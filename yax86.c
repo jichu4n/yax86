@@ -453,21 +453,21 @@ static bool IsPrefixByte(uint8_t byte) {
 
 // Helper to read the next instruction byte.
 static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
-  return ReadByte(cpu, cpu->registers.CS, (*ip)++);
+  return ReadByte(cpu, cpu->registers[kCS], (*ip)++);
 }
 
 // Fetch the next instruction from memory at CS:IP
 EncodedInstruction FetchNextInstruction(CPUState* cpu) {
   EncodedInstruction instruction = {0};
   uint8_t current_byte;
-  const uint16_t original_ip = cpu->registers.IP;
-  uint16_t ip = cpu->registers.IP;
+  const uint16_t original_ip = cpu->registers[kIP];
+  uint16_t ip = cpu->registers[kIP];
 
   // Step 1: Check for prefix bytes
   current_byte = ReadNextInstructionByte(cpu, &ip);
   // Segment override prefixes or REP/LOCK prefixes
   while (IsPrefixByte(current_byte)) {
-    if (instruction.prefix_size >= MAX_NUM_PREFIX_BYTES) {
+    if (instruction.prefix_size >= kMaxPrefixBytes) {
       // Too many prefix bytes, stop reading
       cpu->config->handle_interrupt(kInterruptInvalidOpcode);
       return instruction;
