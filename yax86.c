@@ -47,10 +47,34 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x0D, .has_modrm = false, .immediate_size = 2},
     // PUSH CS
     {.opcode = 0x0E, .has_modrm = false, .immediate_size = 0},
+    // ADC r/m8, r8
+    {.opcode = 0x10, .has_modrm = true, .immediate_size = 0},
+    // ADC r/m16, r16
+    {.opcode = 0x11, .has_modrm = true, .immediate_size = 0},
+    // ADC r8, r/m8
+    {.opcode = 0x12, .has_modrm = true, .immediate_size = 0},
+    // ADC r16, r/m16
+    {.opcode = 0x13, .has_modrm = true, .immediate_size = 0},
+    // ADC AL, imm8
+    {.opcode = 0x14, .has_modrm = false, .immediate_size = 1},
+    // ADC AX, imm16
+    {.opcode = 0x15, .has_modrm = false, .immediate_size = 2},
     // PUSH SS
     {.opcode = 0x16, .has_modrm = false, .immediate_size = 0},
     // POP SS
     {.opcode = 0x17, .has_modrm = false, .immediate_size = 0},
+    // SBB r/m8, r8
+    {.opcode = 0x18, .has_modrm = true, .immediate_size = 0},
+    // SBB r/m16, r16
+    {.opcode = 0x19, .has_modrm = true, .immediate_size = 0},
+    // SBB r8, r/m8
+    {.opcode = 0x1A, .has_modrm = true, .immediate_size = 0},
+    // SBB r16, r/m16
+    {.opcode = 0x1B, .has_modrm = true, .immediate_size = 0},
+    // SBB AL, imm8
+    {.opcode = 0x1C, .has_modrm = false, .immediate_size = 1},
+    // SBB AX, imm16
+    {.opcode = 0x1D, .has_modrm = false, .immediate_size = 2},
     // PUSH DS
     {.opcode = 0x1E, .has_modrm = false, .immediate_size = 0},
     // POP DS
@@ -67,6 +91,8 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x24, .has_modrm = false, .immediate_size = 1},
     // AND AX, imm16
     {.opcode = 0x25, .has_modrm = false, .immediate_size = 2},
+    // SEG ES
+    {.opcode = 0x26, .has_modrm = false, .immediate_size = 0},
     // DAA
     {.opcode = 0x27, .has_modrm = false, .immediate_size = 0},
     // SUB r/m8, r8
@@ -81,6 +107,8 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x2C, .has_modrm = false, .immediate_size = 1},
     // SUB AX, imm16
     {.opcode = 0x2D, .has_modrm = false, .immediate_size = 2},
+    // SEG CS
+    {.opcode = 0x2E, .has_modrm = false, .immediate_size = 0},
     // DAS
     {.opcode = 0x2F, .has_modrm = false, .immediate_size = 0},
     // XOR r/m8, r8
@@ -95,6 +123,8 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x34, .has_modrm = false, .immediate_size = 1},
     // XOR AX, imm16
     {.opcode = 0x35, .has_modrm = false, .immediate_size = 2},
+    // SEG SS
+    {.opcode = 0x36, .has_modrm = false, .immediate_size = 0},
     // AAA
     {.opcode = 0x37, .has_modrm = false, .immediate_size = 0},
     // CMP r/m8, r8
@@ -109,6 +139,8 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x3C, .has_modrm = false, .immediate_size = 1},
     // CMP AX, imm16
     {.opcode = 0x3D, .has_modrm = false, .immediate_size = 2},
+    // SEG DS
+    {.opcode = 0x3E, .has_modrm = false, .immediate_size = 0},
     // AAS
     {.opcode = 0x3F, .has_modrm = false, .immediate_size = 0},
     // INC AX
@@ -175,10 +207,6 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x5E, .has_modrm = false, .immediate_size = 0},
     // POP DI
     {.opcode = 0x5F, .has_modrm = false, .immediate_size = 0},
-    // PUSH imm16
-    {.opcode = 0x68, .has_modrm = false, .immediate_size = 2},
-    // PUSH imm8
-    {.opcode = 0x6A, .has_modrm = false, .immediate_size = 1},
     // JO rel8
     {.opcode = 0x70, .has_modrm = false, .immediate_size = 1},
     // JNO rel8
@@ -211,11 +239,13 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x7E, .has_modrm = false, .immediate_size = 1},
     // JNLE/JG rel8
     {.opcode = 0x7F, .has_modrm = false, .immediate_size = 1},
-    // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m8, imm8 (Group 1)
+    // ADD/ADC/SBB/SUB/CMP r/m8, imm8 (Group 1)
     {.opcode = 0x80, .has_modrm = true, .immediate_size = 1},
-    // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m16, imm16 (Group 1)
+    // ADD/ADC/SBB/SUB/CMP r/m16, imm16 (Group 1)
     {.opcode = 0x81, .has_modrm = true, .immediate_size = 2},
-    // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m16, imm8 (Group 1)
+    // ADC/SBB/SUB/CMP r/m8, imm8 (Group 1)
+    {.opcode = 0x82, .has_modrm = true, .immediate_size = 1},
+    // ADD/ADC/SBB/SUB/CMP r/m16, imm8 (Group 1)
     {.opcode = 0x83, .has_modrm = true, .immediate_size = 1},
     // TEST r/m8, r8
     {.opcode = 0x84, .has_modrm = true, .immediate_size = 0},
@@ -263,6 +293,8 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x99, .has_modrm = false, .immediate_size = 0},
     // CALL ptr16:16 (4 bytes: 2 for offset, 2 for segment)
     {.opcode = 0x9A, .has_modrm = false, .immediate_size = 4},
+    // WAIT
+    {.opcode = 0x9B, .has_modrm = false, .immediate_size = 0},
     // PUSHF
     {.opcode = 0x9C, .has_modrm = false, .immediate_size = 0},
     // POPF
@@ -373,6 +405,38 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0xD5, .has_modrm = false, .immediate_size = 1},
     // XLAT/XLATB
     {.opcode = 0xD7, .has_modrm = false, .immediate_size = 0},
+    // ESC instruction 0xD8 for 8087 numeric coprocessor
+    {.opcode = 0xD8, .has_modrm = true, .immediate_size = 0},
+    // ESC instruction 0xD9 for 8087 numeric coprocessor
+    {.opcode = 0xD9, .has_modrm = true, .immediate_size = 0},
+    // ESC instruction 0xDA for 8087 numeric coprocessor
+    {.opcode = 0xDA, .has_modrm = true, .immediate_size = 0},
+    // ESC instruction 0xDB for 8087 numeric coprocessor
+    {.opcode = 0xDB, .has_modrm = true, .immediate_size = 0},
+    // ESC instruction 0xDC for 8087 numeric coprocessor
+    {.opcode = 0xDC, .has_modrm = true, .immediate_size = 0},
+    // ESC instruction 0xDD for 8087 numeric coprocessor
+    {.opcode = 0xDD, .has_modrm = true, .immediate_size = 0},
+    // ESC instruction 0xDE for 8087 numeric coprocessor
+    {.opcode = 0xDE, .has_modrm = true, .immediate_size = 0},
+    // ESC instruction 0xDF for 8087 numeric coprocessor
+    {.opcode = 0xDF, .has_modrm = true, .immediate_size = 0},
+    // LOOPNE/LOOPNZ rel8
+    {.opcode = 0xE0, .has_modrm = false, .immediate_size = 1},
+    // LOOPE/LOOPZ rel8
+    {.opcode = 0xE1, .has_modrm = false, .immediate_size = 1},
+    // LOOP rel8
+    {.opcode = 0xE2, .has_modrm = false, .immediate_size = 1},
+    // JCXZ rel8
+    {.opcode = 0xE3, .has_modrm = false, .immediate_size = 1},
+    // IN AL, imm8
+    {.opcode = 0xE4, .has_modrm = false, .immediate_size = 1},
+    // IN AX, imm8
+    {.opcode = 0xE5, .has_modrm = false, .immediate_size = 1},
+    // OUT imm8, AL
+    {.opcode = 0xE6, .has_modrm = false, .immediate_size = 1},
+    // OUT imm8, AX
+    {.opcode = 0xE7, .has_modrm = false, .immediate_size = 1},
     // CALL rel16
     {.opcode = 0xE8, .has_modrm = false, .immediate_size = 2},
     // JMP rel16
@@ -381,6 +445,20 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0xEA, .has_modrm = false, .immediate_size = 4},
     // JMP rel8
     {.opcode = 0xEB, .has_modrm = false, .immediate_size = 1},
+    // IN AL, DX
+    {.opcode = 0xEC, .has_modrm = false, .immediate_size = 0},
+    // IN AX, DX
+    {.opcode = 0xED, .has_modrm = false, .immediate_size = 0},
+    // OUT DX, AL
+    {.opcode = 0xEE, .has_modrm = false, .immediate_size = 0},
+    // OUT DX, AX
+    {.opcode = 0xEF, .has_modrm = false, .immediate_size = 0},
+    // LOCK
+    {.opcode = 0xF0, .has_modrm = false, .immediate_size = 0},
+    // REPNE/REPNZ
+    {.opcode = 0xF2, .has_modrm = false, .immediate_size = 0},
+    // REP/REPE/REPZ
+    {.opcode = 0xF3, .has_modrm = false, .immediate_size = 0},
     // HLT
     {.opcode = 0xF4, .has_modrm = false, .immediate_size = 0},
     // CMC
