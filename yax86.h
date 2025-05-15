@@ -69,7 +69,7 @@ typedef union {
 
     // Reserved (bits 12–15 are unused in 8086)
     uint16_t reserved_4 : 4;
-  } flags;
+  } fields;
 } CPUFlags;
 
 // Standard interrupts.
@@ -115,6 +115,22 @@ typedef struct {
 // Maximum number of immediate data bytes in an 8086 instruction.
 #define MAX_NUM_IMMEDIATE_BYTES 4
 
+// The Mod R/M byte.
+typedef union {
+  // Raw byte value.
+  uint8_t value;
+
+  // The individual fields within the Mod R/M byte.
+  struct {
+    // Mod field - bits 6 and 7
+    uint8_t mod : 2;
+    // REG field - bits 3 to 5
+    uint8_t reg : 3;
+    // R/M field - bits 0 to 2
+    uint8_t rm : 3;
+  } fields;
+} ModRM;
+
 // An encoded instruction.
 typedef struct {
   // Prefix bytes.
@@ -125,7 +141,7 @@ typedef struct {
 
   // The ModR/M byte, which specifies addressing modes. For some instructions,
   // the REG field within this byte acts as an opcode extension.
-  uint8_t mod_rm;
+  ModRM mod_rm;
 
   // Raw displacement bytes. If displacement_size is 1, only disp_bytes[0] is
   // valid (value is typically sign-extended). If displacement_size is 2,

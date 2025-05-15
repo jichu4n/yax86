@@ -392,12 +392,10 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
 
   // Step 3: Read ModR/M byte if needed
   if (metadata->has_modrm) {
-    instruction.mod_rm = ReadNextInstructionByte(cpu, &ip);
+    instruction.mod_rm.value = ReadNextInstructionByte(cpu, &ip);
     instruction.has_mod_rm = true;
-
-    // Extract mod and r/m fields to determine if displacement follows
-    uint8_t mod = (instruction.mod_rm >> 6) & 0x03;
-    uint8_t rm = instruction.mod_rm & 0x07;
+    const uint8_t mod = instruction.mod_rm.fields.mod;
+    const uint8_t rm = instruction.mod_rm.fields.rm;
 
     // Step 4: Handle displacement based on mod and r/m
     if (mod == 0 && rm == 6) {
@@ -436,5 +434,5 @@ void InitCPU(CPUState* cpu) {
     ((uint16_t*)&cpu->registers)[i] = 0;
   }
   cpu->flags.value = 0;
-  cpu->flags.flags.reserved_1 = 1;
+  cpu->flags.fields.reserved_1 = 1;
 }
