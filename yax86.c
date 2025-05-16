@@ -464,8 +464,10 @@ static const OpcodeMetadata opcodes[] = {
     // CMC
     {.opcode = 0xF5, .has_modrm = false, .immediate_size = 0},
     // TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m8 (Group 3)
+    // The immediate size depends on the ModR/M byte.
     {.opcode = 0xF6, .has_modrm = true, .immediate_size = 0},
     // TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m16 (Group 3)
+    // The immediate size depends on the ModR/M byte.
     {.opcode = 0xF7, .has_modrm = true, .immediate_size = 0},
     // CLC
     {.opcode = 0xF8, .has_modrm = false, .immediate_size = 0},
@@ -502,14 +504,15 @@ static void InitOpcodeTable() {
 }
 
 // Reads a byte from memory at the specified segment:offset
-static uint8_t ReadByte(CPUState* cpu, uint16_t segment, uint16_t offset) {
+static inline uint8_t ReadByte(
+    CPUState* cpu, uint16_t segment, uint16_t offset) {
   // Calculate physical address (segment * 16 + offset)
   uint16_t address = (segment << 4) + offset;
   return cpu->config->read_memory(address, kByte);
 }
 
 // Helper to check if a byte is a valid prefix
-static bool IsPrefixByte(uint8_t byte) {
+static inline bool IsPrefixByte(uint8_t byte) {
   static const uint8_t kPrefixBytes[] = {
       // Segment overrides
       0x26,  // ES
@@ -530,8 +533,39 @@ static bool IsPrefixByte(uint8_t byte) {
 }
 
 // Helper to read the next instruction byte.
-static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
+static inline uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
   return ReadByte(cpu, cpu->registers[kCS], (*ip)++);
+}
+
+// Returns the number of displacement bytes based on the ModR/M byte.
+static inline uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
+  switch (mod) {
+    case 0:
+      // Special case: 16-bit displacement
+      return rm == 6 ? 2 : 0;
+    case 1:
+    case 2:
+      // 8 or 16-bit displacement
+      return mod;
+    default:
+      // No displacement
+      return 0;
+  }
+}
+
+// Returns the number of immediate bytes in an instruction.
+static inline uint8_t GetImmediateSize(
+    const OpcodeMetadata* metadata, uint8_t mod) {
+  switch (metadata->opcode) {
+    // TEST r/m8, imm8
+    case 0xF6:
+      return mod == 0 ? 1 : 0;
+    // TEST r/m16, imm16
+    case 0xF7:
+      return mod == 0 ? 2 : 0;
+    default:
+      return metadata->immediate_size;
+  }
 }
 
 // Fetch the next instruction from memory at CS:IP
@@ -541,12 +575,10 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
   const uint16_t original_ip = cpu->registers[kIP];
   uint16_t ip = cpu->registers[kIP];
 
-  // Step 1: Check for prefix bytes
+  // Prefix
   current_byte = ReadNextInstructionByte(cpu, &ip);
-  // Segment override prefixes or REP/LOCK prefixes
   while (IsPrefixByte(current_byte)) {
     if (instruction.prefix_size >= kMaxPrefixBytes) {
-      // Too many prefix bytes, stop reading
       cpu->config->handle_interrupt(kInterruptInvalidOpcode);
       return instruction;
     }
@@ -554,38 +586,29 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
     current_byte = ReadNextInstructionByte(cpu, &ip);
   }
 
-  // Step 2: Read opcode
+  // Opcode
   instruction.opcode = current_byte;
   const OpcodeMetadata* metadata = &opcode_table[instruction.opcode];
 
-  // Step 3: Read ModR/M byte if needed
+  // ModR/M
   if (metadata->has_modrm) {
     instruction.mod_rm.value = ReadNextInstructionByte(cpu, &ip);
     instruction.has_mod_rm = true;
-    const uint8_t mod = instruction.mod_rm.fields.mod;
-    const uint8_t rm = instruction.mod_rm.fields.rm;
 
-    // Step 4: Handle displacement based on mod and r/m
-    if (mod == 0 && rm == 6) {
-      // Special case: 16-bit displacement
-      instruction.displacement_size = 2;
-    } else if (mod == 1) {
-      // 8-bit displacement
-      instruction.displacement_size = 1;
-    } else if (mod == 2) {
-      // 16-bit displacement
-      instruction.displacement_size = 2;
-    }
+    // Displacement
+    instruction.displacement_size = GetDisplacementSize(
+        instruction.mod_rm.fields.mod, instruction.mod_rm.fields.rm);
     for (int i = 0; i < instruction.displacement_size; ++i) {
       instruction.displacement[i] = ReadNextInstructionByte(cpu, &ip);
     }
   }
 
-  // Step 5: Handle immediate data based on metadata
-  for (int i = 0; i < metadata->immediate_size; ++i) {
+  // Immediate operand
+  instruction.immediate_size =
+      GetImmediateSize(metadata, instruction.mod_rm.fields.mod);
+  for (int i = 0; i < instruction.immediate_size; ++i) {
     instruction.immediate[i] = ReadNextInstructionByte(cpu, &ip);
   }
-  instruction.immediate_size = metadata->immediate_size;
 
   instruction.size = ip - original_ip;
 

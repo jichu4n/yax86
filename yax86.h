@@ -85,6 +85,9 @@ typedef union {
     uint16_t reserved_4 : 4;
   } fields;
 } Flags;
+// Compile-time assertion that the compiler is packing Flags::fields correctly.
+typedef char
+    _assert_sizeof_Flags_is_2[sizeof(((Flags*)0)->fields) == 2 ? 1 : -1];
 
 // Standard interrupts.
 typedef enum {
@@ -153,6 +156,9 @@ typedef union {
     uint8_t rm : 3;
   } fields;
 } ModRM;
+// Compile-time assertion that the compiler is packing ModRM::fields correctly.
+typedef char
+    _assert_sizeof_ModRM_is_1[sizeof(((ModRM*)0)->fields) == 1 ? 1 : -1];
 
 // An encoded instruction.
 typedef struct {
