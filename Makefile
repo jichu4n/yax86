@@ -7,7 +7,7 @@ AR = ar
 ARFLAGS = rcs
 
 # Directories with their own Makefiles
-SUBDIRS = tests/testdata
+SUBDIRS = tests
 
 # Source and object files
 SRC = $(wildcard *.c)

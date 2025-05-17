@@ -5,6 +5,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif  // __cplusplus
+
 // ============================================================================
 // CPU state and interface
 // ============================================================================
@@ -50,44 +54,36 @@ typedef enum {
 #define kNumRegisters (kIP + 1)
 
 // CPU flags
-typedef union {
-  // 16-bit value representing all flags
-  uint16_t value;
-  // Individual flags
-  struct {
-    // Carry Flag
-    uint16_t CF : 1;
-    // Reserved, always 1
-    uint16_t reserved_1 : 1;
-    // Parity Flag
-    uint16_t PF : 1;
-    // Reserved, always 0
-    uint16_t reserved_2 : 1;
-    // Auxiliary Carry Flag
-    uint16_t AF : 1;
-    // Reserved, always 0
-    uint16_t reserved_3 : 1;
-    // Zero Flag
-    uint16_t ZF : 1;
-    // Sign Flag
-    uint16_t SF : 1;
+typedef struct {
+  // Carry Flag
+  uint16_t CF : 1;
+  // Reserved, always 1
+  uint16_t reserved_1 : 1;
+  // Parity Flag
+  uint16_t PF : 1;
+  // Reserved, always 0
+  uint16_t reserved_2 : 1;
+  // Auxiliary Carry Flag
+  uint16_t AF : 1;
+  // Reserved, always 0
+  uint16_t reserved_3 : 1;
+  // Zero Flag
+  uint16_t ZF : 1;
+  // Sign Flag
+  uint16_t SF : 1;
 
-    // Trap Flag
-    uint16_t TF : 1;
-    // Interrupt Enable Flag
-    uint16_t IF : 1;
-    // Direction Flag
-    uint16_t DF : 1;
-    // Overflow Flag
-    uint16_t OF : 1;
+  // Trap Flag
+  uint16_t TF : 1;
+  // Interrupt Enable Flag
+  uint16_t IF : 1;
+  // Direction Flag
+  uint16_t DF : 1;
+  // Overflow Flag
+  uint16_t OF : 1;
 
-    // Reserved (bits 12–15 are unused in 8086)
-    uint16_t reserved_4 : 4;
-  } fields;
+  // Reserved (bits 12–15 are unused in 8086)
+  uint16_t reserved_4 : 4;
 } Flags;
-// Compile-time assertion that the compiler is packing Flags::fields correctly.
-typedef char
-    _assert_sizeof_Flags_is_2[sizeof(((Flags*)0)->fields) == 2 ? 1 : -1];
 
 // Standard interrupts.
 typedef enum {
@@ -107,11 +103,13 @@ typedef enum { kByte = 1, kWord = 2 } CPUDataWidth;
 
 // Runtime configuration
 typedef struct {
+  // Callback context.
+  void* context;
   // Required - hooks to read and write memory.
-  uint8_t (*read_memory)(uint16_t address, CPUDataWidth width);
-  void (*write_memory)(uint16_t address, CPUDataWidth width, uint8_t value);
+  uint8_t (*read_memory_byte)(void* context, uint16_t address);
+  void (*write_memory_byte)(void* context, uint16_t address, uint8_t value);
   // Required - handle interrupts.
-  void (*handle_interrupt)(uint8_t interrupt_number);
+  void (*handle_interrupt)(void* context, uint8_t interrupt_number);
 } CPUConfig;
 
 // CPU state
@@ -142,23 +140,14 @@ void InitCPU(CPUState* cpu);
 #define kMaxImmediateBytes 4
 
 // The Mod R/M byte.
-typedef union {
-  // Raw byte value.
-  uint8_t value;
-
-  // The individual fields within the Mod R/M byte.
-  struct {
-    // Mod field - bits 6 and 7
-    uint8_t mod : 2;
-    // REG field - bits 3 to 5
-    uint8_t reg : 3;
-    // R/M field - bits 0 to 2
-    uint8_t rm : 3;
-  } fields;
+typedef struct {
+  // Mod field - bits 6 and 7
+  uint8_t mod : 2;
+  // REG field - bits 3 to 5
+  uint8_t reg : 3;
+  // R/M field - bits 0 to 2
+  uint8_t rm : 3;
 } ModRM;
-// Compile-time assertion that the compiler is packing ModRM::fields correctly.
-typedef char
-    _assert_sizeof_ModRM_is_1[sizeof(((ModRM*)0)->fields) == 1 ? 1 : -1];
 
 // An encoded instruction.
 typedef struct {
@@ -197,5 +186,9 @@ typedef struct {
 
 // Fetch the next instruction from memory.
 EncodedInstruction FetchNextInstruction(CPUState* cpu);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
 
 #endif  // YAX86_H

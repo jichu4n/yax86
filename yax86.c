@@ -508,7 +508,7 @@ static inline uint8_t ReadByte(
     CPUState* cpu, uint16_t segment, uint16_t offset) {
   // Calculate physical address (segment * 16 + offset)
   uint16_t address = (segment << 4) + offset;
-  return cpu->config->read_memory(address, kByte);
+  return cpu->config->read_memory_byte(cpu->config->context, address);
 }
 
 // Helper to check if a byte is a valid prefix
@@ -555,14 +555,14 @@ static inline uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
 
 // Returns the number of immediate bytes in an instruction.
 static inline uint8_t GetImmediateSize(
-    const OpcodeMetadata* metadata, uint8_t mod) {
+    const OpcodeMetadata* metadata, uint8_t reg) {
   switch (metadata->opcode) {
     // TEST r/m8, imm8
     case 0xF6:
-      return mod == 0 ? 1 : 0;
+      return reg == 0 ? 1 : 0;
     // TEST r/m16, imm16
     case 0xF7:
-      return mod == 0 ? 2 : 0;
+      return reg == 0 ? 2 : 0;
     default:
       return metadata->immediate_size;
   }
@@ -579,7 +579,8 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
   current_byte = ReadNextInstructionByte(cpu, &ip);
   while (IsPrefixByte(current_byte)) {
     if (instruction.prefix_size >= kMaxPrefixBytes) {
-      cpu->config->handle_interrupt(kInterruptInvalidOpcode);
+      cpu->config->handle_interrupt(
+          cpu->config->context, kInterruptInvalidOpcode);
       return instruction;
     }
     instruction.prefix[instruction.prefix_size++] = current_byte;
@@ -592,12 +593,15 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
 
   // ModR/M
   if (metadata->has_modrm) {
-    instruction.mod_rm.value = ReadNextInstructionByte(cpu, &ip);
+    uint8_t mod_rm_byte = ReadNextInstructionByte(cpu, &ip);
     instruction.has_mod_rm = true;
+    instruction.mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
+    instruction.mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
+    instruction.mod_rm.rm = mod_rm_byte & 0x07;          // Bits 0-2
 
     // Displacement
-    instruction.displacement_size = GetDisplacementSize(
-        instruction.mod_rm.fields.mod, instruction.mod_rm.fields.rm);
+    instruction.displacement_size =
+        GetDisplacementSize(instruction.mod_rm.mod, instruction.mod_rm.rm);
     for (int i = 0; i < instruction.displacement_size; ++i) {
       instruction.displacement[i] = ReadNextInstructionByte(cpu, &ip);
     }
@@ -605,7 +609,7 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
 
   // Immediate operand
   instruction.immediate_size =
-      GetImmediateSize(metadata, instruction.mod_rm.fields.mod);
+      GetImmediateSize(metadata, instruction.mod_rm.reg);
   for (int i = 0; i < instruction.immediate_size; ++i) {
     instruction.immediate[i] = ReadNextInstructionByte(cpu, &ip);
   }
@@ -620,10 +624,8 @@ void InitCPU(CPUState* cpu) {
   // Global setup
   InitOpcodeTable();
 
-  // Initialize CPU registers
-  for (int i = 0; i < sizeof(cpu->registers) / sizeof(uint16_t); ++i) {
-    ((uint16_t*)&cpu->registers)[i] = 0;
-  }
-  cpu->flags.value = 0;
-  cpu->flags.fields.reserved_1 = 1;
+  // Zero out the CPU state
+  const CPUState zero_cpu_state = {0};
+  *cpu = zero_cpu_state;
+  cpu->flags.reserved_1 = 1;
 }
