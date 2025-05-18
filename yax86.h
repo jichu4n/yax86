@@ -10,7 +10,7 @@ extern "C" {
 #endif  // __cplusplus
 
 // ============================================================================
-// CPU state and interface
+// CPU state
 // ============================================================================
 
 // CPU registers.
@@ -184,8 +184,23 @@ typedef struct {
   uint8_t size;
 } EncodedInstruction;
 
-// Fetch the next instruction from memory.
-EncodedInstruction FetchNextInstruction(CPUState* cpu);
+// ============================================================================
+// Execution
+// ============================================================================
+
+// Result status of fetching the next instruction.
+typedef enum {
+  kFetchSuccess,
+  // Prefix exceeds maximum allowed size.
+  kFetchPrefixTooLong = -1,
+} FetchNextInstructionStatus;
+
+// Fetch the next instruction from CS:IP.
+FetchNextInstructionStatus FetchNextInstruction(
+    CPUState* cpu, EncodedInstruction* instruction);
+
+// Execute a single instruction.
+void ExecuteInstruction(CPUState* cpu, EncodedInstruction instruction);
 
 #ifdef __cplusplus
 }  // extern "C"

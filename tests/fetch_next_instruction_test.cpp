@@ -150,7 +150,13 @@ vector<EncodedInstruction> TestFetchInstructions(
   cout << ">> Reading encoded instructions:" << endl;
   vector<EncodedInstruction> instructions;
   while (cpu.registers[kIP] < kCOMFileLoadOffset + machine_code.size()) {
-    EncodedInstruction instruction = FetchNextInstruction(&cpu);
+    EncodedInstruction instruction;
+    auto status =  FetchNextInstruction(&cpu, &instruction);
+    if (status != kFetchSuccess) {
+      throw runtime_error("Failed to fetch instruction at IP: " +
+                          to_string(cpu.registers[kIP]) + ", status: " +
+                          to_string(status));
+    }
     instructions.push_back(instruction);
     cout << "  " << instruction << endl;
     cpu.registers[kIP] += instruction.size;

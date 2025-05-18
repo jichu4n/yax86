@@ -1,8 +1,11 @@
 #include "yax86.h"
 
 // ============================================================================
-// Opcodes
+// Instructions
 // ============================================================================
+
+// Type signature of an opcode handler function.
+typedef void (*OpcodeHandler)(CPUState* cpu, EncodedInstruction instruction);
 
 // Opcode lookup table entry.
 typedef struct {
@@ -13,6 +16,9 @@ typedef struct {
   bool has_modrm : 1;
   // Number of immediate data bytes: 0, 1, 2, or 4
   uint8_t immediate_size : 3;
+
+  // Handler function.
+  OpcodeHandler handler;
 } OpcodeMetadata;
 
 // Opcode metadata definitions.
@@ -503,6 +509,24 @@ static void InitOpcodeTable() {
   }
 }
 
+// ============================================================================
+// CPU state
+// ============================================================================
+
+void InitCPU(CPUState* cpu) {
+  // Global setup
+  InitOpcodeTable();
+
+  // Zero out the CPU state
+  const CPUState zero_cpu_state = {0};
+  *cpu = zero_cpu_state;
+  cpu->flags.reserved_1 = 1;
+}
+
+// ============================================================================
+// Execution
+// ============================================================================
+
 // Reads a byte from memory at the specified segment:offset
 static inline uint8_t ReadByte(
     CPUState* cpu, uint16_t segment, uint16_t offset) {
@@ -568,8 +592,8 @@ static inline uint8_t GetImmediateSize(
   }
 }
 
-// Fetch the next instruction from memory at CS:IP
-EncodedInstruction FetchNextInstruction(CPUState* cpu) {
+FetchNextInstructionStatus FetchNextInstruction(
+    CPUState* cpu, EncodedInstruction* dest_instruction) {
   EncodedInstruction instruction = {0};
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
@@ -579,9 +603,7 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
   current_byte = ReadNextInstructionByte(cpu, &ip);
   while (IsPrefixByte(current_byte)) {
     if (instruction.prefix_size >= kMaxPrefixBytes) {
-      cpu->config->handle_interrupt(
-          cpu->config->context, kInterruptInvalidOpcode);
-      return instruction;
+      return kFetchPrefixTooLong;
     }
     instruction.prefix[instruction.prefix_size++] = current_byte;
     current_byte = ReadNextInstructionByte(cpu, &ip);
@@ -616,16 +638,19 @@ EncodedInstruction FetchNextInstruction(CPUState* cpu) {
 
   instruction.size = ip - original_ip;
 
-  return instruction;
+  *dest_instruction = instruction;
+  return kFetchSuccess;
 }
 
-// Initialize the CPU state
-void InitCPU(CPUState* cpu) {
-  // Global setup
-  InitOpcodeTable();
+void ExecuteInstruction(CPUState* cpu, EncodedInstruction instruction) {
+  cpu->registers[kIP] += instruction.size;
 
-  // Zero out the CPU state
-  const CPUState zero_cpu_state = {0};
-  *cpu = zero_cpu_state;
-  cpu->flags.reserved_1 = 1;
+  OpcodeHandler handler = opcode_table[instruction.opcode].handler;
+  if (!handler) {
+    cpu->config->handle_interrupt(
+        cpu->config->context, kInterruptInvalidOpcode);
+    return;
+  }
+
+  handler(cpu, instruction);
 }
