@@ -22,30 +22,30 @@ typedef enum {
   // Accumulator Register
   kAX = 0,
   // Counter Register
-  kCX,
+  kCX = 1,
   // Data Register
-  kDX,
+  kDX = 2,
   // Base Register
-  kBX,
+  kBX = 3,
   // Stack Pointer Register
-  kSP,
+  kSP = 4,
   // Base Pointer Register
-  kBP,
+  kBP = 5,
   // Source Index Register
-  kSI,
+  kSI = 6,
   // Destination Index Register
-  kDI,
+  kDI = 7,
 
   // Segment registers.
 
   // Extra Segment Register
-  kES,
+  kES = 8,
   // Code Segment Register
-  kCS,
+  kCS = 9,
   // Stack Segment Register
-  kSS,
+  kSS = 10,
   // Data Segment Register
-  kDS,
+  kDS = 11,
 
   // Instruction Pointer Register
   kIP,
@@ -181,9 +181,9 @@ typedef struct {
 // Execution
 // ============================================================================
 
-// Result status of fetching the next instruction.
+// Result status from fetching the next instruction.
 typedef enum {
-  kFetchSuccess,
+  kFetchSuccess = 0,
   // Prefix exceeds maximum allowed size.
   kFetchPrefixTooLong = -1,
 } FetchNextInstructionStatus;
@@ -192,8 +192,18 @@ typedef enum {
 FetchNextInstructionStatus FetchNextInstruction(
     CPUState* cpu, EncodedInstruction* instruction);
 
+// Result status from executing an instruction.
+typedef enum {
+  kExecuteSuccess = 0,
+  // Invalid instruction opcode.
+  kExecuteInvalidOpcode = -2,
+  // Instruction parameters are invalid.
+  kExecuteInvalidInstruction = -1,
+} ExecuteInstructionStatus;
+
 // Execute a single instruction.
-void ExecuteInstruction(CPUState* cpu, EncodedInstruction instruction);
+ExecuteInstructionStatus ExecuteInstruction(
+    CPUState* cpu, EncodedInstruction instruction);
 
 #ifdef __cplusplus
 }  // extern "C"
