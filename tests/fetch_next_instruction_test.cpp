@@ -15,8 +15,6 @@ using namespace std;
 // COM file load offset.
 const uint16_t kCOMFileLoadOffset = 0x100;
 const char* kCOMFileLoadOffsetString = "100h";
-// Test output directory for assembly files and machine code.
-const char* kTestOutputDir = "./test_output/";
 
 // Overload the << operator for EncodedInstruction to print its contents.
 ostream& operator<<(ostream& os, const EncodedInstruction& instruction) {
@@ -64,7 +62,7 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
   cout << ">> Assembling " << name << ":" << endl << asm_code << endl;
 
   // Create a temporary file for the assembly code
-  string asm_file_name = kTestOutputDir + name + ".asm";
+  string asm_file_name = name + ".asm";
   ofstream asm_file(asm_file_name);
   if (!asm_file) {
     throw runtime_error("Failed to create assembly file: " + asm_file_name);
@@ -75,7 +73,7 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
   asm_file.close();
 
   // Assemble the code using fasm to a COM file
-  string com_file_name = kTestOutputDir + name + ".com";
+  string com_file_name = name + ".com";
   string command = "fasm " + asm_file_name + " " + com_file_name;
   if (system(command.c_str()) != 0) {
     throw runtime_error("Failed to run command: " + command);
@@ -151,11 +149,11 @@ vector<EncodedInstruction> TestFetchInstructions(
   vector<EncodedInstruction> instructions;
   while (cpu.registers[kIP] < kCOMFileLoadOffset + machine_code.size()) {
     EncodedInstruction instruction;
-    auto status =  FetchNextInstruction(&cpu, &instruction);
+    auto status = FetchNextInstruction(&cpu, &instruction);
     if (status != kFetchSuccess) {
-      throw runtime_error("Failed to fetch instruction at IP: " +
-                          to_string(cpu.registers[kIP]) + ", status: " +
-                          to_string(status));
+      throw runtime_error(
+          "Failed to fetch instruction at IP: " +
+          to_string(cpu.registers[kIP]) + ", status: " + to_string(status));
     }
     instructions.push_back(instruction);
     cout << "  " << instruction << endl;
