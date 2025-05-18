@@ -53,37 +53,30 @@ typedef enum {
 
 #define kNumRegisters (kIP + 1)
 
-// CPU flags
-typedef struct {
+// CPU flag masks.
+typedef enum {
   // Carry Flag
-  uint16_t CF : 1;
-  // Reserved, always 1
-  uint16_t reserved_1 : 1;
+  kCF = (1 << 0),
   // Parity Flag
-  uint16_t PF : 1;
-  // Reserved, always 0
-  uint16_t reserved_2 : 1;
+  kPF = (1 << 2),
   // Auxiliary Carry Flag
-  uint16_t AF : 1;
-  // Reserved, always 0
-  uint16_t reserved_3 : 1;
+  kAF = (1 << 4),
   // Zero Flag
-  uint16_t ZF : 1;
+  kZF = (1 << 6),
   // Sign Flag
-  uint16_t SF : 1;
-
+  kSF = (1 << 7),
   // Trap Flag
-  uint16_t TF : 1;
+  kTF = (1 << 8),
   // Interrupt Enable Flag
-  uint16_t IF : 1;
+  kIF = (1 << 9),
   // Direction Flag
-  uint16_t DF : 1;
+  kDF = (1 << 10),
   // Overflow Flag
-  uint16_t OF : 1;
+  kOF = (1 << 11),
+} CPUFlags;
 
-  // Reserved (bits 12–15 are unused in 8086)
-  uint16_t reserved_4 : 4;
-} Flags;
+// CPU flags value on reset.
+#define kInitialCPUFlags (1 << 1)  // Reserved_1 is always 1.
 
 // Standard interrupts.
 typedef enum {
@@ -120,7 +113,7 @@ typedef struct {
   // Register values
   uint16_t registers[kNumRegisters];
   // Flag values
-  Flags flags;
+  uint16_t flags;
 } CPUState;
 
 // Initialize CPU state.

@@ -520,7 +520,7 @@ void InitCPU(CPUState* cpu) {
   // Zero out the CPU state
   const CPUState zero_cpu_state = {0};
   *cpu = zero_cpu_state;
-  cpu->flags.reserved_1 = 1;
+  cpu->flags = kInitialCPUFlags;
 }
 
 // ============================================================================
