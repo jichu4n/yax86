@@ -167,9 +167,16 @@ static inline MemoryAddress GetMemoryOperandAddress(
       address.offset = cpu->registers[kDI];
       address.segment = kDS;
       break;
-    case 6:  // [BP] or direct address
-      address.offset = cpu->registers[kBP];
-      address.segment = mod == 0 ? kSS : kDS;
+    case 6:
+      if (mod == 0) {
+        // Direct memory address with 16-bit displacement
+        address.offset = 0;
+        address.segment = kDS;
+      } else {
+        // [BP]
+        address.offset = cpu->registers[kBP];
+        address.segment = kSS;
+      }
       break;
     case 7:  // [BX]
       address.offset = cpu->registers[kBX];
