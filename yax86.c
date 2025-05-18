@@ -11,11 +11,25 @@ static inline uint8_t ReadByte(
       cpu->config->context, (segment << 4) + offset);
 }
 
+// Read a word from memory.
+static inline uint16_t ReadWord(
+    CPUState* cpu, uint16_t segment, uint16_t offset) {
+  return (ReadByte(cpu, segment, offset + 1) << 8) |
+         ReadByte(cpu, segment, offset);
+}
+
 // Write a byte to memory.
 static inline void WriteByte(
     CPUState* cpu, uint16_t segment, uint16_t offset, uint8_t value) {
   cpu->config->write_memory_byte(
       cpu->config->context, (segment << 4) + offset, value);
+}
+
+// Write a word to memory.
+static inline void WriteWord(
+    CPUState* cpu, uint16_t segment, uint16_t offset, uint16_t value) {
+  WriteByte(cpu, segment, offset, value & 0xFF);
+  WriteByte(cpu, segment, offset + 1, (value >> 8) & 0xFF);
 }
 
 // ============================================================================
@@ -26,168 +40,265 @@ static inline void WriteByte(
 typedef ExecuteInstructionStatus (*OpcodeHandler)(
     CPUState* cpu, EncodedInstruction instruction);
 
-// Read register byte value based on the ModR/M byte's reg or R/M field.
-static inline uint8_t ReadRegisterByte(CPUState* cpu, uint8_t reg_or_rm) {
+// A register operand of byte size.
+typedef struct {
+  // Register index (0-7).
+  uint8_t reg_index;
+  // True if this is a high byte (AH, CH, DH, BH).
+  bool is_high_byte;
+  // Current value.
+  uint8_t value;
+} RegisterOperandByte;
+
+// A register operand of word size.
+typedef struct {
+  // Register index (0-7).
+  uint8_t reg_index;
+  // Current value.
+  uint16_t value;
+} RegisterOperandWord;
+
+// Memory operand of byte size.
+typedef struct {
+  // Segment register.
+  Register segment;
+  // Effective address offset.
+  uint16_t offset;
+  // Current value.
+  uint8_t value;
+} MemoryOperandByte;
+
+// Memory operand of word size.
+typedef struct {
+  // Segment register.
+  Register segment;
+  // Effective address offset.
+  uint16_t offset;
+  // Current value.
+  uint16_t value;
+} MemoryOperandWord;
+
+// Whether the operand is a register or memory operand.
+typedef enum { kOperandTypeRegister, kOperandTypeMemory } OperandType;
+
+// Memory or register operand of byte size.
+typedef struct {
+  OperandType type;
+  union {
+    RegisterOperandByte reg;
+    MemoryOperandByte mem;
+  } op;
+} OperandByte;
+
+// Memory or register operand of word size.
+typedef struct {
+  OperandType type;
+  union {
+    RegisterOperandWord reg;
+    MemoryOperandWord mem;
+  } op;
+} OperandWord;
+
+// Get the register operand for a byte instruction based on the ModR/M byte's
+// reg or R/M field.
+static inline RegisterOperandByte GetRegisterOperandByte(
+    CPUState* cpu, uint8_t reg_or_rm) {
+  RegisterOperandByte reg_op;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL (low byte of AX, CX, DX, BX)
-    return cpu->registers[reg_or_rm] & 0xFF;
+    reg_op.reg_index = reg_or_rm;
+    reg_op.is_high_byte = false;
+    reg_op.value = cpu->registers[reg_op.reg_index] & 0xFF;
   } else {
     // AH, CH, DH, BH (high byte of AX, CX, DX, BX)
-    return (cpu->registers[reg_or_rm] >> 8) & 0xFF;
+    reg_op.reg_index = reg_or_rm - 4;
+    reg_op.is_high_byte = true;
+    reg_op.value = (cpu->registers[reg_op.reg_index] >> 8) & 0xFF;
+  }
+  return reg_op;
+}
+
+// Get the register operand for a word instruction based on the ModR/M byte's
+// reg or R/M field.
+static inline RegisterOperandWord GetRegisterOperandWord(
+    CPUState* cpu, uint8_t reg_or_rm) {
+  RegisterOperandWord reg_op;
+  reg_op.reg_index = reg_or_rm;
+  reg_op.value = cpu->registers[reg_op.reg_index];
+  return reg_op;
+}
+
+// Returns the value of a byte operand.
+static inline uint8_t GetOperandValueByte(
+    CPUState* cpu, const OperandByte* operand) {
+  switch (operand->type) {
+    case kOperandTypeRegister:
+      return operand->op.reg.value;
+    case kOperandTypeMemory:
+      return operand->op.mem.value;
+    default:
+      // Invalid operand type
+      return 0xFF;  // Return an invalid value
   }
 }
 
-// Write register byte value based on the ModR/M byte's reg or R/M field.
-static inline void WriteRegisterByte(
-    CPUState* cpu, uint8_t reg_or_rm, uint8_t value) {
-  if (reg_or_rm < 4) {
-    // AL, CL, DL, BL (low byte of AX, CX, DX, BX)
-    cpu->registers[reg_or_rm] = (cpu->registers[reg_or_rm] & 0xFF00) | value;
-  } else {
-    // AH, CH, DH, BH (high byte of AX, CX, DX, BX)
-    cpu->registers[reg_or_rm] =
-        (cpu->registers[reg_or_rm] & 0x00FF) | (value << 8);
+// Returns the value of a word operand.
+static inline uint16_t GetOperandValueWord(
+    CPUState* cpu, const OperandWord* operand) {
+  switch (operand->type) {
+    case kOperandTypeRegister:
+      return operand->op.reg.value;
+    case kOperandTypeMemory:
+      return operand->op.mem.value;
+    default:
+      // Invalid operand type
+      return 0xFFFF;  // Return an invalid value
   }
 }
 
-// Read register word value based on the ModR/M byte's reg or R/M field.
-static inline uint16_t ReadRegisterWord(CPUState* cpu, uint8_t reg_or_rm) {
-  return cpu->registers[reg_or_rm];
-}
-
-// Write register word value based on the ModR/M byte's reg or R/M field.
-static inline void WriteRegisterWord(
-    CPUState* cpu, uint8_t reg_or_rm, uint16_t value) {
-  cpu->registers[reg_or_rm] = value;
-}
-
-// Forward declarations of helper functions
-static uint16_t CalculateEffectiveAddress(
-    CPUState* cpu, uint8_t rm_field, int16_t displacement);
-static void SetFlagsAfterAdditionByte(
-    CPUState* cpu, uint8_t operand1, uint8_t operand2, uint16_t result);
-
-// ADD r/m8, r8
-static ExecuteInstructionStatus HandleOpcode00(
+// Get a register or memory operand for a byte instruction based on the ModR/M
+// byte and displacement.
+static inline OperandByte ReadOperandByte(
     CPUState* cpu, EncodedInstruction instruction) {
-  // Get the source register (r8) from the ModR/M byte's reg field
-  uint8_t src_value = ReadRegisterByte(cpu, instruction.mod_rm.reg);
+  OperandByte operand;
+  uint8_t mod = instruction.mod_rm.mod;
+  uint8_t rm = instruction.mod_rm.rm;
 
-  // Get the destination operand (r/m8)
-  uint8_t rm_field = instruction.mod_rm.rm;
-  uint8_t mod_field = instruction.mod_rm.mod;
-  uint8_t dest_value = 0;
-  uint16_t dest_address = 0;
-  bool is_memory_operand = true;
-
-  // Calculate the effective address for memory operands or get register value
-  // for register operands
-  if (mod_field == 3) {
+  if (mod == 3) {
     // Register operand
-    is_memory_operand = false;
-    dest_value = ReadRegisterByte(cpu, rm_field);
+    operand.type = kOperandTypeRegister;
+    operand.op.reg = GetRegisterOperandByte(cpu, rm);
   } else {
-    // Memory operand - calculate effective address
-    // For simplicity, we're using the default segment (DS)
-    // In a full implementation, we would handle segment overrides here
-    uint16_t segment = cpu->registers[kDS];
+    // Memory operand
+    operand.type = kOperandTypeMemory;
+    switch (rm) {
+      case 0:  // [BX + SI]
+        operand.op.mem.offset = cpu->registers[kBX] + cpu->registers[kSI];
+        operand.op.mem.segment = kDS;
+        break;
+      case 1:  // [BX + DI]
+        operand.op.mem.offset = cpu->registers[kBX] + cpu->registers[kDI];
+        operand.op.mem.segment = kDS;
+        break;
+      case 2:  // [BP + SI]
+        operand.op.mem.offset = cpu->registers[kBP] + cpu->registers[kSI];
+        operand.op.mem.segment = kSS;
+        break;
+      case 3:  // [BP + DI]
+        operand.op.mem.offset = cpu->registers[kBP] + cpu->registers[kDI];
+        operand.op.mem.segment = kSS;
+        break;
+      case 4:  // [SI]
+        operand.op.mem.offset = cpu->registers[kSI];
+        operand.op.mem.segment = kDS;
+        break;
+      case 5:  // [DI]
+        operand.op.mem.offset = cpu->registers[kDI];
+        operand.op.mem.segment = kDS;
+        break;
+      case 6:  // [BP] or direct address
+        operand.op.mem.offset = cpu->registers[kBP];
+        operand.op.mem.segment = mod == 0 ? kSS : kDS;
+        break;
+      case 7:  // [BX]
+        operand.op.mem.offset = cpu->registers[kBX];
+        operand.op.mem.segment = kDS;
+        break;
+      default:
+        // Not possible as RM field is 3 bits (0-7).
+        operand.op.mem.offset = 0xFFFF;
+        operand.op.mem.segment = kDS;  // Invalid RM field
+        break;
+    }
 
-    switch (mod_field) {
-      case 0:
-        // No displacement
-        if (rm_field == 6) {
-          // Special case: direct address
-          dest_address =
-              (instruction.displacement[1] << 8) | instruction.displacement[0];
-        } else {
-          // Indirect address
-          dest_address = CalculateEffectiveAddress(cpu, rm_field, 0);
-        }
+    // Apply segment override if present
+    for (int i = 0; i < instruction.prefix_size; ++i) {
+      switch (instruction.prefix[i]) {
+        case 0x26:  // ES
+          operand.op.mem.segment = kES;
+          break;
+        case 0x2E:  // CS
+          operand.op.mem.segment = kCS;
+          break;
+        case 0x36:  // SS
+          operand.op.mem.segment = kSS;
+          break;
+        case 0x3E:  // DS
+          operand.op.mem.segment = kDS;
+          break;
+        default:
+          // Ignore other prefixes
+          break;
+      }
+    }
+
+    // Add displacement if present
+    switch (instruction.displacement_size) {
+      case 1: {
+        // Sign-extend 8-bit displacement
+        int8_t disp8 = (int8_t)instruction.displacement[0];
+        operand.op.mem.offset += disp8;
         break;
-      case 1:
-        // 8-bit displacement (sign extended)
-        {
-          int8_t disp8 = (int8_t)instruction.displacement[0];
-          dest_address = CalculateEffectiveAddress(cpu, rm_field, disp8);
-        }
-        break;
-      case 2:
+      }
+      case 2: {
         // 16-bit displacement
-        {
-          uint16_t disp16 =
-              (instruction.displacement[1] << 8) | instruction.displacement[0];
-          dest_address = CalculateEffectiveAddress(cpu, rm_field, disp16);
-        }
+        operand.op.mem.offset +=
+            (instruction.displacement[1] << 8) | instruction.displacement[0];
+        break;
+      }
+      default:
+        // No displacement
         break;
     }
 
-    // Read memory at effective address
-    dest_value = ReadByte(cpu, segment, dest_address);
+    // Read the value from memory
+    operand.op.mem.value = ReadByte(
+        cpu, cpu->registers[operand.op.mem.segment], operand.op.mem.offset);
   }
-
-  // Calculate result
-  uint16_t result = dest_value + src_value;
-
-  // Set flags
-  SetFlagsAfterAdditionByte(cpu, dest_value, src_value, result);
-
-  // Write back the result
-  if (is_memory_operand) {
-    // Write to memory
-    uint16_t segment = cpu->registers[kDS];
-    cpu->config->write_memory_byte(
-        cpu->config->context, (segment << 4) + dest_address, result & 0xFF);
-  } else {
-    // Write to register
-    if (rm_field < 4) {
-      // AL, CL, DL, BL
-      cpu->registers[rm_field] =
-          (cpu->registers[rm_field] & 0xFF00) | (result & 0xFF);
-    } else {
-      // AH, CH, DH, BH
-      cpu->registers[rm_field - 4] =
-          (cpu->registers[rm_field - 4] & 0x00FF) | ((result & 0xFF) << 8);
-    }
-  }
-
-  return kExecuteSuccess;
+  return operand;
 }
 
-// Helper functions for the instruction handlers
-
-// Calculate effective address for memory operands
-static uint16_t CalculateEffectiveAddress(
-    CPUState* cpu, uint8_t rm_field, int16_t displacement) {
-  uint16_t address = 0;
-
-  switch (rm_field) {
-    case 0:  // [BX + SI]
-      address = cpu->registers[kBX] + cpu->registers[kSI];
-      break;
-    case 1:  // [BX + DI]
-      address = cpu->registers[kBX] + cpu->registers[kDI];
-      break;
-    case 2:  // [BP + SI]
-      address = cpu->registers[kBP] + cpu->registers[kSI];
-      break;
-    case 3:  // [BP + DI]
-      address = cpu->registers[kBP] + cpu->registers[kDI];
-      break;
-    case 4:  // [SI]
-      address = cpu->registers[kSI];
-      break;
-    case 5:  // [DI]
-      address = cpu->registers[kDI];
-      break;
-    case 6:  // [BP] or direct address
-      address = cpu->registers[kBP];
-      break;
-    case 7:  // [BX]
-      address = cpu->registers[kBX];
-      break;
+// Write register byte value.
+static inline void WriteRegisterByte(
+    CPUState* cpu, const RegisterOperandByte* reg_op, uint8_t value) {
+  if (reg_op->is_high_byte) {
+    // AH, CH, DH, BH (high byte of AX, CX, DX, BX)
+    cpu->registers[reg_op->reg_index] =
+        (cpu->registers[reg_op->reg_index] & 0x00FF) | (value << 8);
+  } else {
+    // AL, CL, DL, BL (low byte of AX, CX, DX, BX)
+    cpu->registers[reg_op->reg_index] =
+        (cpu->registers[reg_op->reg_index] & 0xFF00) | value;
   }
+}
 
-  return address + displacement;
+// Write register word value.
+static inline void WriteRegisterWord(
+    CPUState* cpu, const RegisterOperandWord* reg_op, uint16_t value) {
+  cpu->registers[reg_op->reg_index] = value;
+}
+
+// Write a byte value to a register or memory operand.
+static inline void WriteOperandByte(
+    CPUState* cpu, const OperandByte* operand, uint8_t value) {
+  if (operand->type == kOperandTypeRegister) {
+    // Register operand
+    WriteRegisterByte(cpu, &operand->op.reg, value);
+  } else {
+    // Memory operand
+    WriteByte(cpu, operand->op.mem.segment, operand->op.mem.offset, value);
+  }
+}
+
+// Write a word value to a register or memory operand.
+static inline void WriteOperandWord(
+    CPUState* cpu, const OperandWord* operand, uint16_t value) {
+  if (operand->type == kOperandTypeRegister) {
+    // Register operand
+    WriteRegisterWord(cpu, &operand->op.reg, value);
+  } else {
+    WriteWord(cpu, operand->op.mem.segment, operand->op.mem.offset, value);
+  }
 }
 
 // Set CPU flags after an 8-bit addition operation
@@ -249,6 +360,18 @@ static void SetFlagsAfterAdditionByte(
   } else {
     cpu->flags &= ~kPF;
   }
+}
+
+// ADD r/m8, r8
+static ExecuteInstructionStatus HandleOpcode00(
+    CPUState* cpu, EncodedInstruction instruction) {
+  RegisterOperandByte src = GetRegisterOperandByte(cpu, instruction.mod_rm.reg);
+  OperandByte dest = ReadOperandByte(cpu, instruction);
+  uint8_t dest_value = GetOperandValueByte(cpu, &dest);
+  uint16_t result = dest_value + src.value;
+  WriteOperandByte(cpu, &dest, result & 0xFF);
+  SetFlagsAfterAdditionByte(cpu, dest_value, src.value, result);
+  return kExecuteSuccess;
 }
 
 // Opcode lookup table entry.
