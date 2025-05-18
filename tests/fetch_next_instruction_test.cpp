@@ -61,6 +61,8 @@ ostream& operator<<(ostream& os, const EncodedInstruction& instruction) {
 
 // Test helper to assemble instructions using fasm and return the machine code.
 vector<uint8_t> Assemble(const string& name, const string& asm_code) {
+  cout << ">> Assembling " << name << ":" << endl << asm_code << endl;
+
   // Create a temporary file for the assembly code
   string asm_file_name = kTestOutputDir + name + ".asm";
   ofstream asm_file(asm_file_name);
@@ -92,6 +94,7 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
   string disasm_command =
       "objdump -D -b binary -m i8086 -M intel " + com_file_name;
   system(disasm_command.c_str());
+  cout << endl;
 
   return machine_code;
 }
@@ -144,11 +147,12 @@ vector<EncodedInstruction> TestFetchInstructions(
   cpu.registers[kIP] = kCOMFileLoadOffset;
 
   // Fetch instructions until we reach the end of the machine code
+  cout << ">> Reading encoded instructions:" << endl;
   vector<EncodedInstruction> instructions;
   while (cpu.registers[kIP] < kCOMFileLoadOffset + machine_code.size()) {
     EncodedInstruction instruction = FetchNextInstruction(&cpu);
     instructions.push_back(instruction);
-    cout << instruction << endl;
+    cout << "  " << instruction << endl;
     cpu.registers[kIP] += instruction.size;
   }
 
