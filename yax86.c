@@ -38,12 +38,12 @@ static inline void WriteWord(
 
 // Type signature of an opcode handler function.
 typedef ExecuteInstructionStatus (*OpcodeHandler)(
-    CPUState* cpu, EncodedInstruction instruction);
+    CPUState* cpu, const EncodedInstruction* instruction);
 
 // The address of a register operand.
 typedef struct {
-  // Segment register.
-  Register reg;
+  // Register index.
+  RegisterIndex register_index;
   // Byte offset within the register; only relevant for byte-sized operands.
   // 0 for low byte (AL, CL, DL, BL), 8 for high byte (AH, CH, DH, BH).
   uint8_t byte_offset;
@@ -64,7 +64,7 @@ typedef struct {
 // The address of a memory operand.
 typedef struct {
   // Segment register.
-  Register segment;
+  RegisterIndex segment_register_index;
   // Effective address offset.
   uint16_t offset;
 } MemoryAddress;
@@ -90,9 +90,9 @@ typedef struct {
   OperandType type;
   // Address of the operand.
   union {
-    RegisterAddress reg;  // For register operands
-    MemoryAddress mem;    // For memory operands
-  } address;
+    RegisterAddress register_address;  // For register operands
+    MemoryAddress memory_address;      // For memory operands
+  } value;
 } OperandAddress;
 
 // Memory or register operand of byte size.
@@ -111,98 +111,99 @@ typedef struct {
 // reg or R/M field.
 static inline RegisterOperandByte GetRegisterOperandByte(
     CPUState* cpu, uint8_t reg_or_rm) {
-  RegisterOperandByte reg_op;
+  RegisterOperandByte op;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL (low byte of AX, CX, DX, BX)
-    reg_op.address.reg = reg_or_rm;
-    reg_op.address.byte_offset = 0;
+    op.address.register_index = reg_or_rm;
+    op.address.byte_offset = 0;
   } else {
     // AH, CH, DH, BH (high byte of AX, CX, DX, BX)
-    reg_op.address.reg = reg_or_rm - 4;
-    reg_op.address.byte_offset = 8;
+    op.address.register_index = reg_or_rm - 4;
+    op.address.byte_offset = 8;
   }
-  reg_op.value =
-      (cpu->registers[reg_op.address.reg] >> reg_op.address.byte_offset) & 0xFF;
-  return reg_op;
+  op.value =
+      (cpu->registers[op.address.register_index] >> op.address.byte_offset) &
+      0xFF;
+  return op;
 }
 
 // Get the register operand for a word instruction based on the ModR/M byte's
 // reg or R/M field.
 static inline RegisterOperandWord GetRegisterOperandWord(
     CPUState* cpu, uint8_t reg_or_rm) {
-  RegisterOperandWord reg_op;
-  reg_op.address.reg = reg_or_rm;
-  reg_op.value = cpu->registers[reg_op.address.reg];
-  return reg_op;
+  RegisterOperandWord op;
+  op.address.register_index = reg_or_rm;
+  op.value = cpu->registers[op.address.register_index];
+  return op;
 }
 
 // Compute the memory address for an instruction.
 static inline MemoryAddress GetMemoryOperandAddress(
-    CPUState* cpu, EncodedInstruction instruction) {
+    CPUState* cpu, const EncodedInstruction* instruction) {
   MemoryAddress address;
-  uint8_t mod = instruction.mod_rm.mod;
-  uint8_t rm = instruction.mod_rm.rm;
+  uint8_t mod = instruction->mod_rm.mod;
+  uint8_t rm = instruction->mod_rm.rm;
   switch (rm) {
     case 0:  // [BX + SI]
       address.offset = cpu->registers[kBX] + cpu->registers[kSI];
-      address.segment = kDS;
+      address.segment_register_index = kDS;
       break;
     case 1:  // [BX + DI]
       address.offset = cpu->registers[kBX] + cpu->registers[kDI];
-      address.segment = kDS;
+      address.segment_register_index = kDS;
       break;
     case 2:  // [BP + SI]
       address.offset = cpu->registers[kBP] + cpu->registers[kSI];
-      address.segment = kSS;
+      address.segment_register_index = kSS;
       break;
     case 3:  // [BP + DI]
       address.offset = cpu->registers[kBP] + cpu->registers[kDI];
-      address.segment = kSS;
+      address.segment_register_index = kSS;
       break;
     case 4:  // [SI]
       address.offset = cpu->registers[kSI];
-      address.segment = kDS;
+      address.segment_register_index = kDS;
       break;
     case 5:  // [DI]
       address.offset = cpu->registers[kDI];
-      address.segment = kDS;
+      address.segment_register_index = kDS;
       break;
     case 6:
       if (mod == 0) {
         // Direct memory address with 16-bit displacement
         address.offset = 0;
-        address.segment = kDS;
+        address.segment_register_index = kDS;
       } else {
         // [BP]
         address.offset = cpu->registers[kBP];
-        address.segment = kSS;
+        address.segment_register_index = kSS;
       }
       break;
     case 7:  // [BX]
       address.offset = cpu->registers[kBX];
-      address.segment = kDS;
+      address.segment_register_index = kDS;
       break;
     default:
       // Not possible as RM field is 3 bits (0-7).
       address.offset = 0xFFFF;
-      address.segment = kDS;  // Invalid RM field
+      address.segment_register_index = kDS;  // Invalid RM field
       break;
   }
 
   // Apply segment override if present
-  for (int i = 0; i < instruction.prefix_size; ++i) {
-    switch (instruction.prefix[i]) {
+  for (int i = 0; i < instruction->prefix_size; ++i) {
+    switch (instruction->prefix[i]) {
       case 0x26:  // ES
-        address.segment = kES;
+        address.segment_register_index = kES;
         break;
       case 0x2E:  // CS
-        address.segment = kCS;
+        address.segment_register_index = kCS;
         break;
       case 0x36:  // SS
-        address.segment = kSS;
+        address.segment_register_index = kSS;
         break;
       case 0x3E:  // DS
-        address.segment = kDS;
+        address.segment_register_index = kDS;
         break;
       default:
         // Ignore other prefixes
@@ -211,17 +212,17 @@ static inline MemoryAddress GetMemoryOperandAddress(
   }
 
   // Add displacement if present
-  switch (instruction.displacement_size) {
+  switch (instruction->displacement_size) {
     case 1: {
       // Sign-extend 8-bit displacement
-      int8_t disp8 = (int8_t)instruction.displacement[0];
+      int8_t disp8 = (int8_t)instruction->displacement[0];
       address.offset += disp8;
       break;
     }
     case 2: {
       // 16-bit displacement
       address.offset +=
-          (instruction.displacement[1] << 8) | instruction.displacement[0];
+          (instruction->displacement[1] << 8) | instruction->displacement[0];
       break;
     }
     default:
@@ -235,24 +236,27 @@ static inline MemoryAddress GetMemoryOperandAddress(
 // Get a register or memory operand for a byte instruction based on the ModR/M
 // byte and displacement.
 static inline OperandByte GetOperandByte(
-    CPUState* cpu, EncodedInstruction instruction) {
+    CPUState* cpu, const EncodedInstruction* instruction) {
   OperandByte operand;
-  uint8_t mod = instruction.mod_rm.mod;
-  uint8_t rm = instruction.mod_rm.rm;
+  uint8_t mod = instruction->mod_rm.mod;
+  uint8_t rm = instruction->mod_rm.rm;
 
   if (mod == 3) {
     // Register operand
     operand.address.type = kOperandTypeRegister;
     RegisterOperandByte reg_op = GetRegisterOperandByte(cpu, rm);
-    operand.address.address.reg = reg_op.address;
+    operand.address.value.register_address = reg_op.address;
     operand.value = reg_op.value;
   } else {
     // Memory operand
     operand.address.type = kOperandTypeMemory;
-    operand.address.address.mem = GetMemoryOperandAddress(cpu, instruction);
+    operand.address.value.memory_address =
+        GetMemoryOperandAddress(cpu, instruction);
     operand.value = ReadByte(
-        cpu, cpu->registers[operand.address.address.mem.segment],
-        operand.address.address.mem.offset);
+        cpu,
+        cpu->registers[operand.address.value.memory_address
+                           .segment_register_index],
+        operand.address.value.memory_address.offset);
   }
   return operand;
 }
@@ -260,24 +264,27 @@ static inline OperandByte GetOperandByte(
 // Get a register or memory operand for a word instruction based on the ModR/M
 // byte and displacement.
 static inline OperandWord GetOperandWord(
-    CPUState* cpu, EncodedInstruction instruction) {
+    CPUState* cpu, const EncodedInstruction* instruction) {
   OperandWord operand;
-  uint8_t mod = instruction.mod_rm.mod;
-  uint8_t rm = instruction.mod_rm.rm;
+  uint8_t mod = instruction->mod_rm.mod;
+  uint8_t rm = instruction->mod_rm.rm;
 
   if (mod == 3) {
     // Register operand
     operand.address.type = kOperandTypeRegister;
     RegisterOperandWord reg_op = GetRegisterOperandWord(cpu, rm);
-    operand.address.address.reg = reg_op.address;
+    operand.address.value.register_address = reg_op.address;
     operand.value = reg_op.value;
   } else {
     // Memory operand
     operand.address.type = kOperandTypeMemory;
-    operand.address.address.mem = GetMemoryOperandAddress(cpu, instruction);
+    operand.address.value.memory_address =
+        GetMemoryOperandAddress(cpu, instruction);
     operand.value = ReadWord(
-        cpu, cpu->registers[operand.address.address.mem.segment],
-        operand.address.address.mem.offset);
+        cpu,
+        cpu->registers[operand.address.value.memory_address
+                           .segment_register_index],
+        operand.address.value.memory_address.offset);
   }
   return operand;
 }
@@ -285,15 +292,16 @@ static inline OperandWord GetOperandWord(
 // Write register byte value.
 static inline void WriteRegisterByte(
     CPUState* cpu, const RegisterAddress* address, uint8_t value) {
-  cpu->registers[address->reg] =
-      (cpu->registers[address->reg] & (0xFF << (8 - address->byte_offset))) |
+  cpu->registers[address->register_index] =
+      (cpu->registers[address->register_index] &
+       (0xFF << (8 - address->byte_offset))) |
       (value << address->byte_offset);
 }
 
 // Write register word value.
 static inline void WriteRegisterWord(
     CPUState* cpu, const RegisterAddress* address, uint16_t value) {
-  cpu->registers[address->reg] = value;
+  cpu->registers[address->register_index] = value;
 }
 
 // Write a byte value to a register or memory operand.
@@ -301,12 +309,14 @@ static inline void WriteOperandByte(
     CPUState* cpu, const OperandByte* operand, uint8_t value) {
   if (operand->address.type == kOperandTypeRegister) {
     // Register operand
-    WriteRegisterByte(cpu, &operand->address.address.reg, value);
+    WriteRegisterByte(cpu, &operand->address.value.register_address, value);
   } else {
     // Memory operand
     WriteByte(
-        cpu, cpu->registers[operand->address.address.mem.segment],
-        operand->address.address.mem.offset, value);
+        cpu,
+        cpu->registers[operand->address.value.memory_address
+                           .segment_register_index],
+        operand->address.value.memory_address.offset, value);
   }
 }
 
@@ -315,11 +325,13 @@ static inline void WriteOperandWord(
     CPUState* cpu, const OperandWord* operand, uint16_t value) {
   if (operand->address.type == kOperandTypeRegister) {
     // Register operand
-    WriteRegisterWord(cpu, &operand->address.address.reg, value);
+    WriteRegisterWord(cpu, &operand->address.value.register_address, value);
   } else {
     WriteWord(
-        cpu, cpu->registers[operand->address.address.mem.segment],
-        operand->address.address.mem.offset, value);
+        cpu,
+        cpu->registers[operand->address.value.memory_address
+                           .segment_register_index],
+        operand->address.value.memory_address.offset, value);
   }
 }
 
@@ -386,8 +398,9 @@ static void SetFlagsAfterAdditionByte(
 
 // ADD r/m8, r8
 static ExecuteInstructionStatus HandleOpcode00(
-    CPUState* cpu, EncodedInstruction instruction) {
-  RegisterOperandByte src = GetRegisterOperandByte(cpu, instruction.mod_rm.reg);
+    CPUState* cpu, const EncodedInstruction* instruction) {
+  RegisterOperandByte src =
+      GetRegisterOperandByte(cpu, instruction->mod_rm.reg);
   OperandByte dest = GetOperandByte(cpu, instruction);
   uint16_t result = dest.value + src.value;
   WriteOperandByte(cpu, &dest, result & 0xFF);
@@ -1026,18 +1039,18 @@ FetchNextInstructionStatus FetchNextInstruction(
 }
 
 ExecuteInstructionStatus ExecuteInstruction(
-    CPUState* cpu, EncodedInstruction instruction) {
-  OpcodeMetadata* metadata = &opcode_table[instruction.opcode];
+    CPUState* cpu, const EncodedInstruction* instruction) {
+  OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
   if (!metadata->handler) {
     return kExecuteInvalidOpcode;
   }
 
   // Check encoded instruction against expected instruction format.
-  if (instruction.has_mod_rm != metadata->has_modrm) {
+  if (instruction->has_mod_rm != metadata->has_modrm) {
     return kExecuteInvalidInstruction;
   }
-  if (instruction.immediate_size !=
-      (metadata->has_modrm ? GetImmediateSize(metadata, instruction.mod_rm.reg)
+  if (instruction->immediate_size !=
+      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
                            : metadata->immediate_size)) {
     return kExecuteInvalidInstruction;
   }

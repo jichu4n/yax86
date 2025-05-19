@@ -49,7 +49,7 @@ typedef enum {
 
   // Instruction Pointer Register
   kIP,
-} Register;
+} RegisterIndex;
 
 #define kNumRegisters (kIP + 1)
 
@@ -90,9 +90,6 @@ typedef enum {
   // instruction's prefix exceeds MAX_NUM_PREFIX_BYTES.
   kInterruptInvalidOpcode = 6,
 } Interrupt;
-
-// Data size for memory and register operations
-typedef enum { kByte = 1, kWord = 2 } CPUDataWidth;
 
 // Runtime configuration
 typedef struct {
@@ -203,7 +200,7 @@ typedef enum {
 
 // Execute a single instruction.
 ExecuteInstructionStatus ExecuteInstruction(
-    CPUState* cpu, EncodedInstruction instruction);
+    CPUState* cpu, const EncodedInstruction* instruction);
 
 #ifdef __cplusplus
 }  // extern "C"
