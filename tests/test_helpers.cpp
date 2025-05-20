@@ -50,6 +50,31 @@ ostream& operator<<(ostream& os, const EncodedInstruction& instruction) {
   return os;
 }
 
+string GetFlagName(Flag flag) {
+  switch (flag) {
+    case kCF:
+      return "CF";
+    case kPF:
+      return "PF";
+    case kAF:
+      return "AF";
+    case kZF:
+      return "ZF";
+    case kSF:
+      return "SF";
+    case kTF:
+      return "TF";
+    case kIF:
+      return "IF";
+    case kDF:
+      return "DF";
+    case kOF:
+      return "OF";
+    default:
+      return "Unknown flag";
+  }
+}
+
 vector<uint8_t> Assemble(const string& name, const string& asm_code) {
   cout << ">> Assembling " << name << ":" << endl << asm_code << endl;
 

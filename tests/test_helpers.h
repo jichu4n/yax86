@@ -16,6 +16,9 @@ constexpr uint16_t kCOMFileLoadOffset = 0x100;
 std::ostream& operator<<(
     std::ostream& os, const EncodedInstruction& instruction);
 
+// Returns the name of a CPU flag for debugging.
+std::string GetFlagName(Flag flag);
+
 // Test helper to assemble instructions using fasm and return the machine code.
 std::vector<uint8_t> Assemble(
     const std::string& name, const std::string& asm_code);

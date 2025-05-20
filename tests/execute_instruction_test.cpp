@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <iomanip>
+
 #include "../yax86.h"
 #include "./test_helpers.h"
 
@@ -35,6 +37,22 @@ void TestExecuteInstructions(
   }
 }
 
+// CPU flag and expected value pair.
+struct FlagAndValue {
+  Flag flag;
+  bool value;
+};
+
+// Helper function to check the value of a list of flags.
+void CheckFlags(const CPUState* cpu, const vector<FlagAndValue>& flags) {
+  for (const auto& flag_and_value : flags) {
+    EXPECT_EQ(GetFlag(cpu, flag_and_value.flag), flag_and_value.value)
+        << "Flag " << GetFlagName(flag_and_value.flag) << " expected to be "
+        << (flag_and_value.value ? "set" : "not set") << ", but was "
+        << (GetFlag(cpu, flag_and_value.flag) ? "set" : "not set");
+  }
+}
+
 class ExecuteInstructionTest : public ::testing::Test {
  protected:
   void SetUp() override {}
@@ -48,41 +66,70 @@ TEST_F(ExecuteInstructionTest, ExecuteAddInstruction) {
       "add cx, ax\n"
       "add ch, [di+1]\n"
       "add cl, [di-1]\n");
-
   helper->cpu_.registers[kDS] = 0;
+
   // ax = 0002, bx = 0400, memory[0400] = 1234, result = 1236
   helper->cpu_.registers[kAX] = 0x0002;
   helper->cpu_.registers[kBX] = 0x0400;
   helper->memory_[0x400] = 0x34;
   helper->memory_[0x401] = 0x12;
-
   TestExecuteInstructions(helper, 1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1236);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, true},
+                      {kCF, false},
+                      {kAF, false},
+                      {kOF, false}});
 
-  // bx = 0400, memory[0400] = 1234, cx = 0xEFFF, result = 0233
+  // bx = 0400, memory[0400] = 1234, cx = EFFF, result = 0233
   helper->cpu_.registers[kCX] = 0xEFFF;
   TestExecuteInstructions(helper, 1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1236);
   EXPECT_EQ(helper->memory_[0x400], 0x33);
   EXPECT_EQ(helper->memory_[0x401], 0x02);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), true);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, true},
+                      {kCF, true},
+                      {kAF, true},
+                      {kOF, false}});
 
   // cx = EFFF, ax = 1236, result = 0235
   TestExecuteInstructions(helper, 1);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0x0235);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), true);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, true},
+                      {kCF, true},
+                      {kAF, true},
+                      {kOF, false}});
 
-  // ch = 02, di+1 = 0501, memory[0501] = ae, result = b0
+  // ch = 02, di+1 = 0501, memory[0501] = AE, result = B0
   helper->cpu_.registers[kDI] = 0x0500;
   helper->memory_[0x0501] = 0xAE;
   TestExecuteInstructions(helper, 1);
   EXPECT_EQ((helper->cpu_.registers[kCX] >> 8) & 0xFF, 0xB0);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, true},
+                      {kPF, false},
+                      {kCF, false},
+                      {kAF, true},
+                      {kOF, false}});
 
-  // cl = 35, di-1 = 04FF, memory[04FF] = cb, result = 00
+  // cl = 35, di-1 = 04FF, memory[04FF] = CB, result = 00
   helper->memory_[0x04FF] = 0xCB;
   TestExecuteInstructions(helper, 1);
   EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0x00);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), true);
+  CheckFlags(
+      &helper->cpu_, {{kZF, true},
+                      {kSF, false},
+                      {kPF, true},
+                      {kCF, true},
+                      {kAF, true},
+                      {kOF, false}});
 }
