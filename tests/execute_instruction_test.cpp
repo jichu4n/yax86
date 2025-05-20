@@ -31,9 +31,9 @@ void TestExecuteInstructions(
           "Failed to fetch instruction at IP: " + to_string(*ip) +
           ", status: " + to_string(status));
     }
+    *ip += instruction.size;
     cout << "  " << instruction << endl;
     ExecuteInstruction(cpu, &instruction);
-    *ip += instruction.size;
   }
 }
 
@@ -65,7 +65,9 @@ TEST_F(ExecuteInstructionTest, ExecuteAddInstruction) {
       "add [bx], cx\n"
       "add cx, ax\n"
       "add ch, [di+1]\n"
-      "add cl, [di-1]\n");
+      "add cl, [di-1]\n"
+      "add al, 0AAh\n"
+      "add ax, 0AAAAh\n");
   helper->cpu_.registers[kDS] = 0;
 
   // ax = 0002, bx = 0400, memory[0400] = 1234, result = 1236
@@ -131,5 +133,29 @@ TEST_F(ExecuteInstructionTest, ExecuteAddInstruction) {
                       {kPF, true},
                       {kCF, true},
                       {kAF, true},
+                      {kOF, false}});
+
+  // al = 55, immediate = AA, result = FF
+  helper->cpu_.registers[kAX] = 0x5555;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xFF);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, true},
+                      {kPF, true},
+                      {kCF, false},
+                      {kAF, false},
+                      {kOF, false}});
+
+  // ax = 5555, immediate = AAAA, result = FFFF
+  helper->cpu_.registers[kAX] = 0x5555;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFF);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, true},
+                      {kPF, true},
+                      {kCF, false},
+                      {kAF, false},
                       {kOF, false}});
 }

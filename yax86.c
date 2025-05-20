@@ -390,6 +390,26 @@ static inline OperandAddress GetRegisterOrMemoryOperandAddress(
   return address;
 }
 
+// Read an 8-bit immediate value.
+static inline OperandValue ReadImmediateByte(
+    const EncodedInstruction* instruction) {
+  return ByteValue(instruction->immediate[0]);
+}
+
+// Read a 16-bit immediate value.
+static inline OperandValue ReadImmediateWord(
+    const EncodedInstruction* instruction) {
+  return WordValue(
+      instruction->immediate[0] | (instruction->immediate[1] << 8));
+}
+
+// Table of ReadImmediate* functions, indexed by Width.
+static OperandValue (*const kReadImmediateValueFn[kNumWidths])(
+    const EncodedInstruction* instruction) = {
+    ReadImmediateByte,  // kByte
+    ReadImmediateWord   // kWord
+};
+
 // Set common CPU flags after an 8-bit operation. This includes:
 // - Zero flag (ZF)
 // - Sign flag (SF)
@@ -478,15 +498,22 @@ static inline Operand ReadRegisterOrMemoryOperand(
 }
 
 // Get a register operand for an instruction.
-static inline Operand ReadRegisterOperand(const InstructionContext* ctx) {
+static inline Operand ReadRegisterOperandForRegister(
+    const InstructionContext* ctx, RegisterIndex register_index) {
   Width width = ctx->metadata->width;
   Operand operand;
   operand.address.type = kOperandAddressTypeRegister;
   operand.address.value.register_address =
-      kGetRegisterAddressFn[width](ctx->cpu, ctx->instruction->mod_rm.reg);
+      kGetRegisterAddressFn[width](ctx->cpu, register_index);
   operand.value = kReadOperandValueFn[kOperandAddressTypeRegister][width](
       ctx->cpu, &operand.address);
   return operand;
+}
+
+// Get a register operand for an instruction from the REG field of the Mod/RM
+// byte.
+static inline Operand ReadRegisterOperand(const InstructionContext* ctx) {
+  return ReadRegisterOperandForRegister(ctx, ctx->instruction->mod_rm.reg);
 }
 
 // Write a value to a register or memory operand address.
@@ -504,6 +531,12 @@ static inline void WriteOperand(
   WriteOperandAddress(ctx, &operand->address, raw_value);
 }
 
+// Read an immediate value from the instruction.
+static inline OperandValue ReadImmediate(const InstructionContext* ctx) {
+  Width width = ctx->metadata->width;
+  return kReadImmediateValueFn[width](ctx->instruction);
+}
+
 // Set common CPU flags after an instruction.
 static inline void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
@@ -513,14 +546,14 @@ static inline void SetCommonFlagsAfterInstruction(
 
 // Set CPU flags after an instruction.
 static inline void SetFlagsAfterAddInstruction(
-    const InstructionContext* ctx, const Operand* op1, const Operand* op2,
-    uint32_t result) {
+    const InstructionContext* ctx, const OperandValue* op1,
+    const OperandValue* op2, uint32_t result) {
   Width width = ctx->metadata->width;
   SetCommonFlagsAfterInstruction(ctx, result);
 
   // Get raw values from operands
-  uint32_t operand1 = FromOperand(op1);
-  uint32_t operand2 = FromOperand(op2);
+  uint32_t operand1 = FromOperandValue(op1);
+  uint32_t operand2 = FromOperandValue(op2);
 
   switch (width) {
     case kByte: {
@@ -556,28 +589,42 @@ static inline void SetFlagsAfterAddInstruction(
   }
 }
 
+// Common logic for ADD and ADC instructions.
+static inline ExecuteInstructionStatus ExecuteAdd(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value,
+    bool carry) {
+  uint32_t result =
+      FromOperandValue(src_value) + FromOperand(dest) + (carry ? 1 : 0);
+  WriteOperand(ctx, dest, result);
+  SetFlagsAfterAddInstruction(ctx, src_value, &dest->value, result);
+  return kExecuteSuccess;
+}
+
 // ADD r/m8, r8
 // ADD r/m16, r16
-static ExecuteInstructionStatus HandleAddRegisterToRegisterOrMemory(
+static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
-  Operand src = ReadRegisterOperand(ctx);
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  uint32_t result = FromOperand(&src) + FromOperand(&dest);
-  WriteOperand(ctx, &dest, result);
-  SetFlagsAfterAddInstruction(ctx, &src, &dest, result);
-  return kExecuteSuccess;
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteAdd(ctx, &dest, &src.value, false);
 }
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-static ExecuteInstructionStatus HandleAddRegisterOrMemoryToRegister(
+static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
   Operand dest = ReadRegisterOperand(ctx);
-  uint32_t result = FromOperand(&src) + FromOperand(&dest);
-  WriteOperand(ctx, &dest, result);
-  SetFlagsAfterAddInstruction(ctx, &src, &dest, result);
-  return kExecuteSuccess;
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteAdd(ctx, &dest, &src.value, false);
+}
+
+// ADD AL, imm8
+// ADD AX, imm16
+static ExecuteInstructionStatus ExecuteAddImmediateToALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegister(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteAdd(ctx, &dest, &src_value, false);
 }
 
 // Opcode metadata definitions.
@@ -587,29 +634,37 @@ static const OpcodeMetadata opcodes[] = {
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
-     .handler = HandleAddRegisterToRegisterOrMemory},
+     .handler = ExecuteAddRegisterToRegisterOrMemory},
     // ADD r/m16, r16
     {.opcode = 0x01,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
-     HandleAddRegisterToRegisterOrMemory},
+     .handler = ExecuteAddRegisterToRegisterOrMemory},
     // ADD r8, r/m8
     {.opcode = 0x02,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
-     .handler = HandleAddRegisterOrMemoryToRegister},
+     .handler = ExecuteAddRegisterOrMemoryToRegister},
     // ADD r16, r/m16
     {.opcode = 0x03,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
-     .handler = HandleAddRegisterOrMemoryToRegister},
+     .handler = ExecuteAddRegisterOrMemoryToRegister},
     // ADD AL, imm8
-    {.opcode = 0x04, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x04,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteAddImmediateToALOrAX},
     // ADD AX, imm16
-    {.opcode = 0x04, .has_modrm = false, .immediate_size = 1, .width = kWord},
+    {.opcode = 0x05,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteAddImmediateToALOrAX},
     // PUSH ES
     {.opcode = 0x06, .has_modrm = false, .immediate_size = 0, .width = kWord},
     // POP ES
