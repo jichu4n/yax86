@@ -374,3 +374,118 @@ TEST_F(ExecuteInstructionTest, ExecuteADCInstructions) {
                       {kAF, true},
                       {kOF, false}});
 }
+
+TEST_F(ExecuteInstructionTest, ExecuteINCInstructions) {
+  auto helper = CreateCPUTestHelper(
+      "execute-inc-test",
+      "inc ax\n"
+      "inc cx\n"
+      "inc dx\n"
+      "inc bx\n"
+      "inc sp\n"
+      "inc bp\n"
+      "inc si\n"
+      "inc di\n");
+  helper->cpu_.registers[kDS] = 0;
+
+  // Test incrementing AX from 0x0000 to 0x0001, CF flag should remain unchanged
+  helper->cpu_.registers[kAX] = 0x0000;
+  // Set CF flag to verify INC doesn't change it
+  SetFlag(&helper->cpu_, kCF, true);
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0001);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, false},
+                      {kCF, true},  // CF unchanged
+                      {kAF, false},
+                      {kOF, false}});
+
+  // Test incrementing CX from 0xFFFF to 0x0000 (overflow)
+  helper->cpu_.registers[kCX] = 0xFFFF;
+  // Reset CF flag to verify INC doesn't change it
+  SetFlag(&helper->cpu_, kCF, false);
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kCX], 0x0000);
+  CheckFlags(
+      &helper->cpu_, {{kZF, true},
+                      {kSF, false},
+                      {kPF, true},
+                      {kCF, false},  // CF unchanged
+                      {kAF, true},
+                      {kOF, false}});
+
+  // Test incrementing DX from 0x7FFF to 0x8000 (sign change)
+  helper->cpu_.registers[kDX] = 0x7FFF;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x8000);
+  CheckFlags(
+      &helper->cpu_,
+      {{kZF, false},
+       {kSF, true},  // Sign changed to negative
+       {kPF, true},
+       {kCF, false},  // CF unchanged
+       {kAF, true},
+       {kOF, true}});  // Overflow because sign changed incorrectly
+
+  // Test incrementing BX (regular case)
+  helper->cpu_.registers[kBX] = 0x1234;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kBX], 0x1235);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, true},
+                      {kCF, false},  // CF unchanged
+                      {kAF, false},
+                      {kOF, false}});
+
+  // Test incrementing SP (regular case)
+  helper->cpu_.registers[kSP] = 0x2000;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kSP], 0x2001);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, false},
+                      {kCF, false},  // CF unchanged
+                      {kAF, false},
+                      {kOF, false}});
+
+  // Test incrementing BP (regular case)
+  helper->cpu_.registers[kBP] = 0x3000;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kBP], 0x3001);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, false},
+                      {kCF, false},  // CF unchanged
+                      {kAF, false},
+                      {kOF, false}});
+
+  // Test incrementing SI (regular case)
+  helper->cpu_.registers[kSI] = 0x4000;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kSI], 0x4001);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, false},
+                      {kCF, false},  // CF unchanged
+                      {kAF, false},
+                      {kOF, false}});
+
+  // Test incrementing DI (regular case)
+  helper->cpu_.registers[kDI] = 0x5000;
+  TestExecuteInstructions(helper, 1);
+  EXPECT_EQ(helper->cpu_.registers[kDI], 0x5001);
+  CheckFlags(
+      &helper->cpu_, {{kZF, false},
+                      {kSF, false},
+                      {kPF, false},
+                      {kCF, false},  // CF unchanged
+                      {kAF, false},
+                      {kOF, false}});
+}

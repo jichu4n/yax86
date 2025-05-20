@@ -239,6 +239,18 @@ static void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
     {WriteMemoryByte, WriteMemoryWord},
 };
 
+// Bitmask to extract the sign bit of a value.
+static const uint32_t kSignBit[kNumWidths] = {
+    1 << 7,   // kByte
+    1 << 15,  // kWord
+};
+
+// Maximum value of each data width.
+static const uint32_t kMaxValue[kNumWidths] = {
+    0xFF,   // kByte
+    0xFFFF  // kWord
+};
+
 // ============================================================================
 // Instructions
 // ============================================================================
@@ -410,49 +422,6 @@ static OperandValue (*const kReadImmediateValueFn[kNumWidths])(
     ReadImmediateWord   // kWord
 };
 
-// Set common CPU flags after an 8-bit operation. This includes:
-// - Zero flag (ZF)
-// - Sign flag (SF)
-// - Parity Flag (PF)
-static void SetCommonFlagsAfterInstructionByte(CPUState* cpu, uint32_t result) {
-  uint8_t result8 = result & 0xFF;
-  // Zero flag (ZF)
-  SetFlag(cpu, kZF, result8 == 0);
-  // Sign flag (SF)
-  SetFlag(cpu, kSF, result8 & 0x80);
-  // Parity flag (PF)
-  // Set if the number of set bits in the least significant byte is even
-  uint8_t parity = result8;
-  parity ^= parity >> 4;
-  parity ^= parity >> 2;
-  parity ^= parity >> 1;
-  SetFlag(cpu, kPF, (parity & 1) == 0);
-}
-
-// Set common CPU flags after a 16-bit operation.
-static void SetCommonFlagsAfterInstructionWord(CPUState* cpu, uint32_t result) {
-  uint16_t result16 = result & 0xFFFF;
-  // Zero flag (ZF)
-  SetFlag(cpu, kZF, result16 == 0);
-  // Sign flag (SF)
-  SetFlag(cpu, kSF, result16 & 0x8000);
-  // Parity flag (PF)
-  // Set if the number of set bits in the least significant byte is even
-  uint8_t parity = result16 & 0xFF;  // Check only the low byte for parity
-  parity ^= parity >> 4;
-  parity ^= parity >> 2;
-  parity ^= parity >> 1;
-  SetFlag(cpu, kPF, (parity & 1) == 0);
-}
-
-// Table of common CPU flag setting functions, indexed by Width.
-static void (*const kSetCommonFlagsFn[kNumWidths])(
-    CPUState* cpu,
-    uint32_t result) = {
-    SetCommonFlagsAfterInstructionByte,  // kByte
-    SetCommonFlagsAfterInstructionWord   // kWord
-};
-
 struct OpcodeMetadata;
 
 // Instruction execution context.
@@ -498,7 +467,7 @@ static inline Operand ReadRegisterOrMemoryOperand(
 }
 
 // Get a register operand for an instruction.
-static inline Operand ReadRegisterOperandForRegister(
+static inline Operand ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index) {
   Width width = ctx->metadata->width;
   Operand operand;
@@ -513,7 +482,7 @@ static inline Operand ReadRegisterOperandForRegister(
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
 static inline Operand ReadRegisterOperand(const InstructionContext* ctx) {
-  return ReadRegisterOperandForRegister(ctx, ctx->instruction->mod_rm.reg);
+  return ReadRegisterOperandForRegisterIndex(ctx, ctx->instruction->mod_rm.reg);
 }
 
 // Write a value to a register or memory operand address.
@@ -537,72 +506,77 @@ static inline OperandValue ReadImmediate(const InstructionContext* ctx) {
   return kReadImmediateValueFn[width](ctx->instruction);
 }
 
-// Set common CPU flags after an instruction.
+// Set common CPU flags after an instruction. This includes:
+// - Zero flag (ZF)
+// - Sign flag (SF)
+// - Parity Flag (PF)
 static inline void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
-  kSetCommonFlagsFn[width](ctx->cpu, result);
+  result &= kMaxValue[width];
+  // Zero flag (ZF)
+  SetFlag(ctx->cpu, kZF, result == 0);
+  // Sign flag (SF)
+  SetFlag(ctx->cpu, kSF, result & kSignBit[width]);
+  // Parity flag (PF)
+  // Set if the number of set bits in the least significant byte is even
+  uint8_t parity = result & 0xFF;  // Check only the low byte for parity
+  parity ^= parity >> 4;
+  parity ^= parity >> 2;
+  parity ^= parity >> 1;
+  SetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
-// Set CPU flags after an instruction.
-static inline void SetFlagsAfterAddInstruction(
-    const InstructionContext* ctx, const OperandValue* op1,
-    const OperandValue* op2, uint32_t result, bool did_carry) {
-  Width width = ctx->metadata->width;
+// Set CPU flags after an INC instruction.
+// Other than common flags, the INC instruction sets the following flags:
+// - Overflow Flag (OF) - Set when result has wrong sign
+// - Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
+static void SetFlagsAfterInc(
+    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
+    bool did_carry) {
   SetCommonFlagsAfterInstruction(ctx, result);
 
-  // Get raw values from operands
-  uint32_t operand1 = FromOperandValue(op1);
-  uint32_t operand2 = FromOperandValue(op2);
+  // Overflow Flag (OF) Set when result has wrong sign (both operands have same
+  // sign but result has different sign)
+  uint32_t sign_bit = kSignBit[ctx->metadata->width];
+  bool op1_sign = (op1 & sign_bit) != 0;
+  bool op2_sign = (op2 & sign_bit) != 0;
+  bool result_sign = (result & sign_bit) != 0;
+  SetFlag(ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
 
-  switch (width) {
-    case kByte: {
-      // Carry Flag (CF)
-      SetFlag(ctx->cpu, kCF, result > 0xFF);
-      // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-      SetFlag(
-          ctx->cpu, kAF,
-          ((operand1 & 0xF) + (operand2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
-      // Overflow Flag (OF)
-      // Set when result has wrong sign (both operands have same sign but result
-      // has different sign)
-      bool op1_sign = (operand1 & 0x80) != 0;
-      bool op2_sign = (operand2 & 0x80) != 0;
-      bool result_sign = (result & 0x80) != 0;
-      SetFlag(
-          ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
-      break;
-    }
-    case kWord: {
-      // Carry Flag (CF)
-      SetFlag(ctx->cpu, kCF, result > 0xFFFF);
-      // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-      SetFlag(
-          ctx->cpu, kAF,
-          ((operand1 & 0xF) + (operand2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
-      // Overflow Flag (OF)
-      // Set when result has wrong sign (both operands have same sign but result
-      // has different sign)
-      bool op1_sign = (operand1 & 0x8000) != 0;
-      bool op2_sign = (operand2 & 0x8000) != 0;
-      bool result_sign = (result & 0x8000) != 0;
-      SetFlag(
-          ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
-      break;
-    }
-  }
+  // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
+  SetFlag(
+      ctx->cpu, kAF, ((op1 & 0xF) + (op2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
 }
 
-// Common logic for ADD and ADC instructions.
+// Set CPU flags after an ADD or ADC instruction.
+// Other than the flags set by the INC instruction, the ADD instruction sets the
+// following flags:
+// - Carry Flag (CF) - Set when result overflows the maximum width
+static void SetFlagsAfterAdd(
+    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
+    bool did_carry) {
+  SetFlagsAfterInc(ctx, op1, op2, result, did_carry);
+  // Carry Flag (CF)
+  SetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
+}
+
+// Common signature of SetFlagsAfterAdd and SetFlagsAfterInc.
+typedef void (*SetFlagsAfterFn)(
+    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
+    bool did_carry);
+
+// Common logic for ADD, ADC, and INC instructions.
 static inline ExecuteInstructionStatus ExecuteAdd(
     const InstructionContext* ctx, Operand* dest, OperandValue* src_value,
-    bool carry) {
+    bool carry, SetFlagsAfterFn set_flags_after_fn) {
+  uint32_t raw_dest_value = FromOperand(dest);
+  uint32_t raw_src_value = FromOperandValue(src_value);
   bool should_carry = carry && GetFlag(ctx->cpu, kCF);
-  uint32_t result =
-      FromOperandValue(src_value) + FromOperand(dest) + (should_carry ? 1 : 0);
+  uint32_t result = raw_dest_value + raw_src_value + (should_carry ? 1 : 0);
   WriteOperand(ctx, dest, result);
-  SetFlagsAfterAddInstruction(
-      ctx, src_value, &dest->value, result, should_carry);
+  (*set_flags_after_fn)(
+      ctx, raw_dest_value, raw_src_value, result, should_carry);
   return kExecuteSuccess;
 }
 
@@ -612,7 +586,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, false);
+  return ExecuteAdd(ctx, &dest, &src.value, false, SetFlagsAfterAdd);
 }
 
 // ADD r8, r/m8
@@ -621,16 +595,16 @@ static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, false);
+  return ExecuteAdd(ctx, &dest, &src.value, false, SetFlagsAfterAdd);
 }
 
 // ADD AL, imm8
 // ADD AX, imm16
 static ExecuteInstructionStatus ExecuteAddImmediateToALOrAX(
     const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegister(ctx, kAX);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteAdd(ctx, &dest, &src_value, false);
+  return ExecuteAdd(ctx, &dest, &src_value, false, SetFlagsAfterAdd);
 }
 
 // ADC r/m8, r8
@@ -639,7 +613,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, true);
+  return ExecuteAdd(ctx, &dest, &src.value, true, SetFlagsAfterAdd);
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
@@ -647,16 +621,25 @@ static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, true);
+  return ExecuteAdd(ctx, &dest, &src.value, true, SetFlagsAfterAdd);
 }
 
 // ADC AL, imm8
 // ADC AX, imm16
 static ExecuteInstructionStatus ExecuteAddImmediateToALOrAXWithCarry(
     const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegister(ctx, kAX);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteAdd(ctx, &dest, &src_value, true);
+  return ExecuteAdd(ctx, &dest, &src_value, true, SetFlagsAfterAdd);
+}
+
+// INC AX/CX/DX/BX/SP/BP/SI/DI
+static ExecuteInstructionStatus ExecuteIncRegister(
+    const InstructionContext* ctx) {
+  RegisterIndex register_index = ctx->instruction->opcode - 0x40;
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  OperandValue src_value = WordValue(1);
+  return ExecuteAdd(ctx, &dest, &src_value, false, SetFlagsAfterInc);
 }
 
 // Opcode metadata definitions.
@@ -828,21 +811,53 @@ static const OpcodeMetadata opcodes[] = {
     // AAS
     {.opcode = 0x3F, .has_modrm = false, .immediate_size = 0},
     // INC AX
-    {.opcode = 0x40, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x40,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // INC CX
-    {.opcode = 0x41, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x41,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // INC DX
-    {.opcode = 0x42, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x42,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // INC BX
-    {.opcode = 0x43, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x43,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // INC SP
-    {.opcode = 0x44, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x44,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // INC BP
-    {.opcode = 0x45, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x45,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // INC SI
-    {.opcode = 0x46, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x46,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // INC DI
-    {.opcode = 0x47, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x47,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteIncRegister},
     // DEC AX
     {.opcode = 0x48, .has_modrm = false, .immediate_size = 0},
     // DEC CX
