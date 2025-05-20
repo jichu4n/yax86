@@ -73,10 +73,10 @@ typedef enum {
   kDF = (1 << 10),
   // Overflow Flag
   kOF = (1 << 11),
-} CPUFlags;
+} Flag;
 
 // CPU flags value on reset.
-#define kInitialCPUFlags (1 << 1)  // Reserved_1 is always 1.
+#define kInitialFlags (1 << 1)  // Reserved_1 is always 1.
 
 // Standard interrupts.
 typedef enum {
@@ -115,6 +115,11 @@ typedef struct {
 
 // Initialize CPU state.
 void InitCPU(CPUState* cpu);
+
+// Get the value of a CPU flag.
+bool GetFlag(const CPUState* cpu, Flag flag);
+// Set a CPU flag.
+void SetFlag(CPUState* cpu, Flag flag, bool value);
 
 // ============================================================================
 // Instructions

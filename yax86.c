@@ -390,13 +390,16 @@ static inline OperandAddress GetRegisterOrMemoryOperandAddress(
   return address;
 }
 
-// Set or clear a CPU flag.
-static inline void SetFlag(CPUState* cpu, CPUFlags flag, bool value) {
+void SetFlag(CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
     cpu->flags &= ~flag;
   }
+}
+
+bool GetFlag(const CPUState* cpu, Flag flag) {
+  return (cpu->flags & flag) != 0;
 }
 
 // Set common CPU flags after an 8-bit operation. This includes:
@@ -1096,7 +1099,7 @@ void InitCPU(CPUState* cpu) {
   // Zero out the CPU state
   const CPUState zero_cpu_state = {0};
   *cpu = zero_cpu_state;
-  cpu->flags = kInitialCPUFlags;
+  cpu->flags = kInitialFlags;
 }
 
 // ============================================================================
