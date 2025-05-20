@@ -117,9 +117,17 @@ typedef struct {
 void InitCPU(CPUState* cpu);
 
 // Get the value of a CPU flag.
-bool GetFlag(const CPUState* cpu, Flag flag);
+static inline bool GetFlag(const CPUState* cpu, Flag flag) {
+  return (cpu->flags & flag) != 0;
+}
 // Set a CPU flag.
-void SetFlag(CPUState* cpu, Flag flag, bool value);
+static inline void SetFlag(CPUState* cpu, Flag flag, bool value) {
+  if (value) {
+    cpu->flags |= flag;
+  } else {
+    cpu->flags &= ~flag;
+  }
+}
 
 // ============================================================================
 // Instructions

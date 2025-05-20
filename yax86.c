@@ -390,18 +390,6 @@ static inline OperandAddress GetRegisterOrMemoryOperandAddress(
   return address;
 }
 
-void SetFlag(CPUState* cpu, Flag flag, bool value) {
-  if (value) {
-    cpu->flags |= flag;
-  } else {
-    cpu->flags &= ~flag;
-  }
-}
-
-bool GetFlag(const CPUState* cpu, Flag flag) {
-  return (cpu->flags & flag) != 0;
-}
-
 // Set common CPU flags after an 8-bit operation. This includes:
 // - Zero flag (ZF)
 // - Sign flag (SF)
