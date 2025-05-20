@@ -390,66 +390,57 @@ static inline OperandAddress GetRegisterOrMemoryOperandAddress(
   return address;
 }
 
-// Set CPU flags after an 8-bit addition operation
-static void SetFlagsAfterAdditionByte(
-    CPUState* cpu, uint8_t operand1, uint8_t operand2, uint16_t result) {
-  // Carry flag (CF)
-  if (result > 0xFF) {
-    cpu->flags |= kCF;
+// Set or clear a CPU flag.
+static inline void SetFlag(CPUState* cpu, CPUFlags flag, bool value) {
+  if (value) {
+    cpu->flags |= flag;
   } else {
-    cpu->flags &= ~kCF;
+    cpu->flags &= ~flag;
   }
+}
 
-  // Update result to 8-bit
+// Set common CPU flags after an 8-bit operation. This includes:
+// - Zero flag (ZF)
+// - Sign flag (SF)
+// - Parity Flag (PF)
+static void SetCommonFlagsAfterInstructionByte(CPUState* cpu, uint32_t result) {
   uint8_t result8 = result & 0xFF;
-
   // Zero flag (ZF)
-  if (result8 == 0) {
-    cpu->flags |= kZF;
-  } else {
-    cpu->flags &= ~kZF;
-  }
-
+  SetFlag(cpu, kZF, result8 == 0);
   // Sign flag (SF)
-  if (result8 & 0x80) {
-    cpu->flags |= kSF;
-  } else {
-    cpu->flags &= ~kSF;
-  }
-
-  // Overflow flag (OF)
-  // Overflow occurs when both operands have same sign but result has different
-  // sign
-  bool op1_sign = (operand1 & 0x80) != 0;
-  bool op2_sign = (operand2 & 0x80) != 0;
-  bool result_sign = (result8 & 0x80) != 0;
-
-  if ((op1_sign == op2_sign) && (op1_sign != result_sign)) {
-    cpu->flags |= kOF;
-  } else {
-    cpu->flags &= ~kOF;
-  }
-
-  // Auxiliary Carry flag (AF)
-  // Set if there's a carry from bit 3 to bit 4
-  if (((operand1 & 0xF) + (operand2 & 0xF)) > 0xF) {
-    cpu->flags |= kAF;
-  } else {
-    cpu->flags &= ~kAF;
-  }
-
+  SetFlag(cpu, kSF, result8 & 0x80);
   // Parity flag (PF)
   // Set if the number of set bits in the least significant byte is even
   uint8_t parity = result8;
   parity ^= parity >> 4;
   parity ^= parity >> 2;
   parity ^= parity >> 1;
-  if ((parity & 1) == 0) {
-    cpu->flags |= kPF;
-  } else {
-    cpu->flags &= ~kPF;
-  }
+  SetFlag(cpu, kPF, (parity & 1) == 0);
 }
+
+// Set common CPU flags after a 16-bit operation.
+static void SetCommonFlagsAfterInstructionWord(CPUState* cpu, uint32_t result) {
+  uint16_t result16 = result & 0xFFFF;
+  // Zero flag (ZF)
+  SetFlag(cpu, kZF, result16 == 0);
+  // Sign flag (SF)
+  SetFlag(cpu, kSF, result16 & 0x8000);
+  // Parity flag (PF)
+  // Set if the number of set bits in the least significant byte is even
+  uint8_t parity = result16 & 0xFF;  // Check only the low byte for parity
+  parity ^= parity >> 4;
+  parity ^= parity >> 2;
+  parity ^= parity >> 1;
+  SetFlag(cpu, kPF, (parity & 1) == 0);
+}
+
+// Table of common CPU flag setting functions, indexed by Width.
+static void (*const kSetCommonFlagsFn[kNumWidths])(
+    CPUState* cpu,
+    uint32_t result) = {
+    SetCommonFlagsAfterInstructionByte,  // kByte
+    SetCommonFlagsAfterInstructionWord   // kWord
+};
 
 struct OpcodeMetadata;
 
@@ -522,6 +513,58 @@ static inline void WriteOperand(
   WriteOperandAddress(ctx, &operand->address, raw_value);
 }
 
+// Set common CPU flags after an instruction.
+static inline void SetCommonFlagsAfterInstruction(
+    const InstructionContext* ctx, uint32_t result) {
+  Width width = ctx->metadata->width;
+  kSetCommonFlagsFn[width](ctx->cpu, result);
+}
+
+// Set CPU flags after an instruction.
+static inline void SetFlagsAfterAddInstruction(
+    const InstructionContext* ctx, const Operand* op1, const Operand* op2,
+    uint32_t result) {
+  Width width = ctx->metadata->width;
+  SetCommonFlagsAfterInstruction(ctx, result);
+
+  // Get raw values from operands
+  uint32_t operand1 = FromOperand(op1);
+  uint32_t operand2 = FromOperand(op2);
+
+  switch (width) {
+    case kByte: {
+      // Carry Flag (CF)
+      SetFlag(ctx->cpu, kCF, result > 0xFF);
+      // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
+      SetFlag(ctx->cpu, kAF, ((operand1 & 0xF) + (operand2 & 0xF)) > 0xF);
+      // Overflow Flag (OF)
+      // Set when result has wrong sign (both operands have same sign but result
+      // has different sign)
+      bool op1_sign = (operand1 & 0x80) != 0;
+      bool op2_sign = (operand2 & 0x80) != 0;
+      bool result_sign = (result & 0x80) != 0;
+      SetFlag(
+          ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
+      break;
+    }
+    case kWord: {
+      // Carry Flag (CF)
+      SetFlag(ctx->cpu, kCF, result > 0xFFFF);
+      // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
+      SetFlag(ctx->cpu, kAF, ((operand1 & 0xF) + (operand2 & 0xF)) > 0xF);
+      // Overflow Flag (OF)
+      // Set when result has wrong sign (both operands have same sign but result
+      // has different sign)
+      bool op1_sign = (operand1 & 0x8000) != 0;
+      bool op2_sign = (operand2 & 0x8000) != 0;
+      bool result_sign = (result & 0x8000) != 0;
+      SetFlag(
+          ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
+      break;
+    }
+  }
+}
+
 // ADD r/m8, r8
 // ADD r/m16, r16
 static ExecuteInstructionStatus HandleAddRegisterToRegisterOrMemory(
@@ -530,10 +573,7 @@ static ExecuteInstructionStatus HandleAddRegisterToRegisterOrMemory(
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   uint32_t result = FromOperand(&src) + FromOperand(&dest);
   WriteOperand(ctx, &dest, result);
-  // TODO: Fix this
-  SetFlagsAfterAdditionByte(
-      ctx->cpu, dest.value.value.byte_value, src.value.value.byte_value,
-      result);
+  SetFlagsAfterAddInstruction(ctx, &src, &dest, result);
   return kExecuteSuccess;
 }
 
@@ -544,11 +584,8 @@ static ExecuteInstructionStatus HandleAddRegisterOrMemoryToRegister(
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   Operand dest = ReadRegisterOperand(ctx);
   uint32_t result = FromOperand(&src) + FromOperand(&dest);
-  WriteOperand(ctx, &dest.address, result);
-  // TODO: Fix this
-  SetFlagsAfterAdditionByte(
-      ctx->cpu, src.value.value.byte_value, dest.value.value.byte_value,
-      result);
+  WriteOperand(ctx, &dest, result);
+  SetFlagsAfterAddInstruction(ctx, &src, &dest, result);
   return kExecuteSuccess;
 }
 
