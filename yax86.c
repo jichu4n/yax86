@@ -547,7 +547,7 @@ static inline void SetCommonFlagsAfterInstruction(
 // Set CPU flags after an instruction.
 static inline void SetFlagsAfterAddInstruction(
     const InstructionContext* ctx, const OperandValue* op1,
-    const OperandValue* op2, uint32_t result) {
+    const OperandValue* op2, uint32_t result, bool did_carry) {
   Width width = ctx->metadata->width;
   SetCommonFlagsAfterInstruction(ctx, result);
 
@@ -560,7 +560,9 @@ static inline void SetFlagsAfterAddInstruction(
       // Carry Flag (CF)
       SetFlag(ctx->cpu, kCF, result > 0xFF);
       // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-      SetFlag(ctx->cpu, kAF, ((operand1 & 0xF) + (operand2 & 0xF)) > 0xF);
+      SetFlag(
+          ctx->cpu, kAF,
+          ((operand1 & 0xF) + (operand2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
       // Overflow Flag (OF)
       // Set when result has wrong sign (both operands have same sign but result
       // has different sign)
@@ -575,7 +577,9 @@ static inline void SetFlagsAfterAddInstruction(
       // Carry Flag (CF)
       SetFlag(ctx->cpu, kCF, result > 0xFFFF);
       // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-      SetFlag(ctx->cpu, kAF, ((operand1 & 0xF) + (operand2 & 0xF)) > 0xF);
+      SetFlag(
+          ctx->cpu, kAF,
+          ((operand1 & 0xF) + (operand2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
       // Overflow Flag (OF)
       // Set when result has wrong sign (both operands have same sign but result
       // has different sign)
@@ -593,10 +597,12 @@ static inline void SetFlagsAfterAddInstruction(
 static inline ExecuteInstructionStatus ExecuteAdd(
     const InstructionContext* ctx, Operand* dest, OperandValue* src_value,
     bool carry) {
+  bool should_carry = carry && GetFlag(ctx->cpu, kCF);
   uint32_t result =
-      FromOperandValue(src_value) + FromOperand(dest) + (carry ? 1 : 0);
+      FromOperandValue(src_value) + FromOperand(dest) + (should_carry ? 1 : 0);
   WriteOperand(ctx, dest, result);
-  SetFlagsAfterAddInstruction(ctx, src_value, &dest->value, result);
+  SetFlagsAfterAddInstruction(
+      ctx, src_value, &dest->value, result, should_carry);
   return kExecuteSuccess;
 }
 
@@ -625,6 +631,32 @@ static ExecuteInstructionStatus ExecuteAddImmediateToALOrAX(
   Operand dest = ReadRegisterOperandForRegister(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteAdd(ctx, &dest, &src_value, false);
+}
+
+// ADC r/m8, r8
+// ADC r/m16, r16
+static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteAdd(ctx, &dest, &src.value, true);
+}
+// ADC r8, r/m8
+// ADC r16, r/m16
+static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteAdd(ctx, &dest, &src.value, true);
+}
+
+// ADC AL, imm8
+// ADC AX, imm16
+static ExecuteInstructionStatus ExecuteAddImmediateToALOrAXWithCarry(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegister(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteAdd(ctx, &dest, &src_value, true);
 }
 
 // Opcode metadata definitions.
@@ -684,17 +716,41 @@ static const OpcodeMetadata opcodes[] = {
     // PUSH CS
     {.opcode = 0x0E, .has_modrm = false, .immediate_size = 0, .width = kWord},
     // ADC r/m8, r8
-    {.opcode = 0x10, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x10,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteAddRegisterToRegisterOrMemoryWithCarry},
     // ADC r/m16, r16
-    {.opcode = 0x11, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x11,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteAddRegisterToRegisterOrMemoryWithCarry},
     // ADC r8, r/m8
-    {.opcode = 0x12, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x12,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteAddRegisterOrMemoryToRegisterWithCarry},
     // ADC r16, r/m16
-    {.opcode = 0x13, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x13,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteAddRegisterOrMemoryToRegisterWithCarry},
     // ADC AL, imm8
-    {.opcode = 0x14, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x14,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteAddImmediateToALOrAXWithCarry},
     // ADC AX, imm16
-    {.opcode = 0x15, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0x15,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteAddImmediateToALOrAXWithCarry},
     // PUSH SS
     {.opcode = 0x16, .has_modrm = false, .immediate_size = 0, .width = kWord},
     // POP SS
