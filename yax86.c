@@ -641,6 +641,38 @@ static ExecuteInstructionStatus ExecuteMoveImmediateToRegisterOrMemory(
 }
 
 // ============================================================================
+// XCHG instructions
+// ============================================================================
+
+// XCHG AX, AX/CX/DX/BX/SP/BP/SI/DI
+static ExecuteInstructionStatus ExecuteExchangeRegister(
+    const InstructionContext* ctx) {
+  RegisterIndex register_index = ctx->instruction->opcode - 0x90;
+  if (register_index == kAX) {
+    // No-op
+    return kExecuteSuccess;
+  }
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  uint32_t temp = FromOperand(&dest);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  WriteOperand(ctx, &src, temp);
+  return kExecuteSuccess;
+}
+
+// XCHG r/m8, r8
+// XCHG r/m16, r16
+static ExecuteInstructionStatus ExecuteExchangeRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  uint32_t temp = FromOperand(&dest);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  WriteOperand(ctx, &src, temp);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // ADD, ADC, and INC instructions
 // ============================================================================
 
@@ -1032,7 +1064,7 @@ static const OpcodeMetadata opcodes[] = {
     // PUSH DS
     {.opcode = 0x1E, .has_modrm = false, .immediate_size = 0, .width = kWord},
     // POP DS
-    {.opcode = 0x1E, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x1F, .has_modrm = false, .immediate_size = 0, .width = kWord},
     // AND r/m8, r8
     {.opcode = 0x20, .has_modrm = true, .immediate_size = 0, .width = kByte},
     // AND r/m16, r16
@@ -1286,9 +1318,17 @@ static const OpcodeMetadata opcodes[] = {
     // TEST r/m16, r16
     {.opcode = 0x85, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // XCHG r/m8, r8
-    {.opcode = 0x86, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x86,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteExchangeRegisterOrMemory},
     // XCHG r/m16, r16
-    {.opcode = 0x87, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x87,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegisterOrMemory},
     // MOV r/m8, r8
     {.opcode = 0x88,
      .has_modrm = true,
@@ -1330,21 +1370,53 @@ static const OpcodeMetadata opcodes[] = {
     // POP r/m16 (Group 1A)
     {.opcode = 0x8F, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // XCHG AX, AX (NOP)
-    {.opcode = 0x90, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x90,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // XCHG AX, CX
-    {.opcode = 0x91, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x91,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // XCHG AX, DX
-    {.opcode = 0x92, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x92,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // XCHG AX, BX
-    {.opcode = 0x93, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x93,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // XCHG AX, SP
-    {.opcode = 0x94, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x94,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // XCHG AX, BP
-    {.opcode = 0x95, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x95,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // XCHG AX, SI
-    {.opcode = 0x96, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x96,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // XCHG AX, DI
-    {.opcode = 0x97, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x97,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteExchangeRegister},
     // CBW
     {.opcode = 0x98, .has_modrm = false, .immediate_size = 0},
     // CWD

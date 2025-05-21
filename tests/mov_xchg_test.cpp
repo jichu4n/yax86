@@ -5,9 +5,9 @@
 
 using namespace std;
 
-class MovTest : public ::testing::Test {};
+class MovXchgTest : public ::testing::Test {};
 
-TEST_F(MovTest, MOVRegisterAndMemory) {
+TEST_F(MovXchgTest, MOVRegisterAndMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-test",
       "mov ax, [bx]\n"    // Load a word from memory into AX
@@ -117,7 +117,7 @@ TEST_F(MovTest, MOVRegisterAndMemory) {
        {kAF, true}});
 }
 
-TEST_F(MovTest, MOVSegmentRegister) {
+TEST_F(MovXchgTest, MOVSegmentRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-segment-test",
       "mov ds, ax\n"                // Move register to segment register
@@ -195,7 +195,7 @@ TEST_F(MovTest, MOVSegmentRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovTest, MOVImmediateToRegister) {
+TEST_F(MovXchgTest, MOVImmediateToRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-immediate-test",
       "mov al, 42h\n"       // Move immediate to 8-bit low register
@@ -278,7 +278,7 @@ TEST_F(MovTest, MOVImmediateToRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovTest, MOVMemoryOffsetAndALOrAX) {
+TEST_F(MovXchgTest, MOVMemoryOffsetAndALOrAX) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-memory-offset-test",
       "mov al, [0500h]\n"    // Load a byte from direct memory address to AL
@@ -381,7 +381,7 @@ TEST_F(MovTest, MOVMemoryOffsetAndALOrAX) {
   EXPECT_EQ(helper->memory_[0x0881], 0xAB);  // MSB
 }
 
-TEST_F(MovTest, MOVImmediateToRegisterOrMemory) {
+TEST_F(MovXchgTest, MOVImmediateToRegisterOrMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-immediate-to-reg-mem-test",
       "mov byte [bx], 42h\n"      // Move immediate byte to memory
@@ -500,4 +500,209 @@ TEST_F(MovTest, MOVImmediateToRegisterOrMemory) {
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0860], 0x34);  // LSB
   EXPECT_EQ(helper->memory_[0x0861], 0x12);  // MSB
+}
+
+TEST_F(MovXchgTest, XCHGRegister) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-xchg-register-test",
+      "xchg ax, ax\n"    // NOP (special case)
+      "xchg ax, bx\n"    // Exchange AX with BX
+      "xchg cx, dx\n"    // Exchange CX with DX 
+      "xchg sp, bp\n"    // Exchange SP with BP
+      "xchg si, di\n"    // Exchange SI with DI
+      "xchg ax, di\n");  // Exchange AX with DI
+  helper->cpu_.registers[kDS] = 0;
+
+  // Set various flags to verify XCHG instructions don't affect them
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, true);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, true);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+
+  // Test 1: xchg ax, ax - NOP operation
+  // Set up: AX contains 0x1234
+  helper->cpu_.registers[kAX] = 0x1234;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);  // No change
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 2: xchg ax, bx - Exchange AX with BX
+  // Set up: AX=0x1234, BX=0x5678
+  helper->cpu_.registers[kAX] = 0x1234;
+  helper->cpu_.registers[kBX] = 0x5678;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x5678);
+  EXPECT_EQ(helper->cpu_.registers[kBX], 0x1234);
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 3: xchg cx, dx - Exchange CX with DX
+  // Set up: CX=0xABCD, DX=0xEF01
+  helper->cpu_.registers[kCX] = 0xABCD;
+  helper->cpu_.registers[kDX] = 0xEF01;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kCX], 0xEF01);
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0xABCD);
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 4: xchg sp, bp - Exchange SP with BP
+  // Set up: SP=0x2000, BP=0x3000
+  helper->cpu_.registers[kSP] = 0x2000;
+  helper->cpu_.registers[kBP] = 0x3000;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kSP], 0x3000);
+  EXPECT_EQ(helper->cpu_.registers[kBP], 0x2000);
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 5: xchg si, di - Exchange SI with DI
+  // Set up: SI=0x4000, DI=0x5000
+  helper->cpu_.registers[kSI] = 0x4000;
+  helper->cpu_.registers[kDI] = 0x5000;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kSI], 0x5000);
+  EXPECT_EQ(helper->cpu_.registers[kDI], 0x4000);
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+       
+  // Test 6: xchg ax, di - Exchange AX with DI
+  // Set up: AX=0xAABB, DI=0x4000
+  helper->cpu_.registers[kAX] = 0xAABB;
+  helper->cpu_.registers[kDI] = 0x4000;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x4000);
+  EXPECT_EQ(helper->cpu_.registers[kDI], 0xAABB);
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+}
+
+TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-xchg-register-memory-test",
+      "xchg al, [bx]\n"      // Exchange AL with byte in memory
+      "xchg ch, [bx+1]\n"    // Exchange CH with byte in memory (with displacement)
+      "xchg dx, [si]\n"      // Exchange DX with word in memory
+      "xchg bp, [di+2]\n");  // Exchange BP with word in memory (with displacement)
+  helper->cpu_.registers[kDS] = 0;
+
+  // Set various flags to verify XCHG instructions don't affect them
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, true);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, true);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+
+  // Test 1: xchg al, [bx] - Exchange AL with byte in memory
+  // Set up: AL=0x42, memory at BX=0x0400 contains 0x78
+  helper->cpu_.registers[kAX] = 0x1142;  // AL = 0x42, AH = 0x11
+  helper->cpu_.registers[kBX] = 0x0400;
+  helper->memory_[0x0400] = 0x78;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x78);          // AL now has memory value
+  EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0x11);   // AH unchanged
+  EXPECT_EQ(helper->memory_[0x0400], 0x42);                     // Memory now has AL's value
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 2: xchg ch, [bx+1] - Exchange CH with byte in memory (with displacement)
+  // Set up: CX=0x5500 (CH=0x55), memory at BX+1=0x0401 contains 0xAA
+  helper->cpu_.registers[kCX] = 0x5500;  // CH = 0x55, CL = 0x00
+  helper->memory_[0x0401] = 0xAA;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ((helper->cpu_.registers[kCX] >> 8) & 0xFF, 0xAA);   // CH now has memory value
+  EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0x00);          // CL unchanged
+  EXPECT_EQ(helper->memory_[0x0401], 0x55);                     // Memory now has CH's value
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 3: xchg dx, [si] - Exchange DX with word in memory
+  // Set up: DX=0x1234, memory at SI=0x0500 contains 0x5678
+  helper->cpu_.registers[kDX] = 0x1234;
+  helper->cpu_.registers[kSI] = 0x0500;
+  helper->memory_[0x0500] = 0x78;  // LSB
+  helper->memory_[0x0501] = 0x56;  // MSB
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x5678);           // DX now has memory value
+  EXPECT_EQ(helper->memory_[0x0500], 0x34);                 // LSB of memory
+  EXPECT_EQ(helper->memory_[0x0501], 0x12);                 // MSB of memory
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 4: xchg bp, [di+2] - Exchange BP with word in memory (with displacement)
+  // Set up: BP=0xABCD, memory at DI+2=0x0602 contains 0xEF01
+  helper->cpu_.registers[kBP] = 0xABCD;
+  helper->cpu_.registers[kDI] = 0x0600;
+  helper->memory_[0x0602] = 0x01;  // LSB
+  helper->memory_[0x0603] = 0xEF;  // MSB
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kBP], 0xEF01);           // BP now has memory value
+  EXPECT_EQ(helper->memory_[0x0602], 0xCD);                 // LSB of memory
+  EXPECT_EQ(helper->memory_[0x0603], 0xAB);                 // MSB of memory
+  // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
 }
