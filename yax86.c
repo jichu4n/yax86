@@ -1,7 +1,7 @@
 #include "yax86.h"
 
 // ============================================================================
-// General helpers
+// Types and helpers
 // ============================================================================
 
 // The address of a register operand.
@@ -251,10 +251,6 @@ static const uint32_t kMaxValue[kNumWidths] = {
     0xFFFF  // kWord
 };
 
-// ============================================================================
-// Instructions
-// ============================================================================
-
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
 static inline RegisterAddress GetRegisterAddressByte(
@@ -451,8 +447,6 @@ typedef struct OpcodeMetadata {
   OpcodeHandler handler;
 } OpcodeMetadata;
 
-static const OpcodeMetadata opcodes[];
-
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
 static inline Operand ReadRegisterOrMemoryOperand(
@@ -526,6 +520,34 @@ static inline void SetCommonFlagsAfterInstruction(
   parity ^= parity >> 1;
   SetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
+
+// ============================================================================
+// MOV instructions
+// ============================================================================
+
+// MOV r/m8, r8
+// MOV r/m16, r16
+static ExecuteInstructionStatus ExecuteMoveRegisterToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  return kExecuteSuccess;
+}
+
+// MOV r8, r/m8
+// MOV r16, r/m16
+static ExecuteInstructionStatus ExecuteMoveRegisterOrMemoryToRegister(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  return kExecuteSuccess;
+}
+
+// ============================================================================
+// ADD, ADC, and INC instructions
+// ============================================================================
 
 // Set CPU flags after an INC instruction.
 // Other than common flags, the INC instruction sets the following flags:
@@ -641,6 +663,10 @@ static ExecuteInstructionStatus ExecuteIncRegister(
   OperandValue src_value = WordValue(1);
   return ExecuteAdd(ctx, &dest, &src_value, false, SetFlagsAfterInc);
 }
+
+// ============================================================================
+// SUB, SBB, and DEC instructions
+// ============================================================================
 
 // Set CPU flags after a DEC or SUB/SBB operation (base function).
 // This function sets ZF, SF, PF, OF, AF. It does NOT affect CF.
@@ -771,6 +797,10 @@ static ExecuteInstructionStatus ExecuteDecRegister(
   OperandValue src_value = WordValue(1);
   return ExecuteSub(ctx, &dest, &src_value, false, SetFlagsAfterDec);
 }
+
+// ============================================================================
+// Opcode table
+// ============================================================================
 
 // Opcode metadata definitions.
 static const OpcodeMetadata opcodes[] = {
@@ -1165,13 +1195,29 @@ static const OpcodeMetadata opcodes[] = {
     // XCHG r/m16, r16
     {.opcode = 0x87, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // MOV r/m8, r8
-    {.opcode = 0x88, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x88,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteMoveRegisterToRegisterOrMemory},
     // MOV r/m16, r16
-    {.opcode = 0x89, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x89,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteMoveRegisterToRegisterOrMemory},
     // MOV r8, r/m8
-    {.opcode = 0x8A, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x8A,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteMoveRegisterOrMemoryToRegister},
     // MOV r16, r/m16
-    {.opcode = 0x8B, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x8B,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteMoveRegisterOrMemoryToRegister},
     // MOV r/m16, sreg
     {.opcode = 0x8C, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // LEA r16, m

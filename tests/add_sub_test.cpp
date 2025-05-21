@@ -1,7 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <iomanip>
-
 #include "../yax86.h"
 #include "./test_helpers.h"
 
