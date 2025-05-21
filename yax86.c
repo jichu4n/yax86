@@ -588,6 +588,47 @@ static ExecuteInstructionStatus ExecuteMoveImmediateToRegister(
   return kExecuteSuccess;
 }
 
+// MOV AL, moffs16
+// MOV AX, moffs16
+static ExecuteInstructionStatus ExecuteMoveMemoryOffsetToALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  // Offset is always 16 bits, even though the data width of the operation may
+  // be 8 bits.
+  OperandValue src_offset_value =
+      kReadImmediateValueFn[kWord](ctx->instruction);
+  OperandAddress src_address = {
+      .type = kOperandAddressTypeMemory,
+      .value = {
+          .memory_address.segment_register_index = kDS,
+          .memory_address.offset = FromOperandValue(&src_offset_value),
+      }};
+  OperandValue src_value =
+      kReadOperandValueFn[kOperandAddressTypeMemory][ctx->metadata->width](
+          ctx->cpu, &src_address);
+  WriteOperand(ctx, &dest, FromOperandValue(&src_value));
+  return kExecuteSuccess;
+}
+
+// MOV moffs16, AL
+// MOV moffs16, AX
+static ExecuteInstructionStatus ExecuteMoveALOrAXToMemoryOffset(
+    const InstructionContext* ctx) {
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  // Offset is always 16 bits, even though the data width of the operation may
+  // be 8 bits.
+  OperandValue dest_offset_value =
+      kReadImmediateValueFn[kWord](ctx->instruction);
+  OperandAddress dest_address = {
+      .type = kOperandAddressTypeMemory,
+      .value = {
+          .memory_address.segment_register_index = kDS,
+          .memory_address.offset = FromOperandValue(&dest_offset_value),
+      }};
+  WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
+  return kExecuteSuccess;
+}
+
 // ============================================================================
 // ADD, ADC, and INC instructions
 // ============================================================================
@@ -1309,14 +1350,30 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0x9E, .has_modrm = false, .immediate_size = 0},
     // LAHF
     {.opcode = 0x9F, .has_modrm = false, .immediate_size = 0},
-    // MOV AL, moffs8
-    {.opcode = 0xA0, .has_modrm = false, .immediate_size = 2, .width = kByte},
+    // MOV AL, moffs16
+    {.opcode = 0xA0,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kByte,
+     .handler = ExecuteMoveMemoryOffsetToALOrAX},
     // MOV AX, moffs16
-    {.opcode = 0xA1, .has_modrm = false, .immediate_size = 2, .width = kWord},
-    // MOV moffs8, AL
-    {.opcode = 0xA2, .has_modrm = false, .immediate_size = 2, .width = kByte},
+    {.opcode = 0xA1,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveMemoryOffsetToALOrAX},
+    // MOV moffs16, AL
+    {.opcode = 0xA2,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kByte,
+     .handler = ExecuteMoveALOrAXToMemoryOffset},
     // MOV moffs16, AX
-    {.opcode = 0xA3, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xA3,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveALOrAXToMemoryOffset},
     // MOVSB
     {.opcode = 0xA4, .has_modrm = false, .immediate_size = 0},
     // MOVSW

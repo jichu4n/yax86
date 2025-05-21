@@ -277,3 +277,106 @@ TEST_F(MovTest, MOVImmediateToRegister) {
        {kOF, true},
        {kAF, true}});
 }
+
+TEST_F(MovTest, MOVMemoryOffsetAndALOrAX) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-mov-memory-offset-test",
+      "mov al, [0500h]\n"    // Load a byte from direct memory address to AL
+      "mov [0600h], al\n"    // Store AL to direct memory address
+      "mov ax, [0700h]\n"    // Load a word from direct memory address to AX
+      "mov [0800h], ax\n");  // Store AX to direct memory address
+
+  // Set various flags to verify MOV instructions don't affect them
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, true);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, true);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+
+  // Test with DS = 0 (direct physical address = offset)
+  helper->cpu_.registers[kDS] = 0;
+
+  // Test 1: mov al, [0500h] - Load a byte from memory to AL
+  helper->memory_[0x0500] = 0x42;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);  // AL
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 2: mov [0600h], al - Store AL to memory address
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0600], 0x42);
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 3: mov ax, [0700h] - Load a word from memory to AX
+  helper->memory_[0x0700] = 0x34;  // LSB
+  helper->memory_[0x0701] = 0x12;  // MSB
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 4: mov [0800h], ax - Store AX to memory address
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0800], 0x34);  // LSB
+  EXPECT_EQ(helper->memory_[0x0801], 0x12);  // MSB
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Now test with DS != 0 (segment:offset addressing)
+  helper = CPUTestHelper::CreateWithProgram(
+      "execute-mov-memory-offset-segment-test",
+      "mov al, [0050h]\n"    // Load a byte from memory offset to AL
+      "mov [0060h], al\n"    // Store AL to memory offset
+      "mov ax, [0070h]\n"    // Load a word from memory offset to AX
+      "mov [0080h], ax\n");  // Store AX to memory offset
+
+  helper->cpu_.registers[kDS] =
+      0x80;  // DS = 0x80, so physical addr = (0x80 << 4) + offset
+
+  // Test 5: mov al, [0050h] with DS=0x80 - Physical address = 0x0850
+  helper->memory_[0x0850] = 0xAA;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xAA);  // AL
+
+  // Test 6: mov [0060h], al with DS=0x80 - Physical address = 0x0860
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0860], 0xAA);
+
+  // Test 7: mov ax, [0070h] with DS=0x80 - Physical address = 0x0870
+  helper->memory_[0x0870] = 0xCD;  // LSB
+  helper->memory_[0x0871] = 0xAB;  // MSB
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xABCD);
+
+  // Test 8: mov [0080h], ax with DS=0x80 - Physical address = 0x0880
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0880], 0xCD);  // LSB
+  EXPECT_EQ(helper->memory_[0x0881], 0xAB);  // MSB
+}
