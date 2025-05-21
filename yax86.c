@@ -673,6 +673,89 @@ static ExecuteInstructionStatus ExecuteExchangeRegisterOrMemory(
 }
 
 // ============================================================================
+// PUSH and POP instructions
+// ============================================================================
+
+static inline void Push(const InstructionContext* ctx, OperandValue value) {
+  ctx->cpu->registers[kSP] -= 2;
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value.memory_address = {
+          .segment_register_index = kSS,
+          .offset = ctx->cpu->registers[kSP],
+      }};
+  WriteMemoryWord(ctx->cpu, &address, value);
+}
+
+static inline OperandValue Pop(const InstructionContext* ctx) {
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value.memory_address = {
+          .segment_register_index = kSS,
+          .offset = ctx->cpu->registers[kSP],
+      }};
+  OperandValue value = ReadMemoryWord(ctx->cpu, &address);
+  ctx->cpu->registers[kSP] += 2;
+  return value;
+}
+
+// PUSH AX/CX/DX/BX/SP/BP/SI/DI
+static ExecuteInstructionStatus ExecutePushRegister(
+    const InstructionContext* ctx) {
+  RegisterIndex register_index = ctx->instruction->opcode - 0x50;
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Push(ctx, src.value);
+  return kExecuteSuccess;
+}
+
+// POP AX/CX/DX/BX/SP/BP/SI/DI
+static ExecuteInstructionStatus ExecutePopRegister(
+    const InstructionContext* ctx) {
+  RegisterIndex register_index = ctx->instruction->opcode - 0x58;
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  OperandValue value = Pop(ctx);
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  return kExecuteSuccess;
+}
+
+// PUSH ES/CS/SS/DS
+static ExecuteInstructionStatus ExecutePushSegmentRegister(
+    const InstructionContext* ctx) {
+  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Push(ctx, src.value);
+  return kExecuteSuccess;
+}
+
+// POP ES/CS/SS/DS
+static ExecuteInstructionStatus ExecutePopSegmentRegister(
+    const InstructionContext* ctx) {
+  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
+  // Special case - disallow POP CS
+  if (register_index == kCS) {
+    return kExecuteInvalidInstruction;
+  }
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  OperandValue value = Pop(ctx);
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  return kExecuteSuccess;
+}
+
+// PUSHF
+static ExecuteInstructionStatus ExecutePushFlags(
+    const InstructionContext* ctx) {
+  Push(ctx, WordValue(ctx->cpu->flags));
+  return kExecuteSuccess;
+}
+
+// POPF
+static ExecuteInstructionStatus ExecutePopFlags(const InstructionContext* ctx) {
+  OperandValue value = Pop(ctx);
+  ctx->cpu->flags = FromOperandValue(&value);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // ADD, ADC, and INC instructions
 // ============================================================================
 
@@ -968,9 +1051,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteAddImmediateToALOrAX},
     // PUSH ES
-    {.opcode = 0x06, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x06,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushSegmentRegister},
     // POP ES
-    {.opcode = 0x07, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x07,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopSegmentRegister},
     // OR r/m8, r8
     {.opcode = 0x08, .has_modrm = true, .immediate_size = 0, .width = kByte},
     // OR r/m16, r16
@@ -984,7 +1075,11 @@ static const OpcodeMetadata opcodes[] = {
     // OR AX, imm16
     {.opcode = 0x0D, .has_modrm = false, .immediate_size = 2, .width = kWord},
     // PUSH CS
-    {.opcode = 0x0E, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x0E,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushSegmentRegister},
     // ADC r/m8, r8
     {.opcode = 0x10,
      .has_modrm = true,
@@ -1022,9 +1117,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteAddImmediateToALOrAXWithCarry},
     // PUSH SS
-    {.opcode = 0x16, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x16,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushSegmentRegister},
     // POP SS
-    {.opcode = 0x17, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x17,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopSegmentRegister},
     // SBB r/m8, r8
     {.opcode = 0x18,
      .has_modrm = true,
@@ -1062,9 +1165,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteSubImmediateFromALOrAXWithBorrow},
     // PUSH DS
-    {.opcode = 0x1E, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x1E,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushSegmentRegister},
     // POP DS
-    {.opcode = 0x1F, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x1F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopSegmentRegister},
     // AND r/m8, r8
     {.opcode = 0x20, .has_modrm = true, .immediate_size = 0, .width = kByte},
     // AND r/m16, r16
@@ -1242,37 +1353,101 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteDecRegister},
     // PUSH AX
-    {.opcode = 0x50, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x50,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // PUSH CX
-    {.opcode = 0x51, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x51,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // PUSH DX
-    {.opcode = 0x52, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x52,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // PUSH BX
-    {.opcode = 0x53, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x53,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // PUSH SP
-    {.opcode = 0x54, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x54,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // PUSH BP
-    {.opcode = 0x55, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x55,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // PUSH SI
-    {.opcode = 0x56, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x56,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // PUSH DI
-    {.opcode = 0x57, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x57,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushRegister},
     // POP AX
-    {.opcode = 0x58, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x58,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // POP CX
-    {.opcode = 0x59, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x59,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // POP DX
-    {.opcode = 0x5A, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x5A,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // POP BX
-    {.opcode = 0x5B, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x5B,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // POP SP
-    {.opcode = 0x5C, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x5C,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // POP BP
-    {.opcode = 0x5D, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x5D,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // POP SI
-    {.opcode = 0x5E, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x5E,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // POP DI
-    {.opcode = 0x5F, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x5F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegister},
     // JO rel8
     {.opcode = 0x70, .has_modrm = false, .immediate_size = 1, .width = kByte},
     // JNO rel8
@@ -1426,9 +1601,17 @@ static const OpcodeMetadata opcodes[] = {
     // WAIT
     {.opcode = 0x9B, .has_modrm = false, .immediate_size = 0},
     // PUSHF
-    {.opcode = 0x9C, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x9C,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePushFlags},
     // POPF
-    {.opcode = 0x9D, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x9D,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopFlags},
     // SAHF
     {.opcode = 0x9E, .has_modrm = false, .immediate_size = 0},
     // LAHF

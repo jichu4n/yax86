@@ -507,7 +507,7 @@ TEST_F(MovXchgTest, XCHGRegister) {
       "execute-xchg-register-test",
       "xchg ax, ax\n"    // NOP (special case)
       "xchg ax, bx\n"    // Exchange AX with BX
-      "xchg cx, dx\n"    // Exchange CX with DX 
+      "xchg cx, dx\n"    // Exchange CX with DX
       "xchg sp, bp\n"    // Exchange SP with BP
       "xchg si, di\n"    // Exchange SI with DI
       "xchg ax, di\n");  // Exchange AX with DI
@@ -598,7 +598,7 @@ TEST_F(MovXchgTest, XCHGRegister) {
        {kPF, true},
        {kOF, true},
        {kAF, true}});
-       
+
   // Test 6: xchg ax, di - Exchange AX with DI
   // Set up: AX=0xAABB, DI=0x4000
   helper->cpu_.registers[kAX] = 0xAABB;
@@ -620,9 +620,11 @@ TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-xchg-register-memory-test",
       "xchg al, [bx]\n"      // Exchange AL with byte in memory
-      "xchg ch, [bx+1]\n"    // Exchange CH with byte in memory (with displacement)
+      "xchg ch, [bx+1]\n"    // Exchange CH with byte in memory (with
+                             // displacement)
       "xchg dx, [si]\n"      // Exchange DX with word in memory
-      "xchg bp, [di+2]\n");  // Exchange BP with word in memory (with displacement)
+      "xchg bp, [di+2]\n");  // Exchange BP with word in memory (with
+                             // displacement)
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify XCHG instructions don't affect them
@@ -639,9 +641,10 @@ TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
   helper->cpu_.registers[kBX] = 0x0400;
   helper->memory_[0x0400] = 0x78;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x78);          // AL now has memory value
-  EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0x11);   // AH unchanged
-  EXPECT_EQ(helper->memory_[0x0400], 0x42);                     // Memory now has AL's value
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX] & 0xFF, 0x78);  // AL now has memory value
+  EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0x11);  // AH unchanged
+  EXPECT_EQ(helper->memory_[0x0400], 0x42);  // Memory now has AL's value
   // Verify flags are still set after XCHG instruction
   helper->CheckFlags(
       {{kCF, true},
@@ -651,14 +654,17 @@ TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
        {kOF, true},
        {kAF, true}});
 
-  // Test 2: xchg ch, [bx+1] - Exchange CH with byte in memory (with displacement)
-  // Set up: CX=0x5500 (CH=0x55), memory at BX+1=0x0401 contains 0xAA
+  // Test 2: xchg ch, [bx+1] - Exchange CH with byte in memory (with
+  // displacement) Set up: CX=0x5500 (CH=0x55), memory at BX+1=0x0401 contains
+  // 0xAA
   helper->cpu_.registers[kCX] = 0x5500;  // CH = 0x55, CL = 0x00
   helper->memory_[0x0401] = 0xAA;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ((helper->cpu_.registers[kCX] >> 8) & 0xFF, 0xAA);   // CH now has memory value
-  EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0x00);          // CL unchanged
-  EXPECT_EQ(helper->memory_[0x0401], 0x55);                     // Memory now has CH's value
+  EXPECT_EQ(
+      (helper->cpu_.registers[kCX] >> 8) & 0xFF,
+      0xAA);  // CH now has memory value
+  EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0x00);  // CL unchanged
+  EXPECT_EQ(helper->memory_[0x0401], 0x55);  // Memory now has CH's value
   // Verify flags are still set after XCHG instruction
   helper->CheckFlags(
       {{kCF, true},
@@ -675,9 +681,9 @@ TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
   helper->memory_[0x0500] = 0x78;  // LSB
   helper->memory_[0x0501] = 0x56;  // MSB
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0x5678);           // DX now has memory value
-  EXPECT_EQ(helper->memory_[0x0500], 0x34);                 // LSB of memory
-  EXPECT_EQ(helper->memory_[0x0501], 0x12);                 // MSB of memory
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x5678);  // DX now has memory value
+  EXPECT_EQ(helper->memory_[0x0500], 0x34);        // LSB of memory
+  EXPECT_EQ(helper->memory_[0x0501], 0x12);        // MSB of memory
   // Verify flags are still set after XCHG instruction
   helper->CheckFlags(
       {{kCF, true},
@@ -687,16 +693,16 @@ TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
        {kOF, true},
        {kAF, true}});
 
-  // Test 4: xchg bp, [di+2] - Exchange BP with word in memory (with displacement)
-  // Set up: BP=0xABCD, memory at DI+2=0x0602 contains 0xEF01
+  // Test 4: xchg bp, [di+2] - Exchange BP with word in memory (with
+  // displacement) Set up: BP=0xABCD, memory at DI+2=0x0602 contains 0xEF01
   helper->cpu_.registers[kBP] = 0xABCD;
   helper->cpu_.registers[kDI] = 0x0600;
   helper->memory_[0x0602] = 0x01;  // LSB
   helper->memory_[0x0603] = 0xEF;  // MSB
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kBP], 0xEF01);           // BP now has memory value
-  EXPECT_EQ(helper->memory_[0x0602], 0xCD);                 // LSB of memory
-  EXPECT_EQ(helper->memory_[0x0603], 0xAB);                 // MSB of memory
+  EXPECT_EQ(helper->cpu_.registers[kBP], 0xEF01);  // BP now has memory value
+  EXPECT_EQ(helper->memory_[0x0602], 0xCD);        // LSB of memory
+  EXPECT_EQ(helper->memory_[0x0603], 0xAB);        // MSB of memory
   // Verify flags are still set after XCHG instruction
   helper->CheckFlags(
       {{kCF, true},
