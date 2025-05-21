@@ -562,14 +562,14 @@ static void SetFlagsAfterAdd(
 }
 
 // Common signature of SetFlagsAfterAdd and SetFlagsAfterInc.
-typedef void (*SetFlagsAfterFn)(
+typedef void (*SetFlagsAfterAddFn)(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
 static inline ExecuteInstructionStatus ExecuteAdd(
     const InstructionContext* ctx, Operand* dest, OperandValue* src_value,
-    bool carry, SetFlagsAfterFn set_flags_after_fn) {
+    bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
   bool should_carry = carry && GetFlag(ctx->cpu, kCF);
@@ -640,6 +640,136 @@ static ExecuteInstructionStatus ExecuteIncRegister(
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue src_value = WordValue(1);
   return ExecuteAdd(ctx, &dest, &src_value, false, SetFlagsAfterInc);
+}
+
+// Set CPU flags after a DEC or SUB/SBB operation (base function).
+// This function sets ZF, SF, PF, OF, AF. It does NOT affect CF.
+// - OF is for the full operation op1 - (op2 + did_borrow).
+// - AF is for the full operation op1 - (op2 + did_borrow).
+static void SetFlagsAfterDec(
+    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
+    bool did_borrow) {
+  SetCommonFlagsAfterInstruction(ctx, result);
+
+  uint32_t sign_bit = kSignBit[ctx->metadata->width];
+  uint32_t max_val = kMaxValue[ctx->metadata->width];
+
+  // Overflow Flag (OF)
+  // OF is set if op1_sign != val_being_subtracted_sign AND result_sign ==
+  // val_being_subtracted_sign where val_being_subtracted = (op2 + did_borrow)
+  bool op1_sign = (op1 & sign_bit) != 0;
+  bool result_sign = (result & sign_bit) != 0;
+  uint32_t val_being_subtracted = (op2 & max_val) + (did_borrow ? 1 : 0);
+  // Mask val_being_subtracted to current width before checking its sign,
+  // in case (op2 & max_val) + 1 caused a temporary overflow beyond max_val if
+  // op2 was max_val.
+  bool val_being_subtracted_sign =
+      ((val_being_subtracted & max_val) & sign_bit) != 0;
+  SetFlag(
+      ctx->cpu, kOF,
+      (op1_sign != val_being_subtracted_sign) &&
+          (result_sign == val_being_subtracted_sign));
+
+  // Auxiliary Carry Flag (AF) - borrow from bit 3 to bit 4
+  SetFlag(ctx->cpu, kAF, (op1 & 0xF) < ((op2 & 0xF) + (did_borrow ? 1 : 0)));
+}
+
+// Set CPU flags after a SUB or SBB instruction.
+// This calls SetFlagsAfterDec and then sets the Carry Flag (CF).
+static void SetFlagsAfterSub(
+    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
+    bool did_borrow) {
+  SetFlagsAfterDec(ctx, op1, op2, result, did_borrow);
+
+  // Carry Flag (CF) - Set when a borrow is generated
+  // CF is set if op1 < (op2 + did_borrow) (unsigned comparison)
+  uint32_t val_being_subtracted =
+      (op2 & kMaxValue[ctx->metadata->width]) + (did_borrow ? 1 : 0);
+  SetFlag(ctx->cpu, kCF, op1 < val_being_subtracted);
+}
+
+// Common signature of SetFlagsAfterSub and SetFlagsAfterDec.
+typedef void (*SetFlagsAfterSubFn)(
+    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
+    bool did_borrow);
+
+// Common logic for SUB, SBB, and DEC instructions.
+static inline ExecuteInstructionStatus ExecuteSub(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value,
+    bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
+  uint32_t raw_dest_value = FromOperand(dest);
+  uint32_t raw_src_value = FromOperandValue(src_value);
+  bool should_borrow = borrow && GetFlag(ctx->cpu, kCF);
+  uint32_t result = raw_dest_value - raw_src_value - (should_borrow ? 1 : 0);
+  WriteOperand(ctx, dest, result);
+  (*set_flags_after_fn)(
+      ctx, raw_dest_value, raw_src_value, result, should_borrow);
+  return kExecuteSuccess;
+}
+
+// SUB r/m8, r8
+// SUB r/m16, r16
+static ExecuteInstructionStatus ExecuteSubRegisterFromRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteSub(ctx, &dest, &src.value, false, SetFlagsAfterSub);
+}
+
+// SUB r8, r/m8
+// SUB r16, r/m16
+static ExecuteInstructionStatus ExecuteSubRegisterOrMemoryFromRegister(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteSub(ctx, &dest, &src.value, false, SetFlagsAfterSub);
+}
+
+// SUB AL, imm8
+// SUB AX, imm16
+static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteSub(ctx, &dest, &src_value, false, SetFlagsAfterSub);
+}
+
+// SBB r/m8, r8
+// SBB r/m16, r16
+static ExecuteInstructionStatus
+ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteSub(ctx, &dest, &src.value, true, SetFlagsAfterSub);
+}
+
+// SBB r8, r/m8
+// SBB r16, r/m16
+static ExecuteInstructionStatus
+ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteSub(ctx, &dest, &src.value, true, SetFlagsAfterSub);
+}
+
+// SBB AL, imm8
+// SBB AX, imm16
+static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAXWithBorrow(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteSub(ctx, &dest, &src_value, true, SetFlagsAfterSub);
+}
+
+// DEC AX/CX/DX/BX/SP/BP/SI/DI
+static ExecuteInstructionStatus ExecuteDecRegister(
+    const InstructionContext* ctx) {
+  RegisterIndex register_index = ctx->instruction->opcode - 0x48;
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  OperandValue src_value = WordValue(1);
+  return ExecuteSub(ctx, &dest, &src_value, false, SetFlagsAfterDec);
 }
 
 // Opcode metadata definitions.
@@ -739,17 +869,41 @@ static const OpcodeMetadata opcodes[] = {
     // POP SS
     {.opcode = 0x17, .has_modrm = false, .immediate_size = 0, .width = kWord},
     // SBB r/m8, r8
-    {.opcode = 0x18, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x18,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteSubRegisterFromRegisterOrMemoryWithBorrow},
     // SBB r/m16, r16
-    {.opcode = 0x19, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x19,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteSubRegisterFromRegisterOrMemoryWithBorrow},
     // SBB r8, r/m8
-    {.opcode = 0x1A, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x1A,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteSubRegisterOrMemoryFromRegisterWithBorrow},
     // SBB r16, r/m16
-    {.opcode = 0x1B, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x1B,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteSubRegisterOrMemoryFromRegisterWithBorrow},
     // SBB AL, imm8
-    {.opcode = 0x1C, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x1C,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSubImmediateFromALOrAXWithBorrow},
     // SBB AX, imm16
-    {.opcode = 0x1D, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0x1D,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteSubImmediateFromALOrAXWithBorrow},
     // PUSH DS
     {.opcode = 0x1E, .has_modrm = false, .immediate_size = 0, .width = kWord},
     // POP DS
@@ -769,17 +923,41 @@ static const OpcodeMetadata opcodes[] = {
     // DAA
     {.opcode = 0x27, .has_modrm = false, .immediate_size = 0},
     // SUB r/m8, r8
-    {.opcode = 0x28, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x28,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteSubRegisterFromRegisterOrMemory},
     // SUB r/m16, r16
-    {.opcode = 0x29, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x29,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteSubRegisterFromRegisterOrMemory},
     // SUB r8, r/m8
-    {.opcode = 0x2A, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x2A,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteSubRegisterOrMemoryFromRegister},
     // SUB r16, r/m16
-    {.opcode = 0x2B, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x2B,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteSubRegisterOrMemoryFromRegister},
     // SUB AL, imm8
-    {.opcode = 0x2C, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x2C,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSubImmediateFromALOrAX},
     // SUB AX, imm16
-    {.opcode = 0x2D, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0x2D,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteSubImmediateFromALOrAX},
     // DAS
     {.opcode = 0x2F, .has_modrm = false, .immediate_size = 0},
     // XOR r/m8, r8
@@ -859,21 +1037,53 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteIncRegister},
     // DEC AX
-    {.opcode = 0x48, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x48,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // DEC CX
-    {.opcode = 0x49, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x49,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // DEC DX
-    {.opcode = 0x4A, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x4A,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // DEC BX
-    {.opcode = 0x4B, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x4B,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // DEC SP
-    {.opcode = 0x4C, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x4C,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // DEC BP
-    {.opcode = 0x4D, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x4D,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // DEC SI
-    {.opcode = 0x4E, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x4E,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // DEC DI
-    {.opcode = 0x4F, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x4F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteDecRegister},
     // PUSH AX
     {.opcode = 0x50, .has_modrm = false, .immediate_size = 0},
     // PUSH CX
