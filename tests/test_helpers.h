@@ -23,11 +23,19 @@ std::string GetFlagName(Flag flag);
 std::vector<uint8_t> Assemble(
     const std::string& name, const std::string& asm_code);
 
+// Default memory size for the CPU test helper.
+constexpr size_t kDefaultMemorySize = 0x1000;  // 4KB
+
 // Test helper to manage CPU state and memory.
 class CPUTestHelper {
  public:
-  explicit CPUTestHelper(size_t memory_size);
+  explicit CPUTestHelper(size_t memory_size = kDefaultMemorySize);
   ~CPUTestHelper();
+
+  // Create a test helper and load compiled assembly code into memory.
+  static std::unique_ptr<CPUTestHelper> CreateWithProgram(
+      const std::string& name, const std::string& asm_code,
+      size_t memory_size = kDefaultMemorySize);
 
   // Load data into memory.
   void Load(const std::vector<uint8_t>& data, uint16_t offset);
@@ -38,8 +46,14 @@ class CPUTestHelper {
 
   // Assemble instructions using FASM to a COM binary and load it into memory.
   // Returns the size of the loaded code.
-  size_t AssembleAndLoadCOM(
+  size_t AssembleAndLoadProgram(
       const std::string& name, const std::string& asm_code);
+
+  // Execute instructions from CS:IP.
+  void ExecuteInstructions(int num_instructions);
+
+  // Helper function to test the value of a list of flags.
+  void CheckFlags(const std::vector<std::pair<Flag, bool> >& flags);
 
   // Main memory size.
   const size_t memory_size_;

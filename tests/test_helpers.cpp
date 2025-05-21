@@ -1,5 +1,7 @@
 #include "./test_helpers.h"
 
+#include <gtest/gtest.h>
+
 #include <cstring>
 #include <fstream>
 #include <iomanip>
@@ -158,9 +160,44 @@ void CPUTestHelper::LoadCOM(const vector<uint8_t>& code) {
   cpu_.registers[kIP] = kCOMFileLoadOffset;
 }
 
-size_t CPUTestHelper::AssembleAndLoadCOM(
+size_t CPUTestHelper::AssembleAndLoadProgram(
     const string& name, const string& asm_code) {
   auto machine_code = Assemble(name, asm_code);
   LoadCOM(machine_code);
   return machine_code.size();
+}
+
+unique_ptr<CPUTestHelper> CPUTestHelper::CreateWithProgram(
+    const string& name, const string& asm_code, size_t memory_size) {
+  auto cpu_test_helper = make_unique<CPUTestHelper>(memory_size);
+  cpu_test_helper->AssembleAndLoadProgram(name, asm_code);
+  return cpu_test_helper;
+}
+
+void CPUTestHelper::ExecuteInstructions(int num_instructions) {
+  uint16_t* ip = &cpu_.registers[kIP];
+
+  cout << ">> Executing encoded instructions:" << endl;
+  for (int i = 0; i < num_instructions; ++i) {
+    EncodedInstruction instruction;
+    auto status = FetchNextInstruction(&cpu_, &instruction);
+    if (status != kFetchSuccess) {
+      throw runtime_error(
+          "Failed to fetch instruction at IP: " + to_string(*ip) +
+          ", status: " + to_string(status));
+    }
+    cout << "[" << hex << setw(4) << setfill('0') << (*ip) << "]\t"
+         << instruction << endl;
+    *ip += instruction.size;
+    ExecuteInstruction(&cpu_, &instruction);
+  }
+}
+
+void CPUTestHelper::CheckFlags(const vector<pair<Flag, bool> >& flags) {
+  for (const auto& it : flags) {
+    EXPECT_EQ(GetFlag(&cpu_, it.first), it.second)
+        << "Flag " << GetFlagName(it.first) << " expected to be "
+        << (it.second ? "set" : "not set") << ", but was "
+        << (GetFlag(&cpu_, it.first) ? "set" : "not set");
+  }
 }

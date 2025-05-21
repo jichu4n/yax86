@@ -17,7 +17,8 @@ using namespace std;
 vector<EncodedInstruction> TestFetchInstructions(
     const string& name, const string& asm_code) {
   CPUTestHelper cpu_test_helper(4 * 1024);
-  size_t machine_code_size = cpu_test_helper.AssembleAndLoadCOM(name, asm_code);
+  size_t machine_code_size =
+      cpu_test_helper.AssembleAndLoadProgram(name, asm_code);
   CPUState* cpu = &cpu_test_helper.cpu_;
   uint16_t* ip = &cpu->registers[kIP];
 
