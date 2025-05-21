@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 
 using namespace std;
 
@@ -127,7 +128,10 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
   config_.read_memory_byte = [](void* raw_context, uint16_t address) {
     Context* context = reinterpret_cast<Context*>(raw_context);
     if (address >= context->memory_size) {
-      throw runtime_error("Memory read out of bounds");
+      ostringstream oss;
+      oss << "Memory read out of bounds: 0x" << hex << address
+          << ", memory size: 0x" << hex << context->memory_size;
+      throw runtime_error(oss.str());
     }
     return context->memory[address];
   };
@@ -135,7 +139,10 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
                                  uint8_t value) {
     Context* context = reinterpret_cast<Context*>(raw_context);
     if (address >= context->memory_size) {
-      throw runtime_error("Memory write out of bounds");
+      ostringstream oss;
+      oss << "Memory write out of bounds: 0x" << hex << address
+          << ", memory size: 0x" << hex << context->memory_size;
+      throw runtime_error(oss.str());
     }
     context->memory[address] = value;
   };

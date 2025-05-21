@@ -479,6 +479,14 @@ static inline Operand ReadRegisterOperand(const InstructionContext* ctx) {
   return ReadRegisterOperandForRegisterIndex(ctx, ctx->instruction->mod_rm.reg);
 }
 
+// Get a segment register operand for an instruction from the REG field of the
+// Mod/RM byte.
+static inline Operand ReadSegmentRegisterOperand(
+    const InstructionContext* ctx) {
+  return ReadRegisterOperandForRegisterIndex(
+      ctx, ctx->instruction->mod_rm.reg + 8);
+}
+
 // Write a value to a register or memory operand address.
 static inline void WriteOperandAddress(
     const InstructionContext* ctx, const OperandAddress* address,
@@ -542,6 +550,41 @@ static ExecuteInstructionStatus ExecuteMoveRegisterOrMemoryToRegister(
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   WriteOperand(ctx, &dest, FromOperand(&src));
+  return kExecuteSuccess;
+}
+
+// MOV r/m16, sreg
+static ExecuteInstructionStatus ExecuteMoveSegmentRegisterToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadSegmentRegisterOperand(ctx);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  return kExecuteSuccess;
+}
+
+// MOV sreg, r/m16
+static ExecuteInstructionStatus ExecuteMoveRegisterOrMemoryToSegmentRegister(
+    const InstructionContext* ctx) {
+  Operand dest = ReadSegmentRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  return kExecuteSuccess;
+}
+
+// MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
+// MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
+static ExecuteInstructionStatus ExecuteMoveImmediateToRegister(
+    const InstructionContext* ctx) {
+  static const uint8_t register_index_opcode_base[kNumWidths] = {
+      0xB0,  // kByte
+      0xB8,  // kWord
+  };
+  RegisterIndex register_index =
+      ctx->instruction->opcode -
+      register_index_opcode_base[ctx->metadata->width];
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  OperandValue src_value = ReadImmediate(ctx);
+  WriteOperand(ctx, &dest, FromOperandValue(&src_value));
   return kExecuteSuccess;
 }
 
@@ -1219,11 +1262,19 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteMoveRegisterOrMemoryToRegister},
     // MOV r/m16, sreg
-    {.opcode = 0x8C, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x8C,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteMoveSegmentRegisterToRegisterOrMemory},
     // LEA r16, m
     {.opcode = 0x8D, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // MOV sreg, r/m16
-    {.opcode = 0x8E, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x8E,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteMoveRegisterOrMemoryToSegmentRegister},
     // POP r/m16 (Group 1A)
     {.opcode = 0x8F, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // XCHG AX, AX (NOP)
@@ -1291,37 +1342,101 @@ static const OpcodeMetadata opcodes[] = {
     // SCASW
     {.opcode = 0xAF, .has_modrm = false, .immediate_size = 0},
     // MOV AL, imm8
-    {.opcode = 0xB0, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB0,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV CL, imm8
-    {.opcode = 0xB1, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB1,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV DL, imm8
-    {.opcode = 0xB2, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB2,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV BL, imm8
-    {.opcode = 0xB3, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB3,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV AH, imm8
-    {.opcode = 0xB4, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB4,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV CH, imm8
-    {.opcode = 0xB5, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB5,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV DH, imm8
-    {.opcode = 0xB6, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB6,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV BH, imm8
-    {.opcode = 0xB7, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xB7,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV AX, imm16
-    {.opcode = 0xB8, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xB8,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV CX, imm16
-    {.opcode = 0xB9, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xB9,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV DX, imm16
-    {.opcode = 0xBA, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xBA,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV BX, imm16
-    {.opcode = 0xBB, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xBB,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV SP, imm16
-    {.opcode = 0xBC, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xBC,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV BP, imm16
-    {.opcode = 0xBD, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xBD,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV SI, imm16
-    {.opcode = 0xBE, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xBE,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // MOV DI, imm16
-    {.opcode = 0xBF, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xBF,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegister},
     // RET imm16
     {.opcode = 0xC2, .has_modrm = false, .immediate_size = 2, .width = kWord},
     // RET
