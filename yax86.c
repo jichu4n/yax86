@@ -622,10 +622,21 @@ static ExecuteInstructionStatus ExecuteMoveALOrAXToMemoryOffset(
   OperandAddress dest_address = {
       .type = kOperandAddressTypeMemory,
       .value = {
-          .memory_address.segment_register_index = kDS,
-          .memory_address.offset = FromOperandValue(&dest_offset_value),
-      }};
+          .memory_address = {
+              .segment_register_index = kDS,
+              .offset = FromOperandValue(&dest_offset_value),
+          }}};
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
+  return kExecuteSuccess;
+}
+
+// MOV r/m8, imm8
+// MOV r/m16, imm16
+static ExecuteInstructionStatus ExecuteMoveImmediateToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandValue src_value = ReadImmediate(ctx);
+  WriteOperand(ctx, &dest, FromOperandValue(&src_value));
   return kExecuteSuccess;
 }
 
@@ -1502,10 +1513,18 @@ static const OpcodeMetadata opcodes[] = {
     {.opcode = 0xC4, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // LDS r16, m32
     {.opcode = 0xC5, .has_modrm = true, .immediate_size = 0, .width = kWord},
-    // MOV r/m8, imm8 (Group 11)
-    {.opcode = 0xC6, .has_modrm = true, .immediate_size = 1, .width = kByte},
-    // MOV r/m16, imm16 (Group 11)
-    {.opcode = 0xC7, .has_modrm = true, .immediate_size = 2, .width = kWord},
+    // MOV r/m8, imm8
+    {.opcode = 0xC6,
+     .has_modrm = true,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteMoveImmediateToRegisterOrMemory},
+    // MOV r/m16, imm16
+    {.opcode = 0xC7,
+     .has_modrm = true,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteMoveImmediateToRegisterOrMemory},
     // RETF imm16
     {.opcode = 0xCA, .has_modrm = false, .immediate_size = 2, .width = kWord},
     // RETF

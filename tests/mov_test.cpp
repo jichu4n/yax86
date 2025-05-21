@@ -380,3 +380,124 @@ TEST_F(MovTest, MOVMemoryOffsetAndALOrAX) {
   EXPECT_EQ(helper->memory_[0x0880], 0xCD);  // LSB
   EXPECT_EQ(helper->memory_[0x0881], 0xAB);  // MSB
 }
+
+TEST_F(MovTest, MOVImmediateToRegisterOrMemory) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-mov-immediate-to-reg-mem-test",
+      "mov byte [bx], 42h\n"      // Move immediate byte to memory
+      "mov word [bx+2], 1234h\n"  // Move immediate word to memory
+      "mov byte [si], 0AAh\n"  // Move immediate byte to another memory location
+      "mov word [di], 0ABCDh\n"  // Move immediate word to another memory
+                                 // location
+      "mov cl, 55h\n"      // Move immediate to register (already tested, for
+                           // comparison)
+      "mov dx, 5678h\n");  // Move immediate to register (already tested, for
+                           // comparison)
+  helper->cpu_.registers[kDS] = 0;
+
+  // Set various flags to verify MOV instructions don't affect them
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, true);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, true);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+
+  // Setup memory addresses
+  helper->cpu_.registers[kBX] = 0x0400;
+  helper->cpu_.registers[kSI] = 0x0500;
+  helper->cpu_.registers[kDI] = 0x0600;
+
+  // Test 1: mov byte ptr [bx], 42h - Move immediate byte to memory
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0400], 0x42);
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 2: mov word ptr [bx+2], 1234h - Move immediate word to memory with
+  // displacement
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0402], 0x34);  // LSB
+  EXPECT_EQ(helper->memory_[0x0403], 0x12);  // MSB
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 3: mov byte ptr [si], 0AAh - Move immediate byte to memory via SI
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0500], 0xAA);
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 4: mov word ptr [di], 0ABCDh - Move immediate word to memory via DI
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0600], 0xCD);  // LSB
+  EXPECT_EQ(helper->memory_[0x0601], 0xAB);  // MSB
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 5: mov cl, 55h - Move immediate byte to register (opcode 0xB1)
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0x55);  // CL
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 6: mov dx, 5678h - Move immediate word to register (opcode 0xBA)
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x5678);
+  // Verify flags are still set after MOV instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test with DS != 0 (segment:offset addressing)
+  helper = CPUTestHelper::CreateWithProgram(
+      "execute-mov-immediate-to-mem-segment-test",
+      "mov byte [0050h], 42h\n"      // Move immediate byte to memory offset
+      "mov word [0060h], 1234h\n");  // Move immediate word to memory offset
+
+  helper->cpu_.registers[kDS] =
+      0x80;  // DS = 0x80, so physical addr = 0x80 << 4 + offset
+
+  // Test 9: mov byte ptr [0050h], 42h - Move immediate byte to memory offset
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0850], 0x42);
+
+  // Test 10: mov word ptr [0060h], 1234h - Move immediate word to memory offset
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0860], 0x34);  // LSB
+  EXPECT_EQ(helper->memory_[0x0861], 0x12);  // MSB
+}
