@@ -1009,6 +1009,127 @@ static ExecuteInstructionStatus ExecuteDecRegister(
 }
 
 // ============================================================================
+// Boolean AND, OR and XOR instructions
+// ============================================================================
+
+static inline void SetFlagsAfterBooleanInstruction(
+    const InstructionContext* ctx, uint32_t result) {
+  SetCommonFlagsAfterInstruction(ctx, result);
+  // Carry Flag (CF) should be cleared
+  SetFlag(ctx->cpu, kCF, false);
+  // Overflow Flag (OF) should be cleared
+  SetFlag(ctx->cpu, kOF, false);
+}
+
+// Common logic for AND instructions.
+static inline ExecuteInstructionStatus ExecuteBooleanAnd(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+  uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
+  WriteOperand(ctx, dest, result);
+  SetFlagsAfterBooleanInstruction(ctx, result);
+  return kExecuteSuccess;
+}
+
+// AND r/m8, r8
+// AND r/m16, r16
+static ExecuteInstructionStatus ExecuteBooleanAndRegisterToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteBooleanAnd(ctx, &dest, &src.value);
+}
+
+// AND r8, r/m8
+// AND r16, r/m16
+static ExecuteInstructionStatus ExecuteBooleanAndRegisterOrMemoryToRegister(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteBooleanAnd(ctx, &dest, &src.value);
+}
+
+// AND AL, imm8
+// AND AX, imm16
+static ExecuteInstructionStatus ExecuteBooleanAndImmediateToALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteBooleanAnd(ctx, &dest, &src_value);
+}
+
+// Common logic for OR instructions.
+static inline ExecuteInstructionStatus ExecuteBooleanOr(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+  uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
+  WriteOperand(ctx, dest, result);
+  SetFlagsAfterBooleanInstruction(ctx, result);
+  return kExecuteSuccess;
+}
+
+// OR r/m8, r8
+// OR r/m16, r16
+static ExecuteInstructionStatus ExecuteBooleanOrRegisterToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteBooleanOr(ctx, &dest, &src.value);
+}
+
+// OR r8, r/m8
+// OR r16, r/m16
+static ExecuteInstructionStatus ExecuteBooleanOrRegisterOrMemoryToRegister(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteBooleanOr(ctx, &dest, &src.value);
+}
+
+// OR AL, imm8
+// OR AX, imm16
+static ExecuteInstructionStatus ExecuteBooleanOrImmediateToALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteBooleanOr(ctx, &dest, &src_value);
+}
+
+// Common logic for XOR instructions.
+static inline ExecuteInstructionStatus ExecuteBooleanXor(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+  uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
+  WriteOperand(ctx, dest, result);
+  SetFlagsAfterBooleanInstruction(ctx, result);
+  return kExecuteSuccess;
+}
+
+// XOR r/m8, r8
+// XOR r/m16, r16
+static ExecuteInstructionStatus ExecuteBooleanXorRegisterToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteBooleanXor(ctx, &dest, &src.value);
+}
+
+// XOR r8, r/m8
+// XOR r16, r/m16
+static ExecuteInstructionStatus ExecuteBooleanXorRegisterOrMemoryToRegister(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteBooleanXor(ctx, &dest, &src.value);
+}
+
+// XOR AL, imm8
+// XOR AX, imm16
+static ExecuteInstructionStatus ExecuteBooleanXorImmediateToALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteBooleanXor(ctx, &dest, &src_value);
+}
+
+// ============================================================================
 // Opcode table
 // ============================================================================
 
@@ -1063,17 +1184,41 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecutePopSegmentRegister},
     // OR r/m8, r8
-    {.opcode = 0x08, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x08,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteBooleanOrRegisterToRegisterOrMemory},
     // OR r/m16, r16
-    {.opcode = 0x09, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x09,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteBooleanOrRegisterToRegisterOrMemory},
     // OR r8, r/m8
-    {.opcode = 0x0A, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x0A,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteBooleanOrRegisterOrMemoryToRegister},
     // OR r16, r/m16
-    {.opcode = 0x0B, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x0B,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteBooleanOrRegisterOrMemoryToRegister},
     // OR AL, imm8
-    {.opcode = 0x0C, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x0C,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteBooleanOrImmediateToALOrAX},
     // OR AX, imm16
-    {.opcode = 0x0D, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0x0D,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteBooleanOrImmediateToALOrAX},
     // PUSH CS
     {.opcode = 0x0E,
      .has_modrm = false,
@@ -1177,17 +1322,41 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecutePopSegmentRegister},
     // AND r/m8, r8
-    {.opcode = 0x20, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x20,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteBooleanAndRegisterToRegisterOrMemory},
     // AND r/m16, r16
-    {.opcode = 0x21, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x21,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteBooleanAndRegisterToRegisterOrMemory},
     // AND r8, r/m8
-    {.opcode = 0x22, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x22,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteBooleanAndRegisterOrMemoryToRegister},
     // AND r16, r/m16
-    {.opcode = 0x23, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x23,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteBooleanAndRegisterOrMemoryToRegister},
     // AND AL, imm8
-    {.opcode = 0x24, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x24,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteBooleanAndImmediateToALOrAX},
     // AND AX, imm16
-    {.opcode = 0x25, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0x25,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteBooleanAndImmediateToALOrAX},
     // DAA
     {.opcode = 0x27, .has_modrm = false, .immediate_size = 0},
     // SUB r/m8, r8
@@ -1229,17 +1398,41 @@ static const OpcodeMetadata opcodes[] = {
     // DAS
     {.opcode = 0x2F, .has_modrm = false, .immediate_size = 0},
     // XOR r/m8, r8
-    {.opcode = 0x30, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x30,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteBooleanXorRegisterToRegisterOrMemory},
     // XOR r/m16, r16
-    {.opcode = 0x31, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x31,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteBooleanXorRegisterToRegisterOrMemory},
     // XOR r8, r/m8
-    {.opcode = 0x32, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x32,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteBooleanXorRegisterOrMemoryToRegister},
     // XOR r16, r/m16
-    {.opcode = 0x33, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x33,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteBooleanXorRegisterOrMemoryToRegister},
     // XOR AL, imm8
-    {.opcode = 0x34, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x34,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteBooleanXorImmediateToALOrAX},
     // XOR AX, imm16
-    {.opcode = 0x35, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0x35,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteBooleanXorImmediateToALOrAX},
     // AAA
     {.opcode = 0x37, .has_modrm = false, .immediate_size = 0},
     // CMP r/m8, r8

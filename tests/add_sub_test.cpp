@@ -5,10 +5,7 @@
 
 using namespace std;
 
-class AddSubTest : public ::testing::Test {
- protected:
-  void SetUp() override {}
-};
+class AddSubTest : public ::testing::Test {};
 
 TEST_F(AddSubTest, ADD) {
   auto helper = CPUTestHelper::CreateWithProgram(
