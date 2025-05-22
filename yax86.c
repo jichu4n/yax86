@@ -1009,6 +1009,47 @@ static ExecuteInstructionStatus ExecuteDecRegister(
 }
 
 // ============================================================================
+// CMP instructions
+// ============================================================================
+
+// Common logic for CMP instructions.
+static inline ExecuteInstructionStatus ExecuteCmp(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+  uint32_t raw_dest_value = FromOperand(dest);
+  uint32_t raw_src_value = FromOperandValue(src_value);
+  uint32_t result = raw_dest_value - raw_src_value;
+  SetFlagsAfterSub(ctx, raw_dest_value, raw_src_value, result, false);
+  return kExecuteSuccess;
+}
+
+// CMP r/m8, r8
+// CMP r/m16, r16
+static ExecuteInstructionStatus ExecuteCmpRegisterToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteCmp(ctx, &dest, &src.value);
+}
+
+// CMP r8, r/m8
+// CMP r16, r/m16
+static ExecuteInstructionStatus ExecuteCmpRegisterOrMemoryToRegister(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  return ExecuteCmp(ctx, &dest, &src.value);
+}
+
+// CMP AL, imm8
+// CMP AX, imm16
+static ExecuteInstructionStatus ExecuteCmpImmediateToALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteCmp(ctx, &dest, &src_value);
+}
+
+// ============================================================================
 // Boolean AND, OR and XOR instructions
 // ============================================================================
 
@@ -1436,17 +1477,41 @@ static const OpcodeMetadata opcodes[] = {
     // AAA
     {.opcode = 0x37, .has_modrm = false, .immediate_size = 0},
     // CMP r/m8, r8
-    {.opcode = 0x38, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x38,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteCmpRegisterToRegisterOrMemory},
     // CMP r/m16, r16
-    {.opcode = 0x39, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x39,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteCmpRegisterToRegisterOrMemory},
     // CMP r8, r/m8
-    {.opcode = 0x3A, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x3A,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteCmpRegisterOrMemoryToRegister},
     // CMP r16, r/m16
-    {.opcode = 0x3B, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x3B,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteCmpRegisterOrMemoryToRegister},
     // CMP AL, imm8
-    {.opcode = 0x3C, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x3C,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteCmpImmediateToALOrAX},
     // CMP AX, imm16
-    {.opcode = 0x3D, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0x3D,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteCmpImmediateToALOrAX},
     // AAS
     {.opcode = 0x3F, .has_modrm = false, .immediate_size = 0},
     // INC AX
