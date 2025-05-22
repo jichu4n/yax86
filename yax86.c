@@ -361,14 +361,30 @@ static inline MemoryAddress GetMemoryOperandAddress(
   // Add displacement if present
   switch (instruction->displacement_size) {
     case 1: {
-      // Sign-extend 8-bit displacement
-      address.offset += (int8_t)instruction->displacement[0];
+      // Re-interpret the displacement byte as signed 8-bit integer, then
+      // sign-extend it to 32 bit
+      int32_t signed_displacement =
+          (int32_t)((int8_t)instruction->displacement[0]);
+      // Zero-extend offset to 32 bit
+      int32_t signed_offset = (int32_t)address.offset;
+      // Add the two 32-bit signed values then truncate back down to 16-bit
+      // unsigned
+      address.offset = (uint16_t)(signed_offset + signed_displacement);
       break;
     }
     case 2: {
-      // Signed 16-bit displacement
-      address.offset += (int16_t)(instruction->displacement[0] |
-                                  (instruction->displacement[1] << 8));
+      // Concatenate the two displacement bytes as an unsigned 16-bit integer
+      uint16_t unsigned_displacement =
+          ((uint16_t)instruction->displacement[0]) |
+          (((uint16_t)instruction->displacement[1]) << 8);
+      // Re-interpret the displacement as signed 16-bit integer, then
+      // sign-extend it to 32 bit
+      int32_t signed_displacement = (int32_t)((int16_t)unsigned_displacement);
+      // Zero-extend offset to 32 bit
+      int32_t signed_offset = (int32_t)address.offset;
+      // Add the two 32-bit signed values then truncate back down to 16-bit
+      // unsigned
+      address.offset = (uint16_t)(signed_offset + signed_displacement);
       break;
     }
     default:
