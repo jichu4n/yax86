@@ -95,7 +95,7 @@ static inline OperandValue ToOperandValue(Width width, uint32_t raw_value) {
   return value;
 }
 
-// Helper function to convert OperandValue to a 32-bit value. This makes it
+// Helper function to zero-extend OperandValue to a 32-bit value. This makes it
 // simpler to do direct arithmetic without worrying about overflow.
 static inline uint32_t FromOperandValue(const OperandValue* value) {
   switch (value->width) {
@@ -251,6 +251,26 @@ static const uint32_t kMaxValue[kNumWidths] = {
     0xFFFF  // kWord
 };
 
+// Add an 8-bit signed relative offset to a 16-bit unsigned base address.
+static inline uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
+  // Sign-extend the offset to 32 bits
+  int32_t signed_offset = (int32_t)((int8_t)raw_offset);
+  // Zero-extend base to 32 bits
+  int32_t signed_base = (int32_t)base;
+  // Add the two 32-bit signed values then truncate back down to 16-bit unsigned
+  return (uint16_t)(signed_base + signed_offset);
+}
+
+// Add a 16-bit signed relative offset to a 16-bit unsigned base address.
+static inline uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
+  // Sign-extend the offset to 32 bits
+  int32_t signed_offset = (int32_t)((int16_t)raw_offset);
+  // Zero-extend base to 32 bits
+  int32_t signed_base = (int32_t)base;
+  // Add the two 32-bit signed values then truncate back down to 16-bit unsigned
+  return (uint16_t)(signed_base + signed_offset);
+}
+
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
 static inline RegisterAddress GetRegisterAddressByte(
@@ -361,30 +381,16 @@ static inline MemoryAddress GetMemoryOperandAddress(
   // Add displacement if present
   switch (instruction->displacement_size) {
     case 1: {
-      // Re-interpret the displacement byte as signed 8-bit integer, then
-      // sign-extend it to 32 bit
-      int32_t signed_displacement =
-          (int32_t)((int8_t)instruction->displacement[0]);
-      // Zero-extend offset to 32 bit
-      int32_t signed_offset = (int32_t)address.offset;
-      // Add the two 32-bit signed values then truncate back down to 16-bit
-      // unsigned
-      address.offset = (uint16_t)(signed_offset + signed_displacement);
+      uint8_t raw_displacement = instruction->displacement[0];
+      address.offset = AddSignedOffsetByte(address.offset, raw_displacement);
       break;
     }
     case 2: {
       // Concatenate the two displacement bytes as an unsigned 16-bit integer
-      uint16_t unsigned_displacement =
+      uint16_t raw_displacement =
           ((uint16_t)instruction->displacement[0]) |
           (((uint16_t)instruction->displacement[1]) << 8);
-      // Re-interpret the displacement as signed 16-bit integer, then
-      // sign-extend it to 32 bit
-      int32_t signed_displacement = (int32_t)((int16_t)unsigned_displacement);
-      // Zero-extend offset to 32 bit
-      int32_t signed_offset = (int32_t)address.offset;
-      // Add the two 32-bit signed values then truncate back down to 16-bit
-      // unsigned
-      address.offset = (uint16_t)(signed_offset + signed_displacement);
+      address.offset = AddSignedOffsetWord(address.offset, raw_displacement);
       break;
     }
     default:
@@ -1187,6 +1193,62 @@ static ExecuteInstructionStatus ExecuteBooleanXorImmediateToALOrAX(
 }
 
 // ============================================================================
+// Conditional jumps
+// ============================================================================
+
+// Common logic for conditional jumps.
+static inline ExecuteInstructionStatus ExecuteConditionalJump(
+    const InstructionContext* ctx, bool value, bool success_value) {
+  if (value == success_value) {
+    OperandValue offset_value = ReadImmediate(ctx);
+    ctx->cpu->registers[kIP] = AddSignedOffsetByte(
+        ctx->cpu->registers[kIP], FromOperandValue(&offset_value));
+  }
+  return kExecuteSuccess;
+}
+
+// Table of flag register bitmasks for conditional jumps. The index corresponds
+// to (opcode - 0x70) / 2.
+static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
+    kOF,        // 0x70 - JO, 0x71 - JNO
+    kCF,        // 0x72 - JC, 0x73 - JNC
+    kZF,        // 0x74 - JE, 0x75 - JNE
+    kCF | kZF,  // 0x76 - JBE, 0x77 - JNBE
+    kSF,        // 0x78 - JS, 0x79 - JNS
+    kPF,        // 0x7A - JP, 0x7B - JNP
+};
+
+// Unsigned conditional jumps.
+static ExecuteInstructionStatus ExecuteUnsignedConditionalJump(
+    const InstructionContext* ctx) {
+  uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
+      [(ctx->instruction->opcode - 0x70) / 2];
+  bool flag_value = (ctx->cpu->flags & flag_mask) != 0;
+  // Even opcode => jump if the flag is set
+  // Odd opcode => jump if the flag is not set
+  bool success_value = (ctx->instruction->opcode & 0x1 == 0);
+  return ExecuteConditionalJump(ctx, flag_value, success_value);
+}
+
+// JL/JGNE and JNL/JGE
+static ExecuteInstructionStatus ExecuteSignedConditionalJumpJLOrJNL(
+    const InstructionContext* ctx) {
+  const bool is_greater_or_equal =
+      GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF);
+  const bool success_value = (ctx->instruction->opcode & 0x1);
+  return ExecuteConditionalJump(ctx, is_greater_or_equal, success_value);
+}
+
+// JLE/JG and JNLE/JG
+static ExecuteInstructionStatus ExecuteSignedConditionalJumpJLEOrJNLE(
+    const InstructionContext* ctx) {
+  const bool is_greater = !GetFlag(ctx->cpu, kZF) &&
+                          (GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF));
+  const bool success_value = (ctx->instruction->opcode & 0x1);
+  return ExecuteConditionalJump(ctx, is_greater, success_value);
+}
+
+// ============================================================================
 // Opcode table
 // ============================================================================
 
@@ -1723,37 +1785,101 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecutePopRegister},
     // JO rel8
-    {.opcode = 0x70, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x70,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JNO rel8
-    {.opcode = 0x71, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x71,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JB/JNAE/JC rel8
-    {.opcode = 0x72, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x72,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JNB/JAE/JNC rel8
-    {.opcode = 0x73, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x73,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JE/JZ rel8
-    {.opcode = 0x74, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x74,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JNE/JNZ rel8
-    {.opcode = 0x75, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x75,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JBE/JNA rel8
-    {.opcode = 0x76, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x76,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JNBE/JA rel8
-    {.opcode = 0x77, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x77,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JS rel8
-    {.opcode = 0x78, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x78,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JNS rel8
-    {.opcode = 0x79, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x79,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JP/JPE rel8
-    {.opcode = 0x7A, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x7A,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JNP/JPO rel8
-    {.opcode = 0x7B, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x7B,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
     // JL/JNGE rel8
-    {.opcode = 0x7C, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x7C,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLOrJNL},
     // JNL/JGE rel8
-    {.opcode = 0x7D, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x7D,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLOrJNL},
     // JLE/JNG rel8
-    {.opcode = 0x7E, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x7E,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // JNLE/JG rel8
-    {.opcode = 0x7F, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0x7F,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // ADD/ADC/SBB/SUB/CMP r/m8, imm8 (Group 1)
     {.opcode = 0x80, .has_modrm = true, .immediate_size = 1, .width = kByte},
     // ADD/ADC/SBB/SUB/CMP r/m16, imm16 (Group 1)
