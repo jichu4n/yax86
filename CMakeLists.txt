@@ -15,5 +15,6 @@ add_library(yax86 STATIC ${SOURCES})
 # Tests
 # =============================================================================
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    enable_testing()
     add_subdirectory(tests)
 endif()
