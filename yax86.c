@@ -1226,7 +1226,7 @@ static ExecuteInstructionStatus ExecuteUnsignedConditionalJump(
   bool flag_value = (ctx->cpu->flags & flag_mask) != 0;
   // Even opcode => jump if the flag is set
   // Odd opcode => jump if the flag is not set
-  bool success_value = (ctx->instruction->opcode & 0x1 == 0);
+  bool success_value = ((ctx->instruction->opcode & 0x1) == 0);
   return ExecuteConditionalJump(ctx, flag_value, success_value);
 }
 
