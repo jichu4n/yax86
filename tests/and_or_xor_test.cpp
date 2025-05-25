@@ -414,3 +414,62 @@ TEST_F(AndOrXorTest, XOR) {
   helper2->CheckFlags(
       {{kZF, true}, {kSF, false}, {kPF, true}, {kCF, false}, {kOF, false}});
 }
+
+TEST_F(AndOrXorTest, TEST) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-test-test",
+      "test ax, bx\n"        // Register & register (word)
+      "test al, 0AAh\n"      // AL & Immediate (byte)
+      "test ax, 0AAAAh\n");  // AX & Immediate (word)
+
+  // Set various flags to verify they are properly affected by TEST
+
+  // Test 1: test ax, bx
+  // ax = 0x1200, bx = 0x0034
+  // Result of 0x1200 & 0x0034 is 0x0000.
+  // ZF = true, SF = false, PF = true (for 0x00 LSB), CF = false, OF = false
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, false);
+  SetFlag(&helper->cpu_, kSF, false);
+  SetFlag(&helper->cpu_, kPF, false);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+  helper->cpu_.registers[kAX] = 0x1200;
+  helper->cpu_.registers[kBX] = 0x0034;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1200);  // AX unchanged
+  helper->CheckFlags(
+      {{kZF, true}, {kSF, false}, {kPF, true}, {kCF, false}, {kOF, false}});
+
+  // Test 2: test al, 0AAh
+  // al = 0x55 (from ax = 0x1255), immediate = 0xAA
+  // Result of 0x55 & 0xAA is 0x00.
+  // ZF = true, SF = false, PF = true, CF = false, OF = false
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, true);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, false);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+  helper->cpu_.registers[kAX] = 0x1255;  // Set AL to 0x55, AH to 0x12
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1255);  // AX unchanged
+  helper->CheckFlags(
+      {{kZF, true}, {kSF, false}, {kPF, true}, {kCF, false}, {kOF, false}});
+
+  // Test 3: test ax, 0AAAAh
+  // ax = 0x5555, immediate = 0xAAAA
+  // Result of 0x5555 & 0xAAAA is 0x0000.
+  // ZF = true, SF = false, PF = true, CF = false, OF = false
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, false);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, false);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+  helper->cpu_.registers[kAX] = 0x5555;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x5555);  // AX unchanged
+  helper->CheckFlags(
+      {{kZF, true}, {kSF, false}, {kPF, true}, {kCF, false}, {kOF, false}});
+}

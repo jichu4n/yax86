@@ -1193,6 +1193,36 @@ static ExecuteInstructionStatus ExecuteBooleanXorImmediateToALOrAX(
 }
 
 // ============================================================================
+// TEST instructions
+// ============================================================================
+
+// Common logic for TEST instructions.
+static inline ExecuteInstructionStatus ExecuteTest(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+  uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
+  SetFlagsAfterBooleanInstruction(ctx, result);
+  return kExecuteSuccess;
+}
+
+// TEST r/m8, r8
+// TEST r/m16, r16
+static ExecuteInstructionStatus ExecuteTestRegisterToRegisterOrMemory(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand src = ReadRegisterOperand(ctx);
+  return ExecuteTest(ctx, &dest, &src.value);
+}
+
+// TEST AL, imm8
+// TEST AX, imm16
+static ExecuteInstructionStatus ExecuteTestImmediateToALOrAX(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandValue src_value = ReadImmediate(ctx);
+  return ExecuteTest(ctx, &dest, &src_value);
+}
+
+// ============================================================================
 // Conditional jumps
 // ============================================================================
 
@@ -1889,9 +1919,17 @@ static const OpcodeMetadata opcodes[] = {
     // ADD/ADC/SBB/SUB/CMP r/m16, imm8 (Group 1)
     {.opcode = 0x83, .has_modrm = true, .immediate_size = 1, .width = kWord},
     // TEST r/m8, r8
-    {.opcode = 0x84, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0x84,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteTestRegisterToRegisterOrMemory},
     // TEST r/m16, r16
-    {.opcode = 0x85, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x85,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteTestRegisterToRegisterOrMemory},
     // XCHG r/m8, r8
     {.opcode = 0x86,
      .has_modrm = true,
@@ -2049,9 +2087,17 @@ static const OpcodeMetadata opcodes[] = {
     // CMPSW
     {.opcode = 0xA7, .has_modrm = false, .immediate_size = 0},
     // TEST AL, imm8
-    {.opcode = 0xA8, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xA8,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteTestImmediateToALOrAX},
     // TEST AX, imm16
-    {.opcode = 0xA9, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xA9,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteTestImmediateToALOrAX},
     // STOSB
     {.opcode = 0xAA, .has_modrm = false, .immediate_size = 0},
     // STOSW
