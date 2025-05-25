@@ -1279,6 +1279,31 @@ static ExecuteInstructionStatus ExecuteSignedConditionalJumpJLEOrJNLE(
 }
 
 // ============================================================================
+// Loop instructions
+// ============================================================================
+
+// LOOP rel8
+static ExecuteInstructionStatus ExecuteLoop(const InstructionContext* ctx) {
+  return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
+}
+
+// LOOPZ rel8
+// LOOPNZ rel8
+static ExecuteInstructionStatus ExecuteLoopZOrNZ(
+    const InstructionContext* ctx) {
+  bool condition1 = --(ctx->cpu->registers[kCX]) != 0;
+  bool condition2 =
+      GetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
+  return ExecuteConditionalJump(ctx, condition1 && condition2, true);
+}
+
+// JCXZ rel8
+static ExecuteInstructionStatus ExecuteJumpIfCXIsZero(
+    const InstructionContext* ctx) {
+  return ExecuteConditionalJump(ctx, ctx->cpu->registers[kCX] == 0, true);
+}
+
+// ============================================================================
 // Opcode table
 // ============================================================================
 
@@ -2269,13 +2294,29 @@ static const OpcodeMetadata opcodes[] = {
     // ESC instruction 0xDF for 8087 numeric coprocessor
     {.opcode = 0xDF, .has_modrm = true, .immediate_size = 0},
     // LOOPNE/LOOPNZ rel8
-    {.opcode = 0xE0, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xE0,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteLoopZOrNZ},
     // LOOPE/LOOPZ rel8
-    {.opcode = 0xE1, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xE1,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteLoopZOrNZ},
     // LOOP rel8
-    {.opcode = 0xE2, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xE2,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteLoop},
     // JCXZ rel8
-    {.opcode = 0xE3, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xE3,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteJumpIfCXIsZero},
     // IN AL, imm8
     {.opcode = 0xE4, .has_modrm = false, .immediate_size = 1, .width = kByte},
     // IN AX, imm8
