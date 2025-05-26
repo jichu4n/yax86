@@ -430,7 +430,8 @@ static inline OperandValue ReadImmediateByte(
 static inline OperandValue ReadImmediateWord(
     const EncodedInstruction* instruction) {
   return WordValue(
-      instruction->immediate[0] | (instruction->immediate[1] << 8));
+      ((uint16_t)instruction->immediate[0]) |
+      (((uint16_t)instruction->immediate[1]) << 8));
 }
 
 // Table of ReadImmediate* functions, indexed by Width.
@@ -1304,6 +1305,82 @@ static ExecuteInstructionStatus ExecuteJumpIfCXIsZero(
 }
 
 // ============================================================================
+// CALL and RET instructions
+// ============================================================================
+
+// CALL rel16
+static ExecuteInstructionStatus ExecuteDirectNearCall(
+    const InstructionContext* ctx) {
+  OperandValue offset = ReadImmediate(ctx);
+  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  ctx->cpu->registers[kIP] =
+      AddSignedOffsetWord(ctx->cpu->registers[kIP], FromOperandValue(&offset));
+  return kExecuteSuccess;
+}
+
+// CALL ptr16:16
+static ExecuteInstructionStatus ExecuteDirectFarCall(
+    const InstructionContext* ctx) {
+  Push(ctx, WordValue(ctx->cpu->registers[kCS]));
+  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  OperandValue new_cs = WordValue(
+      ((uint16_t)ctx->instruction->immediate[2]) |
+      (((uint16_t)ctx->instruction->immediate[3]) << 8));
+  ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
+  OperandValue new_ip = WordValue(
+      ((uint16_t)ctx->instruction->immediate[0]) |
+      (((uint16_t)ctx->instruction->immediate[1]) << 8));
+  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
+  return kExecuteSuccess;
+}
+
+// Common logic for RET instructions.
+static ExecuteInstructionStatus ExecuteNearReturnCommon(
+    const InstructionContext* ctx, uint16_t arg_size) {
+  OperandValue new_ip = Pop(ctx);
+  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
+  ctx->cpu->registers[kSP] += arg_size;
+  return kExecuteSuccess;
+}
+
+// RET
+static ExecuteInstructionStatus ExecuteNearReturn(
+    const InstructionContext* ctx) {
+  return ExecuteNearReturnCommon(ctx, 0);
+}
+
+// RET imm16
+static ExecuteInstructionStatus ExecuteNearReturnAndPop(
+    const InstructionContext* ctx) {
+  OperandValue arg_size_value = ReadImmediate(ctx);
+  return ExecuteNearReturnCommon(ctx, FromOperandValue(&arg_size_value));
+}
+
+// Common logic for RETF instructions.
+static ExecuteInstructionStatus ExecuteFarReturnCommon(
+    const InstructionContext* ctx, uint16_t arg_size) {
+  OperandValue new_ip = Pop(ctx);
+  OperandValue new_cs = Pop(ctx);
+  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
+  ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
+  ctx->cpu->registers[kSP] += arg_size;
+  return kExecuteSuccess;
+}
+
+// RETF
+static ExecuteInstructionStatus ExecuteFarReturn(
+    const InstructionContext* ctx) {
+  return ExecuteFarReturnCommon(ctx, 0);
+}
+
+// RETF imm16
+static ExecuteInstructionStatus ExecuteFarReturnAndPop(
+    const InstructionContext* ctx) {
+  OperandValue arg_size_value = ReadImmediate(ctx);
+  return ExecuteFarReturnCommon(ctx, FromOperandValue(&arg_size_value));
+}
+
+// ============================================================================
 // Opcode table
 // ============================================================================
 
@@ -2060,7 +2137,11 @@ static const OpcodeMetadata opcodes[] = {
     // CWD
     {.opcode = 0x99, .has_modrm = false, .immediate_size = 0},
     // CALL ptr16:16 (4 bytes: 2 for offset, 2 for segment)
-    {.opcode = 0x9A, .has_modrm = false, .immediate_size = 4, .width = kWord},
+    {.opcode = 0x9A,
+     .has_modrm = false,
+     .immediate_size = 4,
+     .width = kWord,
+     .handler = ExecuteDirectFarCall},
     // WAIT
     {.opcode = 0x9B, .has_modrm = false, .immediate_size = 0},
     // PUSHF
@@ -2232,9 +2313,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // RET imm16
-    {.opcode = 0xC2, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xC2,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteNearReturnAndPop},
     // RET
-    {.opcode = 0xC3, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xC3,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteNearReturn},
     // LES r16, m32
     {.opcode = 0xC4, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // LDS r16, m32
@@ -2252,9 +2341,16 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegisterOrMemory},
     // RETF imm16
-    {.opcode = 0xCA, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xCA,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteFarReturnAndPop},
     // RETF
-    {.opcode = 0xCB, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xCB,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteFarReturn},
     // INT 3
     {.opcode = 0xCC, .has_modrm = false, .immediate_size = 0},
     // INT imm8
@@ -2326,7 +2422,11 @@ static const OpcodeMetadata opcodes[] = {
     // OUT imm8, AX
     {.opcode = 0xE7, .has_modrm = false, .immediate_size = 1, .width = kWord},
     // CALL rel16
-    {.opcode = 0xE8, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xE8,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteDirectNearCall},
     // JMP rel16
     {.opcode = 0xE9, .has_modrm = false, .immediate_size = 2, .width = kWord},
     // JMP ptr16:16 (4 bytes: 2 for offset, 2 for segment)
