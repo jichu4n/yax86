@@ -1351,17 +1351,25 @@ static ExecuteInstructionStatus ExecuteShortOrNearJump(
   return ExecuteRelativeJumpByte(ctx, &offset_value);
 }
 
+// Common logic for far jumps.
+static inline ExecuteInstructionStatus ExecuteFarJump(
+    const InstructionContext* ctx, const OperandValue* segment,
+    const OperandValue* offset) {
+  ctx->cpu->registers[kCS] = FromOperandValue(segment);
+  ctx->cpu->registers[kIP] = FromOperandValue(offset);
+  return kExecuteSuccess;
+}
+
 // JMP ptr16:16
-static ExecuteInstructionStatus ExecuteFarJump(const InstructionContext* ctx) {
+static ExecuteInstructionStatus ExecuteDirectFarJump(
+    const InstructionContext* ctx) {
   OperandValue new_cs = WordValue(
       ((uint16_t)ctx->instruction->immediate[2]) |
       (((uint16_t)ctx->instruction->immediate[3]) << 8));
-  ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
   OperandValue new_ip = WordValue(
       ((uint16_t)ctx->instruction->immediate[0]) |
       (((uint16_t)ctx->instruction->immediate[1]) << 8));
-  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
-  return kExecuteSuccess;
+  return ExecuteFarJump(ctx, &new_cs, &new_ip);
 }
 
 // ============================================================================
@@ -1448,12 +1456,28 @@ static ExecuteInstructionStatus ExecuteJumpIfCXIsZero(
 // CALL and RET instructions
 // ============================================================================
 
+// Common logic for near calls.
+static inline ExecuteInstructionStatus ExecuteNearCall(
+    const InstructionContext* ctx, const OperandValue* offset) {
+  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  return ExecuteRelativeJump(ctx, offset);
+}
+
 // CALL rel16
 static ExecuteInstructionStatus ExecuteDirectNearCall(
     const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
+  return ExecuteNearCall(ctx, &offset);
+}
+
+// Common logic for far calls.
+static inline ExecuteInstructionStatus ExecuteFarCall(
+    const InstructionContext* ctx, const OperandValue* segment,
+    const OperandValue* offset) {
+  // Push the current CS and IP onto the stack.
+  Push(ctx, WordValue(ctx->cpu->registers[kCS]));
   Push(ctx, WordValue(ctx->cpu->registers[kIP]));
-  return ExecuteRelativeJump(ctx, &offset);
+  return ExecuteFarJump(ctx, segment, offset);
 }
 
 // CALL ptr16:16
@@ -1461,7 +1485,7 @@ static ExecuteInstructionStatus ExecuteDirectFarCall(
     const InstructionContext* ctx) {
   Push(ctx, WordValue(ctx->cpu->registers[kCS]));
   Push(ctx, WordValue(ctx->cpu->registers[kIP]));
-  return ExecuteFarJump(ctx);
+  return ExecuteDirectFarJump(ctx);
 }
 
 // Common logic for RET instructions.
@@ -1573,6 +1597,85 @@ static ExecuteInstructionStatus ExecuteGroup4Instruction(
     const InstructionContext* ctx) {
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  return fn(ctx, &dest);
+}
+
+// ============================================================================
+// Group 5 - INC, DEC, CALL, JMP, PUSH
+// ============================================================================
+
+// Helper to get the segment register value for far JMP and CALL instructions.
+static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
+    const InstructionContext* ctx, const Operand* offset) {
+  OperandAddress segment_address = offset->address;
+  segment_address.value.memory_address.offset += 2;  // Skip the offset
+  OperandValue segment_value = ReadMemoryWord(ctx->cpu, &segment_address);
+  Operand operand = {
+      .address = segment_address,
+      .value = segment_value,
+  };
+  return operand;
+}
+
+// JMP ptr16
+static ExecuteInstructionStatus ExecuteIndirectNearJump(
+    const InstructionContext* ctx, Operand* dest) {
+  ctx->cpu->registers[kIP] = FromOperandValue(&dest->value);
+  return kExecuteSuccess;
+}
+
+// CALL ptr16
+static ExecuteInstructionStatus ExecuteIndirectNearCall(
+    const InstructionContext* ctx, Operand* dest) {
+  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  return ExecuteIndirectNearJump(ctx, dest);
+}
+
+// CALL ptr16:16
+static ExecuteInstructionStatus ExecuteIndirectFarCall(
+    const InstructionContext* ctx, Operand* dest) {
+  Operand segment =
+      GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
+  return ExecuteFarCall(ctx, &segment.value, &dest->value);
+}
+
+// JMP ptr16:16
+static ExecuteInstructionStatus ExecuteIndirectFarJump(
+    const InstructionContext* ctx, Operand* dest) {
+  Operand segment =
+      GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
+  return ExecuteFarJump(ctx, &segment.value, &dest->value);
+}
+
+// PUSH r/m16
+static ExecuteInstructionStatus ExecuteIndirectPush(
+    const InstructionContext* ctx, Operand* dest) {
+  Push(ctx, dest->value);
+  return kExecuteSuccess;
+}
+
+typedef ExecuteInstructionStatus (*Group5ExecuteInstructionFn)(
+    const InstructionContext* ctx, Operand* dest);
+
+// Group 5 instruction implementations, indexed by the corresponding REG
+// field value in the ModRM byte.
+static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
+    ExecuteInc,               // 0 - INC r/m8/r/m16
+    ExecuteDec,               // 1 - DEC r/m8/r/m16
+    ExecuteIndirectNearCall,  // 2 - CALL rel16
+    ExecuteIndirectFarCall,   // 3 - CALL ptr16:16
+    ExecuteIndirectNearJump,  // 4 - JMP ptr16
+    ExecuteIndirectFarJump,   // 5 - JMP ptr16:16
+    ExecuteIndirectPush,      // 6 - PUSH r/m16
+                              // 7 - Reserved
+};
+
+// Group 5 instruction handler.
+static ExecuteInstructionStatus ExecuteGroup5Instruction(
+    const InstructionContext* ctx) {
+  const Group5ExecuteInstructionFn fn =
+      kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
@@ -2665,7 +2768,7 @@ static const OpcodeMetadata opcodes[] = {
      .has_modrm = false,
      .immediate_size = 4,
      .width = kWord,
-     .handler = ExecuteFarJump},
+     .handler = ExecuteDirectFarJump},
     // JMP rel8
     {.opcode = 0xEB,
      .has_modrm = false,
@@ -2715,7 +2818,11 @@ static const OpcodeMetadata opcodes[] = {
      .width = kByte,
      .handler = ExecuteGroup4Instruction},
     // INC/DEC/CALL/JMP/PUSH r/m16 (Group 5)
-    {.opcode = 0xFF, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0xFF,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteGroup5Instruction},
 };
 
 // Opcode metadata lookup table.
