@@ -941,14 +941,20 @@ static ExecuteInstructionStatus ExecuteAddImmediateToALOrAXWithCarry(
   return ExecuteAddWithCarry(ctx, &dest, &src_value);
 }
 
+// Common logic for INC instructions
+static inline ExecuteInstructionStatus ExecuteInc(
+    const InstructionContext* ctx, Operand* dest) {
+  OperandValue src_value = WordValue(1);
+  return ExecuteAddCommon(
+      ctx, dest, &src_value, /* carry */ false, SetFlagsAfterInc);
+}
+
 // INC AX/CX/DX/BX/SP/BP/SI/DI
 static ExecuteInstructionStatus ExecuteIncRegister(
     const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x40;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  OperandValue src_value = WordValue(1);
-  return ExecuteAddCommon(
-      ctx, &dest, &src_value, /* carry */ false, SetFlagsAfterInc);
+  return ExecuteInc(ctx, &dest);
 }
 
 // ============================================================================
@@ -1092,14 +1098,20 @@ static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAXWithBorrow(
   return ExecuteSubWithBorrow(ctx, &dest, &src_value);
 }
 
+// Common logic for DEC instructions
+static inline ExecuteInstructionStatus ExecuteDec(
+    const InstructionContext* ctx, Operand* dest) {
+  OperandValue src_value = WordValue(1);
+  return ExecuteSubCommon(
+      ctx, dest, &src_value, /* borrow */ false, SetFlagsAfterDec);
+}
+
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
 static ExecuteInstructionStatus ExecuteDecRegister(
     const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x48;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  OperandValue src_value = WordValue(1);
-  return ExecuteSubCommon(
-      ctx, &dest, &src_value, /* borrow */ false, SetFlagsAfterDec);
+  return ExecuteDec(ctx, &dest);
 }
 
 // ============================================================================
@@ -1497,6 +1509,29 @@ static ExecuteInstructionStatus ExecuteGroup1InstructionWithSignExtension(
       WordValue((uint16_t)((int16_t)((int8_t)src_value.value.byte_value)));
   // Sign-extend the immediate value to the destination width.
   return fn(ctx, &dest, &src_value_extended);
+}
+
+// ============================================================================
+// Group 4 - INC, DEC
+// ============================================================================
+
+typedef ExecuteInstructionStatus (*Group4ExecuteInstructionFn)(
+    const InstructionContext* ctx, Operand* dest);
+
+// Group 4 instruction implementations, indexed by the corresponding REG field
+// value in the ModRM byte.
+static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
+    ExecuteInc,  // 0 - INC
+    ExecuteDec,  // 1 - DEC
+};
+
+// Group 4 instruction handler.
+static ExecuteInstructionStatus ExecuteGroup4Instruction(
+    const InstructionContext* ctx) {
+  const Group4ExecuteInstructionFn fn =
+      kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  return fn(ctx, &dest);
 }
 
 // ============================================================================
@@ -2619,7 +2654,11 @@ static const OpcodeMetadata opcodes[] = {
     // STD
     {.opcode = 0xFD, .has_modrm = false, .immediate_size = 0},
     // INC/DEC r/m8 (Group 4)
-    {.opcode = 0xFE, .has_modrm = true, .immediate_size = 0, .width = kByte},
+    {.opcode = 0xFE,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteGroup4Instruction},
     // INC/DEC/CALL/JMP/PUSH r/m16 (Group 5)
     {.opcode = 0xFF, .has_modrm = true, .immediate_size = 0, .width = kWord},
 };
