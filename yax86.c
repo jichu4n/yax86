@@ -859,8 +859,8 @@ typedef void (*SetFlagsAfterAddFn)(
     bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
-static inline ExecuteInstructionStatus ExecuteAdd(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value,
+static inline ExecuteInstructionStatus ExecuteAddCommon(
+    const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -872,13 +872,21 @@ static inline ExecuteInstructionStatus ExecuteAdd(
   return kExecuteSuccess;
 }
 
+// Common logic for ADD instructions
+static inline ExecuteInstructionStatus ExecuteAdd(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
+  return ExecuteAddCommon(
+      ctx, dest, src_value, /* carry */ false, SetFlagsAfterAdd);
+}
+
 // ADD r/m8, r8
 // ADD r/m16, r16
 static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, false, SetFlagsAfterAdd);
+  return ExecuteAdd(ctx, &dest, &src.value);
 }
 
 // ADD r8, r/m8
@@ -887,7 +895,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, false, SetFlagsAfterAdd);
+  return ExecuteAdd(ctx, &dest, &src.value);
 }
 
 // ADD AL, imm8
@@ -896,7 +904,15 @@ static ExecuteInstructionStatus ExecuteAddImmediateToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteAdd(ctx, &dest, &src_value, false, SetFlagsAfterAdd);
+  return ExecuteAdd(ctx, &dest, &src_value);
+}
+
+// Common logic for ADC instructions
+static inline ExecuteInstructionStatus ExecuteAddWithCarry(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
+  return ExecuteAddCommon(
+      ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);
 }
 
 // ADC r/m8, r8
@@ -905,7 +921,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, true, SetFlagsAfterAdd);
+  return ExecuteAddWithCarry(ctx, &dest, &src.value);
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
@@ -913,7 +929,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value, true, SetFlagsAfterAdd);
+  return ExecuteAddWithCarry(ctx, &dest, &src.value);
 }
 
 // ADC AL, imm8
@@ -922,7 +938,7 @@ static ExecuteInstructionStatus ExecuteAddImmediateToALOrAXWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteAdd(ctx, &dest, &src_value, true, SetFlagsAfterAdd);
+  return ExecuteAddWithCarry(ctx, &dest, &src_value);
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
@@ -931,7 +947,8 @@ static ExecuteInstructionStatus ExecuteIncRegister(
   RegisterIndex register_index = ctx->instruction->opcode - 0x40;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue src_value = WordValue(1);
-  return ExecuteAdd(ctx, &dest, &src_value, false, SetFlagsAfterInc);
+  return ExecuteAddCommon(
+      ctx, &dest, &src_value, /* carry */ false, SetFlagsAfterInc);
 }
 
 // ============================================================================
@@ -990,8 +1007,8 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-static inline ExecuteInstructionStatus ExecuteSub(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value,
+static inline ExecuteInstructionStatus ExecuteSubCommon(
+    const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -1003,13 +1020,21 @@ static inline ExecuteInstructionStatus ExecuteSub(
   return kExecuteSuccess;
 }
 
+// Common logic for SUB instructions
+static inline ExecuteInstructionStatus ExecuteSub(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
+  return ExecuteSubCommon(
+      ctx, dest, src_value, /* borrow */ false, SetFlagsAfterSub);
+}
+
 // SUB r/m8, r8
 // SUB r/m16, r16
 static ExecuteInstructionStatus ExecuteSubRegisterFromRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteSub(ctx, &dest, &src.value, false, SetFlagsAfterSub);
+  return ExecuteSub(ctx, &dest, &src.value);
 }
 
 // SUB r8, r/m8
@@ -1018,7 +1043,7 @@ static ExecuteInstructionStatus ExecuteSubRegisterOrMemoryFromRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteSub(ctx, &dest, &src.value, false, SetFlagsAfterSub);
+  return ExecuteSub(ctx, &dest, &src.value);
 }
 
 // SUB AL, imm8
@@ -1027,7 +1052,15 @@ static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteSub(ctx, &dest, &src_value, false, SetFlagsAfterSub);
+  return ExecuteSub(ctx, &dest, &src_value);
+}
+
+// Common logic for SBB instructions
+static inline ExecuteInstructionStatus ExecuteSubWithBorrow(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
+  return ExecuteSubCommon(
+      ctx, dest, src_value, /* borrow */ true, SetFlagsAfterSub);
 }
 
 // SBB r/m8, r8
@@ -1037,7 +1070,7 @@ ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteSub(ctx, &dest, &src.value, true, SetFlagsAfterSub);
+  return ExecuteSubWithBorrow(ctx, &dest, &src.value);
 }
 
 // SBB r8, r/m8
@@ -1047,7 +1080,7 @@ ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteSub(ctx, &dest, &src.value, true, SetFlagsAfterSub);
+  return ExecuteSubWithBorrow(ctx, &dest, &src.value);
 }
 
 // SBB AL, imm8
@@ -1056,7 +1089,7 @@ static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAXWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteSub(ctx, &dest, &src_value, true, SetFlagsAfterSub);
+  return ExecuteSubWithBorrow(ctx, &dest, &src_value);
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
@@ -1065,7 +1098,8 @@ static ExecuteInstructionStatus ExecuteDecRegister(
   RegisterIndex register_index = ctx->instruction->opcode - 0x48;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue src_value = WordValue(1);
-  return ExecuteSub(ctx, &dest, &src_value, false, SetFlagsAfterDec);
+  return ExecuteSubCommon(
+      ctx, &dest, &src_value, /* borrow */ false, SetFlagsAfterDec);
 }
 
 // ============================================================================
@@ -1074,7 +1108,8 @@ static ExecuteInstructionStatus ExecuteDecRegister(
 
 // Common logic for CMP instructions.
 static inline ExecuteInstructionStatus ExecuteCmp(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
   uint32_t result = raw_dest_value - raw_src_value;
@@ -1124,7 +1159,8 @@ static inline void SetFlagsAfterBooleanInstruction(
 
 // Common logic for AND instructions.
 static inline ExecuteInstructionStatus ExecuteBooleanAnd(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -1160,7 +1196,8 @@ static ExecuteInstructionStatus ExecuteBooleanAndImmediateToALOrAX(
 
 // Common logic for OR instructions.
 static inline ExecuteInstructionStatus ExecuteBooleanOr(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -1196,7 +1233,8 @@ static ExecuteInstructionStatus ExecuteBooleanOrImmediateToALOrAX(
 
 // Common logic for XOR instructions.
 static inline ExecuteInstructionStatus ExecuteBooleanXor(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -1415,6 +1453,50 @@ static ExecuteInstructionStatus ExecuteFarReturnAndPop(
     const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteFarReturnCommon(ctx, FromOperandValue(&arg_size_value));
+}
+
+// ============================================================================
+// Group 1 - ADD, OR, ADC, SBB, AND, SUB, XOR, CMP
+// ============================================================================
+
+typedef ExecuteInstructionStatus (*Group1ExecuteInstructionFn)(
+    const InstructionContext* ctx, Operand* dest, const OperandValue* src);
+
+// Group 1 instruction implementations, indexed by the corresponding REG field
+// value in the ModRM byte.
+static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
+    ExecuteAdd,            // 0 - ADD
+    ExecuteBooleanOr,      // 1 - OR
+    ExecuteAddWithCarry,   // 2 - ADC
+    ExecuteSubWithBorrow,  // 3 - SBB
+    ExecuteBooleanAnd,     // 4 - AND
+    ExecuteSub,            // 5 - SUB
+    ExecuteBooleanXor,     // 6 - XOR
+    ExecuteCmp,            // 7 - CMP
+};
+
+// Group 1 instruction handler.
+static ExecuteInstructionStatus ExecuteGroup1Instruction(
+    const InstructionContext* ctx) {
+  const Group1ExecuteInstructionFn fn =
+      kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandValue src_value = ReadImmediate(ctx);
+  return fn(ctx, &dest, &src_value);
+}
+
+// Group 1 instruction handler, but sign-extends the 8-bit immediate value.
+static ExecuteInstructionStatus ExecuteGroup1InstructionWithSignExtension(
+    const InstructionContext* ctx) {
+  const Group1ExecuteInstructionFn fn =
+      kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandValue src_value =
+      ReadImmediateByte(ctx->instruction);  // immediate is always 8-bit
+  OperandValue src_value_extended =
+      WordValue((uint16_t)((int16_t)((int8_t)src_value.value.byte_value)));
+  // Sign-extend the immediate value to the destination width.
+  return fn(ctx, &dest, &src_value_extended);
 }
 
 // ============================================================================
@@ -2049,14 +2131,32 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
-    // ADD/ADC/SBB/SUB/CMP r/m8, imm8 (Group 1)
-    {.opcode = 0x80, .has_modrm = true, .immediate_size = 1, .width = kByte},
-    // ADD/ADC/SBB/SUB/CMP r/m16, imm16 (Group 1)
-    {.opcode = 0x81, .has_modrm = true, .immediate_size = 2, .width = kWord},
-    // ADC/SBB/SUB/CMP r/m8, imm8 (Group 1)
-    {.opcode = 0x82, .has_modrm = true, .immediate_size = 1, .width = kByte},
-    // ADD/ADC/SBB/SUB/CMP r/m16, imm8 (Group 1)
-    {.opcode = 0x83, .has_modrm = true, .immediate_size = 1, .width = kWord},
+    // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m8, imm8 (Group 1)
+    {.opcode = 0x80,
+     .has_modrm = true,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteGroup1Instruction},
+    // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m16, imm16 (Group 1)
+    {.opcode = 0x81,
+     .has_modrm = true,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteGroup1Instruction},
+    // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m8, imm8 (Group 1)
+    {.opcode = 0x82,
+     .has_modrm = true,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteGroup1Instruction},
+    // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m16, imm8 (Group 1)
+    {.opcode = 0x83,
+     .has_modrm = true,
+     // This is a special case - the immediate is 8 bits but the destination is
+     // 16 bits.
+     .immediate_size = 1,
+     .width = kWord,
+     .handler = ExecuteGroup1InstructionWithSignExtension},
     // TEST r/m8, r8
     {.opcode = 0x84,
      .has_modrm = true,

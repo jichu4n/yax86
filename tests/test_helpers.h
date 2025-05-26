@@ -62,8 +62,12 @@ class CPUTestHelper {
   // CPU state.
   CPUState cpu_;
 
+  // Whether to print out debug information for memory accesses.
+  bool enable_debug_memory_access_ = false;
+
  private:
   struct Context {
+    CPUTestHelper* self;
     uint8_t* memory;
     size_t memory_size;
   } context_;

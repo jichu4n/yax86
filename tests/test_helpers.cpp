@@ -120,7 +120,7 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
 CPUTestHelper::CPUTestHelper(size_t memory_size)
     : memory_size_(memory_size),
       memory_(make_unique<uint8_t[]>(memory_size)),
-      context_{memory_.get(), memory_size} {
+      context_{this, memory_.get(), memory_size} {
   InitCPU(&cpu_);
 
   cpu_.config = &config_;
@@ -133,6 +133,11 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
           << ", memory size: 0x" << hex << context->memory_size;
       throw runtime_error(oss.str());
     }
+    if (context->self->enable_debug_memory_access_) {
+      cout << "--- READ " << hex << setw(4) << setfill('0') << address << " => "
+           << hex << setw(2) << setfill('0')
+           << static_cast<uint32_t>(context->memory[address]) << endl;
+    }
     return context->memory[address];
   };
   config_.write_memory_byte = [](void* raw_context, uint16_t address,
@@ -143,6 +148,11 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
       oss << "Memory write out of bounds: 0x" << hex << address
           << ", memory size: 0x" << hex << context->memory_size;
       throw runtime_error(oss.str());
+    }
+    if (context->self->enable_debug_memory_access_) {
+      cout << "--- WRITE " << hex << setw(4) << setfill('0') << address
+           << " <= " << hex << setw(2) << setfill('0')
+           << static_cast<uint32_t>(value) << endl;
     }
     context->memory[address] = value;
   };
