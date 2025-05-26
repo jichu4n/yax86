@@ -121,36 +121,33 @@ static inline uint32_t FromOperand(const Operand* operand) {
   return FromOperandValue(&operand->value);
 }
 
+// Computes the raw effective address corresponding to a MemoryAddress.
+static inline uint16_t ToPhysicalAddress(
+    const CPUState* cpu, const MemoryAddress* address) {
+  uint16_t segment = cpu->registers[address->segment_register_index];
+  return (segment << 4) + address->offset;
+}
+
 // Read a byte from memory.
 static OperandValue ReadMemoryByte(
     CPUState* cpu, const OperandAddress* address) {
-  const MemoryAddress* memory_address = &address->value.memory_address;
-  uint16_t segment = cpu->registers[memory_address->segment_register_index];
   uint8_t byte_value = cpu->config->read_memory_byte(
-      cpu->config->context, (segment << 4) + memory_address->offset);
-  OperandValue value = {
-      .width = kByte,
-      .value = {.byte_value = byte_value},
-  };
-  return value;
+      cpu->config->context,
+      ToPhysicalAddress(cpu, &address->value.memory_address));
+  return ByteValue(byte_value);
 }
 
 // Read a word from memory.
 static OperandValue ReadMemoryWord(
     CPUState* cpu, const OperandAddress* address) {
-  const MemoryAddress* memory_address = &address->value.memory_address;
-  uint16_t segment = cpu->registers[memory_address->segment_register_index];
-  const uint16_t address_value = (segment << 4) + memory_address->offset;
+  const uint16_t physical_address =
+      ToPhysicalAddress(cpu, &address->value.memory_address);
   uint8_t low_byte_value =
-      cpu->config->read_memory_byte(cpu->config->context, address_value);
+      cpu->config->read_memory_byte(cpu->config->context, physical_address);
   uint8_t high_byte_value =
-      cpu->config->read_memory_byte(cpu->config->context, address_value + 1);
+      cpu->config->read_memory_byte(cpu->config->context, physical_address + 1);
   uint16_t word_value = (high_byte_value << 8) | low_byte_value;
-  OperandValue value = {
-      .width = kWord,
-      .value = {.word_value = word_value},
-  };
-  return value;
+  return WordValue(word_value);
 }
 
 // Read a byte from a register.
@@ -159,11 +156,7 @@ static OperandValue ReadRegisterByte(
   const RegisterAddress* register_address = &address->value.register_address;
   uint8_t byte_value = cpu->registers[register_address->register_index] >>
                        register_address->byte_offset;
-  OperandValue value = {
-      .width = kByte,
-      .value = {.byte_value = byte_value},
-  };
-  return value;
+  return ByteValue(byte_value);
 }
 
 // Read a word from a register.
@@ -171,11 +164,7 @@ static OperandValue ReadRegisterWord(
     CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
   uint16_t word_value = cpu->registers[register_address->register_index];
-  OperandValue value = {
-      .width = kWord,
-      .value = {.word_value = word_value},
-  };
-  return value;
+  return WordValue(word_value);
 }
 
 // Table of Read* functions, indexed by OperandAddressType and Width.
@@ -696,6 +685,21 @@ static ExecuteInstructionStatus ExecuteExchangeRegisterOrMemory(
 }
 
 // ============================================================================
+// LEA instruction
+// ============================================================================
+
+// LEA r16, m
+static ExecuteInstructionStatus ExecuteLoadEffectiveAddress(
+    const InstructionContext* ctx) {
+  Operand dest = ReadRegisterOperand(ctx);
+  MemoryAddress memory_address =
+      GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
+  uint32_t physical_address = ToPhysicalAddress(ctx->cpu, &memory_address);
+  WriteOperandAddress(ctx, &dest.address, physical_address);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // PUSH and POP instructions
 // ============================================================================
 
@@ -775,6 +779,39 @@ static ExecuteInstructionStatus ExecutePushFlags(
 static ExecuteInstructionStatus ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx);
   ctx->cpu->flags = FromOperandValue(&value);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
+// LAHF and SAHF
+// ============================================================================
+
+// Returns the AH register address.
+static inline const OperandAddress* GetAHRegisterAddress() {
+  static OperandAddress ah = {
+      .type = kOperandAddressTypeRegister,
+      .value = {
+          .register_address = {
+              .register_index = kAX,
+              .byte_offset = 8,
+          }}};
+  return &ah;
+}
+
+// LAHF
+static ExecuteInstructionStatus ExecuteLoadAHFromFlags(
+    const InstructionContext* ctx) {
+  WriteRegisterByte(
+      ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
+  return kExecuteSuccess;
+}
+
+// SAHF
+static ExecuteInstructionStatus ExecuteStoreAHToFlags(
+    const InstructionContext* ctx) {
+  OperandValue value = ReadRegisterByte(ctx->cpu, GetAHRegisterAddress());
+  // Clear the lower byte of flags and set it to the value in AH
+  ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
   return kExecuteSuccess;
 }
 
@@ -2075,7 +2112,11 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteMoveSegmentRegisterToRegisterOrMemory},
     // LEA r16, m
-    {.opcode = 0x8D, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0x8D,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteLoadEffectiveAddress},
     // MOV sreg, r/m16
     {.opcode = 0x8E,
      .has_modrm = true,
@@ -2157,9 +2198,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecutePopFlags},
     // SAHF
-    {.opcode = 0x9E, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x9E,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteStoreAHToFlags},
     // LAHF
-    {.opcode = 0x9F, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x9F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteLoadAHFromFlags},
     // MOV AL, moffs16
     {.opcode = 0xA0,
      .has_modrm = false,

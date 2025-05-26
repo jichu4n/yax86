@@ -5,9 +5,9 @@
 
 using namespace std;
 
-class MovXchgTest : public ::testing::Test {};
+class MovXchgLeaTest : public ::testing::Test {};
 
-TEST_F(MovXchgTest, MOVRegisterAndMemory) {
+TEST_F(MovXchgLeaTest, MOVRegisterAndMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-test",
       "mov ax, [bx]\n"    // Load a word from memory into AX
@@ -117,7 +117,7 @@ TEST_F(MovXchgTest, MOVRegisterAndMemory) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, MOVSegmentRegister) {
+TEST_F(MovXchgLeaTest, MOVSegmentRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-segment-test",
       "mov ds, ax\n"                // Move register to segment register
@@ -195,7 +195,7 @@ TEST_F(MovXchgTest, MOVSegmentRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, MOVImmediateToRegister) {
+TEST_F(MovXchgLeaTest, MOVImmediateToRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-immediate-test",
       "mov al, 42h\n"       // Move immediate to 8-bit low register
@@ -278,7 +278,7 @@ TEST_F(MovXchgTest, MOVImmediateToRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, MOVMemoryOffsetAndALOrAX) {
+TEST_F(MovXchgLeaTest, MOVMemoryOffsetAndALOrAX) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-memory-offset-test",
       "mov al, [0500h]\n"    // Load a byte from direct memory address to AL
@@ -381,7 +381,7 @@ TEST_F(MovXchgTest, MOVMemoryOffsetAndALOrAX) {
   EXPECT_EQ(helper->memory_[0x0881], 0xAB);  // MSB
 }
 
-TEST_F(MovXchgTest, MOVImmediateToRegisterOrMemory) {
+TEST_F(MovXchgLeaTest, MOVImmediateToRegisterOrMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-immediate-to-reg-mem-test",
       "mov byte [bx], 42h\n"      // Move immediate byte to memory
@@ -502,7 +502,7 @@ TEST_F(MovXchgTest, MOVImmediateToRegisterOrMemory) {
   EXPECT_EQ(helper->memory_[0x0861], 0x12);  // MSB
 }
 
-TEST_F(MovXchgTest, XCHGRegister) {
+TEST_F(MovXchgLeaTest, XCHGRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-xchg-register-test",
       "xchg ax, ax\n"    // NOP (special case)
@@ -616,7 +616,7 @@ TEST_F(MovXchgTest, XCHGRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
+TEST_F(MovXchgLeaTest, XCHGRegisterAndMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-xchg-register-memory-test",
       "xchg al, [bx]\n"      // Exchange AL with byte in memory
@@ -704,6 +704,111 @@ TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
   EXPECT_EQ(helper->memory_[0x0602], 0xCD);        // LSB of memory
   EXPECT_EQ(helper->memory_[0x0603], 0xAB);        // MSB of memory
   // Verify flags are still set after XCHG instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+}
+
+TEST_F(MovXchgLeaTest, LEA) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-lea-test",
+      "lea ax, [bx+si]\n"      // Effective address from BX+SI
+      "lea cx, [bp+di+10h]\n"  // Effective address with 8-bit displacement
+      "lea dx, [0200h]\n"      // Effective address from direct address
+      "lea sp, [bx+0100h]\n"   // Effective address with 16-bit displacement
+      "lea bp, [si-5]\n");     // Effective address with negative 8-bit
+                               // displacement (0FBh)
+  helper->cpu_.registers[kDS] =
+      0;  // LEA calculates offset, DS doesn't affect result unless overridden
+
+  // Set various flags to verify LEA instructions don't affect them
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, true);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, true);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+
+  // Test 1: lea ax, [bx+si]
+  // Set up: BX=0x1000, SI=0x0200. Expected AX = 0x1000 + 0x0200 = 0x1200
+  helper->cpu_.registers[kBX] = 0x1000;
+  helper->cpu_.registers[kSI] = 0x0200;
+  // Put some data in memory to ensure LEA doesn't read it
+  helper->memory_[0x1200] = 0xAA;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1200);
+  EXPECT_EQ(helper->memory_[0x1200], 0xAA);  // Memory should be unchanged
+  // Verify flags are still set after LEA instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 2: lea cx, [bp+di+10h]
+  // Set up: BP=0x2000, DI=0x0300. Expected CX = 0x2000 + 0x0300 + 0x0010 =
+  // 0x2310
+  helper->cpu_.registers[kBP] = 0x2000;
+  helper->cpu_.registers[kDI] = 0x0300;
+  helper->memory_[0x2310] = 0xBB;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kCX], 0x2310);
+  EXPECT_EQ(helper->memory_[0x2310], 0xBB);  // Memory should be unchanged
+  // Verify flags are still set
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 3: lea dx, [0200h]
+  // Expected DX = 0x0200. Note: DS is 0, so segment override is not tested
+  // here. For LEA, [0200h] means the offset 0200h itself, not DS:0200h.
+  helper->memory_[0x0200] = 0xCC;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0200);
+  EXPECT_EQ(helper->memory_[0x0200], 0xCC);  // Memory should be unchanged
+  // Verify flags are still set
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 4: lea sp, [bx+0100h]
+  // Set up: BX=0x1000 (from Test 1). Expected SP = 0x1000 + 0x0100 = 0x1100
+  // SI is still 0x0200 from Test 1, but not used here.
+  helper->memory_[0x1100] = 0xDD;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kSP], 0x1100);
+  EXPECT_EQ(helper->memory_[0x1100], 0xDD);  // Memory should be unchanged
+  // Verify flags are still set
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test 5: lea bp, [si-5] (equivalent to lea bp, [si+0FBh] for 8-bit
+  // displacement) Set up: SI=0x0200 (from Test 1). Expected BP = 0x0200 - 5 =
+  // 0x01FB BX is still 0x1000, BP is 0x2000 (will be overwritten), DI is 0x0300
+  helper->memory_[0x01FB] = 0xEE;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kBP], 0x01FB);
+  EXPECT_EQ(helper->memory_[0x01FB], 0xEE);  // Memory should be unchanged
+  // Verify flags are still set
   helper->CheckFlags(
       {{kCF, true},
        {kZF, true},
