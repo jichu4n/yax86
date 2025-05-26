@@ -196,3 +196,29 @@ TEST_F(CmpJmpTest, CMPJG) {
   EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 }
+
+TEST_F(CmpJmpTest, JumpShort) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-cmp-jmp-short-jmp-test",
+      "jmp b2\n"
+      "b1: mov cx, 1\n"
+      "b2: mov cx, 2\n");
+  helper->cpu_.registers[kCX] = 0;
+  helper->ExecuteInstructions(1);  // jmp b2
+  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x5);
+  helper->ExecuteInstructions(1);  // mov cx, 2
+  EXPECT_EQ(helper->cpu_.registers[kCX], 2);
+}
+
+TEST_F(CmpJmpTest, JumpFar) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-cmp-jmp-far-jmp-test",
+      "jmp 0000:b2\n"
+      "b1: mov cx, 1\n"
+      "b2: mov cx, 2\n");
+  helper->cpu_.registers[kCX] = 0;
+  helper->ExecuteInstructions(1);  // jmp b2
+  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x8);
+  helper->ExecuteInstructions(1);  // mov cx, 2
+  EXPECT_EQ(helper->cpu_.registers[kCX], 2);
+}

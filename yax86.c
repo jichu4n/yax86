@@ -1311,6 +1311,60 @@ static ExecuteInstructionStatus ExecuteTestImmediateToALOrAX(
 }
 
 // ============================================================================
+// JMP instructions
+// ============================================================================
+
+// Jump to a relative signed byte offset.
+static ExecuteInstructionStatus ExecuteRelativeJumpByte(
+    const InstructionContext* ctx, const OperandValue* offset_value) {
+  ctx->cpu->registers[kIP] = AddSignedOffsetByte(
+      ctx->cpu->registers[kIP], FromOperandValue(offset_value));
+  return kExecuteSuccess;
+}
+
+// Jump to a relative signed word offset.
+static ExecuteInstructionStatus ExecuteRelativeJumpWord(
+    const InstructionContext* ctx, const OperandValue* offset_value) {
+  ctx->cpu->registers[kIP] = AddSignedOffsetWord(
+      ctx->cpu->registers[kIP], FromOperandValue(offset_value));
+  return kExecuteSuccess;
+}
+
+// Table of relative jump instructions, indexed by width.
+static ExecuteInstructionStatus (*const kRelativeJumpFn[kNumWidths])(
+    const InstructionContext* ctx, const OperandValue* offset_value) = {
+    ExecuteRelativeJumpByte,  // kByte
+    ExecuteRelativeJumpWord,  // kWord
+};
+
+// Common logic for JMP instructions.
+static inline ExecuteInstructionStatus ExecuteRelativeJump(
+    const InstructionContext* ctx, const OperandValue* offset_value) {
+  return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
+}
+
+// JMP rel8
+// JMP rel16
+static ExecuteInstructionStatus ExecuteShortOrNearJump(
+    const InstructionContext* ctx) {
+  OperandValue offset_value = ReadImmediate(ctx);
+  return ExecuteRelativeJumpByte(ctx, &offset_value);
+}
+
+// JMP ptr16:16
+static ExecuteInstructionStatus ExecuteFarJump(const InstructionContext* ctx) {
+  OperandValue new_cs = WordValue(
+      ((uint16_t)ctx->instruction->immediate[2]) |
+      (((uint16_t)ctx->instruction->immediate[3]) << 8));
+  ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
+  OperandValue new_ip = WordValue(
+      ((uint16_t)ctx->instruction->immediate[0]) |
+      (((uint16_t)ctx->instruction->immediate[1]) << 8));
+  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // Conditional jumps
 // ============================================================================
 
@@ -1319,8 +1373,7 @@ static inline ExecuteInstructionStatus ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     OperandValue offset_value = ReadImmediate(ctx);
-    ctx->cpu->registers[kIP] = AddSignedOffsetByte(
-        ctx->cpu->registers[kIP], FromOperandValue(&offset_value));
+    return ExecuteRelativeJump(ctx, &offset_value);
   }
   return kExecuteSuccess;
 }
@@ -1400,9 +1453,7 @@ static ExecuteInstructionStatus ExecuteDirectNearCall(
     const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   Push(ctx, WordValue(ctx->cpu->registers[kIP]));
-  ctx->cpu->registers[kIP] =
-      AddSignedOffsetWord(ctx->cpu->registers[kIP], FromOperandValue(&offset));
-  return kExecuteSuccess;
+  return ExecuteRelativeJump(ctx, &offset);
 }
 
 // CALL ptr16:16
@@ -1410,15 +1461,7 @@ static ExecuteInstructionStatus ExecuteDirectFarCall(
     const InstructionContext* ctx) {
   Push(ctx, WordValue(ctx->cpu->registers[kCS]));
   Push(ctx, WordValue(ctx->cpu->registers[kIP]));
-  OperandValue new_cs = WordValue(
-      ((uint16_t)ctx->instruction->immediate[2]) |
-      (((uint16_t)ctx->instruction->immediate[3]) << 8));
-  ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
-  OperandValue new_ip = WordValue(
-      ((uint16_t)ctx->instruction->immediate[0]) |
-      (((uint16_t)ctx->instruction->immediate[1]) << 8));
-  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
-  return kExecuteSuccess;
+  return ExecuteFarJump(ctx);
 }
 
 // Common logic for RET instructions.
@@ -2612,11 +2655,23 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteDirectNearCall},
     // JMP rel16
-    {.opcode = 0xE9, .has_modrm = false, .immediate_size = 2, .width = kWord},
+    {.opcode = 0xE9,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteShortOrNearJump},
     // JMP ptr16:16 (4 bytes: 2 for offset, 2 for segment)
-    {.opcode = 0xEA, .has_modrm = false, .immediate_size = 4, .width = kWord},
+    {.opcode = 0xEA,
+     .has_modrm = false,
+     .immediate_size = 4,
+     .width = kWord,
+     .handler = ExecuteFarJump},
     // JMP rel8
-    {.opcode = 0xEB, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xEB,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteShortOrNearJump},
     // IN AL, DX
     {.opcode = 0xEC, .has_modrm = false, .immediate_size = 0, .width = kByte},
     // IN AX, DX
