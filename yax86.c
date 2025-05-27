@@ -685,6 +685,27 @@ static ExecuteInstructionStatus ExecuteExchangeRegisterOrMemory(
 }
 
 // ============================================================================
+// XLAT
+// ============================================================================
+
+// XLAT
+static ExecuteInstructionStatus ExecuteTranslateByte(
+    const InstructionContext* ctx) {
+  // Read the AL register
+  Operand al = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandAddress src_address = {
+      .type = kOperandAddressTypeMemory,
+      .value =
+          {.memory_address =
+               {.segment_register_index = kDS,
+                .offset = ctx->cpu->registers[kBX] + FromOperand(&al)}},
+  };
+  OperandValue src_value = ReadMemoryByte(ctx->cpu, &src_address);
+  WriteOperandAddress(ctx, &al.address, FromOperandValue(&src_value));
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // LEA instruction
 // ============================================================================
 
@@ -2747,7 +2768,11 @@ static const OpcodeMetadata opcodes[] = {
     // AAD
     {.opcode = 0xD5, .has_modrm = false, .immediate_size = 1},
     // XLAT/XLATB
-    {.opcode = 0xD7, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xD7,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteTranslateByte},
     // ESC instruction 0xD8 for 8087 numeric coprocessor
     {.opcode = 0xD8, .has_modrm = true, .immediate_size = 0},
     // ESC instruction 0xD9 for 8087 numeric coprocessor

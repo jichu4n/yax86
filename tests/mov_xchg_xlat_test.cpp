@@ -5,9 +5,9 @@
 
 using namespace std;
 
-class MovXchgTest : public ::testing::Test {};
+class MovXchgXlatTest : public ::testing::Test {};
 
-TEST_F(MovXchgTest, MOVRegisterAndMemory) {
+TEST_F(MovXchgXlatTest, MOVRegisterAndMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-test",
       "mov ax, [bx]\n"    // Load a word from memory into AX
@@ -117,7 +117,7 @@ TEST_F(MovXchgTest, MOVRegisterAndMemory) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, MOVSegmentRegister) {
+TEST_F(MovXchgXlatTest, MOVSegmentRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-segment-test",
       "mov ds, ax\n"                // Move register to segment register
@@ -195,7 +195,7 @@ TEST_F(MovXchgTest, MOVSegmentRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, MOVImmediateToRegister) {
+TEST_F(MovXchgXlatTest, MOVImmediateToRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-immediate-test",
       "mov al, 42h\n"       // Move immediate to 8-bit low register
@@ -278,7 +278,7 @@ TEST_F(MovXchgTest, MOVImmediateToRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, MOVMemoryOffsetAndALOrAX) {
+TEST_F(MovXchgXlatTest, MOVMemoryOffsetAndALOrAX) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-memory-offset-test",
       "mov al, [0500h]\n"    // Load a byte from direct memory address to AL
@@ -381,7 +381,7 @@ TEST_F(MovXchgTest, MOVMemoryOffsetAndALOrAX) {
   EXPECT_EQ(helper->memory_[0x0881], 0xAB);  // MSB
 }
 
-TEST_F(MovXchgTest, MOVImmediateToRegisterOrMemory) {
+TEST_F(MovXchgXlatTest, MOVImmediateToRegisterOrMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-mov-immediate-to-reg-mem-test",
       "mov byte [bx], 42h\n"      // Move immediate byte to memory
@@ -502,7 +502,7 @@ TEST_F(MovXchgTest, MOVImmediateToRegisterOrMemory) {
   EXPECT_EQ(helper->memory_[0x0861], 0x12);  // MSB
 }
 
-TEST_F(MovXchgTest, XCHGRegister) {
+TEST_F(MovXchgXlatTest, XCHGRegister) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-xchg-register-test",
       "xchg ax, ax\n"    // NOP (special case)
@@ -616,7 +616,7 @@ TEST_F(MovXchgTest, XCHGRegister) {
        {kAF, true}});
 }
 
-TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
+TEST_F(MovXchgXlatTest, XCHGRegisterAndMemory) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-xchg-register-memory-test",
       "xchg al, [bx]\n"      // Exchange AL with byte in memory
@@ -711,4 +711,77 @@ TEST_F(MovXchgTest, XCHGRegisterAndMemory) {
        {kPF, true},
        {kOF, true},
        {kAF, true}});
+}
+
+TEST_F(MovXchgXlatTest, XLAT) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-xlat-test",
+      "xlatb\n");                   // XLATB is an alias for XLAT
+  helper->cpu_.registers[kDS] = 0;  // Assume DS is 0 for direct addressing
+
+  // Set various flags to verify XLAT instructions don't affect them
+  SetFlag(&helper->cpu_, kCF, true);
+  SetFlag(&helper->cpu_, kZF, true);
+  SetFlag(&helper->cpu_, kSF, true);
+  SetFlag(&helper->cpu_, kPF, true);
+  SetFlag(&helper->cpu_, kOF, true);
+  SetFlag(&helper->cpu_, kAF, true);
+
+  // Test XLAT: AL should be replaced by the value at [DS:BX+AL]
+  // Set up: BX = 0x0700 (table base), AL = 0x05 (index)
+  // Memory at [0x0700 + 0x05] = 0x0705 contains 0xAB
+  helper->cpu_.registers[kBX] = 0x0700;
+  helper->cpu_.registers[kAX] =
+      0xCC05;  // AL = 0x05, AH = 0xCC (to check AH is unchanged)
+  helper->memory_[0x0705] = 0xAB;
+
+  helper->ExecuteInstructions(1);
+
+  // Verify AL is updated
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xAB);  // AL should be 0xAB
+  // Verify AH is unchanged
+  EXPECT_EQ(
+      (helper->cpu_.registers[kAX] >> 8) & 0xFF,
+      0xCC);  // AH should still be 0xCC
+
+  // Verify flags are still set after XLAT instruction
+  helper->CheckFlags(
+      {{kCF, true},
+       {kZF, true},
+       {kSF, true},
+       {kPF, true},
+       {kOF, true},
+       {kAF, true}});
+
+  // Test with a different index and value
+  // Set up: BX = 0x0800, AL = 0x0A
+  // Memory at [0x0800 + 0x0A] = 0x080A contains 0x42
+  helper = CPUTestHelper::CreateWithProgram(
+      "execute-xlat-test-2", "xlat byte [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  SetFlag(&helper->cpu_, kCF, false);  // Change some flags for variety
+  SetFlag(&helper->cpu_, kZF, false);
+  SetFlag(&helper->cpu_, kSF, false);
+  SetFlag(&helper->cpu_, kPF, false);
+  SetFlag(&helper->cpu_, kOF, false);
+  SetFlag(&helper->cpu_, kAF, false);
+
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0xDD0A;  // AL = 0x0A, AH = 0xDD
+  helper->memory_[0x080A] = 0x42;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);  // AL should be 0x42
+  EXPECT_EQ(
+      (helper->cpu_.registers[kAX] >> 8) & 0xFF,
+      0xDD);  // AH should still be 0xDD
+
+  helper->CheckFlags(
+      {{kCF, false},
+       {kZF, false},
+       {kSF, false},
+       {kPF, false},
+       {kOF, false},
+       {kAF, false}});
 }
