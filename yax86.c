@@ -700,6 +700,43 @@ static ExecuteInstructionStatus ExecuteLoadEffectiveAddress(
 }
 
 // ============================================================================
+// LES and LDS instructions
+// ============================================================================
+
+// Common logic for LES and LDS instructions.
+static ExecuteInstructionStatus ExecuteLoadSegmentWithPointer(
+    const InstructionContext* ctx, RegisterIndex segment_register_index) {
+  Operand destRegister = ReadRegisterOperand(ctx);
+  Operand destSegmentRegister =
+      ReadRegisterOperandForRegisterIndex(ctx, segment_register_index);
+
+  OperandAddress src_address = {
+      .type = kOperandAddressTypeMemory,
+      .value = {
+          .memory_address = GetMemoryOperandAddress(ctx->cpu, ctx->instruction),
+      }};
+  OperandValue src_offset_value = ReadMemoryWord(ctx->cpu, &src_address);
+  src_address.value.memory_address.offset += 2;
+  OperandValue src_segment_value = ReadMemoryWord(ctx->cpu, &src_address);
+
+  WriteOperand(ctx, &destRegister, FromOperandValue(&src_offset_value));
+  WriteOperand(ctx, &destSegmentRegister, FromOperandValue(&src_segment_value));
+  return kExecuteSuccess;
+}
+
+// LES r16, m
+static ExecuteInstructionStatus ExecuteLoadESWithPointer(
+    const InstructionContext* ctx) {
+  return ExecuteLoadSegmentWithPointer(ctx, kES);
+}
+
+// LDS r16, m
+static ExecuteInstructionStatus ExecuteLoadDSWithPointer(
+    const InstructionContext* ctx) {
+  return ExecuteLoadSegmentWithPointer(ctx, kDS);
+}
+
+// ============================================================================
 // PUSH and POP instructions
 // ============================================================================
 
@@ -2655,9 +2692,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteNearReturn},
     // LES r16, m32
-    {.opcode = 0xC4, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0xC4,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteLoadESWithPointer},
     // LDS r16, m32
-    {.opcode = 0xC5, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    {.opcode = 0xC5,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteLoadDSWithPointer},
     // MOV r/m8, imm8
     {.opcode = 0xC6,
      .has_modrm = true,
