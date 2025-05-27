@@ -5,9 +5,9 @@
 
 using namespace std;
 
-class PushPopFlagsTest : public ::testing::Test {};
+class PushPopTest : public ::testing::Test {};
 
-TEST_F(PushPopFlagsTest, PushPopRegisters) {
+TEST_F(PushPopTest, PushPopRegisters) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-push-pop-test",
       "push ax\n"   // Push AX onto the stack
@@ -27,7 +27,7 @@ TEST_F(PushPopFlagsTest, PushPopRegisters) {
   EXPECT_EQ(helper->cpu_.registers[kDX], 0x5678);
 }
 
-TEST_F(PushPopFlagsTest, PushPopSegmentRegisters) {
+TEST_F(PushPopTest, PushPopSegmentRegisters) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-push-pop-segment-test",
       "push ds\n"   // Push DS onto the stack
@@ -43,34 +43,4 @@ TEST_F(PushPopFlagsTest, PushPopSegmentRegisters) {
   helper->ExecuteInstructions(4);
   EXPECT_EQ(helper->cpu_.registers[kDS], 0x5678);
   EXPECT_EQ(helper->cpu_.registers[kES], 0x1234);
-}
-
-TEST_F(PushPopFlagsTest, PushPopFlag) {
-  auto helper = CPUTestHelper::CreateWithProgram(
-      "execute-push-pop-flag-test",
-      "pushf\n"   // Push flags onto the stack
-      "popf\n");  // Pop from the stack into flags
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = helper->memory_size_ - 2;
-  // Set up: Flags=0x1234
-  helper->cpu_.flags = 0x1234;
-
-  helper->ExecuteInstructions(1);
-  helper->cpu_.flags = 0x5678;
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.flags, 0x1234);
-}
-
-TEST_F(PushPopFlagsTest, LAHFAndSAHF) {
-  auto helper = CPUTestHelper::CreateWithProgram(
-      "execute-lahf-sahf-test",
-      "lahf\n"
-      "sahf\n");
-  helper->cpu_.flags = 0x1234;
-  helper->cpu_.registers[kAX] = 0;
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x3400);
-  helper->cpu_.registers[kAX] = 0x5678;
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.flags, 0x1256);
 }

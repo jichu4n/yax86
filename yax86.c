@@ -874,6 +874,27 @@ static ExecuteInstructionStatus ExecuteStoreAHToFlags(
 }
 
 // ============================================================================
+// CLC, STC, CLI, STI, CLD, STD instructions
+// ============================================================================
+
+// Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
+// instructions, indexed by (opcode - 0xF8) / 2.
+static const Flag kFlagsForClearAndSetInstructions[] = {
+    kCF,  // CLC, STC
+    kIF,  // CLI, STI
+    kDF,  // CLD, STD
+};
+
+static ExecuteInstructionStatus ExecuteClearOrSetFlag(
+    const InstructionContext* ctx) {
+  uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
+  Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
+  bool value = (opcode_index & 0x1) != 0;
+  SetFlag(ctx->cpu, flag, value);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // ADD, ADC, and INC instructions
 // ============================================================================
 
@@ -2870,17 +2891,41 @@ static const OpcodeMetadata opcodes[] = {
     // The immediate size depends on the ModR/M byte.
     {.opcode = 0xF7, .has_modrm = true, .immediate_size = 0, .width = kWord},
     // CLC
-    {.opcode = 0xF8, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xF8,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteClearOrSetFlag},
     // STC
-    {.opcode = 0xF9, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xF9,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteClearOrSetFlag},
     // CLI
-    {.opcode = 0xFA, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xFA,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteClearOrSetFlag},
     // STI
-    {.opcode = 0xFB, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xFB,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteClearOrSetFlag},
     // CLD
-    {.opcode = 0xFC, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xFC,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteClearOrSetFlag},
     // STD
-    {.opcode = 0xFD, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xFD,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteClearOrSetFlag},
     // INC/DEC r/m8 (Group 4)
     {.opcode = 0xFE,
      .has_modrm = true,
