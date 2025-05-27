@@ -840,6 +840,18 @@ static ExecuteInstructionStatus ExecutePopFlags(const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
+// POP r/m16
+static ExecuteInstructionStatus ExecutePopRegisterOrMemory(
+    const InstructionContext* ctx) {
+  if (ctx->instruction->mod_rm.reg != 0) {
+    return kExecuteInvalidInstruction;
+  }
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandValue value = Pop(ctx);
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  return kExecuteSuccess;
+}
+
 // ============================================================================
 // LAHF and SAHF
 // ============================================================================
@@ -2483,8 +2495,12 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteMoveRegisterOrMemoryToSegmentRegister},
-    // POP r/m16 (Group 1A)
-    {.opcode = 0x8F, .has_modrm = true, .immediate_size = 0, .width = kWord},
+    // POP r/m16
+    {.opcode = 0x8F,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopRegisterOrMemory},
     // XCHG AX, AX (NOP)
     {.opcode = 0x90,
      .has_modrm = false,
