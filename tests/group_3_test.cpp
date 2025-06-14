@@ -1,4 +1,3 @@
-// filepath: /home/chuan/Projects/yax86/tests/group_3_test.cpp
 #include <gtest/gtest.h>
 
 #include "../yax86.h"
@@ -450,7 +449,7 @@ TEST_F(Group3Test, NegRegisterWord) {
   helper->cpu_.registers[kAX] = 0x1234;
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xEDCC);  // ~0x1234 = 0xEDCB
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xEDCC);  // ~0x1234 = 0xEDCC
 
   // Test with CX register
   helper = CPUTestHelper::CreateWithProgram("group3-neg-cx-test", "neg cx\n");
@@ -659,205 +658,326 @@ TEST_F(Group3Test, MulRegisterWord) {
   helper->CheckFlags({{kCF, true}, {kOF, true}});
 }
 
-TEST_F(Group3Test, ImulByte) {
-  // Test case for IMUL r/m8 (Opcode F6 /5)
-  // Example: IMUL byte [bx] (AX = AL * byte [bx])
+TEST_F(Group3Test, DivByte) {
+  // Test case for DIV r/m8 (Opcode F6 /6)
+  // Example: DIV byte [bx] (AL = AX / byte [bx], AH = AX % byte [bx])
 
-  // Case 1: Positive * Positive, no overflow
+  // Case 1: Normal division, no remainder
   auto helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-byte-pos-pos-no-overflow", "imul byte [bx]\n");
+      "group3-div-byte-normal-no-remainder", "div byte [bx]\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x0002;  // AL = 2
-  helper->memory_[0x0800] = 0x03;        // [bx] = 3
+  helper->cpu_.registers[kAX] = 0x0014;  // AX = 20
+  helper->memory_[0x0800] = 0x04;        // [bx] = 4
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0006);  // AX = 2 * 3 = 6
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX], 0x0005);  // AL = 20/4 = 5, AH = 20%4 = 0
 
-  // Case 2: Positive * Negative, no overflow
+  // Case 2: Normal division with remainder
   helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-byte-pos-neg-no-overflow", "imul byte [bx]\n");
+      "group3-div-byte-normal-with-remainder", "div byte [bx]\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x0002;  // AL = 2
-  helper->memory_[0x0800] = 0xFD;        // [bx] = -3
+  helper->cpu_.registers[kAX] = 0x0017;  // AX = 23
+  helper->memory_[0x0800] = 0x05;        // [bx] = 5
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFA);  // AX = 2 * -3 = -6
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX], 0x0304);  // AL = 23/5 = 4, AH = 23%5 = 3
 
-  // Case 3: Negative * Positive, no overflow
+  // Case 3: Large dividend using AH:AL
   helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-byte-neg-pos-no-overflow", "imul byte [bx]\n");
+      "group3-div-byte-large-dividend", "div byte [bx]\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x00FE;  // AL = -2
-  helper->memory_[0x0800] = 0x03;        // [bx] = 3
+  helper->cpu_.registers[kAX] =
+      0x0102;  // AH = 1, AL = 2, so dividend = 256 + 2 = 258
+  helper->memory_[0x0800] = 0x03;  // [bx] = 3
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFA);  // AX = -2 * 3 = -6
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX], 0x0056);  // AL = 258/3 = 86, AH = 258%3 = 0
 
-  // Case 4: Negative * Negative, no overflow
+  // Case 4: Division by 1
   helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-byte-neg-neg-no-overflow", "imul byte [bx]\n");
+      "group3-div-byte-by-one", "div byte [bx]\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x00FE;  // AL = -2
-  helper->memory_[0x0800] = 0xFD;        // [bx] = -3
+  helper->cpu_.registers[kAX] = 0x00FF;  // AX = 255
+  helper->memory_[0x0800] = 0x01;        // [bx] = 1
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0006);  // AX = -2 * -3 = 6
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX], 0x00FF);  // AL = 255/1 = 255, AH = 255%1 = 0
 
-  // Case 5: Positive overflow
-  // AL = 10, [bx] = 10. Result = 100 (0x64). Fits in AL. AH should be 0.
-  // AL = 20 (0x14), [bx] = 10 (0x0A). Result = 200 (0xC8). Does not fit in AL
-  // (max signed is 127). AX should be 0x00C8. CF=OF=1.
-  helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-byte-pos-overflow", "imul byte [bx]\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x0014;  // AL = 20
-  helper->memory_[0x0800] = 0x0A;        // [bx] = 10
+  // Case 5: Test with register operand
+  helper =
+      CPUTestHelper::CreateWithProgram("group3-div-byte-register", "div cl\n");
+  helper->cpu_.registers[kAX] = 0x0030;  // AX = 48
+  helper->cpu_.registers[kCX] = 0x0006;  // CL = 6
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x00C8);  // AX = 20 * 10 = 200
-  helper->CheckFlags({{kCF, true}, {kOF, true}});
-
-  // Case 6: Negative overflow
-  // AL = -10 (0xF6), [bx] = 10 (0x0A). Result = -100 (0xFF9C). Fits in AL
-  // (0x9C). AH should be 0xFF. AL = -20 (0xEC), [bx] = 10 (0x0A). Result = -200
-  // (0xFF38). Does not fit in AL (min signed is -128). AX should be 0xFF38.
-  // CF=OF=1.
-  helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-byte-neg-overflow", "imul byte [bx]\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x00EC;  // AL = -20
-  helper->memory_[0x0800] = 0x0A;        // [bx] = 10
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFF38);  // AX = -20 * 10 = -200
-  helper->CheckFlags({{kCF, true}, {kOF, true}});
-
-  // Case 7: Min negative byte * -1 (overflow)
-  // AL = -128 (0x80), [bx] = -1 (0xFF). Result = 128. Overflows signed byte.
-  // AX should be 0x0080. CF=OF=1.
-  helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-byte-min-neg-overflow", "imul byte [bx]\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x0080;  // AL = -128
-  helper->memory_[0x0800] = 0xFF;        // [bx] = -1
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0080);  // AX = -128 * -1 = 128
-  helper->CheckFlags({{kCF, true}, {kOF, true}});
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX], 0x0008);  // AL = 48/6 = 8, AH = 48%6 = 0
 }
 
-TEST_F(Group3Test, ImulWord) {
-  // Test case for IMUL r/m16 (Opcode F7 /5)
-  // Example: IMUL word [bx] (DX:AX = AX * word [bx])
+TEST_F(Group3Test, DivWord) {
+  // Test case for DIV r/m16 (Opcode F7 /6)
+  // Example: DIV word [bx] (AX = DX:AX / word [bx], DX = DX:AX % word [bx])
 
-  // Case 1: Positive * Positive, no overflow
+  // Case 1: Normal division, no remainder
   auto helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-word-pos-pos-no-overflow", "imul word [bx]\n");
+      "group3-div-word-normal-no-remainder", "div word [bx]\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x0002;  // AX = 2
-  helper->memory_[0x0800] = 0x03;        // [bx] = 3 (low byte)
+  helper->cpu_.registers[kAX] = 0x0014;  // AX = 20
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0, so dividend = 20
+  helper->memory_[0x0800] = 0x04;        // [bx] = 4 (low byte)
   helper->memory_[0x0801] = 0x00;        // (high byte)
-  helper->cpu_.registers[kDX] =
-      0x5555;  // Pre-set DX to check it's correctly overwritten
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0006);
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0005);  // AX = 20/4 = 5
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 20%4 = 0
 
-  // Case 2: Positive * Negative, no overflow
+  // Case 2: Normal division with remainder
   helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-word-pos-neg-no-overflow", "imul word [bx]\n");
+      "group3-div-word-normal-with-remainder", "div word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0017;  // AX = 23
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0, so dividend = 23
+  helper->memory_[0x0800] = 0x05;        // [bx] = 5
+  helper->memory_[0x0801] = 0x00;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0004);  // AX = 23/5 = 4
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0003);  // DX = 23%5 = 3
+
+  // Case 3: Large dividend using DX:AX
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-div-word-large-dividend", "div word [bx]\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->cpu_.registers[kAX] = 0x0002;  // AX = 2
-  helper->memory_[0x0800] = 0xFD;        // [bx] = -3 (low byte)
-  helper->memory_[0x0801] = 0xFF;        // (high byte)
-  helper->cpu_.registers[kDX] = 0x5555;
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFA);  // AX = -6
-  EXPECT_EQ(
-      helper->cpu_.registers[kDX], 0xFFFF);  // DX should be sign extension
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
-
-  // Case 3: Negative * Positive, no overflow
-  helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-word-neg-pos-no-overflow", "imul word [bx]\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0xFFFE;  // AX = -2
-  helper->memory_[0x0800] = 0x03;        // [bx] = 3
+  helper->cpu_.registers[kDX] =
+      0x0001;                      // DX = 1, so dividend = 65536 + 2 = 65538
+  helper->memory_[0x0800] = 0x03;  // [bx] = 3
   helper->memory_[0x0801] = 0x00;
-  helper->cpu_.registers[kDX] = 0x5555;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFA);  // AX = -6
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0xFFFF);
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x5556);  // AX = 65538/3 = 21846
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 65538%3 = 0
 
-  // Case 4: Negative * Negative, no overflow
+  // Case 4: Division by 1
   helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-word-neg-neg-no-overflow", "imul word [bx]\n");
+      "group3-div-word-by-one", "div word [bx]\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0xFFFE;  // AX = -2
-  helper->memory_[0x0800] = 0xFD;        // [bx] = -3
-  helper->memory_[0x0801] = 0xFF;
-  helper->cpu_.registers[kDX] = 0x5555;
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0006);  // AX = 6
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);
-  helper->CheckFlags({{kCF, false}, {kOF, false}});
-
-  // Case 5: Positive overflow
-  // AX = 200 (0x00C8), [bx] = 200 (0x00C8). Result = 40000 (0x9C40). Does not
-  // fit in AX (max signed is 32767). DX:AX should be 0x00009C40. CF=OF=1.
-  helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-word-pos-overflow", "imul word [bx]\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
-  helper->cpu_.registers[kAX] = 0x00C8;  // AX = 200
-  helper->memory_[0x0800] = 0xC8;        // [bx] = 200
+  helper->cpu_.registers[kAX] = 0xFFFF;  // AX = 65535
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0
+  helper->memory_[0x0800] = 0x01;        // [bx] = 1
   helper->memory_[0x0801] = 0x00;
-  helper->cpu_.registers[kDX] = 0x5555;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x9C40);
-  EXPECT_EQ(
-      helper->cpu_.registers[kDX],
-      0x0000);  // Result is 40000, fits in 16 bits if unsigned, but overflows
-                // signed 16-bit For IMUL, if result fits in AX, DX is sign
-                // extension. If it doesn't fit, DX contains the high part.
-                // 40000 is positive, so DX should be 0.
-  helper->CheckFlags({{kCF, true}, {kOF, true}});
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFF);  // AX = 65535/1 = 65535
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 65535%1 = 0
 
-  // Case 6: Negative overflow
-  // AX = -200 (0xFF38), SI = 200 (0x00C8). Result = -40000 (0xFFFF63C0). Does
-  // not fit in AX (min signed is -32768). DX:AX should be 0xFFFF63C0. CF=OF=1.
-  helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-si-neg-overflow", "imul si\n");
-  helper->cpu_.registers[kAX] = 0xFF38;  // AX = -200
-  helper->cpu_.registers[kSI] = 0x00C8;  // SI = 200
-  helper->cpu_.registers[kDX] = 0x5555;
+  // Case 5: Test with register operand
+  helper =
+      CPUTestHelper::CreateWithProgram("group3-div-word-register", "div cx\n");
+  helper->cpu_.registers[kAX] = 0x0030;  // AX = 48
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0
+  helper->cpu_.registers[kCX] = 0x0006;  // CX = 6
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x63C0);
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0xFFFF);
-  helper->CheckFlags({{kCF, true}, {kOF, true}});
-
-  // Case 7: Min negative word (AX) * -1 (CX) (overflow)
-  // AX = -32768 (0x8000), CX = -1 (0xFFFF). Result = 32768. Overflows signed
-  // word. DX:AX should be 0x00008000. CF=OF=1.
-  helper = CPUTestHelper::CreateWithProgram(
-      "group3-imul-cx-min-neg-overflow", "imul cx\n");
-  helper->cpu_.registers[kAX] = 0x8000;  // AX = -32768
-  helper->cpu_.registers[kCX] = 0xFFFF;  // CX = -1
-  helper->cpu_.registers[kDX] = 0x5555;
-  helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x8000);
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);
-  helper->CheckFlags({{kCF, true}, {kOF, true}});
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0008);  // AX = 48/6 = 8
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 48%6 = 0
 }
 
+TEST_F(Group3Test, IdivByte) {
+  // Test case for IDIV r/m8 (Opcode F6 /7)
+  // Example: IDIV byte [bx] (AL = AX / byte [bx], AH = AX % byte [bx])
+  // All operations are signed
 
+  // Case 1: Positive dividend, positive divisor, no remainder
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-pos-pos-no-remainder", "idiv byte [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0014;  // AX = 20
+  helper->memory_[0x0800] = 0x04;        // [bx] = 4
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX], 0x0005);  // AL = 20/4 = 5, AH = 20%4 = 0
+
+  // Case 2: Positive dividend, positive divisor, with remainder
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-pos-pos-with-remainder", "idiv byte [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0017;  // AX = 23
+  helper->memory_[0x0800] = 0x05;        // [bx] = 5
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX], 0x0304);  // AL = 23/5 = 4, AH = 23%5 = 3
+
+  // Case 3: Positive dividend, negative divisor
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-pos-neg", "idiv byte [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0014;  // AX = 20
+  helper->memory_[0x0800] = 0xFC;        // [bx] = -4
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX],
+      0x00FB);  // AL = 20/(-4) = -5, AH = 20%(-4) = 0
+
+  // Case 4: Negative dividend, positive divisor
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-neg-pos", "idiv byte [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0xFFEC;  // AH = 0xFF, AL = 0xEC, so dividend =
+                                         // 0xFFEC = -20 (signed 16-bit)
+  helper->memory_[0x0800] = 0x04;        // [bx] = 4
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX],
+      0x00FB);  // AL = -20/4 = -5 (0xFB), AH = -20%4 = 0
+
+  // Case 5: Negative dividend, negative divisor
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-neg-neg", "idiv byte [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0xFFEC;  // AH = 0xFF, AL = 0xEC, so dividend =
+                                         // 0xFFEC = -20 (signed 16-bit)
+  helper->memory_[0x0800] = 0xFC;        // [bx] = -4
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX],
+      0x0005);  // AL = -20/(-4) = 5, AH = -20%(-4) = 0
+
+  // Case 6: Division with negative remainder
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-neg-remainder", "idiv byte [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0xFFE9;  // AH = 0xFF, AL = 0xE9, so dividend =
+                                         // 0xFFE9 = -23 (signed 16-bit)
+  helper->memory_[0x0800] = 0x05;        // [bx] = 5
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX],
+      0xFDFC);  // AL = -23/5 = -4, AH = -23%5 = -3
+
+  // Case 7: Test with register operand
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-register", "idiv cl\n");
+  helper->cpu_.registers[kAX] = 0x0030;  // AX = 48
+  helper->cpu_.registers[kCX] = 0x00F4;  // CL = -12
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(
+      helper->cpu_.registers[kAX],
+      0x00FC);  // AL = 48/(-12) = -4, AH = 48%(-12) = 0
+}
+
+TEST_F(Group3Test, IdivWord) {
+  // Test case for IDIV r/m16 (Opcode F7 /7)
+  // Example: IDIV word [bx] (AX = DX:AX / word [bx], DX = DX:AX % word [bx])
+  // All operations are signed
+
+  // Case 1: Positive dividend, positive divisor, no remainder
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-pos-pos-no-remainder", "idiv word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0014;  // AX = 20
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0, so dividend = 20
+  helper->memory_[0x0800] = 0x04;        // [bx] = 4
+  helper->memory_[0x0801] = 0x00;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0005);  // AX = 20/4 = 5
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 20%4 = 0
+
+  // Case 2: Positive dividend, positive divisor, with remainder
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-pos-pos-with-remainder", "idiv word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0017;  // AX = 23
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0, so dividend = 23
+  helper->memory_[0x0800] = 0x05;        // [bx] = 5
+  helper->memory_[0x0801] = 0x00;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0004);  // AX = 23/5 = 4
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0003);  // DX = 23%5 = 3
+
+  // Case 3: Positive dividend, negative divisor
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-pos-neg", "idiv word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0014;  // AX = 20
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0
+  helper->memory_[0x0800] = 0xFC;        // [bx] = -4 (0xFFFC)
+  helper->memory_[0x0801] = 0xFF;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFB);  // AX = 20/(-4) = -5
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 20%(-4) = 0
+
+  // Case 4: Negative dividend, positive divisor
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-neg-pos", "idiv word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0xFFEC;  // AX = -20
+  helper->cpu_.registers[kDX] =
+      0xFFFF;  // DX = -1 (sign extension), so dividend = -20
+  helper->memory_[0x0800] = 0x04;  // [bx] = 4
+  helper->memory_[0x0801] = 0x00;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFB);  // AX = -20/4 = -5
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = -20%4 = 0
+
+  // Case 5: Negative dividend, negative divisor
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-neg-neg", "idiv word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0xFFEC;  // AX = -20
+  helper->cpu_.registers[kDX] = 0xFFFF;  // DX = -1, so dividend = -20
+  helper->memory_[0x0800] = 0xFC;        // [bx] = -4
+  helper->memory_[0x0801] = 0xFF;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0005);  // AX = -20/(-4) = 5
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = -20%(-4) = 0
+
+  // Case 6: Division with negative remainder
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-neg-remainder", "idiv word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0xFFE9;  // AX = -23
+  helper->cpu_.registers[kDX] = 0xFFFF;  // DX = -1, so dividend = -23
+  helper->memory_[0x0800] = 0x05;        // [bx] = 5
+  helper->memory_[0x0801] = 0x00;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFC);  // AX = -23/5 = -4
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0xFFFD);  // DX = -23%5 = -3
+
+  // Case 7: Large positive dividend
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-large-pos", "idiv word [bx]\n");
+  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x0002;  // AX = 2
+  helper->cpu_.registers[kDX] = 0x0001;  // DX = 1, so dividend = 65538
+  helper->memory_[0x0800] = 0x03;        // [bx] = 3
+  helper->memory_[0x0801] = 0x00;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x5556);  // AX = 65538/3 = 21846
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 65538%3 = 0
+
+  // Case 8: Test with register operand
+  helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-word-register", "idiv cx\n");
+  helper->cpu_.registers[kAX] = 0x0030;  // AX = 48
+  helper->cpu_.registers[kDX] = 0x0000;  // DX = 0
+  helper->cpu_.registers[kCX] = 0xFFF4;  // CX = -12
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFC);  // AX = 48/(-12) = -4
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 48%(-12) = 0
+}

@@ -135,7 +135,7 @@ static inline uint32_t FromOperand(const Operand* operand) {
 }
 
 // Helper function to extract a sign-extended value from an operand.
-static inline uint32_t FromSignedOperand(const Operand* operand) {
+static inline int32_t FromSignedOperand(const Operand* operand) {
   return FromSignedOperandValue(&operand->value);
 }
 
@@ -1802,26 +1802,6 @@ static ExecuteInstructionStatus ExecuteImul(
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-static inline ExecuteInstructionStatus PrepareDiv(
-    const InstructionContext* ctx, Operand* dest, uint32_t* dividend,
-    uint32_t divisor) {
-  if (divisor == 0) {
-    // TODO: Handle division by zero error
-    return kExecuteInvalidInstruction;
-  }
-
-  Width width = ctx->metadata->width;
-  *dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-
-  OperandValue dest_high_half =
-      kReadOperandValueFn[kOperandAddressTypeRegister][width](
-          ctx->cpu, &kMulDivResultHighHalfAddress[width]);
-  *dividend = FromOperand(dest) | (FromOperandValue(&dest_high_half)
-                                   << kMulDivResultHighHalfShiftWidth[width]);
-
-  return kExecuteSuccess;
-}
-
 static inline ExecuteInstructionStatus WriteDivResult(
     const InstructionContext* ctx, Operand* dest, uint32_t quotient,
     uint32_t remainder) {
@@ -1835,14 +1815,21 @@ static inline ExecuteInstructionStatus WriteDivResult(
 // DIV r/m16
 static ExecuteInstructionStatus ExecuteDiv(
     const InstructionContext* ctx, Operand* op) {
-  Operand dest;
-  uint32_t dividend;
   uint32_t divisor = FromOperand(op);
-  ExecuteInstructionStatus prepareStatus =
-      PrepareDiv(ctx, &dest, &dividend, divisor);
-  if (prepareStatus != kExecuteSuccess) {
-    return prepareStatus;
+  if (divisor == 0) {
+    // TODO: Handle division by zero error
+    return kExecuteInvalidInstruction;
   }
+
+  Width width = ctx->metadata->width;
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+
+  OperandValue dest_high_half =
+      kReadOperandValueFn[kOperandAddressTypeRegister][width](
+          ctx->cpu, &kMulDivResultHighHalfAddress[width]);
+  uint32_t dividend =
+      FromOperand(&dest) | (FromOperandValue(&dest_high_half)
+                           << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
     // TODO: Handle division overflow error
@@ -1855,20 +1842,21 @@ static ExecuteInstructionStatus ExecuteDiv(
 // IDIV r/m16
 static ExecuteInstructionStatus ExecuteIdiv(
     const InstructionContext* ctx, Operand* op) {
-  Operand dest;
-  int32_t dividend;
   int32_t divisor = FromSignedOperand(op);
-  ExecuteInstructionStatus prepareStatus =
-      // Both of these casts are safe:
-      //   - The construction of the dividend (AL and AH or AX and DX) is
-      //     sign-agnostic. PrepareDiv will always construct it as a uint32_t
-      //     which will then be interpreted as a signed value.
-      //   - PrepareDiv just checks if the divisor is zero, so the sign doesn't
-      //     matter.
-      PrepareDiv(ctx, &dest, (uint32_t*)&dividend, (uint32_t)divisor);
-  if (prepareStatus != kExecuteSuccess) {
-    return prepareStatus;
+  if (divisor == 0) {
+    // TODO: Handle division by zero error
+    return kExecuteInvalidInstruction;
   }
+
+  Width width = ctx->metadata->width;
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+
+  OperandValue dest_high_half =
+      kReadOperandValueFn[kOperandAddressTypeRegister][width](
+          ctx->cpu, &kMulDivResultHighHalfAddress[width]);
+  int32_t dividend =
+      FromOperand(&dest) | (FromSignedOperandValue(&dest_high_half)
+                           << kMulDivResultHighHalfShiftWidth[width]);
   int32_t quotient = dividend / divisor;
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < kMinSignedValue[ctx->metadata->width]) {

@@ -197,16 +197,20 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
   cout << ">> Executing encoded instructions:" << endl;
   for (int i = 0; i < num_instructions; ++i) {
     EncodedInstruction instruction;
-    auto status = FetchNextInstruction(&cpu_, &instruction);
-    if (status != kFetchSuccess) {
+    auto fetch_status = FetchNextInstruction(&cpu_, &instruction);
+    if (fetch_status != kFetchSuccess) {
       throw runtime_error(
           "Failed to fetch instruction at IP: " + to_string(*ip) +
-          ", status: " + to_string(status));
+          ", status: " + to_string(fetch_status));
     }
     cout << "[" << hex << setw(4) << setfill('0') << (*ip) << "]\t"
          << instruction << endl;
     *ip += instruction.size;
-    ExecuteInstruction(&cpu_, &instruction);
+    auto execute_status = ExecuteInstruction(&cpu_, &instruction);
+    if (execute_status != kExecuteSuccess) {
+      cout << "Warning: Instruction execution returned status " << dec
+           << execute_status << endl;
+    }
   }
 }
 
