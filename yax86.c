@@ -2213,6 +2213,139 @@ static ExecuteInstructionStatus ExecuteGroup5Instruction(
 }
 
 // ============================================================================
+// BCD and ASCII instructions
+// ============================================================================
+
+// AAA
+static ExecuteInstructionStatus ExecuteAaa(const InstructionContext* ctx) {
+  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint16_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  if ((al & 0x0F) > 9 || GetFlag(ctx->cpu, kAF)) {
+    al += 6;
+    ++ah;
+    SetFlag(ctx->cpu, kAF, true);
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  al &= 0x0F;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  return kExecuteSuccess;
+}
+
+// AAS
+static ExecuteInstructionStatus ExecuteAas(const InstructionContext* ctx) {
+  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint16_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  if ((al & 0x0F) > 9 || GetFlag(ctx->cpu, kAF)) {
+    al -= 6;
+    --ah;
+    SetFlag(ctx->cpu, kAF, true);
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  al &= 0x0F;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  return kExecuteSuccess;
+}
+
+// AAM
+static ExecuteInstructionStatus ExecuteAam(const InstructionContext* ctx) {
+  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
+  OperandValue base = ReadImmediate(ctx);
+  uint16_t base_value = FromOperandValue(&base);
+  if (base_value == 0) {
+    return kExecuteInvalidInstruction;
+  }
+  uint16_t ah = al / base_value;
+  al %= base_value;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+// AAD
+static ExecuteInstructionStatus ExecuteAad(const InstructionContext* ctx) {
+  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint16_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  OperandValue base = ReadImmediate(ctx);
+  uint16_t base_value = FromOperandValue(&base);
+  al += ah * base_value;
+  ah = 0;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+// DAA
+static ExecuteInstructionStatus ExecuteDaa(const InstructionContext* ctx) {
+  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint16_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al_low = al & 0x0F;
+  uint8_t al_high = (al >> 4) & 0x0F;
+  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+    al += 6;
+    SetFlag(ctx->cpu, kAF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+  }
+  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+    al += 0x60;
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+// DAS
+static ExecuteInstructionStatus ExecuteDas(const InstructionContext* ctx) {
+  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint16_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al_low = al & 0x0F;
+  uint8_t al_high = (al >> 4) & 0x0F;
+  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+    al -= 6;
+    SetFlag(ctx->cpu, kAF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+  }
+  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+    al -= 0x60;
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
+// Sign extension instructions
+// ============================================================================
+
+// CBW
+static ExecuteInstructionStatus ExecuteCbw(const InstructionContext* ctx) {
+  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint16_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  return kExecuteSuccess;
+}
+
+// CWD
+static ExecuteInstructionStatus ExecuteCwd(const InstructionContext* ctx) {
+  ctx->cpu->registers[kDX] =
+      (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // Opcode table
 // ============================================================================
 
@@ -2441,7 +2574,10 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteBooleanAndImmediateToALOrAX},
     // DAA
-    {.opcode = 0x27, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x27,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteDaa},
     // SUB r/m8, r8
     {.opcode = 0x28,
      .has_modrm = true,
@@ -2479,7 +2615,10 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteSubImmediateFromALOrAX},
     // DAS
-    {.opcode = 0x2F, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x2F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteDas},
     // XOR r/m8, r8
     {.opcode = 0x30,
      .has_modrm = true,
@@ -2517,7 +2656,11 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteBooleanXorImmediateToALOrAX},
     // AAA
-    {.opcode = 0x37, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x37,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteAaa},
     // CMP r/m8, r8
     {.opcode = 0x38,
      .has_modrm = true,
@@ -2555,7 +2698,11 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteCmpImmediateToALOrAX},
     // AAS
-    {.opcode = 0x3F, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x3F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteAas},
     // INC AX
     {.opcode = 0x40,
      .has_modrm = false,
@@ -2991,9 +3138,15 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // CBW
-    {.opcode = 0x98, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x98,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteCbw},
     // CWD
-    {.opcode = 0x99, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x99,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteCwd},
     // CALL ptr16:16 (4 bytes: 2 for offset, 2 for segment)
     {.opcode = 0x9A,
      .has_modrm = false,
@@ -3001,7 +3154,7 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteDirectFarCall},
     // WAIT
-    {.opcode = 0x9B, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0x9B, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // PUSHF
     {.opcode = 0x9C,
      .has_modrm = false,
@@ -3051,13 +3204,13 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteMoveALOrAXToMemoryOffset},
     // MOVSB
-    {.opcode = 0xA4, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xA4, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // MOVSW
-    {.opcode = 0xA5, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xA5, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // CMPSB
-    {.opcode = 0xA6, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xA6, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // CMPSW
-    {.opcode = 0xA7, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xA7, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // TEST AL, imm8
     {.opcode = 0xA8,
      .has_modrm = false,
@@ -3071,17 +3224,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteTestImmediateToALOrAX},
     // STOSB
-    {.opcode = 0xAA, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xAA, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // STOSW
-    {.opcode = 0xAB, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xAB, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // LODSB
-    {.opcode = 0xAC, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xAC, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // LODSW
-    {.opcode = 0xAD, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xAD, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // SCASB
-    {.opcode = 0xAE, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xAE, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // SCASW
-    {.opcode = 0xAF, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xAF, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // MOV AL, imm8
     {.opcode = 0xB0,
      .has_modrm = false,
@@ -3226,13 +3379,17 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 0,
      .handler = ExecuteFarReturn},
     // INT 3
-    {.opcode = 0xCC, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xCC, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // INT imm8
-    {.opcode = 0xCD, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xCD,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = 0},
     // INTO
-    {.opcode = 0xCE, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xCE, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // IRET
-    {.opcode = 0xCF, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xCF, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // ROL/ROR/RCL/RCR/SHL/SHR/SAR r/m8, 1 (Group 2)
     {.opcode = 0xD0,
      .has_modrm = true,
@@ -3258,9 +3415,17 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteGroup2ShiftOrRotateByCLInstruction},
     // AAM
-    {.opcode = 0xD4, .has_modrm = false, .immediate_size = 1},
+    {.opcode = 0xD4,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteAam},
     // AAD
-    {.opcode = 0xD5, .has_modrm = false, .immediate_size = 1},
+    {.opcode = 0xD5,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteAad},
     // XLAT/XLATB
     {.opcode = 0xD7,
      .has_modrm = false,
@@ -3268,21 +3433,21 @@ static const OpcodeMetadata opcodes[] = {
      .width = kByte,
      .handler = ExecuteTranslateByte},
     // ESC instruction 0xD8 for 8087 numeric coprocessor
-    {.opcode = 0xD8, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xD8, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // ESC instruction 0xD9 for 8087 numeric coprocessor
-    {.opcode = 0xD9, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xD9, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // ESC instruction 0xDA for 8087 numeric coprocessor
-    {.opcode = 0xDA, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xDA, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // ESC instruction 0xDB for 8087 numeric coprocessor
-    {.opcode = 0xDB, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xDB, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // ESC instruction 0xDC for 8087 numeric coprocessor
-    {.opcode = 0xDC, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xDC, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // ESC instruction 0xDD for 8087 numeric coprocessor
-    {.opcode = 0xDD, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xDD, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // ESC instruction 0xDE for 8087 numeric coprocessor
-    {.opcode = 0xDE, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xDE, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // ESC instruction 0xDF for 8087 numeric coprocessor
-    {.opcode = 0xDF, .has_modrm = true, .immediate_size = 0},
+    {.opcode = 0xDF, .has_modrm = true, .immediate_size = 0, .handler = 0},
     // LOOPNE/LOOPNZ rel8
     {.opcode = 0xE0,
      .has_modrm = false,
@@ -3308,13 +3473,29 @@ static const OpcodeMetadata opcodes[] = {
      .width = kByte,
      .handler = ExecuteJumpIfCXIsZero},
     // IN AL, imm8
-    {.opcode = 0xE4, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xE4,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = 0},
     // IN AX, imm8
-    {.opcode = 0xE5, .has_modrm = false, .immediate_size = 1, .width = kWord},
+    {.opcode = 0xE5,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kWord,
+     .handler = 0},
     // OUT imm8, AL
-    {.opcode = 0xE6, .has_modrm = false, .immediate_size = 1, .width = kByte},
+    {.opcode = 0xE6,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = 0},
     // OUT imm8, AX
-    {.opcode = 0xE7, .has_modrm = false, .immediate_size = 1, .width = kWord},
+    {.opcode = 0xE7,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kWord,
+     .handler = 0},
     // CALL rel16
     {.opcode = 0xE8,
      .has_modrm = false,
@@ -3340,23 +3521,39 @@ static const OpcodeMetadata opcodes[] = {
      .width = kByte,
      .handler = ExecuteShortOrNearJump},
     // IN AL, DX
-    {.opcode = 0xEC, .has_modrm = false, .immediate_size = 0, .width = kByte},
+    {.opcode = 0xEC,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = 0},
     // IN AX, DX
-    {.opcode = 0xED, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0xED,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = 0},
     // OUT DX, AL
-    {.opcode = 0xEE, .has_modrm = false, .immediate_size = 0, .width = kByte},
+    {.opcode = 0xEE,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = 0},
     // OUT DX, AX
-    {.opcode = 0xEF, .has_modrm = false, .immediate_size = 0, .width = kWord},
+    {.opcode = 0xEF,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = 0},
     // LOCK
-    {.opcode = 0xF0, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xF0, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // REPNE/REPNZ
-    {.opcode = 0xF2, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xF2, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // REP/REPE/REPZ
-    {.opcode = 0xF3, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xF3, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // HLT
-    {.opcode = 0xF4, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xF4, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // CMC
-    {.opcode = 0xF5, .has_modrm = false, .immediate_size = 0},
+    {.opcode = 0xF5, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m8 (Group 3)
     // The immediate size depends on the ModR/M byte.
     {.opcode = 0xF6,
