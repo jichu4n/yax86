@@ -942,6 +942,17 @@ static ExecuteInstructionStatus ExecuteClearOrSetFlag(
 }
 
 // ============================================================================
+// CMC instruction
+// ============================================================================
+
+// CMC
+static ExecuteInstructionStatus ExecuteComplementCarryFlag(
+    const InstructionContext* ctx) {
+  SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
+  return kExecuteSuccess;
+}
+
+// ============================================================================
 // ADD, ADC, and INC instructions
 // ============================================================================
 
@@ -2334,8 +2345,8 @@ static ExecuteInstructionStatus ExecuteDas(const InstructionContext* ctx) {
 
 // CBW
 static ExecuteInstructionStatus ExecuteCbw(const InstructionContext* ctx) {
-  uint16_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint16_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   return kExecuteSuccess;
 }
@@ -3555,7 +3566,10 @@ static const OpcodeMetadata opcodes[] = {
     // HLT
     {.opcode = 0xF4, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // CMC
-    {.opcode = 0xF5, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xF5,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteComplementCarryFlag},
     // TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m8 (Group 3)
     // The immediate size depends on the ModR/M byte.
     {.opcode = 0xF6,
