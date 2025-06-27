@@ -1285,7 +1285,7 @@ static ExecuteInstructionStatus ExecuteDecRegister(
 // CMP instructions
 // ============================================================================
 
-// Common logic for CMP instructions.
+// Common logic for CMP instructions. Computes dest - src and sets flags.
 static inline ExecuteInstructionStatus ExecuteCmp(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
@@ -2559,6 +2559,23 @@ static ExecuteInstructionStatus ExecuteScas(const InstructionContext* ctx) {
       ctx, ExecuteScasIteration);
 }
 
+// Single CMPS iteration.
+static ExecuteInstructionStatus ExecuteCmpsIteration(
+    const InstructionContext* ctx) {
+  Operand dest = GetStringSourceOperand(ctx);
+  Operand src = GetStringDestinationOperand(ctx);
+  ExecuteCmp(ctx, &dest, &src.value);
+  UpdateStringSourceAddress(ctx);
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// CMPS
+static ExecuteInstructionStatus ExecuteCmps(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPZOrRepNZPrefix(
+      ctx, ExecuteCmpsIteration);
+}
+
 // ============================================================================
 // Sign extension instructions
 // ============================================================================
@@ -3453,13 +3470,13 @@ static const OpcodeMetadata opcodes[] = {
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
-     .handler = 0},
+     .handler = ExecuteCmps},
     // CMPSW
     {.opcode = 0xA7,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
-     .handler = 0},
+     .handler = ExecuteCmps},
     // TEST AL, imm8
     {.opcode = 0xA8,
      .has_modrm = false,
