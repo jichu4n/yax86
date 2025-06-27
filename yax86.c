@@ -2595,6 +2595,11 @@ static ExecuteInstructionStatus ExecuteCwd(const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
+// Dummy instruction for unsupported opcodes.
+static ExecuteInstructionStatus ExecuteNoOp(const InstructionContext* ctx) {
+  return kExecuteSuccess;
+}
+
 // ============================================================================
 // Opcode table
 // ============================================================================
@@ -3404,7 +3409,10 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteDirectFarCall},
     // WAIT
-    {.opcode = 0x9B, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0x9B,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // PUSHF
     {.opcode = 0x9C,
      .has_modrm = false,
@@ -3723,21 +3731,45 @@ static const OpcodeMetadata opcodes[] = {
      .width = kByte,
      .handler = ExecuteTranslateByte},
     // ESC instruction 0xD8 for 8087 numeric coprocessor
-    {.opcode = 0xD8, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xD8,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // ESC instruction 0xD9 for 8087 numeric coprocessor
-    {.opcode = 0xD9, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xD9,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // ESC instruction 0xDA for 8087 numeric coprocessor
-    {.opcode = 0xDA, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xDA,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // ESC instruction 0xDB for 8087 numeric coprocessor
-    {.opcode = 0xDB, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xDB,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // ESC instruction 0xDC for 8087 numeric coprocessor
-    {.opcode = 0xDC, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xDC,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // ESC instruction 0xDD for 8087 numeric coprocessor
-    {.opcode = 0xDD, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xDD,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // ESC instruction 0xDE for 8087 numeric coprocessor
-    {.opcode = 0xDE, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xDE,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // ESC instruction 0xDF for 8087 numeric coprocessor
-    {.opcode = 0xDF, .has_modrm = true, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xDF,
+     .has_modrm = true,
+     .immediate_size = 0,
+     .handler = ExecuteNoOp},
     // LOOPNE/LOOPNZ rel8
     {.opcode = 0xE0,
      .has_modrm = false,
