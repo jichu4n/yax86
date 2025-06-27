@@ -12,7 +12,7 @@ typedef enum {
   kPrefixSS = 0x36,     // SS segment override
   kPrefixDS = 0x3E,     // DS segment override
   kPrefixLOCK = 0xF0,   // LOCK
-  kPrefixREPNE = 0xF2,  // REPNE/REPNZ
+  kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
   kPrefixREP = 0xF3,    // REP/REPE/REPZ
 } InstructionPrefix;
 
@@ -2377,7 +2377,7 @@ static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
   for (int i = 0; i < ctx->instruction->prefix_size; ++i) {
     switch (ctx->instruction->prefix[i]) {
       case kPrefixREP:
-      case kPrefixREPNE:
+      case kPrefixREPNZ:
         prefix = ctx->instruction->prefix[i];
         break;
       default:
@@ -2424,6 +2424,17 @@ static inline OperandAddress GetStringDestinationOperandAddress(
           },
   };
   return address;
+}
+
+// Get the destination operand for string instructions. Always ES:DI.
+static inline Operand GetStringDestinationOperand(
+    const InstructionContext* ctx) {
+  OperandAddress address = GetStringDestinationOperandAddress(ctx);
+  Operand operand = {
+      .address = address,
+      .value = ReadOperandValue(ctx, &address),
+  };
+  return operand;
 }
 
 // Update the source address register (SI) after a string operation.
@@ -2507,6 +2518,45 @@ static ExecuteInstructionStatus ExecuteLodsIteration(
 // LODS
 static ExecuteInstructionStatus ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
+}
+
+// Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
+static inline ExecuteInstructionStatus
+ExecuteStringInstructionWithREPZOrRepNZPrefix(
+    const InstructionContext* ctx,
+    ExecuteInstructionStatus (*fn)(const InstructionContext*)) {
+  uint8_t prefix = GetRepetitionPrefix(ctx);
+  if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
+    return fn(ctx);
+  }
+  bool terminate_zf_value = prefix == kPrefixREPNZ;
+  while (ctx->cpu->registers[kCX]) {
+    ExecuteInstructionStatus status = fn(ctx);
+    if (status != kExecuteSuccess) {
+      return status;
+    }
+    --ctx->cpu->registers[kCX];
+    if (GetFlag(ctx->cpu, kZF) == terminate_zf_value) {
+      break;
+    }
+  }
+  return kExecuteSuccess;
+}
+
+// Single SCAS iteration.
+static ExecuteInstructionStatus ExecuteScasIteration(
+    const InstructionContext* ctx) {
+  Operand src = GetStringDestinationOperand(ctx);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  ExecuteCmp(ctx, &dest, &src.value);
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// SCAS
+static ExecuteInstructionStatus ExecuteScas(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPZOrRepNZPrefix(
+      ctx, ExecuteScasIteration);
 }
 
 // ============================================================================
@@ -3451,13 +3501,13 @@ static const OpcodeMetadata opcodes[] = {
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
-     .handler = 0},
+     .handler = ExecuteScas},
     // SCASW
     {.opcode = 0xAF,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
-     .handler = 0},
+     .handler = ExecuteScas},
     // MOV AL, imm8
     {.opcode = 0xB0,
      .has_modrm = false,
@@ -3876,7 +3926,7 @@ void InitCPU(CPUState* cpu) {
 static inline bool IsPrefixByte(uint8_t byte) {
   static const uint8_t kPrefixBytes[] = {
       kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
-      kPrefixLOCK, kPrefixREPNE, kPrefixREP,
+      kPrefixLOCK, kPrefixREPNZ, kPrefixREP,
   };
   for (uint8_t i = 0; i < sizeof(kPrefixBytes); ++i) {
     if (byte == kPrefixBytes[i]) {
