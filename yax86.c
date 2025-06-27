@@ -3767,12 +3767,6 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 0,
      .width = kWord,
      .handler = 0},
-    // LOCK
-    {.opcode = 0xF0, .has_modrm = false, .immediate_size = 0, .handler = 0},
-    // REPNE/REPNZ
-    {.opcode = 0xF2, .has_modrm = false, .immediate_size = 0, .handler = 0},
-    // REP/REPE/REPZ
-    {.opcode = 0xF3, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // HLT
     {.opcode = 0xF4, .has_modrm = false, .immediate_size = 0, .handler = 0},
     // CMC
