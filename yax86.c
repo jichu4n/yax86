@@ -4,6 +4,18 @@
 // Types and helpers
 // ============================================================================
 
+// Instruction prefixes.
+typedef enum {
+  // Segment override prefixes
+  kPrefixES = 0x26,     // ES segment override
+  kPrefixCS = 0x2E,     // CS segment override
+  kPrefixSS = 0x36,     // SS segment override
+  kPrefixDS = 0x3E,     // DS segment override
+  kPrefixLOCK = 0xF0,   // LOCK
+  kPrefixREPNE = 0xF2,  // REPNE/REPNZ
+  kPrefixREP = 0xF3,    // REP/REPE/REPZ
+} InstructionPrefix;
+
 // The address of a register operand.
 typedef struct {
   // Register index.
@@ -269,6 +281,12 @@ static const int32_t kMinSignedValue[kNumWidths] = {
     -0x8000  // kWord
 };
 
+// Number of bytes in each data width.
+static const uint8_t kNumBytes[kNumWidths] = {
+    1,  // kByte
+    2,  // kWord
+};
+
 // Number of bits in each data width.
 static const uint8_t kNumBits[kNumWidths] = {
     8,   // kByte
@@ -328,6 +346,30 @@ static RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
     GetRegisterAddressWord   // kWord
 };
 
+// Apply segment override prefixes to a MemoryAddress.
+static inline void ApplySegmentOverride(
+    const EncodedInstruction* instruction, MemoryAddress* address) {
+  for (int i = 0; i < instruction->prefix_size; ++i) {
+    switch (instruction->prefix[i]) {
+      case kPrefixES:
+        address->segment_register_index = kES;
+        break;
+      case kPrefixCS:
+        address->segment_register_index = kCS;
+        break;
+      case kPrefixSS:
+        address->segment_register_index = kSS;
+        break;
+      case kPrefixDS:
+        address->segment_register_index = kDS;
+        break;
+      default:
+        // Ignore other prefixes
+        break;
+    }
+  }
+}
+
 // Compute the memory address for an instruction.
 static inline MemoryAddress GetMemoryOperandAddress(
     CPUState* cpu, const EncodedInstruction* instruction) {
@@ -381,26 +423,8 @@ static inline MemoryAddress GetMemoryOperandAddress(
       break;
   }
 
-  // Apply segment override if present
-  for (int i = 0; i < instruction->prefix_size; ++i) {
-    switch (instruction->prefix[i]) {
-      case 0x26:  // ES
-        address.segment_register_index = kES;
-        break;
-      case 0x2E:  // CS
-        address.segment_register_index = kCS;
-        break;
-      case 0x36:  // SS
-        address.segment_register_index = kSS;
-        break;
-      case 0x3E:  // DS
-        address.segment_register_index = kDS;
-        break;
-      default:
-        // Ignore other prefixes
-        break;
-    }
-  }
+  // Apply segment override prefixes if present
+  ApplySegmentOverride(instruction, &address);
 
   // Add displacement if present
   switch (instruction->displacement_size) {
@@ -494,6 +518,13 @@ typedef struct OpcodeMetadata {
   OpcodeHandler handler;
 } OpcodeMetadata;
 
+// Read a value from an operand address.
+static inline OperandValue ReadOperandValue(
+    const InstructionContext* ctx, const OperandAddress* address) {
+  return kReadOperandValueFn[address->type][ctx->metadata->width](
+      ctx->cpu, address);
+}
+
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
 static inline Operand ReadRegisterOrMemoryOperand(
@@ -502,8 +533,7 @@ static inline Operand ReadRegisterOrMemoryOperand(
   Operand operand;
   operand.address =
       GetRegisterOrMemoryOperandAddress(ctx->cpu, ctx->instruction, width);
-  operand.value = kReadOperandValueFn[operand.address.type][width](
-      ctx->cpu, &operand.address);
+  operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
 }
 
@@ -511,12 +541,14 @@ static inline Operand ReadRegisterOrMemoryOperand(
 static inline Operand ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index) {
   Width width = ctx->metadata->width;
-  Operand operand;
-  operand.address.type = kOperandAddressTypeRegister;
-  operand.address.value.register_address =
-      kGetRegisterAddressFn[width](ctx->cpu, register_index);
-  operand.value = kReadOperandValueFn[kOperandAddressTypeRegister][width](
-      ctx->cpu, &operand.address);
+  Operand operand = {
+      .address = {
+          .type = kOperandAddressTypeRegister,
+          .value = {
+              .register_address =
+                  kGetRegisterAddressFn[width](ctx->cpu, register_index),
+          }}};
+  operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
 }
 
@@ -650,9 +682,7 @@ static ExecuteInstructionStatus ExecuteMoveMemoryOffsetToALOrAX(
           .memory_address.segment_register_index = kDS,
           .memory_address.offset = FromOperandValue(&src_offset_value),
       }};
-  OperandValue src_value =
-      kReadOperandValueFn[kOperandAddressTypeMemory][ctx->metadata->width](
-          ctx->cpu, &src_address);
+  OperandValue src_value = ReadOperandValue(ctx, &src_address);
   WriteOperand(ctx, &dest, FromOperandValue(&src_value));
   return kExecuteSuccess;
 }
@@ -2055,8 +2085,7 @@ static ExecuteInstructionStatus ExecuteDiv(
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
 
   OperandValue dest_high_half =
-      kReadOperandValueFn[kOperandAddressTypeRegister][width](
-          ctx->cpu, &kMulDivResultHighHalfAddress[width]);
+      ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
   uint32_t dividend =
       FromOperand(&dest) | (FromOperandValue(&dest_high_half)
                             << kMulDivResultHighHalfShiftWidth[width]);
@@ -2082,8 +2111,7 @@ static ExecuteInstructionStatus ExecuteIdiv(
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
 
   OperandValue dest_high_half =
-      kReadOperandValueFn[kOperandAddressTypeRegister][width](
-          ctx->cpu, &kMulDivResultHighHalfAddress[width]);
+      ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
   int32_t dividend =
       FromOperand(&dest) | (FromSignedOperandValue(&dest_high_half)
                             << kMulDivResultHighHalfShiftWidth[width]);
@@ -2337,6 +2365,148 @@ static ExecuteInstructionStatus ExecuteDas(const InstructionContext* ctx) {
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   SetCommonFlagsAfterInstruction(ctx, al);
   return kExecuteSuccess;
+}
+
+// ============================================================================
+// String instructions
+// ============================================================================
+
+// Get the repetition prefix of a string instruction, if any.
+static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+  uint8_t prefix = 0;
+  for (int i = 0; i < ctx->instruction->prefix_size; ++i) {
+    switch (ctx->instruction->prefix[i]) {
+      case kPrefixREP:
+      case kPrefixREPNE:
+        prefix = ctx->instruction->prefix[i];
+        break;
+      default:
+        continue;
+    }
+  }
+  return prefix;
+}
+
+// Get the source operand for string instructions. Typically DS:SI but can be
+// overridden by a segment override prefix.
+static inline Operand GetStringSourceOperand(const InstructionContext* ctx) {
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value =
+          {
+              .memory_address =
+                  {
+                      .segment_register_index = kDS,
+                      .offset = ctx->cpu->registers[kSI],
+                  },
+          },
+  };
+  ApplySegmentOverride(ctx->instruction, &address.value.memory_address);
+  Operand operand = {
+      .address = address,
+      .value = ReadOperandValue(ctx, &address),
+  };
+  return operand;
+}
+
+// Get the destination operand address for string instructions. Always ES:DI.
+static inline OperandAddress GetStringDestinationOperandAddress(
+    const InstructionContext* ctx) {
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value =
+          {
+              .memory_address =
+                  {
+                      .segment_register_index = kES,
+                      .offset = ctx->cpu->registers[kDI],
+                  },
+          },
+  };
+  return address;
+}
+
+// Update the source address register (SI) after a string operation.
+static inline void UpdateStringSourceAddress(const InstructionContext* ctx) {
+  if (GetFlag(ctx->cpu, kDF)) {
+    ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
+  } else {
+    ctx->cpu->registers[kSI] += kNumBytes[ctx->metadata->width];
+  }
+}
+
+// Update the destination address register (DI) after a string operation.
+static inline void UpdateStringDestinationAddress(
+    const InstructionContext* ctx) {
+  if (GetFlag(ctx->cpu, kDF)) {
+    ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
+  } else {
+    ctx->cpu->registers[kDI] += kNumBytes[ctx->metadata->width];
+  }
+}
+
+// Execute a string instruction with optional REP prefix.
+static inline ExecuteInstructionStatus ExecuteStringInstructionWithREPPrefix(
+    const InstructionContext* ctx,
+    ExecuteInstructionStatus (*fn)(const InstructionContext*)) {
+  uint8_t prefix = GetRepetitionPrefix(ctx);
+  if (prefix != kPrefixREP) {
+    return fn(ctx);
+  }
+  while (ctx->cpu->registers[kCX]) {
+    ExecuteInstructionStatus status = fn(ctx);
+    if (status != kExecuteSuccess) {
+      return status;
+    }
+    --ctx->cpu->registers[kCX];
+  }
+  return kExecuteSuccess;
+}
+
+// Single MOVS iteration.
+static ExecuteInstructionStatus ExecuteMovsIteration(
+    const InstructionContext* ctx) {
+  Operand src = GetStringSourceOperand(ctx);
+  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
+  WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
+  UpdateStringSourceAddress(ctx);
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// MOVS
+static ExecuteInstructionStatus ExecuteMovs(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteMovsIteration);
+}
+
+// Single STOS iteration.
+static ExecuteInstructionStatus ExecuteStosIteration(
+    const InstructionContext* ctx) {
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
+  WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// STOS
+static ExecuteInstructionStatus ExecuteStos(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteStosIteration);
+}
+
+// Single LODS iteration.
+static ExecuteInstructionStatus ExecuteLodsIteration(
+    const InstructionContext* ctx) {
+  Operand src = GetStringSourceOperand(ctx);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  UpdateStringSourceAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// LODS
+static ExecuteInstructionStatus ExecuteLods(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
 
 // ============================================================================
@@ -3217,13 +3387,29 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteMoveALOrAXToMemoryOffset},
     // MOVSB
-    {.opcode = 0xA4, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xA4,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteMovs},
     // MOVSW
-    {.opcode = 0xA5, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xA5,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteMovs},
     // CMPSB
-    {.opcode = 0xA6, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xA6,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = 0},
     // CMPSW
-    {.opcode = 0xA7, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xA7,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = 0},
     // TEST AL, imm8
     {.opcode = 0xA8,
      .has_modrm = false,
@@ -3237,17 +3423,41 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteTestImmediateToALOrAX},
     // STOSB
-    {.opcode = 0xAA, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xAA,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteStos},
     // STOSW
-    {.opcode = 0xAB, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xAB,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteStos},
     // LODSB
-    {.opcode = 0xAC, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xAC,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteLods},
     // LODSW
-    {.opcode = 0xAD, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xAD,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteLods},
     // SCASB
-    {.opcode = 0xAE, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xAE,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = 0},
     // SCASW
-    {.opcode = 0xAF, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xAF,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = 0},
     // MOV AL, imm8
     {.opcode = 0xB0,
      .has_modrm = false,
@@ -3671,15 +3881,8 @@ void InitCPU(CPUState* cpu) {
 // Helper to check if a byte is a valid prefix
 static inline bool IsPrefixByte(uint8_t byte) {
   static const uint8_t kPrefixBytes[] = {
-      // Segment overrides
-      0x26,  // ES
-      0x2E,  // CS
-      0x36,  // SS
-      0x3E,  // DS
-      // Repetition prefixes and LOCK
-      0xF0,  // LOCK
-      0xF2,  // REPNE
-      0xF3,  // REP
+      kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
+      kPrefixLOCK, kPrefixREPNE, kPrefixREP,
   };
   for (uint8_t i = 0; i < sizeof(kPrefixBytes); ++i) {
     if (byte == kPrefixBytes[i]) {
