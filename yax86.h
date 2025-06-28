@@ -85,25 +85,47 @@ typedef enum {
   kInterruptNMI = 2,
   kInterruptBreakpoint = 3,
   kInterruptOverflow = 4,
-
-  // Not actually used in real 8086, but thrown by this emulator when an
-  // instruction's prefix exceeds MAX_NUM_PREFIX_BYTES.
-  kInterruptInvalidOpcode = 6,
 } Interrupt;
+
+// Result status from executing an instruction or opcode.
+typedef enum {
+  // Successfully executed the instruction or opcode.
+  kExecuteSuccess = 0,
+  // Invalid instruction opcode.
+  kExecuteInvalidOpcode,
+  // Invalid instruction operands.
+  kExecuteInvalidInstruction,
+  // The interrupt was not handled by the interrupt handler callback, and should
+  // be handled by the VM instead.
+  kExecuteUnhandledInterrupt,
+  // The VM should stop execution.
+  kExecuteHalt,
+} ExecuteStatus;
+
+struct CPUState;
 
 // Runtime configuration
 typedef struct {
-  // Callback context.
+  // Custom data passed through to callbacks.
   void* context;
-  // Required - hooks to read and write memory.
-  uint8_t (*read_memory_byte)(void* context, uint16_t address);
-  void (*write_memory_byte)(void* context, uint16_t address, uint8_t value);
-  // Required - handle interrupts.
-  void (*handle_interrupt)(void* context, uint8_t interrupt_number);
+
+  // Callback to read a byte from memory.
+  uint8_t (*read_memory_byte)(struct CPUState* cpu, uint16_t address);
+  // Callback to write a byte to memory.
+  void (*write_memory_byte)(
+      struct CPUState* cpu, uint16_t address, uint8_t value);
+  // Callback to handle an interrupt.
+  // - Returns kExecuteSuccess if the interrupt was handled and execution should
+  //   continue.
+  // - Returns kExecuteUnhandledInterrupt if the interrupt was not handled and
+  //   should be handled by the VM instead.
+  // - Any other value is passed through to the execution loop
+  ExecuteStatus (*handle_interrupt)(
+      struct CPUState* cpu, uint8_t interrupt_number);
 } CPUConfig;
 
 // CPU state
-typedef struct {
+typedef struct CPUState {
   // Pointer to the configuration
   CPUConfig* config;
 
@@ -185,7 +207,7 @@ typedef struct {
 
   // Total length of the original encoded instruction in bytes.
   uint8_t size;
-} EncodedInstruction;
+} Instruction;
 
 // ============================================================================
 // Execution
@@ -200,20 +222,10 @@ typedef enum {
 
 // Fetch the next instruction from CS:IP.
 FetchNextInstructionStatus FetchNextInstruction(
-    CPUState* cpu, EncodedInstruction* instruction);
-
-// Result status from executing an instruction.
-typedef enum {
-  kExecuteSuccess = 0,
-  // Invalid instruction opcode.
-  kExecuteInvalidOpcode = -2,
-  // Instruction parameters are invalid.
-  kExecuteInvalidInstruction = -1,
-} ExecuteInstructionStatus;
+    CPUState* cpu, Instruction* instruction);
 
 // Execute a single instruction.
-ExecuteInstructionStatus ExecuteInstruction(
-    CPUState* cpu, const EncodedInstruction* instruction);
+ExecuteStatus ExecuteInstruction(CPUState* cpu, const Instruction* instruction);
 
 #ifdef __cplusplus
 }  // extern "C"

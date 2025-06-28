@@ -12,8 +12,8 @@ using namespace std;
 // COM file load offset.
 constexpr const char* kCOMFileLoadOffsetString = "100h";
 
-// Overload the << operator for EncodedInstruction to print its contents.
-ostream& operator<<(ostream& os, const EncodedInstruction& instruction) {
+// Overload the << operator for Instruction to print its contents.
+ostream& operator<<(ostream& os, const Instruction& instruction) {
   // Prefix
   if (instruction.prefix_size > 0) {
     os << "p[";
@@ -125,8 +125,8 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
 
   cpu_.config = &config_;
   config_.context = &context_;
-  config_.read_memory_byte = [](void* raw_context, uint16_t address) {
-    Context* context = reinterpret_cast<Context*>(raw_context);
+  config_.read_memory_byte = [](CPUState* cpu, uint16_t address) {
+    Context* context = reinterpret_cast<Context*>(cpu->config->context);
     if (address >= context->memory_size) {
       ostringstream oss;
       oss << "Memory read out of bounds: 0x" << hex << address
@@ -140,9 +140,9 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     }
     return context->memory[address];
   };
-  config_.write_memory_byte = [](void* raw_context, uint16_t address,
+  config_.write_memory_byte = [](CPUState* cpu, uint16_t address,
                                  uint8_t value) {
-    Context* context = reinterpret_cast<Context*>(raw_context);
+    Context* context = reinterpret_cast<Context*>(cpu->config->context);
     if (address >= context->memory_size) {
       ostringstream oss;
       oss << "Memory write out of bounds: 0x" << hex << address
@@ -156,7 +156,8 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     }
     context->memory[address] = value;
   };
-  config_.handle_interrupt = [](void* raw_context, uint8_t interrupt_number) {
+  config_.handle_interrupt = [](CPUState* cpu,
+                                uint8_t interrupt_number) -> ExecuteStatus {
     throw runtime_error(
         "Interrupt " + to_string(interrupt_number) + " not handled in test");
   };
@@ -196,7 +197,7 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
 
   cout << ">> Executing encoded instructions:" << endl;
   for (int i = 0; i < num_instructions; ++i) {
-    EncodedInstruction instruction;
+    Instruction instruction;
     auto fetch_status = FetchNextInstruction(&cpu_, &instruction);
     if (fetch_status != kFetchSuccess) {
       throw runtime_error(

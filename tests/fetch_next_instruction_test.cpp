@@ -14,7 +14,7 @@
 using namespace std;
 
 // Helper function to test decoding a sequence of assembly instructions.
-vector<EncodedInstruction> TestFetchInstructions(
+vector<Instruction> TestFetchInstructions(
     const string& name, const string& asm_code) {
   CPUTestHelper cpu_test_helper(4 * 1024);
   size_t machine_code_size =
@@ -24,9 +24,9 @@ vector<EncodedInstruction> TestFetchInstructions(
 
   // Fetch instructions until we reach the end of the machine code
   cout << ">> Reading encoded instructions:" << endl;
-  vector<EncodedInstruction> instructions;
+  vector<Instruction> instructions;
   while (*ip < kCOMFileLoadOffset + machine_code_size) {
-    EncodedInstruction instruction;
+    Instruction instruction;
     auto status = FetchNextInstruction(cpu, &instruction);
     if (status != kFetchSuccess) {
       throw runtime_error(

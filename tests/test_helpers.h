@@ -12,9 +12,8 @@
 // COM file load offset.
 constexpr uint16_t kCOMFileLoadOffset = 0x100;
 
-// Overload the << operator for EncodedInstruction to print its contents.
-std::ostream& operator<<(
-    std::ostream& os, const EncodedInstruction& instruction);
+// Overload the << operator for Instruction to print its contents.
+std::ostream& operator<<(std::ostream& os, const Instruction& instruction);
 
 // Returns the name of a CPU flag for debugging.
 std::string GetFlagName(Flag flag);

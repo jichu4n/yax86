@@ -162,8 +162,7 @@ static inline uint16_t ToPhysicalAddress(
 static OperandValue ReadMemoryByte(
     CPUState* cpu, const OperandAddress* address) {
   uint8_t byte_value = cpu->config->read_memory_byte(
-      cpu->config->context,
-      ToPhysicalAddress(cpu, &address->value.memory_address));
+      cpu, ToPhysicalAddress(cpu, &address->value.memory_address));
   return ByteValue(byte_value);
 }
 
@@ -172,10 +171,9 @@ static OperandValue ReadMemoryWord(
     CPUState* cpu, const OperandAddress* address) {
   const uint16_t physical_address =
       ToPhysicalAddress(cpu, &address->value.memory_address);
-  uint8_t low_byte_value =
-      cpu->config->read_memory_byte(cpu->config->context, physical_address);
+  uint8_t low_byte_value = cpu->config->read_memory_byte(cpu, physical_address);
   uint8_t high_byte_value =
-      cpu->config->read_memory_byte(cpu->config->context, physical_address + 1);
+      cpu->config->read_memory_byte(cpu, physical_address + 1);
   uint16_t word_value = (high_byte_value << 8) | low_byte_value;
   return WordValue(word_value);
 }
@@ -212,8 +210,7 @@ static void WriteMemoryByte(
   const MemoryAddress* memory_address = &address->value.memory_address;
   uint16_t segment = cpu->registers[memory_address->segment_register_index];
   cpu->config->write_memory_byte(
-      cpu->config->context, (segment << 4) + memory_address->offset,
-      value.value.byte_value);
+      cpu, (segment << 4) + memory_address->offset, value.value.byte_value);
 }
 
 // Write a word to memory.
@@ -225,10 +222,8 @@ static void WriteMemoryWord(
   uint16_t word_value = value.value.word_value;
   uint8_t low_byte_value = word_value & 0xFF;
   uint8_t high_byte_value = (word_value >> 8) & 0xFF;
-  cpu->config->write_memory_byte(
-      cpu->config->context, address_value, low_byte_value);
-  cpu->config->write_memory_byte(
-      cpu->config->context, address_value + 1, high_byte_value);
+  cpu->config->write_memory_byte(cpu, address_value, low_byte_value);
+  cpu->config->write_memory_byte(cpu, address_value + 1, high_byte_value);
 }
 // Write a byte to a register.
 static void WriteRegisterByte(
@@ -348,7 +343,7 @@ static RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
 
 // Apply segment override prefixes to a MemoryAddress.
 static inline void ApplySegmentOverride(
-    const EncodedInstruction* instruction, MemoryAddress* address) {
+    const Instruction* instruction, MemoryAddress* address) {
   for (int i = 0; i < instruction->prefix_size; ++i) {
     switch (instruction->prefix[i]) {
       case kPrefixES:
@@ -372,7 +367,7 @@ static inline void ApplySegmentOverride(
 
 // Compute the memory address for an instruction.
 static inline MemoryAddress GetMemoryOperandAddress(
-    CPUState* cpu, const EncodedInstruction* instruction) {
+    CPUState* cpu, const Instruction* instruction) {
   MemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
   uint8_t rm = instruction->mod_rm.rm;
@@ -452,7 +447,7 @@ static inline MemoryAddress GetMemoryOperandAddress(
 // Get a register or memory operand address based on the ModR/M byte and
 // displacement.
 static inline OperandAddress GetRegisterOrMemoryOperandAddress(
-    CPUState* cpu, const EncodedInstruction* instruction, Width width) {
+    CPUState* cpu, const Instruction* instruction, Width width) {
   OperandAddress address;
   uint8_t mod = instruction->mod_rm.mod;
   uint8_t rm = instruction->mod_rm.rm;
@@ -469,14 +464,12 @@ static inline OperandAddress GetRegisterOrMemoryOperandAddress(
 }
 
 // Read an 8-bit immediate value.
-static inline OperandValue ReadImmediateByte(
-    const EncodedInstruction* instruction) {
+static inline OperandValue ReadImmediateByte(const Instruction* instruction) {
   return ByteValue(instruction->immediate[0]);
 }
 
 // Read a 16-bit immediate value.
-static inline OperandValue ReadImmediateWord(
-    const EncodedInstruction* instruction) {
+static inline OperandValue ReadImmediateWord(const Instruction* instruction) {
   return WordValue(
       ((uint16_t)instruction->immediate[0]) |
       (((uint16_t)instruction->immediate[1]) << 8));
@@ -484,7 +477,7 @@ static inline OperandValue ReadImmediateWord(
 
 // Table of ReadImmediate* functions, indexed by Width.
 static OperandValue (*const kReadImmediateValueFn[kNumWidths])(
-    const EncodedInstruction* instruction) = {
+    const Instruction* instruction) = {
     ReadImmediateByte,  // kByte
     ReadImmediateWord   // kWord
 };
@@ -494,12 +487,11 @@ struct OpcodeMetadata;
 // Instruction execution context.
 typedef struct {
   CPUState* cpu;
-  const EncodedInstruction* instruction;
+  const Instruction* instruction;
   const struct OpcodeMetadata* metadata;
 } InstructionContext;
 
-typedef ExecuteInstructionStatus (*OpcodeHandler)(
-    const InstructionContext* context);
+typedef ExecuteStatus (*OpcodeHandler)(const InstructionContext* context);
 
 // Opcode lookup table entry.
 typedef struct OpcodeMetadata {
@@ -614,7 +606,7 @@ static inline void SetCommonFlagsAfterInstruction(
 
 // MOV r/m8, r8
 // MOV r/m16, r16
-static ExecuteInstructionStatus ExecuteMoveRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteMoveRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -624,7 +616,7 @@ static ExecuteInstructionStatus ExecuteMoveRegisterToRegisterOrMemory(
 
 // MOV r8, r/m8
 // MOV r16, r/m16
-static ExecuteInstructionStatus ExecuteMoveRegisterOrMemoryToRegister(
+static ExecuteStatus ExecuteMoveRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -633,7 +625,7 @@ static ExecuteInstructionStatus ExecuteMoveRegisterOrMemoryToRegister(
 }
 
 // MOV r/m16, sreg
-static ExecuteInstructionStatus ExecuteMoveSegmentRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteMoveSegmentRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadSegmentRegisterOperand(ctx);
@@ -642,7 +634,7 @@ static ExecuteInstructionStatus ExecuteMoveSegmentRegisterToRegisterOrMemory(
 }
 
 // MOV sreg, r/m16
-static ExecuteInstructionStatus ExecuteMoveRegisterOrMemoryToSegmentRegister(
+static ExecuteStatus ExecuteMoveRegisterOrMemoryToSegmentRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadSegmentRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -652,7 +644,7 @@ static ExecuteInstructionStatus ExecuteMoveRegisterOrMemoryToSegmentRegister(
 
 // MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
 // MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
-static ExecuteInstructionStatus ExecuteMoveImmediateToRegister(
+static ExecuteStatus ExecuteMoveImmediateToRegister(
     const InstructionContext* ctx) {
   static const uint8_t register_index_opcode_base[kNumWidths] = {
       0xB0,  // kByte
@@ -669,7 +661,7 @@ static ExecuteInstructionStatus ExecuteMoveImmediateToRegister(
 
 // MOV AL, moffs16
 // MOV AX, moffs16
-static ExecuteInstructionStatus ExecuteMoveMemoryOffsetToALOrAX(
+static ExecuteStatus ExecuteMoveMemoryOffsetToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
@@ -689,7 +681,7 @@ static ExecuteInstructionStatus ExecuteMoveMemoryOffsetToALOrAX(
 
 // MOV moffs16, AL
 // MOV moffs16, AX
-static ExecuteInstructionStatus ExecuteMoveALOrAXToMemoryOffset(
+static ExecuteStatus ExecuteMoveALOrAXToMemoryOffset(
     const InstructionContext* ctx) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
@@ -709,7 +701,7 @@ static ExecuteInstructionStatus ExecuteMoveALOrAXToMemoryOffset(
 
 // MOV r/m8, imm8
 // MOV r/m16, imm16
-static ExecuteInstructionStatus ExecuteMoveImmediateToRegisterOrMemory(
+static ExecuteStatus ExecuteMoveImmediateToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue src_value = ReadImmediate(ctx);
@@ -722,8 +714,7 @@ static ExecuteInstructionStatus ExecuteMoveImmediateToRegisterOrMemory(
 // ============================================================================
 
 // XCHG AX, AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteInstructionStatus ExecuteExchangeRegister(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteExchangeRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x90;
   if (register_index == kAX) {
     // No-op
@@ -739,7 +730,7 @@ static ExecuteInstructionStatus ExecuteExchangeRegister(
 
 // XCHG r/m8, r8
 // XCHG r/m16, r16
-static ExecuteInstructionStatus ExecuteExchangeRegisterOrMemory(
+static ExecuteStatus ExecuteExchangeRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -754,8 +745,7 @@ static ExecuteInstructionStatus ExecuteExchangeRegisterOrMemory(
 // ============================================================================
 
 // XLAT
-static ExecuteInstructionStatus ExecuteTranslateByte(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteTranslateByte(const InstructionContext* ctx) {
   // Read the AL register
   Operand al = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandAddress src_address = {
@@ -775,7 +765,7 @@ static ExecuteInstructionStatus ExecuteTranslateByte(
 // ============================================================================
 
 // LEA r16, m
-static ExecuteInstructionStatus ExecuteLoadEffectiveAddress(
+static ExecuteStatus ExecuteLoadEffectiveAddress(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   MemoryAddress memory_address =
@@ -790,7 +780,7 @@ static ExecuteInstructionStatus ExecuteLoadEffectiveAddress(
 // ============================================================================
 
 // Common logic for LES and LDS instructions.
-static ExecuteInstructionStatus ExecuteLoadSegmentWithPointer(
+static ExecuteStatus ExecuteLoadSegmentWithPointer(
     const InstructionContext* ctx, RegisterIndex segment_register_index) {
   Operand destRegister = ReadRegisterOperand(ctx);
   Operand destSegmentRegister =
@@ -811,14 +801,12 @@ static ExecuteInstructionStatus ExecuteLoadSegmentWithPointer(
 }
 
 // LES r16, m
-static ExecuteInstructionStatus ExecuteLoadESWithPointer(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteLoadESWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kES);
 }
 
 // LDS r16, m
-static ExecuteInstructionStatus ExecuteLoadDSWithPointer(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kDS);
 }
 
@@ -850,8 +838,7 @@ static inline OperandValue Pop(const InstructionContext* ctx) {
 }
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteInstructionStatus ExecutePushRegister(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x50;
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   Push(ctx, src.value);
@@ -859,8 +846,7 @@ static ExecuteInstructionStatus ExecutePushRegister(
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteInstructionStatus ExecutePopRegister(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x58;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx);
@@ -869,8 +855,7 @@ static ExecuteInstructionStatus ExecutePopRegister(
 }
 
 // PUSH ES/CS/SS/DS
-static ExecuteInstructionStatus ExecutePushSegmentRegister(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   Push(ctx, src.value);
@@ -878,8 +863,7 @@ static ExecuteInstructionStatus ExecutePushSegmentRegister(
 }
 
 // POP ES/CS/SS/DS
-static ExecuteInstructionStatus ExecutePopSegmentRegister(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecutePopSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
   // Special case - disallow POP CS
   if (register_index == kCS) {
@@ -892,22 +876,20 @@ static ExecuteInstructionStatus ExecutePopSegmentRegister(
 }
 
 // PUSHF
-static ExecuteInstructionStatus ExecutePushFlags(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecutePushFlags(const InstructionContext* ctx) {
   Push(ctx, WordValue(ctx->cpu->flags));
   return kExecuteSuccess;
 }
 
 // POPF
-static ExecuteInstructionStatus ExecutePopFlags(const InstructionContext* ctx) {
+static ExecuteStatus ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx);
   ctx->cpu->flags = FromOperandValue(&value);
   return kExecuteSuccess;
 }
 
 // POP r/m16
-static ExecuteInstructionStatus ExecutePopRegisterOrMemory(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   if (ctx->instruction->mod_rm.reg != 0) {
     return kExecuteInvalidInstruction;
   }
@@ -934,16 +916,14 @@ static inline const OperandAddress* GetAHRegisterAddress() {
 }
 
 // LAHF
-static ExecuteInstructionStatus ExecuteLoadAHFromFlags(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
   WriteRegisterByte(
       ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
   return kExecuteSuccess;
 }
 
 // SAHF
-static ExecuteInstructionStatus ExecuteStoreAHToFlags(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value = ReadRegisterByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
   ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
@@ -962,8 +942,7 @@ static const Flag kFlagsForClearAndSetInstructions[] = {
     kDF,  // CLD, STD
 };
 
-static ExecuteInstructionStatus ExecuteClearOrSetFlag(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
   Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
@@ -976,8 +955,7 @@ static ExecuteInstructionStatus ExecuteClearOrSetFlag(
 // ============================================================================
 
 // CMC
-static ExecuteInstructionStatus ExecuteComplementCarryFlag(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext* ctx) {
   SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
   return kExecuteSuccess;
 }
@@ -1026,7 +1004,7 @@ typedef void (*SetFlagsAfterAddFn)(
     bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
-static inline ExecuteInstructionStatus ExecuteAddCommon(
+static inline ExecuteStatus ExecuteAddCommon(
     const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -1040,7 +1018,7 @@ static inline ExecuteInstructionStatus ExecuteAddCommon(
 }
 
 // Common logic for ADD instructions
-static inline ExecuteInstructionStatus ExecuteAdd(
+static inline ExecuteStatus ExecuteAdd(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteAddCommon(
@@ -1049,7 +1027,7 @@ static inline ExecuteInstructionStatus ExecuteAdd(
 
 // ADD r/m8, r8
 // ADD r/m16, r16
-static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteAddRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1058,7 +1036,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemory(
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegister(
+static ExecuteStatus ExecuteAddRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1067,7 +1045,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegister(
 
 // ADD AL, imm8
 // ADD AX, imm16
-static ExecuteInstructionStatus ExecuteAddImmediateToALOrAX(
+static ExecuteStatus ExecuteAddImmediateToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1075,7 +1053,7 @@ static ExecuteInstructionStatus ExecuteAddImmediateToALOrAX(
 }
 
 // Common logic for ADC instructions
-static inline ExecuteInstructionStatus ExecuteAddWithCarry(
+static inline ExecuteStatus ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteAddCommon(
@@ -1084,7 +1062,7 @@ static inline ExecuteInstructionStatus ExecuteAddWithCarry(
 
 // ADC r/m8, r8
 // ADC r/m16, r16
-static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
+static ExecuteStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1092,7 +1070,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
-static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
+static ExecuteStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1101,7 +1079,7 @@ static ExecuteInstructionStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
 
 // ADC AL, imm8
 // ADC AX, imm16
-static ExecuteInstructionStatus ExecuteAddImmediateToALOrAXWithCarry(
+static ExecuteStatus ExecuteAddImmediateToALOrAXWithCarry(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1109,7 +1087,7 @@ static ExecuteInstructionStatus ExecuteAddImmediateToALOrAXWithCarry(
 }
 
 // Common logic for INC instructions
-static inline ExecuteInstructionStatus ExecuteInc(
+static inline ExecuteStatus ExecuteInc(
     const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = WordValue(1);
   return ExecuteAddCommon(
@@ -1117,8 +1095,7 @@ static inline ExecuteInstructionStatus ExecuteInc(
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteInstructionStatus ExecuteIncRegister(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x40;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteInc(ctx, &dest);
@@ -1180,7 +1157,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-static inline ExecuteInstructionStatus ExecuteSubCommon(
+static inline ExecuteStatus ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -1194,7 +1171,7 @@ static inline ExecuteInstructionStatus ExecuteSubCommon(
 }
 
 // Common logic for SUB instructions
-static inline ExecuteInstructionStatus ExecuteSub(
+static inline ExecuteStatus ExecuteSub(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -1203,7 +1180,7 @@ static inline ExecuteInstructionStatus ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-static ExecuteInstructionStatus ExecuteSubRegisterFromRegisterOrMemory(
+static ExecuteStatus ExecuteSubRegisterFromRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1212,7 +1189,7 @@ static ExecuteInstructionStatus ExecuteSubRegisterFromRegisterOrMemory(
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-static ExecuteInstructionStatus ExecuteSubRegisterOrMemoryFromRegister(
+static ExecuteStatus ExecuteSubRegisterOrMemoryFromRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1221,7 +1198,7 @@ static ExecuteInstructionStatus ExecuteSubRegisterOrMemoryFromRegister(
 
 // SUB AL, imm8
 // SUB AX, imm16
-static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAX(
+static ExecuteStatus ExecuteSubImmediateFromALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1229,7 +1206,7 @@ static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAX(
 }
 
 // Common logic for SBB instructions
-static inline ExecuteInstructionStatus ExecuteSubWithBorrow(
+static inline ExecuteStatus ExecuteSubWithBorrow(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -1238,8 +1215,7 @@ static inline ExecuteInstructionStatus ExecuteSubWithBorrow(
 
 // SBB r/m8, r8
 // SBB r/m16, r16
-static ExecuteInstructionStatus
-ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
+static ExecuteStatus ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1248,8 +1224,7 @@ ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
 
 // SBB r8, r/m8
 // SBB r16, r/m16
-static ExecuteInstructionStatus
-ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
+static ExecuteStatus ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1258,7 +1233,7 @@ ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
 
 // SBB AL, imm8
 // SBB AX, imm16
-static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAXWithBorrow(
+static ExecuteStatus ExecuteSubImmediateFromALOrAXWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1266,7 +1241,7 @@ static ExecuteInstructionStatus ExecuteSubImmediateFromALOrAXWithBorrow(
 }
 
 // Common logic for DEC instructions
-static inline ExecuteInstructionStatus ExecuteDec(
+static inline ExecuteStatus ExecuteDec(
     const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = WordValue(1);
   return ExecuteSubCommon(
@@ -1274,8 +1249,7 @@ static inline ExecuteInstructionStatus ExecuteDec(
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteInstructionStatus ExecuteDecRegister(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x48;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteDec(ctx, &dest);
@@ -1286,7 +1260,7 @@ static ExecuteInstructionStatus ExecuteDecRegister(
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-static inline ExecuteInstructionStatus ExecuteCmp(
+static inline ExecuteStatus ExecuteCmp(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -1298,7 +1272,7 @@ static inline ExecuteInstructionStatus ExecuteCmp(
 
 // CMP r/m8, r8
 // CMP r/m16, r16
-static ExecuteInstructionStatus ExecuteCmpRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteCmpRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1307,7 +1281,7 @@ static ExecuteInstructionStatus ExecuteCmpRegisterToRegisterOrMemory(
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-static ExecuteInstructionStatus ExecuteCmpRegisterOrMemoryToRegister(
+static ExecuteStatus ExecuteCmpRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1316,7 +1290,7 @@ static ExecuteInstructionStatus ExecuteCmpRegisterOrMemoryToRegister(
 
 // CMP AL, imm8
 // CMP AX, imm16
-static ExecuteInstructionStatus ExecuteCmpImmediateToALOrAX(
+static ExecuteStatus ExecuteCmpImmediateToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1337,7 +1311,7 @@ static inline void SetFlagsAfterBooleanInstruction(
 }
 
 // Common logic for AND instructions.
-static inline ExecuteInstructionStatus ExecuteBooleanAnd(
+static inline ExecuteStatus ExecuteBooleanAnd(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
@@ -1348,7 +1322,7 @@ static inline ExecuteInstructionStatus ExecuteBooleanAnd(
 
 // AND r/m8, r8
 // AND r/m16, r16
-static ExecuteInstructionStatus ExecuteBooleanAndRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteBooleanAndRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1357,7 +1331,7 @@ static ExecuteInstructionStatus ExecuteBooleanAndRegisterToRegisterOrMemory(
 
 // AND r8, r/m8
 // AND r16, r/m16
-static ExecuteInstructionStatus ExecuteBooleanAndRegisterOrMemoryToRegister(
+static ExecuteStatus ExecuteBooleanAndRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1366,7 +1340,7 @@ static ExecuteInstructionStatus ExecuteBooleanAndRegisterOrMemoryToRegister(
 
 // AND AL, imm8
 // AND AX, imm16
-static ExecuteInstructionStatus ExecuteBooleanAndImmediateToALOrAX(
+static ExecuteStatus ExecuteBooleanAndImmediateToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1374,7 +1348,7 @@ static ExecuteInstructionStatus ExecuteBooleanAndImmediateToALOrAX(
 }
 
 // Common logic for OR instructions.
-static inline ExecuteInstructionStatus ExecuteBooleanOr(
+static inline ExecuteStatus ExecuteBooleanOr(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
@@ -1385,7 +1359,7 @@ static inline ExecuteInstructionStatus ExecuteBooleanOr(
 
 // OR r/m8, r8
 // OR r/m16, r16
-static ExecuteInstructionStatus ExecuteBooleanOrRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteBooleanOrRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1394,7 +1368,7 @@ static ExecuteInstructionStatus ExecuteBooleanOrRegisterToRegisterOrMemory(
 
 // OR r8, r/m8
 // OR r16, r/m16
-static ExecuteInstructionStatus ExecuteBooleanOrRegisterOrMemoryToRegister(
+static ExecuteStatus ExecuteBooleanOrRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1403,7 +1377,7 @@ static ExecuteInstructionStatus ExecuteBooleanOrRegisterOrMemoryToRegister(
 
 // OR AL, imm8
 // OR AX, imm16
-static ExecuteInstructionStatus ExecuteBooleanOrImmediateToALOrAX(
+static ExecuteStatus ExecuteBooleanOrImmediateToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1411,7 +1385,7 @@ static ExecuteInstructionStatus ExecuteBooleanOrImmediateToALOrAX(
 }
 
 // Common logic for XOR instructions.
-static inline ExecuteInstructionStatus ExecuteBooleanXor(
+static inline ExecuteStatus ExecuteBooleanXor(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
@@ -1422,7 +1396,7 @@ static inline ExecuteInstructionStatus ExecuteBooleanXor(
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-static ExecuteInstructionStatus ExecuteBooleanXorRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteBooleanXorRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1431,7 +1405,7 @@ static ExecuteInstructionStatus ExecuteBooleanXorRegisterToRegisterOrMemory(
 
 // XOR r8, r/m8
 // XOR r16, r/m16
-static ExecuteInstructionStatus ExecuteBooleanXorRegisterOrMemoryToRegister(
+static ExecuteStatus ExecuteBooleanXorRegisterOrMemoryToRegister(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1440,7 +1414,7 @@ static ExecuteInstructionStatus ExecuteBooleanXorRegisterOrMemoryToRegister(
 
 // XOR AL, imm8
 // XOR AX, imm16
-static ExecuteInstructionStatus ExecuteBooleanXorImmediateToALOrAX(
+static ExecuteStatus ExecuteBooleanXorImmediateToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1452,7 +1426,7 @@ static ExecuteInstructionStatus ExecuteBooleanXorImmediateToALOrAX(
 // ============================================================================
 
 // Common logic for TEST instructions.
-static inline ExecuteInstructionStatus ExecuteTest(
+static inline ExecuteStatus ExecuteTest(
     const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -1461,7 +1435,7 @@ static inline ExecuteInstructionStatus ExecuteTest(
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-static ExecuteInstructionStatus ExecuteTestRegisterToRegisterOrMemory(
+static ExecuteStatus ExecuteTestRegisterToRegisterOrMemory(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1470,7 +1444,7 @@ static ExecuteInstructionStatus ExecuteTestRegisterToRegisterOrMemory(
 
 // TEST AL, imm8
 // TEST AX, imm16
-static ExecuteInstructionStatus ExecuteTestImmediateToALOrAX(
+static ExecuteStatus ExecuteTestImmediateToALOrAX(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -1482,7 +1456,7 @@ static ExecuteInstructionStatus ExecuteTestImmediateToALOrAX(
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-static ExecuteInstructionStatus ExecuteRelativeJumpByte(
+static ExecuteStatus ExecuteRelativeJumpByte(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -1490,7 +1464,7 @@ static ExecuteInstructionStatus ExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-static ExecuteInstructionStatus ExecuteRelativeJumpWord(
+static ExecuteStatus ExecuteRelativeJumpWord(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -1498,28 +1472,27 @@ static ExecuteInstructionStatus ExecuteRelativeJumpWord(
 }
 
 // Table of relative jump instructions, indexed by width.
-static ExecuteInstructionStatus (*const kRelativeJumpFn[kNumWidths])(
+static ExecuteStatus (*const kRelativeJumpFn[kNumWidths])(
     const InstructionContext* ctx, const OperandValue* offset_value) = {
     ExecuteRelativeJumpByte,  // kByte
     ExecuteRelativeJumpWord,  // kWord
 };
 
 // Common logic for JMP instructions.
-static inline ExecuteInstructionStatus ExecuteRelativeJump(
+static inline ExecuteStatus ExecuteRelativeJump(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
 // JMP rel8
 // JMP rel16
-static ExecuteInstructionStatus ExecuteShortOrNearJump(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
   return ExecuteRelativeJumpByte(ctx, &offset_value);
 }
 
 // Common logic for far jumps.
-static inline ExecuteInstructionStatus ExecuteFarJump(
+static inline ExecuteStatus ExecuteFarJump(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   ctx->cpu->registers[kCS] = FromOperandValue(segment);
@@ -1528,8 +1501,7 @@ static inline ExecuteInstructionStatus ExecuteFarJump(
 }
 
 // JMP ptr16:16
-static ExecuteInstructionStatus ExecuteDirectFarJump(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteDirectFarJump(const InstructionContext* ctx) {
   OperandValue new_cs = WordValue(
       ((uint16_t)ctx->instruction->immediate[2]) |
       (((uint16_t)ctx->instruction->immediate[3]) << 8));
@@ -1544,7 +1516,7 @@ static ExecuteInstructionStatus ExecuteDirectFarJump(
 // ============================================================================
 
 // Common logic for conditional jumps.
-static inline ExecuteInstructionStatus ExecuteConditionalJump(
+static inline ExecuteStatus ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     OperandValue offset_value = ReadImmediate(ctx);
@@ -1565,7 +1537,7 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-static ExecuteInstructionStatus ExecuteUnsignedConditionalJump(
+static ExecuteStatus ExecuteUnsignedConditionalJump(
     const InstructionContext* ctx) {
   uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
       [(ctx->instruction->opcode - 0x70) / 2];
@@ -1577,7 +1549,7 @@ static ExecuteInstructionStatus ExecuteUnsignedConditionalJump(
 }
 
 // JL/JGNE and JNL/JGE
-static ExecuteInstructionStatus ExecuteSignedConditionalJumpJLOrJNL(
+static ExecuteStatus ExecuteSignedConditionalJumpJLOrJNL(
     const InstructionContext* ctx) {
   const bool is_greater_or_equal =
       GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF);
@@ -1586,7 +1558,7 @@ static ExecuteInstructionStatus ExecuteSignedConditionalJumpJLOrJNL(
 }
 
 // JLE/JG and JNLE/JG
-static ExecuteInstructionStatus ExecuteSignedConditionalJumpJLEOrJNLE(
+static ExecuteStatus ExecuteSignedConditionalJumpJLEOrJNLE(
     const InstructionContext* ctx) {
   const bool is_greater = !GetFlag(ctx->cpu, kZF) &&
                           (GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF));
@@ -1599,14 +1571,13 @@ static ExecuteInstructionStatus ExecuteSignedConditionalJumpJLEOrJNLE(
 // ============================================================================
 
 // LOOP rel8
-static ExecuteInstructionStatus ExecuteLoop(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteLoop(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
 }
 
 // LOOPZ rel8
 // LOOPNZ rel8
-static ExecuteInstructionStatus ExecuteLoopZOrNZ(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
   bool condition1 = --(ctx->cpu->registers[kCX]) != 0;
   bool condition2 =
       GetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
@@ -1614,8 +1585,7 @@ static ExecuteInstructionStatus ExecuteLoopZOrNZ(
 }
 
 // JCXZ rel8
-static ExecuteInstructionStatus ExecuteJumpIfCXIsZero(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, ctx->cpu->registers[kCX] == 0, true);
 }
 
@@ -1624,21 +1594,20 @@ static ExecuteInstructionStatus ExecuteJumpIfCXIsZero(
 // ============================================================================
 
 // Common logic for near calls.
-static inline ExecuteInstructionStatus ExecuteNearCall(
+static inline ExecuteStatus ExecuteNearCall(
     const InstructionContext* ctx, const OperandValue* offset) {
   Push(ctx, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteRelativeJump(ctx, offset);
 }
 
 // CALL rel16
-static ExecuteInstructionStatus ExecuteDirectNearCall(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   return ExecuteNearCall(ctx, &offset);
 }
 
 // Common logic for far calls.
-static inline ExecuteInstructionStatus ExecuteFarCall(
+static inline ExecuteStatus ExecuteFarCall(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   // Push the current CS and IP onto the stack.
@@ -1648,15 +1617,14 @@ static inline ExecuteInstructionStatus ExecuteFarCall(
 }
 
 // CALL ptr16:16
-static ExecuteInstructionStatus ExecuteDirectFarCall(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteDirectFarCall(const InstructionContext* ctx) {
   Push(ctx, WordValue(ctx->cpu->registers[kCS]));
   Push(ctx, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteDirectFarJump(ctx);
 }
 
 // Common logic for RET instructions.
-static ExecuteInstructionStatus ExecuteNearReturnCommon(
+static ExecuteStatus ExecuteNearReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx);
   ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
@@ -1665,20 +1633,18 @@ static ExecuteInstructionStatus ExecuteNearReturnCommon(
 }
 
 // RET
-static ExecuteInstructionStatus ExecuteNearReturn(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteNearReturn(const InstructionContext* ctx) {
   return ExecuteNearReturnCommon(ctx, 0);
 }
 
 // RET imm16
-static ExecuteInstructionStatus ExecuteNearReturnAndPop(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteNearReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteNearReturnCommon(ctx, FromOperandValue(&arg_size_value));
 }
 
 // Common logic for RETF instructions.
-static ExecuteInstructionStatus ExecuteFarReturnCommon(
+static ExecuteStatus ExecuteFarReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx);
   OperandValue new_cs = Pop(ctx);
@@ -1689,14 +1655,12 @@ static ExecuteInstructionStatus ExecuteFarReturnCommon(
 }
 
 // RETF
-static ExecuteInstructionStatus ExecuteFarReturn(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteFarReturn(const InstructionContext* ctx) {
   return ExecuteFarReturnCommon(ctx, 0);
 }
 
 // RETF imm16
-static ExecuteInstructionStatus ExecuteFarReturnAndPop(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteFarReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteFarReturnCommon(ctx, FromOperandValue(&arg_size_value));
 }
@@ -1705,7 +1669,7 @@ static ExecuteInstructionStatus ExecuteFarReturnAndPop(
 // Group 1 - ADD, OR, ADC, SBB, AND, SUB, XOR, CMP
 // ============================================================================
 
-typedef ExecuteInstructionStatus (*Group1ExecuteInstructionFn)(
+typedef ExecuteStatus (*Group1ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* dest, const OperandValue* src);
 
 // Group 1 instruction implementations, indexed by the corresponding REG field
@@ -1722,8 +1686,7 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-static ExecuteInstructionStatus ExecuteGroup1Instruction(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -1732,7 +1695,7 @@ static ExecuteInstructionStatus ExecuteGroup1Instruction(
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-static ExecuteInstructionStatus ExecuteGroup1InstructionWithSignExtension(
+static ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
     const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -1749,14 +1712,14 @@ static ExecuteInstructionStatus ExecuteGroup1InstructionWithSignExtension(
 // Group 2 - ROL, ROR, RCL, RCR, SHL, SHR, SAL, SAR
 // ============================================================================
 
-typedef ExecuteInstructionStatus (*Group2ExecuteInstructionFn)(
+typedef ExecuteStatus (*Group2ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* op, uint8_t count);
 
 // SHL r/m8, 1
 // SHL r/m16, 1
 // SHL r/m8, CL
 // SHL r/m16, CL
-static ExecuteInstructionStatus ExecuteGroup2Shl(
+static ExecuteStatus ExecuteGroup2Shl(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -1780,7 +1743,7 @@ static ExecuteInstructionStatus ExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-static ExecuteInstructionStatus ExecuteGroup2Shr(
+static ExecuteStatus ExecuteGroup2Shr(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -1803,7 +1766,7 @@ static ExecuteInstructionStatus ExecuteGroup2Shr(
 // SAR r/m16, 1
 // SAR r/m8, CL
 // SAR r/m16, CL
-static ExecuteInstructionStatus ExecuteGroup2Sar(
+static ExecuteStatus ExecuteGroup2Sar(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -1825,7 +1788,7 @@ static ExecuteInstructionStatus ExecuteGroup2Sar(
 // ROL r/m16, 1
 // ROL r/m8, CL
 // ROL r/m16, CL
-static ExecuteInstructionStatus ExecuteGroup2Rol(
+static ExecuteStatus ExecuteGroup2Rol(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -1852,7 +1815,7 @@ static ExecuteInstructionStatus ExecuteGroup2Rol(
 // ROR r/m16, 1
 // ROR r/m8, CL
 // ROR r/m16, CL
-static ExecuteInstructionStatus ExecuteGroup2Ror(
+static ExecuteStatus ExecuteGroup2Ror(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -1879,7 +1842,7 @@ static ExecuteInstructionStatus ExecuteGroup2Ror(
 // RCL r/m16, 1
 // RCL r/m8, CL
 // RCL r/m16, CL
-static ExecuteInstructionStatus ExecuteGroup2Rcl(
+static ExecuteStatus ExecuteGroup2Rcl(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   uint8_t effective_count = count % (kNumBits[ctx->metadata->width] + 1);
   if (effective_count == 0) {
@@ -1905,7 +1868,7 @@ static ExecuteInstructionStatus ExecuteGroup2Rcl(
 // RCR r/m16, 1
 // RCR r/m8, CL
 // RCR r/m16, CL
-static ExecuteInstructionStatus ExecuteGroup2Rcr(
+static ExecuteStatus ExecuteGroup2Rcr(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   uint8_t effective_count = count % (kNumBits[ctx->metadata->width] + 1);
   if (effective_count == 0) {
@@ -1942,7 +1905,7 @@ static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
 };
 
 // Group 2 shift / rotate by 1.
-static ExecuteInstructionStatus ExecuteGroup2ShiftOrRotateBy1Instruction(
+static ExecuteStatus ExecuteGroup2ShiftOrRotateBy1Instruction(
     const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -1951,7 +1914,7 @@ static ExecuteInstructionStatus ExecuteGroup2ShiftOrRotateBy1Instruction(
 }
 
 // Group 2 shift / rotate by CL.
-static ExecuteInstructionStatus ExecuteGroup2ShiftOrRotateByCLInstruction(
+static ExecuteStatus ExecuteGroup2ShiftOrRotateByCLInstruction(
     const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -1963,12 +1926,12 @@ static ExecuteInstructionStatus ExecuteGroup2ShiftOrRotateByCLInstruction(
 // Group 3 - TEST, NOT, NEG, MUL, IMUL, DIV, IDIV
 // ============================================================================
 
-typedef ExecuteInstructionStatus (*Group3ExecuteInstructionFn)(
+typedef ExecuteStatus (*Group3ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* op);
 
 // TEST r/m8, imm8
 // TEST r/m16, imm16
-static ExecuteInstructionStatus ExecuteGroup3Test(
+static ExecuteStatus ExecuteGroup3Test(
     const InstructionContext* ctx, Operand* op) {
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, op, &src_value);
@@ -1976,16 +1939,14 @@ static ExecuteInstructionStatus ExecuteGroup3Test(
 
 // NOT r/m8
 // NOT r/m16
-static ExecuteInstructionStatus ExecuteNot(
-    const InstructionContext* ctx, Operand* op) {
+static ExecuteStatus ExecuteNot(const InstructionContext* ctx, Operand* op) {
   WriteOperand(ctx, op, ~FromOperand(op));
   return kExecuteSuccess;
 }
 
 // NEG r/m8
 // NEG r/m16
-static ExecuteInstructionStatus ExecuteNeg(
-    const InstructionContext* ctx, Operand* op) {
+static ExecuteStatus ExecuteNeg(const InstructionContext* ctx, Operand* op) {
   int32_t op_value = FromSignedOperand(op);
   int32_t result_value = -op_value;
   WriteOperand(ctx, op, result_value);
@@ -2021,7 +1982,7 @@ static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-static inline ExecuteInstructionStatus ExecuteMulCommon(
+static inline ExecuteStatus ExecuteMulCommon(
     const InstructionContext* ctx, Operand* dest, uint32_t result,
     bool overflow) {
   Width width = ctx->metadata->width;
@@ -2042,8 +2003,7 @@ static inline ExecuteInstructionStatus ExecuteMulCommon(
 
 // MUL r/m8
 // MUL r/m16
-static ExecuteInstructionStatus ExecuteMul(
-    const InstructionContext* ctx, Operand* op) {
+static ExecuteStatus ExecuteMul(const InstructionContext* ctx, Operand* op) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   uint32_t result = FromOperand(&dest) * FromOperand(op);
   return ExecuteMulCommon(
@@ -2052,8 +2012,7 @@ static ExecuteInstructionStatus ExecuteMul(
 
 // IMUL r/m8
 // IMUL r/m16
-static ExecuteInstructionStatus ExecuteImul(
-    const InstructionContext* ctx, Operand* op) {
+static ExecuteStatus ExecuteImul(const InstructionContext* ctx, Operand* op) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   int32_t result = FromSignedOperand(&dest) * FromSignedOperand(op);
   return ExecuteMulCommon(
@@ -2062,7 +2021,7 @@ static ExecuteInstructionStatus ExecuteImul(
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-static inline ExecuteInstructionStatus WriteDivResult(
+static inline ExecuteStatus WriteDivResult(
     const InstructionContext* ctx, Operand* dest, uint32_t quotient,
     uint32_t remainder) {
   WriteOperand(ctx, dest, quotient);
@@ -2073,8 +2032,7 @@ static inline ExecuteInstructionStatus WriteDivResult(
 
 // DIV r/m8
 // DIV r/m16
-static ExecuteInstructionStatus ExecuteDiv(
-    const InstructionContext* ctx, Operand* op) {
+static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
     // TODO: Handle division by zero error
@@ -2099,8 +2057,7 @@ static ExecuteInstructionStatus ExecuteDiv(
 
 // IDIV r/m8
 // IDIV r/m16
-static ExecuteInstructionStatus ExecuteIdiv(
-    const InstructionContext* ctx, Operand* op) {
+static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
     // TODO: Handle division by zero error
@@ -2138,8 +2095,7 @@ static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
 };
 
 // Group 3 instruction handler.
-static ExecuteInstructionStatus ExecuteGroup3Instruction(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteGroup3Instruction(const InstructionContext* ctx) {
   const Group3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   if (fn == 0) {
@@ -2153,7 +2109,7 @@ static ExecuteInstructionStatus ExecuteGroup3Instruction(
 // Group 4 - INC, DEC
 // ============================================================================
 
-typedef ExecuteInstructionStatus (*Group4ExecuteInstructionFn)(
+typedef ExecuteStatus (*Group4ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* dest);
 
 // Group 4 instruction implementations, indexed by the corresponding REG field
@@ -2164,8 +2120,7 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
 };
 
 // Group 4 instruction handler.
-static ExecuteInstructionStatus ExecuteGroup4Instruction(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* ctx) {
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -2190,21 +2145,21 @@ static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
 }
 
 // JMP ptr16
-static ExecuteInstructionStatus ExecuteIndirectNearJump(
+static ExecuteStatus ExecuteIndirectNearJump(
     const InstructionContext* ctx, Operand* dest) {
   ctx->cpu->registers[kIP] = FromOperandValue(&dest->value);
   return kExecuteSuccess;
 }
 
 // CALL ptr16
-static ExecuteInstructionStatus ExecuteIndirectNearCall(
+static ExecuteStatus ExecuteIndirectNearCall(
     const InstructionContext* ctx, Operand* dest) {
   Push(ctx, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
 // CALL ptr16:16
-static ExecuteInstructionStatus ExecuteIndirectFarCall(
+static ExecuteStatus ExecuteIndirectFarCall(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
@@ -2212,7 +2167,7 @@ static ExecuteInstructionStatus ExecuteIndirectFarCall(
 }
 
 // JMP ptr16:16
-static ExecuteInstructionStatus ExecuteIndirectFarJump(
+static ExecuteStatus ExecuteIndirectFarJump(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
@@ -2220,13 +2175,13 @@ static ExecuteInstructionStatus ExecuteIndirectFarJump(
 }
 
 // PUSH r/m16
-static ExecuteInstructionStatus ExecuteIndirectPush(
+static ExecuteStatus ExecuteIndirectPush(
     const InstructionContext* ctx, Operand* dest) {
   Push(ctx, dest->value);
   return kExecuteSuccess;
 }
 
-typedef ExecuteInstructionStatus (*Group5ExecuteInstructionFn)(
+typedef ExecuteStatus (*Group5ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* dest);
 
 // Group 5 instruction implementations, indexed by the corresponding REG
@@ -2243,8 +2198,7 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
 };
 
 // Group 5 instruction handler.
-static ExecuteInstructionStatus ExecuteGroup5Instruction(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteGroup5Instruction(const InstructionContext* ctx) {
   const Group5ExecuteInstructionFn fn =
       kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -2256,7 +2210,7 @@ static ExecuteInstructionStatus ExecuteGroup5Instruction(
 // ============================================================================
 
 // AAA
-static ExecuteInstructionStatus ExecuteAaa(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteAaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -2275,7 +2229,7 @@ static ExecuteInstructionStatus ExecuteAaa(const InstructionContext* ctx) {
 }
 
 // AAS
-static ExecuteInstructionStatus ExecuteAas(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteAas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -2294,7 +2248,7 @@ static ExecuteInstructionStatus ExecuteAas(const InstructionContext* ctx) {
 }
 
 // AAM
-static ExecuteInstructionStatus ExecuteAam(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteAam(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   OperandValue base = ReadImmediate(ctx);
   uint16_t base_value = FromOperandValue(&base);
@@ -2309,7 +2263,7 @@ static ExecuteInstructionStatus ExecuteAam(const InstructionContext* ctx) {
 }
 
 // AAD
-static ExecuteInstructionStatus ExecuteAad(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteAad(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   OperandValue base = ReadImmediate(ctx);
@@ -2322,7 +2276,7 @@ static ExecuteInstructionStatus ExecuteAad(const InstructionContext* ctx) {
 }
 
 // DAA
-static ExecuteInstructionStatus ExecuteDaa(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteDaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -2345,7 +2299,7 @@ static ExecuteInstructionStatus ExecuteDaa(const InstructionContext* ctx) {
 }
 
 // DAS
-static ExecuteInstructionStatus ExecuteDas(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -2457,15 +2411,15 @@ static inline void UpdateStringDestinationAddress(
 }
 
 // Execute a string instruction with optional REP prefix.
-static inline ExecuteInstructionStatus ExecuteStringInstructionWithREPPrefix(
+static inline ExecuteStatus ExecuteStringInstructionWithREPPrefix(
     const InstructionContext* ctx,
-    ExecuteInstructionStatus (*fn)(const InstructionContext*)) {
+    ExecuteStatus (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP) {
     return fn(ctx);
   }
   while (ctx->cpu->registers[kCX]) {
-    ExecuteInstructionStatus status = fn(ctx);
+    ExecuteStatus status = fn(ctx);
     if (status != kExecuteSuccess) {
       return status;
     }
@@ -2475,8 +2429,7 @@ static inline ExecuteInstructionStatus ExecuteStringInstructionWithREPPrefix(
 }
 
 // Single MOVS iteration.
-static ExecuteInstructionStatus ExecuteMovsIteration(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteMovsIteration(const InstructionContext* ctx) {
   Operand src = GetStringSourceOperand(ctx);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
@@ -2486,13 +2439,12 @@ static ExecuteInstructionStatus ExecuteMovsIteration(
 }
 
 // MOVS
-static ExecuteInstructionStatus ExecuteMovs(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteMovs(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteMovsIteration);
 }
 
 // Single STOS iteration.
-static ExecuteInstructionStatus ExecuteStosIteration(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteStosIteration(const InstructionContext* ctx) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
@@ -2501,13 +2453,12 @@ static ExecuteInstructionStatus ExecuteStosIteration(
 }
 
 // STOS
-static ExecuteInstructionStatus ExecuteStos(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteStos(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteStosIteration);
 }
 
 // Single LODS iteration.
-static ExecuteInstructionStatus ExecuteLodsIteration(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteLodsIteration(const InstructionContext* ctx) {
   Operand src = GetStringSourceOperand(ctx);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   WriteOperand(ctx, &dest, FromOperand(&src));
@@ -2516,22 +2467,21 @@ static ExecuteInstructionStatus ExecuteLodsIteration(
 }
 
 // LODS
-static ExecuteInstructionStatus ExecuteLods(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
 
 // Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-static inline ExecuteInstructionStatus
-ExecuteStringInstructionWithREPZOrRepNZPrefix(
+static inline ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
     const InstructionContext* ctx,
-    ExecuteInstructionStatus (*fn)(const InstructionContext*)) {
+    ExecuteStatus (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
     return fn(ctx);
   }
   bool terminate_zf_value = prefix == kPrefixREPNZ;
   while (ctx->cpu->registers[kCX]) {
-    ExecuteInstructionStatus status = fn(ctx);
+    ExecuteStatus status = fn(ctx);
     if (status != kExecuteSuccess) {
       return status;
     }
@@ -2544,8 +2494,7 @@ ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-static ExecuteInstructionStatus ExecuteScasIteration(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src = GetStringDestinationOperand(ctx);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   ExecuteCmp(ctx, &dest, &src.value);
@@ -2554,14 +2503,13 @@ static ExecuteInstructionStatus ExecuteScasIteration(
 }
 
 // SCAS
-static ExecuteInstructionStatus ExecuteScas(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteScas(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteScasIteration);
 }
 
 // Single CMPS iteration.
-static ExecuteInstructionStatus ExecuteCmpsIteration(
-    const InstructionContext* ctx) {
+static ExecuteStatus ExecuteCmpsIteration(const InstructionContext* ctx) {
   Operand dest = GetStringSourceOperand(ctx);
   Operand src = GetStringDestinationOperand(ctx);
   ExecuteCmp(ctx, &dest, &src.value);
@@ -2571,7 +2519,7 @@ static ExecuteInstructionStatus ExecuteCmpsIteration(
 }
 
 // CMPS
-static ExecuteInstructionStatus ExecuteCmps(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteCmps(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteCmpsIteration);
 }
@@ -2581,7 +2529,7 @@ static ExecuteInstructionStatus ExecuteCmps(const InstructionContext* ctx) {
 // ============================================================================
 
 // CBW
-static ExecuteInstructionStatus ExecuteCbw(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteCbw(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -2589,14 +2537,14 @@ static ExecuteInstructionStatus ExecuteCbw(const InstructionContext* ctx) {
 }
 
 // CWD
-static ExecuteInstructionStatus ExecuteCwd(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
   ctx->cpu->registers[kDX] =
       (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
   return kExecuteSuccess;
 }
 
 // Dummy instruction for unsupported opcodes.
-static ExecuteInstructionStatus ExecuteNoOp(const InstructionContext* ctx) {
+static ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
@@ -4028,8 +3976,8 @@ static inline uint8_t GetImmediateSize(
 }
 
 FetchNextInstructionStatus FetchNextInstruction(
-    CPUState* cpu, EncodedInstruction* dest_instruction) {
-  EncodedInstruction instruction = {0};
+    CPUState* cpu, Instruction* dest_instruction) {
+  Instruction instruction = {0};
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
   uint16_t ip = cpu->registers[kIP];
@@ -4077,8 +4025,8 @@ FetchNextInstructionStatus FetchNextInstruction(
   return kFetchSuccess;
 }
 
-ExecuteInstructionStatus ExecuteInstruction(
-    CPUState* cpu, const EncodedInstruction* instruction) {
+ExecuteStatus ExecuteInstruction(
+    CPUState* cpu, const Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
   if (!metadata->handler) {
