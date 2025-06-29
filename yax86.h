@@ -16,7 +16,7 @@ extern "C" {
 // CPU registers.
 // Note that the order / numeric values of these constants are important here as
 // they must match how the registers are encoded in the ModR/M byte.
-typedef enum {
+typedef enum RegisterIndex {
   // General-purpose and index registers.
 
   // Accumulator Register
@@ -54,7 +54,7 @@ typedef enum {
 #define kNumRegisters (kIP + 1)
 
 // CPU flag masks.
-typedef enum {
+typedef enum Flag {
   // Carry Flag
   kCF = (1 << 0),
   // Parity Flag
@@ -79,16 +79,16 @@ typedef enum {
 #define kInitialFlags (1 << 1)  // Reserved_1 is always 1.
 
 // Standard interrupts.
-typedef enum {
-  kInterruptDivideByZero = 0,
+typedef enum InterruptNumber {
+  kInterruptDivideError = 0,
   kInterruptSingleStep = 1,
   kInterruptNMI = 2,
   kInterruptBreakpoint = 3,
   kInterruptOverflow = 4,
-} Interrupt;
+} InterruptNumer;
 
 // Result status from executing an instruction or opcode.
-typedef enum {
+typedef enum ExecuteStatus {
   // Successfully executed the instruction or opcode.
   kExecuteSuccess = 0,
   // Invalid instruction opcode.
@@ -103,28 +103,43 @@ typedef enum {
 } ExecuteStatus;
 
 struct CPUState;
+struct Instruction;
 
-// Runtime configuration
-typedef struct {
+// Caller-provided runtime configuration.
+typedef struct CPUConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Callback to read a byte from memory.
   uint8_t (*read_memory_byte)(struct CPUState* cpu, uint16_t address);
   // Callback to write a byte to memory.
+
   void (*write_memory_byte)(
       struct CPUState* cpu, uint16_t address, uint8_t value);
   // Callback to handle an interrupt.
-  // - Returns kExecuteSuccess if the interrupt was handled and execution should
+  // - Return kExecuteSuccess if the interrupt was handled and execution should
   //   continue.
-  // - Returns kExecuteUnhandledInterrupt if the interrupt was not handled and
+  // - Return kExecuteUnhandledInterrupt if the interrupt was not handled and
   //   should be handled by the VM instead.
-  // - Any other value is passed through to the execution loop
+  // - Return any other value to terminate the execution loop.
   ExecuteStatus (*handle_interrupt)(
       struct CPUState* cpu, uint8_t interrupt_number);
+
+  // Callback invoked before executing an instruction. This can be used to
+  // inspect or modify the instruction before it is executed, add delays, or
+  // terminate the execution loop.
+  //   - Return kExecuteSuccess to continue execution.
+  //   - Return any other value to terminate the execution loop.
+  ExecuteStatus (*on_before_execute_instruction)(
+      struct CPUState* cpu, struct Instruction* instruction);
+  // Callback invoked after executing an instruction. This can be used to
+  // inspect the instruction after it is executed, add delays, or terminate the
+  // execution loop.
+  ExecuteStatus (*on_after_execute_instruction)(
+      struct CPUState* cpu, const struct Instruction* instruction);
 } CPUConfig;
 
-// CPU state
+// State of the emulated CPU.
 typedef struct CPUState {
   // Pointer to the configuration
   CPUConfig* config;
@@ -133,6 +148,11 @@ typedef struct CPUState {
   uint16_t registers[kNumRegisters];
   // Flag values
   uint16_t flags;
+
+  // Whether there is an active interrupt.
+  bool has_pending_interrupt;
+  // The interrupt number of the pending interrupt.
+  uint8_t pending_interrupt_number;
 } CPUState;
 
 // Initialize CPU state.
@@ -151,6 +171,19 @@ static inline void SetFlag(CPUState* cpu, Flag flag, bool value) {
   }
 }
 
+// Set pending interrupt.
+static inline void SetPendingInterrupt(
+    CPUState* cpu, uint8_t interrupt_number) {
+  cpu->has_pending_interrupt = true;
+  cpu->pending_interrupt_number = interrupt_number;
+}
+
+// Clear pending interrupt.
+static inline void ClearPendingInterrupt(CPUState* cpu) {
+  cpu->has_pending_interrupt = false;
+  cpu->pending_interrupt_number = 0;
+}
+
 // ============================================================================
 // Instructions
 // ============================================================================
@@ -165,7 +198,7 @@ static inline void SetFlag(CPUState* cpu, Flag flag, bool value) {
 #define kMaxImmediateBytes 4
 
 // The Mod R/M byte.
-typedef struct {
+typedef struct ModRM {
   // Mod field - bits 6 and 7
   uint8_t mod : 2;
   // REG field - bits 3 to 5
@@ -175,7 +208,7 @@ typedef struct {
 } ModRM;
 
 // An encoded instruction.
-typedef struct {
+typedef struct Instruction {
   // Prefix bytes.
   uint8_t prefix[kMaxPrefixBytes];
 
@@ -214,7 +247,7 @@ typedef struct {
 // ============================================================================
 
 // Result status from fetching the next instruction.
-typedef enum {
+typedef enum FetchNextInstructionStatus {
   kFetchSuccess = 0,
   // Prefix exceeds maximum allowed size.
   kFetchPrefixTooLong = -1,
@@ -224,8 +257,18 @@ typedef enum {
 FetchNextInstructionStatus FetchNextInstruction(
     CPUState* cpu, Instruction* instruction);
 
-// Execute a single instruction.
-ExecuteStatus ExecuteInstruction(CPUState* cpu, const Instruction* instruction);
+// Execute a single fetched instruction.
+ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction);
+
+// Run a single instruction cycle, including fetching and executing the next
+// instruction at CS:IP, and handling interrupts.
+ExecuteStatus RunInstructionCycle(CPUState* cpu);
+
+// Run instruction execution loop.
+//
+// Terminates when an instruction execution or handler returns a non-success
+// status.
+ExecuteStatus RunMainLoop(CPUState* cpu);
 
 #ifdef __cplusplus
 }  // extern "C"

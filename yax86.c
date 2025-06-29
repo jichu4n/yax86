@@ -814,26 +814,26 @@ static ExecuteStatus ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
 // PUSH and POP instructions
 // ============================================================================
 
-static inline void Push(const InstructionContext* ctx, OperandValue value) {
-  ctx->cpu->registers[kSP] -= 2;
+static inline void Push(CPUState* cpu, OperandValue value) {
+  cpu->registers[kSP] -= 2;
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .value.memory_address = {
           .segment_register_index = kSS,
-          .offset = ctx->cpu->registers[kSP],
+          .offset = cpu->registers[kSP],
       }};
-  WriteMemoryWord(ctx->cpu, &address, value);
+  WriteMemoryWord(cpu, &address, value);
 }
 
-static inline OperandValue Pop(const InstructionContext* ctx) {
+static inline OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .value.memory_address = {
           .segment_register_index = kSS,
-          .offset = ctx->cpu->registers[kSP],
+          .offset = cpu->registers[kSP],
       }};
-  OperandValue value = ReadMemoryWord(ctx->cpu, &address);
-  ctx->cpu->registers[kSP] += 2;
+  OperandValue value = ReadMemoryWord(cpu, &address);
+  cpu->registers[kSP] += 2;
   return value;
 }
 
@@ -841,7 +841,7 @@ static inline OperandValue Pop(const InstructionContext* ctx) {
 static ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x50;
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx, src.value);
+  Push(ctx->cpu, src.value);
   return kExecuteSuccess;
 }
 
@@ -849,7 +849,7 @@ static ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
 static ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x58;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  OperandValue value = Pop(ctx);
+  OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
   return kExecuteSuccess;
 }
@@ -858,7 +858,7 @@ static ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
 static ExecuteStatus ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx, src.value);
+  Push(ctx->cpu, src.value);
   return kExecuteSuccess;
 }
 
@@ -870,20 +870,20 @@ static ExecuteStatus ExecutePopSegmentRegister(const InstructionContext* ctx) {
     return kExecuteInvalidInstruction;
   }
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  OperandValue value = Pop(ctx);
+  OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
   return kExecuteSuccess;
 }
 
 // PUSHF
 static ExecuteStatus ExecutePushFlags(const InstructionContext* ctx) {
-  Push(ctx, WordValue(ctx->cpu->flags));
+  Push(ctx->cpu, WordValue(ctx->cpu->flags));
   return kExecuteSuccess;
 }
 
 // POPF
 static ExecuteStatus ExecutePopFlags(const InstructionContext* ctx) {
-  OperandValue value = Pop(ctx);
+  OperandValue value = Pop(ctx->cpu);
   ctx->cpu->flags = FromOperandValue(&value);
   return kExecuteSuccess;
 }
@@ -894,7 +894,7 @@ static ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
     return kExecuteInvalidInstruction;
   }
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  OperandValue value = Pop(ctx);
+  OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
   return kExecuteSuccess;
 }
@@ -1596,7 +1596,7 @@ static ExecuteStatus ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // Common logic for near calls.
 static inline ExecuteStatus ExecuteNearCall(
     const InstructionContext* ctx, const OperandValue* offset) {
-  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteRelativeJump(ctx, offset);
 }
 
@@ -1611,22 +1611,22 @@ static inline ExecuteStatus ExecuteFarCall(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   // Push the current CS and IP onto the stack.
-  Push(ctx, WordValue(ctx->cpu->registers[kCS]));
-  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
+  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteFarJump(ctx, segment, offset);
 }
 
 // CALL ptr16:16
 static ExecuteStatus ExecuteDirectFarCall(const InstructionContext* ctx) {
-  Push(ctx, WordValue(ctx->cpu->registers[kCS]));
-  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
+  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteDirectFarJump(ctx);
 }
 
 // Common logic for RET instructions.
 static ExecuteStatus ExecuteNearReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
-  OperandValue new_ip = Pop(ctx);
+  OperandValue new_ip = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
   ctx->cpu->registers[kSP] += arg_size;
   return kExecuteSuccess;
@@ -1646,8 +1646,8 @@ static ExecuteStatus ExecuteNearReturnAndPop(const InstructionContext* ctx) {
 // Common logic for RETF instructions.
 static ExecuteStatus ExecuteFarReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
-  OperandValue new_ip = Pop(ctx);
-  OperandValue new_cs = Pop(ctx);
+  OperandValue new_ip = Pop(ctx->cpu);
+  OperandValue new_cs = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
   ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
   ctx->cpu->registers[kSP] += arg_size;
@@ -2035,8 +2035,8 @@ static inline ExecuteStatus WriteDivResult(
 static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
-    // TODO: Handle division by zero error
-    return kExecuteInvalidInstruction;
+    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    return kExecuteSuccess;
   }
 
   Width width = ctx->metadata->width;
@@ -2049,8 +2049,8 @@ static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
                             << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
-    // TODO: Handle division overflow error
-    return kExecuteInvalidInstruction;
+    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    return kExecuteSuccess;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
 }
@@ -2060,8 +2060,8 @@ static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
 static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
-    // TODO: Handle division by zero error
-    return kExecuteInvalidInstruction;
+    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    return kExecuteSuccess;
   }
 
   Width width = ctx->metadata->width;
@@ -2075,8 +2075,8 @@ static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   int32_t quotient = dividend / divisor;
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < kMinSignedValue[ctx->metadata->width]) {
-    // TODO: Handle division overflow error
-    return kExecuteInvalidInstruction;
+    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    return kExecuteSuccess;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
 }
@@ -2154,7 +2154,7 @@ static ExecuteStatus ExecuteIndirectNearJump(
 // CALL ptr16
 static ExecuteStatus ExecuteIndirectNearCall(
     const InstructionContext* ctx, Operand* dest) {
-  Push(ctx, WordValue(ctx->cpu->registers[kIP]));
+  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
@@ -2177,7 +2177,7 @@ static ExecuteStatus ExecuteIndirectFarJump(
 // PUSH r/m16
 static ExecuteStatus ExecuteIndirectPush(
     const InstructionContext* ctx, Operand* dest) {
-  Push(ctx, dest->value);
+  Push(ctx->cpu, dest->value);
   return kExecuteSuccess;
 }
 
@@ -2546,6 +2546,51 @@ static ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
 // Dummy instruction for unsupported opcodes.
 static ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
   return kExecuteSuccess;
+}
+
+// ============================================================================
+// Interrupt instructions
+// ============================================================================
+
+static inline ExecuteStatus ExecuteReturnFromInterrupt(CPUState* cpu) {
+  OperandValue ip_value = Pop(cpu);
+  cpu->registers[kIP] = FromOperandValue(&ip_value);
+  OperandValue cs_value = Pop(cpu);
+  cpu->registers[kCS] = FromOperandValue(&cs_value);
+  OperandValue flags_value = Pop(cpu);
+  cpu->flags = FromOperandValue(&flags_value);
+  return kExecuteSuccess;
+}
+
+// IRET
+static ExecuteStatus ExecuteIret(const InstructionContext* ctx) {
+  return ExecuteReturnFromInterrupt(ctx->cpu);
+}
+
+// INT 3
+static ExecuteStatus ExecuteInt3(const InstructionContext* ctx) {
+  SetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
+  return kExecuteSuccess;
+}
+
+// INTO
+static ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
+  if (GetFlag(ctx->cpu, kOF)) {
+    SetPendingInterrupt(ctx->cpu, kInterruptOverflow);
+  }
+  return kExecuteSuccess;
+}
+
+// INT n
+static ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
+  OperandValue interrupt_number_value = ReadImmediate(ctx);
+  SetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
+  return kExecuteSuccess;
+}
+
+// HLT
+static ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
+  return kExecuteHalt;
 }
 
 // ============================================================================
@@ -3625,17 +3670,26 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 0,
      .handler = ExecuteFarReturn},
     // INT 3
-    {.opcode = 0xCC, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xCC,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteInt3},
     // INT imm8
     {.opcode = 0xCD,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
-     .handler = 0},
+     .handler = ExecuteIntN},
     // INTO
-    {.opcode = 0xCE, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xCE,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteInto},
     // IRET
-    {.opcode = 0xCF, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xCF,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteIret},
     // ROL/ROR/RCL/RCR/SHL/SHR/SAR r/m8, 1 (Group 2)
     {.opcode = 0xD0,
      .has_modrm = true,
@@ -3815,7 +3869,10 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = 0},
     // HLT
-    {.opcode = 0xF4, .has_modrm = false, .immediate_size = 0, .handler = 0},
+    {.opcode = 0xF4,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .handler = ExecuteHlt},
     // CMC
     {.opcode = 0xF5,
      .has_modrm = false,
@@ -4025,10 +4082,17 @@ FetchNextInstructionStatus FetchNextInstruction(
   return kFetchSuccess;
 }
 
-ExecuteStatus ExecuteInstruction(
-    CPUState* cpu, const Instruction* instruction) {
-  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction) {
+  ExecuteStatus status;
 
+  // Run the on_before_execute_instruction callback if provided.
+  if (cpu->config->on_before_execute_instruction &&
+      (status = cpu->config->on_before_execute_instruction(cpu, instruction) !=
+                kExecuteSuccess)) {
+    return status;
+  }
+
+  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
   if (!metadata->handler) {
     return kExecuteInvalidOpcode;
   }
@@ -4043,10 +4107,106 @@ ExecuteStatus ExecuteInstruction(
     return kExecuteInvalidInstruction;
   }
 
+  // Run the instruction handler.
   InstructionContext context = {
       .cpu = cpu,
       .instruction = instruction,
       .metadata = metadata,
   };
-  return metadata->handler(&context);
+  if ((status = metadata->handler(&context)) != kExecuteSuccess) {
+    return status;
+  }
+
+  // Run the on_after_execute_instruction callback if provided.
+  if (cpu->config->on_after_execute_instruction &&
+      (status = cpu->config->on_after_execute_instruction(cpu, instruction) !=
+                kExecuteSuccess)) {
+    return status;
+  }
+
+  return kExecuteSuccess;
+}
+
+// Process pending interrupt, if any.
+static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
+  if (!cpu->has_pending_interrupt) {
+    return kExecuteSuccess;
+  }
+  uint8_t interrupt_number = cpu->pending_interrupt_number;
+  ClearPendingInterrupt(cpu);
+
+  // Prepare for interrupt processing.
+  Push(cpu, WordValue(cpu->flags));
+  SetFlag(cpu, kIF, false);
+  SetFlag(cpu, kTF, false);
+  Push(cpu, WordValue(cpu->registers[kCS]));
+  Push(cpu, WordValue(cpu->registers[kIP]));
+
+  // Invoke the caller-provided interrupt handler to give
+  ExecuteStatus interrupt_handler_status =
+      (*cpu->config->handle_interrupt)(cpu, interrupt_number);
+
+  switch (interrupt_handler_status) {
+    case kExecuteSuccess: {
+      // If the caller-provided interrupt handler was successful, restore state
+      // and continue.
+      return ExecuteReturnFromInterrupt(cpu);
+    }
+    case kExecuteUnhandledInterrupt: {
+      // If the interrupt handler did not handle the interrupt, we handle it
+      // within the VM using the Interrupt Vector Table.
+      uint16_t ivt_entry_offset = interrupt_number << 2;
+      uint8_t ivt_entry[4];
+      for (int i = 0; i < 4; ++i, ++ivt_entry_offset) {
+        ivt_entry[i] = cpu->config->read_memory_byte(cpu, ivt_entry_offset);
+      }
+      cpu->registers[kIP] = (ivt_entry[0] | (ivt_entry[1] << 8));
+      cpu->registers[kCS] = (ivt_entry[2] | (ivt_entry[3] << 8));
+      return kExecuteSuccess;
+    }
+    default:
+      // If the interrupt handler returned an error, return it.
+      return interrupt_handler_status;
+  }
+}
+
+ExecuteStatus RunInstructionCycle(CPUState* cpu) {
+  // Step 1: Fetch the next instruction, and increment IP.
+  Instruction instruction;
+  FetchNextInstructionStatus fetch_status =
+      FetchNextInstruction(cpu, &instruction);
+  if (fetch_status != kFetchSuccess) {
+    return kExecuteInvalidInstruction;
+  }
+  cpu->registers[kIP] += instruction.size;
+
+  // Step 2: Execute the instruction.
+  ExecuteStatus status;
+  if ((status = ExecuteInstruction(cpu, &instruction)) != kExecuteSuccess) {
+    return status;
+  }
+
+  // Step 3: Handle pending interrupts.
+  if ((status = ExecutePendingInterrupt(cpu)) != kExecuteSuccess) {
+    return status;
+  }
+
+  // Step 4: If trap flag is set, handle single-step execution.
+  if (GetFlag(cpu, kTF)) {
+    SetPendingInterrupt(cpu, kInterruptSingleStep);
+    if ((status = ExecutePendingInterrupt(cpu)) != kExecuteSuccess) {
+      return status;
+    }
+  }
+
+  return kExecuteSuccess;
+}
+
+ExecuteStatus RunMainLoop(CPUState* cpu) {
+  ExecuteStatus status;
+  for (;;) {
+    if ((status = RunInstructionCycle(cpu)) != kExecuteSuccess) {
+      return status;
+    }
+  }
 }
