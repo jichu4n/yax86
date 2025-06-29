@@ -4,17 +4,50 @@
 // Types and helpers
 // ============================================================================
 
-// Instruction prefixes.
-typedef enum {
-  // Segment override prefixes
-  kPrefixES = 0x26,     // ES segment override
-  kPrefixCS = 0x2E,     // CS segment override
-  kPrefixSS = 0x36,     // SS segment override
-  kPrefixDS = 0x3E,     // DS segment override
-  kPrefixLOCK = 0xF0,   // LOCK
-  kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
-  kPrefixREP = 0xF3,    // REP/REPE/REPZ
-} InstructionPrefix;
+// Data width.
+typedef enum Width {
+  kByte = 0,  // 8-bit operand
+  kWord       // 16-bit operand
+} Width;
+
+// Number of data width types.
+#define kNumWidths (kWord + 1)
+
+// Bitmask to extract the sign bit of a value.
+static const uint32_t kSignBit[kNumWidths] = {
+    1 << 7,   // kByte
+    1 << 15,  // kWord
+};
+
+// Maximum unsigned value for each data width.
+static const uint32_t kMaxValue[kNumWidths] = {
+    0xFF,   // kByte
+    0xFFFF  // kWord
+};
+
+// Maximum signed value for each data width.
+static const int32_t kMaxSignedValue[kNumWidths] = {
+    0x7F,   // kByte
+    0x7FFF  // kWord
+};
+
+// Minimum signed value for each data width.
+static const int32_t kMinSignedValue[kNumWidths] = {
+    -0x80,   // kByte
+    -0x8000  // kWord
+};
+
+// Number of bytes in each data width.
+static const uint8_t kNumBytes[kNumWidths] = {
+    1,  // kByte
+    2,  // kWord
+};
+
+// Number of bits in each data width.
+static const uint8_t kNumBits[kNumWidths] = {
+    8,   // kByte
+    16,  // kWord
+};
 
 // The address of a register operand.
 typedef struct {
@@ -53,15 +86,6 @@ typedef struct {
   } value;
 } OperandAddress;
 
-// Data width.
-typedef enum {
-  kByte = 0,  // 8-bit operand
-  kWord       // 16-bit operand
-} Width;
-
-// Number of data width types.
-#define kNumWidths (kWord + 1)
-
 // Operand value.
 typedef struct {
   // Data width.
@@ -95,16 +119,12 @@ static inline OperandValue WordValue(uint16_t word_value) {
 static inline OperandValue ToOperandValue(Width width, uint32_t raw_value) {
   switch (width) {
     case kByte:
-      return ByteValue(raw_value & 0xFF);
+      return ByteValue(raw_value & kMaxValue[width]);
     case kWord:
-      return WordValue(raw_value & 0xFFFF);
+      return WordValue(raw_value & kMaxValue[width]);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  OperandValue value = {
-      .width = kByte,
-      .value = {.byte_value = 0xFF},
-  };
-  return value;
+  return ByteValue(0xFF);
 }
 
 // Helper function to zero-extend OperandValue to a 32-bit value. This makes it
@@ -158,27 +178,39 @@ static inline uint16_t ToPhysicalAddress(
   return (segment << 4) + address->offset;
 }
 
-// Read a byte from memory.
+// Read a byte from memory as a uint8_t.
+static inline uint8_t ReadRawMemoryByte(
+    CPUState* cpu, uint16_t physical_address) {
+  return cpu->config->read_memory_byte
+             ? cpu->config->read_memory_byte(cpu, physical_address)
+             : 0xFF;
+}
+
+// Read a word from memory as a uint16_t.
+static inline uint16_t ReadRawMemoryWord(
+    CPUState* cpu, uint16_t physical_address) {
+  uint8_t low_byte_value = ReadRawMemoryByte(cpu, physical_address);
+  uint8_t high_byte_value = ReadRawMemoryByte(cpu, physical_address + 1);
+  return (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value;
+}
+
+// Read a byte from memory to an OperandValue.
 static OperandValue ReadMemoryByte(
     CPUState* cpu, const OperandAddress* address) {
-  uint8_t byte_value = cpu->config->read_memory_byte(
+  uint8_t byte_value = ReadRawMemoryByte(
       cpu, ToPhysicalAddress(cpu, &address->value.memory_address));
   return ByteValue(byte_value);
 }
 
-// Read a word from memory.
+// Read a word from memory to an OperandValue.
 static OperandValue ReadMemoryWord(
     CPUState* cpu, const OperandAddress* address) {
-  const uint16_t physical_address =
-      ToPhysicalAddress(cpu, &address->value.memory_address);
-  uint8_t low_byte_value = cpu->config->read_memory_byte(cpu, physical_address);
-  uint8_t high_byte_value =
-      cpu->config->read_memory_byte(cpu, physical_address + 1);
-  uint16_t word_value = (high_byte_value << 8) | low_byte_value;
+  uint16_t word_value = ReadRawMemoryWord(
+      cpu, ToPhysicalAddress(cpu, &address->value.memory_address));
   return WordValue(word_value);
 }
 
-// Read a byte from a register.
+// Read a byte from a register to an OperandValue.
 static OperandValue ReadRegisterByte(
     CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
@@ -187,7 +219,7 @@ static OperandValue ReadRegisterByte(
   return ByteValue(byte_value);
 }
 
-// Read a word from a register.
+// Read a word from a register to an OperandValue.
 static OperandValue ReadRegisterWord(
     CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
@@ -204,35 +236,47 @@ static OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWid
     {ReadMemoryByte, ReadMemoryWord},
 };
 
+// Write a byte as uint8_t to memory.
+static inline void WriteRawMemoryByte(
+    CPUState* cpu, uint16_t address, uint8_t value) {
+  if (!cpu->config->write_memory_byte) {
+    return;
+  }
+  cpu->config->write_memory_byte(cpu, address, value);
+}
+
+// Write a word as uint16_t to memory.
+static inline void WriteRawMemoryWord(
+    CPUState* cpu, uint16_t address, uint16_t value) {
+  WriteRawMemoryByte(cpu, address, value & 0xFF);
+  WriteRawMemoryByte(cpu, address + 1, (value >> 8) & 0xFF);
+}
+
 // Write a byte to memory.
 static void WriteMemoryByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
-  const MemoryAddress* memory_address = &address->value.memory_address;
-  uint16_t segment = cpu->registers[memory_address->segment_register_index];
-  cpu->config->write_memory_byte(
-      cpu, (segment << 4) + memory_address->offset, value.value.byte_value);
+  WriteRawMemoryByte(
+      cpu, ToPhysicalAddress(cpu, &address->value.memory_address),
+      value.value.byte_value);
 }
 
 // Write a word to memory.
 static void WriteMemoryWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
-  const MemoryAddress* memory_address = &address->value.memory_address;
-  uint16_t segment = cpu->registers[memory_address->segment_register_index];
-  uint16_t address_value = (segment << 4) + memory_address->offset;
-  uint16_t word_value = value.value.word_value;
-  uint8_t low_byte_value = word_value & 0xFF;
-  uint8_t high_byte_value = (word_value >> 8) & 0xFF;
-  cpu->config->write_memory_byte(cpu, address_value, low_byte_value);
-  cpu->config->write_memory_byte(cpu, address_value + 1, high_byte_value);
+  WriteRawMemoryWord(
+      cpu, ToPhysicalAddress(cpu, &address->value.memory_address),
+      value.value.word_value);
 }
+
 // Write a byte to a register.
 static void WriteRegisterByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
-  const uint16_t updated_byte = value.value.byte_value
+  const uint16_t updated_byte = ((uint16_t)value.value.byte_value)
                                 << register_address->byte_offset;
-  const uint16_t other_byte = cpu->registers[register_address->register_index] &
-                              (0xFF << (8 - register_address->byte_offset));
+  const uint16_t other_byte =
+      cpu->registers[register_address->register_index] &
+      (((uint16_t)0xFF) << (8 - register_address->byte_offset));
   cpu->registers[register_address->register_index] = other_byte | updated_byte;
 }
 
@@ -250,42 +294,6 @@ static void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
     {WriteRegisterByte, WriteRegisterWord},
     // kOperandTypeMemory
     {WriteMemoryByte, WriteMemoryWord},
-};
-
-// Bitmask to extract the sign bit of a value.
-static const uint32_t kSignBit[kNumWidths] = {
-    1 << 7,   // kByte
-    1 << 15,  // kWord
-};
-
-// Maximum unsigned value for each data width.
-static const uint32_t kMaxValue[kNumWidths] = {
-    0xFF,   // kByte
-    0xFFFF  // kWord
-};
-
-// Maximum signed value for each data width.
-static const int32_t kMaxSignedValue[kNumWidths] = {
-    0x7F,   // kByte
-    0x7FFF  // kWord
-};
-
-// Minimum signed value for each data width.
-static const int32_t kMinSignedValue[kNumWidths] = {
-    -0x80,   // kByte
-    -0x8000  // kWord
-};
-
-// Number of bytes in each data width.
-static const uint8_t kNumBytes[kNumWidths] = {
-    1,  // kByte
-    2,  // kWord
-};
-
-// Number of bits in each data width.
-static const uint8_t kNumBits[kNumWidths] = {
-    8,   // kByte
-    16,  // kWord
 };
 
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
@@ -340,6 +348,18 @@ static RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
     GetRegisterAddressByte,  // kByte
     GetRegisterAddressWord   // kWord
 };
+
+// Instruction prefixes.
+typedef enum {
+  // Segment override prefixes
+  kPrefixES = 0x26,     // ES segment override
+  kPrefixCS = 0x2E,     // CS segment override
+  kPrefixSS = 0x36,     // SS segment override
+  kPrefixDS = 0x3E,     // DS segment override
+  kPrefixLOCK = 0xF0,   // LOCK
+  kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
+  kPrefixREP = 0xF3,    // REP/REPE/REPZ
+} InstructionPrefix;
 
 // Apply segment override prefixes to a MemoryAddress.
 static inline void ApplySegmentOverride(
@@ -4142,26 +4162,27 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
   Push(cpu, WordValue(cpu->registers[kCS]));
   Push(cpu, WordValue(cpu->registers[kIP]));
 
-  // Invoke the caller-provided interrupt handler to give
+  // Invoke the interrupt handler callback first. If the caller did not provide
+  // an interrupt handler callback, handle the interrupt within the VM using the
+  // Interrupt Vector Table.
   ExecuteStatus interrupt_handler_status =
-      (*cpu->config->handle_interrupt)(cpu, interrupt_number);
+      cpu->config->handle_interrupt
+          ? cpu->config->handle_interrupt(cpu, interrupt_number)
+          : kExecuteUnhandledInterrupt;
 
   switch (interrupt_handler_status) {
     case kExecuteSuccess: {
-      // If the caller-provided interrupt handler was successful, restore state
-      // and continue.
+      // If the interrupt was handled by the caller-provided interrupt handler
+      // callback, restore state and continue execution.
       return ExecuteReturnFromInterrupt(cpu);
     }
     case kExecuteUnhandledInterrupt: {
-      // If the interrupt handler did not handle the interrupt, we handle it
-      // within the VM using the Interrupt Vector Table.
+      // If the interrupt was not handled by the caller-provided interrupt
+      // handler callback, handle it within the VM using the Interrupt Vector
+      // Table.
       uint16_t ivt_entry_offset = interrupt_number << 2;
-      uint8_t ivt_entry[4];
-      for (int i = 0; i < 4; ++i, ++ivt_entry_offset) {
-        ivt_entry[i] = cpu->config->read_memory_byte(cpu, ivt_entry_offset);
-      }
-      cpu->registers[kIP] = (ivt_entry[0] | (ivt_entry[1] << 8));
-      cpu->registers[kCS] = (ivt_entry[2] | (ivt_entry[3] << 8));
+      cpu->registers[kIP] = ReadRawMemoryWord(cpu, ivt_entry_offset);
+      cpu->registers[kCS] = ReadRawMemoryWord(cpu, ivt_entry_offset + 2);
       return kExecuteSuccess;
     }
     default:

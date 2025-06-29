@@ -111,30 +111,42 @@ typedef struct CPUConfig {
   void* context;
 
   // Callback to read a byte from memory.
+  //
+  // Note that on the 8086, there is no concept of paging or page faults.
+  // Reading an invalid memory address will likely just yield garbage data. This
+  // callback interface mirrors that behavior.
   uint8_t (*read_memory_byte)(struct CPUState* cpu, uint16_t address);
-  // Callback to write a byte to memory.
 
+  // Callback to write a byte to memory.
+  //
+  // Note that on the 8086, there is no concept of virtual memory or page
+  // faults. Writing to an invalid memory address will most likely be a no-op.
+  // This callback interface mirrors that behavior.
   void (*write_memory_byte)(
       struct CPUState* cpu, uint16_t address, uint8_t value);
+
   // Callback to handle an interrupt.
-  // - Return kExecuteSuccess if the interrupt was handled and execution should
-  //   continue.
-  // - Return kExecuteUnhandledInterrupt if the interrupt was not handled and
-  //   should be handled by the VM instead.
-  // - Return any other value to terminate the execution loop.
+  //   - Return kExecuteSuccess if the interrupt was handled and execution
+  //     should continue.
+  //   - Return kExecuteUnhandledInterrupt if the interrupt was not handled and
+  //     should be handled by the VM instead.
+  //   - Return any other value to terminate the execution loop.
   ExecuteStatus (*handle_interrupt)(
       struct CPUState* cpu, uint8_t interrupt_number);
 
   // Callback invoked before executing an instruction. This can be used to
-  // inspect or modify the instruction before it is executed, add delays, or
-  // terminate the execution loop.
+  // inspect or modify the instruction before it is executed, inject pending
+  // interrupt or delay, or terminate the execution loop.
   //   - Return kExecuteSuccess to continue execution.
   //   - Return any other value to terminate the execution loop.
   ExecuteStatus (*on_before_execute_instruction)(
       struct CPUState* cpu, struct Instruction* instruction);
+
   // Callback invoked after executing an instruction. This can be used to
-  // inspect the instruction after it is executed, add delays, or terminate the
-  // execution loop.
+  // inspect the instruction after it is executed, inject pending interrupt or
+  // delay, or terminate the execution loop.
+  //   - Return kExecuteSuccess to continue execution.
+  //   - Return any other value to terminate the execution loop.
   ExecuteStatus (*on_after_execute_instruction)(
       struct CPUState* cpu, const struct Instruction* instruction);
 } CPUConfig;

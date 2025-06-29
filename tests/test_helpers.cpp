@@ -120,7 +120,8 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
 CPUTestHelper::CPUTestHelper(size_t memory_size)
     : memory_size_(memory_size),
       memory_(make_unique<uint8_t[]>(memory_size)),
-      context_{this, memory_.get(), memory_size} {
+      context_{this, memory_.get(), memory_size},
+      config_{0} {
   InitCPU(&cpu_);
 
   cpu_.config = &config_;
