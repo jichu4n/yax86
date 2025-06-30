@@ -112,16 +112,22 @@ typedef struct CPUConfig {
 
   // Callback to read a byte from memory.
   //
-  // Note that on the 8086, there is no concept of paging or page faults.
-  // Reading an invalid memory address will likely just yield garbage data. This
-  // callback interface mirrors that behavior.
+  // On the 8086, accessing an invalid memory address will yield garbage data
+  // rather than causing a page fault. This callback interface mirrors that
+  // behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
   uint8_t (*read_memory_byte)(struct CPUState* cpu, uint16_t address);
 
   // Callback to write a byte to memory.
   //
-  // Note that on the 8086, there is no concept of virtual memory or page
-  // faults. Writing to an invalid memory address will most likely be a no-op.
-  // This callback interface mirrors that behavior.
+  // On the 8086, accessing an invalid memory address will yield garbage data
+  // rather than causing a page fault. This callback interface mirrors that
+  // behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
   void (*write_memory_byte)(
       struct CPUState* cpu, uint16_t address, uint8_t value);
 
@@ -149,6 +155,24 @@ typedef struct CPUConfig {
   //   - Return any other value to terminate the execution loop.
   ExecuteStatus (*on_after_execute_instruction)(
       struct CPUState* cpu, const struct Instruction* instruction);
+
+  // Callback to read a byte from an I/O port.
+  //
+  // On the 8086, accessing an invalid I/O port will most likely yield garbage
+  // data. This callback interface mirrors that behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
+  uint8_t (*read_port)(struct CPUState* cpu, uint16_t port);
+
+  // Callback to write a byte to an I/O port.
+  //
+  // On the 8086, accessing an invalid I/O port will most likely yield garbage
+  // data. This callback interface mirrors that behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
+  void (*write_port)(struct CPUState* cpu, uint16_t port, uint8_t value);
 } CPUConfig;
 
 // State of the emulated CPU.
