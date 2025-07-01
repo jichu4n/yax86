@@ -1,7 +1,6 @@
 #ifndef YAX86_IMPLEMENTATION
-#include "operands.h"
-
 #include "../common.h"
+#include "cpu_private.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Helper functions to construct OperandValue.
@@ -392,3 +391,72 @@ YAX86_PRIVATE OperandValue (*const kReadImmediateValueFn[kNumWidths])(
   ReadImmediateByte,  // kByte
   ReadImmediateWord   // kWord
 };
+
+// Read a value from an operand address.
+YAX86_PRIVATE OperandValue
+ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
+  return kReadOperandValueFn[address->type][ctx->metadata->width](
+      ctx->cpu, address);
+}
+
+// Get a register or memory operand for an instruction based on the ModR/M
+// byte and displacement.
+YAX86_PRIVATE Operand
+ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
+  Width width = ctx->metadata->width;
+  Operand operand;
+  operand.address =
+      GetRegisterOrMemoryOperandAddress(ctx->cpu, ctx->instruction, width);
+  operand.value = ReadOperandValue(ctx, &operand.address);
+  return operand;
+}
+
+// Get a register operand for an instruction.
+YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
+    const InstructionContext* ctx, RegisterIndex register_index) {
+  Width width = ctx->metadata->width;
+  Operand operand = {
+      .address = {
+          .type = kOperandAddressTypeRegister,
+          .value = {
+              .register_address =
+                  kGetRegisterAddressFn[width](ctx->cpu, register_index),
+          }}};
+  operand.value = ReadOperandValue(ctx, &operand.address);
+  return operand;
+}
+
+// Get a register operand for an instruction from the REG field of the Mod/RM
+// byte.
+YAX86_PRIVATE Operand ReadRegisterOperand(const InstructionContext* ctx) {
+  return ReadRegisterOperandForRegisterIndex(ctx, ctx->instruction->mod_rm.reg);
+}
+
+// Get a segment register operand for an instruction from the REG field of the
+// Mod/RM byte.
+YAX86_PRIVATE Operand
+ReadSegmentRegisterOperand(const InstructionContext* ctx) {
+  return ReadRegisterOperandForRegisterIndex(
+      ctx, ctx->instruction->mod_rm.reg + 8);
+}
+
+// Write a value to a register or memory operand address.
+YAX86_PRIVATE void WriteOperandAddress(
+    const InstructionContext* ctx, const OperandAddress* address,
+    uint32_t raw_value) {
+  Width width = ctx->metadata->width;
+  kWriteOperandFn[address->type][width](
+      ctx->cpu, address, ToOperandValue(width, raw_value));
+}
+
+// Write a value to a register or memory operand.
+YAX86_PRIVATE void WriteOperand(
+    const InstructionContext* ctx, const Operand* operand, uint32_t raw_value) {
+  WriteOperandAddress(ctx, &operand->address, raw_value);
+}
+
+// Read an immediate value from the instruction.
+YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
+  Width width = ctx->metadata->width;
+  return kReadImmediateValueFn[width](ctx->instruction);
+}

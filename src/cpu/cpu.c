@@ -1,115 +1,18 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
+#include "cpu_private.h"
 #include "cpu_public.h"
-#include "operands.h"
-#include "widths.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Types and helpers
 // ============================================================================
 
-struct OpcodeMetadata;
-
-// Context during instruction execution.
-typedef struct {
-  CPUState* cpu;
-  const Instruction* instruction;
-  const struct OpcodeMetadata* metadata;
-} InstructionContext;
-
-// Handler function for an opcode.
-typedef ExecuteStatus (*OpcodeHandler)(const InstructionContext* context);
-
-// An entry in the opcode lookup table.
-typedef struct OpcodeMetadata {
-  // Opcode.
-  uint8_t opcode;
-
-  // Instruction has ModR/M byte
-  bool has_modrm : 1;
-  // Number of immediate data bytes: 0, 1, 2, or 4
-  uint8_t immediate_size : 3;
-
-  // Width of the instruction's operands.
-  Width width : 1;
-
-  // Handler function.
-  OpcodeHandler handler;
-} OpcodeMetadata;
-
-// Read a value from an operand address.
-static OperandValue ReadOperandValue(
-    const InstructionContext* ctx, const OperandAddress* address) {
-  return kReadOperandValueFn[address->type][ctx->metadata->width](
-      ctx->cpu, address);
-}
-
-// Get a register or memory operand for an instruction based on the ModR/M
-// byte and displacement.
-static Operand ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
-  Width width = ctx->metadata->width;
-  Operand operand;
-  operand.address =
-      GetRegisterOrMemoryOperandAddress(ctx->cpu, ctx->instruction, width);
-  operand.value = ReadOperandValue(ctx, &operand.address);
-  return operand;
-}
-
-// Get a register operand for an instruction.
-static Operand ReadRegisterOperandForRegisterIndex(
-    const InstructionContext* ctx, RegisterIndex register_index) {
-  Width width = ctx->metadata->width;
-  Operand operand = {
-      .address = {
-          .type = kOperandAddressTypeRegister,
-          .value = {
-              .register_address =
-                  kGetRegisterAddressFn[width](ctx->cpu, register_index),
-          }}};
-  operand.value = ReadOperandValue(ctx, &operand.address);
-  return operand;
-}
-
-// Get a register operand for an instruction from the REG field of the Mod/RM
-// byte.
-static Operand ReadRegisterOperand(const InstructionContext* ctx) {
-  return ReadRegisterOperandForRegisterIndex(ctx, ctx->instruction->mod_rm.reg);
-}
-
-// Get a segment register operand for an instruction from the REG field of the
-// Mod/RM byte.
-static Operand ReadSegmentRegisterOperand(const InstructionContext* ctx) {
-  return ReadRegisterOperandForRegisterIndex(
-      ctx, ctx->instruction->mod_rm.reg + 8);
-}
-
-// Write a value to a register or memory operand address.
-static void WriteOperandAddress(
-    const InstructionContext* ctx, const OperandAddress* address,
-    uint32_t raw_value) {
-  Width width = ctx->metadata->width;
-  kWriteOperandFn[address->type][width](
-      ctx->cpu, address, ToOperandValue(width, raw_value));
-}
-
-// Write a value to a register or memory operand.
-static void WriteOperand(
-    const InstructionContext* ctx, const Operand* operand, uint32_t raw_value) {
-  WriteOperandAddress(ctx, &operand->address, raw_value);
-}
-
-// Read an immediate value from the instruction.
-static OperandValue ReadImmediate(const InstructionContext* ctx) {
-  Width width = ctx->metadata->width;
-  return kReadImmediateValueFn[width](ctx->instruction);
-}
-
 // Set common CPU flags after an instruction. This includes:
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-static void SetCommonFlagsAfterInstruction(
+YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];

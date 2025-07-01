@@ -1,10 +1,60 @@
-#ifndef YAX86_CPU_OPERANDS_H
-#define YAX86_CPU_OPERANDS_H
+#ifndef YAX86_CPU_CPU_PRIVATE_H
+#define YAX86_CPU_CPU_PRIVATE_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "cpu_public.h"
-#include "widths.h"
 #endif  // YAX86_IMPLEMENTATION
+
+// Data width helpers.
+
+// Data widths supported by the 8086 CPU.
+typedef enum Width {
+  kByte = 0,
+  kWord,
+} Width;
+
+enum {
+  // Number of data width types.
+  kNumWidths = kWord + 1,
+};
+
+// Bitmask to extract the sign bit of a value.
+static const uint32_t kSignBit[kNumWidths] = {
+    1 << 7,   // kByte
+    1 << 15,  // kWord
+};
+
+// Maximum unsigned value for each data width.
+static const uint32_t kMaxValue[kNumWidths] = {
+    0xFF,   // kByte
+    0xFFFF  // kWord
+};
+
+// Maximum signed value for each data width.
+static const int32_t kMaxSignedValue[kNumWidths] = {
+    0x7F,   // kByte
+    0x7FFF  // kWord
+};
+
+// Minimum signed value for each data width.
+static const int32_t kMinSignedValue[kNumWidths] = {
+    -0x80,   // kByte
+    -0x8000  // kWord
+};
+
+// Number of bytes in each data width.
+static const uint8_t kNumBytes[kNumWidths] = {
+    1,  // kByte
+    2,  // kWord
+};
+
+// Number of bits in each data width.
+static const uint8_t kNumBits[kNumWidths] = {
+    8,   // kByte
+    16,  // kWord
+};
+
+// Operand types.
 
 // The address of a register operand.
 typedef struct RegisterAddress {
@@ -63,6 +113,37 @@ typedef struct Operand {
   // Value of the operand.
   OperandValue value;
 } Operand;
+
+// Instruction types.
+
+struct OpcodeMetadata;
+
+// Context during instruction execution.
+typedef struct {
+  CPUState* cpu;
+  const Instruction* instruction;
+  const struct OpcodeMetadata* metadata;
+} InstructionContext;
+
+// Handler function for an opcode.
+typedef ExecuteStatus (*OpcodeHandler)(const InstructionContext* context);
+
+// An entry in the opcode lookup table.
+typedef struct OpcodeMetadata {
+  // Opcode.
+  uint8_t opcode;
+
+  // Instruction has ModR/M byte
+  bool has_modrm : 1;
+  // Number of immediate data bytes: 0, 1, 2, or 4
+  uint8_t immediate_size : 3;
+
+  // Width of the instruction's operands.
+  Width width : 1;
+
+  // Handler function.
+  OpcodeHandler handler;
+} OpcodeMetadata;
 
 #ifndef YAX86_IMPLEMENTATION
 
@@ -186,6 +267,45 @@ extern void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
 extern OperandValue (*const kReadImmediateValueFn[kNumWidths])(
     const Instruction* instruction);
 
+// Read a value from an operand address.
+extern OperandValue ReadOperandValue(
+    const InstructionContext* ctx, const OperandAddress* address);
+
+// Get a register or memory operand for an instruction based on the ModR/M
+// byte and displacement.
+extern Operand ReadRegisterOrMemoryOperand(const InstructionContext* ctx);
+
+// Get a register operand for an instruction.
+extern Operand ReadRegisterOperandForRegisterIndex(
+    const InstructionContext* ctx, RegisterIndex register_index);
+
+// Get a register operand for an instruction from the REG field of the Mod/RM
+// byte.
+extern Operand ReadRegisterOperand(const InstructionContext* ctx);
+
+// Get a segment register operand for an instruction from the REG field of the
+// Mod/RM byte.
+extern Operand ReadSegmentRegisterOperand(const InstructionContext* ctx);
+
+// Write a value to a register or memory operand address.
+extern void WriteOperandAddress(
+    const InstructionContext* ctx, const OperandAddress* address,
+    uint32_t raw_value);
+
+// Write a value to a register or memory operand.
+extern void WriteOperand(
+    const InstructionContext* ctx, const Operand* operand, uint32_t raw_value);
+
+// Read an immediate value from the instruction.
+extern OperandValue ReadImmediate(const InstructionContext* ctx);
+
+// Set common CPU flags after an instruction. This includes:
+// - Zero flag (ZF)
+// - Sign flag (SF)
+// - Parity Flag (PF)
+extern void SetCommonFlagsAfterInstruction(
+    const InstructionContext* ctx, uint32_t result);
+
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_CPU_OPERANDS_H
+#endif  // YAX86_CPU_CPU_PRIVATE_H
