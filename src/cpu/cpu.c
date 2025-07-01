@@ -138,8 +138,8 @@ ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 
   // Run the on_before_execute_instruction callback if provided.
   if (cpu->config->on_before_execute_instruction &&
-      (status = cpu->config->on_before_execute_instruction(cpu, instruction) !=
-                kExecuteSuccess)) {
+      (status = cpu->config->on_before_execute_instruction(cpu, instruction)) !=
+          kExecuteSuccess) {
     return status;
   }
 
@@ -170,8 +170,8 @@ ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 
   // Run the on_after_execute_instruction callback if provided.
   if (cpu->config->on_after_execute_instruction &&
-      (status = cpu->config->on_after_execute_instruction(cpu, instruction) !=
-                kExecuteSuccess)) {
+      (status = cpu->config->on_after_execute_instruction(cpu, instruction)) !=
+          kExecuteSuccess) {
     return status;
   }
 

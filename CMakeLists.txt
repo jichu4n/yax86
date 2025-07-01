@@ -34,8 +34,7 @@ generate_header_bundle("cpu")
 # =============================================================================
 # Main library
 # =============================================================================
-file(GLOB SOURCES "*.c")
-add_library(yax86 STATIC ${SOURCES} ${ALL_HEADER_BUNDLES})
+add_library(yax86 STATIC all.c ${ALL_HEADER_BUNDLES})
 
 # =============================================================================
 # Tests
@@ -43,4 +42,12 @@ add_library(yax86 STATIC ${SOURCES} ${ALL_HEADER_BUNDLES})
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# =============================================================================
+# Demo programs
+# =============================================================================
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+    add_subdirectory(demos/cpu)
 endif()

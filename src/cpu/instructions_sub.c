@@ -154,7 +154,8 @@ ExecuteDec(const InstructionContext* ctx, Operand* dest) {
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x48;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x48);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteDec(ctx, &dest);
 }

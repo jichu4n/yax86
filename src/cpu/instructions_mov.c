@@ -56,8 +56,8 @@ ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
       0xB8,  // kWord
   };
   RegisterIndex register_index =
-      ctx->instruction->opcode -
-      register_index_opcode_base[ctx->metadata->width];
+      (RegisterIndex)(ctx->instruction->opcode -
+                      register_index_opcode_base[ctx->metadata->width]);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue src_value = ReadImmediate(ctx);
   WriteOperand(ctx, &dest, FromOperandValue(&src_value));
@@ -76,9 +76,10 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
       .value = {
-          .memory_address.segment_register_index = kDS,
-          .memory_address.offset = FromOperandValue(&src_offset_value),
-      }};
+          .memory_address = {
+              .segment_register_index = kDS,
+              .offset = (uint16_t)FromOperandValue(&src_offset_value),
+          }}};
   OperandValue src_value = ReadOperandValue(ctx, &src_address);
   WriteOperand(ctx, &dest, FromOperandValue(&src_value));
   return kExecuteSuccess;
@@ -98,7 +99,7 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
       .value = {
           .memory_address = {
               .segment_register_index = kDS,
-              .offset = FromOperandValue(&dest_offset_value),
+              .offset = (uint16_t)FromOperandValue(&dest_offset_value),
           }}};
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   return kExecuteSuccess;
@@ -121,7 +122,8 @@ ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
 // XCHG AX, AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus
 ExecuteExchangeRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x90;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x90);
   if (register_index == kAX) {
     // No-op
     return kExecuteSuccess;
@@ -159,8 +161,11 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
       .type = kOperandAddressTypeMemory,
       .value =
           {.memory_address =
-               {.segment_register_index = kDS,
-                .offset = ctx->cpu->registers[kBX] + FromOperand(&al)}},
+               {
+                   .segment_register_index = kDS,
+                   .offset =
+                       (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
+               }},
   };
   OperandValue src_value = ReadMemoryByte(ctx->cpu, &src_address);
   WriteOperandAddress(ctx, &al.address, FromOperandValue(&src_value));

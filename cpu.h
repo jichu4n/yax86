@@ -5,6 +5,10 @@
 #ifndef YAX86_CPU_BUNDLE_H
 #define YAX86_CPU_BUNDLE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif  // __cplusplus
+
 // ==============================================================================
 // src/cpu/public.h start
 // ==============================================================================
@@ -16,10 +20,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif  // __cplusplus
 
 // ============================================================================
 // CPU state
@@ -340,10 +340,6 @@ ExecuteStatus RunInstructionCycle(CPUState* cpu);
 // Terminates when an instruction execution or handler returns a non-success
 // status.
 ExecuteStatus RunMainLoop(CPUState* cpu);
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif
 
 #endif  // YAX86_CPU_PUBLIC_H
 
@@ -950,11 +946,11 @@ GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
-    address.register_index = reg_or_rm;
+    address.register_index = (RegisterIndex)reg_or_rm;
     address.byte_offset = 0;
   } else {
     // AH, CH, DH, BH
-    address.register_index = reg_or_rm - 4;
+    address.register_index = (RegisterIndex)(reg_or_rm - 4);
     address.byte_offset = 8;
   }
   return address;
@@ -966,7 +962,7 @@ YAX86_PRIVATE RegisterAddress
 GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm) {
   (void)cpu;
   const RegisterAddress address = {
-      .register_index = reg_or_rm, .byte_offset = 0};
+      .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
   return address;
 }
 
@@ -1155,7 +1151,8 @@ YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
 YAX86_PRIVATE Operand ReadRegisterOperand(const InstructionContext* ctx) {
-  return ReadRegisterOperandForRegisterIndex(ctx, ctx->instruction->mod_rm.reg);
+  return ReadRegisterOperandForRegisterIndex(
+      ctx, (RegisterIndex)ctx->instruction->mod_rm.reg);
 }
 
 // Get a segment register operand for an instruction from the REG field of the
@@ -1163,7 +1160,7 @@ YAX86_PRIVATE Operand ReadRegisterOperand(const InstructionContext* ctx) {
 YAX86_PRIVATE Operand
 ReadSegmentRegisterOperand(const InstructionContext* ctx) {
   return ReadRegisterOperandForRegisterIndex(
-      ctx, ctx->instruction->mod_rm.reg + 8);
+      ctx, (RegisterIndex)(ctx->instruction->mod_rm.reg + 8));
 }
 
 // Write a value to a register or memory operand address.
@@ -1701,20 +1698,22 @@ YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
   cpu->registers[kSP] -= 2;
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value.memory_address = {
-          .segment_register_index = kSS,
-          .offset = cpu->registers[kSP],
-      }};
+      .value = {
+          .memory_address = {
+              .segment_register_index = kSS,
+              .offset = cpu->registers[kSP],
+          }}};
   WriteMemoryWord(cpu, &address, value);
 }
 
 YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value.memory_address = {
-          .segment_register_index = kSS,
-          .offset = cpu->registers[kSP],
-      }};
+      .value = {
+          .memory_address = {
+              .segment_register_index = kSS,
+              .offset = cpu->registers[kSP],
+          }}};
   OperandValue value = ReadMemoryWord(cpu, &address);
   cpu->registers[kSP] += 2;
   return value;
@@ -1794,8 +1793,8 @@ ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
       0xB8,  // kWord
   };
   RegisterIndex register_index =
-      ctx->instruction->opcode -
-      register_index_opcode_base[ctx->metadata->width];
+      (RegisterIndex)(ctx->instruction->opcode -
+                      register_index_opcode_base[ctx->metadata->width]);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue src_value = ReadImmediate(ctx);
   WriteOperand(ctx, &dest, FromOperandValue(&src_value));
@@ -1814,9 +1813,10 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
       .value = {
-          .memory_address.segment_register_index = kDS,
-          .memory_address.offset = FromOperandValue(&src_offset_value),
-      }};
+          .memory_address = {
+              .segment_register_index = kDS,
+              .offset = (uint16_t)FromOperandValue(&src_offset_value),
+          }}};
   OperandValue src_value = ReadOperandValue(ctx, &src_address);
   WriteOperand(ctx, &dest, FromOperandValue(&src_value));
   return kExecuteSuccess;
@@ -1836,7 +1836,7 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
       .value = {
           .memory_address = {
               .segment_register_index = kDS,
-              .offset = FromOperandValue(&dest_offset_value),
+              .offset = (uint16_t)FromOperandValue(&dest_offset_value),
           }}};
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   return kExecuteSuccess;
@@ -1859,7 +1859,8 @@ ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
 // XCHG AX, AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus
 ExecuteExchangeRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x90;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x90);
   if (register_index == kAX) {
     // No-op
     return kExecuteSuccess;
@@ -1897,8 +1898,11 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
       .type = kOperandAddressTypeMemory,
       .value =
           {.memory_address =
-               {.segment_register_index = kDS,
-                .offset = ctx->cpu->registers[kBX] + FromOperand(&al)}},
+               {
+                   .segment_register_index = kDS,
+                   .offset =
+                       (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
+               }},
   };
   OperandValue src_value = ReadMemoryByte(ctx->cpu, &src_address);
   WriteOperandAddress(ctx, &al.address, FromOperandValue(&src_value));
@@ -2127,7 +2131,8 @@ ExecuteInc(const InstructionContext* ctx, Operand* dest) {
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x40;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x40);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteInc(ctx, &dest);
 }
@@ -2298,7 +2303,8 @@ ExecuteDec(const InstructionContext* ctx, Operand* dest) {
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x48;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x48);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteDec(ctx, &dest);
 }
@@ -2624,7 +2630,7 @@ static ExecuteStatus ExecuteRelativeJump(
 YAX86_PRIVATE ExecuteStatus
 ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
-  return ExecuteRelativeJumpByte(ctx, &offset_value);
+  return ExecuteRelativeJump(ctx, &offset_value);
 }
 
 // Common logic for far jumps.
@@ -2877,7 +2883,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x50;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x50);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   Push(ctx->cpu, src.value);
   return kExecuteSuccess;
@@ -2885,7 +2892,8 @@ YAX86_PRIVATE ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x58;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x58);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
@@ -2893,16 +2901,20 @@ YAX86_PRIVATE ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
 }
 
 // PUSH ES/CS/SS/DS
-YAX86_PRIVATE ExecuteStatus ExecutePushSegmentRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
+YAX86_PRIVATE ExecuteStatus
+ExecutePushSegmentRegister(const InstructionContext* ctx) {
+  RegisterIndex register_index =
+      (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   Push(ctx->cpu, src.value);
   return kExecuteSuccess;
 }
 
 // POP ES/CS/SS/DS
-YAX86_PRIVATE ExecuteStatus ExecutePopSegmentRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
+YAX86_PRIVATE ExecuteStatus
+ExecutePopSegmentRegister(const InstructionContext* ctx) {
+  RegisterIndex register_index =
+      (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   // Special case - disallow POP CS
   if (register_index == kCS) {
     return kExecuteInvalidInstruction;
@@ -2927,7 +2939,8 @@ YAX86_PRIVATE ExecuteStatus ExecutePopFlags(const InstructionContext* ctx) {
 }
 
 // POP r/m16
-YAX86_PRIVATE ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   if (ctx->instruction->mod_rm.reg != 0) {
     return kExecuteInvalidInstruction;
   }
@@ -2954,14 +2967,16 @@ static const OperandAddress* GetAHRegisterAddress(void) {
 }
 
 // LAHF
-YAX86_PRIVATE ExecuteStatus ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
   WriteRegisterByte(
       ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
   return kExecuteSuccess;
 }
 
 // SAHF
-YAX86_PRIVATE ExecuteStatus ExecuteStoreAHToFlags(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value = ReadRegisterByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
   ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
@@ -5633,8 +5648,8 @@ ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 
   // Run the on_before_execute_instruction callback if provided.
   if (cpu->config->on_before_execute_instruction &&
-      (status = cpu->config->on_before_execute_instruction(cpu, instruction) !=
-                kExecuteSuccess)) {
+      (status = cpu->config->on_before_execute_instruction(cpu, instruction)) !=
+          kExecuteSuccess) {
     return status;
   }
 
@@ -5665,8 +5680,8 @@ ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 
   // Run the on_after_execute_instruction callback if provided.
   if (cpu->config->on_after_execute_instruction &&
-      (status = cpu->config->on_after_execute_instruction(cpu, instruction) !=
-                kExecuteSuccess)) {
+      (status = cpu->config->on_after_execute_instruction(cpu, instruction)) !=
+          kExecuteSuccess) {
     return status;
   }
 
@@ -5764,7 +5779,11 @@ ExecuteStatus RunMainLoop(CPUState* cpu) {
 // ==============================================================================
 
 
-#endif // YAX86_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
-#endif // YAX86_CPU_BUNDLE_H
+#ifdef __cplusplus
+}  // extern "C"
+#endif  // __cplusplus
+
+#endif  // YAX86_CPU_BUNDLE_H
 

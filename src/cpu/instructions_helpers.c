@@ -30,20 +30,22 @@ YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
   cpu->registers[kSP] -= 2;
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value.memory_address = {
-          .segment_register_index = kSS,
-          .offset = cpu->registers[kSP],
-      }};
+      .value = {
+          .memory_address = {
+              .segment_register_index = kSS,
+              .offset = cpu->registers[kSP],
+          }}};
   WriteMemoryWord(cpu, &address, value);
 }
 
 YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value.memory_address = {
-          .segment_register_index = kSS,
-          .offset = cpu->registers[kSP],
-      }};
+      .value = {
+          .memory_address = {
+              .segment_register_index = kSS,
+              .offset = cpu->registers[kSP],
+          }}};
   OperandValue value = ReadMemoryWord(cpu, &address);
   cpu->registers[kSP] += 2;
   return value;

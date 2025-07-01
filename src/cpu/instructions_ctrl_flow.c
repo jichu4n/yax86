@@ -43,7 +43,7 @@ static ExecuteStatus ExecuteRelativeJump(
 YAX86_PRIVATE ExecuteStatus
 ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
-  return ExecuteRelativeJumpByte(ctx, &offset_value);
+  return ExecuteRelativeJump(ctx, &offset_value);
 }
 
 // Common logic for far jumps.

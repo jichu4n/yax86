@@ -5,10 +5,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif  // __cplusplus
-
 // ============================================================================
 // CPU state
 // ============================================================================
@@ -328,9 +324,5 @@ ExecuteStatus RunInstructionCycle(CPUState* cpu);
 // Terminates when an instruction execution or handler returns a non-success
 // status.
 ExecuteStatus RunMainLoop(CPUState* cpu);
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif
 
 #endif  // YAX86_CPU_PUBLIC_H

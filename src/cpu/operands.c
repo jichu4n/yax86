@@ -225,11 +225,11 @@ GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
-    address.register_index = reg_or_rm;
+    address.register_index = (RegisterIndex)reg_or_rm;
     address.byte_offset = 0;
   } else {
     // AH, CH, DH, BH
-    address.register_index = reg_or_rm - 4;
+    address.register_index = (RegisterIndex)(reg_or_rm - 4);
     address.byte_offset = 8;
   }
   return address;
@@ -241,7 +241,7 @@ YAX86_PRIVATE RegisterAddress
 GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm) {
   (void)cpu;
   const RegisterAddress address = {
-      .register_index = reg_or_rm, .byte_offset = 0};
+      .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
   return address;
 }
 
@@ -430,7 +430,8 @@ YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
 YAX86_PRIVATE Operand ReadRegisterOperand(const InstructionContext* ctx) {
-  return ReadRegisterOperandForRegisterIndex(ctx, ctx->instruction->mod_rm.reg);
+  return ReadRegisterOperandForRegisterIndex(
+      ctx, (RegisterIndex)ctx->instruction->mod_rm.reg);
 }
 
 // Get a segment register operand for an instruction from the REG field of the
@@ -438,7 +439,7 @@ YAX86_PRIVATE Operand ReadRegisterOperand(const InstructionContext* ctx) {
 YAX86_PRIVATE Operand
 ReadSegmentRegisterOperand(const InstructionContext* ctx) {
   return ReadRegisterOperandForRegisterIndex(
-      ctx, ctx->instruction->mod_rm.reg + 8);
+      ctx, (RegisterIndex)(ctx->instruction->mod_rm.reg + 8));
 }
 
 // Write a value to a register or memory operand address.

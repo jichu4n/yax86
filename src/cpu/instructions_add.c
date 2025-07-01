@@ -141,7 +141,8 @@ ExecuteInc(const InstructionContext* ctx, Operand* dest) {
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
 YAX86_PRIVATE ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x40;
+  RegisterIndex register_index =
+      (RegisterIndex)(ctx->instruction->opcode - 0x40);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteInc(ctx, &dest);
 }
