@@ -1,6 +1,7 @@
-// Simple hello world demo for the CPU module.
+// Minimal harness to demo and debug 8086 CPU emulation.
 //
-// Runs in the terminal, asks the user for their name and prints out a greeting.
+// Implements a bare minimum set of DOS interrupts that maps to standard input /
+// output.
 
 #include <sys/time.h>
 #include <time.h>
