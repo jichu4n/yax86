@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "../yax86.h"
+#include "../cpu.h"
 #include "./test_helpers.h"
 
 using namespace std;

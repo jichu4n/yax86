@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "../yax86.h"
+#include "../cpu.h"
 #include "./test_helpers.h"
 
 class StringRepCmpTest : public ::testing::Test {};

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "../yax86.h"
+#include "../cpu.h"
 #include "./test_helpers.h"
 
 using namespace std;
@@ -971,7 +971,7 @@ TEST_F(StringRepTest, REPLODSBZeroCount) {
 
 TEST_F(StringRepTest, LODSBMultipleOperations) {
   auto helper = CPUTestHelper::CreateWithProgram(
-      "execute-lodsb-multiple-test", 
+      "execute-lodsb-multiple-test",
       "lodsb\n"
       "lodsb\n"
       "lodsb\n");
@@ -1009,7 +1009,7 @@ TEST_F(StringRepTest, LODSBMultipleOperations) {
 
 TEST_F(StringRepTest, LODSWMultipleOperations) {
   auto helper = CPUTestHelper::CreateWithProgram(
-      "execute-lodsw-multiple-test", 
+      "execute-lodsw-multiple-test",
       "lodsw\n"
       "lodsw\n");
   helper->cpu_.registers[kDS] = 0;

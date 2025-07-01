@@ -1,7 +1,7 @@
 // filepath: /home/chuan/Projects/yax86/tests/loop_test.cpp
 #include <gtest/gtest.h>
 
-#include "../yax86.h"
+#include "../cpu.h"
 #include "./test_helpers.h"
 
 using namespace std;

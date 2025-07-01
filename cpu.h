@@ -1,6 +1,6 @@
 // 8086 CPU emulator.
-#ifndef YAX86_H
-#define YAX86_H
+#ifndef YAX86_CPU_H
+#define YAX86_CPU_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -310,4 +310,4 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 }  // extern "C"
 #endif
 
-#endif  // YAX86_H
+#endif  // YAX86_CPU_H
