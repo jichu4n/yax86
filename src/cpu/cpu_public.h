@@ -244,6 +244,18 @@ enum {
   kMaxImmediateBytes = 4,
 };
 
+// Instruction prefixes.
+typedef enum {
+  // Segment override prefixes
+  kPrefixES = 0x26,     // ES segment override
+  kPrefixCS = 0x2E,     // CS segment override
+  kPrefixSS = 0x36,     // SS segment override
+  kPrefixDS = 0x3E,     // DS segment override
+  kPrefixLOCK = 0xF0,   // LOCK
+  kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
+  kPrefixREP = 0xF3,    // REP/REPE/REPZ
+} InstructionPrefix;
+
 // The Mod R/M byte.
 typedef struct ModRM {
   // Mod field - bits 6 and 7

@@ -255,6 +255,18 @@ enum {
   kMaxImmediateBytes = 4,
 };
 
+// Instruction prefixes.
+typedef enum {
+  // Segment override prefixes
+  kPrefixES = 0x26,     // ES segment override
+  kPrefixCS = 0x2E,     // CS segment override
+  kPrefixSS = 0x36,     // SS segment override
+  kPrefixDS = 0x3E,     // DS segment override
+  kPrefixLOCK = 0xF0,   // LOCK
+  kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
+  kPrefixREP = 0xF3,    // REP/REPE/REPZ
+} InstructionPrefix;
+
 // The Mod R/M byte.
 typedef struct ModRM {
   // Mod field - bits 6 and 7
@@ -339,21 +351,42 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 // cpu_public.h end
 // --------------------
 
+
 #ifdef YAX86_IMPLEMENTATION
 
 // --------------------
-// cpu.c start
+// ../common.h start
 // --------------------
 
-#ifndef YAX86_CPU_BUNDLE_H
+#ifndef YAX86_COMMON_H
+#define YAX86_COMMON_H
+
+// Macro that expands to `static` when bundled.
+#ifdef YAX86_IMPLEMENTATION
+#define YAX86_PRIVATE static
+#else
+#define YAX86_PRIVATE
+#endif  // YAX86_IMPLEMENTATION
+
+#endif  // YAX86_COMMON_H
+
+
+// --------------------
+// ../common.h end
+// --------------------
+
+// --------------------
+// widths.h start
+// --------------------
+
+#ifndef YAX86_CPU_WIDTHS_H
+#define YAX86_CPU_WIDTHS_H
+
+#ifndef YAX86_IMPLEMENTATION
 #include "cpu_public.h"
-#endif  // YAX86_CPU_BUNDLE_H
+#endif  // YAX86_IMPLEMENTATION
 
-// ============================================================================
-// Types and helpers
-// ============================================================================
-
-// Data width.
+// Data widths supported by the 8086 CPU.
 typedef enum Width {
   kByte = 0,
   kWord,
@@ -400,8 +433,27 @@ static const uint8_t kNumBits[kNumWidths] = {
     16,  // kWord
 };
 
+#endif  // YAX86_CPU_WIDTHS_H
+
+
+// --------------------
+// widths.h end
+// --------------------
+
+// --------------------
+// operands.h start
+// --------------------
+
+#ifndef YAX86_CPU_OPERANDS_H
+#define YAX86_CPU_OPERANDS_H
+
+#ifndef YAX86_IMPLEMENTATION
+#include "cpu_public.h"
+#include "widths.h"
+#endif  // YAX86_IMPLEMENTATION
+
 // The address of a register operand.
-typedef struct {
+typedef struct RegisterAddress {
   // Register index.
   RegisterIndex register_index;
   // Byte offset within the register; only relevant for byte-sized operands.
@@ -410,7 +462,7 @@ typedef struct {
 } RegisterAddress;
 
 // The address of a memory operand.
-typedef struct {
+typedef struct MemoryAddress {
   // Segment register.
   RegisterIndex segment_register_index;
   // Effective address offset.
@@ -418,7 +470,7 @@ typedef struct {
 } MemoryAddress;
 
 // Whether the operand is a register or memory operand.
-typedef enum {
+typedef enum OperandAddressType {
   kOperandAddressTypeRegister = 0,
   kOperandAddressTypeMemory,
 } OperandAddressType;
@@ -429,7 +481,7 @@ enum {
 };
 
 // Operand address.
-typedef struct {
+typedef struct OperandAddress {
   // Type of operand (register or memory).
   OperandAddressType type;
   // Address of the operand.
@@ -440,7 +492,7 @@ typedef struct {
 } OperandAddress;
 
 // Operand value.
-typedef struct {
+typedef struct OperandValue {
   // Data width.
   Width width;
   // The value of the operand.
@@ -450,8 +502,157 @@ typedef struct {
   } value;
 } OperandValue;
 
+// An operand.
+typedef struct Operand {
+  // Address of the operand.
+  OperandAddress address;
+  // Value of the operand.
+  OperandValue value;
+} Operand;
+
+#ifndef YAX86_IMPLEMENTATION
+
 // Helper functions to construct OperandValue.
-static inline OperandValue ByteValue(uint8_t byte_value) {
+extern OperandValue ByteValue(uint8_t byte_value);
+
+// Helper function to construct OperandValue for a word.
+extern OperandValue WordValue(uint16_t word_value);
+
+// Helper function to construct OperandValue given a Width and a value.
+extern OperandValue ToOperandValue(Width width, uint32_t raw_value);
+
+// Helper function to zero-extend OperandValue to a 32-bit value. This makes it
+// simpler to do direct arithmetic without worrying about overflow.
+extern uint32_t FromOperandValue(const OperandValue* value);
+
+// Helper function to sign-extend OperandValue to a 32-bit value. This makes it
+// simpler to do direct arithmetic without worrying about overflow.
+extern int32_t FromSignedOperandValue(const OperandValue* value);
+
+// Helper function to extract a zero-extended value from an operand.
+extern uint32_t FromOperand(const Operand* operand);
+
+// Helper function to extract a sign-extended value from an operand.
+extern int32_t FromSignedOperand(const Operand* operand);
+
+// Computes the raw effective address corresponding to a MemoryAddress.
+extern uint16_t ToPhysicalAddress(
+    const CPUState* cpu, const MemoryAddress* address);
+
+// Read a byte from memory as a uint8_t.
+extern uint8_t ReadRawMemoryByte(CPUState* cpu, uint16_t physical_address);
+
+// Read a word from memory as a uint16_t.
+extern uint16_t ReadRawMemoryWord(CPUState* cpu, uint16_t physical_address);
+
+// Read a byte from memory to an OperandValue.
+extern OperandValue ReadMemoryByte(
+    CPUState* cpu, const OperandAddress* address);
+
+// Read a word from memory to an OperandValue.
+extern OperandValue ReadMemoryWord(
+    CPUState* cpu, const OperandAddress* address);
+
+// Read a byte from a register to an OperandValue.
+extern OperandValue ReadRegisterByte(
+    CPUState* cpu, const OperandAddress* address);
+
+// Read a word from a register to an OperandValue.
+extern OperandValue ReadRegisterWord(
+    CPUState* cpu, const OperandAddress* address);
+
+// Write a byte as uint8_t to memory.
+extern void WriteRawMemoryByte(CPUState* cpu, uint16_t address, uint8_t value);
+
+// Write a word as uint16_t to memory.
+extern void WriteRawMemoryWord(CPUState* cpu, uint16_t address, uint16_t value);
+
+// Write a byte to memory.
+extern void WriteMemoryByte(
+    CPUState* cpu, const OperandAddress* address, OperandValue value);
+
+// Write a word to memory.
+extern void WriteMemoryWord(
+    CPUState* cpu, const OperandAddress* address, OperandValue value);
+
+// Write a byte to a register.
+extern void WriteRegisterByte(
+    CPUState* cpu, const OperandAddress* address, OperandValue value);
+
+// Write a word to a register.
+extern void WriteRegisterWord(
+    CPUState* cpu, const OperandAddress* address, OperandValue value);
+
+// Add an 8-bit signed relative offset to a 16-bit unsigned base address.
+extern uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset);
+
+// Add a 16-bit signed relative offset to a 16-bit unsigned base address.
+extern uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset);
+
+// Get the register operand for a byte instruction based on the ModR/M byte's
+// reg or R/M field.
+extern RegisterAddress GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm);
+
+// Get the register operand for a word instruction based on the ModR/M byte's
+// reg or R/M field.
+extern RegisterAddress GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm);
+
+// Apply segment override prefixes to a MemoryAddress.
+extern void ApplySegmentOverride(
+    const Instruction* instruction, MemoryAddress* address);
+
+// Compute the memory address for an instruction.
+extern MemoryAddress GetMemoryOperandAddress(
+    CPUState* cpu, const Instruction* instruction);
+
+// Get a register or memory operand address based on the ModR/M byte and
+// displacement.
+extern OperandAddress GetRegisterOrMemoryOperandAddress(
+    CPUState* cpu, const Instruction* instruction, Width width);
+
+// Read an 8-bit immediate value.
+extern OperandValue ReadImmediateByte(const Instruction* instruction);
+
+// Read a 16-bit immediate value.
+extern OperandValue ReadImmediateWord(const Instruction* instruction);
+
+// Table of GetRegisterAddress functions, indexed by Width.
+extern RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
+    CPUState* cpu, uint8_t reg_or_rm);
+
+// Table of Read* functions, indexed by OperandAddressType and Width.
+extern OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
+    CPUState* cpu, const OperandAddress* address);
+
+// Table of Write* functions, indexed by OperandAddressType and Width.
+extern void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
+    CPUState* cpu, const OperandAddress* address, OperandValue value);
+
+// Table of ReadImmediate* functions, indexed by Width.
+extern OperandValue (*const kReadImmediateValueFn[kNumWidths])(
+    const Instruction* instruction);
+
+#endif  // YAX86_IMPLEMENTATION
+
+#endif  // YAX86_CPU_OPERANDS_H
+
+
+// --------------------
+// operands.h end
+// --------------------
+
+// --------------------
+// operands.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "operands.h"
+
+#include "../common.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// Helper functions to construct OperandValue.
+YAX86_PRIVATE OperandValue ByteValue(uint8_t byte_value) {
   OperandValue value = {
       .width = kByte,
       .value = {.byte_value = byte_value},
@@ -460,7 +661,7 @@ static inline OperandValue ByteValue(uint8_t byte_value) {
 }
 
 // Helper function to construct OperandValue for a word.
-static inline OperandValue WordValue(uint16_t word_value) {
+YAX86_PRIVATE OperandValue WordValue(uint16_t word_value) {
   OperandValue value = {
       .width = kWord,
       .value = {.word_value = word_value},
@@ -469,7 +670,7 @@ static inline OperandValue WordValue(uint16_t word_value) {
 }
 
 // Helper function to construct OperandValue given a Width and a value.
-static inline OperandValue ToOperandValue(Width width, uint32_t raw_value) {
+YAX86_PRIVATE OperandValue ToOperandValue(Width width, uint32_t raw_value) {
   switch (width) {
     case kByte:
       return ByteValue(raw_value & kMaxValue[width]);
@@ -482,7 +683,7 @@ static inline OperandValue ToOperandValue(Width width, uint32_t raw_value) {
 
 // Helper function to zero-extend OperandValue to a 32-bit value. This makes it
 // simpler to do direct arithmetic without worrying about overflow.
-static inline uint32_t FromOperandValue(const OperandValue* value) {
+YAX86_PRIVATE uint32_t FromOperandValue(const OperandValue* value) {
   switch (value->width) {
     case kByte:
       return value->value.byte_value;
@@ -495,7 +696,7 @@ static inline uint32_t FromOperandValue(const OperandValue* value) {
 
 // Helper function to sign-extend OperandValue to a 32-bit value. This makes it
 // simpler to do direct arithmetic without worrying about overflow.
-static inline int32_t FromSignedOperandValue(const OperandValue* value) {
+YAX86_PRIVATE int32_t FromSignedOperandValue(const OperandValue* value) {
   switch (value->width) {
     case kByte:
       return (int32_t)((int8_t)value->value.byte_value);
@@ -506,66 +707,58 @@ static inline int32_t FromSignedOperandValue(const OperandValue* value) {
   return 0xFFFF;
 }
 
-// An operand.
-typedef struct {
-  // Address of the operand.
-  OperandAddress address;
-  // Value of the operand.
-  OperandValue value;
-} Operand;
-
 // Helper function to extract a zero-extended value from an operand.
-static inline uint32_t FromOperand(const Operand* operand) {
+YAX86_PRIVATE uint32_t FromOperand(const Operand* operand) {
   return FromOperandValue(&operand->value);
 }
 
 // Helper function to extract a sign-extended value from an operand.
-static inline int32_t FromSignedOperand(const Operand* operand) {
+YAX86_PRIVATE int32_t FromSignedOperand(const Operand* operand) {
   return FromSignedOperandValue(&operand->value);
 }
 
 // Computes the raw effective address corresponding to a MemoryAddress.
-static inline uint16_t ToPhysicalAddress(
-    const CPUState* cpu, const MemoryAddress* address) {
+YAX86_PRIVATE uint16_t
+ToPhysicalAddress(const CPUState* cpu, const MemoryAddress* address) {
   uint16_t segment = cpu->registers[address->segment_register_index];
   return (segment << 4) + address->offset;
 }
 
 // Read a byte from memory as a uint8_t.
-static inline uint8_t ReadRawMemoryByte(
-    CPUState* cpu, uint16_t physical_address) {
+YAX86_PRIVATE uint8_t
+ReadRawMemoryByte(CPUState* cpu, uint16_t physical_address) {
   return cpu->config->read_memory_byte
              ? cpu->config->read_memory_byte(cpu, physical_address)
              : 0xFF;
 }
 
 // Read a word from memory as a uint16_t.
-static inline uint16_t ReadRawMemoryWord(
-    CPUState* cpu, uint16_t physical_address) {
+YAX86_PRIVATE uint16_t
+ReadRawMemoryWord(CPUState* cpu, uint16_t physical_address) {
   uint8_t low_byte_value = ReadRawMemoryByte(cpu, physical_address);
   uint8_t high_byte_value = ReadRawMemoryByte(cpu, physical_address + 1);
   return (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value;
 }
 
 // Read a byte from memory to an OperandValue.
-static OperandValue ReadMemoryByte(
-    CPUState* cpu, const OperandAddress* address) {
+YAX86_PRIVATE OperandValue
+ReadMemoryByte(CPUState* cpu, const OperandAddress* address) {
   uint8_t byte_value = ReadRawMemoryByte(
       cpu, ToPhysicalAddress(cpu, &address->value.memory_address));
   return ByteValue(byte_value);
 }
 
 // Read a word from memory to an OperandValue.
-static OperandValue ReadMemoryWord(
-    CPUState* cpu, const OperandAddress* address) {
+YAX86_PRIVATE OperandValue
+ReadMemoryWord(CPUState* cpu, const OperandAddress* address) {
   uint16_t word_value = ReadRawMemoryWord(
       cpu, ToPhysicalAddress(cpu, &address->value.memory_address));
   return WordValue(word_value);
 }
 
 // Read a byte from a register to an OperandValue.
-static OperandValue ReadRegisterByte(
-    CPUState* cpu, const OperandAddress* address) {
+YAX86_PRIVATE OperandValue
+ReadRegisterByte(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
   uint8_t byte_value = cpu->registers[register_address->register_index] >>
                        register_address->byte_offset;
@@ -573,15 +766,16 @@ static OperandValue ReadRegisterByte(
 }
 
 // Read a word from a register to an OperandValue.
-static OperandValue ReadRegisterWord(
-    CPUState* cpu, const OperandAddress* address) {
+YAX86_PRIVATE OperandValue
+ReadRegisterWord(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
   uint16_t word_value = cpu->registers[register_address->register_index];
   return WordValue(word_value);
 }
 
 // Table of Read* functions, indexed by OperandAddressType and Width.
-static OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
+YAX86_PRIVATE
+OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
     CPUState* cpu, const OperandAddress* address) = {
     // kOperandTypeRegister
     {ReadRegisterByte, ReadRegisterWord},
@@ -590,7 +784,7 @@ static OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWid
 };
 
 // Write a byte as uint8_t to memory.
-static inline void WriteRawMemoryByte(
+YAX86_PRIVATE void WriteRawMemoryByte(
     CPUState* cpu, uint16_t address, uint8_t value) {
   if (!cpu->config->write_memory_byte) {
     return;
@@ -599,14 +793,14 @@ static inline void WriteRawMemoryByte(
 }
 
 // Write a word as uint16_t to memory.
-static inline void WriteRawMemoryWord(
+YAX86_PRIVATE void WriteRawMemoryWord(
     CPUState* cpu, uint16_t address, uint16_t value) {
   WriteRawMemoryByte(cpu, address, value & 0xFF);
   WriteRawMemoryByte(cpu, address + 1, (value >> 8) & 0xFF);
 }
 
 // Write a byte to memory.
-static void WriteMemoryByte(
+YAX86_PRIVATE void WriteMemoryByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   WriteRawMemoryByte(
       cpu, ToPhysicalAddress(cpu, &address->value.memory_address),
@@ -614,7 +808,7 @@ static void WriteMemoryByte(
 }
 
 // Write a word to memory.
-static void WriteMemoryWord(
+YAX86_PRIVATE void WriteMemoryWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   WriteRawMemoryWord(
       cpu, ToPhysicalAddress(cpu, &address->value.memory_address),
@@ -622,7 +816,7 @@ static void WriteMemoryWord(
 }
 
 // Write a byte to a register.
-static void WriteRegisterByte(
+YAX86_PRIVATE void WriteRegisterByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
   const uint16_t updated_byte = ((uint16_t)value.value.byte_value)
@@ -634,14 +828,15 @@ static void WriteRegisterByte(
 }
 
 // Write a word to a register.
-static void WriteRegisterWord(
+YAX86_PRIVATE void WriteRegisterWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
   cpu->registers[register_address->register_index] = value.value.word_value;
 }
 
 // Table of Write* functions, indexed by OperandAddressType and Width.
-static void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
+YAX86_PRIVATE void (*const kWriteOperandFn[kNumOperandAddressTypes]
+                                          [kNumWidths])(
     CPUState* cpu, const OperandAddress* address, OperandValue value) = {
     // kOperandTypeRegister
     {WriteRegisterByte, WriteRegisterWord},
@@ -650,7 +845,7 @@ static void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
 };
 
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
-static inline uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
+YAX86_PRIVATE uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
   // Sign-extend the offset to 32 bits
   int32_t signed_offset = (int32_t)((int8_t)raw_offset);
   // Zero-extend base to 32 bits
@@ -660,7 +855,7 @@ static inline uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
 }
 
 // Add a 16-bit signed relative offset to a 16-bit unsigned base address.
-static inline uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
+YAX86_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
   // Sign-extend the offset to 32 bits
   int32_t signed_offset = (int32_t)((int16_t)raw_offset);
   // Zero-extend base to 32 bits
@@ -671,8 +866,8 @@ static inline uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
 
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
-static inline RegisterAddress GetRegisterAddressByte(
-    CPUState* cpu, uint8_t reg_or_rm) {
+YAX86_PRIVATE RegisterAddress
+GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
   (void)cpu;
   RegisterAddress address;
   if (reg_or_rm < 4) {
@@ -689,8 +884,8 @@ static inline RegisterAddress GetRegisterAddressByte(
 
 // Get the register operand for a word instruction based on the ModR/M byte's
 // reg or R/M field.
-static inline RegisterAddress GetRegisterAddressWord(
-    CPUState* cpu, uint8_t reg_or_rm) {
+YAX86_PRIVATE RegisterAddress
+GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm) {
   (void)cpu;
   const RegisterAddress address = {
       .register_index = reg_or_rm, .byte_offset = 0};
@@ -698,26 +893,14 @@ static inline RegisterAddress GetRegisterAddressWord(
 }
 
 // Table of GetRegisterAddress functions, indexed by Width.
-static RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
+YAX86_PRIVATE RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
     CPUState* cpu, uint8_t reg_or_rm) = {
-    GetRegisterAddressByte,  // kByte
-    GetRegisterAddressWord   // kWord
+  GetRegisterAddressByte,  // kByte
+  GetRegisterAddressWord   // kWord
 };
 
-// Instruction prefixes.
-typedef enum {
-  // Segment override prefixes
-  kPrefixES = 0x26,     // ES segment override
-  kPrefixCS = 0x2E,     // CS segment override
-  kPrefixSS = 0x36,     // SS segment override
-  kPrefixDS = 0x3E,     // DS segment override
-  kPrefixLOCK = 0xF0,   // LOCK
-  kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
-  kPrefixREP = 0xF3,    // REP/REPE/REPZ
-} InstructionPrefix;
-
 // Apply segment override prefixes to a MemoryAddress.
-static inline void ApplySegmentOverride(
+YAX86_PRIVATE void ApplySegmentOverride(
     const Instruction* instruction, MemoryAddress* address) {
   for (int i = 0; i < instruction->prefix_size; ++i) {
     switch (instruction->prefix[i]) {
@@ -741,8 +924,8 @@ static inline void ApplySegmentOverride(
 }
 
 // Compute the memory address for an instruction.
-static inline MemoryAddress GetMemoryOperandAddress(
-    CPUState* cpu, const Instruction* instruction) {
+YAX86_PRIVATE MemoryAddress
+GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
   MemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
   uint8_t rm = instruction->mod_rm.rm;
@@ -821,7 +1004,7 @@ static inline MemoryAddress GetMemoryOperandAddress(
 
 // Get a register or memory operand address based on the ModR/M byte and
 // displacement.
-static inline OperandAddress GetRegisterOrMemoryOperandAddress(
+YAX86_PRIVATE OperandAddress GetRegisterOrMemoryOperandAddress(
     CPUState* cpu, const Instruction* instruction, Width width) {
   OperandAddress address;
   uint8_t mod = instruction->mod_rm.mod;
@@ -839,36 +1022,57 @@ static inline OperandAddress GetRegisterOrMemoryOperandAddress(
 }
 
 // Read an 8-bit immediate value.
-static inline OperandValue ReadImmediateByte(const Instruction* instruction) {
+YAX86_PRIVATE OperandValue ReadImmediateByte(const Instruction* instruction) {
   return ByteValue(instruction->immediate[0]);
 }
 
 // Read a 16-bit immediate value.
-static inline OperandValue ReadImmediateWord(const Instruction* instruction) {
+YAX86_PRIVATE OperandValue ReadImmediateWord(const Instruction* instruction) {
   return WordValue(
       ((uint16_t)instruction->immediate[0]) |
       (((uint16_t)instruction->immediate[1]) << 8));
 }
 
 // Table of ReadImmediate* functions, indexed by Width.
-static OperandValue (*const kReadImmediateValueFn[kNumWidths])(
+YAX86_PRIVATE OperandValue (*const kReadImmediateValueFn[kNumWidths])(
     const Instruction* instruction) = {
-    ReadImmediateByte,  // kByte
-    ReadImmediateWord   // kWord
+  ReadImmediateByte,  // kByte
+  ReadImmediateWord   // kWord
 };
+
+
+// --------------------
+// operands.c end
+// --------------------
+
+// --------------------
+// cpu.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "cpu_public.h"
+#include "operands.h"
+#include "widths.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// ============================================================================
+// Types and helpers
+// ============================================================================
 
 struct OpcodeMetadata;
 
-// Instruction execution context.
+// Context during instruction execution.
 typedef struct {
   CPUState* cpu;
   const Instruction* instruction;
   const struct OpcodeMetadata* metadata;
 } InstructionContext;
 
+// Handler function for an opcode.
 typedef ExecuteStatus (*OpcodeHandler)(const InstructionContext* context);
 
-// Opcode lookup table entry.
+// An entry in the opcode lookup table.
 typedef struct OpcodeMetadata {
   // Opcode.
   uint8_t opcode;
@@ -878,7 +1082,7 @@ typedef struct OpcodeMetadata {
   // Number of immediate data bytes: 0, 1, 2, or 4
   uint8_t immediate_size : 3;
 
-  // Width of the instruction's operands. Passed to handler.
+  // Width of the instruction's operands.
   Width width : 1;
 
   // Handler function.
@@ -886,7 +1090,7 @@ typedef struct OpcodeMetadata {
 } OpcodeMetadata;
 
 // Read a value from an operand address.
-static inline OperandValue ReadOperandValue(
+static OperandValue ReadOperandValue(
     const InstructionContext* ctx, const OperandAddress* address) {
   return kReadOperandValueFn[address->type][ctx->metadata->width](
       ctx->cpu, address);
@@ -894,8 +1098,7 @@ static inline OperandValue ReadOperandValue(
 
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
-static inline Operand ReadRegisterOrMemoryOperand(
-    const InstructionContext* ctx) {
+static Operand ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
   Width width = ctx->metadata->width;
   Operand operand;
   operand.address =
@@ -905,7 +1108,7 @@ static inline Operand ReadRegisterOrMemoryOperand(
 }
 
 // Get a register operand for an instruction.
-static inline Operand ReadRegisterOperandForRegisterIndex(
+static Operand ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index) {
   Width width = ctx->metadata->width;
   Operand operand = {
@@ -921,20 +1124,19 @@ static inline Operand ReadRegisterOperandForRegisterIndex(
 
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
-static inline Operand ReadRegisterOperand(const InstructionContext* ctx) {
+static Operand ReadRegisterOperand(const InstructionContext* ctx) {
   return ReadRegisterOperandForRegisterIndex(ctx, ctx->instruction->mod_rm.reg);
 }
 
 // Get a segment register operand for an instruction from the REG field of the
 // Mod/RM byte.
-static inline Operand ReadSegmentRegisterOperand(
-    const InstructionContext* ctx) {
+static Operand ReadSegmentRegisterOperand(const InstructionContext* ctx) {
   return ReadRegisterOperandForRegisterIndex(
       ctx, ctx->instruction->mod_rm.reg + 8);
 }
 
 // Write a value to a register or memory operand address.
-static inline void WriteOperandAddress(
+static void WriteOperandAddress(
     const InstructionContext* ctx, const OperandAddress* address,
     uint32_t raw_value) {
   Width width = ctx->metadata->width;
@@ -943,13 +1145,13 @@ static inline void WriteOperandAddress(
 }
 
 // Write a value to a register or memory operand.
-static inline void WriteOperand(
+static void WriteOperand(
     const InstructionContext* ctx, const Operand* operand, uint32_t raw_value) {
   WriteOperandAddress(ctx, &operand->address, raw_value);
 }
 
 // Read an immediate value from the instruction.
-static inline OperandValue ReadImmediate(const InstructionContext* ctx) {
+static OperandValue ReadImmediate(const InstructionContext* ctx) {
   Width width = ctx->metadata->width;
   return kReadImmediateValueFn[width](ctx->instruction);
 }
@@ -958,7 +1160,7 @@ static inline OperandValue ReadImmediate(const InstructionContext* ctx) {
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-static inline void SetCommonFlagsAfterInstruction(
+static void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];
@@ -1189,7 +1391,7 @@ static ExecuteStatus ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
 // PUSH and POP instructions
 // ============================================================================
 
-static inline void Push(CPUState* cpu, OperandValue value) {
+static void Push(CPUState* cpu, OperandValue value) {
   cpu->registers[kSP] -= 2;
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
@@ -1200,7 +1402,7 @@ static inline void Push(CPUState* cpu, OperandValue value) {
   WriteMemoryWord(cpu, &address, value);
 }
 
-static inline OperandValue Pop(CPUState* cpu) {
+static OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .value.memory_address = {
@@ -1279,7 +1481,7 @@ static ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
 // ============================================================================
 
 // Returns the AH register address.
-static inline const OperandAddress* GetAHRegisterAddress(void) {
+static const OperandAddress* GetAHRegisterAddress(void) {
   static OperandAddress ah = {
       .type = kOperandAddressTypeRegister,
       .value = {
@@ -1379,7 +1581,7 @@ typedef void (*SetFlagsAfterAddFn)(
     bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
-static inline ExecuteStatus ExecuteAddCommon(
+static ExecuteStatus ExecuteAddCommon(
     const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -1393,7 +1595,7 @@ static inline ExecuteStatus ExecuteAddCommon(
 }
 
 // Common logic for ADD instructions
-static inline ExecuteStatus ExecuteAdd(
+static ExecuteStatus ExecuteAdd(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteAddCommon(
@@ -1428,7 +1630,7 @@ static ExecuteStatus ExecuteAddImmediateToALOrAX(
 }
 
 // Common logic for ADC instructions
-static inline ExecuteStatus ExecuteAddWithCarry(
+static ExecuteStatus ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteAddCommon(
@@ -1462,8 +1664,7 @@ static ExecuteStatus ExecuteAddImmediateToALOrAXWithCarry(
 }
 
 // Common logic for INC instructions
-static inline ExecuteStatus ExecuteInc(
-    const InstructionContext* ctx, Operand* dest) {
+static ExecuteStatus ExecuteInc(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = WordValue(1);
   return ExecuteAddCommon(
       ctx, dest, &src_value, /* carry */ false, SetFlagsAfterInc);
@@ -1532,7 +1733,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-static inline ExecuteStatus ExecuteSubCommon(
+static ExecuteStatus ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -1546,7 +1747,7 @@ static inline ExecuteStatus ExecuteSubCommon(
 }
 
 // Common logic for SUB instructions
-static inline ExecuteStatus ExecuteSub(
+static ExecuteStatus ExecuteSub(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -1581,7 +1782,7 @@ static ExecuteStatus ExecuteSubImmediateFromALOrAX(
 }
 
 // Common logic for SBB instructions
-static inline ExecuteStatus ExecuteSubWithBorrow(
+static ExecuteStatus ExecuteSubWithBorrow(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -1616,8 +1817,7 @@ static ExecuteStatus ExecuteSubImmediateFromALOrAXWithBorrow(
 }
 
 // Common logic for DEC instructions
-static inline ExecuteStatus ExecuteDec(
-    const InstructionContext* ctx, Operand* dest) {
+static ExecuteStatus ExecuteDec(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = WordValue(1);
   return ExecuteSubCommon(
       ctx, dest, &src_value, /* borrow */ false, SetFlagsAfterDec);
@@ -1635,7 +1835,7 @@ static ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-static inline ExecuteStatus ExecuteCmp(
+static ExecuteStatus ExecuteCmp(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -1676,7 +1876,7 @@ static ExecuteStatus ExecuteCmpImmediateToALOrAX(
 // Boolean AND, OR and XOR instructions
 // ============================================================================
 
-static inline void SetFlagsAfterBooleanInstruction(
+static void SetFlagsAfterBooleanInstruction(
     const InstructionContext* ctx, uint32_t result) {
   SetCommonFlagsAfterInstruction(ctx, result);
   // Carry Flag (CF) should be cleared
@@ -1686,7 +1886,7 @@ static inline void SetFlagsAfterBooleanInstruction(
 }
 
 // Common logic for AND instructions.
-static inline ExecuteStatus ExecuteBooleanAnd(
+static ExecuteStatus ExecuteBooleanAnd(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
@@ -1723,7 +1923,7 @@ static ExecuteStatus ExecuteBooleanAndImmediateToALOrAX(
 }
 
 // Common logic for OR instructions.
-static inline ExecuteStatus ExecuteBooleanOr(
+static ExecuteStatus ExecuteBooleanOr(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
@@ -1760,7 +1960,7 @@ static ExecuteStatus ExecuteBooleanOrImmediateToALOrAX(
 }
 
 // Common logic for XOR instructions.
-static inline ExecuteStatus ExecuteBooleanXor(
+static ExecuteStatus ExecuteBooleanXor(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
@@ -1801,7 +2001,7 @@ static ExecuteStatus ExecuteBooleanXorImmediateToALOrAX(
 // ============================================================================
 
 // Common logic for TEST instructions.
-static inline ExecuteStatus ExecuteTest(
+static ExecuteStatus ExecuteTest(
     const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -1854,7 +2054,7 @@ static ExecuteStatus (*const kRelativeJumpFn[kNumWidths])(
 };
 
 // Common logic for JMP instructions.
-static inline ExecuteStatus ExecuteRelativeJump(
+static ExecuteStatus ExecuteRelativeJump(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
@@ -1867,7 +2067,7 @@ static ExecuteStatus ExecuteShortOrNearJump(const InstructionContext* ctx) {
 }
 
 // Common logic for far jumps.
-static inline ExecuteStatus ExecuteFarJump(
+static ExecuteStatus ExecuteFarJump(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   ctx->cpu->registers[kCS] = FromOperandValue(segment);
@@ -1891,7 +2091,7 @@ static ExecuteStatus ExecuteDirectFarJump(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for conditional jumps.
-static inline ExecuteStatus ExecuteConditionalJump(
+static ExecuteStatus ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     OperandValue offset_value = ReadImmediate(ctx);
@@ -1969,7 +2169,7 @@ static ExecuteStatus ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for near calls.
-static inline ExecuteStatus ExecuteNearCall(
+static ExecuteStatus ExecuteNearCall(
     const InstructionContext* ctx, const OperandValue* offset) {
   Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteRelativeJump(ctx, offset);
@@ -1982,7 +2182,7 @@ static ExecuteStatus ExecuteDirectNearCall(const InstructionContext* ctx) {
 }
 
 // Common logic for far calls.
-static inline ExecuteStatus ExecuteFarCall(
+static ExecuteStatus ExecuteFarCall(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   // Push the current CS and IP onto the stack.
@@ -2357,7 +2557,7 @@ static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-static inline ExecuteStatus ExecuteMulCommon(
+static ExecuteStatus ExecuteMulCommon(
     const InstructionContext* ctx, Operand* dest, uint32_t result,
     bool overflow) {
   Width width = ctx->metadata->width;
@@ -2396,7 +2596,7 @@ static ExecuteStatus ExecuteImul(const InstructionContext* ctx, Operand* op) {
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-static inline ExecuteStatus WriteDivResult(
+static ExecuteStatus WriteDivResult(
     const InstructionContext* ctx, Operand* dest, uint32_t quotient,
     uint32_t remainder) {
   WriteOperand(ctx, dest, quotient);
@@ -2701,7 +2901,7 @@ static ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
 // ============================================================================
 
 // Get the repetition prefix of a string instruction, if any.
-static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+static uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
   uint8_t prefix = 0;
   for (int i = 0; i < ctx->instruction->prefix_size; ++i) {
     switch (ctx->instruction->prefix[i]) {
@@ -2718,7 +2918,7 @@ static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
 
 // Get the source operand for string instructions. Typically DS:SI but can be
 // overridden by a segment override prefix.
-static inline Operand GetStringSourceOperand(const InstructionContext* ctx) {
+static Operand GetStringSourceOperand(const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .value =
@@ -2739,7 +2939,7 @@ static inline Operand GetStringSourceOperand(const InstructionContext* ctx) {
 }
 
 // Get the destination operand address for string instructions. Always ES:DI.
-static inline OperandAddress GetStringDestinationOperandAddress(
+static OperandAddress GetStringDestinationOperandAddress(
     const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
@@ -2756,8 +2956,7 @@ static inline OperandAddress GetStringDestinationOperandAddress(
 }
 
 // Get the destination operand for string instructions. Always ES:DI.
-static inline Operand GetStringDestinationOperand(
-    const InstructionContext* ctx) {
+static Operand GetStringDestinationOperand(const InstructionContext* ctx) {
   OperandAddress address = GetStringDestinationOperandAddress(ctx);
   Operand operand = {
       .address = address,
@@ -2767,7 +2966,7 @@ static inline Operand GetStringDestinationOperand(
 }
 
 // Update the source address register (SI) after a string operation.
-static inline void UpdateStringSourceAddress(const InstructionContext* ctx) {
+static void UpdateStringSourceAddress(const InstructionContext* ctx) {
   if (GetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -2776,8 +2975,7 @@ static inline void UpdateStringSourceAddress(const InstructionContext* ctx) {
 }
 
 // Update the destination address register (DI) after a string operation.
-static inline void UpdateStringDestinationAddress(
-    const InstructionContext* ctx) {
+static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
   if (GetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -2786,7 +2984,7 @@ static inline void UpdateStringDestinationAddress(
 }
 
 // Execute a string instruction with optional REP prefix.
-static inline ExecuteStatus ExecuteStringInstructionWithREPPrefix(
+static ExecuteStatus ExecuteStringInstructionWithREPPrefix(
     const InstructionContext* ctx,
     ExecuteStatus (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -2847,7 +3045,7 @@ static ExecuteStatus ExecuteLods(const InstructionContext* ctx) {
 }
 
 // Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-static inline ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
+static ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
     const InstructionContext* ctx,
     ExecuteStatus (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -2928,7 +3126,7 @@ static ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
 // Interrupt instructions
 // ============================================================================
 
-static inline ExecuteStatus ExecuteReturnFromInterrupt(CPUState* cpu) {
+static ExecuteStatus ExecuteReturnFromInterrupt(CPUState* cpu) {
   OperandValue ip_value = Pop(cpu);
   cpu->registers[kIP] = FromOperandValue(&ip_value);
   OperandValue cs_value = Pop(cpu);
@@ -2994,8 +3192,7 @@ static OperandValue (*const kReadFromPortFns[])(CPUState*, uint16_t) = {
 };
 
 // Common logic for IN instructions.
-static inline ExecuteStatus ExecuteIn(
-    const InstructionContext* ctx, uint16_t port) {
+static ExecuteStatus ExecuteIn(const InstructionContext* ctx, uint16_t port) {
   OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   WriteOperand(ctx, &dest, FromOperandValue(&value));
@@ -3037,8 +3234,7 @@ static void (*const kWriteToPortFns[])(CPUState*, uint16_t, OperandValue) = {
 };
 
 // Common logic for OUT instructions.
-static inline ExecuteStatus ExecuteOut(
-    const InstructionContext* ctx, uint16_t port) {
+static ExecuteStatus ExecuteOut(const InstructionContext* ctx, uint16_t port) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
   return kExecuteSuccess;
@@ -4446,7 +4642,7 @@ void InitCPU(CPUState* cpu) {
 // ============================================================================
 
 // Helper to check if a byte is a valid prefix
-static inline bool IsPrefixByte(uint8_t byte) {
+static bool IsPrefixByte(uint8_t byte) {
   static const uint8_t kPrefixBytes[] = {
       kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
       kPrefixLOCK, kPrefixREPNZ, kPrefixREP,
@@ -4460,7 +4656,7 @@ static inline bool IsPrefixByte(uint8_t byte) {
 }
 
 // Helper to read the next instruction byte.
-static inline uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
+static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .value = {
@@ -4472,7 +4668,7 @@ static inline uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.
-static inline uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
+static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
   switch (mod) {
     case 0:
       // Special case: 16-bit displacement
@@ -4488,8 +4684,7 @@ static inline uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
 }
 
 // Returns the number of immediate bytes in an instruction.
-static inline uint8_t GetImmediateSize(
-    const OpcodeMetadata* metadata, uint8_t reg) {
+static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
   switch (metadata->opcode) {
     // TEST r/m8, imm8
     case 0xF6:
@@ -4685,6 +4880,7 @@ ExecuteStatus RunMainLoop(CPUState* cpu) {
 // --------------------
 // cpu.c end
 // --------------------
+
 
 #endif // YAX86_IMPLEMENTATION
 

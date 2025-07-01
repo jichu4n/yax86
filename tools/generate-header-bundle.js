@@ -16,6 +16,7 @@ function wrapFileContent({fileName, fileContent}) {
     `// ${'-'.repeat(20)}`,
     `// ${fileName} end`,
     `// ${'-'.repeat(20)}`,
+    '',
   ].join('\n');
 }
 
