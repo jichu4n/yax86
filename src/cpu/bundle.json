@@ -1,4 +1,4 @@
 {
-  "public": ["cpu_public.h"],
-  "private": ["../common.h", "cpu_private.h", "operands.c", "cpu.c"]
+  "public": ["public.h"],
+  "private": ["../common.h", "types.h", "utils.h", "utils.c", "cpu.c"]
 }

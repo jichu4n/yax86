@@ -6,7 +6,7 @@
 #define YAX86_CPU_BUNDLE_H
 
 // --------------------
-// cpu_public.h start
+// public.h start
 // --------------------
 
 // Public interface for the CPU emulator module.
@@ -348,7 +348,7 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 
 
 // --------------------
-// cpu_public.h end
+// public.h end
 // --------------------
 
 
@@ -376,14 +376,14 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 // --------------------
 
 // --------------------
-// cpu_private.h start
+// types.h start
 // --------------------
 
-#ifndef YAX86_CPU_CPU_PRIVATE_H
-#define YAX86_CPU_CPU_PRIVATE_H
+#ifndef YAX86_CPU_TYPES_H
+#define YAX86_CPU_TYPES_H
 
 #ifndef YAX86_IMPLEMENTATION
-#include "cpu_public.h"
+#include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Data width helpers.
@@ -526,7 +526,23 @@ typedef struct OpcodeMetadata {
   OpcodeHandler handler;
 } OpcodeMetadata;
 
+#endif  // YAX86_CPU_TYPES_H
+
+
+// --------------------
+// types.h end
+// --------------------
+
+// --------------------
+// utils.h start
+// --------------------
+
+#ifndef YAX86_CPU_UTILS_H
+#define YAX86_CPU_UTILS_H
+
 #ifndef YAX86_IMPLEMENTATION
+#include "public.h"
+#include "types.h"
 
 // Helper functions to construct OperandValue.
 extern OperandValue ByteValue(uint8_t byte_value);
@@ -689,20 +705,21 @@ extern void SetCommonFlagsAfterInstruction(
 
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_CPU_CPU_PRIVATE_H
+#endif  // YAX86_CPU_UTILS_H
 
 
 // --------------------
-// cpu_private.h end
+// utils.h end
 // --------------------
 
 // --------------------
-// operands.c start
+// utils.c start
 // --------------------
 
 #ifndef YAX86_IMPLEMENTATION
+#include "utils.h"
+
 #include "../common.h"
-#include "cpu_private.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Helper functions to construct OperandValue.
@@ -1163,25 +1180,6 @@ YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
   return kReadImmediateValueFn[width](ctx->instruction);
 }
 
-
-// --------------------
-// operands.c end
-// --------------------
-
-// --------------------
-// cpu.c start
-// --------------------
-
-#ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
-#include "cpu_private.h"
-#include "cpu_public.h"
-#endif  // YAX86_IMPLEMENTATION
-
-// ============================================================================
-// Types and helpers
-// ============================================================================
-
 // Set common CPU flags after an instruction. This includes:
 // - Zero flag (ZF)
 // - Sign flag (SF)
@@ -1202,6 +1200,21 @@ YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   parity ^= parity >> 1;
   SetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
+
+// --------------------
+// utils.c end
+// --------------------
+
+// --------------------
+// cpu.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "public.h"
+#include "types.h"
+#include "utils.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // MOV instructions

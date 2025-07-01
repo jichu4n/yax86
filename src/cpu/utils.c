@@ -1,6 +1,7 @@
 #ifndef YAX86_IMPLEMENTATION
+#include "utils.h"
+
 #include "../common.h"
-#include "cpu_private.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Helper functions to construct OperandValue.
@@ -459,4 +460,25 @@ YAX86_PRIVATE void WriteOperand(
 YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
   Width width = ctx->metadata->width;
   return kReadImmediateValueFn[width](ctx->instruction);
+}
+
+// Set common CPU flags after an instruction. This includes:
+// - Zero flag (ZF)
+// - Sign flag (SF)
+// - Parity Flag (PF)
+YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
+    const InstructionContext* ctx, uint32_t result) {
+  Width width = ctx->metadata->width;
+  result &= kMaxValue[width];
+  // Zero flag (ZF)
+  SetFlag(ctx->cpu, kZF, result == 0);
+  // Sign flag (SF)
+  SetFlag(ctx->cpu, kSF, result & kSignBit[width]);
+  // Parity flag (PF)
+  // Set if the number of set bits in the least significant byte is even
+  uint8_t parity = result & 0xFF;  // Check only the low byte for parity
+  parity ^= parity >> 4;
+  parity ^= parity >> 2;
+  parity ^= parity >> 1;
+  SetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
