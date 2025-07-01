@@ -51,6 +51,13 @@ ExecuteStatus HandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   uint8_t ah = (cpu->registers[kAX] >> 8) & 0xFF;
   uint16_t dx = cpu->registers[kDX];
   switch (ah) {
+    case 0x01: {  // Read character
+      char ch;
+      cin.get(ch);
+      uint8_t ah = (cpu->registers[kAX] >> 8) & 0xFF;
+      cpu->registers[kAX] = (ah << 8) | static_cast<uint8_t>(ch);
+      return kExecuteSuccess;
+    }
     case 0x02: {  // Print character
       cout << static_cast<char>(dx & 0xFF) << flush;
       return kExecuteSuccess;
