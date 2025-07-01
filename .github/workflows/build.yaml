@@ -30,3 +30,4 @@ jobs:
         run: ctest --verbose
       - working-directory: ${{github.workspace}}/build
         run: ls -lh *.a
+      - run: git diff --exit-code

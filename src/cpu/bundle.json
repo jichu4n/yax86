@@ -1,0 +1,4 @@
+{
+  "public": ["cpu_public.h"],
+  "private": ["cpu.c"]
+}

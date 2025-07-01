@@ -7,10 +7,31 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wall -Wextra -Wpedantic -Werror")
 
 # =============================================================================
+# Header bundles.
+# =============================================================================
+set(ALL_HEADER_BUNDLES)
+function(generate_header_bundle module)
+    set(bundle "${CMAKE_CURRENT_SOURCE_DIR}/${module}.h")
+    set(generate_header_bundle "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-header-bundle.js")
+    file(GLOB module_sources "${CMAKE_CURRENT_SOURCE_DIR}/src/${module}/*")
+    add_custom_command(
+        OUTPUT ${bundle}
+        COMMAND ${generate_header_bundle} ARGS ${module}
+        DEPENDS ${generate_header_bundle} ${module_sources}
+        COMMENT "Generating header bundle for module ${module} => ${bundle}"
+    )
+    set(${module}_BUNDLE "${bundle}" PARENT_SCOPE)
+    list(APPEND ALL_HEADER_BUNDLES ${bundle})
+    set(ALL_HEADER_BUNDLES ${ALL_HEADER_BUNDLES} PARENT_SCOPE)
+endfunction()
+
+generate_header_bundle("cpu")
+
+# =============================================================================
 # Main library
 # =============================================================================
 file(GLOB SOURCES "*.c")
-add_library(yax86 STATIC ${SOURCES})
+add_library(yax86 STATIC ${SOURCES} ${ALL_HEADER_BUNDLES})
 
 # =============================================================================
 # Tests

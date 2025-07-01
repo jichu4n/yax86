@@ -1,4 +1,6 @@
-#include "cpu.h"
+#ifndef YAX86_CPU_BUNDLE_H
+#include "cpu_public.h"
+#endif  // YAX86_CPU_BUNDLE_H
 
 // ============================================================================
 // Types and helpers
