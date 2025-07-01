@@ -6,12 +6,14 @@
 
 // Data width.
 typedef enum Width {
-  kByte = 0,  // 8-bit operand
-  kWord       // 16-bit operand
+  kByte = 0,
+  kWord,
 } Width;
 
-// Number of data width types.
-#define kNumWidths (kWord + 1)
+enum {
+  // Number of data width types.
+  kNumWidths = kWord + 1,
+};
 
 // Bitmask to extract the sign bit of a value.
 static const uint32_t kSignBit[kNumWidths] = {
@@ -69,11 +71,13 @@ typedef struct {
 // Whether the operand is a register or memory operand.
 typedef enum {
   kOperandAddressTypeRegister = 0,
-  kOperandAddressTypeMemory
+  kOperandAddressTypeMemory,
 } OperandAddressType;
 
-// Number of operand address types.
-#define kNumOperandAddressTypes (kOperandAddressTypeMemory + 1)
+enum {
+  // Number of operand address types.
+  kNumOperandAddressTypes = kOperandAddressTypeMemory + 1,
+};
 
 // Operand address.
 typedef struct {
