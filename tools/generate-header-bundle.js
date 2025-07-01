@@ -5,26 +5,28 @@ const path = require('path');
 
 const IMPLEMENTATION_MACRO = 'YAX86_IMPLEMENTATION';
 
-function wrapFileContent({fileName, fileContent}) {
+function wrapFileContent({relFilePath, fileContent}) {
   return [
-    `// ${'-'.repeat(20)}`,
-    `// ${fileName} start`,
-    `// ${'-'.repeat(20)}`,
+    `// ${'='.repeat(78)}`,
+    `// ${relFilePath} start`,
+    `// ${'='.repeat(78)}`,
     '',
+    `#line 1 "./${relFilePath}"`,
     fileContent,
     '',
-    `// ${'-'.repeat(20)}`,
-    `// ${fileName} end`,
-    `// ${'-'.repeat(20)}`,
+    `// ${'='.repeat(78)}`,
+    `// ${relFilePath} end`,
+    `// ${'='.repeat(78)}`,
     '',
   ].join('\n');
 }
 
-async function readAndWrapFileContent({fileNames, dirPath}) {
+async function readAndWrapFileContent({fileNames, rootDirPath, moduleDir}) {
   return (
     await Promise.all(
       fileNames.map(async (fileName) => {
-        const filePath = path.resolve(dirPath, fileName);
+        const relFilePath = path.join(moduleDir, fileName);
+        const filePath = path.resolve(rootDirPath, relFilePath);
         let fileContent;
         try {
           fileContent = await fs.readFile(filePath, 'utf8');
@@ -32,7 +34,7 @@ async function readAndWrapFileContent({fileNames, dirPath}) {
           console.error(`Error reading file "${filePath}":`, error);
           throw error;
         }
-        return wrapFileContent({fileName, fileContent});
+        return wrapFileContent({relFilePath, fileContent});
       })
     )
   ).join('\n');
@@ -43,20 +45,23 @@ async function generateHeaderBundle({
   outputFilePath,
   public,
   private,
-  dirPath,
+  rootDirPath,
+  moduleDir,
 }) {
   const includeGuard = `YAX86_${moduleName.toUpperCase()}_BUNDLE_H`;
   const publicContent = await readAndWrapFileContent({
     fileNames: public,
-    dirPath,
+    rootDirPath,
+    moduleDir,
   });
   const implementationContent = await readAndWrapFileContent({
     fileNames: private,
-    dirPath,
+    rootDirPath,
+    moduleDir,
   });
   const headerBundleContent = [
     `// ${'='.repeat(78)}`,
-    `// MODULE ${moduleName.toUpperCase()} - GENERATED SINGLE HEADER BUNDLE`,
+    `// YAX86 ${moduleName.toUpperCase()} MODULE - GENERATED SINGLE HEADER BUNDLE`,
     `// ${'='.repeat(78)}`,
     '',
     `#ifndef ${includeGuard}`,
@@ -72,6 +77,7 @@ async function generateHeaderBundle({
     '',
     `#endif // ${includeGuard}`,
     '',
+    '',
   ].join('\n');
   // console.log(`Writing header bundle to ${outputFilePath}`);
   await fs.writeFile(outputFilePath, headerBundleContent, 'utf8');
@@ -84,8 +90,9 @@ if (require.main === module) {
     process.exit(1);
   }
   const moduleName = args[0];
-  const dirPath = path.resolve(__dirname, '..', 'src', moduleName);
-  const bundleJsonPath = path.resolve(dirPath, 'bundle.json');
+  const rootDirPath = path.resolve(__dirname, '..');
+  const moduleDir = path.join('src', moduleName);
+  const bundleJsonPath = path.resolve(rootDirPath, moduleDir, 'bundle.json');
   // console.log(`Reading bundle configuration from ${bundleJsonPath}`);
   const outputFilePath = path.resolve(__dirname, '..', `${moduleName}.h`);
 
@@ -94,7 +101,8 @@ if (require.main === module) {
     await generateHeaderBundle({
       moduleName,
       outputFilePath,
-      dirPath,
+      rootDirPath,
+      moduleDir,
       ...bundleJson,
     });
   })();

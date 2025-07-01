@@ -1,14 +1,15 @@
 // ==============================================================================
-// MODULE CPU - GENERATED SINGLE HEADER BUNDLE
+// YAX86 CPU MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
 #ifndef YAX86_CPU_BUNDLE_H
 #define YAX86_CPU_BUNDLE_H
 
-// --------------------
-// public.h start
-// --------------------
+// ==============================================================================
+// src/cpu/public.h start
+// ==============================================================================
 
+#line 1 "./src/cpu/public.h"
 // Public interface for the CPU emulator module.
 #ifndef YAX86_CPU_PUBLIC_H
 #define YAX86_CPU_PUBLIC_H
@@ -347,38 +348,49 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 #endif  // YAX86_CPU_PUBLIC_H
 
 
-// --------------------
-// public.h end
-// --------------------
+// ==============================================================================
+// src/cpu/public.h end
+// ==============================================================================
 
 
 #ifdef YAX86_IMPLEMENTATION
 
-// --------------------
-// ../common.h start
-// --------------------
+// ==============================================================================
+// src/common.h start
+// ==============================================================================
 
+#line 1 "./src/common.h"
 #ifndef YAX86_COMMON_H
 #define YAX86_COMMON_H
 
-// Macro that expands to `static` when bundled.
+// Macro that expands to `static` when bundled. Use for variables and functions
+// that need to be visible to other files within the same module, but not
+// publicly to users of the bundled library.
+//
+// This enables better IDE integration as it allows each source file to be
+// compiled independently in unbundled form, but still keeps the symbols private
+// when bundled.
 #ifdef YAX86_IMPLEMENTATION
+// When bundled, static linkage so that the symbol is only visible within the
+// implementation file.
 #define YAX86_PRIVATE static
 #else
+// When unbundled, use default linkage.
 #define YAX86_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 #endif  // YAX86_COMMON_H
 
 
-// --------------------
-// ../common.h end
-// --------------------
+// ==============================================================================
+// src/common.h end
+// ==============================================================================
 
-// --------------------
-// types.h start
-// --------------------
+// ==============================================================================
+// src/cpu/types.h start
+// ==============================================================================
 
+#line 1 "./src/cpu/types.h"
 #ifndef YAX86_CPU_TYPES_H
 #define YAX86_CPU_TYPES_H
 
@@ -529,14 +541,15 @@ typedef struct OpcodeMetadata {
 #endif  // YAX86_CPU_TYPES_H
 
 
-// --------------------
-// types.h end
-// --------------------
+// ==============================================================================
+// src/cpu/types.h end
+// ==============================================================================
 
-// --------------------
-// operands.h start
-// --------------------
+// ==============================================================================
+// src/cpu/operands.h start
+// ==============================================================================
 
+#line 1 "./src/cpu/operands.h"
 #ifndef YAX86_CPU_OPERANDS_H
 #define YAX86_CPU_OPERANDS_H
 
@@ -701,14 +714,15 @@ extern OperandValue ReadImmediate(const InstructionContext* ctx);
 #endif  // YAX86_CPU_OPERANDS_H
 
 
-// --------------------
-// operands.h end
-// --------------------
+// ==============================================================================
+// src/cpu/operands.h end
+// ==============================================================================
 
-// --------------------
-// operands.c start
-// --------------------
+// ==============================================================================
+// src/cpu/operands.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/operands.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "operands.h"
 
@@ -1174,14 +1188,15 @@ YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// operands.c end
-// --------------------
+// ==============================================================================
+// src/cpu/operands.c end
+// ==============================================================================
 
-// --------------------
-// instructions.h start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions.h start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions.h"
 #ifndef YAX86_CPU_INSTRUCTIONS_H
 #define YAX86_CPU_INSTRUCTIONS_H
 
@@ -1645,14 +1660,15 @@ extern ExecuteStatus ExecuteGroup5Instruction(const InstructionContext* ctx);
 #endif  // YAX86_CPU_INSTRUCTIONS_H
 
 
-// --------------------
-// instructions.h end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions.h end
+// ==============================================================================
 
-// --------------------
-// instructions_helpers.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_helpers.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_helpers.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -1711,14 +1727,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_helpers.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_helpers.c end
+// ==============================================================================
 
-// --------------------
-// instructions_mov.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_mov.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_mov.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -1889,14 +1906,15 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_mov.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_mov.c end
+// ==============================================================================
 
-// --------------------
-// instructions_lea.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_lea.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_lea.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -1957,14 +1975,15 @@ ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_lea.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_lea.c end
+// ==============================================================================
 
-// --------------------
-// instructions_add.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_add.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_add.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2114,14 +2133,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_add.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_add.c end
+// ==============================================================================
 
-// --------------------
-// instructions_sub.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_sub.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_sub.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2284,14 +2304,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_sub.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_sub.c end
+// ==============================================================================
 
-// --------------------
-// instructions_sign_ext.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_sign_ext.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_sign_ext.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2319,14 +2340,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_sign_ext.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_sign_ext.c end
+// ==============================================================================
 
-// --------------------
-// instructions_cmp.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_cmp.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_cmp.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2377,14 +2399,15 @@ ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_cmp.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_cmp.c end
+// ==============================================================================
 
-// --------------------
-// instructions_bool.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_bool.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_bool.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2547,14 +2570,15 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_bool.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_bool.c end
+// ==============================================================================
 
-// --------------------
-// instructions_ctrl_flow.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_ctrl_flow.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_ctrl_flow.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2831,14 +2855,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_ctrl_flow.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_ctrl_flow.c end
+// ==============================================================================
 
-// --------------------
-// instructions_stack.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_stack.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_stack.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2944,14 +2969,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteStoreAHToFlags(const InstructionContext* ctx)
 }
 
 
-// --------------------
-// instructions_stack.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_stack.c end
+// ==============================================================================
 
-// --------------------
-// instructions_flags.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_flags.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_flags.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -2990,14 +3016,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext*
 }
 
 
-// --------------------
-// instructions_flags.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_flags.c end
+// ==============================================================================
 
-// --------------------
-// instructions_io.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_io.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_io.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -3091,14 +3118,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteOutDX(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_io.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_io.c end
+// ==============================================================================
 
-// --------------------
-// instructions_string.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_string.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_string.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -3308,14 +3336,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteCmps(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_string.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_string.c end
+// ==============================================================================
 
-// --------------------
-// instructions_bcd_ascii.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_bcd_ascii.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_bcd_ascii.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -3440,14 +3469,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_bcd_ascii.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_bcd_ascii.c end
+// ==============================================================================
 
-// --------------------
-// instructions_group_1.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_1.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_group_1.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -3499,14 +3529,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
 }
 
 
-// --------------------
-// instructions_group_1.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_1.c end
+// ==============================================================================
 
-// --------------------
-// instructions_group_2.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_2.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_group_2.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -3729,14 +3760,15 @@ ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_group_2.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_2.c end
+// ==============================================================================
 
-// --------------------
-// instructions_group_3.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_3.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_group_3.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -3929,14 +3961,15 @@ ExecuteGroup3Instruction(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_group_3.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_3.c end
+// ==============================================================================
 
-// --------------------
-// instructions_group_4.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_4.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_group_4.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -3967,14 +4000,15 @@ YAX86_PRIVATE ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* c
 }
 
 
-// --------------------
-// instructions_group_4.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_4.c end
+// ==============================================================================
 
-// --------------------
-// instructions_group_5.c start
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_5.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/instructions_group_5.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -4062,14 +4096,15 @@ ExecuteGroup5Instruction(const InstructionContext* ctx) {
 }
 
 
-// --------------------
-// instructions_group_5.c end
-// --------------------
+// ==============================================================================
+// src/cpu/instructions_group_5.c end
+// ==============================================================================
 
-// --------------------
-// opcode_table.c start
-// --------------------
+// ==============================================================================
+// src/cpu/opcode_table.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/opcode_table.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -5449,14 +5484,15 @@ YAX86_PRIVATE void InitOpcodeTable(void) {
 }
 
 
-// --------------------
-// opcode_table.c end
-// --------------------
+// ==============================================================================
+// src/cpu/opcode_table.c end
+// ==============================================================================
 
-// --------------------
-// cpu.c start
-// --------------------
+// ==============================================================================
+// src/cpu/cpu.c start
+// ==============================================================================
 
+#line 1 "./src/cpu/cpu.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "instructions.h"
@@ -5723,11 +5759,12 @@ ExecuteStatus RunMainLoop(CPUState* cpu) {
 }
 
 
-// --------------------
-// cpu.c end
-// --------------------
+// ==============================================================================
+// src/cpu/cpu.c end
+// ==============================================================================
 
 
 #endif // YAX86_IMPLEMENTATION
 
 #endif // YAX86_CPU_BUNDLE_H
+

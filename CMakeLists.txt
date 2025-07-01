@@ -14,10 +14,14 @@ function(generate_header_bundle module)
     set(bundle "${CMAKE_CURRENT_SOURCE_DIR}/${module}.h")
     set(generate_header_bundle "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-header-bundle.js")
     file(GLOB module_sources "${CMAKE_CURRENT_SOURCE_DIR}/src/${module}/*")
+    file(GLOB common_sources
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+    )
     add_custom_command(
         OUTPUT ${bundle}
         COMMAND ${generate_header_bundle} ARGS ${module}
-        DEPENDS ${generate_header_bundle} ${module_sources}
+        DEPENDS ${generate_header_bundle} ${module_sources} ${common_sources}
         COMMENT "Generating header bundle for module ${module} => ${bundle}"
     )
     set(${module}_BUNDLE "${bundle}" PARENT_SCOPE)
