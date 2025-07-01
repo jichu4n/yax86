@@ -324,6 +324,7 @@ static inline uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
 // reg or R/M field.
 static inline RegisterAddress GetRegisterAddressByte(
     CPUState* cpu, uint8_t reg_or_rm) {
+  (void)cpu;
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
@@ -341,6 +342,7 @@ static inline RegisterAddress GetRegisterAddressByte(
 // reg or R/M field.
 static inline RegisterAddress GetRegisterAddressWord(
     CPUState* cpu, uint8_t reg_or_rm) {
+  (void)cpu;
   const RegisterAddress address = {
       .register_index = reg_or_rm, .byte_offset = 0};
   return address;
@@ -928,7 +930,7 @@ static ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
 // ============================================================================
 
 // Returns the AH register address.
-static inline const OperandAddress* GetAHRegisterAddress() {
+static inline const OperandAddress* GetAHRegisterAddress(void) {
   static OperandAddress ah = {
       .type = kOperandAddressTypeRegister,
       .value = {
@@ -2569,6 +2571,7 @@ static ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
 
 // Dummy instruction for unsupported opcodes.
 static ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
+  (void)ctx;
   return kExecuteSuccess;
 }
 
@@ -2614,6 +2617,7 @@ static ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
 
 // HLT
 static ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
+  (void)ctx;
   return kExecuteHalt;
 }
 
@@ -4053,18 +4057,23 @@ static const OpcodeMetadata opcodes[] = {
      .handler = ExecuteGroup5Instruction},
 };
 
+enum {
+  // Number of defined opcodes.
+  kNumOpcodes = sizeof(opcodes) / sizeof(OpcodeMetadata),
+};
+
 // Opcode metadata lookup table.
-static OpcodeMetadata opcode_table[256] = {};
+static OpcodeMetadata opcode_table[256] = {0};
 
 // Populate opcode_table based on opcodes array.
-static void InitOpcodeTable() {
+static void InitOpcodeTable(void) {
   static bool has_run = false;
   if (has_run) {
     return;
   }
   has_run = true;
 
-  for (int i = 0; i < sizeof(opcodes) / sizeof(OpcodeMetadata); ++i) {
+  for (unsigned int i = 0; i < kNumOpcodes; ++i) {
     opcode_table[opcodes[i].opcode] = opcodes[i];
   }
 }

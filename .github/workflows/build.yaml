@@ -8,17 +8,25 @@ jobs:
         compiler:
           - {cc: 'gcc', cxx: 'g++'}
           - {cc: 'clang', cxx: 'clang++'}
-    name: build with ${{ matrix.compiler.cc }}
+        build_type:
+          - Debug
+          - MinSizeRel
+    name: build with ${{ matrix.compiler.cc }} type ${{ matrix.build_type }}
     steps:
       - uses: actions/checkout@v4
       - run: |
+          bash -c 'echo "set man-db/auto-update false" | sudo debconf-communicate' && \
+          sudo dpkg-reconfigure man-db && \
           sudo apt-get update && \
           sudo apt-get install -y fasm
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
           cmake -B ${{github.workspace}}/build \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
               -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
               -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
-      - run: cmake --build ${{github.workspace}}/build
+      - run: cmake --build ${{github.workspace}}/build -j$(nproc)
       - working-directory: ${{github.workspace}}/build
         run: ctest --verbose
+      - working-directory: ${{github.workspace}}/build
+        run: ls -lh *.a
