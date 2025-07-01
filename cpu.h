@@ -534,11 +534,11 @@ typedef struct OpcodeMetadata {
 // --------------------
 
 // --------------------
-// utils.h start
+// operands.h start
 // --------------------
 
-#ifndef YAX86_CPU_UTILS_H
-#define YAX86_CPU_UTILS_H
+#ifndef YAX86_CPU_OPERANDS_H
+#define YAX86_CPU_OPERANDS_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "public.h"
@@ -696,28 +696,21 @@ extern void WriteOperand(
 // Read an immediate value from the instruction.
 extern OperandValue ReadImmediate(const InstructionContext* ctx);
 
-// Set common CPU flags after an instruction. This includes:
-// - Zero flag (ZF)
-// - Sign flag (SF)
-// - Parity Flag (PF)
-extern void SetCommonFlagsAfterInstruction(
-    const InstructionContext* ctx, uint32_t result);
-
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_CPU_UTILS_H
+#endif  // YAX86_CPU_OPERANDS_H
 
 
 // --------------------
-// utils.h end
+// operands.h end
 // --------------------
 
 // --------------------
-// utils.c start
+// operands.c start
 // --------------------
 
 #ifndef YAX86_IMPLEMENTATION
-#include "utils.h"
+#include "operands.h"
 
 #include "../common.h"
 #endif  // YAX86_IMPLEMENTATION
@@ -1180,6 +1173,493 @@ YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
   return kReadImmediateValueFn[width](ctx->instruction);
 }
 
+
+// --------------------
+// operands.c end
+// --------------------
+
+// --------------------
+// instructions.h start
+// --------------------
+
+#ifndef YAX86_CPU_INSTRUCTIONS_H
+#define YAX86_CPU_INSTRUCTIONS_H
+
+#ifndef YAX86_IMPLEMENTATION
+#include "public.h"
+#include "types.h"
+
+// ============================================================================
+// Helpers - instructions_helpers.h
+// ============================================================================
+
+// Set common CPU flags after an instruction. This includes:
+// - Zero flag (ZF)
+// - Sign flag (SF)
+// - Parity Flag (PF)
+extern void SetCommonFlagsAfterInstruction(
+    const InstructionContext* ctx, uint32_t result);
+
+// Push a value onto the stack.
+extern void Push(CPUState* cpu, OperandValue value);
+// Pop a value from the stack.
+extern OperandValue Pop(CPUState* cpu);
+
+// Dummy instruction for unsupported opcodes.
+extern ExecuteStatus ExecuteNoOp(const InstructionContext* ctx);
+
+// ============================================================================
+// Opcode table - opcode_table.h
+// ============================================================================
+
+// Global opcode metadata lookup table.
+extern OpcodeMetadata opcode_table[256];
+// Populate global opcode metadata lookup table. This only needs to be run once
+// per program execution.
+extern void InitOpcodeTable(void);
+
+// ============================================================================
+// Move instructions - instructions_mov.h
+// ============================================================================
+
+// MOV r/m8, r8
+// MOV r/m16, r16
+extern ExecuteStatus ExecuteMoveRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// MOV r8, r/m8
+// MOV r16, r/m16
+extern ExecuteStatus ExecuteMoveRegisterOrMemoryToRegister(
+    const InstructionContext* ctx);
+// MOV r/m16, sreg
+extern ExecuteStatus ExecuteMoveSegmentRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// MOV sreg, r/m16
+extern ExecuteStatus ExecuteMoveRegisterOrMemoryToSegmentRegister(
+    const InstructionContext* ctx);
+// MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
+// MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
+extern ExecuteStatus ExecuteMoveImmediateToRegister(
+    const InstructionContext* ctx);
+// MOV AL, moffs16
+// MOV AX, moffs16
+extern ExecuteStatus ExecuteMoveMemoryOffsetToALOrAX(
+    const InstructionContext* ctx);
+// MOV moffs16, AL
+// MOV moffs16, AX
+extern ExecuteStatus ExecuteMoveALOrAXToMemoryOffset(
+    const InstructionContext* ctx);
+// MOV r/m8, imm8
+// MOV r/m16, imm16
+extern ExecuteStatus ExecuteMoveImmediateToRegisterOrMemory(
+    const InstructionContext* ctx);
+// XCHG AX, AX/CX/DX/BX/SP/BP/SI/DI
+extern ExecuteStatus ExecuteExchangeRegister(const InstructionContext* ctx);
+// XCHG r/m8, r8
+// XCHG r/m16, r16
+extern ExecuteStatus ExecuteExchangeRegisterOrMemory(
+    const InstructionContext* ctx);
+// XLAT
+extern ExecuteStatus ExecuteTranslateByte(const InstructionContext* ctx);
+
+// ============================================================================
+// LEA instructions - instructions_lea.h
+// ============================================================================
+
+// LEA r16, m
+extern ExecuteStatus ExecuteLoadEffectiveAddress(const InstructionContext* ctx);
+// LES r16, m
+extern ExecuteStatus ExecuteLoadESWithPointer(const InstructionContext* ctx);
+// LDS r16, m
+extern ExecuteStatus ExecuteLoadDSWithPointer(const InstructionContext* ctx);
+
+// ============================================================================
+// Addition instructions - instructions_add.h
+// ============================================================================
+
+// Common logic for ADD instructions
+extern ExecuteStatus ExecuteAdd(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+// Common logic for INC instructions
+extern ExecuteStatus ExecuteInc(const InstructionContext* ctx, Operand* dest);
+// Common logic for ADC instructions
+extern ExecuteStatus ExecuteAddWithCarry(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+
+// ADD r/m8, r8
+// ADD r/m16, r16
+extern ExecuteStatus ExecuteAddRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// ADD r8, r/m8
+// ADD r16, r/m16
+extern ExecuteStatus ExecuteAddRegisterOrMemoryToRegister(
+    const InstructionContext* ctx);
+// ADD AL, imm8
+// ADD AX, imm16
+extern ExecuteStatus ExecuteAddImmediateToALOrAX(const InstructionContext* ctx);
+// ADC r/m8, r8
+// ADC r/m16, r16
+extern ExecuteStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
+    const InstructionContext* ctx);
+// ADC r8, r/m8
+// ADC r16, r/m16
+extern ExecuteStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
+    const InstructionContext* ctx);
+// ADC AL, imm8
+// ADC AX, imm16
+extern ExecuteStatus ExecuteAddImmediateToALOrAXWithCarry(
+    const InstructionContext* ctx);
+// INC AX/CX/DX/BX/SP/BP/SI/DI
+extern ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx);
+
+// ============================================================================
+// Subtraction instructions - instructions_sub.c
+// ============================================================================
+
+// Set CPU flags after a SUB, SBB, CMP, or NEG instruction.
+extern void SetFlagsAfterSub(
+    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
+    bool did_borrow);
+
+// Common logic for SUB instructions
+extern ExecuteStatus ExecuteSub(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+// Common logic for SBB instructions
+extern ExecuteStatus ExecuteSubWithBorrow(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+// Common logic for DEC instructions
+extern ExecuteStatus ExecuteDec(const InstructionContext* ctx, Operand* dest);
+
+// SUB r/m8, r8
+// SUB r/m16, r16
+extern ExecuteStatus ExecuteSubRegisterFromRegisterOrMemory(
+    const InstructionContext* ctx);
+// SUB r8, r/m8
+// SUB r16, r/m16
+extern ExecuteStatus ExecuteSubRegisterOrMemoryFromRegister(
+    const InstructionContext* ctx);
+// SUB AL, imm8
+// SUB AX, imm16
+extern ExecuteStatus ExecuteSubImmediateFromALOrAX(
+    const InstructionContext* ctx);
+// SBB r/m8, r8
+// SBB r/m16, r16
+extern ExecuteStatus ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
+    const InstructionContext* ctx);
+// SBB r8, r/m8
+// SBB r16, r/m16
+extern ExecuteStatus ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
+    const InstructionContext* ctx);
+// SBB AL, imm8
+// SBB AX, imm16
+extern ExecuteStatus ExecuteSubImmediateFromALOrAXWithBorrow(
+    const InstructionContext* ctx);
+// DEC AX/CX/DX/BX/SP/BP/SI/DI
+extern ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx);
+
+// ============================================================================
+// Sign extension instructions - instructions_sign_ext.c
+// ============================================================================
+
+// CBW
+extern ExecuteStatus ExecuteCbw(const InstructionContext* ctx);
+// CWD
+extern ExecuteStatus ExecuteCwd(const InstructionContext* ctx);
+
+// ============================================================================
+// CMP instructions - instructions_cmp.c
+// ============================================================================
+
+// Common logic for CMP instructions. Computes dest - src and sets flags.
+extern ExecuteStatus ExecuteCmp(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+
+// CMP r/m8, r8
+// CMP r/m16, r16
+extern ExecuteStatus ExecuteCmpRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// CMP r8, r/m8
+// CMP r16, r/m16
+extern ExecuteStatus ExecuteCmpRegisterOrMemoryToRegister(
+    const InstructionContext* ctx);
+// CMP AL, imm8
+// CMP AX, imm16
+extern ExecuteStatus ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx);
+
+// ============================================================================
+// Boolean instructions - instructions_bool.c
+// ============================================================================
+
+extern void SetFlagsAfterBooleanInstruction(
+    const InstructionContext* ctx, uint32_t result);
+// Common logic for AND instructions.
+extern ExecuteStatus ExecuteBooleanAnd(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+// Common logic for OR instructions.
+extern ExecuteStatus ExecuteBooleanOr(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+// Common logic for XOR instructions.
+extern ExecuteStatus ExecuteBooleanXor(
+    const InstructionContext* ctx, Operand* dest,
+    const OperandValue* src_value);
+// Common logic for TEST instructions.
+extern ExecuteStatus ExecuteTest(
+    const InstructionContext* ctx, Operand* dest, OperandValue* src_value);
+
+// AND r/m8, r8
+// AND r/m16, r16
+extern ExecuteStatus ExecuteBooleanAndRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// AND r8, r/m8
+// AND r16, r/m16
+extern ExecuteStatus ExecuteBooleanAndRegisterOrMemoryToRegister(
+    const InstructionContext* ctx);
+// AND AL, imm8
+// AND AX, imm16
+extern ExecuteStatus ExecuteBooleanAndImmediateToALOrAX(
+    const InstructionContext* ctx);
+// OR r/m8, r8
+// OR r/m16, r16
+extern ExecuteStatus ExecuteBooleanOrRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// OR r8, r/m8
+// OR r16, r/m16
+extern ExecuteStatus ExecuteBooleanOrRegisterOrMemoryToRegister(
+    const InstructionContext* ctx);
+// OR AL, imm8
+// OR AX, imm16
+extern ExecuteStatus ExecuteBooleanOrImmediateToALOrAX(
+    const InstructionContext* ctx);
+// XOR r/m8, r8
+// XOR r/m16, r16
+extern ExecuteStatus ExecuteBooleanXorRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// XOR r8, r/m8
+// XOR r16, r/m16
+extern ExecuteStatus ExecuteBooleanXorRegisterOrMemoryToRegister(
+    const InstructionContext* ctx);
+// XOR AL, imm8
+// XOR AX, imm16
+extern ExecuteStatus ExecuteBooleanXorImmediateToALOrAX(
+    const InstructionContext* ctx);
+// TEST r/m8, r8
+// TEST r/m16, r16
+extern ExecuteStatus ExecuteTestRegisterToRegisterOrMemory(
+    const InstructionContext* ctx);
+// TEST AL, imm8
+// TEST AX, imm16
+extern ExecuteStatus ExecuteTestImmediateToALOrAX(
+    const InstructionContext* ctx);
+
+// ============================================================================
+// Control flow instructions - instructions_ctrl_flow.c
+// ============================================================================
+
+// Common logic for far jumps.
+extern ExecuteStatus ExecuteFarJump(
+    const InstructionContext* ctx, const OperandValue* segment,
+    const OperandValue* offset);
+// Common logic for far calls.
+extern ExecuteStatus ExecuteFarCall(
+    const InstructionContext* ctx, const OperandValue* segment,
+    const OperandValue* offset);
+// Common logic for returning from an interrupt.
+extern ExecuteStatus ExecuteReturnFromInterrupt(CPUState* cpu);
+
+// JMP rel8
+// JMP rel16
+extern ExecuteStatus ExecuteShortOrNearJump(const InstructionContext* ctx);
+// JMP ptr16:16
+extern ExecuteStatus ExecuteDirectFarJump(const InstructionContext* ctx);
+// Unsigned conditional jumps.
+extern ExecuteStatus ExecuteUnsignedConditionalJump(
+    const InstructionContext* ctx);
+// JL/JGNE and JNL/JGE
+extern ExecuteStatus ExecuteSignedConditionalJumpJLOrJNL(
+    const InstructionContext* ctx);
+// JLE/JG and JNLE/JG
+extern ExecuteStatus ExecuteSignedConditionalJumpJLEOrJNLE(
+    const InstructionContext* ctx);
+// LOOP rel8
+extern ExecuteStatus ExecuteLoop(const InstructionContext* ctx);
+// LOOPZ rel8
+// LOOPNZ rel8
+extern ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx);
+// JCXZ rel8
+extern ExecuteStatus ExecuteJumpIfCXIsZero(const InstructionContext* ctx);
+// CALL rel16
+extern ExecuteStatus ExecuteDirectNearCall(const InstructionContext* ctx);
+// CALL ptr16:16
+extern ExecuteStatus ExecuteDirectFarCall(const InstructionContext* ctx);
+// RET
+extern ExecuteStatus ExecuteNearReturn(const InstructionContext* ctx);
+// RET imm16
+extern ExecuteStatus ExecuteNearReturnAndPop(const InstructionContext* ctx);
+// RETF
+extern ExecuteStatus ExecuteFarReturn(const InstructionContext* ctx);
+// RETF imm16
+extern ExecuteStatus ExecuteFarReturnAndPop(const InstructionContext* ctx);
+// IRET
+extern ExecuteStatus ExecuteIret(const InstructionContext* ctx);
+// INT 3
+extern ExecuteStatus ExecuteInt3(const InstructionContext* ctx);
+// INTO
+extern ExecuteStatus ExecuteInto(const InstructionContext* ctx);
+// INT n
+extern ExecuteStatus ExecuteIntN(const InstructionContext* ctx);
+// HLT
+extern ExecuteStatus ExecuteHlt(const InstructionContext* ctx);
+
+// ============================================================================
+// Stack instructions - instructions_stack.c
+// ============================================================================
+
+// PUSH AX/CX/DX/BX/SP/BP/SI/DI
+extern ExecuteStatus ExecutePushRegister(const InstructionContext* ctx);
+// POP AX/CX/DX/BX/SP/BP/SI/DI
+extern ExecuteStatus ExecutePopRegister(const InstructionContext* ctx);
+// PUSH ES/CS/SS/DS
+extern ExecuteStatus ExecutePushSegmentRegister(const InstructionContext* ctx);
+// POP ES/CS/SS/DS
+extern ExecuteStatus ExecutePopSegmentRegister(const InstructionContext* ctx);
+// PUSHF
+extern ExecuteStatus ExecutePushFlags(const InstructionContext* ctx);
+// POPF
+extern ExecuteStatus ExecutePopFlags(const InstructionContext* ctx);
+// POP r/m16
+extern ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx);
+// LAHF
+extern ExecuteStatus ExecuteLoadAHFromFlags(const InstructionContext* ctx);
+// SAHF
+extern ExecuteStatus ExecuteStoreAHToFlags(const InstructionContext* ctx);
+
+// ============================================================================
+// Flag manipulation instructions - instructions_flags.c
+// ============================================================================
+
+// CLC, STC, CLI, STI, CLD, STD
+extern ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx);
+// CMC
+extern ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext* ctx);
+
+// ============================================================================
+// IN and OUT instructions - instructions_io.c
+// ============================================================================
+
+// IN AL, imm8
+// IN AX, imm8
+extern ExecuteStatus ExecuteInImmediate(const InstructionContext* ctx);
+// IN AL, DX
+// IN AX, DX
+extern ExecuteStatus ExecuteInDX(const InstructionContext* ctx);
+// OUT imm8, AL
+// OUT imm8, AX
+extern ExecuteStatus ExecuteOutImmediate(const InstructionContext* ctx);
+// OUT DX, AL
+// OUT DX, AX
+extern ExecuteStatus ExecuteOutDX(const InstructionContext* ctx);
+
+// ============================================================================
+// String instructions - instructions_string.c
+// ============================================================================
+
+// MOVS
+extern ExecuteStatus ExecuteMovs(const InstructionContext* ctx);
+// STOS
+extern ExecuteStatus ExecuteStos(const InstructionContext* ctx);
+// LODS
+extern ExecuteStatus ExecuteLods(const InstructionContext* ctx);
+// SCAS
+extern ExecuteStatus ExecuteScas(const InstructionContext* ctx);
+// CMPS
+extern ExecuteStatus ExecuteCmps(const InstructionContext* ctx);
+
+// ============================================================================
+// BCD and ASCII arithmetic instructions - instructions_bcd_ascii.c
+// ============================================================================
+
+// AAA
+extern ExecuteStatus ExecuteAaa(const InstructionContext* ctx);
+// AAS
+extern ExecuteStatus ExecuteAas(const InstructionContext* ctx);
+// AAM
+extern ExecuteStatus ExecuteAam(const InstructionContext* ctx);
+// AAD
+extern ExecuteStatus ExecuteAad(const InstructionContext* ctx);
+// DAA
+extern ExecuteStatus ExecuteDaa(const InstructionContext* ctx);
+// DAS
+extern ExecuteStatus ExecuteDas(const InstructionContext* ctx);
+
+// ============================================================================
+// Group 1 instructions - instructions_group_1.c
+// ============================================================================
+
+// Group 1 instruction handler.
+extern ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* ctx);
+
+// Group 1 instruction handler, but sign-extends the 8-bit immediate value.
+extern ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
+    const InstructionContext* ctx);
+
+// ============================================================================
+// Group 2 instructions - instructions_group_2.c
+// ============================================================================
+
+// Group 2 shift / rotate by 1.
+extern ExecuteStatus ExecuteGroup2ShiftOrRotateBy1Instruction(
+    const InstructionContext* ctx);
+// Group 2 shift / rotate by CL.
+extern ExecuteStatus ExecuteGroup2ShiftOrRotateByCLInstruction(
+    const InstructionContext* ctx);
+
+// ============================================================================
+// Group 3 instructions - instructions_group_3.c
+// ============================================================================
+
+// Group 3 instruction handler.
+extern ExecuteStatus ExecuteGroup3Instruction(const InstructionContext* ctx);
+
+// ============================================================================
+// Group 4 instructions - instructions_group_4.c
+// ============================================================================
+
+// Group 4 instruction handler.
+extern ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* ctx);
+
+// ============================================================================
+// Group 5 instructions - instructions_group_5.c
+// ============================================================================
+
+// Group 5 instruction handler.
+extern ExecuteStatus ExecuteGroup5Instruction(const InstructionContext* ctx);
+
+#endif  // YAX86_IMPLEMENTATION
+
+#endif  // YAX86_CPU_INSTRUCTIONS_H
+
+
+// --------------------
+// instructions.h end
+// --------------------
+
+// --------------------
+// instructions_helpers.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
 // Set common CPU flags after an instruction. This includes:
 // - Zero flag (ZF)
 // - Sign flag (SF)
@@ -1201,19 +1681,49 @@ YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   SetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
+YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
+  cpu->registers[kSP] -= 2;
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value.memory_address = {
+          .segment_register_index = kSS,
+          .offset = cpu->registers[kSP],
+      }};
+  WriteMemoryWord(cpu, &address, value);
+}
+
+YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value.memory_address = {
+          .segment_register_index = kSS,
+          .offset = cpu->registers[kSP],
+      }};
+  OperandValue value = ReadMemoryWord(cpu, &address);
+  cpu->registers[kSP] += 2;
+  return value;
+}
+
+// Dummy instruction for unsupported opcodes.
+YAX86_PRIVATE ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
+  (void)ctx;
+  return kExecuteSuccess;
+}
+
+
 // --------------------
-// utils.c end
+// instructions_helpers.c end
 // --------------------
 
 // --------------------
-// cpu.c start
+// instructions_mov.c start
 // --------------------
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
-#include "public.h"
+#include "instructions.h"
+#include "operands.h"
 #include "types.h"
-#include "utils.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
@@ -1222,8 +1732,8 @@ YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
 
 // MOV r/m8, r8
 // MOV r/m16, r16
-static ExecuteStatus ExecuteMoveRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   WriteOperand(ctx, &dest, FromOperand(&src));
@@ -1232,8 +1742,8 @@ static ExecuteStatus ExecuteMoveRegisterToRegisterOrMemory(
 
 // MOV r8, r/m8
 // MOV r16, r/m16
-static ExecuteStatus ExecuteMoveRegisterOrMemoryToRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   WriteOperand(ctx, &dest, FromOperand(&src));
@@ -1241,8 +1751,8 @@ static ExecuteStatus ExecuteMoveRegisterOrMemoryToRegister(
 }
 
 // MOV r/m16, sreg
-static ExecuteStatus ExecuteMoveSegmentRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveSegmentRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadSegmentRegisterOperand(ctx);
   WriteOperand(ctx, &dest, FromOperand(&src));
@@ -1250,8 +1760,8 @@ static ExecuteStatus ExecuteMoveSegmentRegisterToRegisterOrMemory(
 }
 
 // MOV sreg, r/m16
-static ExecuteStatus ExecuteMoveRegisterOrMemoryToSegmentRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveRegisterOrMemoryToSegmentRegister(const InstructionContext* ctx) {
   Operand dest = ReadSegmentRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   WriteOperand(ctx, &dest, FromOperand(&src));
@@ -1260,8 +1770,8 @@ static ExecuteStatus ExecuteMoveRegisterOrMemoryToSegmentRegister(
 
 // MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
 // MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
-static ExecuteStatus ExecuteMoveImmediateToRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
   static const uint8_t register_index_opcode_base[kNumWidths] = {
       0xB0,  // kByte
       0xB8,  // kWord
@@ -1277,8 +1787,8 @@ static ExecuteStatus ExecuteMoveImmediateToRegister(
 
 // MOV AL, moffs16
 // MOV AX, moffs16
-static ExecuteStatus ExecuteMoveMemoryOffsetToALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
@@ -1297,8 +1807,8 @@ static ExecuteStatus ExecuteMoveMemoryOffsetToALOrAX(
 
 // MOV moffs16, AL
 // MOV moffs16, AX
-static ExecuteStatus ExecuteMoveALOrAXToMemoryOffset(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
@@ -1317,8 +1827,8 @@ static ExecuteStatus ExecuteMoveALOrAXToMemoryOffset(
 
 // MOV r/m8, imm8
 // MOV r/m16, imm16
-static ExecuteStatus ExecuteMoveImmediateToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue src_value = ReadImmediate(ctx);
   WriteOperand(ctx, &dest, FromOperandValue(&src_value));
@@ -1330,7 +1840,8 @@ static ExecuteStatus ExecuteMoveImmediateToRegisterOrMemory(
 // ============================================================================
 
 // XCHG AX, AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteStatus ExecuteExchangeRegister(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteExchangeRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x90;
   if (register_index == kAX) {
     // No-op
@@ -1346,8 +1857,8 @@ static ExecuteStatus ExecuteExchangeRegister(const InstructionContext* ctx) {
 
 // XCHG r/m8, r8
 // XCHG r/m16, r16
-static ExecuteStatus ExecuteExchangeRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteExchangeRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   uint32_t temp = FromOperand(&dest);
@@ -1361,7 +1872,8 @@ static ExecuteStatus ExecuteExchangeRegisterOrMemory(
 // ============================================================================
 
 // XLAT
-static ExecuteStatus ExecuteTranslateByte(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteTranslateByte(const InstructionContext* ctx) {
   // Read the AL register
   Operand al = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandAddress src_address = {
@@ -1376,13 +1888,29 @@ static ExecuteStatus ExecuteTranslateByte(const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
+
+// --------------------
+// instructions_mov.c end
+// --------------------
+
+// --------------------
+// instructions_lea.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
 // ============================================================================
 // LEA instruction
 // ============================================================================
 
 // LEA r16, m
-static ExecuteStatus ExecuteLoadEffectiveAddress(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   MemoryAddress memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
@@ -1417,164 +1945,32 @@ static ExecuteStatus ExecuteLoadSegmentWithPointer(
 }
 
 // LES r16, m
-static ExecuteStatus ExecuteLoadESWithPointer(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteLoadESWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kES);
 }
 
 // LDS r16, m
-static ExecuteStatus ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kDS);
 }
 
-// ============================================================================
-// PUSH and POP instructions
-// ============================================================================
 
-static void Push(CPUState* cpu, OperandValue value) {
-  cpu->registers[kSP] -= 2;
-  OperandAddress address = {
-      .type = kOperandAddressTypeMemory,
-      .value.memory_address = {
-          .segment_register_index = kSS,
-          .offset = cpu->registers[kSP],
-      }};
-  WriteMemoryWord(cpu, &address, value);
-}
+// --------------------
+// instructions_lea.c end
+// --------------------
 
-static OperandValue Pop(CPUState* cpu) {
-  OperandAddress address = {
-      .type = kOperandAddressTypeMemory,
-      .value.memory_address = {
-          .segment_register_index = kSS,
-          .offset = cpu->registers[kSP],
-      }};
-  OperandValue value = ReadMemoryWord(cpu, &address);
-  cpu->registers[kSP] += 2;
-  return value;
-}
+// --------------------
+// instructions_add.c start
+// --------------------
 
-// PUSH AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x50;
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx->cpu, src.value);
-  return kExecuteSuccess;
-}
-
-// POP AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ctx->instruction->opcode - 0x58;
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
-  return kExecuteSuccess;
-}
-
-// PUSH ES/CS/SS/DS
-static ExecuteStatus ExecutePushSegmentRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx->cpu, src.value);
-  return kExecuteSuccess;
-}
-
-// POP ES/CS/SS/DS
-static ExecuteStatus ExecutePopSegmentRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
-  // Special case - disallow POP CS
-  if (register_index == kCS) {
-    return kExecuteInvalidInstruction;
-  }
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
-  return kExecuteSuccess;
-}
-
-// PUSHF
-static ExecuteStatus ExecutePushFlags(const InstructionContext* ctx) {
-  Push(ctx->cpu, WordValue(ctx->cpu->flags));
-  return kExecuteSuccess;
-}
-
-// POPF
-static ExecuteStatus ExecutePopFlags(const InstructionContext* ctx) {
-  OperandValue value = Pop(ctx->cpu);
-  ctx->cpu->flags = FromOperandValue(&value);
-  return kExecuteSuccess;
-}
-
-// POP r/m16
-static ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
-  if (ctx->instruction->mod_rm.reg != 0) {
-    return kExecuteInvalidInstruction;
-  }
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
-  return kExecuteSuccess;
-}
-
-// ============================================================================
-// LAHF and SAHF
-// ============================================================================
-
-// Returns the AH register address.
-static const OperandAddress* GetAHRegisterAddress(void) {
-  static OperandAddress ah = {
-      .type = kOperandAddressTypeRegister,
-      .value = {
-          .register_address = {
-              .register_index = kAX,
-              .byte_offset = 8,
-          }}};
-  return &ah;
-}
-
-// LAHF
-static ExecuteStatus ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
-  WriteRegisterByte(
-      ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
-  return kExecuteSuccess;
-}
-
-// SAHF
-static ExecuteStatus ExecuteStoreAHToFlags(const InstructionContext* ctx) {
-  OperandValue value = ReadRegisterByte(ctx->cpu, GetAHRegisterAddress());
-  // Clear the lower byte of flags and set it to the value in AH
-  ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
-  return kExecuteSuccess;
-}
-
-// ============================================================================
-// CLC, STC, CLI, STI, CLD, STD instructions
-// ============================================================================
-
-// Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
-// instructions, indexed by (opcode - 0xF8) / 2.
-static const Flag kFlagsForClearAndSetInstructions[] = {
-    kCF,  // CLC, STC
-    kIF,  // CLI, STI
-    kDF,  // CLD, STD
-};
-
-static ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx) {
-  uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
-  Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
-  bool value = (opcode_index & 0x1) != 0;
-  SetFlag(ctx->cpu, flag, value);
-  return kExecuteSuccess;
-}
-
-// ============================================================================
-// CMC instruction
-// ============================================================================
-
-// CMC
-static ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext* ctx) {
-  SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
-  return kExecuteSuccess;
-}
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // ADD, ADC, and INC instructions
@@ -1634,7 +2030,7 @@ static ExecuteStatus ExecuteAddCommon(
 }
 
 // Common logic for ADD instructions
-static ExecuteStatus ExecuteAdd(
+YAX86_PRIVATE ExecuteStatus ExecuteAdd(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteAddCommon(
@@ -1643,8 +2039,8 @@ static ExecuteStatus ExecuteAdd(
 
 // ADD r/m8, r8
 // ADD r/m16, r16
-static ExecuteStatus ExecuteAddRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteAdd(ctx, &dest, &src.value);
@@ -1652,8 +2048,8 @@ static ExecuteStatus ExecuteAddRegisterToRegisterOrMemory(
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-static ExecuteStatus ExecuteAddRegisterOrMemoryToRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   return ExecuteAdd(ctx, &dest, &src.value);
@@ -1661,15 +2057,15 @@ static ExecuteStatus ExecuteAddRegisterOrMemoryToRegister(
 
 // ADD AL, imm8
 // ADD AX, imm16
-static ExecuteStatus ExecuteAddImmediateToALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteAdd(ctx, &dest, &src_value);
 }
 
 // Common logic for ADC instructions
-static ExecuteStatus ExecuteAddWithCarry(
+YAX86_PRIVATE ExecuteStatus ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteAddCommon(
@@ -1678,16 +2074,16 @@ static ExecuteStatus ExecuteAddWithCarry(
 
 // ADC r/m8, r8
 // ADC r/m16, r16
-static ExecuteStatus ExecuteAddRegisterToRegisterOrMemoryWithCarry(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteAddWithCarry(ctx, &dest, &src.value);
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
-static ExecuteStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   return ExecuteAddWithCarry(ctx, &dest, &src.value);
@@ -1695,26 +2091,43 @@ static ExecuteStatus ExecuteAddRegisterOrMemoryToRegisterWithCarry(
 
 // ADC AL, imm8
 // ADC AX, imm16
-static ExecuteStatus ExecuteAddImmediateToALOrAXWithCarry(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteAddWithCarry(ctx, &dest, &src_value);
 }
 
 // Common logic for INC instructions
-static ExecuteStatus ExecuteInc(const InstructionContext* ctx, Operand* dest) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteInc(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = WordValue(1);
   return ExecuteAddCommon(
       ctx, dest, &src_value, /* carry */ false, SetFlagsAfterInc);
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x40;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteInc(ctx, &dest);
 }
+
+
+// --------------------
+// instructions_add.c end
+// --------------------
+
+// --------------------
+// instructions_sub.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // SUB, SBB, and DEC instructions
@@ -1752,9 +2165,9 @@ static void SetFlagsAfterDec(
   SetFlag(ctx->cpu, kAF, (op1 & 0xF) < ((op2 & 0xF) + (did_borrow ? 1 : 0)));
 }
 
-// Set CPU flags after a SUB or SBB instruction.
+// Set CPU flags after a SUB, SBB, CMP or NEG instruction.
 // This calls SetFlagsAfterDec and then sets the Carry Flag (CF).
-static void SetFlagsAfterSub(
+YAX86_PRIVATE void SetFlagsAfterSub(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_borrow) {
   SetFlagsAfterDec(ctx, op1, op2, result, did_borrow);
@@ -1786,7 +2199,7 @@ static ExecuteStatus ExecuteSubCommon(
 }
 
 // Common logic for SUB instructions
-static ExecuteStatus ExecuteSub(
+YAX86_PRIVATE ExecuteStatus ExecuteSub(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -1795,8 +2208,8 @@ static ExecuteStatus ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-static ExecuteStatus ExecuteSubRegisterFromRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteSub(ctx, &dest, &src.value);
@@ -1804,8 +2217,8 @@ static ExecuteStatus ExecuteSubRegisterFromRegisterOrMemory(
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-static ExecuteStatus ExecuteSubRegisterOrMemoryFromRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   return ExecuteSub(ctx, &dest, &src.value);
@@ -1813,15 +2226,15 @@ static ExecuteStatus ExecuteSubRegisterOrMemoryFromRegister(
 
 // SUB AL, imm8
 // SUB AX, imm16
-static ExecuteStatus ExecuteSubImmediateFromALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteSub(ctx, &dest, &src_value);
 }
 
 // Common logic for SBB instructions
-static ExecuteStatus ExecuteSubWithBorrow(
+YAX86_PRIVATE ExecuteStatus ExecuteSubWithBorrow(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -1830,7 +2243,7 @@ static ExecuteStatus ExecuteSubWithBorrow(
 
 // SBB r/m8, r8
 // SBB r/m16, r16
-static ExecuteStatus ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
+YAX86_PRIVATE ExecuteStatus ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -1839,7 +2252,7 @@ static ExecuteStatus ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
 
 // SBB r8, r/m8
 // SBB r16, r/m16
-static ExecuteStatus ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
+YAX86_PRIVATE ExecuteStatus ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -1848,33 +2261,85 @@ static ExecuteStatus ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
 
 // SBB AL, imm8
 // SBB AX, imm16
-static ExecuteStatus ExecuteSubImmediateFromALOrAXWithBorrow(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteSubWithBorrow(ctx, &dest, &src_value);
 }
 
 // Common logic for DEC instructions
-static ExecuteStatus ExecuteDec(const InstructionContext* ctx, Operand* dest) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteDec(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = WordValue(1);
   return ExecuteSubCommon(
       ctx, dest, &src_value, /* borrow */ false, SetFlagsAfterDec);
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
-static ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
   RegisterIndex register_index = ctx->instruction->opcode - 0x48;
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteDec(ctx, &dest);
 }
+
+
+// --------------------
+// instructions_sub.c end
+// --------------------
+
+// --------------------
+// instructions_sign_ext.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// ============================================================================
+// Sign extension instructions
+// ============================================================================
+
+// CBW
+YAX86_PRIVATE ExecuteStatus ExecuteCbw(const InstructionContext* ctx) {
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  return kExecuteSuccess;
+}
+
+// CWD
+YAX86_PRIVATE ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
+  ctx->cpu->registers[kDX] =
+      (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
+  return kExecuteSuccess;
+}
+
+
+// --------------------
+// instructions_sign_ext.c end
+// --------------------
+
+// --------------------
+// instructions_cmp.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // CMP instructions
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-static ExecuteStatus ExecuteCmp(
+YAX86_PRIVATE ExecuteStatus ExecuteCmp(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -1886,8 +2351,8 @@ static ExecuteStatus ExecuteCmp(
 
 // CMP r/m8, r8
 // CMP r/m16, r16
-static ExecuteStatus ExecuteCmpRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteCmp(ctx, &dest, &src.value);
@@ -1895,8 +2360,8 @@ static ExecuteStatus ExecuteCmpRegisterToRegisterOrMemory(
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-static ExecuteStatus ExecuteCmpRegisterOrMemoryToRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   return ExecuteCmp(ctx, &dest, &src.value);
@@ -1904,18 +2369,34 @@ static ExecuteStatus ExecuteCmpRegisterOrMemoryToRegister(
 
 // CMP AL, imm8
 // CMP AX, imm16
-static ExecuteStatus ExecuteCmpImmediateToALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteCmp(ctx, &dest, &src_value);
 }
 
+
+// --------------------
+// instructions_cmp.c end
+// --------------------
+
+// --------------------
+// instructions_bool.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
 // ============================================================================
 // Boolean AND, OR and XOR instructions
 // ============================================================================
 
-static void SetFlagsAfterBooleanInstruction(
+YAX86_PRIVATE void SetFlagsAfterBooleanInstruction(
     const InstructionContext* ctx, uint32_t result) {
   SetCommonFlagsAfterInstruction(ctx, result);
   // Carry Flag (CF) should be cleared
@@ -1925,7 +2406,7 @@ static void SetFlagsAfterBooleanInstruction(
 }
 
 // Common logic for AND instructions.
-static ExecuteStatus ExecuteBooleanAnd(
+YAX86_PRIVATE ExecuteStatus ExecuteBooleanAnd(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
@@ -1936,8 +2417,8 @@ static ExecuteStatus ExecuteBooleanAnd(
 
 // AND r/m8, r8
 // AND r/m16, r16
-static ExecuteStatus ExecuteBooleanAndRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteBooleanAnd(ctx, &dest, &src.value);
@@ -1945,8 +2426,8 @@ static ExecuteStatus ExecuteBooleanAndRegisterToRegisterOrMemory(
 
 // AND r8, r/m8
 // AND r16, r/m16
-static ExecuteStatus ExecuteBooleanAndRegisterOrMemoryToRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   return ExecuteBooleanAnd(ctx, &dest, &src.value);
@@ -1954,15 +2435,15 @@ static ExecuteStatus ExecuteBooleanAndRegisterOrMemoryToRegister(
 
 // AND AL, imm8
 // AND AX, imm16
-static ExecuteStatus ExecuteBooleanAndImmediateToALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanAndImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteBooleanAnd(ctx, &dest, &src_value);
 }
 
 // Common logic for OR instructions.
-static ExecuteStatus ExecuteBooleanOr(
+YAX86_PRIVATE ExecuteStatus ExecuteBooleanOr(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
@@ -1973,8 +2454,8 @@ static ExecuteStatus ExecuteBooleanOr(
 
 // OR r/m8, r8
 // OR r/m16, r16
-static ExecuteStatus ExecuteBooleanOrRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteBooleanOr(ctx, &dest, &src.value);
@@ -1982,8 +2463,8 @@ static ExecuteStatus ExecuteBooleanOrRegisterToRegisterOrMemory(
 
 // OR r8, r/m8
 // OR r16, r/m16
-static ExecuteStatus ExecuteBooleanOrRegisterOrMemoryToRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   return ExecuteBooleanOr(ctx, &dest, &src.value);
@@ -1991,15 +2472,15 @@ static ExecuteStatus ExecuteBooleanOrRegisterOrMemoryToRegister(
 
 // OR AL, imm8
 // OR AX, imm16
-static ExecuteStatus ExecuteBooleanOrImmediateToALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanOrImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteBooleanOr(ctx, &dest, &src_value);
 }
 
 // Common logic for XOR instructions.
-static ExecuteStatus ExecuteBooleanXor(
+YAX86_PRIVATE ExecuteStatus ExecuteBooleanXor(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
@@ -2010,8 +2491,8 @@ static ExecuteStatus ExecuteBooleanXor(
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-static ExecuteStatus ExecuteBooleanXorRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteBooleanXor(ctx, &dest, &src.value);
@@ -2019,8 +2500,8 @@ static ExecuteStatus ExecuteBooleanXorRegisterToRegisterOrMemory(
 
 // XOR r8, r/m8
 // XOR r16, r/m16
-static ExecuteStatus ExecuteBooleanXorRegisterOrMemoryToRegister(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
   return ExecuteBooleanXor(ctx, &dest, &src.value);
@@ -2028,8 +2509,8 @@ static ExecuteStatus ExecuteBooleanXorRegisterOrMemoryToRegister(
 
 // XOR AL, imm8
 // XOR AX, imm16
-static ExecuteStatus ExecuteBooleanXorImmediateToALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteBooleanXor(ctx, &dest, &src_value);
@@ -2040,7 +2521,7 @@ static ExecuteStatus ExecuteBooleanXorImmediateToALOrAX(
 // ============================================================================
 
 // Common logic for TEST instructions.
-static ExecuteStatus ExecuteTest(
+YAX86_PRIVATE ExecuteStatus ExecuteTest(
     const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -2049,8 +2530,8 @@ static ExecuteStatus ExecuteTest(
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-static ExecuteStatus ExecuteTestRegisterToRegisterOrMemory(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
   return ExecuteTest(ctx, &dest, &src.value);
@@ -2058,12 +2539,28 @@ static ExecuteStatus ExecuteTestRegisterToRegisterOrMemory(
 
 // TEST AL, imm8
 // TEST AX, imm16
-static ExecuteStatus ExecuteTestImmediateToALOrAX(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, &dest, &src_value);
 }
+
+
+// --------------------
+// instructions_bool.c end
+// --------------------
+
+// --------------------
+// instructions_ctrl_flow.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // JMP instructions
@@ -2100,13 +2597,14 @@ static ExecuteStatus ExecuteRelativeJump(
 
 // JMP rel8
 // JMP rel16
-static ExecuteStatus ExecuteShortOrNearJump(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
   return ExecuteRelativeJumpByte(ctx, &offset_value);
 }
 
 // Common logic for far jumps.
-static ExecuteStatus ExecuteFarJump(
+YAX86_PRIVATE ExecuteStatus ExecuteFarJump(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   ctx->cpu->registers[kCS] = FromOperandValue(segment);
@@ -2115,7 +2613,8 @@ static ExecuteStatus ExecuteFarJump(
 }
 
 // JMP ptr16:16
-static ExecuteStatus ExecuteDirectFarJump(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteDirectFarJump(const InstructionContext* ctx) {
   OperandValue new_cs = WordValue(
       ((uint16_t)ctx->instruction->immediate[2]) |
       (((uint16_t)ctx->instruction->immediate[3]) << 8));
@@ -2151,8 +2650,8 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-static ExecuteStatus ExecuteUnsignedConditionalJump(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
   uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
       [(ctx->instruction->opcode - 0x70) / 2];
   bool flag_value = (ctx->cpu->flags & flag_mask) != 0;
@@ -2163,8 +2662,8 @@ static ExecuteStatus ExecuteUnsignedConditionalJump(
 }
 
 // JL/JGNE and JNL/JGE
-static ExecuteStatus ExecuteSignedConditionalJumpJLOrJNL(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
       GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF);
   const bool success_value = (ctx->instruction->opcode & 0x1);
@@ -2172,8 +2671,8 @@ static ExecuteStatus ExecuteSignedConditionalJumpJLOrJNL(
 }
 
 // JLE/JG and JNLE/JG
-static ExecuteStatus ExecuteSignedConditionalJumpJLEOrJNLE(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
   const bool is_greater = !GetFlag(ctx->cpu, kZF) &&
                           (GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF));
   const bool success_value = (ctx->instruction->opcode & 0x1);
@@ -2185,13 +2684,13 @@ static ExecuteStatus ExecuteSignedConditionalJumpJLEOrJNLE(
 // ============================================================================
 
 // LOOP rel8
-static ExecuteStatus ExecuteLoop(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteLoop(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
 }
 
 // LOOPZ rel8
 // LOOPNZ rel8
-static ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
   bool condition1 = --(ctx->cpu->registers[kCX]) != 0;
   bool condition2 =
       GetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
@@ -2199,7 +2698,8 @@ static ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
 }
 
 // JCXZ rel8
-static ExecuteStatus ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, ctx->cpu->registers[kCX] == 0, true);
 }
 
@@ -2215,13 +2715,14 @@ static ExecuteStatus ExecuteNearCall(
 }
 
 // CALL rel16
-static ExecuteStatus ExecuteDirectNearCall(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   return ExecuteNearCall(ctx, &offset);
 }
 
 // Common logic for far calls.
-static ExecuteStatus ExecuteFarCall(
+YAX86_PRIVATE ExecuteStatus ExecuteFarCall(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   // Push the current CS and IP onto the stack.
@@ -2231,7 +2732,8 @@ static ExecuteStatus ExecuteFarCall(
 }
 
 // CALL ptr16:16
-static ExecuteStatus ExecuteDirectFarCall(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteDirectFarCall(const InstructionContext* ctx) {
   Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
   Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteDirectFarJump(ctx);
@@ -2247,12 +2749,13 @@ static ExecuteStatus ExecuteNearReturnCommon(
 }
 
 // RET
-static ExecuteStatus ExecuteNearReturn(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteNearReturn(const InstructionContext* ctx) {
   return ExecuteNearReturnCommon(ctx, 0);
 }
 
 // RET imm16
-static ExecuteStatus ExecuteNearReturnAndPop(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteNearReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteNearReturnCommon(ctx, FromOperandValue(&arg_size_value));
 }
@@ -2269,15 +2772,688 @@ static ExecuteStatus ExecuteFarReturnCommon(
 }
 
 // RETF
-static ExecuteStatus ExecuteFarReturn(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteFarReturn(const InstructionContext* ctx) {
   return ExecuteFarReturnCommon(ctx, 0);
 }
 
 // RETF imm16
-static ExecuteStatus ExecuteFarReturnAndPop(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteFarReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteFarReturnCommon(ctx, FromOperandValue(&arg_size_value));
 }
+
+// ============================================================================
+// Interrupt instructions
+// ============================================================================
+
+// Common logic for returning from an interrupt.
+YAX86_PRIVATE ExecuteStatus ExecuteReturnFromInterrupt(CPUState* cpu) {
+  OperandValue ip_value = Pop(cpu);
+  cpu->registers[kIP] = FromOperandValue(&ip_value);
+  OperandValue cs_value = Pop(cpu);
+  cpu->registers[kCS] = FromOperandValue(&cs_value);
+  OperandValue flags_value = Pop(cpu);
+  cpu->flags = FromOperandValue(&flags_value);
+  return kExecuteSuccess;
+}
+
+// IRET
+YAX86_PRIVATE ExecuteStatus ExecuteIret(const InstructionContext* ctx) {
+  return ExecuteReturnFromInterrupt(ctx->cpu);
+}
+
+// INT 3
+YAX86_PRIVATE ExecuteStatus ExecuteInt3(const InstructionContext* ctx) {
+  SetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
+  return kExecuteSuccess;
+}
+
+// INTO
+YAX86_PRIVATE ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
+  if (GetFlag(ctx->cpu, kOF)) {
+    SetPendingInterrupt(ctx->cpu, kInterruptOverflow);
+  }
+  return kExecuteSuccess;
+}
+
+// INT n
+YAX86_PRIVATE ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
+  OperandValue interrupt_number_value = ReadImmediate(ctx);
+  SetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
+  return kExecuteSuccess;
+}
+
+// HLT
+YAX86_PRIVATE ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
+  (void)ctx;
+  return kExecuteHalt;
+}
+
+
+// --------------------
+// instructions_ctrl_flow.c end
+// --------------------
+
+// --------------------
+// instructions_stack.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// ============================================================================
+// PUSH and POP instructions
+// ============================================================================
+
+// PUSH AX/CX/DX/BX/SP/BP/SI/DI
+YAX86_PRIVATE ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
+  RegisterIndex register_index = ctx->instruction->opcode - 0x50;
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Push(ctx->cpu, src.value);
+  return kExecuteSuccess;
+}
+
+// POP AX/CX/DX/BX/SP/BP/SI/DI
+YAX86_PRIVATE ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
+  RegisterIndex register_index = ctx->instruction->opcode - 0x58;
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  OperandValue value = Pop(ctx->cpu);
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  return kExecuteSuccess;
+}
+
+// PUSH ES/CS/SS/DS
+YAX86_PRIVATE ExecuteStatus ExecutePushSegmentRegister(const InstructionContext* ctx) {
+  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Push(ctx->cpu, src.value);
+  return kExecuteSuccess;
+}
+
+// POP ES/CS/SS/DS
+YAX86_PRIVATE ExecuteStatus ExecutePopSegmentRegister(const InstructionContext* ctx) {
+  RegisterIndex register_index = ((ctx->instruction->opcode >> 3) & 0x03) + 8;
+  // Special case - disallow POP CS
+  if (register_index == kCS) {
+    return kExecuteInvalidInstruction;
+  }
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  OperandValue value = Pop(ctx->cpu);
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  return kExecuteSuccess;
+}
+
+// PUSHF
+YAX86_PRIVATE ExecuteStatus ExecutePushFlags(const InstructionContext* ctx) {
+  Push(ctx->cpu, WordValue(ctx->cpu->flags));
+  return kExecuteSuccess;
+}
+
+// POPF
+YAX86_PRIVATE ExecuteStatus ExecutePopFlags(const InstructionContext* ctx) {
+  OperandValue value = Pop(ctx->cpu);
+  ctx->cpu->flags = FromOperandValue(&value);
+  return kExecuteSuccess;
+}
+
+// POP r/m16
+YAX86_PRIVATE ExecuteStatus ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
+  if (ctx->instruction->mod_rm.reg != 0) {
+    return kExecuteInvalidInstruction;
+  }
+  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandValue value = Pop(ctx->cpu);
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  return kExecuteSuccess;
+}
+
+// ============================================================================
+// LAHF and SAHF
+// ============================================================================
+
+// Returns the AH register address.
+static const OperandAddress* GetAHRegisterAddress(void) {
+  static OperandAddress ah = {
+      .type = kOperandAddressTypeRegister,
+      .value = {
+          .register_address = {
+              .register_index = kAX,
+              .byte_offset = 8,
+          }}};
+  return &ah;
+}
+
+// LAHF
+YAX86_PRIVATE ExecuteStatus ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
+  WriteRegisterByte(
+      ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
+  return kExecuteSuccess;
+}
+
+// SAHF
+YAX86_PRIVATE ExecuteStatus ExecuteStoreAHToFlags(const InstructionContext* ctx) {
+  OperandValue value = ReadRegisterByte(ctx->cpu, GetAHRegisterAddress());
+  // Clear the lower byte of flags and set it to the value in AH
+  ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
+  return kExecuteSuccess;
+}
+
+
+// --------------------
+// instructions_stack.c end
+// --------------------
+
+// --------------------
+// instructions_flags.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// ============================================================================
+// CLC, STC, CLI, STI, CLD, STD instructions
+// ============================================================================
+
+// Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
+// instructions, indexed by (opcode - 0xF8) / 2.
+static const Flag kFlagsForClearAndSetInstructions[] = {
+    kCF,  // CLC, STC
+    kIF,  // CLI, STI
+    kDF,  // CLD, STD
+};
+
+YAX86_PRIVATE ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx) {
+  uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
+  Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
+  bool value = (opcode_index & 0x1) != 0;
+  SetFlag(ctx->cpu, flag, value);
+  return kExecuteSuccess;
+}
+
+// ============================================================================
+// CMC instruction
+// ============================================================================
+
+// CMC
+YAX86_PRIVATE ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext* ctx) {
+  SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
+  return kExecuteSuccess;
+}
+
+
+// --------------------
+// instructions_flags.c end
+// --------------------
+
+// --------------------
+// instructions_io.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// ============================================================================
+// IN and OUT instructions
+// ============================================================================
+
+// Read a byte from an I/O port.
+static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
+  return ByteValue(
+      cpu->config->read_port ? cpu->config->read_port(cpu, port) : 0xFF);
+}
+
+// Read a word from an I/O port as a uint16_t.
+static OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
+  uint8_t low = ReadByteFromPort(cpu, port).value.byte_value;
+  uint8_t high = ReadByteFromPort(cpu, port).value.byte_value;
+  return WordValue((high << 8) | low);
+}
+
+// Table of functions to read from an I/O port, indexed by data width.
+static OperandValue (*const kReadFromPortFns[])(CPUState*, uint16_t) = {
+    ReadByteFromPort,  // kByte
+    ReadWordFromPort,  // kWord
+};
+
+// Common logic for IN instructions.
+static ExecuteStatus ExecuteIn(const InstructionContext* ctx, uint16_t port) {
+  OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  WriteOperand(ctx, &dest, FromOperandValue(&value));
+  return kExecuteSuccess;
+}
+
+// IN AL, imm8
+// IN AX, imm8
+YAX86_PRIVATE ExecuteStatus ExecuteInImmediate(const InstructionContext* ctx) {
+  OperandValue port = ReadImmediateByte(ctx->instruction);
+  return ExecuteIn(ctx, FromOperandValue(&port));
+}
+
+// IN AL, DX
+// IN AX, DX
+YAX86_PRIVATE ExecuteStatus ExecuteInDX(const InstructionContext* ctx) {
+  return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
+}
+
+// Write a byte to an I/O port.
+static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
+  if (!cpu->config->write_port) {
+    return;
+  }
+  cpu->config->write_port(cpu, port, FromOperandValue(&value));
+}
+
+// Write a word to an I/O port.
+static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
+  uint32_t raw_value = FromOperandValue(&value);
+  WriteByteToPort(cpu, port, ByteValue(raw_value & 0xFF));
+  WriteByteToPort(cpu, port, ByteValue((raw_value >> 8) & 0xFF));
+}
+
+// Table of functions to write to an I/O port, indexed by data width.
+static void (*const kWriteToPortFns[])(CPUState*, uint16_t, OperandValue) = {
+    WriteByteToPort,  // kByte
+    WriteWordToPort,  // kWord
+};
+
+// Common logic for OUT instructions.
+static ExecuteStatus ExecuteOut(const InstructionContext* ctx, uint16_t port) {
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
+  return kExecuteSuccess;
+}
+
+// OUT imm8, AL
+// OUT imm8, AX
+YAX86_PRIVATE ExecuteStatus ExecuteOutImmediate(const InstructionContext* ctx) {
+  OperandValue port = ReadImmediateByte(ctx->instruction);
+  return ExecuteOut(ctx, FromOperandValue(&port));
+}
+
+// OUT DX, AL
+// OUT DX, AX
+YAX86_PRIVATE ExecuteStatus ExecuteOutDX(const InstructionContext* ctx) {
+  return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
+}
+
+
+// --------------------
+// instructions_io.c end
+// --------------------
+
+// --------------------
+// instructions_string.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// ============================================================================
+// String instructions
+// ============================================================================
+
+// Get the repetition prefix of a string instruction, if any.
+static uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+  uint8_t prefix = 0;
+  for (int i = 0; i < ctx->instruction->prefix_size; ++i) {
+    switch (ctx->instruction->prefix[i]) {
+      case kPrefixREP:
+      case kPrefixREPNZ:
+        prefix = ctx->instruction->prefix[i];
+        break;
+      default:
+        continue;
+    }
+  }
+  return prefix;
+}
+
+// Get the source operand for string instructions. Typically DS:SI but can be
+// overridden by a segment override prefix.
+static Operand GetStringSourceOperand(const InstructionContext* ctx) {
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value =
+          {
+              .memory_address =
+                  {
+                      .segment_register_index = kDS,
+                      .offset = ctx->cpu->registers[kSI],
+                  },
+          },
+  };
+  ApplySegmentOverride(ctx->instruction, &address.value.memory_address);
+  Operand operand = {
+      .address = address,
+      .value = ReadOperandValue(ctx, &address),
+  };
+  return operand;
+}
+
+// Get the destination operand address for string instructions. Always ES:DI.
+static OperandAddress GetStringDestinationOperandAddress(
+    const InstructionContext* ctx) {
+  OperandAddress address = {
+      .type = kOperandAddressTypeMemory,
+      .value =
+          {
+              .memory_address =
+                  {
+                      .segment_register_index = kES,
+                      .offset = ctx->cpu->registers[kDI],
+                  },
+          },
+  };
+  return address;
+}
+
+// Get the destination operand for string instructions. Always ES:DI.
+static Operand GetStringDestinationOperand(const InstructionContext* ctx) {
+  OperandAddress address = GetStringDestinationOperandAddress(ctx);
+  Operand operand = {
+      .address = address,
+      .value = ReadOperandValue(ctx, &address),
+  };
+  return operand;
+}
+
+// Update the source address register (SI) after a string operation.
+static void UpdateStringSourceAddress(const InstructionContext* ctx) {
+  if (GetFlag(ctx->cpu, kDF)) {
+    ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
+  } else {
+    ctx->cpu->registers[kSI] += kNumBytes[ctx->metadata->width];
+  }
+}
+
+// Update the destination address register (DI) after a string operation.
+static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
+  if (GetFlag(ctx->cpu, kDF)) {
+    ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
+  } else {
+    ctx->cpu->registers[kDI] += kNumBytes[ctx->metadata->width];
+  }
+}
+
+// Execute a string instruction with optional REP prefix.
+static ExecuteStatus ExecuteStringInstructionWithREPPrefix(
+    const InstructionContext* ctx,
+    ExecuteStatus (*fn)(const InstructionContext*)) {
+  uint8_t prefix = GetRepetitionPrefix(ctx);
+  if (prefix != kPrefixREP) {
+    return fn(ctx);
+  }
+  while (ctx->cpu->registers[kCX]) {
+    ExecuteStatus status = fn(ctx);
+    if (status != kExecuteSuccess) {
+      return status;
+    }
+    --ctx->cpu->registers[kCX];
+  }
+  return kExecuteSuccess;
+}
+
+// Single MOVS iteration.
+static ExecuteStatus ExecuteMovsIteration(const InstructionContext* ctx) {
+  Operand src = GetStringSourceOperand(ctx);
+  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
+  WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
+  UpdateStringSourceAddress(ctx);
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// MOVS
+YAX86_PRIVATE ExecuteStatus ExecuteMovs(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteMovsIteration);
+}
+
+// Single STOS iteration.
+static ExecuteStatus ExecuteStosIteration(const InstructionContext* ctx) {
+  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
+  WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// STOS
+YAX86_PRIVATE ExecuteStatus ExecuteStos(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteStosIteration);
+}
+
+// Single LODS iteration.
+static ExecuteStatus ExecuteLodsIteration(const InstructionContext* ctx) {
+  Operand src = GetStringSourceOperand(ctx);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  WriteOperand(ctx, &dest, FromOperand(&src));
+  UpdateStringSourceAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// LODS
+YAX86_PRIVATE ExecuteStatus ExecuteLods(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
+}
+
+// Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
+static ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
+    const InstructionContext* ctx,
+    ExecuteStatus (*fn)(const InstructionContext*)) {
+  uint8_t prefix = GetRepetitionPrefix(ctx);
+  if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
+    return fn(ctx);
+  }
+  bool terminate_zf_value = prefix == kPrefixREPNZ;
+  while (ctx->cpu->registers[kCX]) {
+    ExecuteStatus status = fn(ctx);
+    if (status != kExecuteSuccess) {
+      return status;
+    }
+    --ctx->cpu->registers[kCX];
+    if (GetFlag(ctx->cpu, kZF) == terminate_zf_value) {
+      break;
+    }
+  }
+  return kExecuteSuccess;
+}
+
+// Single SCAS iteration.
+static ExecuteStatus ExecuteScasIteration(const InstructionContext* ctx) {
+  Operand src = GetStringDestinationOperand(ctx);
+  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  ExecuteCmp(ctx, &dest, &src.value);
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// SCAS
+YAX86_PRIVATE ExecuteStatus ExecuteScas(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPZOrRepNZPrefix(
+      ctx, ExecuteScasIteration);
+}
+
+// Single CMPS iteration.
+static ExecuteStatus ExecuteCmpsIteration(const InstructionContext* ctx) {
+  Operand dest = GetStringSourceOperand(ctx);
+  Operand src = GetStringDestinationOperand(ctx);
+  ExecuteCmp(ctx, &dest, &src.value);
+  UpdateStringSourceAddress(ctx);
+  UpdateStringDestinationAddress(ctx);
+  return kExecuteSuccess;
+}
+
+// CMPS
+YAX86_PRIVATE ExecuteStatus ExecuteCmps(const InstructionContext* ctx) {
+  return ExecuteStringInstructionWithREPZOrRepNZPrefix(
+      ctx, ExecuteCmpsIteration);
+}
+
+
+// --------------------
+// instructions_string.c end
+// --------------------
+
+// --------------------
+// instructions_bcd_ascii.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// ============================================================================
+// BCD and ASCII arithmetic instructions
+// ============================================================================
+
+// AAA
+YAX86_PRIVATE ExecuteStatus ExecuteAaa(const InstructionContext* ctx) {
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al_low = al & 0x0F;
+  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+    al += 6;
+    ++ah;
+    SetFlag(ctx->cpu, kAF, true);
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  al &= 0x0F;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  return kExecuteSuccess;
+}
+
+// AAS
+YAX86_PRIVATE ExecuteStatus ExecuteAas(const InstructionContext* ctx) {
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al_low = al & 0x0F;
+  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+    al -= 6;
+    --ah;
+    SetFlag(ctx->cpu, kAF, true);
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  al &= 0x0F;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  return kExecuteSuccess;
+}
+
+// AAM
+YAX86_PRIVATE ExecuteStatus ExecuteAam(const InstructionContext* ctx) {
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  OperandValue base = ReadImmediate(ctx);
+  uint16_t base_value = FromOperandValue(&base);
+  if (base_value == 0) {
+    return kExecuteInvalidInstruction;
+  }
+  uint8_t ah = al / base_value;
+  al %= base_value;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+// AAD
+YAX86_PRIVATE ExecuteStatus ExecuteAad(const InstructionContext* ctx) {
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  OperandValue base = ReadImmediate(ctx);
+  uint8_t base_value = FromOperandValue(&base);
+  al += ah * base_value;
+  ah = 0;
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+// DAA
+YAX86_PRIVATE ExecuteStatus ExecuteDaa(const InstructionContext* ctx) {
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al_low = al & 0x0F;
+  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+    al += 6;
+    SetFlag(ctx->cpu, kAF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+  }
+  uint8_t al_high = (al >> 4) & 0x0F;
+  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+    al += 0x60;
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+// DAS
+YAX86_PRIVATE ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
+  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al_low = al & 0x0F;
+  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+    al -= 6;
+    SetFlag(ctx->cpu, kAF, true);
+  } else {
+    SetFlag(ctx->cpu, kAF, false);
+  }
+  uint8_t al_high = (al >> 4) & 0x0F;
+  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+    al -= 0x60;
+    SetFlag(ctx->cpu, kCF, true);
+  } else {
+    SetFlag(ctx->cpu, kCF, false);
+  }
+  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  SetCommonFlagsAfterInstruction(ctx, al);
+  return kExecuteSuccess;
+}
+
+
+// --------------------
+// instructions_bcd_ascii.c end
+// --------------------
+
+// --------------------
+// instructions_group_1.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 1 - ADD, OR, ADC, SBB, AND, SUB, XOR, CMP
@@ -2300,7 +3476,7 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-static ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -2309,7 +3485,7 @@ static ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-static ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
+YAX86_PRIVATE ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
     const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -2321,6 +3497,22 @@ static ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
   // Sign-extend the immediate value to the destination width.
   return fn(ctx, &dest, &src_value_extended);
 }
+
+
+// --------------------
+// instructions_group_1.c end
+// --------------------
+
+// --------------------
+// instructions_group_2.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 2 - ROL, ROR, RCL, RCR, SHL, SHR, SAL, SAR
@@ -2519,8 +3711,8 @@ static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
 };
 
 // Group 2 shift / rotate by 1.
-static ExecuteStatus ExecuteGroup2ShiftOrRotateBy1Instruction(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand op = ReadRegisterOrMemoryOperand(ctx);
@@ -2528,13 +3720,29 @@ static ExecuteStatus ExecuteGroup2ShiftOrRotateBy1Instruction(
 }
 
 // Group 2 shift / rotate by CL.
-static ExecuteStatus ExecuteGroup2ShiftOrRotateByCLInstruction(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand op = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &op, ctx->cpu->registers[kCX] & 0xFF);
 }
+
+
+// --------------------
+// instructions_group_2.c end
+// --------------------
+
+// --------------------
+// instructions_group_3.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 3 - TEST, NOT, NEG, MUL, IMUL, DIV, IDIV
@@ -2709,7 +3917,8 @@ static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
 };
 
 // Group 3 instruction handler.
-static ExecuteStatus ExecuteGroup3Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup3Instruction(const InstructionContext* ctx) {
   const Group3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   if (fn == 0) {
@@ -2718,6 +3927,22 @@ static ExecuteStatus ExecuteGroup3Instruction(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
+
+
+// --------------------
+// instructions_group_3.c end
+// --------------------
+
+// --------------------
+// instructions_group_4.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 4 - INC, DEC
@@ -2734,12 +3959,28 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
 };
 
 // Group 4 instruction handler.
-static ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* ctx) {
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
+
+
+// --------------------
+// instructions_group_4.c end
+// --------------------
+
+// --------------------
+// instructions_group_5.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 5 - INC, DEC, CALL, JMP, PUSH
@@ -2812,485 +4053,29 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
 };
 
 // Group 5 instruction handler.
-static ExecuteStatus ExecuteGroup5Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup5Instruction(const InstructionContext* ctx) {
   const Group5ExecuteInstructionFn fn =
       kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
 
-// ============================================================================
-// BCD and ASCII instructions
-// ============================================================================
 
-// AAA
-static ExecuteStatus ExecuteAaa(const InstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
-  uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
-    al += 6;
-    ++ah;
-    SetFlag(ctx->cpu, kAF, true);
-    SetFlag(ctx->cpu, kCF, true);
-  } else {
-    SetFlag(ctx->cpu, kAF, false);
-    SetFlag(ctx->cpu, kCF, false);
-  }
-  al &= 0x0F;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  return kExecuteSuccess;
-}
+// --------------------
+// instructions_group_5.c end
+// --------------------
 
-// AAS
-static ExecuteStatus ExecuteAas(const InstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
-  uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
-    al -= 6;
-    --ah;
-    SetFlag(ctx->cpu, kAF, true);
-    SetFlag(ctx->cpu, kCF, true);
-  } else {
-    SetFlag(ctx->cpu, kAF, false);
-    SetFlag(ctx->cpu, kCF, false);
-  }
-  al &= 0x0F;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  return kExecuteSuccess;
-}
+// --------------------
+// opcode_table.c start
+// --------------------
 
-// AAM
-static ExecuteStatus ExecuteAam(const InstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  OperandValue base = ReadImmediate(ctx);
-  uint16_t base_value = FromOperandValue(&base);
-  if (base_value == 0) {
-    return kExecuteInvalidInstruction;
-  }
-  uint8_t ah = al / base_value;
-  al %= base_value;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
-  return kExecuteSuccess;
-}
-
-// AAD
-static ExecuteStatus ExecuteAad(const InstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
-  OperandValue base = ReadImmediate(ctx);
-  uint8_t base_value = FromOperandValue(&base);
-  al += ah * base_value;
-  ah = 0;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
-  return kExecuteSuccess;
-}
-
-// DAA
-static ExecuteStatus ExecuteDaa(const InstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
-  uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
-    al += 6;
-    SetFlag(ctx->cpu, kAF, true);
-  } else {
-    SetFlag(ctx->cpu, kAF, false);
-  }
-  uint8_t al_high = (al >> 4) & 0x0F;
-  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
-    al += 0x60;
-    SetFlag(ctx->cpu, kCF, true);
-  } else {
-    SetFlag(ctx->cpu, kCF, false);
-  }
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
-  return kExecuteSuccess;
-}
-
-// DAS
-static ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
-  uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
-    al -= 6;
-    SetFlag(ctx->cpu, kAF, true);
-  } else {
-    SetFlag(ctx->cpu, kAF, false);
-  }
-  uint8_t al_high = (al >> 4) & 0x0F;
-  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
-    al -= 0x60;
-    SetFlag(ctx->cpu, kCF, true);
-  } else {
-    SetFlag(ctx->cpu, kCF, false);
-  }
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
-  return kExecuteSuccess;
-}
-
-// ============================================================================
-// String instructions
-// ============================================================================
-
-// Get the repetition prefix of a string instruction, if any.
-static uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
-  uint8_t prefix = 0;
-  for (int i = 0; i < ctx->instruction->prefix_size; ++i) {
-    switch (ctx->instruction->prefix[i]) {
-      case kPrefixREP:
-      case kPrefixREPNZ:
-        prefix = ctx->instruction->prefix[i];
-        break;
-      default:
-        continue;
-    }
-  }
-  return prefix;
-}
-
-// Get the source operand for string instructions. Typically DS:SI but can be
-// overridden by a segment override prefix.
-static Operand GetStringSourceOperand(const InstructionContext* ctx) {
-  OperandAddress address = {
-      .type = kOperandAddressTypeMemory,
-      .value =
-          {
-              .memory_address =
-                  {
-                      .segment_register_index = kDS,
-                      .offset = ctx->cpu->registers[kSI],
-                  },
-          },
-  };
-  ApplySegmentOverride(ctx->instruction, &address.value.memory_address);
-  Operand operand = {
-      .address = address,
-      .value = ReadOperandValue(ctx, &address),
-  };
-  return operand;
-}
-
-// Get the destination operand address for string instructions. Always ES:DI.
-static OperandAddress GetStringDestinationOperandAddress(
-    const InstructionContext* ctx) {
-  OperandAddress address = {
-      .type = kOperandAddressTypeMemory,
-      .value =
-          {
-              .memory_address =
-                  {
-                      .segment_register_index = kES,
-                      .offset = ctx->cpu->registers[kDI],
-                  },
-          },
-  };
-  return address;
-}
-
-// Get the destination operand for string instructions. Always ES:DI.
-static Operand GetStringDestinationOperand(const InstructionContext* ctx) {
-  OperandAddress address = GetStringDestinationOperandAddress(ctx);
-  Operand operand = {
-      .address = address,
-      .value = ReadOperandValue(ctx, &address),
-  };
-  return operand;
-}
-
-// Update the source address register (SI) after a string operation.
-static void UpdateStringSourceAddress(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kDF)) {
-    ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
-  } else {
-    ctx->cpu->registers[kSI] += kNumBytes[ctx->metadata->width];
-  }
-}
-
-// Update the destination address register (DI) after a string operation.
-static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kDF)) {
-    ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
-  } else {
-    ctx->cpu->registers[kDI] += kNumBytes[ctx->metadata->width];
-  }
-}
-
-// Execute a string instruction with optional REP prefix.
-static ExecuteStatus ExecuteStringInstructionWithREPPrefix(
-    const InstructionContext* ctx,
-    ExecuteStatus (*fn)(const InstructionContext*)) {
-  uint8_t prefix = GetRepetitionPrefix(ctx);
-  if (prefix != kPrefixREP) {
-    return fn(ctx);
-  }
-  while (ctx->cpu->registers[kCX]) {
-    ExecuteStatus status = fn(ctx);
-    if (status != kExecuteSuccess) {
-      return status;
-    }
-    --ctx->cpu->registers[kCX];
-  }
-  return kExecuteSuccess;
-}
-
-// Single MOVS iteration.
-static ExecuteStatus ExecuteMovsIteration(const InstructionContext* ctx) {
-  Operand src = GetStringSourceOperand(ctx);
-  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
-  WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
-  UpdateStringSourceAddress(ctx);
-  UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
-}
-
-// MOVS
-static ExecuteStatus ExecuteMovs(const InstructionContext* ctx) {
-  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteMovsIteration);
-}
-
-// Single STOS iteration.
-static ExecuteStatus ExecuteStosIteration(const InstructionContext* ctx) {
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
-  WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
-  UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
-}
-
-// STOS
-static ExecuteStatus ExecuteStos(const InstructionContext* ctx) {
-  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteStosIteration);
-}
-
-// Single LODS iteration.
-static ExecuteStatus ExecuteLodsIteration(const InstructionContext* ctx) {
-  Operand src = GetStringSourceOperand(ctx);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  WriteOperand(ctx, &dest, FromOperand(&src));
-  UpdateStringSourceAddress(ctx);
-  return kExecuteSuccess;
-}
-
-// LODS
-static ExecuteStatus ExecuteLods(const InstructionContext* ctx) {
-  return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
-}
-
-// Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-static ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
-    const InstructionContext* ctx,
-    ExecuteStatus (*fn)(const InstructionContext*)) {
-  uint8_t prefix = GetRepetitionPrefix(ctx);
-  if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
-    return fn(ctx);
-  }
-  bool terminate_zf_value = prefix == kPrefixREPNZ;
-  while (ctx->cpu->registers[kCX]) {
-    ExecuteStatus status = fn(ctx);
-    if (status != kExecuteSuccess) {
-      return status;
-    }
-    --ctx->cpu->registers[kCX];
-    if (GetFlag(ctx->cpu, kZF) == terminate_zf_value) {
-      break;
-    }
-  }
-  return kExecuteSuccess;
-}
-
-// Single SCAS iteration.
-static ExecuteStatus ExecuteScasIteration(const InstructionContext* ctx) {
-  Operand src = GetStringDestinationOperand(ctx);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  ExecuteCmp(ctx, &dest, &src.value);
-  UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
-}
-
-// SCAS
-static ExecuteStatus ExecuteScas(const InstructionContext* ctx) {
-  return ExecuteStringInstructionWithREPZOrRepNZPrefix(
-      ctx, ExecuteScasIteration);
-}
-
-// Single CMPS iteration.
-static ExecuteStatus ExecuteCmpsIteration(const InstructionContext* ctx) {
-  Operand dest = GetStringSourceOperand(ctx);
-  Operand src = GetStringDestinationOperand(ctx);
-  ExecuteCmp(ctx, &dest, &src.value);
-  UpdateStringSourceAddress(ctx);
-  UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
-}
-
-// CMPS
-static ExecuteStatus ExecuteCmps(const InstructionContext* ctx) {
-  return ExecuteStringInstructionWithREPZOrRepNZPrefix(
-      ctx, ExecuteCmpsIteration);
-}
-
-// ============================================================================
-// Sign extension instructions
-// ============================================================================
-
-// CBW
-static ExecuteStatus ExecuteCbw(const InstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  return kExecuteSuccess;
-}
-
-// CWD
-static ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
-  ctx->cpu->registers[kDX] =
-      (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
-  return kExecuteSuccess;
-}
-
-// Dummy instruction for unsupported opcodes.
-static ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
-  (void)ctx;
-  return kExecuteSuccess;
-}
-
-// ============================================================================
-// Interrupt instructions
-// ============================================================================
-
-static ExecuteStatus ExecuteReturnFromInterrupt(CPUState* cpu) {
-  OperandValue ip_value = Pop(cpu);
-  cpu->registers[kIP] = FromOperandValue(&ip_value);
-  OperandValue cs_value = Pop(cpu);
-  cpu->registers[kCS] = FromOperandValue(&cs_value);
-  OperandValue flags_value = Pop(cpu);
-  cpu->flags = FromOperandValue(&flags_value);
-  return kExecuteSuccess;
-}
-
-// IRET
-static ExecuteStatus ExecuteIret(const InstructionContext* ctx) {
-  return ExecuteReturnFromInterrupt(ctx->cpu);
-}
-
-// INT 3
-static ExecuteStatus ExecuteInt3(const InstructionContext* ctx) {
-  SetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
-  return kExecuteSuccess;
-}
-
-// INTO
-static ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kOF)) {
-    SetPendingInterrupt(ctx->cpu, kInterruptOverflow);
-  }
-  return kExecuteSuccess;
-}
-
-// INT n
-static ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
-  OperandValue interrupt_number_value = ReadImmediate(ctx);
-  SetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
-  return kExecuteSuccess;
-}
-
-// HLT
-static ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
-  (void)ctx;
-  return kExecuteHalt;
-}
-
-// ============================================================================
-// IN and OUT instructions
-// ============================================================================
-
-// Read a byte from an I/O port.
-static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
-  return ByteValue(
-      cpu->config->read_port ? cpu->config->read_port(cpu, port) : 0xFF);
-}
-
-// Read a word from an I/O port as a uint16_t.
-static OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
-  uint8_t low = ReadByteFromPort(cpu, port).value.byte_value;
-  uint8_t high = ReadByteFromPort(cpu, port).value.byte_value;
-  return WordValue((high << 8) | low);
-}
-
-// Table of functions to read from an I/O port, indexed by data width.
-static OperandValue (*const kReadFromPortFns[])(CPUState*, uint16_t) = {
-    ReadByteFromPort,  // kByte
-    ReadWordFromPort,  // kWord
-};
-
-// Common logic for IN instructions.
-static ExecuteStatus ExecuteIn(const InstructionContext* ctx, uint16_t port) {
-  OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  WriteOperand(ctx, &dest, FromOperandValue(&value));
-  return kExecuteSuccess;
-}
-
-// IN AL, imm8
-// IN AX, imm8
-static ExecuteStatus ExecuteInImmediate(const InstructionContext* ctx) {
-  OperandValue port = ReadImmediateByte(ctx->instruction);
-  return ExecuteIn(ctx, FromOperandValue(&port));
-}
-
-// IN AL, DX
-// IN AX, DX
-static ExecuteStatus ExecuteInDX(const InstructionContext* ctx) {
-  return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
-}
-
-// Write a byte to an I/O port.
-static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
-  if (!cpu->config->write_port) {
-    return;
-  }
-  cpu->config->write_port(cpu, port, FromOperandValue(&value));
-}
-
-// Write a word to an I/O port.
-static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
-  uint32_t raw_value = FromOperandValue(&value);
-  WriteByteToPort(cpu, port, ByteValue(raw_value & 0xFF));
-  WriteByteToPort(cpu, port, ByteValue((raw_value >> 8) & 0xFF));
-}
-
-// Table of functions to write to an I/O port, indexed by data width.
-static void (*const kWriteToPortFns[])(CPUState*, uint16_t, OperandValue) = {
-    WriteByteToPort,  // kByte
-    WriteWordToPort,  // kWord
-};
-
-// Common logic for OUT instructions.
-static ExecuteStatus ExecuteOut(const InstructionContext* ctx, uint16_t port) {
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
-  return kExecuteSuccess;
-}
-
-// OUT imm8, AL
-// OUT imm8, AX
-static ExecuteStatus ExecuteOutImmediate(const InstructionContext* ctx) {
-  OperandValue port = ReadImmediateByte(ctx->instruction);
-  return ExecuteOut(ctx, FromOperandValue(&port));
-}
-
-// OUT DX, AL
-// OUT DX, AX
-static ExecuteStatus ExecuteOutDX(const InstructionContext* ctx) {
-  return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
-}
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Opcode table
@@ -4646,11 +5431,12 @@ enum {
   kNumOpcodes = sizeof(opcodes) / sizeof(OpcodeMetadata),
 };
 
-// Opcode metadata lookup table.
-static OpcodeMetadata opcode_table[256] = {0};
+// Global opcode metadata lookup table.
+YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {0};
 
-// Populate opcode_table based on opcodes array.
-static void InitOpcodeTable(void) {
+// Populate global opcode metadata lookup table. This only needs to be run once
+// per program execution.
+YAX86_PRIVATE void InitOpcodeTable(void) {
   static bool has_run = false;
   if (has_run) {
     return;
@@ -4661,6 +5447,23 @@ static void InitOpcodeTable(void) {
     opcode_table[opcodes[i].opcode] = opcodes[i];
   }
 }
+
+
+// --------------------
+// opcode_table.c end
+// --------------------
+
+// --------------------
+// cpu.c start
+// --------------------
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "instructions.h"
+#include "operands.h"
+#include "public.h"
+#include "types.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // CPU state
@@ -4677,7 +5480,7 @@ void InitCPU(CPUState* cpu) {
 }
 
 // ============================================================================
-// Execution
+// Instruction decoding
 // ============================================================================
 
 // Helper to check if a byte is a valid prefix
@@ -4784,6 +5587,10 @@ FetchNextInstructionStatus FetchNextInstruction(
   *dest_instruction = instruction;
   return kFetchSuccess;
 }
+
+// ============================================================================
+// Execution
+// ============================================================================
 
 ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   ExecuteStatus status;

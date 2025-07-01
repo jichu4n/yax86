@@ -1,5 +1,5 @@
-#ifndef YAX86_CPU_UTILS_H
-#define YAX86_CPU_UTILS_H
+#ifndef YAX86_CPU_OPERANDS_H
+#define YAX86_CPU_OPERANDS_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "public.h"
@@ -157,13 +157,6 @@ extern void WriteOperand(
 // Read an immediate value from the instruction.
 extern OperandValue ReadImmediate(const InstructionContext* ctx);
 
-// Set common CPU flags after an instruction. This includes:
-// - Zero flag (ZF)
-// - Sign flag (SF)
-// - Parity Flag (PF)
-extern void SetCommonFlagsAfterInstruction(
-    const InstructionContext* ctx, uint32_t result);
-
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_CPU_UTILS_H
+#endif  // YAX86_CPU_OPERANDS_H

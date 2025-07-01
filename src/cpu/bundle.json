@@ -1,4 +1,31 @@
 {
   "public": ["public.h"],
-  "private": ["../common.h", "types.h", "utils.h", "utils.c", "cpu.c"]
+  "private": [
+    "../common.h",
+    "types.h",
+    "operands.h",
+    "operands.c",
+    "instructions.h",
+    "instructions_helpers.c",
+    "instructions_mov.c",
+    "instructions_lea.c",
+    "instructions_add.c",
+    "instructions_sub.c",
+    "instructions_sign_ext.c",
+    "instructions_cmp.c",
+    "instructions_bool.c",
+    "instructions_ctrl_flow.c",
+    "instructions_stack.c",
+    "instructions_flags.c",
+    "instructions_io.c",
+    "instructions_string.c",
+    "instructions_bcd_ascii.c",
+    "instructions_group_1.c",
+    "instructions_group_2.c",
+    "instructions_group_3.c",
+    "instructions_group_4.c",
+    "instructions_group_5.c",
+    "opcode_table.c",
+    "cpu.c"
+  ]
 }
