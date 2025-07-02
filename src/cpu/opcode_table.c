@@ -9,8 +9,8 @@
 // Opcode table
 // ============================================================================
 
-// Opcode metadata definitions.
-static const OpcodeMetadata opcodes[] = {
+// Global opcode metadata lookup table.
+YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
     // ADD r/m8, r8
     {.opcode = 0x00,
      .has_modrm = true,
@@ -101,6 +101,8 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushSegmentRegister},
+    // 0x0F - UNSUPPORTED
+    {.opcode = 0x0F, .handler = 0},
     // ADC r/m8, r8
     {.opcode = 0x10,
      .has_modrm = true,
@@ -233,6 +235,8 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteBooleanAndImmediateToALOrAX},
+    // ES prefix - 0x26
+    {.opcode = 0x26, .handler = 0},
     // DAA
     {.opcode = 0x27,
      .has_modrm = false,
@@ -274,6 +278,8 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteSubImmediateFromALOrAX},
+    // CS prefix - 0x2E
+    {.opcode = 0x2E, .handler = 0},
     // DAS
     {.opcode = 0x2F,
      .has_modrm = false,
@@ -315,6 +321,8 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteBooleanXorImmediateToALOrAX},
+    // SS prefix - 0x36
+    {.opcode = 0x36, .handler = 0},
     // AAA
     {.opcode = 0x37,
      .has_modrm = false,
@@ -357,6 +365,8 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteCmpImmediateToALOrAX},
+    // DS prefix - 0x3E
+    {.opcode = 0x3E, .handler = 0},
     // AAS
     {.opcode = 0x3F,
      .has_modrm = false,
@@ -555,6 +565,23 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
+    // 0x60 - 0x6F - UNSUPPORTED
+    {.opcode = 0x60, .handler = 0},
+    {.opcode = 0x61, .handler = 0},
+    {.opcode = 0x62, .handler = 0},
+    {.opcode = 0x63, .handler = 0},
+    {.opcode = 0x64, .handler = 0},
+    {.opcode = 0x65, .handler = 0},
+    {.opcode = 0x66, .handler = 0},
+    {.opcode = 0x67, .handler = 0},
+    {.opcode = 0x68, .handler = 0},
+    {.opcode = 0x69, .handler = 0},
+    {.opcode = 0x6A, .handler = 0},
+    {.opcode = 0x6B, .handler = 0},
+    {.opcode = 0x6C, .handler = 0},
+    {.opcode = 0x6D, .handler = 0},
+    {.opcode = 0x6E, .handler = 0},
+    {.opcode = 0x6F, .handler = 0},
     // JO rel8
     {.opcode = 0x70,
      .has_modrm = false,
@@ -1034,6 +1061,10 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
+    // 0xC0 - UNSUPPORTED
+    {.opcode = 0xC0, .handler = 0},
+    // 0xC1 - UNSUPPORTED
+    {.opcode = 0xC1, .handler = 0},
     // RET imm16
     {.opcode = 0xC2,
      .has_modrm = false,
@@ -1070,6 +1101,10 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegisterOrMemory},
+    // 0xC8 - UNSUPPORTED
+    {.opcode = 0xC8, .handler = 0},
+    // 0xC9 - UNSUPPORTED
+    {.opcode = 0xC9, .handler = 0},
     // RETF imm16
     {.opcode = 0xCA,
      .has_modrm = false,
@@ -1138,6 +1173,8 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteAad},
+    // 0xD6 - UNSUPPORTED
+    {.opcode = 0xD6, .handler = 0},
     // XLAT/XLATB
     {.opcode = 0xD7,
      .has_modrm = false,
@@ -1280,6 +1317,14 @@ static const OpcodeMetadata opcodes[] = {
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteOutDX},
+    // 0xF0 - LOCK prefix
+    {.opcode = 0xF0, .handler = 0},
+    // 0xF1 - UNSUPPORTED
+    {.opcode = 0xF1, .handler = 0},
+    // 0xF2 - REPNE prefix
+    {.opcode = 0xF2, .handler = 0},
+    // 0xF3 - REP/REPE prefix
+    {.opcode = 0xF3, .handler = 0},
     // HLT
     {.opcode = 0xF4,
      .has_modrm = false,
@@ -1353,25 +1398,3 @@ static const OpcodeMetadata opcodes[] = {
      .width = kWord,
      .handler = ExecuteGroup5Instruction},
 };
-
-enum {
-  // Number of defined opcodes.
-  kNumOpcodes = sizeof(opcodes) / sizeof(OpcodeMetadata),
-};
-
-// Global opcode metadata lookup table.
-YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {0};
-
-// Populate global opcode metadata lookup table. This only needs to be run once
-// per program execution.
-YAX86_PRIVATE void InitOpcodeTable(void) {
-  static bool has_run = false;
-  if (has_run) {
-    return;
-  }
-  has_run = true;
-
-  for (unsigned int i = 0; i < kNumOpcodes; ++i) {
-    opcode_table[opcodes[i].opcode] = opcodes[i];
-  }
-}

@@ -11,9 +11,6 @@
 // ============================================================================
 
 void InitCPU(CPUState* cpu) {
-  // Global setup
-  InitOpcodeTable();
-
   // Zero out the CPU state
   const CPUState zero_cpu_state = {0};
   *cpu = zero_cpu_state;

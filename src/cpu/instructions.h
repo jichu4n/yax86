@@ -30,9 +30,6 @@ extern ExecuteStatus ExecuteNoOp(const InstructionContext* ctx);
 
 // Global opcode metadata lookup table.
 extern OpcodeMetadata opcode_table[256];
-// Populate global opcode metadata lookup table. This only needs to be run once
-// per program execution.
-extern void InitOpcodeTable(void);
 
 // ============================================================================
 // Move instructions - instructions_mov.h
