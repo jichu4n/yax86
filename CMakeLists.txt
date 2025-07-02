@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(yax86)
 
+option(ENABLE_SDL "Enable the SDL3-based user interface" OFF)
+
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -30,11 +32,26 @@ function(generate_header_bundle module)
 endfunction()
 
 generate_header_bundle("cpu")
+generate_header_bundle("bios_sdl")
 
 # =============================================================================
 # Main library
 # =============================================================================
 add_library(yax86 STATIC all.c ${ALL_HEADER_BUNDLES})
+
+# =============================================================================
+# SDL
+# =============================================================================
+if(ENABLE_SDL)
+    include(FetchContent)
+    FetchContent_Declare(
+        SDL3
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG release-3.2.16
+    )
+    FetchContent_MakeAvailable(SDL3)
+    target_link_libraries(yax86 PRIVATE SDL3::SDL3)
+endif()
 
 # =============================================================================
 # Tests
