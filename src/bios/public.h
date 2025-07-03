@@ -2,7 +2,132 @@
 #ifndef YAX86_BIOS_PUBLIC_H
 #define YAX86_BIOS_PUBLIC_H
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+
+struct BIOSState;
+
+// ============================================================================
+// Memory
+// ============================================================================
+
+enum {
+  // First 640KB of memory, mapped to 0x00000 to 0x9FFFF (640KB).
+  kMemoryRegionConventional = 0,
+  // Text mode framebuffer, mapped to 0xB8000 to 0xB8F9F (80x25x2 bytes).
+  kMemoryRegionTextModeFramebuffer = 1,
+
+  // Maximum number of memory region entries.
+  kMaxMemoryRegions = 8,
+};
+
+// A memory region in the BIOS memory map. Memory regions should not overlap.
+typedef struct MemoryRegion {
+  // The memory region, such as kMemoryRegionConventional.
+  uint8_t region;
+  // Start address of the memory region.
+  uint16_t start;
+  // Size of the memory region in bytes.
+  uint16_t size;
+  // Callback to read a byte from the memory region, where address is relative
+  // to the start of the region.
+  uint8_t (*read_memory_byte)(
+      struct BIOSState* bios, uint16_t relative_address);
+  // Callback to write a byte to memory, where address is relative to the start
+  // of the region.
+  void (*write_memory_byte)(
+      struct BIOSState* bios, uint16_t relative_address, uint8_t value);
+} MemoryRegion;
+
+// Add a region to the memory map. Returns true on success, false if we've
+// exceeded the maximum number of memory regions.
+bool AddMemoryRegion(struct BIOSState* bios, const MemoryRegion* metadata);
+// Look up the memory region corresponding to an address. Returns NULL if the
+// address is not mapped to a known memory region.
+MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
+
+// Read a byte from a logical memory address.
+//
+// On the 8086, accessing an invalid memory address will yield garbage data
+// rather than causing a page fault. This callback interface mirrors that
+// behavior.
+uint8_t ReadMemoryByte(struct BIOSState* bios, uint16_t address);
+// Read a word from a logical memory address.
+uint16_t ReadMemoryWord(struct BIOSState* bios, uint16_t address);
+
+// Write a byte to a logical memory address.
+//
+// On the 8086, accessing an invalid memory address will yield garbage data
+// rather than causing a page fault. This callback interface mirrors that
+// behavior.
+void WriteMemoryByte(struct BIOSState* bios, uint16_t address, uint8_t value);
+// Write a word to a logical memory address.
+void WriteMemoryWord(struct BIOSState* bios, uint16_t address, uint16_t value);
+
+// ============================================================================
+// Text mode
+// ============================================================================
+
+enum {
+  // Text mode framebuffer address.
+  kTextModeFramebufferAddress = 0xB8000,
+  // Number of columns in text mode.
+  kTextModeColumns = 80,
+  // Number of rows in text mode.
+  kTextModeRows = 25,
+  // Size of the text mode framebuffer in bytes. 2 bytes per character (char +
+  // attribute).
+  kTextModeFramebufferSize = kTextModeColumns * kTextModeRows * 2,
+};
+
+// ============================================================================
+// BIOS state
+// ============================================================================
+
+// Caller-provided runtime configuration.
+typedef struct BIOSConfig {
+  // Custom data passed through to callbacks.
+  void* context;
+
+  // Physical memory size in KB (1024 bytes). Must be between 64 and 640.
+  uint16_t memory_size_kb;
+
+  // Callback to read a byte from physical memory.
+  //
+  // On the 8086, accessing an invalid memory address will yield garbage data
+  // rather than causing a page fault. This callback interface mirrors that
+  // behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
+  uint8_t (*read_memory_byte)(struct BIOSState* bios, uint16_t address);
+
+  // Callback to write a byte to physical memory.
+  //
+  // On the 8086, accessing an invalid memory address will yield garbage data
+  // rather than causing a page fault. This callback interface mirrors that
+  // behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
+  void (*write_memory_byte)(
+      struct BIOSState* bios, uint16_t address, uint8_t value);
+} BIOSConfig;
+
+// State of the BIOS.
+typedef struct BIOSState {
+  // Pointer to caller-provided runtime configuration
+  BIOSConfig* config;
+
+  // Memory map.
+  MemoryRegion memory_regions[kMaxMemoryRegions];
+  // Number of memory regions in the memory map.
+  uint8_t num_memory_regions;
+
+  // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
+  uint8_t text_framebuffer[kTextModeFramebufferSize];
+} BIOSState;
 
 // ============================================================================
 // BIOS Data Area (BDA)
@@ -185,34 +310,6 @@ typedef struct BDAFieldMetadata {
 // BDAFieldMetadata array, indexed by BDAField enum.
 extern const BDAFieldMetadata BDAFieldMetadataTable[kBDANumFields];
 
-// ============================================================================
-// Text mode
-// ============================================================================
-
-enum {
-  // Text mode framebuffer address.
-  kTextModeFramebufferAddress = 0xB8000,
-  // Number of columns in text mode.
-  kTextModeColumns = 80,
-  // Number of rows in text mode.
-  kTextModeRows = 25,
-  // Size of the text mode framebuffer in bytes. 2 bytes per character (char +
-  // attribute).
-  kTextModeFramebufferSize = kTextModeColumns * kTextModeRows * 2,
-};
-
-// ============================================================================
-// BIOS state
-// ============================================================================
-
-// State of the BIOS.
-typedef struct BIOSState {
-  // BIOS Data Area, located at kBDAAddress (0x0040).
-  uint8_t bda[kBDASize];
-  // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
-  uint8_t text_framebuffer[kTextModeFramebufferSize];
-} BIOSState;
-
 // Structure of the equipment word in the BDA at offset 0x10.
 typedef struct EquipmentWord {
   // bits 15-14: number of parallel devices
@@ -248,7 +345,7 @@ EquipmentWord ParseEquipmentWord(uint16_t raw_equipment_word);
 // Convert EquipmentWord to uint16_t.
 uint16_t SerializeEquipmentWord(EquipmentWord equipment);
 
-// Initialize BIOS state.
-void InitBIOS(BIOSState* bios);
+// Initialize BIOS state with the provided configuration.
+void InitBIOS(BIOSState* bios, BIOSConfig* config);
 
 #endif  // YAX86_BIOS_PUBLIC_H

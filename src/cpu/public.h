@@ -178,7 +178,7 @@ typedef struct CPUConfig {
 
 // State of the emulated CPU.
 typedef struct CPUState {
-  // Pointer to the configuration
+  // Pointer to caller-provided runtime configuration
   CPUConfig* config;
 
   // Register values

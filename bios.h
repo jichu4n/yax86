@@ -18,16 +18,74 @@ extern "C" {
 #ifndef YAX86_BIOS_PUBLIC_H
 #define YAX86_BIOS_PUBLIC_H
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
+struct BIOSState;
+
 // ============================================================================
-// BIOS state
+// Memory
 // ============================================================================
 
 enum {
-  // Address of the BIOS Data Area.
-  kBDAAddress = 0x0040,
+  // First 640KB of memory, mapped to 0x00000 to 0x9FFFF (640KB).
+  kMemoryRegionConventional = 0,
+  // Text mode framebuffer, mapped to 0xB8000 to 0xB8F9F (80x25x2 bytes).
+  kMemoryRegionTextModeFramebuffer = 1,
 
+  // Maximum number of memory region entries.
+  kMaxMemoryRegions = 8,
+};
+
+// A memory region in the BIOS memory map. Memory regions should not overlap.
+typedef struct MemoryRegion {
+  // The memory region, such as kMemoryRegionConventional.
+  uint8_t region;
+  // Start address of the memory region.
+  uint16_t start;
+  // Size of the memory region in bytes.
+  uint16_t size;
+  // Callback to read a byte from the memory region, where address is relative
+  // to the start of the region.
+  uint8_t (*read_memory_byte)(
+      struct BIOSState* bios, uint16_t relative_address);
+  // Callback to write a byte to memory, where address is relative to the start
+  // of the region.
+  void (*write_memory_byte)(
+      struct BIOSState* bios, uint16_t relative_address, uint8_t value);
+} MemoryRegion;
+
+// Add a region to the memory map. Returns true on success, false if we've
+// exceeded the maximum number of memory regions.
+bool AddMemoryRegion(struct BIOSState* bios, const MemoryRegion* metadata);
+// Look up the memory region corresponding to an address. Returns NULL if the
+// address is not mapped to a known memory region.
+MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
+
+// Read a byte from a logical memory address.
+//
+// On the 8086, accessing an invalid memory address will yield garbage data
+// rather than causing a page fault. This callback interface mirrors that
+// behavior.
+uint8_t ReadMemoryByte(struct BIOSState* bios, uint16_t address);
+// Read a word from a logical memory address.
+uint16_t ReadMemoryWord(struct BIOSState* bios, uint16_t address);
+
+// Write a byte to a logical memory address.
+//
+// On the 8086, accessing an invalid memory address will yield garbage data
+// rather than causing a page fault. This callback interface mirrors that
+// behavior.
+void WriteMemoryByte(struct BIOSState* bios, uint16_t address, uint8_t value);
+// Write a word to a logical memory address.
+void WriteMemoryWord(struct BIOSState* bios, uint16_t address, uint16_t value);
+
+// ============================================================================
+// Text mode
+// ============================================================================
+
+enum {
   // Text mode framebuffer address.
   kTextModeFramebufferAddress = 0xB8000,
   // Number of columns in text mode.
@@ -39,172 +97,272 @@ enum {
   kTextModeFramebufferSize = kTextModeColumns * kTextModeRows * 2,
 };
 
-// BIOS Data Area (BDA) structure.
-typedef struct BDA {
-  // 0x00: Base I/O address for serial ports.
-  uint16_t com_address[4];
-  // 0x08: Base I/O address for parallel ports.
-  uint16_t lpt_address[4];
-  // 0x10: Equipment word.
-  uint16_t equipment;
-  // 0x12: POST status / Manufacturing test initialization flags
-  uint8_t post_status;
-  // 0x13: Base memory size in kilobytes (0-640)
-  uint16_t memory_size;
-  // 0x15: Manufacturing test scratch pad
-  uint8_t manufacturing_test_1;
-  // 0x16: Manufacturing test scratch pad / BIOS control flags
-  uint8_t manufacturing_test_2;
-  // 0x17: Keyboard status flags 1
-  uint8_t keyboard_status_1;
-  // 0x18: Keyboard status flags 2
-  uint8_t keyboard_status_2;
-  // 0x19: Keyboard: Alt-nnn keypad workspace
-  uint8_t keyboard_alt_numpad;
-  // 0x1A: Keyboard: ptr to next character in keyboard buffer
-  uint16_t keyboard_buffer_head;
-  // 0x1C: Keyboard: ptr to first free slot in keyboard buffer
-  uint16_t keyboard_buffer_tail;
-  // 0x1E: Keyboard circular buffer (16 words)
-  uint16_t keyboard_buffer[16];
-  // 0x3E: Diskette recalibrate status
-  uint8_t diskette_recalibrate_status;
-  // 0x3F: Diskette motor status
-  uint8_t diskette_motor_status;
-  // 0x40: Diskette motor turn-off time-out count
-  uint8_t diskette_motor_timeout;
-  // 0x41: Diskette last operation status
-  uint8_t diskette_last_status;
-  // 0x42: Diskette/Fixed disk status/command bytes (7 bytes)
-  uint8_t diskette_status_command[7];
-  // 0x49: Video current mode
-  uint8_t video_mode;
-  // 0x4A: Video columns on screen
-  uint16_t video_columns;
-  // 0x4C: Video page (regen buffer) size in bytes
-  uint16_t video_page_size;
-  // 0x4E: Video current page start address in regen buffer
-  uint16_t video_page_offset;
-  // 0x50: Video cursor position (col, row) for eight pages
-  uint16_t video_cursor_pos[8];
-  // 0x60: Video cursor type, 6845 compatible
-  uint16_t video_cursor_type;
-  // 0x62: Video current page number
-  uint8_t video_current_page;
-  // 0x63: Video CRT controller base address
-  uint16_t video_crt_base_address;
-  // 0x65: Video current setting of mode select register
-  uint8_t video_mode_select;
-  // 0x66: Video current setting of CGA palette register
-  uint8_t video_cga_palette;
-  // 0x67: POST real mode re-entry point after certain resets
-  uint32_t post_reentry_point;
-  // 0x6B: POST last unexpected interrupt
-  uint8_t post_last_interrupt;
-  // 0x6C: Timer ticks since midnight
-  uint32_t timer_ticks;
-  // 0x70: Timer overflow, non-zero if has counted past midnight
-  uint8_t timer_overflow;
-  // 0x71: Ctrl-Break flag
-  uint8_t ctrl_break_flag;
-  // 0x72: POST reset flag
-  uint16_t post_reset_flag;
-  // 0x74: Fixed disk last operation status
-  uint8_t fixed_disk_status;
-  // 0x75: Fixed disk: number of fixed disk drives
-  uint8_t fixed_disk_count;
-  // 0x76: Fixed disk: control byte
-  uint8_t fixed_disk_control;
-  // 0x77: Fixed disk: I/O port offset
-  uint8_t fixed_disk_port_offset;
-  // 0x78: Parallel devices 1-3 time-out counters
-  uint8_t parallel_timeout[4];
-  // 0x7C: Serial devices 1-4 time-out counters
-  uint8_t serial_timeout[4];
-  // 0x80: Keyboard buffer start offset
-  uint16_t keyboard_buffer_start;
-  // 0x82: Keyboard buffer end+1 offset
-  uint16_t keyboard_buffer_end;
-  // 0x84: Video EGA/MCGA/VGA rows on screen minus one
-  uint8_t video_rows;
-  // 0x85: Video EGA/MCGA/VGA character height in scan-lines
-  uint16_t video_char_height;
-  // 0x87: Video EGA/VGA control
-  uint8_t video_ega_control;
-  // 0x88: Video EGA/VGA switches
-  uint8_t video_ega_switches;
-  // 0x89: Video MCGA/VGA mode-set option control
-  uint8_t video_vga_control;
-  // 0x8A: Video index into Display Combination Code table
-  uint8_t video_dcc_index;
-  // 0x8B: Diskette media control
-  uint8_t diskette_media_control;
-  // 0x8C: Fixed disk controller status
-  uint8_t fixed_disk_controller_status;
-  // 0x8D: Fixed disk controller Error Status
-  uint8_t fixed_disk_error_status;
-  // 0x8E: Fixed disk Interrupt Control
-  uint8_t fixed_disk_interrupt_control;
-  // 0x8F: Diskette controller information
-  uint8_t diskette_controller_info;
-  // 0x90: Diskette drive 0 media state
-  uint8_t diskette_drive0_media_state;
-  // 0x91: Diskette drive 1 media state
-  uint8_t diskette_drive1_media_state;
-  // 0x92: Diskette drive 0 media state at start of operation
-  uint8_t diskette_drive0_start_state;
-  // 0x93: Diskette drive 1 media state at start of operation
-  uint8_t diskette_drive1_start_state;
-  // 0x94: Diskette drive 0 current track number
-  uint8_t diskette_drive0_track;
-  // 0x95: Diskette drive 1 current track number
-  uint8_t diskette_drive1_track;
-  // 0x96: Keyboard status byte 3
-  uint8_t keyboard_status_3;
-  // 0x97: Keyboard status byte 4
-  uint8_t keyboard_status_4;
-  // 0x98: Timer2: ptr to user wait-complete flag
-  uint32_t timer2_wait_flag_ptr;
-  // 0x9C: Timer2: user wait count in microseconds
-  uint32_t timer2_wait_count;
-  // 0xA0: Timer2: Wait active flag
-  uint8_t timer2_wait_active;
-  // 0xA1: Reserved for network adapters (7 bytes)
-  uint8_t network_reserved[7];
-  // 0xA8: Video: EGA/MCGA/VGA ptr to Video Save Pointer Table
-  uint32_t video_save_pointer_table;
-  // 0xAC: Reserved (4 bytes)
-  uint8_t reserved_ac[4];
-  // 0xB0: ptr to 3363 Optical disk driver or BIOS entry point
-  uint32_t optical_disk_ptr;
-  // 0xB4: Reserved (2 bytes)
-  uint8_t reserved_b4[2];
-  // 0xB6: Reserved for POST (3 bytes)
-  uint8_t reserved_post[3];
-  // 0xB9: Unknown (7 bytes)
-  uint8_t unknown_b9[7];
-  // 0xC0: Reserved (14 bytes)
-  uint8_t reserved_c0[14];
-  // 0xCE: Count of days since last boot
-  uint16_t days_since_boot;
-  // 0xD0: Reserved (32 bytes)
-  uint8_t reserved_d0[32];
-  // 0xF0: Reserved for user (16 bytes)
-  uint8_t user_reserved[16];
-  // 0x100: Print Screen Status byte
-  uint8_t print_screen_status;
-} BDA;
+// ============================================================================
+// BIOS state
+// ============================================================================
+
+// Caller-provided runtime configuration.
+typedef struct BIOSConfig {
+  // Custom data passed through to callbacks.
+  void* context;
+
+  // Physical memory size in KB (1024 bytes). Must be between 64 and 640.
+  uint16_t memory_size_kb;
+
+  // Callback to read a byte from physical memory.
+  //
+  // On the 8086, accessing an invalid memory address will yield garbage data
+  // rather than causing a page fault. This callback interface mirrors that
+  // behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
+  uint8_t (*read_memory_byte)(struct BIOSState* bios, uint16_t address);
+
+  // Callback to write a byte to physical memory.
+  //
+  // On the 8086, accessing an invalid memory address will yield garbage data
+  // rather than causing a page fault. This callback interface mirrors that
+  // behavior.
+  //
+  // For simplicity, we use a single 8-bit interface for memory access, similar
+  // to the real-life 8088.
+  void (*write_memory_byte)(
+      struct BIOSState* bios, uint16_t address, uint8_t value);
+} BIOSConfig;
 
 // State of the BIOS.
 typedef struct BIOSState {
-  // BDA structure, located at kBDAAddress (0x0040).
-  BDA bda;
+  // Pointer to caller-provided runtime configuration
+  BIOSConfig* config;
+
+  // Memory map.
+  MemoryRegion memory_regions[kMaxMemoryRegions];
+  // Number of memory regions in the memory map.
+  uint8_t num_memory_regions;
+
   // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
   uint8_t text_framebuffer[kTextModeFramebufferSize];
 } BIOSState;
 
-// Initialize BIOS state.
-void InitBIOS(BIOSState* bios);
+// ============================================================================
+// BIOS Data Area (BDA)
+// ============================================================================
+
+enum {
+  // Address of the BIOS Data Area.
+  kBDAAddress = 0x0040,
+  // Size of the BIOS Data Area in bytes.
+  kBDASize = 0x100,
+};
+
+// Fields in the BIOS Data Area.
+typedef enum BDAField {
+  // 0x00: Base I/O address for serial ports.
+  kBDASerialPortAddress = 0,
+  // 0x08: Base I/O address for parallel ports.
+  kBDAParallelPortAddress,
+  // 0x10: Equipment word.
+  kBDAEquipmentWord,
+  // 0x12: POST status / Manufacturing test initialization flags
+  kBDAPOSTStatus,
+  // 0x13: Base memory size in kilobytes (0-640)
+  kBDAMemorySize,
+  // 0x15: Manufacturing test scratch pad
+  kBDAManufacturingTest1,
+  // 0x16: Manufacturing test scratch pad / BIOS control flags
+  kBDAManufacturingTest2,
+  // 0x17: Keyboard status flags 1
+  kBDAKeyboardStatus1,
+  // 0x18: Keyboard status flags 2
+  kBDAKeyboardStatus2,
+  // 0x19: Keyboard: Alt-nnn keypad workspace
+  kBDAKeyboardAltNumpad,
+  // 0x1A: Keyboard: ptr to next character in keyboard buffer
+  kBDAKeyboardBufferHead,
+  // 0x1C: Keyboard: ptr to first free slot in keyboard buffer
+  kBDAKeyboardBufferTail,
+  // 0x1E: Keyboard circular buffer (16 words)
+  kBDAKeyboardBuffer,
+  // 0x3E: Diskette recalibrate status
+  kBDADisketteRecalibrateStatus,
+  // 0x3F: Diskette motor status
+  kBDADisketteMotorStatus,
+  // 0x40: Diskette motor turn-off time-out count
+  kBDADisketteMotorTimeout,
+  // 0x41: Diskette last operation status
+  kBDADisketteLastStatus,
+  // 0x42: Diskette/Fixed disk status/command bytes (7 bytes)
+  kBDADisketteStatusCommand,
+  // 0x49: Video current mode
+  kBDAVideoMode,
+  // 0x4A: Video columns on screen
+  kBDAVideoColumns,
+  // 0x4C: Video page (regen buffer) size in bytes
+  kBDAVideoPageSize,
+  // 0x4E: Video current page start address in regen buffer
+  kBDAVideoPageOffset,
+  // 0x50: Video cursor position (col, row) for eight pages
+  kBDAVideoCursorPos,
+  // 0x60: Video cursor type, 6845 compatible
+  kBDAVideoCursorType,
+  // 0x62: Video current page number
+  kBDAVideoCurrentPage,
+  // 0x63: Video CRT controller base address
+  kBDAVideoCRTBaseAddress,
+  // 0x65: Video current setting of mode select register
+  kBDAVideoModeSelect,
+  // 0x66: Video current setting of CGA palette register
+  kBDAVideoCGAPalette,
+  // 0x67: POST real mode re-entry point after certain resets
+  kBDAPostReentryPoint,
+  // 0x6B: POST last unexpected interrupt
+  kBDAPostLastInterrupt,
+  // 0x6C: Timer ticks since midnight
+  kBDATimerTicks,
+  // 0x70: Timer overflow, non-zero if has counted past midnight
+  kBDATimerOverflow,
+  // 0x71: Ctrl-Break flag
+  kBDACtrlBreakFlag,
+  // 0x72: POST reset flag
+  kBDAPostResetFlag,
+  // 0x74: Fixed disk last operation status
+  kBDAFixedDiskStatus,
+  // 0x75: Fixed disk: number of fixed disk drives
+  kBDAFixedDiskCount,
+  // 0x76: Fixed disk: control byte
+  kBDAFixedDiskControl,
+  // 0x77: Fixed disk: I/O port offset
+  kBDAFixedDiskPortOffset,
+  // 0x78: Parallel devices 1-3 time-out counters
+  kBDAParallelTimeout,
+  // 0x7C: Serial devices 1-4 time-out counters
+  kBDASerialTimeout,
+  // 0x80: Keyboard buffer start offset
+  kBDAKeyboardBufferStart,
+  // 0x82: Keyboard buffer end+1 offset
+  kBDAKeyboardBufferEnd,
+  // 0x84: Video EGA/MCGA/VGA rows on screen minus one
+  kBDAVideoRows,
+  // 0x85: Video EGA/MCGA/VGA character height in scan-lines
+  kBDAVideoCharHeight,
+  // 0x87: Video EGA/VGA control
+  kBDAVideoEGAControl,
+  // 0x88: Video EGA/VGA switches
+  kBDAVideoEGASwitches,
+  // 0x89: Video MCGA/VGA mode-set option control
+  kBDAVideoVGAControl,
+  // 0x8A: Video index into Display Combination Code table
+  kBDAVideoDCCIndex,
+  // 0x8B: Diskette media control
+  kBDADisketteMediaControl,
+  // 0x8C: Fixed disk controller status
+  kBDAFixedDiskControllerStatus,
+  // 0x8D: Fixed disk controller Error Status
+  kBDAFixedDiskErrorStatus,
+  // 0x8E: Fixed disk Interrupt Control
+  kBDAFixedDiskInterruptControl,
+  // 0x8F: Diskette controller information
+  kBDADisketteControllerInfo,
+  // 0x90: Diskette drive 0 media state
+  kBDADisketteDrive0MediaState,
+  // 0x91: Diskette drive 1 media state
+  kBDADisketteDrive1MediaState,
+  // 0x92: Diskette drive 0 media state at start of operation
+  kBDADisketteDrive0StartState,
+  // 0x93: Diskette drive 1 media state at start of operation
+  kBDADisketteDrive1StartState,
+  // 0x94: Diskette drive 0 current track number
+  kBDADisketteDrive0Track,
+  // 0x95: Diskette drive 1 current track number
+  kBDADisketteDrive1Track,
+  // 0x96: Keyboard status byte 3
+  kBDAKeyboardStatus3,
+  // 0x97: Keyboard status byte 4
+  kBDAKeyboardStatus4,
+  // 0x98: Timer2: ptr to user wait-complete flag
+  kBDATimer2WaitFlagPtr,
+  // 0x9C: Timer2: user wait count in microseconds
+  kBDATimer2WaitCount,
+  // 0xA0: Timer2: Wait active flag
+  kBDATimer2WaitActive,
+  // 0xA1: Reserved for network adapters (7 bytes)
+  kBDANetworkReserved,
+  // 0xA8: Video: EGA/MCGA/VGA ptr to Video Save Pointer Table
+  kBDAVideoSavePointerTable,
+  // 0xAC: Reserved (4 bytes)
+  kBDAReservedAC,
+  // 0xB0: ptr to 3363 Optical disk driver or BIOS entry point
+  kBDAOpticalDiskPtr,
+  // 0xB4: Reserved (2 bytes)
+  kBDAReservedB4,
+  // 0xB6: Reserved for POST (3 bytes)
+  kBDAReservedPost,
+  // 0xB9: Unknown (7 bytes)
+  kBDAUnknownB9,
+  // 0xC0: Reserved (14 bytes)
+  kBDAReservedC0,
+  // 0xCE: Count of days since last boot
+  kBDADaysSinceBoot,
+  // 0xD0: Reserved (32 bytes)
+  kBDAReservedD0,
+  // 0xF0: Reserved for user (16 bytes)
+  kBDAUserReserved,
+
+  // Total number of fields in the BDA.
+  kBDANumFields,
+} BDAField;
+
+// Metadata about each BIOS Data Area field.
+typedef struct BDAFieldMetadata {
+  // The BDA field.
+  BDAField field;
+  // Offset of the field in the BIOS Data Area.
+  uint16_t offset;
+  // Size of the field in bytes.
+  uint8_t size;
+} BDAFieldMetadata;
+
+// BDAFieldMetadata array, indexed by BDAField enum.
+extern const BDAFieldMetadata BDAFieldMetadataTable[kBDANumFields];
+
+// Structure of the equipment word in the BDA at offset 0x10.
+typedef struct EquipmentWord {
+  // bits 15-14: number of parallel devices
+  uint8_t parallel_devices : 2;
+  // bit 13: Internal modem
+  uint8_t reserved_13 : 1;
+  // bit 12: reserved
+  uint8_t reserved_12 : 1;
+  // bits 11-9: number of serial devices
+  uint8_t serial_devices : 3;
+  // bit 8: reserved
+  uint8_t reserved_8 : 1;
+  // bits 7-6: number of diskette drives minus one
+  uint8_t diskette_drives : 2;
+  // bits 5-4: Initial video mode:
+  //     00b = EGA,VGA,PGA
+  //     01b = 40 x 25 color
+  //     10b = 80 x 25 color
+  //     11b = 80 x 25 mono
+  uint8_t video_mode : 2;
+  // bit 3: reserved
+  uint8_t reserved_3 : 1;
+  // bit 2: 1 if pointing device
+  uint8_t pointing_device : 1;
+  // bit 1: 1 if math co-processor
+  uint8_t math_coprocessor : 1;
+  // bit 0: 1 if diskette available for boot
+  uint8_t diskette_boot_available : 1;
+} EquipmentWord;
+
+// Parse uint16_t as EquipmentWord.
+EquipmentWord ParseEquipmentWord(uint16_t raw_equipment_word);
+// Convert EquipmentWord to uint16_t.
+uint16_t SerializeEquipmentWord(EquipmentWord equipment);
+
+// Initialize BIOS state with the provided configuration.
+void InitBIOS(BIOSState* bios, BIOSConfig* config);
 
 #endif  // YAX86_BIOS_PUBLIC_H
 
@@ -248,19 +406,142 @@ void InitBIOS(BIOSState* bios);
 // ==============================================================================
 
 // ==============================================================================
+// src/bios/memory.c start
+// ==============================================================================
+
+#line 1 "./src/bios/memory.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// Add a region to the memory map. Returns true on success, false if we've
+// exceeded the maximum number of memory regions.
+bool AddMemoryRegion(struct BIOSState* bios, const MemoryRegion* metadata) {
+  if (bios->num_memory_regions >= kMaxMemoryRegions) {
+    return false;
+  }
+  bios->memory_regions[bios->num_memory_regions++] = *metadata;
+  return true;
+}
+
+// Look up the memory region corresponding to an address. Returns NULL if the
+// address is not mapped to a known memory region.
+MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address) {
+  for (uint8_t i = 0; i < bios->num_memory_regions; ++i) {
+    MemoryRegion* region = &bios->memory_regions[i];
+    if (address >= region->start && address < region->start + region->size) {
+      return region;
+    }
+  }
+  return NULL;
+}
+
+// Read a byte from a logical memory address.
+uint8_t ReadMemoryByte(struct BIOSState* bios, uint16_t address) {
+  MemoryRegion* region = GetMemoryRegion(bios, address);
+  if (!region || !region->read_memory_byte) {
+    return 0xFF;
+  }
+  return region->read_memory_byte(bios, address - region->start);
+}
+
+// Read a word from a logical memory address.
+uint16_t ReadMemoryWord(struct BIOSState* bios, uint16_t address) {
+  uint8_t low_byte = ReadMemoryByte(bios, address);
+  uint8_t high_byte = ReadMemoryByte(bios, address + 1);
+  return (high_byte << 8) | low_byte;
+}
+
+// Write a byte to a logical memory address.
+void WriteMemoryByte(struct BIOSState* bios, uint16_t address, uint8_t value) {
+  MemoryRegion* region = GetMemoryRegion(bios, address);
+  if (!region || !region->write_memory_byte) {
+    return;
+  }
+  region->write_memory_byte(bios, address - region->start, value);
+}
+
+// Write a word to a logical memory address.
+void WriteMemoryWord(struct BIOSState* bios, uint16_t address, uint16_t value) {
+  WriteMemoryByte(bios, address, value & 0xFF);
+  WriteMemoryByte(bios, address + 1, (value >> 8) & 0xFF);
+}
+
+
+// ==============================================================================
+// src/bios/memory.c end
+// ==============================================================================
+
+// ==============================================================================
+// src/bios/display_text.h start
+// ==============================================================================
+
+#line 1 "./src/bios/display_text.h"
+#ifndef YAX86_BIOS_DISPLAY_TEXT_H
+#define YAX86_BIOS_DISPLAY_TEXT_H
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "public.h"
+
+// Initialize the display.
+extern void InitDisplayText(BIOSState* bios);
+
+#endif  // YAX86_IMPLEMENTATION
+
+#endif  // YAX86_BIOS_DISPLAY_TEXT_H
+
+
+// ==============================================================================
+// src/bios/display_text.h end
+// ==============================================================================
+
+// ==============================================================================
+// src/bios/display_text.c start
+// ==============================================================================
+
+#line 1 "./src/bios/display_text.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "../common.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+YAX86_PRIVATE void InitDisplayText(BIOSState* bios) {
+  // TODO: Set display to text mode.
+
+  // Initialize the text mode framebuffer to a blank state.
+  for (int i = 0; i < kTextModeFramebufferSize; i += 2) {
+    bios->text_framebuffer[i] = 0;
+    bios->text_framebuffer[i + 1] = 0x07;
+  }
+}
+
+
+// ==============================================================================
+// src/bios/display_text.c end
+// ==============================================================================
+
+// ==============================================================================
 // src/bios/bios.c start
 // ==============================================================================
 
 #line 1 "./src/bios/bios.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
+#include "display_text.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-void InitBIOS(BIOSState* bios) {
+void InitBIOS(BIOSState* bios, BIOSConfig* config) {
   // Zero out the BIOS state.
   BIOSState empty_bios = {0};
   *bios = empty_bios;
+
+  bios->config = config;
+
+  InitDisplayText(bios);
+
   // TODO: Set BDA values.
 }
 
