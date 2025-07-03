@@ -1,6 +1,6 @@
-// Public interface for the SDL-based BIOS module.
-#ifndef YAX86_BIOS_SDL_PUBLIC_H
-#define YAX86_BIOS_SDL_PUBLIC_H
+// Public interface for the BIOS module.
+#ifndef YAX86_BIOS_PUBLIC_H
+#define YAX86_BIOS_PUBLIC_H
 
 #include <stdint.h>
 
@@ -190,4 +190,4 @@ typedef struct BIOSState {
 // Initialize BIOS state.
 void InitBIOS(BIOSState* bios);
 
-#endif  // YAX86_BIOS_SDL_PUBLIC_H
+#endif  // YAX86_BIOS_PUBLIC_H

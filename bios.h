@@ -1,22 +1,22 @@
 // ==============================================================================
-// YAX86 BIOS_SDL MODULE - GENERATED SINGLE HEADER BUNDLE
+// YAX86 BIOS MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef YAX86_BIOS_SDL_BUNDLE_H
-#define YAX86_BIOS_SDL_BUNDLE_H
+#ifndef YAX86_BIOS_BUNDLE_H
+#define YAX86_BIOS_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
-// src/bios_sdl/public.h start
+// src/bios/public.h start
 // ==============================================================================
 
-#line 1 "./src/bios_sdl/public.h"
-// Public interface for the SDL-based BIOS module.
-#ifndef YAX86_BIOS_SDL_PUBLIC_H
-#define YAX86_BIOS_SDL_PUBLIC_H
+#line 1 "./src/bios/public.h"
+// Public interface for the BIOS module.
+#ifndef YAX86_BIOS_PUBLIC_H
+#define YAX86_BIOS_PUBLIC_H
 
 #include <stdint.h>
 
@@ -206,11 +206,11 @@ typedef struct BIOSState {
 // Initialize BIOS state.
 void InitBIOS(BIOSState* bios);
 
-#endif  // YAX86_BIOS_SDL_PUBLIC_H
+#endif  // YAX86_BIOS_PUBLIC_H
 
 
 // ==============================================================================
-// src/bios_sdl/public.h end
+// src/bios/public.h end
 // ==============================================================================
 
 
@@ -248,10 +248,10 @@ void InitBIOS(BIOSState* bios);
 // ==============================================================================
 
 // ==============================================================================
-// src/bios_sdl/bios.c start
+// src/bios/bios.c start
 // ==============================================================================
 
-#line 1 "./src/bios_sdl/bios.c"
+#line 1 "./src/bios/bios.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../common.h"
 #include "public.h"
@@ -266,7 +266,7 @@ void InitBIOS(BIOSState* bios) {
 
 
 // ==============================================================================
-// src/bios_sdl/bios.c end
+// src/bios/bios.c end
 // ==============================================================================
 
 
@@ -276,5 +276,5 @@ void InitBIOS(BIOSState* bios) {
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // YAX86_BIOS_SDL_BUNDLE_H
+#endif  // YAX86_BIOS_BUNDLE_H
 

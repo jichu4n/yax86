@@ -32,7 +32,7 @@ function(generate_header_bundle module)
 endfunction()
 
 generate_header_bundle("cpu")
-generate_header_bundle("bios_sdl")
+generate_header_bundle("bios")
 
 # =============================================================================
 # Main library
