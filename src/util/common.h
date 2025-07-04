@@ -1,5 +1,5 @@
-#ifndef YAX86_COMMON_H
-#define YAX86_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -17,4 +17,4 @@
 #define YAX86_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H

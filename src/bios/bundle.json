@@ -1,7 +1,7 @@
 {
-  "public": ["public.h"],
+  "public": ["../util/static_vector.h", "public.h"],
   "private": [
-    "../common.h",
+    "../util/common.h",
     "memory.c",
     "display_text.h",
     "display_text.c",

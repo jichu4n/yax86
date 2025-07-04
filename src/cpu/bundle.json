@@ -1,7 +1,7 @@
 {
   "public": ["public.h"],
   "private": [
-    "../common.h",
+    "../util/common.h",
     "types.h",
     "operands.h",
     "operands.c",

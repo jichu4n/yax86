@@ -1,5 +1,5 @@
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -26,7 +26,8 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-YAX86_PRIVATE ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -35,8 +36,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* c
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_PRIVATE ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);

@@ -16,14 +16,11 @@ function(generate_header_bundle module)
     set(bundle "${CMAKE_CURRENT_SOURCE_DIR}/${module}.h")
     set(generate_header_bundle "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-header-bundle.js")
     file(GLOB module_sources "${CMAKE_CURRENT_SOURCE_DIR}/src/${module}/*")
-    file(GLOB common_sources
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
-    )
+    file(GLOB util_sources "${CMAKE_CURRENT_SOURCE_DIR}/src/util/*")
     add_custom_command(
         OUTPUT ${bundle}
         COMMAND ${generate_header_bundle} ARGS ${module}
-        DEPENDS ${generate_header_bundle} ${module_sources} ${common_sources}
+        DEPENDS ${generate_header_bundle} ${module_sources} ${util_sources}
         COMMENT "Generating header bundle for module ${module} => ${bundle}"
     )
     set(${module}_BUNDLE "${bundle}" PARENT_SCOPE)
@@ -31,7 +28,6 @@ function(generate_header_bundle module)
     set(ALL_HEADER_BUNDLES ${ALL_HEADER_BUNDLES} PARENT_SCOPE)
 endfunction()
 
-generate_header_bundle("util")
 generate_header_bundle("cpu")
 generate_header_bundle("bios")
 

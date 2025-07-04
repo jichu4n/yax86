@@ -2,11 +2,16 @@
 #define YAX86_BIOS_DISPLAY_TEXT_H
 
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "public.h"
 
 // Initialize the display.
-extern void InitDisplayText(BIOSState* bios);
+void InitDisplayText(BIOSState* bios);
+
+// Read a byte from the display text buffer.
+uint8_t ReadDisplayTextByte(BIOSState* bios, uint16_t address);
+// Write a byte to the display text buffer.
+void WriteDisplayTextByte(BIOSState* bios, uint16_t address, uint8_t value);
 
 #endif  // YAX86_IMPLEMENTATION
 

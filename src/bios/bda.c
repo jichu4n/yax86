@@ -1,5 +1,5 @@
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 

@@ -1,5 +1,5 @@
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -20,7 +20,8 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
 };
 
 // Group 4 instruction handler.
-YAX86_PRIVATE ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup4Instruction(const InstructionContext* ctx) {
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);

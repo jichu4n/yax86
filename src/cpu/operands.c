@@ -1,7 +1,7 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "operands.h"
 
-#include "../common.h"
+#include "../util/common.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Helper functions to construct OperandValue.

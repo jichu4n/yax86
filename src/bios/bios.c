@@ -1,5 +1,5 @@
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "display_text.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
@@ -10,6 +10,24 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
   *bios = empty_bios;
 
   bios->config = config;
+
+  MemoryRegionsInit(&bios->memory_regions);
+  MemoryRegion conventional_memory = {
+      .region = kMemoryRegionConventional,
+      .start = 0x0000,
+      .size = config->memory_size_kb * (2 << 10),
+      .read_memory_byte = config->read_memory_byte,
+      .write_memory_byte = config->write_memory_byte,
+  };
+  MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
+  MemoryRegion text_mode_framebuffer = {
+      .region = kMemoryRegionTextModeFramebuffer,
+      .start = kTextModeFramebufferAddress,
+      .size = kTextModeFramebufferSize,
+      .read_memory_byte = ReadDisplayTextByte,
+      .write_memory_byte = WriteDisplayTextByte,
+  };
+  MemoryRegionsAppend(&bios->memory_regions, &text_mode_framebuffer);
 
   InitDisplayText(bios);
 

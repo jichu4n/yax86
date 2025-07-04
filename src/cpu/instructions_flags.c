@@ -1,5 +1,5 @@
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -17,7 +17,8 @@ static const Flag kFlagsForClearAndSetInstructions[] = {
     kDF,  // CLD, STD
 };
 
-YAX86_PRIVATE ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteClearOrSetFlag(const InstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
   Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
@@ -30,7 +31,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx)
 // ============================================================================
 
 // CMC
-YAX86_PRIVATE ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteComplementCarryFlag(const InstructionContext* ctx) {
   SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
   return kExecuteSuccess;
 }

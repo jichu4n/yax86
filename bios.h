@@ -10,6 +10,94 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
+// src/util/static_vector.h start
+// ==============================================================================
+
+#line 1 "./src/util/static_vector.h"
+// Static vector library.
+//
+// A static vector is a vector backed by a fixed-size array. It's essentially
+// a vector, but whose underlying storage is statically allocated and does not
+// rely on dynamic memory allocation.
+
+#ifndef YAX86_UTIL_STATIC_VECTOR_H
+#define YAX86_UTIL_STATIC_VECTOR_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+// Header structure at the beginning of a static vector.
+typedef struct StaticVectorHeader {
+  // Element size in bytes.
+  size_t element_size;
+  // Maximum number of elements the vector can hold.
+  size_t max_length;
+  // Number of elements currently in the vector.
+  size_t length;
+} StaticVectorHeader;
+
+// Define a static vector type with an element type.
+#define STATIC_VECTOR_TYPE(name, element_type, max_length_value)        \
+  typedef struct name {                                                 \
+    StaticVectorHeader header;                                          \
+    element_type elements[max_length_value];                            \
+  } name;                                                               \
+  static void name##Init(name* vector) {                                \
+    static const StaticVectorHeader header = {                          \
+        .element_size = sizeof(element_type),                           \
+        .max_length = (max_length_value),                               \
+        .length = 0,                                                    \
+    };                                                                  \
+    vector->header = header;                                            \
+  }                                                                     \
+  static size_t name##Length(const name* vector) {                      \
+    return vector->header.length;                                       \
+  }                                                                     \
+  static element_type* name##Get(name* vector, size_t index) {          \
+    if (index >= (max_length_value)) {                                  \
+      return NULL;                                                      \
+    }                                                                   \
+    return &(vector->elements[index]);                                  \
+  }                                                                     \
+  static bool name##Append(name* vector, const element_type* element) { \
+    if (vector->header.length >= (max_length_value)) {                  \
+      return false;                                                     \
+    }                                                                   \
+    vector->elements[vector->header.length++] = *element;               \
+    return true;                                                        \
+  }                                                                     \
+  static bool name##Insert(                                             \
+      name* vector, size_t index, const element_type* element) {        \
+    if (index > vector->header.length ||                                \
+        vector->header.length >= (max_length_value)) {                  \
+      return false;                                                     \
+    }                                                                   \
+    for (size_t i = vector->header.length; i > index; --i) {            \
+      vector->elements[i] = vector->elements[i - 1];                    \
+    }                                                                   \
+    vector->elements[index] = *element;                                 \
+    ++vector->header.length;                                            \
+    return true;                                                        \
+  }                                                                     \
+  static bool name##Remove(name* vector, size_t index) {                \
+    if (index >= vector->header.length) {                               \
+      return false;                                                     \
+    }                                                                   \
+    for (size_t i = index; i < vector->header.length - 1; ++i) {        \
+      vector->elements[i] = vector->elements[i + 1];                    \
+    }                                                                   \
+    --vector->header.length;                                            \
+    return true;                                                        \
+  }
+
+#endif  // YAX86_UTIL_STATIC_VECTOR_H
+
+
+// ==============================================================================
+// src/util/static_vector.h end
+// ==============================================================================
+
+// ==============================================================================
 // src/bios/public.h start
 // ==============================================================================
 
@@ -21,6 +109,10 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../util/static_vector.h"
+#endif  // YAX86_IMPLEMENTATION
 
 struct BIOSState;
 
@@ -56,9 +148,6 @@ typedef struct MemoryRegion {
       struct BIOSState* bios, uint16_t relative_address, uint8_t value);
 } MemoryRegion;
 
-// Add a region to the memory map. Returns true on success, false if we've
-// exceeded the maximum number of memory regions.
-bool AddMemoryRegion(struct BIOSState* bios, const MemoryRegion* metadata);
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
 MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
@@ -68,18 +157,20 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-uint8_t ReadMemoryByte(struct BIOSState* bios, uint16_t address);
+uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint16_t address);
 // Read a word from a logical memory address.
-uint16_t ReadMemoryWord(struct BIOSState* bios, uint16_t address);
+uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address);
 
 // Write a byte to a logical memory address.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-void WriteMemoryByte(struct BIOSState* bios, uint16_t address, uint8_t value);
+void WriteLogicalMemoryByte(
+    struct BIOSState* bios, uint16_t address, uint8_t value);
 // Write a word to a logical memory address.
-void WriteMemoryWord(struct BIOSState* bios, uint16_t address, uint16_t value);
+void WriteLogicalMemoryWord(
+    struct BIOSState* bios, uint16_t address, uint16_t value);
 
 // ============================================================================
 // Text mode
@@ -131,15 +222,15 @@ typedef struct BIOSConfig {
       struct BIOSState* bios, uint16_t address, uint8_t value);
 } BIOSConfig;
 
+STATIC_VECTOR_TYPE(MemoryRegions, MemoryRegion, kMaxMemoryRegions)
+
 // State of the BIOS.
 typedef struct BIOSState {
   // Pointer to caller-provided runtime configuration
   BIOSConfig* config;
 
   // Memory map.
-  MemoryRegion memory_regions[kMaxMemoryRegions];
-  // Number of memory regions in the memory map.
-  uint8_t num_memory_regions;
+  MemoryRegions memory_regions;
 
   // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
   uint8_t text_framebuffer[kTextModeFramebufferSize];
@@ -375,12 +466,12 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config);
 #ifdef YAX86_IMPLEMENTATION
 
 // ==============================================================================
-// src/common.h start
+// src/util/common.h start
 // ==============================================================================
 
-#line 1 "./src/common.h"
-#ifndef YAX86_COMMON_H
-#define YAX86_COMMON_H
+#line 1 "./src/util/common.h"
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -398,11 +489,11 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config);
 #define YAX86_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 
 // ==============================================================================
-// src/common.h end
+// src/util/common.h end
 // ==============================================================================
 
 // ==============================================================================
@@ -411,25 +502,15 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config);
 
 #line 1 "./src/bios/memory.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
-
-// Add a region to the memory map. Returns true on success, false if we've
-// exceeded the maximum number of memory regions.
-bool AddMemoryRegion(struct BIOSState* bios, const MemoryRegion* metadata) {
-  if (bios->num_memory_regions >= kMaxMemoryRegions) {
-    return false;
-  }
-  bios->memory_regions[bios->num_memory_regions++] = *metadata;
-  return true;
-}
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
 MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address) {
-  for (uint8_t i = 0; i < bios->num_memory_regions; ++i) {
-    MemoryRegion* region = &bios->memory_regions[i];
+  for (uint8_t i = 0; i < MemoryRegionsLength(&bios->memory_regions); ++i) {
+    MemoryRegion* region = MemoryRegionsGet(&bios->memory_regions, i);
     if (address >= region->start && address < region->start + region->size) {
       return region;
     }
@@ -438,7 +519,7 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address) {
 }
 
 // Read a byte from a logical memory address.
-uint8_t ReadMemoryByte(struct BIOSState* bios, uint16_t address) {
+uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint16_t address) {
   MemoryRegion* region = GetMemoryRegion(bios, address);
   if (!region || !region->read_memory_byte) {
     return 0xFF;
@@ -447,14 +528,15 @@ uint8_t ReadMemoryByte(struct BIOSState* bios, uint16_t address) {
 }
 
 // Read a word from a logical memory address.
-uint16_t ReadMemoryWord(struct BIOSState* bios, uint16_t address) {
-  uint8_t low_byte = ReadMemoryByte(bios, address);
-  uint8_t high_byte = ReadMemoryByte(bios, address + 1);
+uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address) {
+  uint8_t low_byte = ReadLogicalMemoryByte(bios, address);
+  uint8_t high_byte = ReadLogicalMemoryByte(bios, address + 1);
   return (high_byte << 8) | low_byte;
 }
 
 // Write a byte to a logical memory address.
-void WriteMemoryByte(struct BIOSState* bios, uint16_t address, uint8_t value) {
+void WriteLogicalMemoryByte(
+    struct BIOSState* bios, uint16_t address, uint8_t value) {
   MemoryRegion* region = GetMemoryRegion(bios, address);
   if (!region || !region->write_memory_byte) {
     return;
@@ -463,9 +545,10 @@ void WriteMemoryByte(struct BIOSState* bios, uint16_t address, uint8_t value) {
 }
 
 // Write a word to a logical memory address.
-void WriteMemoryWord(struct BIOSState* bios, uint16_t address, uint16_t value) {
-  WriteMemoryByte(bios, address, value & 0xFF);
-  WriteMemoryByte(bios, address + 1, (value >> 8) & 0xFF);
+void WriteLogicalMemoryWord(
+    struct BIOSState* bios, uint16_t address, uint16_t value) {
+  WriteLogicalMemoryByte(bios, address, value & 0xFF);
+  WriteLogicalMemoryByte(bios, address + 1, (value >> 8) & 0xFF);
 }
 
 
@@ -482,11 +565,16 @@ void WriteMemoryWord(struct BIOSState* bios, uint16_t address, uint16_t value) {
 #define YAX86_BIOS_DISPLAY_TEXT_H
 
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "public.h"
 
 // Initialize the display.
-extern void InitDisplayText(BIOSState* bios);
+void InitDisplayText(BIOSState* bios);
+
+// Read a byte from the display text buffer.
+uint8_t ReadDisplayTextByte(BIOSState* bios, uint16_t address);
+// Write a byte to the display text buffer.
+void WriteDisplayTextByte(BIOSState* bios, uint16_t address, uint8_t value);
 
 #endif  // YAX86_IMPLEMENTATION
 
@@ -503,7 +591,7 @@ extern void InitDisplayText(BIOSState* bios);
 
 #line 1 "./src/bios/display_text.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -517,6 +605,20 @@ YAX86_PRIVATE void InitDisplayText(BIOSState* bios) {
   }
 }
 
+uint8_t ReadDisplayTextByte(BIOSState* bios, uint16_t address) {
+  if (address >= kTextModeFramebufferSize) {
+    return 0xFF;  // Out of bounds, return garbage data.
+  }
+  return bios->text_framebuffer[address];
+}
+
+void WriteDisplayTextByte(BIOSState* bios, uint16_t address, uint8_t value) {
+  if (address >= kTextModeFramebufferSize) {
+    return;
+  }
+  bios->text_framebuffer[address] = value;
+}
+
 
 // ==============================================================================
 // src/bios/display_text.c end
@@ -528,7 +630,7 @@ YAX86_PRIVATE void InitDisplayText(BIOSState* bios) {
 
 #line 1 "./src/bios/bios.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "display_text.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
@@ -539,6 +641,24 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
   *bios = empty_bios;
 
   bios->config = config;
+
+  MemoryRegionsInit(&bios->memory_regions);
+  MemoryRegion conventional_memory = {
+      .region = kMemoryRegionConventional,
+      .start = 0x0000,
+      .size = config->memory_size_kb * (2 << 10),
+      .read_memory_byte = config->read_memory_byte,
+      .write_memory_byte = config->write_memory_byte,
+  };
+  MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
+  MemoryRegion text_mode_framebuffer = {
+      .region = kMemoryRegionTextModeFramebuffer,
+      .start = kTextModeFramebufferAddress,
+      .size = kTextModeFramebufferSize,
+      .read_memory_byte = ReadDisplayTextByte,
+      .write_memory_byte = WriteDisplayTextByte,
+  };
+  MemoryRegionsAppend(&bios->memory_regions, &text_mode_framebuffer);
 
   InitDisplayText(bios);
 

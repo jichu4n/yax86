@@ -1,4 +1,0 @@
-{
-  "public": ["static_vector.h"],
-  "private": ["static_vector.c"]
-}

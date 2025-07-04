@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef YAX86_IMPLEMENTATION
+#include "../util/static_vector.h"
+#endif  // YAX86_IMPLEMENTATION
+
 struct BIOSState;
 
 // ============================================================================
@@ -40,9 +44,6 @@ typedef struct MemoryRegion {
       struct BIOSState* bios, uint16_t relative_address, uint8_t value);
 } MemoryRegion;
 
-// Add a region to the memory map. Returns true on success, false if we've
-// exceeded the maximum number of memory regions.
-bool AddMemoryRegion(struct BIOSState* bios, const MemoryRegion* metadata);
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
 MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
@@ -52,18 +53,20 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-uint8_t ReadMemoryByte(struct BIOSState* bios, uint16_t address);
+uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint16_t address);
 // Read a word from a logical memory address.
-uint16_t ReadMemoryWord(struct BIOSState* bios, uint16_t address);
+uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address);
 
 // Write a byte to a logical memory address.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-void WriteMemoryByte(struct BIOSState* bios, uint16_t address, uint8_t value);
+void WriteLogicalMemoryByte(
+    struct BIOSState* bios, uint16_t address, uint8_t value);
 // Write a word to a logical memory address.
-void WriteMemoryWord(struct BIOSState* bios, uint16_t address, uint16_t value);
+void WriteLogicalMemoryWord(
+    struct BIOSState* bios, uint16_t address, uint16_t value);
 
 // ============================================================================
 // Text mode
@@ -115,15 +118,15 @@ typedef struct BIOSConfig {
       struct BIOSState* bios, uint16_t address, uint8_t value);
 } BIOSConfig;
 
+STATIC_VECTOR_TYPE(MemoryRegions, MemoryRegion, kMaxMemoryRegions)
+
 // State of the BIOS.
 typedef struct BIOSState {
   // Pointer to caller-provided runtime configuration
   BIOSConfig* config;
 
   // Memory map.
-  MemoryRegion memory_regions[kMaxMemoryRegions];
-  // Number of memory regions in the memory map.
-  uint8_t num_memory_regions;
+  MemoryRegions memory_regions;
 
   // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
   uint8_t text_framebuffer[kTextModeFramebufferSize];

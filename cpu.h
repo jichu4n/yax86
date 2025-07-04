@@ -351,12 +351,12 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 #ifdef YAX86_IMPLEMENTATION
 
 // ==============================================================================
-// src/common.h start
+// src/util/common.h start
 // ==============================================================================
 
-#line 1 "./src/common.h"
-#ifndef YAX86_COMMON_H
-#define YAX86_COMMON_H
+#line 1 "./src/util/common.h"
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -374,11 +374,11 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 #define YAX86_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 
 // ==============================================================================
-// src/common.h end
+// src/util/common.h end
 // ==============================================================================
 
 // ==============================================================================
@@ -721,7 +721,7 @@ extern OperandValue ReadImmediate(const InstructionContext* ctx);
 #ifndef YAX86_IMPLEMENTATION
 #include "operands.h"
 
-#include "../common.h"
+#include "../util/common.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Helper functions to construct OperandValue.
@@ -1663,7 +1663,7 @@ extern ExecuteStatus ExecuteGroup5Instruction(const InstructionContext* ctx);
 
 #line 1 "./src/cpu/instructions_helpers.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -1732,7 +1732,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_mov.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -1916,7 +1916,7 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_lea.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -1985,7 +1985,7 @@ ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_add.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -2144,7 +2144,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_sub.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -2316,7 +2316,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_sign_ext.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -2352,7 +2352,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_cmp.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -2411,7 +2411,7 @@ ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_bool.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -2582,7 +2582,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_ctrl_flow.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -2867,7 +2867,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_stack.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -2990,7 +2990,7 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_flags.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -3008,7 +3008,8 @@ static const Flag kFlagsForClearAndSetInstructions[] = {
     kDF,  // CLD, STD
 };
 
-YAX86_PRIVATE ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteClearOrSetFlag(const InstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
   Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
@@ -3021,7 +3022,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteClearOrSetFlag(const InstructionContext* ctx)
 // ============================================================================
 
 // CMC
-YAX86_PRIVATE ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteComplementCarryFlag(const InstructionContext* ctx) {
   SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
   return kExecuteSuccess;
 }
@@ -3037,7 +3039,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteComplementCarryFlag(const InstructionContext*
 
 #line 1 "./src/cpu/instructions_io.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -3139,7 +3141,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteOutDX(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_string.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -3357,7 +3359,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteCmps(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_bcd_ascii.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -3490,7 +3492,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_group_1.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -3517,7 +3519,8 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-YAX86_PRIVATE ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -3526,8 +3529,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteGroup1Instruction(const InstructionContext* c
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_PRIVATE ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
-    const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -3550,7 +3553,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteGroup1InstructionWithSignExtension(
 
 #line 1 "./src/cpu/instructions_group_2.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -3781,7 +3784,7 @@ ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_group_3.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -3982,7 +3985,7 @@ ExecuteGroup3Instruction(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/instructions_group_4.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -4003,7 +4006,8 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
 };
 
 // Group 4 instruction handler.
-YAX86_PRIVATE ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* ctx) {
+YAX86_PRIVATE ExecuteStatus
+ExecuteGroup4Instruction(const InstructionContext* ctx) {
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -4021,7 +4025,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteGroup4Instruction(const InstructionContext* c
 
 #line 1 "./src/cpu/instructions_group_5.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -4117,7 +4121,7 @@ ExecuteGroup5Instruction(const InstructionContext* ctx) {
 
 #line 1 "./src/cpu/opcode_table.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -5528,7 +5532,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
 
 #line 1 "./src/cpu/cpu.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../common.h"
+#include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "public.h"
