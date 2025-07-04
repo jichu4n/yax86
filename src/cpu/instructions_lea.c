@@ -15,8 +15,8 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   MemoryAddress memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
-  uint32_t physical_address = ToPhysicalAddress(ctx->cpu, &memory_address);
-  WriteOperandAddress(ctx, &dest.address, physical_address);
+  uint32_t raw_address = ToRawAddress(ctx->cpu, &memory_address);
+  WriteOperandAddress(ctx, &dest.address, raw_address);
   return kExecuteSuccess;
 }
 

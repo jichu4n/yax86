@@ -29,14 +29,13 @@ extern uint32_t FromOperand(const Operand* operand);
 extern int32_t FromSignedOperand(const Operand* operand);
 
 // Computes the raw effective address corresponding to a MemoryAddress.
-extern uint16_t ToPhysicalAddress(
-    const CPUState* cpu, const MemoryAddress* address);
+extern uint32_t ToRawAddress(const CPUState* cpu, const MemoryAddress* address);
 
 // Read a byte from memory as a uint8_t.
-extern uint8_t ReadRawMemoryByte(CPUState* cpu, uint16_t physical_address);
+extern uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address);
 
 // Read a word from memory as a uint16_t.
-extern uint16_t ReadRawMemoryWord(CPUState* cpu, uint16_t physical_address);
+extern uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address);
 
 // Read a byte from memory to an OperandValue.
 extern OperandValue ReadMemoryByte(
@@ -55,10 +54,10 @@ extern OperandValue ReadRegisterWord(
     CPUState* cpu, const OperandAddress* address);
 
 // Write a byte as uint8_t to memory.
-extern void WriteRawMemoryByte(CPUState* cpu, uint16_t address, uint8_t value);
+extern void WriteRawMemoryByte(CPUState* cpu, uint32_t address, uint8_t value);
 
 // Write a word as uint16_t to memory.
-extern void WriteRawMemoryWord(CPUState* cpu, uint16_t address, uint16_t value);
+extern void WriteRawMemoryWord(CPUState* cpu, uint32_t address, uint16_t value);
 
 // Write a byte to memory.
 extern void WriteMemoryByte(

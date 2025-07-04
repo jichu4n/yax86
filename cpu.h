@@ -135,7 +135,7 @@ typedef struct CPUConfig {
   //
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
-  uint8_t (*read_memory_byte)(struct CPUState* cpu, uint16_t address);
+  uint8_t (*read_memory_byte)(struct CPUState* cpu, uint32_t address);
 
   // Callback to write a byte to memory.
   //
@@ -146,7 +146,7 @@ typedef struct CPUConfig {
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
   void (*write_memory_byte)(
-      struct CPUState* cpu, uint16_t address, uint8_t value);
+      struct CPUState* cpu, uint32_t address, uint8_t value);
 
   // Callback to handle an interrupt.
   //   - Return kExecuteSuccess if the interrupt was handled and execution
@@ -576,14 +576,13 @@ extern uint32_t FromOperand(const Operand* operand);
 extern int32_t FromSignedOperand(const Operand* operand);
 
 // Computes the raw effective address corresponding to a MemoryAddress.
-extern uint16_t ToPhysicalAddress(
-    const CPUState* cpu, const MemoryAddress* address);
+extern uint32_t ToRawAddress(const CPUState* cpu, const MemoryAddress* address);
 
 // Read a byte from memory as a uint8_t.
-extern uint8_t ReadRawMemoryByte(CPUState* cpu, uint16_t physical_address);
+extern uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address);
 
 // Read a word from memory as a uint16_t.
-extern uint16_t ReadRawMemoryWord(CPUState* cpu, uint16_t physical_address);
+extern uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address);
 
 // Read a byte from memory to an OperandValue.
 extern OperandValue ReadMemoryByte(
@@ -602,10 +601,10 @@ extern OperandValue ReadRegisterWord(
     CPUState* cpu, const OperandAddress* address);
 
 // Write a byte as uint8_t to memory.
-extern void WriteRawMemoryByte(CPUState* cpu, uint16_t address, uint8_t value);
+extern void WriteRawMemoryByte(CPUState* cpu, uint32_t address, uint8_t value);
 
 // Write a word as uint16_t to memory.
-extern void WriteRawMemoryWord(CPUState* cpu, uint16_t address, uint16_t value);
+extern void WriteRawMemoryWord(CPUState* cpu, uint32_t address, uint16_t value);
 
 // Write a byte to memory.
 extern void WriteMemoryByte(
@@ -791,41 +790,39 @@ YAX86_PRIVATE int32_t FromSignedOperand(const Operand* operand) {
 }
 
 // Computes the raw effective address corresponding to a MemoryAddress.
-YAX86_PRIVATE uint16_t
-ToPhysicalAddress(const CPUState* cpu, const MemoryAddress* address) {
+YAX86_PRIVATE uint32_t
+ToRawAddress(const CPUState* cpu, const MemoryAddress* address) {
   uint16_t segment = cpu->registers[address->segment_register_index];
-  return (segment << 4) + address->offset;
+  return (((uint32_t)segment) << 4) + (uint32_t)(address->offset);
 }
 
 // Read a byte from memory as a uint8_t.
-YAX86_PRIVATE uint8_t
-ReadRawMemoryByte(CPUState* cpu, uint16_t physical_address) {
+YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   return cpu->config->read_memory_byte
-             ? cpu->config->read_memory_byte(cpu, physical_address)
+             ? cpu->config->read_memory_byte(cpu, raw_address)
              : 0xFF;
 }
 
 // Read a word from memory as a uint16_t.
-YAX86_PRIVATE uint16_t
-ReadRawMemoryWord(CPUState* cpu, uint16_t physical_address) {
-  uint8_t low_byte_value = ReadRawMemoryByte(cpu, physical_address);
-  uint8_t high_byte_value = ReadRawMemoryByte(cpu, physical_address + 1);
+YAX86_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
+  uint8_t low_byte_value = ReadRawMemoryByte(cpu, raw_address);
+  uint8_t high_byte_value = ReadRawMemoryByte(cpu, raw_address + 1);
   return (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value;
 }
 
 // Read a byte from memory to an OperandValue.
 YAX86_PRIVATE OperandValue
 ReadMemoryByte(CPUState* cpu, const OperandAddress* address) {
-  uint8_t byte_value = ReadRawMemoryByte(
-      cpu, ToPhysicalAddress(cpu, &address->value.memory_address));
+  uint8_t byte_value =
+      ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address->value.memory_address));
   return ByteValue(byte_value);
 }
 
 // Read a word from memory to an OperandValue.
 YAX86_PRIVATE OperandValue
 ReadMemoryWord(CPUState* cpu, const OperandAddress* address) {
-  uint16_t word_value = ReadRawMemoryWord(
-      cpu, ToPhysicalAddress(cpu, &address->value.memory_address));
+  uint16_t word_value =
+      ReadRawMemoryWord(cpu, ToRawAddress(cpu, &address->value.memory_address));
   return WordValue(word_value);
 }
 
@@ -858,7 +855,7 @@ OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
 
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
-    CPUState* cpu, uint16_t address, uint8_t value) {
+    CPUState* cpu, uint32_t address, uint8_t value) {
   if (!cpu->config->write_memory_byte) {
     return;
   }
@@ -867,7 +864,7 @@ YAX86_PRIVATE void WriteRawMemoryByte(
 
 // Write a word as uint16_t to memory.
 YAX86_PRIVATE void WriteRawMemoryWord(
-    CPUState* cpu, uint16_t address, uint16_t value) {
+    CPUState* cpu, uint32_t address, uint16_t value) {
   WriteRawMemoryByte(cpu, address, value & 0xFF);
   WriteRawMemoryByte(cpu, address + 1, (value >> 8) & 0xFF);
 }
@@ -876,7 +873,7 @@ YAX86_PRIVATE void WriteRawMemoryWord(
 YAX86_PRIVATE void WriteMemoryByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   WriteRawMemoryByte(
-      cpu, ToPhysicalAddress(cpu, &address->value.memory_address),
+      cpu, ToRawAddress(cpu, &address->value.memory_address),
       value.value.byte_value);
 }
 
@@ -884,7 +881,7 @@ YAX86_PRIVATE void WriteMemoryByte(
 YAX86_PRIVATE void WriteMemoryWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   WriteRawMemoryWord(
-      cpu, ToPhysicalAddress(cpu, &address->value.memory_address),
+      cpu, ToRawAddress(cpu, &address->value.memory_address),
       value.value.word_value);
 }
 
@@ -1932,8 +1929,8 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   MemoryAddress memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
-  uint32_t physical_address = ToPhysicalAddress(ctx->cpu, &memory_address);
-  WriteOperandAddress(ctx, &dest.address, physical_address);
+  uint32_t raw_address = ToRawAddress(ctx->cpu, &memory_address);
+  WriteOperandAddress(ctx, &dest.address, raw_address);
   return kExecuteSuccess;
 }
 

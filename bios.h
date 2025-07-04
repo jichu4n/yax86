@@ -37,57 +37,68 @@ typedef struct StaticVectorHeader {
 } StaticVectorHeader;
 
 // Define a static vector type with an element type.
-#define STATIC_VECTOR_TYPE(name, element_type, max_length_value)        \
-  typedef struct name {                                                 \
-    StaticVectorHeader header;                                          \
-    element_type elements[max_length_value];                            \
-  } name;                                                               \
-  static void name##Init(name* vector) {                                \
-    static const StaticVectorHeader header = {                          \
-        .element_size = sizeof(element_type),                           \
-        .max_length = (max_length_value),                               \
-        .length = 0,                                                    \
-    };                                                                  \
-    vector->header = header;                                            \
-  }                                                                     \
-  static size_t name##Length(const name* vector) {                      \
-    return vector->header.length;                                       \
-  }                                                                     \
-  static element_type* name##Get(name* vector, size_t index) {          \
-    if (index >= (max_length_value)) {                                  \
-      return NULL;                                                      \
-    }                                                                   \
-    return &(vector->elements[index]);                                  \
-  }                                                                     \
-  static bool name##Append(name* vector, const element_type* element) { \
-    if (vector->header.length >= (max_length_value)) {                  \
-      return false;                                                     \
-    }                                                                   \
-    vector->elements[vector->header.length++] = *element;               \
-    return true;                                                        \
-  }                                                                     \
-  static bool name##Insert(                                             \
-      name* vector, size_t index, const element_type* element) {        \
-    if (index > vector->header.length ||                                \
-        vector->header.length >= (max_length_value)) {                  \
-      return false;                                                     \
-    }                                                                   \
-    for (size_t i = vector->header.length; i > index; --i) {            \
-      vector->elements[i] = vector->elements[i - 1];                    \
-    }                                                                   \
-    vector->elements[index] = *element;                                 \
-    ++vector->header.length;                                            \
-    return true;                                                        \
-  }                                                                     \
-  static bool name##Remove(name* vector, size_t index) {                \
-    if (index >= vector->header.length) {                               \
-      return false;                                                     \
-    }                                                                   \
-    for (size_t i = index; i < vector->header.length - 1; ++i) {        \
-      vector->elements[i] = vector->elements[i + 1];                    \
-    }                                                                   \
-    --vector->header.length;                                            \
-    return true;                                                        \
+#define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
+  typedef struct name {                                                   \
+    StaticVectorHeader header;                                            \
+    element_type elements[max_length_value];                              \
+  } name;                                                                 \
+  static void name##Init(name* vector) __attribute__((unused));           \
+  static void name##Init(name* vector) {                                  \
+    static const StaticVectorHeader header = {                            \
+        .element_size = sizeof(element_type),                             \
+        .max_length = (max_length_value),                                 \
+        .length = 0,                                                      \
+    };                                                                    \
+    vector->header = header;                                              \
+  }                                                                       \
+  static size_t name##Length(const name* vector) __attribute__((unused)); \
+  static size_t name##Length(const name* vector) {                        \
+    return vector->header.length;                                         \
+  }                                                                       \
+  static element_type* name##Get(name* vector, size_t index)              \
+      __attribute__((unused));                                            \
+  static element_type* name##Get(name* vector, size_t index) {            \
+    if (index >= (max_length_value)) {                                    \
+      return NULL;                                                        \
+    }                                                                     \
+    return &(vector->elements[index]);                                    \
+  }                                                                       \
+  static bool name##Append(name* vector, const element_type* element)     \
+      __attribute__((unused));                                            \
+  static bool name##Append(name* vector, const element_type* element) {   \
+    if (vector->header.length >= (max_length_value)) {                    \
+      return false;                                                       \
+    }                                                                     \
+    vector->elements[vector->header.length++] = *element;                 \
+    return true;                                                          \
+  }                                                                       \
+  static bool name##Insert(                                               \
+      name* vector, size_t index, const element_type* element)            \
+      __attribute__((unused));                                            \
+  static bool name##Insert(                                               \
+      name* vector, size_t index, const element_type* element) {          \
+    if (index > vector->header.length ||                                  \
+        vector->header.length >= (max_length_value)) {                    \
+      return false;                                                       \
+    }                                                                     \
+    for (size_t i = vector->header.length; i > index; --i) {              \
+      vector->elements[i] = vector->elements[i - 1];                      \
+    }                                                                     \
+    vector->elements[index] = *element;                                   \
+    ++vector->header.length;                                              \
+    return true;                                                          \
+  }                                                                       \
+  static bool name##Remove(name* vector, size_t index)                    \
+      __attribute__((unused));                                            \
+  static bool name##Remove(name* vector, size_t index) {                  \
+    if (index >= vector->header.length) {                                 \
+      return false;                                                       \
+    }                                                                     \
+    for (size_t i = index; i < vector->header.length - 1; ++i) {          \
+      vector->elements[i] = vector->elements[i + 1];                      \
+    }                                                                     \
+    --vector->header.length;                                              \
+    return true;                                                          \
   }
 
 #endif  // YAX86_UTIL_STATIC_VECTOR_H
@@ -135,31 +146,31 @@ typedef struct MemoryRegion {
   // The memory region, such as kMemoryRegionConventional.
   uint8_t region;
   // Start address of the memory region.
-  uint16_t start;
+  uint32_t start;
   // Size of the memory region in bytes.
-  uint16_t size;
+  uint32_t size;
   // Callback to read a byte from the memory region, where address is relative
   // to the start of the region.
   uint8_t (*read_memory_byte)(
-      struct BIOSState* bios, uint16_t relative_address);
+      struct BIOSState* bios, uint32_t relative_address);
   // Callback to write a byte to memory, where address is relative to the start
   // of the region.
   void (*write_memory_byte)(
-      struct BIOSState* bios, uint16_t relative_address, uint8_t value);
+      struct BIOSState* bios, uint32_t relative_address, uint8_t value);
 } MemoryRegion;
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
+MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address);
 
 // Read a byte from a logical memory address.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint16_t address);
+uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint32_t address);
 // Read a word from a logical memory address.
-uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address);
+uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint32_t address);
 
 // Write a byte to a logical memory address.
 //
@@ -167,10 +178,10 @@ uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address);
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
 void WriteLogicalMemoryByte(
-    struct BIOSState* bios, uint16_t address, uint8_t value);
+    struct BIOSState* bios, uint32_t address, uint8_t value);
 // Write a word to a logical memory address.
 void WriteLogicalMemoryWord(
-    struct BIOSState* bios, uint16_t address, uint16_t value);
+    struct BIOSState* bios, uint32_t address, uint16_t value);
 
 // ============================================================================
 // Text mode
@@ -208,7 +219,7 @@ typedef struct BIOSConfig {
   //
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
-  uint8_t (*read_memory_byte)(struct BIOSState* bios, uint16_t address);
+  uint8_t (*read_memory_byte)(struct BIOSState* bios, uint32_t address);
 
   // Callback to write a byte to physical memory.
   //
@@ -219,7 +230,7 @@ typedef struct BIOSConfig {
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
   void (*write_memory_byte)(
-      struct BIOSState* bios, uint16_t address, uint8_t value);
+      struct BIOSState* bios, uint32_t address, uint8_t value);
 } BIOSConfig;
 
 STATIC_VECTOR_TYPE(MemoryRegions, MemoryRegion, kMaxMemoryRegions)
@@ -508,7 +519,7 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config);
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address) {
+MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address) {
   for (uint8_t i = 0; i < MemoryRegionsLength(&bios->memory_regions); ++i) {
     MemoryRegion* region = MemoryRegionsGet(&bios->memory_regions, i);
     if (address >= region->start && address < region->start + region->size) {
@@ -519,7 +530,7 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address) {
 }
 
 // Read a byte from a logical memory address.
-uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint16_t address) {
+uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint32_t address) {
   MemoryRegion* region = GetMemoryRegion(bios, address);
   if (!region || !region->read_memory_byte) {
     return 0xFF;
@@ -528,7 +539,7 @@ uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint16_t address) {
 }
 
 // Read a word from a logical memory address.
-uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address) {
+uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint32_t address) {
   uint8_t low_byte = ReadLogicalMemoryByte(bios, address);
   uint8_t high_byte = ReadLogicalMemoryByte(bios, address + 1);
   return (high_byte << 8) | low_byte;
@@ -536,7 +547,7 @@ uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address) {
 
 // Write a byte to a logical memory address.
 void WriteLogicalMemoryByte(
-    struct BIOSState* bios, uint16_t address, uint8_t value) {
+    struct BIOSState* bios, uint32_t address, uint8_t value) {
   MemoryRegion* region = GetMemoryRegion(bios, address);
   if (!region || !region->write_memory_byte) {
     return;
@@ -546,7 +557,7 @@ void WriteLogicalMemoryByte(
 
 // Write a word to a logical memory address.
 void WriteLogicalMemoryWord(
-    struct BIOSState* bios, uint16_t address, uint16_t value) {
+    struct BIOSState* bios, uint32_t address, uint16_t value) {
   WriteLogicalMemoryByte(bios, address, value & 0xFF);
   WriteLogicalMemoryByte(bios, address + 1, (value >> 8) & 0xFF);
 }
@@ -572,9 +583,9 @@ void WriteLogicalMemoryWord(
 void InitDisplayText(BIOSState* bios);
 
 // Read a byte from the display text buffer.
-uint8_t ReadDisplayTextByte(BIOSState* bios, uint16_t address);
+uint8_t ReadDisplayTextByte(BIOSState* bios, uint32_t address);
 // Write a byte to the display text buffer.
-void WriteDisplayTextByte(BIOSState* bios, uint16_t address, uint8_t value);
+void WriteDisplayTextByte(BIOSState* bios, uint32_t address, uint8_t value);
 
 #endif  // YAX86_IMPLEMENTATION
 
@@ -605,14 +616,14 @@ YAX86_PRIVATE void InitDisplayText(BIOSState* bios) {
   }
 }
 
-uint8_t ReadDisplayTextByte(BIOSState* bios, uint16_t address) {
+uint8_t ReadDisplayTextByte(BIOSState* bios, uint32_t address) {
   if (address >= kTextModeFramebufferSize) {
     return 0xFF;  // Out of bounds, return garbage data.
   }
   return bios->text_framebuffer[address];
 }
 
-void WriteDisplayTextByte(BIOSState* bios, uint16_t address, uint8_t value) {
+void WriteDisplayTextByte(BIOSState* bios, uint32_t address, uint8_t value) {
   if (address >= kTextModeFramebufferSize) {
     return;
   }

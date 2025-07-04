@@ -126,7 +126,7 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
 
   cpu_.config = &config_;
   config_.context = &context_;
-  config_.read_memory_byte = [](CPUState* cpu, uint16_t address) {
+  config_.read_memory_byte = [](CPUState* cpu, uint32_t address) {
     Context* context = reinterpret_cast<Context*>(cpu->config->context);
     if (address >= context->memory_size) {
       ostringstream oss;
@@ -141,7 +141,7 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     }
     return context->memory[address];
   };
-  config_.write_memory_byte = [](CPUState* cpu, uint16_t address,
+  config_.write_memory_byte = [](CPUState* cpu, uint32_t address,
                                  uint8_t value) {
     Context* context = reinterpret_cast<Context*>(cpu->config->context);
     if (address >= context->memory_size) {

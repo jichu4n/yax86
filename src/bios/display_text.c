@@ -13,14 +13,14 @@ YAX86_PRIVATE void InitDisplayText(BIOSState* bios) {
   }
 }
 
-uint8_t ReadDisplayTextByte(BIOSState* bios, uint16_t address) {
+uint8_t ReadDisplayTextByte(BIOSState* bios, uint32_t address) {
   if (address >= kTextModeFramebufferSize) {
     return 0xFF;  // Out of bounds, return garbage data.
   }
   return bios->text_framebuffer[address];
 }
 
-void WriteDisplayTextByte(BIOSState* bios, uint16_t address, uint8_t value) {
+void WriteDisplayTextByte(BIOSState* bios, uint32_t address, uint8_t value) {
   if (address >= kTextModeFramebufferSize) {
     return;
   }

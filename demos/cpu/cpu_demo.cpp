@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
     // sleep(1);
     return kExecuteSuccess;
   };
-  config.read_memory_byte = [](CPUState* cpu, uint16_t address) -> uint8_t {
+  config.read_memory_byte = [](CPUState* cpu, uint32_t address) -> uint8_t {
     if (address >= sizeof(memory)) {
       cerr << "Memory read out of bounds at address: " << hex << address
            << endl;
@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
     }
     return memory[address];
   };
-  config.write_memory_byte = [](CPUState* cpu, uint16_t address,
+  config.write_memory_byte = [](CPUState* cpu, uint32_t address,
                                 uint8_t value) {
     if (address >= sizeof(memory)) {
       cerr << "Memory write out of bounds at address: " << hex << address

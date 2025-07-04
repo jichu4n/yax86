@@ -31,31 +31,31 @@ typedef struct MemoryRegion {
   // The memory region, such as kMemoryRegionConventional.
   uint8_t region;
   // Start address of the memory region.
-  uint16_t start;
+  uint32_t start;
   // Size of the memory region in bytes.
-  uint16_t size;
+  uint32_t size;
   // Callback to read a byte from the memory region, where address is relative
   // to the start of the region.
   uint8_t (*read_memory_byte)(
-      struct BIOSState* bios, uint16_t relative_address);
+      struct BIOSState* bios, uint32_t relative_address);
   // Callback to write a byte to memory, where address is relative to the start
   // of the region.
   void (*write_memory_byte)(
-      struct BIOSState* bios, uint16_t relative_address, uint8_t value);
+      struct BIOSState* bios, uint32_t relative_address, uint8_t value);
 } MemoryRegion;
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint16_t address);
+MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address);
 
 // Read a byte from a logical memory address.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint16_t address);
+uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint32_t address);
 // Read a word from a logical memory address.
-uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address);
+uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint32_t address);
 
 // Write a byte to a logical memory address.
 //
@@ -63,10 +63,10 @@ uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint16_t address);
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
 void WriteLogicalMemoryByte(
-    struct BIOSState* bios, uint16_t address, uint8_t value);
+    struct BIOSState* bios, uint32_t address, uint8_t value);
 // Write a word to a logical memory address.
 void WriteLogicalMemoryWord(
-    struct BIOSState* bios, uint16_t address, uint16_t value);
+    struct BIOSState* bios, uint32_t address, uint16_t value);
 
 // ============================================================================
 // Text mode
@@ -104,7 +104,7 @@ typedef struct BIOSConfig {
   //
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
-  uint8_t (*read_memory_byte)(struct BIOSState* bios, uint16_t address);
+  uint8_t (*read_memory_byte)(struct BIOSState* bios, uint32_t address);
 
   // Callback to write a byte to physical memory.
   //
@@ -115,7 +115,7 @@ typedef struct BIOSConfig {
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
   void (*write_memory_byte)(
-      struct BIOSState* bios, uint16_t address, uint8_t value);
+      struct BIOSState* bios, uint32_t address, uint8_t value);
 } BIOSConfig;
 
 STATIC_VECTOR_TYPE(MemoryRegions, MemoryRegion, kMaxMemoryRegions)

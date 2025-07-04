@@ -119,7 +119,7 @@ typedef struct CPUConfig {
   //
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
-  uint8_t (*read_memory_byte)(struct CPUState* cpu, uint16_t address);
+  uint8_t (*read_memory_byte)(struct CPUState* cpu, uint32_t address);
 
   // Callback to write a byte to memory.
   //
@@ -130,7 +130,7 @@ typedef struct CPUConfig {
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
   void (*write_memory_byte)(
-      struct CPUState* cpu, uint16_t address, uint8_t value);
+      struct CPUState* cpu, uint32_t address, uint8_t value);
 
   // Callback to handle an interrupt.
   //   - Return kExecuteSuccess if the interrupt was handled and execution
