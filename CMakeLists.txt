@@ -31,6 +31,7 @@ function(generate_header_bundle module)
     set(ALL_HEADER_BUNDLES ${ALL_HEADER_BUNDLES} PARENT_SCOPE)
 endfunction()
 
+generate_header_bundle("util")
 generate_header_bundle("cpu")
 generate_header_bundle("bios")
 
