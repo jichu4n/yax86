@@ -1,6 +1,6 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
-#include "display_text.h"
+#include "display_text_mode.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 

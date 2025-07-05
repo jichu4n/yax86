@@ -3,8 +3,8 @@
   "private": [
     "../util/common.h",
     "memory.c",
-    "display_text.h",
-    "display_text.c",
+    "display_text_mode.h",
+    "display_text_mode.c",
     "bios.c"
   ]
 }

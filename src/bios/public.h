@@ -137,179 +137,158 @@ typedef struct BIOSState {
 enum {
   // Address of the BIOS Data Area.
   kBDAAddress = 0x0040,
-  // Size of the BIOS Data Area in bytes.
-  kBDASize = 0x100,
-};
 
-// Fields in the BIOS Data Area.
-typedef enum BDAField {
   // 0x00: Base I/O address for serial ports.
-  kBDASerialPortAddress = 0,
+  kBDASerialPortAddress = 0x00,
   // 0x08: Base I/O address for parallel ports.
-  kBDAParallelPortAddress,
+  kBDAParallelPortAddress = 0x08,
   // 0x10: Equipment word.
-  kBDAEquipmentWord,
+  kBDAEquipmentWord = 0x10,
   // 0x12: POST status / Manufacturing test initialization flags
-  kBDAPOSTStatus,
+  kBDAPOSTStatus = 0x12,
   // 0x13: Base memory size in kilobytes (0-640)
-  kBDAMemorySize,
+  kBDAMemorySize = 0x13,
   // 0x15: Manufacturing test scratch pad
-  kBDAManufacturingTest1,
+  kBDAManufacturingTest1 = 0x15,
   // 0x16: Manufacturing test scratch pad / BIOS control flags
-  kBDAManufacturingTest2,
+  kBDAManufacturingTest2 = 0x16,
   // 0x17: Keyboard status flags 1
-  kBDAKeyboardStatus1,
+  kBDAKeyboardStatus1 = 0x17,
   // 0x18: Keyboard status flags 2
-  kBDAKeyboardStatus2,
+  kBDAKeyboardStatus2 = 0x18,
   // 0x19: Keyboard: Alt-nnn keypad workspace
-  kBDAKeyboardAltNumpad,
+  kBDAKeyboardAltNumpad = 0x19,
   // 0x1A: Keyboard: ptr to next character in keyboard buffer
-  kBDAKeyboardBufferHead,
+  kBDAKeyboardBufferHead = 0x1A,
   // 0x1C: Keyboard: ptr to first free slot in keyboard buffer
-  kBDAKeyboardBufferTail,
+  kBDAKeyboardBufferTail = 0x1C,
   // 0x1E: Keyboard circular buffer (16 words)
-  kBDAKeyboardBuffer,
+  kBDAKeyboardBuffer = 0x1E,
   // 0x3E: Diskette recalibrate status
-  kBDADisketteRecalibrateStatus,
+  kBDADisketteRecalibrateStatus = 0x3E,
   // 0x3F: Diskette motor status
-  kBDADisketteMotorStatus,
+  kBDADisketteMotorStatus = 0x3F,
   // 0x40: Diskette motor turn-off time-out count
-  kBDADisketteMotorTimeout,
+  kBDADisketteMotorTimeout = 0x40,
   // 0x41: Diskette last operation status
-  kBDADisketteLastStatus,
+  kBDADisketteLastStatus = 0x41,
   // 0x42: Diskette/Fixed disk status/command bytes (7 bytes)
-  kBDADisketteStatusCommand,
+  kBDADisketteStatusCommand = 0x42,
   // 0x49: Video current mode
-  kBDAVideoMode,
+  kBDAVideoMode = 0x49,
   // 0x4A: Video columns on screen
-  kBDAVideoColumns,
+  kBDAVideoColumns = 0x4A,
   // 0x4C: Video page (regen buffer) size in bytes
-  kBDAVideoPageSize,
+  kBDAVideoPageSize = 0x4C,
   // 0x4E: Video current page start address in regen buffer
-  kBDAVideoPageOffset,
+  kBDAVideoPageOffset = 0x4E,
   // 0x50: Video cursor position (col, row) for eight pages
-  kBDAVideoCursorPos,
+  kBDAVideoCursorPos = 0x50,
   // 0x60: Video cursor type, 6845 compatible
-  kBDAVideoCursorType,
+  kBDAVideoCursorType = 0x60,
   // 0x62: Video current page number
-  kBDAVideoCurrentPage,
+  kBDAVideoCurrentPage = 0x62,
   // 0x63: Video CRT controller base address
-  kBDAVideoCRTBaseAddress,
+  kBDAVideoCRTBaseAddress = 0x63,
   // 0x65: Video current setting of mode select register
-  kBDAVideoModeSelect,
+  kBDAVideoModeSelect = 0x65,
   // 0x66: Video current setting of CGA palette register
-  kBDAVideoCGAPalette,
+  kBDAVideoCGAPalette = 0x66,
   // 0x67: POST real mode re-entry point after certain resets
-  kBDAPostReentryPoint,
+  kBDAPostReentryPoint = 0x67,
   // 0x6B: POST last unexpected interrupt
-  kBDAPostLastInterrupt,
+  kBDAPostLastInterrupt = 0x6B,
   // 0x6C: Timer ticks since midnight
-  kBDATimerTicks,
+  kBDATimerTicks = 0x6C,
   // 0x70: Timer overflow, non-zero if has counted past midnight
-  kBDATimerOverflow,
+  kBDATimerOverflow = 0x70,
   // 0x71: Ctrl-Break flag
-  kBDACtrlBreakFlag,
+  kBDACtrlBreakFlag = 0x71,
   // 0x72: POST reset flag
-  kBDAPostResetFlag,
+  kBDAPostResetFlag = 0x72,
   // 0x74: Fixed disk last operation status
-  kBDAFixedDiskStatus,
+  kBDAFixedDiskStatus = 0x74,
   // 0x75: Fixed disk: number of fixed disk drives
-  kBDAFixedDiskCount,
+  kBDAFixedDiskCount = 0x75,
   // 0x76: Fixed disk: control byte
-  kBDAFixedDiskControl,
+  kBDAFixedDiskControl = 0x76,
   // 0x77: Fixed disk: I/O port offset
-  kBDAFixedDiskPortOffset,
+  kBDAFixedDiskPortOffset = 0x77,
   // 0x78: Parallel devices 1-3 time-out counters
-  kBDAParallelTimeout,
+  kBDAParallelTimeout = 0x78,
   // 0x7C: Serial devices 1-4 time-out counters
-  kBDASerialTimeout,
+  kBDASerialTimeout = 0x7C,
   // 0x80: Keyboard buffer start offset
-  kBDAKeyboardBufferStart,
+  kBDAKeyboardBufferStart = 0x80,
   // 0x82: Keyboard buffer end+1 offset
-  kBDAKeyboardBufferEnd,
+  kBDAKeyboardBufferEnd = 0x82,
   // 0x84: Video EGA/MCGA/VGA rows on screen minus one
-  kBDAVideoRows,
+  kBDAVideoRows = 0x84,
   // 0x85: Video EGA/MCGA/VGA character height in scan-lines
-  kBDAVideoCharHeight,
+  kBDAVideoCharHeight = 0x85,
   // 0x87: Video EGA/VGA control
-  kBDAVideoEGAControl,
+  kBDAVideoEGAControl = 0x87,
   // 0x88: Video EGA/VGA switches
-  kBDAVideoEGASwitches,
+  kBDAVideoEGASwitches = 0x88,
   // 0x89: Video MCGA/VGA mode-set option control
-  kBDAVideoVGAControl,
+  kBDAVideoVGAControl = 0x89,
   // 0x8A: Video index into Display Combination Code table
-  kBDAVideoDCCIndex,
+  kBDAVideoDCCIndex = 0x8A,
   // 0x8B: Diskette media control
-  kBDADisketteMediaControl,
+  kBDADisketteMediaControl = 0x8B,
   // 0x8C: Fixed disk controller status
-  kBDAFixedDiskControllerStatus,
+  kBDAFixedDiskControllerStatus = 0x8C,
   // 0x8D: Fixed disk controller Error Status
-  kBDAFixedDiskErrorStatus,
+  kBDAFixedDiskErrorStatus = 0x8D,
   // 0x8E: Fixed disk Interrupt Control
-  kBDAFixedDiskInterruptControl,
+  kBDAFixedDiskInterruptControl = 0x8E,
   // 0x8F: Diskette controller information
-  kBDADisketteControllerInfo,
+  kBDADisketteControllerInfo = 0x8F,
   // 0x90: Diskette drive 0 media state
-  kBDADisketteDrive0MediaState,
+  kBDADisketteDrive0MediaState = 0x90,
   // 0x91: Diskette drive 1 media state
-  kBDADisketteDrive1MediaState,
+  kBDADisketteDrive1MediaState = 0x91,
   // 0x92: Diskette drive 0 media state at start of operation
-  kBDADisketteDrive0StartState,
+  kBDADisketteDrive0StartState = 0x92,
   // 0x93: Diskette drive 1 media state at start of operation
-  kBDADisketteDrive1StartState,
+  kBDADisketteDrive1StartState = 0x93,
   // 0x94: Diskette drive 0 current track number
-  kBDADisketteDrive0Track,
+  kBDADisketteDrive0Track = 0x94,
   // 0x95: Diskette drive 1 current track number
-  kBDADisketteDrive1Track,
+  kBDADisketteDrive1Track = 0x95,
   // 0x96: Keyboard status byte 3
-  kBDAKeyboardStatus3,
+  kBDAKeyboardStatus3 = 0x96,
   // 0x97: Keyboard status byte 4
-  kBDAKeyboardStatus4,
+  kBDAKeyboardStatus4 = 0x97,
   // 0x98: Timer2: ptr to user wait-complete flag
-  kBDATimer2WaitFlagPtr,
+  kBDATimer2WaitFlagPtr = 0x98,
   // 0x9C: Timer2: user wait count in microseconds
-  kBDATimer2WaitCount,
+  kBDATimer2WaitCount = 0x9C,
   // 0xA0: Timer2: Wait active flag
-  kBDATimer2WaitActive,
+  kBDATimer2WaitActive = 0xA0,
   // 0xA1: Reserved for network adapters (7 bytes)
-  kBDANetworkReserved,
+  kBDANetworkReserved = 0xA1,
   // 0xA8: Video: EGA/MCGA/VGA ptr to Video Save Pointer Table
-  kBDAVideoSavePointerTable,
+  kBDAVideoSavePointerTable = 0xA8,
   // 0xAC: Reserved (4 bytes)
-  kBDAReservedAC,
+  kBDAReservedAC = 0xAC,
   // 0xB0: ptr to 3363 Optical disk driver or BIOS entry point
-  kBDAOpticalDiskPtr,
+  kBDAOpticalDiskPtr = 0xB0,
   // 0xB4: Reserved (2 bytes)
-  kBDAReservedB4,
+  kBDAReservedB4 = 0xB4,
   // 0xB6: Reserved for POST (3 bytes)
-  kBDAReservedPost,
+  kBDAReservedPost = 0xB6,
   // 0xB9: Unknown (7 bytes)
-  kBDAUnknownB9,
+  kBDAUnknownB9 = 0xB9,
   // 0xC0: Reserved (14 bytes)
-  kBDAReservedC0,
+  kBDAReservedC0 = 0xC0,
   // 0xCE: Count of days since last boot
-  kBDADaysSinceBoot,
+  kBDADaysSinceBoot = 0xCE,
   // 0xD0: Reserved (32 bytes)
-  kBDAReservedD0,
+  kBDAReservedD0 = 0xD0,
   // 0xF0: Reserved for user (16 bytes)
-  kBDAUserReserved,
-
-  // Total number of fields in the BDA.
-  kBDANumFields,
-} BDAField;
-
-// Metadata about each BIOS Data Area field.
-typedef struct BDAFieldMetadata {
-  // The BDA field.
-  BDAField field;
-  // Offset of the field in the BIOS Data Area.
-  uint16_t offset;
-  // Size of the field in bytes.
-  uint8_t size;
-} BDAFieldMetadata;
-
-// BDAFieldMetadata array, indexed by BDAField enum.
-extern const BDAFieldMetadata BDAFieldMetadataTable[kBDANumFields];
+  kBDAUserReserved = 0xF0,
+};
 
 // Structure of the equipment word in the BDA at offset 0x10.
 typedef struct EquipmentWord {
