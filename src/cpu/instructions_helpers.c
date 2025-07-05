@@ -35,7 +35,7 @@ YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
               .segment_register_index = kSS,
               .offset = cpu->registers[kSP],
           }}};
-  WriteMemoryWord(cpu, &address, value);
+  WriteMemoryOperandWord(cpu, &address, value);
 }
 
 YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
@@ -46,7 +46,7 @@ YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
               .segment_register_index = kSS,
               .offset = cpu->registers[kSP],
           }}};
-  OperandValue value = ReadMemoryWord(cpu, &address);
+  OperandValue value = ReadMemoryOperandWord(cpu, &address);
   cpu->registers[kSP] += 2;
   return value;
 }

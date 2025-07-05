@@ -5,7 +5,7 @@
 #include "public.h"
 #include "types.h"
 
-// Helper functions to construct OperandValue.
+// Helper function to construct an OperandValue for a byte.
 extern OperandValue ByteValue(uint8_t byte_value);
 
 // Helper function to construct OperandValue for a word.
@@ -37,20 +37,20 @@ extern uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address);
 // Read a word from memory as a uint16_t.
 extern uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address);
 
-// Read a byte from memory to an OperandValue.
-extern OperandValue ReadMemoryByte(
+// Read a byte from memory as an OperandValue.
+extern OperandValue ReadMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address);
 
-// Read a word from memory to an OperandValue.
-extern OperandValue ReadMemoryWord(
+// Read a word from memory as an OperandValue.
+extern OperandValue ReadMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address);
 
-// Read a byte from a register to an OperandValue.
-extern OperandValue ReadRegisterByte(
+// Read a byte from a register as an OperandValue.
+extern OperandValue ReadRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address);
 
-// Read a word from a register to an OperandValue.
-extern OperandValue ReadRegisterWord(
+// Read a word from a register as an OperandValue.
+extern OperandValue ReadRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address);
 
 // Write a byte as uint8_t to memory.
@@ -60,19 +60,19 @@ extern void WriteRawMemoryByte(CPUState* cpu, uint32_t address, uint8_t value);
 extern void WriteRawMemoryWord(CPUState* cpu, uint32_t address, uint16_t value);
 
 // Write a byte to memory.
-extern void WriteMemoryByte(
+extern void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value);
 
 // Write a word to memory.
-extern void WriteMemoryWord(
+extern void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value);
 
 // Write a byte to a register.
-extern void WriteRegisterByte(
+extern void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value);
 
 // Write a word to a register.
-extern void WriteRegisterWord(
+extern void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value);
 
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
@@ -103,10 +103,10 @@ extern OperandAddress GetRegisterOrMemoryOperandAddress(
     CPUState* cpu, const Instruction* instruction, Width width);
 
 // Read an 8-bit immediate value.
-extern OperandValue ReadImmediateByte(const Instruction* instruction);
+extern OperandValue ReadImmediateOperandByte(const Instruction* instruction);
 
 // Read a 16-bit immediate value.
-extern OperandValue ReadImmediateWord(const Instruction* instruction);
+extern OperandValue ReadImmediateOperandWord(const Instruction* instruction);
 
 // Table of GetRegisterAddress functions, indexed by Width.
 extern RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(

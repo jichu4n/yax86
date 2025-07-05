@@ -167,7 +167,7 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
                        (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
                }},
   };
-  OperandValue src_value = ReadMemoryByte(ctx->cpu, &src_address);
+  OperandValue src_value = ReadMemoryOperandByte(ctx->cpu, &src_address);
   WriteOperandAddress(ctx, &al.address, FromOperandValue(&src_value));
   return kExecuteSuccess;
 }

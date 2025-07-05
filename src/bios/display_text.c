@@ -1,28 +1,40 @@
 #ifndef YAX86_IMPLEMENTATION
+#include "display_text.h"
+
 #include "../util/common.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-YAX86_PRIVATE void InitDisplayText(BIOSState* bios) {
-  // TODO: Set display to text mode.
-
-  // Initialize the text mode framebuffer to a blank state.
-  for (int i = 0; i < kTextModeFramebufferSize; i += 2) {
-    bios->text_framebuffer[i] = 0;
-    bios->text_framebuffer[i + 1] = 0x07;
-  }
-}
-
-uint8_t ReadDisplayTextByte(BIOSState* bios, uint32_t address) {
+YAX86_PRIVATE uint8_t
+ReadTextModeFramebufferByte(BIOSState* bios, uint32_t address) {
   if (address >= kTextModeFramebufferSize) {
-    return 0xFF;  // Out of bounds, return garbage data.
+    return 0xFF;
   }
-  return bios->text_framebuffer[address];
+  return bios->text_mode_framebuffer[address];
 }
 
-void WriteDisplayTextByte(BIOSState* bios, uint32_t address, uint8_t value) {
+YAX86_PRIVATE void WriteTextModeFramebufferByte(
+    BIOSState* bios, uint32_t address, uint8_t value) {
   if (address >= kTextModeFramebufferSize) {
     return;
   }
-  bios->text_framebuffer[address] = value;
+  bios->text_mode_framebuffer[address] = value;
+}
+
+YAX86_PRIVATE void InitTextMode(BIOSState* bios) {
+  // TODO: Set display to text mode.
+  MemoryRegion text_mode_framebuffer = {
+      .region = kMemoryRegionTextModeFramebuffer,
+      .start = kTextModeFramebufferAddress,
+      .size = kTextModeFramebufferSize,
+      .read_memory_byte = ReadTextModeFramebufferByte,
+      .write_memory_byte = WriteTextModeFramebufferByte,
+  };
+  MemoryRegionsAppend(&bios->memory_regions, &text_mode_framebuffer);
+
+  // Initialize the framebuffer to a blank state.
+  for (int i = 0; i < kTextModeFramebufferSize; i += 2) {
+    bios->text_mode_framebuffer[i] = ' ';
+    bios->text_mode_framebuffer[i + 1] = 0x07;
+  }
 }

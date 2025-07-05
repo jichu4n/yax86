@@ -14,7 +14,8 @@ static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
     const InstructionContext* ctx, const Operand* offset) {
   OperandAddress segment_address = offset->address;
   segment_address.value.memory_address.offset += 2;  // Skip the offset
-  OperandValue segment_value = ReadMemoryWord(ctx->cpu, &segment_address);
+  OperandValue segment_value =
+      ReadMemoryOperandWord(ctx->cpu, &segment_address);
   Operand operand = {
       .address = segment_address,
       .value = segment_value,

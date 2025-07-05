@@ -44,7 +44,7 @@ static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
               .segment_register_index = kCS,
               .offset = (*ip)++,
           }}};
-  return ReadMemoryByte(cpu, &address).value.byte_value;
+  return ReadMemoryOperandByte(cpu, &address).value.byte_value;
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.

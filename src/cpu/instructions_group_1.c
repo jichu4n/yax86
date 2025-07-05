@@ -42,7 +42,7 @@ ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue src_value =
-      ReadImmediateByte(ctx->instruction);  // immediate is always 8-bit
+      ReadImmediateOperandByte(ctx->instruction);  // immediate is always 8-bit
   OperandValue src_value_extended =
       WordValue((uint16_t)((int16_t)((int8_t)src_value.value.byte_value)));
   // Sign-extend the immediate value to the destination width.

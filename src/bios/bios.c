@@ -20,16 +20,8 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
       .write_memory_byte = config->write_memory_byte,
   };
   MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
-  MemoryRegion text_mode_framebuffer = {
-      .region = kMemoryRegionTextModeFramebuffer,
-      .start = kTextModeFramebufferAddress,
-      .size = kTextModeFramebufferSize,
-      .read_memory_byte = ReadDisplayTextByte,
-      .write_memory_byte = WriteDisplayTextByte,
-  };
-  MemoryRegionsAppend(&bios->memory_regions, &text_mode_framebuffer);
 
-  InitDisplayText(bios);
+  InitTextMode(bios);
 
   // TODO: Set BDA values.
 }

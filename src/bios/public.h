@@ -53,20 +53,18 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address);
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint32_t address);
+uint8_t ReadMemoryByte(struct BIOSState* bios, uint32_t address);
 // Read a word from a logical memory address.
-uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint32_t address);
+uint16_t ReadMemoryWord(struct BIOSState* bios, uint32_t address);
 
 // Write a byte to a logical memory address.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-void WriteLogicalMemoryByte(
-    struct BIOSState* bios, uint32_t address, uint8_t value);
+void WriteMemoryByte(struct BIOSState* bios, uint32_t address, uint8_t value);
 // Write a word to a logical memory address.
-void WriteLogicalMemoryWord(
-    struct BIOSState* bios, uint32_t address, uint16_t value);
+void WriteMemoryWord(struct BIOSState* bios, uint32_t address, uint16_t value);
 
 // ============================================================================
 // Text mode
@@ -129,7 +127,7 @@ typedef struct BIOSState {
   MemoryRegions memory_regions;
 
   // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
-  uint8_t text_framebuffer[kTextModeFramebufferSize];
+  uint8_t text_mode_framebuffer[kTextModeFramebufferSize];
 } BIOSState;
 
 // ============================================================================

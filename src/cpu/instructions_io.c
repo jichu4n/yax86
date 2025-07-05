@@ -39,7 +39,7 @@ static ExecuteStatus ExecuteIn(const InstructionContext* ctx, uint16_t port) {
 // IN AL, imm8
 // IN AX, imm8
 YAX86_PRIVATE ExecuteStatus ExecuteInImmediate(const InstructionContext* ctx) {
-  OperandValue port = ReadImmediateByte(ctx->instruction);
+  OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteIn(ctx, FromOperandValue(&port));
 }
 
@@ -80,7 +80,7 @@ static ExecuteStatus ExecuteOut(const InstructionContext* ctx, uint16_t port) {
 // OUT imm8, AL
 // OUT imm8, AX
 YAX86_PRIVATE ExecuteStatus ExecuteOutImmediate(const InstructionContext* ctx) {
-  OperandValue port = ReadImmediateByte(ctx->instruction);
+  OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteOut(ctx, FromOperandValue(&port));
 }
 

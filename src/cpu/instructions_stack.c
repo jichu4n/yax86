@@ -97,7 +97,7 @@ static const OperandAddress* GetAHRegisterAddress(void) {
 // LAHF
 YAX86_PRIVATE ExecuteStatus
 ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
-  WriteRegisterByte(
+  WriteRegisterOperandByte(
       ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
   return kExecuteSuccess;
 }
@@ -105,7 +105,8 @@ ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
 // SAHF
 YAX86_PRIVATE ExecuteStatus
 ExecuteStoreAHToFlags(const InstructionContext* ctx) {
-  OperandValue value = ReadRegisterByte(ctx->cpu, GetAHRegisterAddress());
+  OperandValue value =
+      ReadRegisterOperandByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
   ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
   return kExecuteSuccess;

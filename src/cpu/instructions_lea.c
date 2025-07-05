@@ -36,9 +36,10 @@ static ExecuteStatus ExecuteLoadSegmentWithPointer(
       .value = {
           .memory_address = GetMemoryOperandAddress(ctx->cpu, ctx->instruction),
       }};
-  OperandValue src_offset_value = ReadMemoryWord(ctx->cpu, &src_address);
+  OperandValue src_offset_value = ReadMemoryOperandWord(ctx->cpu, &src_address);
   src_address.value.memory_address.offset += 2;
-  OperandValue src_segment_value = ReadMemoryWord(ctx->cpu, &src_address);
+  OperandValue src_segment_value =
+      ReadMemoryOperandWord(ctx->cpu, &src_address);
 
   WriteOperand(ctx, &destRegister, FromOperandValue(&src_offset_value));
   WriteOperand(ctx, &destSegmentRegister, FromOperandValue(&src_segment_value));

@@ -93,7 +93,7 @@ YAX86_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
 
 // Read a byte from memory to an OperandValue.
 YAX86_PRIVATE OperandValue
-ReadMemoryByte(CPUState* cpu, const OperandAddress* address) {
+ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
   uint8_t byte_value =
       ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address->value.memory_address));
   return ByteValue(byte_value);
@@ -101,7 +101,7 @@ ReadMemoryByte(CPUState* cpu, const OperandAddress* address) {
 
 // Read a word from memory to an OperandValue.
 YAX86_PRIVATE OperandValue
-ReadMemoryWord(CPUState* cpu, const OperandAddress* address) {
+ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
   uint16_t word_value =
       ReadRawMemoryWord(cpu, ToRawAddress(cpu, &address->value.memory_address));
   return WordValue(word_value);
@@ -109,7 +109,7 @@ ReadMemoryWord(CPUState* cpu, const OperandAddress* address) {
 
 // Read a byte from a register to an OperandValue.
 YAX86_PRIVATE OperandValue
-ReadRegisterByte(CPUState* cpu, const OperandAddress* address) {
+ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
   uint8_t byte_value = cpu->registers[register_address->register_index] >>
                        register_address->byte_offset;
@@ -118,7 +118,7 @@ ReadRegisterByte(CPUState* cpu, const OperandAddress* address) {
 
 // Read a word from a register to an OperandValue.
 YAX86_PRIVATE OperandValue
-ReadRegisterWord(CPUState* cpu, const OperandAddress* address) {
+ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
   uint16_t word_value = cpu->registers[register_address->register_index];
   return WordValue(word_value);
@@ -129,9 +129,9 @@ YAX86_PRIVATE
 OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
     CPUState* cpu, const OperandAddress* address) = {
     // kOperandTypeRegister
-    {ReadRegisterByte, ReadRegisterWord},
+    {ReadRegisterOperandByte, ReadRegisterOperandWord},
     // kOperandTypeMemory
-    {ReadMemoryByte, ReadMemoryWord},
+    {ReadMemoryOperandByte, ReadMemoryOperandWord},
 };
 
 // Write a byte as uint8_t to memory.
@@ -151,7 +151,7 @@ YAX86_PRIVATE void WriteRawMemoryWord(
 }
 
 // Write a byte to memory.
-YAX86_PRIVATE void WriteMemoryByte(
+YAX86_PRIVATE void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   WriteRawMemoryByte(
       cpu, ToRawAddress(cpu, &address->value.memory_address),
@@ -159,7 +159,7 @@ YAX86_PRIVATE void WriteMemoryByte(
 }
 
 // Write a word to memory.
-YAX86_PRIVATE void WriteMemoryWord(
+YAX86_PRIVATE void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   WriteRawMemoryWord(
       cpu, ToRawAddress(cpu, &address->value.memory_address),
@@ -167,7 +167,7 @@ YAX86_PRIVATE void WriteMemoryWord(
 }
 
 // Write a byte to a register.
-YAX86_PRIVATE void WriteRegisterByte(
+YAX86_PRIVATE void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
   const uint16_t updated_byte = ((uint16_t)value.value.byte_value)
@@ -179,7 +179,7 @@ YAX86_PRIVATE void WriteRegisterByte(
 }
 
 // Write a word to a register.
-YAX86_PRIVATE void WriteRegisterWord(
+YAX86_PRIVATE void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
   cpu->registers[register_address->register_index] = value.value.word_value;
@@ -190,9 +190,9 @@ YAX86_PRIVATE void (*const kWriteOperandFn[kNumOperandAddressTypes]
                                           [kNumWidths])(
     CPUState* cpu, const OperandAddress* address, OperandValue value) = {
     // kOperandTypeRegister
-    {WriteRegisterByte, WriteRegisterWord},
+    {WriteRegisterOperandByte, WriteRegisterOperandWord},
     // kOperandTypeMemory
-    {WriteMemoryByte, WriteMemoryWord},
+    {WriteMemoryOperandByte, WriteMemoryOperandWord},
 };
 
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
@@ -373,12 +373,14 @@ YAX86_PRIVATE OperandAddress GetRegisterOrMemoryOperandAddress(
 }
 
 // Read an 8-bit immediate value.
-YAX86_PRIVATE OperandValue ReadImmediateByte(const Instruction* instruction) {
+YAX86_PRIVATE OperandValue
+ReadImmediateOperandByte(const Instruction* instruction) {
   return ByteValue(instruction->immediate[0]);
 }
 
 // Read a 16-bit immediate value.
-YAX86_PRIVATE OperandValue ReadImmediateWord(const Instruction* instruction) {
+YAX86_PRIVATE OperandValue
+ReadImmediateOperandWord(const Instruction* instruction) {
   return WordValue(
       ((uint16_t)instruction->immediate[0]) |
       (((uint16_t)instruction->immediate[1]) << 8));
@@ -387,8 +389,8 @@ YAX86_PRIVATE OperandValue ReadImmediateWord(const Instruction* instruction) {
 // Table of ReadImmediate* functions, indexed by Width.
 YAX86_PRIVATE OperandValue (*const kReadImmediateValueFn[kNumWidths])(
     const Instruction* instruction) = {
-  ReadImmediateByte,  // kByte
-  ReadImmediateWord   // kWord
+  ReadImmediateOperandByte,  // kByte
+  ReadImmediateOperandWord   // kWord
 };
 
 // Read a value from an operand address.

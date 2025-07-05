@@ -168,20 +168,18 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address);
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint32_t address);
+uint8_t ReadMemoryByte(struct BIOSState* bios, uint32_t address);
 // Read a word from a logical memory address.
-uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint32_t address);
+uint16_t ReadMemoryWord(struct BIOSState* bios, uint32_t address);
 
 // Write a byte to a logical memory address.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This callback interface mirrors that
 // behavior.
-void WriteLogicalMemoryByte(
-    struct BIOSState* bios, uint32_t address, uint8_t value);
+void WriteMemoryByte(struct BIOSState* bios, uint32_t address, uint8_t value);
 // Write a word to a logical memory address.
-void WriteLogicalMemoryWord(
-    struct BIOSState* bios, uint32_t address, uint16_t value);
+void WriteMemoryWord(struct BIOSState* bios, uint32_t address, uint16_t value);
 
 // ============================================================================
 // Text mode
@@ -244,7 +242,7 @@ typedef struct BIOSState {
   MemoryRegions memory_regions;
 
   // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
-  uint8_t text_framebuffer[kTextModeFramebufferSize];
+  uint8_t text_mode_framebuffer[kTextModeFramebufferSize];
 } BIOSState;
 
 // ============================================================================
@@ -520,6 +518,8 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config);
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
 MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address) {
+  // TODO: Use a more efficient data structure for lookups, such as a sorted
+  // array with binary search.
   for (uint8_t i = 0; i < MemoryRegionsLength(&bios->memory_regions); ++i) {
     MemoryRegion* region = MemoryRegionsGet(&bios->memory_regions, i);
     if (address >= region->start && address < region->start + region->size) {
@@ -530,7 +530,7 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address) {
 }
 
 // Read a byte from a logical memory address.
-uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint32_t address) {
+uint8_t ReadMemoryByte(struct BIOSState* bios, uint32_t address) {
   MemoryRegion* region = GetMemoryRegion(bios, address);
   if (!region || !region->read_memory_byte) {
     return 0xFF;
@@ -539,15 +539,14 @@ uint8_t ReadLogicalMemoryByte(struct BIOSState* bios, uint32_t address) {
 }
 
 // Read a word from a logical memory address.
-uint16_t ReadLogicalMemoryWord(struct BIOSState* bios, uint32_t address) {
-  uint8_t low_byte = ReadLogicalMemoryByte(bios, address);
-  uint8_t high_byte = ReadLogicalMemoryByte(bios, address + 1);
+uint16_t ReadMemoryWord(struct BIOSState* bios, uint32_t address) {
+  uint8_t low_byte = ReadMemoryByte(bios, address);
+  uint8_t high_byte = ReadMemoryByte(bios, address + 1);
   return (high_byte << 8) | low_byte;
 }
 
 // Write a byte to a logical memory address.
-void WriteLogicalMemoryByte(
-    struct BIOSState* bios, uint32_t address, uint8_t value) {
+void WriteMemoryByte(struct BIOSState* bios, uint32_t address, uint8_t value) {
   MemoryRegion* region = GetMemoryRegion(bios, address);
   if (!region || !region->write_memory_byte) {
     return;
@@ -556,10 +555,9 @@ void WriteLogicalMemoryByte(
 }
 
 // Write a word to a logical memory address.
-void WriteLogicalMemoryWord(
-    struct BIOSState* bios, uint32_t address, uint16_t value) {
-  WriteLogicalMemoryByte(bios, address, value & 0xFF);
-  WriteLogicalMemoryByte(bios, address + 1, (value >> 8) & 0xFF);
+void WriteMemoryWord(struct BIOSState* bios, uint32_t address, uint16_t value) {
+  WriteMemoryByte(bios, address, value & 0xFF);
+  WriteMemoryByte(bios, address + 1, (value >> 8) & 0xFF);
 }
 
 
@@ -579,13 +577,14 @@ void WriteLogicalMemoryWord(
 #include "../util/common.h"
 #include "public.h"
 
-// Initialize the display.
-void InitDisplayText(BIOSState* bios);
+// Initialize the display in text mode.
+extern void InitTextMode(BIOSState* bios);
 
-// Read a byte from the display text buffer.
-uint8_t ReadDisplayTextByte(BIOSState* bios, uint32_t address);
-// Write a byte to the display text buffer.
-void WriteDisplayTextByte(BIOSState* bios, uint32_t address, uint8_t value);
+// Read a byte from the text framebuffer.
+extern uint8_t ReadTextModeFramebufferByte(BIOSState* bios, uint32_t address);
+// Write a byte to the text framebuffer.
+extern void WriteTextModeFramebufferByte(
+    BIOSState* bios, uint32_t address, uint8_t value);
 
 #endif  // YAX86_IMPLEMENTATION
 
@@ -602,34 +601,45 @@ void WriteDisplayTextByte(BIOSState* bios, uint32_t address, uint8_t value);
 
 #line 1 "./src/bios/display_text.c"
 #ifndef YAX86_IMPLEMENTATION
+#include "display_text.h"
+
 #include "../util/common.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-YAX86_PRIVATE void InitDisplayText(BIOSState* bios) {
-  // TODO: Set display to text mode.
-
-  // Initialize the text mode framebuffer to a blank state.
-  for (int i = 0; i < kTextModeFramebufferSize; i += 2) {
-    bios->text_framebuffer[i] = 0;
-    bios->text_framebuffer[i + 1] = 0x07;
-  }
-}
-
-uint8_t ReadDisplayTextByte(BIOSState* bios, uint32_t address) {
+YAX86_PRIVATE uint8_t
+ReadTextModeFramebufferByte(BIOSState* bios, uint32_t address) {
   if (address >= kTextModeFramebufferSize) {
-    return 0xFF;  // Out of bounds, return garbage data.
+    return 0xFF;
   }
-  return bios->text_framebuffer[address];
+  return bios->text_mode_framebuffer[address];
 }
 
-void WriteDisplayTextByte(BIOSState* bios, uint32_t address, uint8_t value) {
+YAX86_PRIVATE void WriteTextModeFramebufferByte(
+    BIOSState* bios, uint32_t address, uint8_t value) {
   if (address >= kTextModeFramebufferSize) {
     return;
   }
-  bios->text_framebuffer[address] = value;
+  bios->text_mode_framebuffer[address] = value;
 }
 
+YAX86_PRIVATE void InitTextMode(BIOSState* bios) {
+  // TODO: Set display to text mode.
+  MemoryRegion text_mode_framebuffer = {
+      .region = kMemoryRegionTextModeFramebuffer,
+      .start = kTextModeFramebufferAddress,
+      .size = kTextModeFramebufferSize,
+      .read_memory_byte = ReadTextModeFramebufferByte,
+      .write_memory_byte = WriteTextModeFramebufferByte,
+  };
+  MemoryRegionsAppend(&bios->memory_regions, &text_mode_framebuffer);
+
+  // Initialize the framebuffer to a blank state.
+  for (int i = 0; i < kTextModeFramebufferSize; i += 2) {
+    bios->text_mode_framebuffer[i] = ' ';
+    bios->text_mode_framebuffer[i + 1] = 0x07;
+  }
+}
 
 // ==============================================================================
 // src/bios/display_text.c end
@@ -662,16 +672,8 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
       .write_memory_byte = config->write_memory_byte,
   };
   MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
-  MemoryRegion text_mode_framebuffer = {
-      .region = kMemoryRegionTextModeFramebuffer,
-      .start = kTextModeFramebufferAddress,
-      .size = kTextModeFramebufferSize,
-      .read_memory_byte = ReadDisplayTextByte,
-      .write_memory_byte = WriteDisplayTextByte,
-  };
-  MemoryRegionsAppend(&bios->memory_regions, &text_mode_framebuffer);
 
-  InitDisplayText(bios);
+  InitTextMode(bios);
 
   // TODO: Set BDA values.
 }
