@@ -1,10 +1,4 @@
 {
   "public": ["../util/static_vector.h", "public.h"],
-  "private": [
-    "../util/common.h",
-    "memory.c",
-    "display_text_mode.h",
-    "display_text_mode.c",
-    "bios.c"
-  ]
+  "private": ["../util/common.h", "memory.c", "video.h", "video.c", "bios.c"]
 }

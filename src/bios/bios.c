@@ -1,7 +1,7 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
-#include "display_text_mode.h"
 #include "public.h"
+#include "video.h"
 #endif  // YAX86_IMPLEMENTATION
 
 void InitBIOS(BIOSState* bios, BIOSConfig* config) {
@@ -13,7 +13,7 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
 
   MemoryRegionsInit(&bios->memory_regions);
   MemoryRegion conventional_memory = {
-      .region = kMemoryRegionConventional,
+      .region_type = kMemoryRegionConventional,
       .start = 0x0000,
       .size = config->memory_size_kb * (2 << 10),
       .read_memory_byte = config->read_memory_byte,
@@ -21,7 +21,7 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
   };
   MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
 
-  InitTextMode(bios);
+  InitVideo(bios);
 
   // TODO: Set BDA values.
 }

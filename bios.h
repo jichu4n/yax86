@@ -131,11 +131,13 @@ struct BIOSState;
 // Memory
 // ============================================================================
 
+// Memory region types.
 enum {
-  // First 640KB of memory, mapped to 0x00000 to 0x9FFFF (640KB).
+  // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
+  // 0x9FFFF (640KB).
   kMemoryRegionConventional = 0,
-  // Text mode framebuffer, mapped to 0xB8000 to 0xB8F9F (80x25x2 bytes).
-  kMemoryRegionTextModeFramebuffer = 1,
+  // Video RAM. Mapping depends on the video mode.
+  kMemoryRegionVideo = 1,
 
   // Maximum number of memory region entries.
   kMaxMemoryRegions = 8,
@@ -143,8 +145,8 @@ enum {
 
 // A memory region in the BIOS memory map. Memory regions should not overlap.
 typedef struct MemoryRegion {
-  // The memory region, such as kMemoryRegionConventional.
-  uint8_t region;
+  // The memory region type, such as kMemoryRegionConventional.
+  uint8_t region_type;
   // Start address of the memory region.
   uint32_t start;
   // Size of the memory region in bytes.
@@ -161,7 +163,12 @@ typedef struct MemoryRegion {
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address);
+MemoryRegion* GetMemoryRegionForAddress(
+    struct BIOSState* bios, uint32_t address);
+// Look up a memory region by type. Returns NULL if no region found with the
+// specified type.
+MemoryRegion* GetMemoryRegionByType(
+    struct BIOSState* bios, uint8_t region_type);
 
 // Read a byte from a logical memory address.
 //
@@ -182,20 +189,89 @@ void WriteMemoryByte(struct BIOSState* bios, uint32_t address, uint8_t value);
 void WriteMemoryWord(struct BIOSState* bios, uint32_t address, uint16_t value);
 
 // ============================================================================
-// Text mode
+// Video.
 // ============================================================================
 
-enum {
-  // Text mode framebuffer address.
-  kTextModeFramebufferAddress = 0xB8000,
-  // Number of columns in text mode.
-  kTextModeColumns = 80,
-  // Number of rows in text mode.
-  kTextModeRows = 25,
-  // Size of the text mode framebuffer in bytes. 2 bytes per character (char +
-  // attribute).
-  kTextModeFramebufferSize = kTextModeColumns * kTextModeRows * 2,
-};
+// Video modes.
+typedef enum VideoMode {
+  // CGA text mode 0x00: Text, 40×25, grayscale, 320x200, 8x8
+  kVideoTextModeCGA00 = 0x00,
+  // CGA text mode 0x01: Text, 40×25, 16 colors, 320x200, 8x8
+  kVideoTextModeCGA01 = 0x01,
+  // CGA text mode 0x02: Text, 80×25, grayscale, 640x200, 8x8
+  kVideoTextModeCGA02 = 0x02,
+  // CGA text mode 0x03: Text, 80×25, 16 colors, 640x200, 8x8
+  kVideoTextModeCGA03 = 0x03,
+  // CGA graphics mode 0x04: Graphics, 4 colors, 320×200
+  kVideoGraphicsModeCGA04 = 0x04,
+  // CGA graphics mode 0x05: Graphics, grayscale, 320×200
+  kVideoGraphicsModeCGA05 = 0x05,
+  // CGA graphics mode 0x06: Graphics, monochrome, 640×200
+  kVideoGraphicsModeCGA06 = 0x06,
+  // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
+  kVideoTextModeMDA07 = 0x07,
+
+  // Invalid video mode value.
+  kInvalidVideoMode = 0xFF,
+
+  // Number of video modes supported.
+  kNumVideoModes = 8,
+} VideoMode;
+
+// Text vs graphics modes.
+typedef enum VideoModeType {
+  // Invalid video mode. This is needed due to gap in the list of video mode
+  // values.
+  kVideoModeUnsupported = 0,
+  // Text mode.
+  kVideoTextMode,
+  // Graphics mode.
+  kVideoGraphicsMode,
+} VideoModeType;
+
+// Metadata for each video mode.
+typedef struct VideoModeMetadata {
+  // The video mode.
+  VideoMode mode;
+  // Type of the video mode (text or graphics).
+  VideoModeType type;
+  // Mapped memory address of video RAM.
+  uint32_t vram_address;
+  // Video RAM size in bytes.
+  uint32_t vram_size;
+  // Resolution width in pixels.
+  uint16_t width;
+  // Resolution height in pixels.
+  uint16_t height;
+
+  // Text mode - number of columns.
+  uint8_t columns;
+  // Text mode - number of rows.
+  uint8_t rows;
+  // Text mode - character width in pixels.
+  uint8_t char_width;
+  // Text mode - character height in pixels.
+  uint8_t char_height;
+} VideoModeMetadata;
+
+// Table of video mode metadata, indexed by VideoMode enum values.
+extern const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes];
+
+// Check if video mode is valid and supported.
+extern bool IsSupportedVideoMode(uint8_t mode);
+
+// Get current video mode. Returns kInvalidVideoMode if the video mode in the
+// BIOS Data Area (BDA) is invalid.
+extern VideoMode GetCurrentVideoMode(struct BIOSState* bios);
+// Get current video mode metadata, or NULL if the video mode in the BIOS Data
+// Area (BDA) is invalid.
+extern const VideoModeMetadata* GetCurrentVideoModeMetadata(
+    struct BIOSState* bios);
+// Switch video mode.
+extern bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode);
+
+// Text mode - clear screen.
+extern void TextClearScreen(struct BIOSState* bios);
 
 // ============================================================================
 // BIOS state
@@ -229,6 +305,13 @@ typedef struct BIOSConfig {
   // to the real-life 8088.
   void (*write_memory_byte)(
       struct BIOSState* bios, uint32_t address, uint8_t value);
+
+  // Callback to read a byte from video RAM.
+  uint8_t (*read_vram_byte)(struct BIOSState* bios, uint32_t address);
+
+  // Callback to write a byte to video RAM.
+  void (*write_vram_byte)(
+      struct BIOSState* bios, uint32_t address, uint8_t value);
 } BIOSConfig;
 
 STATIC_VECTOR_TYPE(MemoryRegions, MemoryRegion, kMaxMemoryRegions)
@@ -240,9 +323,6 @@ typedef struct BIOSState {
 
   // Memory map.
   MemoryRegions memory_regions;
-
-  // Text mode framebuffer, located at kTextModeFramebufferAddress (0xB8000).
-  uint8_t text_mode_framebuffer[kTextModeFramebufferSize];
 } BIOSState;
 
 // ============================================================================
@@ -496,7 +576,8 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config);
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address) {
+MemoryRegion* GetMemoryRegionForAddress(
+    struct BIOSState* bios, uint32_t address) {
   // TODO: Use a more efficient data structure for lookups, such as a sorted
   // array with binary search.
   for (uint8_t i = 0; i < MemoryRegionsLength(&bios->memory_regions); ++i) {
@@ -508,9 +589,22 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address) {
   return NULL;
 }
 
+// Look up a memory region by type. Returns NULL if no region found with the
+// specified type.
+MemoryRegion* GetMemoryRegionByType(
+    struct BIOSState* bios, uint8_t region_type) {
+  for (uint8_t i = 0; i < MemoryRegionsLength(&bios->memory_regions); ++i) {
+    MemoryRegion* region = MemoryRegionsGet(&bios->memory_regions, i);
+    if (region->region_type == region_type) {
+      return region;
+    }
+  }
+  return NULL;
+}
+
 // Read a byte from a logical memory address.
 uint8_t ReadMemoryByte(struct BIOSState* bios, uint32_t address) {
-  MemoryRegion* region = GetMemoryRegion(bios, address);
+  MemoryRegion* region = GetMemoryRegionForAddress(bios, address);
   if (!region || !region->read_memory_byte) {
     return 0xFF;
   }
@@ -526,7 +620,7 @@ uint16_t ReadMemoryWord(struct BIOSState* bios, uint32_t address) {
 
 // Write a byte to a logical memory address.
 void WriteMemoryByte(struct BIOSState* bios, uint32_t address, uint8_t value) {
-  MemoryRegion* region = GetMemoryRegion(bios, address);
+  MemoryRegion* region = GetMemoryRegionForAddress(bios, address);
   if (!region || !region->write_memory_byte) {
     return;
   }
@@ -545,83 +639,269 @@ void WriteMemoryWord(struct BIOSState* bios, uint32_t address, uint16_t value) {
 // ==============================================================================
 
 // ==============================================================================
-// src/bios/display_text_mode.h start
+// src/bios/video.h start
 // ==============================================================================
 
-#line 1 "./src/bios/display_text_mode.h"
-#ifndef YAX86_BIOS_DISPLAY_TEXT_H
-#define YAX86_BIOS_DISPLAY_TEXT_H
+#line 1 "./src/bios/video.h"
+#ifndef YAX86_BIOS_VIDEO_H
+#define YAX86_BIOS_VIDEO_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 
 // Initialize the display in text mode.
-extern void InitTextMode(BIOSState* bios);
+extern void InitVideo(BIOSState* bios);
 
-// Read a byte from the text framebuffer.
-extern uint8_t ReadTextModeFramebufferByte(BIOSState* bios, uint32_t address);
-// Write a byte to the text framebuffer.
-extern void WriteTextModeFramebufferByte(
-    BIOSState* bios, uint32_t address, uint8_t value);
+// Read a byte from video RAM.
+extern uint8_t ReadVRAMByte(BIOSState* bios, uint32_t address);
+// Write a byte to video RAM.
+extern void WriteVRAMByte(BIOSState* bios, uint32_t address, uint8_t value);
 
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // YAX86_BIOS_DISPLAY_TEXT_H
+#endif  // YAX86_BIOS_VIDEO_H
 
 
 // ==============================================================================
-// src/bios/display_text_mode.h end
+// src/bios/video.h end
 // ==============================================================================
 
 // ==============================================================================
-// src/bios/display_text_mode.c start
+// src/bios/video.c start
 // ==============================================================================
 
-#line 1 "./src/bios/display_text_mode.c"
+#line 1 "./src/bios/video.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "display_text_mode.h"
+#include "video.h"
 
 #include "../util/common.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-YAX86_PRIVATE uint8_t
-ReadTextModeFramebufferByte(BIOSState* bios, uint32_t address) {
-  if (address >= kTextModeFramebufferSize) {
+const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
+    // CGA text mode 0x00: Text, 40×25, grayscale, 320x200, 8x8
+    {
+        .mode = kVideoTextModeCGA00,
+        .type = kVideoTextMode,
+        .vram_address = 0xB8000,
+        .vram_size = 16 * 1024,
+        .width = 320,
+        .height = 200,
+        .columns = 40,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // CGA text mode 0x01: Text, 40×25, 16 colors, 320x200, 8x8
+    {
+        .mode = kVideoTextModeCGA01,
+        .type = kVideoTextMode,
+        .vram_address = 0xB8000,
+        .vram_size = 16 * 1024,
+        .width = 320,
+        .height = 200,
+        .columns = 40,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // CGA text mode 0x02: Text, 80×25, grayscale, 640x200, 8x8
+    {
+        .mode = kVideoTextModeCGA02,
+        .type = kVideoTextMode,
+        .vram_address = 0xB8000,
+        .vram_size = 16 * 1024,
+        .width = 640,
+        .height = 200,
+        .columns = 80,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // CGA text mode 0x03: Text, 80×25, 16 colors, 640x200, 8x8
+    {
+        .mode = kVideoTextModeCGA03,
+        .type = kVideoTextMode,
+        .vram_address = 0xB8000,
+        .vram_size = 16 * 1024,
+        .width = 640,
+        .height = 200,
+        .columns = 80,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // CGA graphics mode 0x04: Graphics, 4 colors, 320×200
+    {
+        .mode = kVideoGraphicsModeCGA04,
+        .type = kVideoGraphicsMode,
+        .vram_address = 0xB8000,
+        .vram_size = 16 * 1024,
+        .width = 320,
+        .height = 200,
+    },
+    // CGA graphics mode 0x05: Graphics, grayscale, 320×200
+    {
+        .mode = kVideoGraphicsModeCGA05,
+        .type = kVideoGraphicsMode,
+        .vram_address = 0xB8000,
+        .vram_size = 16 * 1024,
+        .width = 320,
+        .height = 200,
+    },
+    // CGA graphics mode 0x06: Graphics, monochrome, 640×200
+    {
+        .mode = kVideoGraphicsModeCGA06,
+        .type = kVideoGraphicsMode,
+        .vram_address = 0xB8000,
+        .vram_size = 16 * 1024,
+        .width = 640,
+        .height = 200,
+    },
+    // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
+    {
+        .mode = kVideoTextModeMDA07,
+        .type = kVideoTextMode,
+        .vram_address = 0xB0000,
+        .vram_size = 4 * 1024,
+        .width = 720,
+        .height = 350,
+        .columns = 80,
+        .rows = 25,
+        .char_width = 9,
+        .char_height = 14,
+    },
+};
+
+// Check if video mode is valid and supported.
+bool IsSupportedVideoMode(uint8_t mode) {
+  if (mode >= kNumVideoModes) {
+    return false;
+  }
+  return kVideoModeMetadataTable[mode].type != kVideoModeUnsupported;
+}
+
+// Get current video mode. Returns kInvalidVideoMode if the video mode in the
+// BIOS Data Area (BDA) is invalid.
+VideoMode GetCurrentVideoMode(struct BIOSState* bios) {
+  uint8_t mode = ReadMemoryByte(bios, kBDAAddress + kBDAVideoMode);
+  return IsSupportedVideoMode(mode) ? (VideoMode)mode : kInvalidVideoMode;
+}
+
+// Get current video mode metadata, or NULL if the video mode in the BIOS Data
+// Area (BDA) is invalid.
+const VideoModeMetadata* GetCurrentVideoModeMetadata(struct BIOSState* bios) {
+  VideoMode mode = GetCurrentVideoMode(bios);
+  return IsSupportedVideoMode(mode) ? &kVideoModeMetadataTable[mode] : NULL;
+}
+
+YAX86_PRIVATE uint8_t ReadVRAMByte(BIOSState* bios, uint32_t address) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || address >= metadata->vram_size) {
     return 0xFF;
   }
-  return bios->text_mode_framebuffer[address];
+  return bios->config->read_vram_byte(bios, address);
 }
 
-YAX86_PRIVATE void WriteTextModeFramebufferByte(
+YAX86_PRIVATE void WriteVRAMByte(
     BIOSState* bios, uint32_t address, uint8_t value) {
-  if (address >= kTextModeFramebufferSize) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || address >= metadata->vram_size) {
     return;
   }
-  bios->text_mode_framebuffer[address] = value;
+  bios->config->write_vram_byte(bios, address, value);
 }
 
-YAX86_PRIVATE void InitTextMode(BIOSState* bios) {
-  // TODO: Set display to text mode.
-  MemoryRegion text_mode_framebuffer = {
-      .region = kMemoryRegionTextModeFramebuffer,
-      .start = kTextModeFramebufferAddress,
-      .size = kTextModeFramebufferSize,
-      .read_memory_byte = ReadTextModeFramebufferByte,
-      .write_memory_byte = WriteTextModeFramebufferByte,
-  };
-  MemoryRegionsAppend(&bios->memory_regions, &text_mode_framebuffer);
+// Switch video mode.
+bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode) {
+  if (!IsSupportedVideoMode(mode)) {
+    return false;
+  }
 
-  // Initialize the framebuffer to a blank state.
-  for (int i = 0; i < kTextModeFramebufferSize; i += 2) {
-    bios->text_mode_framebuffer[i] = ' ';
-    bios->text_mode_framebuffer[i + 1] = 0x07;
+  // Update the video mode in the BIOS Data Area (BDA).
+  WriteMemoryByte(bios, kBDAAddress + kBDAVideoMode, (uint8_t)mode);
+  // Update memory map.
+  const VideoModeMetadata* metadata = &kVideoModeMetadataTable[mode];
+  MemoryRegion vram_region = {
+      .region_type = kMemoryRegionVideo,
+      .start = metadata->vram_address,
+      .size = metadata->vram_size,
+      .read_memory_byte = ReadVRAMByte,
+      .write_memory_byte = WriteVRAMByte,
+  };
+  MemoryRegion* existing_vram_region =
+      GetMemoryRegionByType(bios, kMemoryRegionVideo);
+  if (existing_vram_region) {
+    *existing_vram_region = vram_region;
+  } else {
+    MemoryRegionsAppend(&bios->memory_regions, &vram_region);
+  }
+
+  if (metadata->type == kVideoTextMode) {
+    // Update text mode metadata in the BDA.
+    WriteMemoryByte(bios, kBDAAddress + kBDAVideoColumns, metadata->columns);
+    WriteMemoryByte(bios, kBDAAddress + kBDAVideoRows, metadata->rows - 1);
+    WriteMemoryByte(
+        bios, kBDAAddress + kBDAVideoCharHeight, metadata->char_height);
+
+    // Update page state.
+    // One page is 2 bytes per character (char + attr).
+    WriteMemoryWord(
+        bios, kBDAAddress + kBDAVideoPageSize,
+        metadata->columns * metadata->rows * 2);
+    WriteMemoryByte(bios, kBDAAddress + kBDAVideoPageOffset, 0);
+    WriteMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage, 0);
+
+    // Update cursor state.
+    // Default cursor type is two scan lines at bottom of the character cell.
+    uint16_t default_cursor =
+        (metadata->char_height - 2) << 8 | (metadata->char_height - 1);
+    WriteMemoryWord(bios, kBDAAddress + kBDAVideoCursorType, default_cursor);
+    WriteMemoryByte(
+        bios, kBDAAddress + kBDAVideoCursorType + 1, default_cursor);
+    // Set cursor position to (0, 0) for all pages.
+    for (uint8_t i = 0; i < 8; ++i) {
+      WriteMemoryWord(bios, kBDAAddress + kBDAVideoCursorPos + i * 2, 0);
+    }
+
+    // Clear screen.
+    TextClearScreen(bios);
+  }
+
+  return true;
+}
+
+// Text mode - clear screen.
+void TextClearScreen(struct BIOSState* bios) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || metadata->type != kVideoTextMode) {
+    return;
+  }
+  for (uint32_t i = 0; i < metadata->vram_size; i += 2) {
+    WriteVRAMByte(bios, i, ' ');
+    // All text modes use 0x07 as the default attribute byte.
+    WriteVRAMByte(bios, i + 1, 0x07);
   }
 }
 
+YAX86_PRIVATE void InitVideo(BIOSState* bios) {
+  // Set initial video mode in BDA equipment list word, bits 4-5.
+  //   00b - EGA, VGA, or other (use other BIOS data area locations)
+  //   01b - 40×25 color (CGA)
+  //   10b - 80×25 color (CGA)
+  //   11b - 80×25 monochrome (MDA)
+  uint16_t equipment_word =
+      ReadMemoryWord(bios, kBDAAddress + kBDAEquipmentWord);
+  equipment_word |= (0x03 << 4);
+  WriteMemoryWord(bios, kBDAAddress + kBDAEquipmentWord, equipment_word);
+
+  SwitchVideoMode(bios, kVideoTextModeMDA07);
+}
+
+
 // ==============================================================================
-// src/bios/display_text_mode.c end
+// src/bios/video.c end
 // ==============================================================================
 
 // ==============================================================================
@@ -631,8 +911,8 @@ YAX86_PRIVATE void InitTextMode(BIOSState* bios) {
 #line 1 "./src/bios/bios.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
-#include "display_text_mode.h"
 #include "public.h"
+#include "video.h"
 #endif  // YAX86_IMPLEMENTATION
 
 void InitBIOS(BIOSState* bios, BIOSConfig* config) {
@@ -644,7 +924,7 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
 
   MemoryRegionsInit(&bios->memory_regions);
   MemoryRegion conventional_memory = {
-      .region = kMemoryRegionConventional,
+      .region_type = kMemoryRegionConventional,
       .start = 0x0000,
       .size = config->memory_size_kb * (2 << 10),
       .read_memory_byte = config->read_memory_byte,
@@ -652,7 +932,7 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
   };
   MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
 
-  InitTextMode(bios);
+  InitVideo(bios);
 
   // TODO: Set BDA values.
 }

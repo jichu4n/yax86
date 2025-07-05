@@ -5,7 +5,8 @@
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address) {
+MemoryRegion* GetMemoryRegionForAddress(
+    struct BIOSState* bios, uint32_t address) {
   // TODO: Use a more efficient data structure for lookups, such as a sorted
   // array with binary search.
   for (uint8_t i = 0; i < MemoryRegionsLength(&bios->memory_regions); ++i) {
@@ -17,9 +18,22 @@ MemoryRegion* GetMemoryRegion(struct BIOSState* bios, uint32_t address) {
   return NULL;
 }
 
+// Look up a memory region by type. Returns NULL if no region found with the
+// specified type.
+MemoryRegion* GetMemoryRegionByType(
+    struct BIOSState* bios, uint8_t region_type) {
+  for (uint8_t i = 0; i < MemoryRegionsLength(&bios->memory_regions); ++i) {
+    MemoryRegion* region = MemoryRegionsGet(&bios->memory_regions, i);
+    if (region->region_type == region_type) {
+      return region;
+    }
+  }
+  return NULL;
+}
+
 // Read a byte from a logical memory address.
 uint8_t ReadMemoryByte(struct BIOSState* bios, uint32_t address) {
-  MemoryRegion* region = GetMemoryRegion(bios, address);
+  MemoryRegion* region = GetMemoryRegionForAddress(bios, address);
   if (!region || !region->read_memory_byte) {
     return 0xFF;
   }
@@ -35,7 +49,7 @@ uint16_t ReadMemoryWord(struct BIOSState* bios, uint32_t address) {
 
 // Write a byte to a logical memory address.
 void WriteMemoryByte(struct BIOSState* bios, uint32_t address, uint8_t value) {
-  MemoryRegion* region = GetMemoryRegion(bios, address);
+  MemoryRegion* region = GetMemoryRegionForAddress(bios, address);
   if (!region || !region->write_memory_byte) {
     return;
   }
