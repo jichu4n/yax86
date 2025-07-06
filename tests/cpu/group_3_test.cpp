@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "../cpu.h"
 #include "./test_helpers.h"
+#include "cpu.h"
 
 using namespace std;
 

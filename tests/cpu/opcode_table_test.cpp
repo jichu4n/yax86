@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #define YAX86_IMPLEMENTATION
-#include "../cpu.h"
+#include "cpu.h"
 
 using namespace std;
 

@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <string>
 
-#include "../cpu.h"
 #include "./test_helpers.h"
+#include "cpu.h"
 
 using namespace std;
 

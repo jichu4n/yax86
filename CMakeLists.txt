@@ -55,6 +55,7 @@ endif()
 # =============================================================================
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     enable_testing()
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR})
     add_subdirectory(tests)
 endif()
 

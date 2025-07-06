@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "../cpu.h"
+#include "cpu.h"
 
 // COM file load offset.
 constexpr uint16_t kCOMFileLoadOffset = 0x100;
