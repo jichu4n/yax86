@@ -2,6 +2,7 @@
 #include "video.h"
 
 #include "../util/common.h"
+#include "fonts.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -16,8 +17,8 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
         .height = 200,
         .columns = 40,
         .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
+        .char_width = kCGACharWidth,
+        .char_height = kCGACharHeight,
     },
     // CGA text mode 0x01: Text, 40×25, 16 colors, 320x200, 8x8
     {
@@ -29,8 +30,8 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
         .height = 200,
         .columns = 40,
         .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
+        .char_width = kCGACharWidth,
+        .char_height = kCGACharHeight,
     },
     // CGA text mode 0x02: Text, 80×25, grayscale, 640x200, 8x8
     {
@@ -42,8 +43,8 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
         .height = 200,
         .columns = 80,
         .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
+        .char_width = kCGACharWidth,
+        .char_height = kCGACharHeight,
     },
     // CGA text mode 0x03: Text, 80×25, 16 colors, 640x200, 8x8
     {
@@ -55,8 +56,8 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
         .height = 200,
         .columns = 80,
         .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
+        .char_width = kCGACharWidth,
+        .char_height = kCGACharHeight,
     },
     // CGA graphics mode 0x04: Graphics, 4 colors, 320×200
     {
@@ -95,9 +96,14 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
         .height = 350,
         .columns = 80,
         .rows = 25,
-        .char_width = 9,
-        .char_height = 14,
+        .char_width = kMDACharWidth,
+        .char_height = kMDACharHeight,
     },
+};
+
+enum {
+  // Position of underline in MDA text mode.
+  kMDAUnderlinePosition = 12,
 };
 
 // Check if video mode is valid and supported.
@@ -221,4 +227,110 @@ YAX86_PRIVATE void InitVideo(BIOSState* bios) {
   WriteMemoryWord(bios, kBDAAddress + kBDAEquipmentWord, equipment_word);
 
   SwitchVideoMode(bios, kVideoTextModeMDA07);
+}
+
+// Write a character to display in MDA text mode.
+// TODO: Support blinking.
+YAX86_PRIVATE void WriteCharMDA(
+    BIOSState* bios, const VideoModeMetadata* metadata, Position char_pos) {
+  if (char_pos.x >= metadata->columns || char_pos.y >= metadata->rows) {
+    return;
+  }
+
+  uint32_t char_address = (char_pos.y * metadata->columns + char_pos.x) * 2;
+  uint8_t char_value = ReadVRAMByte(bios, char_address);
+  uint8_t attr_value = ReadVRAMByte(bios, char_address + 1);
+  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+
+  const RGB* foreground;
+  const RGB* background;
+  if ((attr_value & kMDABackground) == 0x70) {
+    // Reverse video mode.
+    foreground = &bios->config->mda_config.background;
+    background = &bios->config->mda_config.foreground;
+  } else {
+    // Normal video mode.
+    foreground = (attr_value & kMDAIntenseForeground)
+                     ? &bios->config->mda_config.intense_foreground
+                     : &bios->config->mda_config.foreground;
+    background = &bios->config->mda_config.background;
+  }
+
+  Position origin_pixel_pos = {
+      .x = char_pos.x * metadata->char_width,
+      .y = char_pos.y * metadata->char_height,
+  };
+  for (uint8_t y = 0; y < metadata->char_height; ++y) {
+    uint16_t row_bitmap;
+    // If underline, set entire underline row to foreground color.
+    if (y == kMDAUnderlinePosition && (attr_value & kMDAForeground) == 0x01) {
+      row_bitmap = 0xFFFF;
+    } else {
+      row_bitmap = char_bitmap[y];
+    }
+    for (uint8_t x = 0; x < metadata->char_width; ++x) {
+      Position pixel_pos = {
+          .x = origin_pixel_pos.x + x,
+          .y = origin_pixel_pos.y + y,
+      };
+      const RGB* pixel_rgb =
+          (row_bitmap & (1 << (metadata->char_width - 1 - x))) ? foreground
+                                                               : background;
+      bios->config->write_pixel(bios, pixel_pos, *pixel_rgb);
+    }
+  }
+}
+
+// Handler to write a character to the display in text mode.
+typedef void (*WriteCharHandler)(
+    struct BIOSState* bios, const VideoModeMetadata* metadata,
+    Position char_pos);
+// Table of handlers for writing characters in different text modes, indexed by
+// VideoMode enum values.
+const WriteCharHandler kWriteCharHandlers[] = {
+    // CGA text mode 0x00: 40×25, grayscale, 320x200, 8x8
+    0,
+    // CGA text mode 0x01: 40×25, 16 colors, 320x200, 8x8
+    0,
+    // CGA text mode 0x02: 80×25, grayscale, 640x200, 8x8
+    0,
+    // CGA text mode 0x03: 80×25, 16 colors, 640x200, 8x8
+    0,
+    // CGA graphics mode 0x04: 4 colors, 320×200
+    0,
+    // CGA graphics mode 0x05: grayscale, 320×200
+    0,
+    // CGA graphics mode 0x06: monochrome, 640×200
+    0,
+    // MDA text mode 0x07: 80×25, monochrome, 720x350, 9x14
+    WriteCharMDA,
+};
+
+// Render the current page in the emulated video RAM to the real display.
+// Invokes the write_pixel callback to do the actual pixel rendering.
+bool RenderCurrentVideoPage(struct BIOSState* bios) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata) {
+    return false;
+  }
+  switch (metadata->type) {
+    case kVideoTextMode: {
+      WriteCharHandler handler = kWriteCharHandlers[metadata->mode];
+      if (!handler) {
+        return false;
+      }
+      for (uint8_t y = 0; y < metadata->rows; ++y) {
+        for (uint8_t x = 0; x < metadata->columns; ++x) {
+          Position char_pos = {.x = x, .y = y};
+          handler(bios, metadata, char_pos);
+        }
+      }
+      return true;
+    }
+    case kVideoGraphicsMode: {
+      return false;
+    }
+    default:
+      return false;
+  }
 }

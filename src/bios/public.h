@@ -77,6 +77,24 @@ void WriteMemoryWord(struct BIOSState* bios, uint32_t address, uint16_t value);
 // Video.
 // ============================================================================
 
+// RGB pixel value.
+typedef struct RGB {
+  // Red component (0-255).
+  uint8_t r;
+  // Green component (0-255).
+  uint8_t g;
+  // Blue component (0-255).
+  uint8_t b;
+} RGB;
+
+// Position in 2D space.
+typedef struct Position {
+  // X coordinate.
+  uint16_t x;
+  // Y coordinate.
+  uint16_t y;
+} Position;
+
 // Video modes.
 typedef enum VideoMode {
   // CGA text mode 0x00: Text, 40×25, grayscale, 320x200, 8x8
@@ -139,8 +157,17 @@ typedef struct VideoModeMetadata {
   uint8_t char_height;
 } VideoModeMetadata;
 
-// Table of video mode metadata, indexed by VideoMode enum values.
-extern const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes];
+// Character width and height for text modes.
+enum {
+  // CGA text mode character width.
+  kCGACharWidth = 8,
+  // CGA text mode character height.
+  kCGACharHeight = 8,
+  // MDA text mode character width.
+  kMDACharWidth = 9,
+  // MDA text mode character height.
+  kMDACharHeight = 14,
+};
 
 // Check if video mode is valid and supported.
 extern bool IsSupportedVideoMode(uint8_t mode);
@@ -158,6 +185,38 @@ extern bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode);
 // Text mode - clear screen.
 extern void TextClearScreen(struct BIOSState* bios);
 
+// Render the current page in the emulated video RAM to the real display.
+// Invokes the write_pixel callback to do the actual pixel rendering.
+extern bool RenderCurrentVideoPage(struct BIOSState* bios);
+
+// Caller-provided configuration for MDA text mode rendering.
+typedef struct MDAConfig {
+  // Foreground color.
+  RGB foreground;
+  // Intense foreground color.
+  RGB intense_foreground;
+  // Background color.
+  RGB background;
+} MDAConfig;
+
+// Default MDA config.
+static const MDAConfig kDefaultMDAConfig = {
+    .foreground = {.r = 0x00, .g = 0xAA, .b = 0x00},
+    .intense_foreground = {.r = 0x55, .g = 0xFF, .b = 0x55},
+    .background = {.r = 0x00, .g = 0x00, .b = 0x00}};
+
+// Bitmasks for MDA character attributes.
+enum {
+  // Bit 7 - blink (0 = normal, 1 = blink).
+  kMDABlink = 0x80,
+  // Bits 6-4 - reverse video (000 = normal, 111 = reverse).
+  kMDABackground = 0x70,
+  // Bit 3 - intense foreground (0 = normal, 1 = intense).
+  kMDAIntenseForeground = 0x08,
+  // Bits 2-0 - underline (000 = normal, 001 = underline).
+  kMDAForeground = 0x07,
+};
+
 // ============================================================================
 // BIOS state
 // ============================================================================
@@ -169,6 +228,9 @@ typedef struct BIOSConfig {
 
   // Physical memory size in KB (1024 bytes). Must be between 64 and 640.
   uint16_t memory_size_kb;
+
+  // MDA text mode configuration.
+  MDAConfig mda_config;
 
   // Callback to read a byte from physical memory.
   //
@@ -191,12 +253,16 @@ typedef struct BIOSConfig {
   void (*write_memory_byte)(
       struct BIOSState* bios, uint32_t address, uint8_t value);
 
-  // Callback to read a byte from video RAM.
+  // Callback to read a byte from the emulated video RAM.
   uint8_t (*read_vram_byte)(struct BIOSState* bios, uint32_t address);
 
-  // Callback to write a byte to video RAM.
+  // Callback to write a byte to the emulated video RAM.
   void (*write_vram_byte)(
       struct BIOSState* bios, uint32_t address, uint8_t value);
+
+  // Callback to write an RGB pixel value to the real display, invoked from
+  // RenderCurrentVideoPage().
+  void (*write_pixel)(struct BIOSState* bios, Position position, RGB rgb);
 } BIOSConfig;
 
 STATIC_VECTOR_TYPE(MemoryRegions, MemoryRegion, kMaxMemoryRegions)
