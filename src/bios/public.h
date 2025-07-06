@@ -6,9 +6,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef YAX86_IMPLEMENTATION
+#ifndef YAX86_BIOS_BUNDLE_H
 #include "../util/static_vector.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // YAX86_BIOS_BUNDLE_H
 
 struct BIOSState;
 
