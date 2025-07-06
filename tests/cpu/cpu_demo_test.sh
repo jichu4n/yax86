@@ -1,6 +1,6 @@
 #!/bin/bash
 
-root_dir="$(dirname "$0")/.."
+root_dir="$(dirname "$0")/../.."
 cd "$root_dir" || exit 1
 
 cpu_demo=./build/demos/cpu/cpu_demo

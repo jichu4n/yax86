@@ -28,7 +28,7 @@ jobs:
       - run: cmake --build ${{github.workspace}}/build -j$(nproc)
       - working-directory: ${{github.workspace}}/build
         run: ctest --verbose
-      - run: tests/cpu_demo_test.sh
+      - run: tests/cpu/cpu_demo_test.sh
       - working-directory: ${{github.workspace}}/build
         run: ls -lh *.a
       - run: git diff --exit-code
