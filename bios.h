@@ -210,6 +210,15 @@ typedef struct Position {
   uint16_t y;
 } Position;
 
+// Text mode character position. We use a different structure to avoid confusion
+// with Position, which is used for pixel coordinates.
+typedef struct TextPosition {
+  // Column (0-based).
+  uint8_t col;
+  // Row (0-based).
+  uint8_t row;
+} TextPosition;
+
 // Video modes.
 typedef enum VideoMode {
   // CGA text mode 0x00: Text, 40×25, grayscale, 320x200, 8x8
@@ -286,7 +295,6 @@ enum {
 
 // Check if video mode is valid and supported.
 extern bool IsSupportedVideoMode(uint8_t mode);
-
 // Get current video mode. Returns kInvalidVideoMode if the video mode in the
 // BIOS Data Area (BDA) is invalid.
 extern VideoMode GetCurrentVideoMode(struct BIOSState* bios);
@@ -299,6 +307,12 @@ extern bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode);
 
 // Text mode - clear screen.
 extern void TextClearScreen(struct BIOSState* bios);
+// Text mode - get current page.
+extern uint8_t TextGetCurrentPage(struct BIOSState* bios);
+// Text mode - get cursor position on a page.
+extern TextPosition TextGetCursorPositionForPage(struct BIOSState* bios, uint8_t page);
+// Text mode - get cursor position in current page.
+extern TextPosition TextGetCursorPosition(struct BIOSState* bios);
 
 // Render the current page in the emulated video RAM to the real display.
 // Invokes the write_pixel callback to do the actual pixel rendering.
@@ -1783,6 +1797,43 @@ void TextClearScreen(struct BIOSState* bios) {
   }
 }
 
+// Text mode - get current page.
+uint8_t TextGetCurrentPage(struct BIOSState* bios) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || metadata->type != kVideoTextMode) {
+    return 0;
+  }
+  return ReadMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage);
+}
+
+// Text mode - get cursor position on a page.
+TextPosition TextGetCursorPositionForPage(
+    struct BIOSState* bios, uint8_t page) {
+  static const TextPosition kInvalidTextPosition = {
+      .col = 0,
+      .row = 0,
+  };
+  if (page >= 8) {
+    return kInvalidTextPosition;
+  }
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || metadata->type != kVideoTextMode) {
+    return kInvalidTextPosition;
+  }
+
+  uint32_t cursor_address = kBDAAddress + kBDAVideoCursorPos + page * 2;
+  TextPosition position = {
+      .col = ReadMemoryByte(bios, cursor_address),
+      .row = ReadMemoryByte(bios, cursor_address + 1),
+  };
+  return position;
+}
+
+// Text mode - get cursor position in current page.
+TextPosition TextGetCursorPosition(struct BIOSState* bios) {
+  return TextGetCursorPositionForPage(bios, TextGetCurrentPage(bios));
+}
+
 YAX86_PRIVATE void InitVideo(BIOSState* bios) {
   // Set initial video mode in BDA equipment list word, bits 4-5.
   //   00b - EGA, VGA, or other (use other BIOS data area locations)
@@ -1791,7 +1842,7 @@ YAX86_PRIVATE void InitVideo(BIOSState* bios) {
   //   11b - 80×25 monochrome (MDA)
   uint16_t equipment_word =
       ReadMemoryWord(bios, kBDAAddress + kBDAEquipmentWord);
-  equipment_word |= (0x03 << 4);
+  equipment_word |= (0x03 << 4);  // MDA
   WriteMemoryWord(bios, kBDAAddress + kBDAEquipmentWord, equipment_word);
 
   SwitchVideoMode(bios, kVideoTextModeMDA07);
@@ -1800,12 +1851,15 @@ YAX86_PRIVATE void InitVideo(BIOSState* bios) {
 // Write a character to display in MDA text mode.
 // TODO: Support blinking.
 YAX86_PRIVATE void WriteCharMDA(
-    BIOSState* bios, const VideoModeMetadata* metadata, Position char_pos) {
-  if (char_pos.x >= metadata->columns || char_pos.y >= metadata->rows) {
+    BIOSState* bios, const VideoModeMetadata* metadata, uint8_t page,
+    TextPosition char_pos) {
+  if (char_pos.col >= metadata->columns || char_pos.row >= metadata->rows) {
     return;
   }
 
-  uint32_t char_address = (char_pos.y * metadata->columns + char_pos.x) * 2;
+  uint32_t char_address = (page * metadata->rows * metadata->columns +
+                           char_pos.row * metadata->columns + char_pos.col) *
+                          2;
   uint8_t char_value = ReadVRAMByte(bios, char_address);
   uint8_t attr_value = ReadVRAMByte(bios, char_address + 1);
   const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
@@ -1825,8 +1879,8 @@ YAX86_PRIVATE void WriteCharMDA(
   }
 
   Position origin_pixel_pos = {
-      .x = char_pos.x * metadata->char_width,
-      .y = char_pos.y * metadata->char_height,
+      .x = char_pos.col * metadata->char_width,
+      .y = char_pos.row * metadata->char_height,
   };
   for (uint8_t y = 0; y < metadata->char_height; ++y) {
     uint16_t row_bitmap;
@@ -1851,8 +1905,8 @@ YAX86_PRIVATE void WriteCharMDA(
 
 // Handler to write a character to the display in text mode.
 typedef void (*WriteCharHandler)(
-    struct BIOSState* bios, const VideoModeMetadata* metadata,
-    Position char_pos);
+    struct BIOSState* bios, const VideoModeMetadata* metadata, uint8_t page,
+    TextPosition char_pos);
 // Table of handlers for writing characters in different text modes, indexed by
 // VideoMode enum values.
 const WriteCharHandler kWriteCharHandlers[] = {
@@ -1887,10 +1941,11 @@ bool RenderCurrentVideoPage(struct BIOSState* bios) {
       if (!handler) {
         return false;
       }
-      for (uint8_t y = 0; y < metadata->rows; ++y) {
-        for (uint8_t x = 0; x < metadata->columns; ++x) {
-          Position char_pos = {.x = x, .y = y};
-          handler(bios, metadata, char_pos);
+      uint8_t page = TextGetCurrentPage(bios);
+      for (uint8_t row = 0; row < metadata->rows; ++row) {
+        for (uint8_t col = 0; col < metadata->columns; ++col) {
+          TextPosition char_pos = {.col = col, .row = row};
+          handler(bios, metadata, page, char_pos);
         }
       }
       return true;

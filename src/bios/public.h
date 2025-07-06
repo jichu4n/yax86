@@ -95,6 +95,15 @@ typedef struct Position {
   uint16_t y;
 } Position;
 
+// Text mode character position. We use a different structure to avoid confusion
+// with Position, which is used for pixel coordinates.
+typedef struct TextPosition {
+  // Column (0-based).
+  uint8_t col;
+  // Row (0-based).
+  uint8_t row;
+} TextPosition;
+
 // Video modes.
 typedef enum VideoMode {
   // CGA text mode 0x00: Text, 40×25, grayscale, 320x200, 8x8
@@ -171,7 +180,6 @@ enum {
 
 // Check if video mode is valid and supported.
 extern bool IsSupportedVideoMode(uint8_t mode);
-
 // Get current video mode. Returns kInvalidVideoMode if the video mode in the
 // BIOS Data Area (BDA) is invalid.
 extern VideoMode GetCurrentVideoMode(struct BIOSState* bios);
@@ -184,6 +192,12 @@ extern bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode);
 
 // Text mode - clear screen.
 extern void TextClearScreen(struct BIOSState* bios);
+// Text mode - get current page.
+extern uint8_t TextGetCurrentPage(struct BIOSState* bios);
+// Text mode - get cursor position on a page.
+extern TextPosition TextGetCursorPositionForPage(struct BIOSState* bios, uint8_t page);
+// Text mode - get cursor position in current page.
+extern TextPosition TextGetCursorPosition(struct BIOSState* bios);
 
 // Render the current page in the emulated video RAM to the real display.
 // Invokes the write_pixel callback to do the actual pixel rendering.
