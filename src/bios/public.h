@@ -201,8 +201,8 @@ typedef struct MDAConfig {
 
 // Default MDA config.
 static const MDAConfig kDefaultMDAConfig = {
-    .foreground = {.r = 0x00, .g = 0xAA, .b = 0x00},
-    .intense_foreground = {.r = 0x55, .g = 0xFF, .b = 0x55},
+    .foreground = {.r = 0xAA, .g = 0xAA, .b = 0xAA},
+    .intense_foreground = {.r = 0xFF, .g = 0xFF, .b = 0xFF},
     .background = {.r = 0x00, .g = 0x00, .b = 0x00}};
 
 // Bitmasks for MDA character attributes.
