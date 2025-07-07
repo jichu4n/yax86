@@ -195,7 +195,8 @@ extern void TextClearScreen(struct BIOSState* bios);
 // Text mode - get current page.
 extern uint8_t TextGetCurrentPage(struct BIOSState* bios);
 // Text mode - get cursor position on a page.
-extern TextPosition TextGetCursorPositionForPage(struct BIOSState* bios, uint8_t page);
+extern TextPosition TextGetCursorPositionForPage(
+    struct BIOSState* bios, uint8_t page);
 // Text mode - get cursor position in current page.
 extern TextPosition TextGetCursorPosition(struct BIOSState* bios);
 
@@ -218,18 +219,6 @@ static const MDAConfig kDefaultMDAConfig = {
     .foreground = {.r = 0xAA, .g = 0xAA, .b = 0xAA},
     .intense_foreground = {.r = 0xFF, .g = 0xFF, .b = 0xFF},
     .background = {.r = 0x00, .g = 0x00, .b = 0x00}};
-
-// Bitmasks for MDA character attributes.
-enum {
-  // Bit 7 - blink (0 = normal, 1 = blink).
-  kMDABlink = 0x80,
-  // Bits 6-4 - reverse video (000 = normal, 111 = reverse).
-  kMDABackground = 0x70,
-  // Bit 3 - intense foreground (0 = normal, 1 = intense).
-  kMDAIntenseForeground = 0x08,
-  // Bits 2-0 - underline (000 = normal, 001 = underline).
-  kMDAForeground = 0x07,
-};
 
 // ============================================================================
 // BIOS state

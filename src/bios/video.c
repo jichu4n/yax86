@@ -266,7 +266,23 @@ YAX86_PRIVATE void InitVideo(BIOSState* bios) {
   SwitchVideoMode(bios, kVideoTextModeMDA07);
 }
 
-// Write a character to display in MDA text mode.
+// Write a character to display in MDA text mode. For the attribute byte, we
+// follow the description in the book Programmer's Reference Manual for IBM
+// Personal Computers.
+//
+// Attribute byte structure:
+//   - Bit 7: blink (0 = normal, 1 = blink)
+//   - Bits 6-4: background
+//   - Bit 3: intense foreground (0 = normal, 1 = intense)
+//   - Bits 2-0: foreground
+//
+// Valid MDA character background and foreground attribute combinations:
+//   - Normal: background = 000, foreground = 111
+//   - Inverse video: background = 111, foreground = 000
+//   - Invisible: background = 000, foreground = 000
+//   - Underline: background = 000, foreground = 001
+//
+// Other combinations are undefined, but we will treat them as normal.
 // TODO: Support blinking.
 YAX86_PRIVATE void WriteCharMDA(
     BIOSState* bios, const VideoModeMetadata* metadata, uint8_t page,
@@ -284,15 +300,33 @@ YAX86_PRIVATE void WriteCharMDA(
 
   const RGB* foreground;
   const RGB* background;
-  if ((attr_value & kMDABackground) == 0x70) {
-    // Reverse video mode.
+  bool underline = false;
+
+  bool intense = ((attr_value >> 3) & 0x01) != 0;
+  uint8_t background_attr = (attr_value >> 4) & 0x07;
+  uint8_t foreground_attr = attr_value & 0x07;
+  if (background_attr == 0x00 && foreground_attr == 0x07) {
+    // Normal video mode.
+    foreground = intense ? &bios->config->mda_config.intense_foreground
+                         : &bios->config->mda_config.foreground;
+    background = &bios->config->mda_config.background;
+  } else if (background_attr == 0x07 && foreground_attr == 0x00) {
+    // Inverse video mode.
     foreground = &bios->config->mda_config.background;
     background = &bios->config->mda_config.foreground;
+  } else if (background_attr == 0x00 && foreground_attr == 0x00) {
+    // Invisible mode.
+    foreground = &bios->config->mda_config.background;
+    background = &bios->config->mda_config.background;
+  } else if (background_attr == 0x00 && foreground_attr == 0x01) {
+    // Underline mode.
+    underline = true;
+    foreground = &bios->config->mda_config.foreground;
+    background = &bios->config->mda_config.background;
   } else {
-    // Normal video mode.
-    foreground = (attr_value & kMDAIntenseForeground)
-                     ? &bios->config->mda_config.intense_foreground
-                     : &bios->config->mda_config.foreground;
+    // Other combinations are treated as normal.
+    foreground = intense ? &bios->config->mda_config.intense_foreground
+                         : &bios->config->mda_config.foreground;
     background = &bios->config->mda_config.background;
   }
 
@@ -303,7 +337,7 @@ YAX86_PRIVATE void WriteCharMDA(
   for (uint8_t y = 0; y < metadata->char_height; ++y) {
     uint16_t row_bitmap;
     // If underline, set entire underline row to foreground color.
-    if (y == kMDAUnderlinePosition && (attr_value & kMDAForeground) == 0x01) {
+    if (y == kMDAUnderlinePosition && underline) {
       row_bitmap = 0xFFFF;
     } else {
       row_bitmap = char_bitmap[y];
@@ -313,9 +347,9 @@ YAX86_PRIVATE void WriteCharMDA(
           .x = origin_pixel_pos.x + x,
           .y = origin_pixel_pos.y + y,
       };
-      const RGB* pixel_rgb =
-          (row_bitmap & (1 << (metadata->char_width - 1 - x))) ? foreground
-                                                               : background;
+      bool is_foreground =
+          (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+      const RGB* pixel_rgb = is_foreground ? foreground : background;
       bios->config->write_pixel(bios, pixel_pos, *pixel_rgb);
     }
   }
