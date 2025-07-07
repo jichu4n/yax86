@@ -7,6 +7,7 @@
     "fonts.c",
     "video.h",
     "video.c",
+    "interrupts.h",
     "bios.c"
   ]
 }

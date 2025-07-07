@@ -208,10 +208,6 @@ typedef struct CPUState {
   uint8_t pending_interrupt_number;
 } CPUState;
 
-// ============================================================================
-// CPU state helper functions.
-// ============================================================================
-
 // Initialize CPU state.
 void InitCPU(CPUState* cpu);
 

@@ -10,6 +10,8 @@
 #include "../util/static_vector.h"
 #endif  // YAX86_BIOS_BUNDLE_H
 
+#include "cpu.h"
+
 struct BIOSState;
 
 // ============================================================================
@@ -279,6 +281,19 @@ typedef struct BIOSState {
   MemoryRegions memory_regions;
 } BIOSState;
 
+// Initialize BIOS state with the provided configuration.
+void InitBIOS(BIOSState* bios, BIOSConfig* config);
+
+// Handle a BIOS interrupt. Follows the handle_interrupt callback signature in
+// the CPUConfig structure.
+//   - Return kExecuteSuccess if the interrupt was handled and execution
+//     should continue.
+//   - Return kExecuteUnhandledInterrupt if the interrupt was not handled and
+//     should be handled by the VM instead.
+//   - Return any other value to terminate the execution loop.
+ExecuteStatus HandleBIOSInterrupt(
+    BIOSState* bios, CPUState* cpu, uint8_t interrupt_number);
+
 // ============================================================================
 // BIOS Data Area (BDA)
 // ============================================================================
@@ -473,8 +488,5 @@ typedef struct EquipmentWord {
 EquipmentWord ParseEquipmentWord(uint16_t raw_equipment_word);
 // Convert EquipmentWord to uint16_t.
 uint16_t SerializeEquipmentWord(EquipmentWord equipment);
-
-// Initialize BIOS state with the provided configuration.
-void InitBIOS(BIOSState* bios, BIOSConfig* config);
 
 #endif  // YAX86_BIOS_PUBLIC_H
