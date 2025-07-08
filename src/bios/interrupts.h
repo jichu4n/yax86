@@ -1,16 +1,43 @@
 #ifndef YAX86_BIOS_INTERRUPTS_H
 #define YAX86_BIOS_INTERRUPTS_H
 
-#ifndef YAX86_IMPLEMENTATION
-#include "../util/common.h"
-#include "public.h"
-
 // Signature of a BIOS interrupt handler, i.e. a function that handles
 // an interrupt number.
 typedef ExecuteStatus (*BIOSInterruptHandler)(
     BIOSState* bios, CPUState* cpu, uint8_t ah);
 
+// Signature of a BIOS interrupt function handler, i.e. a function that handles
+// a specific interrupt number and AH register value.
+typedef ExecuteStatus (*BIOSInterruptFunctionHandler)(
+    BIOSState* bios, CPUState* cpu);
+
+enum {
+  // Number of BIOS functions for interrupt 0x10.
+  kNumBIOSInterrupt10Functions = 0x14,
+  // Number of BIOS functions for interrupt 0x13.
+  kNumBIOSInterrupt13Functions = 0x18,
+  // Number of BIOS functions for interrupt 0x14.
+  kNumBIOSInterrupt14Functions = 0x04,
+  // Number of BIOS functions for interrupt 0x15.
+  kNumBIOSInterrupt15Functions = 0x04,
+  // Number of BIOS functions for interrupt 0x16.
+  kNumBIOSInterrupt16Functions = 0x03,
+  // Number of BIOS functions for interrupt 0x17.
+  kNumBIOSInterrupt17Functions = 0x03,
+  // Number of BIOS functions for interrupt 0x1A.
+  kNumBIOSInterrupt1AFunctions = 0x08,
+};
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../util/common.h"
+#include "public.h"
+
 // BIOS interrupt 0x05 - Print screen
+// The result of the print screen operation is reported in the status byte at
+// address 0x500:
+//   - 0x00: Print screen successful
+//   - 0x01: Print screen in progress
+//   - 0xFF: Print screen failed
 YAX86_PRIVATE ExecuteStatus
 HandleBIOSInterrupt05PrintScreen(BIOSState* bios, CPUState* cpu, uint8_t ah);
 // BIOS interrupt 0x10 - Video I/O
@@ -46,28 +73,6 @@ YAX86_PRIVATE ExecuteStatus HandleBIOSInterrupt19BootstrapLoader(
 // BIOS interrupt 0x1A - Time-of-Day
 YAX86_PRIVATE ExecuteStatus
 HandleBIOSInterrupt1ATimeOfDay(BIOSState* bios, CPUState* cpu, uint8_t ah);
-
-// Signature of a BIOS interrupt function handler, i.e. a function that handles
-// a specific interrupt number and AH register value.
-typedef ExecuteStatus (*BIOSInterruptFunctionHandler)(
-    BIOSState* bios, CPUState* cpu);
-
-enum {
-  // Number of BIOS functions for interrupt 0x10.
-  kNumBIOSInterrupt10Functions = 0x14,
-  // Number of BIOS functions for interrupt 0x13.
-  kNumBIOSInterrupt13Functions = 0x18,
-  // Number of BIOS functions for interrupt 0x14.
-  kNumBIOSInterrupt14Functions = 0x04,
-  // Number of BIOS functions for interrupt 0x15.
-  kNumBIOSInterrupt15Functions = 0x04,
-  // Number of BIOS functions for interrupt 0x16.
-  kNumBIOSInterrupt16Functions = 0x03,
-  // Number of BIOS functions for interrupt 0x17.
-  kNumBIOSInterrupt17Functions = 0x03,
-  // Number of BIOS functions for interrupt 0x1A.
-  kNumBIOSInterrupt1AFunctions = 0x08,
-};
 
 // No-op BIOS interrupt function handler.
 YAX86_PRIVATE ExecuteStatus

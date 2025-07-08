@@ -300,7 +300,7 @@ ExecuteStatus HandleBIOSInterrupt(
 
 enum {
   // Address of the BIOS Data Area.
-  kBDAAddress = 0x0040,
+  kBDAAddress = 0x0400,
 
   // 0x00: Base I/O address for serial ports.
   kBDASerialPortAddress = 0x00,

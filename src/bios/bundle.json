@@ -8,6 +8,7 @@
     "video.h",
     "video.c",
     "interrupts.h",
+    "interrupt_05.c",
     "bios.c"
   ]
 }
