@@ -64,5 +64,6 @@ endif()
 # =============================================================================
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-    add_subdirectory(demos/cpu)
+    add_subdirectory(tools/cpu_demo)
 endif()
+
