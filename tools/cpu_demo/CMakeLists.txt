@@ -1,14 +1,14 @@
 # =============================================================================
 # Executable dependencies
 # =============================================================================
-find_program(FASM_EXECUTABLE fasm)
-if(NOT FASM_EXECUTABLE)
-  message(WARNING "fasm not found, tests will fail to run!")
+find_program(NASM_EXECUTABLE nasm)
+if(NOT NASM_EXECUTABLE)
+  message(WARNING "nasm not found, tests will fail to run!")
 endif()
 
-find_program(OBJDUMP_EXECUTABLE objdump)
-if(NOT OBJDUMP_EXECUTABLE)
-  message(WARNING "objdump not found, tests will fail to run!")
+find_program(NDISASM_EXECUTABLE ndisasm)
+if(NOT NDISASM_EXECUTABLE)
+  message(WARNING "ndisasm not found, tests will fail to run!")
 endif()
 
 # =============================================================================

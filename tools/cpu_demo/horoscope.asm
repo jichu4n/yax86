@@ -1,4 +1,3 @@
-; 8086 Horoscope Program for FASM
 ; This program asks for the user's birth month and day,
 ; then calculates and displays their astrological sign.
 ; To be compiled as a .COM file.

@@ -22,9 +22,9 @@ using namespace std;
 uint8_t memory[0x2000] = {0};
 
 vector<uint8_t> Assemble(const string& asm_file_name) {
-  // Assemble the code using fasm to a COM file
+  // Assemble the code to a COM file
   string com_file_name = asm_file_name + ".com";
-  string command = "fasm " + asm_file_name + " " + com_file_name;
+  string command = "nasm -f bin " + asm_file_name + " -o " + com_file_name;
   if (system(command.c_str()) != 0) {
     throw runtime_error("Failed to run command: " + command);
   }

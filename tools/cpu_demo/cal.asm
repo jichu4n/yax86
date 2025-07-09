@@ -1,4 +1,3 @@
-; 8086 Assembly Calendar Program for FASM
 ; Generates a calendar for a given month and year.
 ; Monday is the first day of the week.
 ; Corrected for .COM file format.

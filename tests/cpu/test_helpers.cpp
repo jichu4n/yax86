@@ -92,9 +92,9 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
            << asm_code << endl;
   asm_file.close();
 
-  // Assemble the code using fasm to a COM file
+  // Assemble the code to a COM file
   string com_file_name = name + ".com";
-  string command = "fasm " + asm_file_name + " " + com_file_name;
+  string command = "nasm -f bin " + asm_file_name + " -o " + com_file_name;
   if (system(command.c_str()) != 0) {
     throw runtime_error("Failed to run command: " + command);
   }
@@ -108,9 +108,8 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
       (istreambuf_iterator<char>(com_file)), istreambuf_iterator<char>());
   com_file.close();
 
-  // Use objdump to disassemble and print out the machine code
-  string disasm_command =
-      "objdump -D -b binary -m i8086 -M intel " + com_file_name;
+  // Disassemble and print out the machine code
+  string disasm_command = "ndisasm -o 100h -b 16 " + com_file_name;
   system(disasm_command.c_str());
   cout << endl;
 

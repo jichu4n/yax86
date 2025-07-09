@@ -18,7 +18,7 @@ std::ostream& operator<<(std::ostream& os, const Instruction& instruction);
 // Returns the name of a CPU flag for debugging.
 std::string GetFlagName(Flag flag);
 
-// Test helper to assemble instructions using fasm and return the machine code.
+// Test helper to assemble instructions using NASM and return the machine code.
 std::vector<uint8_t> Assemble(
     const std::string& name, const std::string& asm_code);
 
@@ -43,7 +43,7 @@ class CPUTestHelper {
   // point to the start of the code.
   void LoadCOM(const std::vector<uint8_t>& code);
 
-  // Assemble instructions using FASM to a COM binary and load it into memory.
+  // Assemble instructions using NASM to a COM binary and load it into memory.
   // Returns the size of the loaded code.
   size_t AssembleAndLoadProgram(
       const std::string& name, const std::string& asm_code);

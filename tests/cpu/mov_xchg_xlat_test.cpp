@@ -756,8 +756,7 @@ TEST_F(MovXchgXlatTest, XLAT) {
   // Test with a different index and value
   // Set up: BX = 0x0800, AL = 0x0A
   // Memory at [0x0800 + 0x0A] = 0x080A contains 0x42
-  helper = CPUTestHelper::CreateWithProgram(
-      "execute-xlat-test-2", "xlat byte [bx]\n");
+  helper = CPUTestHelper::CreateWithProgram("execute-xlat-test-2", "xlat");
   helper->cpu_.registers[kDS] = 0;
   SetFlag(&helper->cpu_, kCF, false);  // Change some flags for variety
   SetFlag(&helper->cpu_, kZF, false);
