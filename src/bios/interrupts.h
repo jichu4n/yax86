@@ -28,6 +28,12 @@ enum {
   kNumBIOSInterrupt1AFunctions = 0x08,
 };
 
+// Helper function to execute a BIOS interrupt function handler based on the AH
+// register value.
+YAX86_PRIVATE ExecuteStatus ExecuteBIOSInterruptFunctionHandler(
+    BIOSInterruptFunctionHandler* handlers, size_t num_handlers,
+    BIOSState* bios, CPUState* cpu, uint8_t ah);
+
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
@@ -258,28 +264,6 @@ HandleBIOSInterrupt1AAH06SetAlarm(BIOSState* bios, CPUState* cpu);
 // BIOS Interrupt 0x1A, AH = 0x07 - Reset the alarm
 YAX86_PRIVATE ExecuteStatus
 HandleBIOSInterrupt1AAH07ResetAlarm(BIOSState* bios, CPUState* cpu);
-
-// Function handlers for BIOS interrupt 0x10.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_10_handlers[kNumBIOSInterrupt10Functions];
-// Function handlers for BIOS interrupt 0x13.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_13_handlers[kNumBIOSInterrupt13Functions];
-// Function handlers for BIOS interrupt 0x14.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_14_handlers[kNumBIOSInterrupt14Functions];
-// Function handlers for BIOS interrupt 0x15.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_15_handlers[kNumBIOSInterrupt15Functions];
-// Function handlers for BIOS interrupt 0x16.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_16_handlers[kNumBIOSInterrupt16Functions];
-// Function handlers for BIOS interrupt 0x17.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_17_handlers[kNumBIOSInterrupt17Functions];
-// Function handlers for BIOS interrupt 0x1A.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_1A_handlers[kNumBIOSInterrupt1AFunctions];
 
 #endif  // YAX86_IMPLEMENTATION
 

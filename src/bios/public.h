@@ -157,6 +157,8 @@ typedef struct VideoModeMetadata {
   uint16_t width;
   // Resolution height in pixels.
   uint16_t height;
+  // Number of pages in the video mode.
+  uint8_t num_pages;
 
   // Text mode - number of columns.
   uint8_t columns;
@@ -196,11 +198,22 @@ extern bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode);
 extern void TextClearScreen(struct BIOSState* bios);
 // Text mode - get current page.
 extern uint8_t TextGetCurrentPage(struct BIOSState* bios);
+// Text mode - set current page.
+extern bool TextSetCurrentPage(struct BIOSState* bios, uint8_t page);
 // Text mode - get cursor position on a page.
 extern TextPosition TextGetCursorPositionForPage(
     struct BIOSState* bios, uint8_t page);
+// Text mode - set cursor position for a specific page.
+extern bool TextSetCursorPositionForPage(
+    struct BIOSState* bios, TextPosition position, uint8_t page);
 // Text mode - get cursor position in current page.
 extern TextPosition TextGetCursorPosition(struct BIOSState* bios);
+// Text mode - set cursor start and end rows.
+extern bool TextSetCursorShape(
+    struct BIOSState* bios, uint8_t start_row, uint8_t end_row);
+// Text mode - get cursor start and end rows.
+extern bool TextGetCursorShape(
+    struct BIOSState* bios, uint8_t* start_row, uint8_t* end_row);
 
 // Render the current page in the emulated video RAM to the real display.
 // Invokes the write_pixel callback to do the actual pixel rendering.
@@ -348,8 +361,10 @@ enum {
   kBDAVideoPageOffset = 0x4E,
   // 0x50: Video cursor position (col, row) for eight pages
   kBDAVideoCursorPos = 0x50,
-  // 0x60: Video cursor type, 6845 compatible
-  kBDAVideoCursorType = 0x60,
+  // 0x60: Cursor ending (bottom) scan line
+  kBDAVideoCursorEndRow = 0x60,
+  // 0x60: Cursor starting (top) scan line
+  kBDAVideoCursorStartRow = 0x61,
   // 0x62: Video current page number
   kBDAVideoCurrentPage = 0x62,
   // 0x63: Video CRT controller base address

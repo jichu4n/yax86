@@ -16,6 +16,10 @@ extern void WriteVRAMByte(BIOSState* bios, uint32_t address, uint8_t value);
 // Table of video mode metadata, indexed by VideoMode enum values.
 extern const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes];
 
+// Get default cursor start and end rows for a mode.
+extern void GetDefaultCursorShape(
+    const VideoModeMetadata* metadata, uint8_t* start_row, uint8_t* end_row);
+
 #endif  // YAX86_IMPLEMENTATION
 
 #endif  // YAX86_BIOS_VIDEO_H

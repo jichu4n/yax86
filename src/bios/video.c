@@ -10,11 +10,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x00: Text, 40×25, grayscale, 320x200, 8x8
     {
         .mode = kVideoTextModeCGA00,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 8,
         .columns = 40,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -23,11 +25,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x01: Text, 40×25, 16 colors, 320x200, 8x8
     {
         .mode = kVideoTextModeCGA01,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 8,
         .columns = 40,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -36,11 +40,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x02: Text, 80×25, grayscale, 640x200, 8x8
     {
         .mode = kVideoTextModeCGA02,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 640,
         .height = 200,
+        .num_pages = 4,
         .columns = 80,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -49,11 +55,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x03: Text, 80×25, 16 colors, 640x200, 8x8
     {
         .mode = kVideoTextModeCGA03,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 640,
         .height = 200,
+        .num_pages = 4,
         .columns = 80,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -62,29 +70,35 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA graphics mode 0x04: Graphics, 4 colors, 320×200
     {
         .mode = kVideoGraphicsModeCGA04,
-        .type = kVideoGraphicsMode,
+        // .type = kVideoGraphicsMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 1,
     },
     // CGA graphics mode 0x05: Graphics, grayscale, 320×200
     {
         .mode = kVideoGraphicsModeCGA05,
-        .type = kVideoGraphicsMode,
+        // .type = kVideoGraphicsMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 1,
     },
     // CGA graphics mode 0x06: Graphics, monochrome, 640×200
     {
         .mode = kVideoGraphicsModeCGA06,
-        .type = kVideoGraphicsMode,
+        // .type = kVideoGraphicsMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 640,
         .height = 200,
+        .num_pages = 1,
     },
     // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
     {
@@ -94,6 +108,7 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
         .vram_size = 4 * 1024,
         .width = 720,
         .height = 350,
+        .num_pages = 1,
         .columns = 80,
         .rows = 25,
         .char_width = kMDACharWidth,
@@ -105,6 +120,14 @@ enum {
   // Position of underline in MDA text mode.
   kMDAUnderlinePosition = 12,
 };
+
+// Get default cursor start and end rows for a mode.
+YAX86_PRIVATE void GetDefaultCursorShape(
+    const VideoModeMetadata* metadata, uint8_t* start_row, uint8_t* end_row) {
+  // Default cursor type is two scan lines at bottom of the character cell.
+  *start_row = metadata->char_height - 2;
+  *end_row = metadata->char_height - 1;
+}
 
 // Check if video mode is valid and supported.
 bool IsSupportedVideoMode(uint8_t mode) {
@@ -187,9 +210,9 @@ bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode) {
 
     // Update cursor state.
     // Default cursor type is two scan lines at bottom of the character cell.
-    uint16_t default_cursor =
-        (metadata->char_height - 2) << 8 | (metadata->char_height - 1);
-    WriteMemoryWord(bios, kBDAAddress + kBDAVideoCursorType, default_cursor);
+    uint8_t cursor_start_row, cursor_end_row;
+    GetDefaultCursorShape(metadata, &cursor_start_row, &cursor_end_row);
+    TextSetCursorShape(bios, cursor_start_row, cursor_end_row);
     // Set cursor position to (0, 0) for all pages.
     for (uint8_t i = 0; i < 8; ++i) {
       WriteMemoryWord(bios, kBDAAddress + kBDAVideoCursorPos + i * 2, 0);
@@ -218,10 +241,25 @@ void TextClearScreen(struct BIOSState* bios) {
 // Text mode - get current page.
 uint8_t TextGetCurrentPage(struct BIOSState* bios) {
   const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
-  if (!metadata || metadata->type != kVideoTextMode) {
+  if (!metadata) {
     return 0;
   }
-  return ReadMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage);
+  uint8_t page = ReadMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage);
+  if (page >= metadata->num_pages) {
+    // If the page is out of bounds, default to the first page.
+    page = 0;
+  }
+  return page;
+}
+
+// Text mode - set current page.
+bool TextSetCurrentPage(struct BIOSState* bios, uint8_t page) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || page >= metadata->num_pages) {
+    return false;
+  }
+  WriteMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage, page);
+  return true;
 }
 
 // Text mode - get cursor position on a page.
@@ -244,12 +282,70 @@ TextPosition TextGetCursorPositionForPage(
       .col = ReadMemoryByte(bios, cursor_address),
       .row = ReadMemoryByte(bios, cursor_address + 1),
   };
+  if (position.col >= metadata->columns) {
+    position.col = metadata->columns - 1;
+  }
+  if (position.row >= metadata->rows) {
+    position.row = metadata->rows - 1;
+  }
   return position;
+}
+
+// Text mode - set cursor position for a specific page.
+bool TextSetCursorPositionForPage(
+    struct BIOSState* bios, TextPosition position, uint8_t page) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata) {
+    return false;
+  }
+  if (page >= metadata->num_pages || position.col >= metadata->columns ||
+      position.row >= metadata->rows) {
+    return false;
+  }
+  uint32_t cursor_address = kBDAAddress + kBDAVideoCursorPos + page * 2;
+  WriteMemoryByte(bios, cursor_address, position.col);
+  WriteMemoryByte(bios, cursor_address + 1, position.row);
+  return true;
 }
 
 // Text mode - get cursor position in current page.
 TextPosition TextGetCursorPosition(struct BIOSState* bios) {
   return TextGetCursorPositionForPage(bios, TextGetCurrentPage(bios));
+}
+
+// Text mode - set cursor start and end rows.
+bool TextSetCursorShape(
+    struct BIOSState* bios, uint8_t start_row, uint8_t end_row) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || metadata->type != kVideoTextMode) {
+    return false;
+  }
+  if (start_row >= metadata->char_height || end_row >= metadata->char_height) {
+    return false;
+  }
+  WriteMemoryByte(bios, kBDAAddress + kBDAVideoCursorStartRow, start_row);
+  WriteMemoryByte(bios, kBDAAddress + kBDAVideoCursorEndRow, end_row);
+  return true;
+}
+
+// Text mode - get cursor start and end rows.
+bool TextGetCursorShape(
+    struct BIOSState* bios, uint8_t* start_row, uint8_t* end_row) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || metadata->type != kVideoTextMode) {
+    return false;
+  }
+  uint8_t start_row_value =
+      ReadMemoryByte(bios, kBDAAddress + kBDAVideoCursorStartRow);
+  uint8_t end_row_value =
+      ReadMemoryByte(bios, kBDAAddress + kBDAVideoCursorEndRow);
+  if (start_row_value >= metadata->char_height ||
+      end_row_value >= metadata->char_height) {
+    return false;
+  }
+  *start_row = start_row_value;
+  *end_row = end_row_value;
+  return true;
 }
 
 YAX86_PRIVATE void InitVideo(BIOSState* bios) {

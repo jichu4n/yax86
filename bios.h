@@ -272,6 +272,8 @@ typedef struct VideoModeMetadata {
   uint16_t width;
   // Resolution height in pixels.
   uint16_t height;
+  // Number of pages in the video mode.
+  uint8_t num_pages;
 
   // Text mode - number of columns.
   uint8_t columns;
@@ -311,11 +313,22 @@ extern bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode);
 extern void TextClearScreen(struct BIOSState* bios);
 // Text mode - get current page.
 extern uint8_t TextGetCurrentPage(struct BIOSState* bios);
+// Text mode - set current page.
+extern bool TextSetCurrentPage(struct BIOSState* bios, uint8_t page);
 // Text mode - get cursor position on a page.
 extern TextPosition TextGetCursorPositionForPage(
     struct BIOSState* bios, uint8_t page);
+// Text mode - set cursor position for a specific page.
+extern bool TextSetCursorPositionForPage(
+    struct BIOSState* bios, TextPosition position, uint8_t page);
 // Text mode - get cursor position in current page.
 extern TextPosition TextGetCursorPosition(struct BIOSState* bios);
+// Text mode - set cursor start and end rows.
+extern bool TextSetCursorShape(
+    struct BIOSState* bios, uint8_t start_row, uint8_t end_row);
+// Text mode - get cursor start and end rows.
+extern bool TextGetCursorShape(
+    struct BIOSState* bios, uint8_t* start_row, uint8_t* end_row);
 
 // Render the current page in the emulated video RAM to the real display.
 // Invokes the write_pixel callback to do the actual pixel rendering.
@@ -463,8 +476,10 @@ enum {
   kBDAVideoPageOffset = 0x4E,
   // 0x50: Video cursor position (col, row) for eight pages
   kBDAVideoCursorPos = 0x50,
-  // 0x60: Video cursor type, 6845 compatible
-  kBDAVideoCursorType = 0x60,
+  // 0x60: Cursor ending (bottom) scan line
+  kBDAVideoCursorEndRow = 0x60,
+  // 0x60: Cursor starting (top) scan line
+  kBDAVideoCursorStartRow = 0x61,
   // 0x62: Video current page number
   kBDAVideoCurrentPage = 0x62,
   // 0x63: Video CRT controller base address
@@ -1567,6 +1582,10 @@ extern void WriteVRAMByte(BIOSState* bios, uint32_t address, uint8_t value);
 // Table of video mode metadata, indexed by VideoMode enum values.
 extern const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes];
 
+// Get default cursor start and end rows for a mode.
+extern void GetDefaultCursorShape(
+    const VideoModeMetadata* metadata, uint8_t* start_row, uint8_t* end_row);
+
 #endif  // YAX86_IMPLEMENTATION
 
 #endif  // YAX86_BIOS_VIDEO_H
@@ -1593,11 +1612,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x00: Text, 40×25, grayscale, 320x200, 8x8
     {
         .mode = kVideoTextModeCGA00,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 8,
         .columns = 40,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -1606,11 +1627,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x01: Text, 40×25, 16 colors, 320x200, 8x8
     {
         .mode = kVideoTextModeCGA01,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 8,
         .columns = 40,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -1619,11 +1642,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x02: Text, 80×25, grayscale, 640x200, 8x8
     {
         .mode = kVideoTextModeCGA02,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 640,
         .height = 200,
+        .num_pages = 4,
         .columns = 80,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -1632,11 +1657,13 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA text mode 0x03: Text, 80×25, 16 colors, 640x200, 8x8
     {
         .mode = kVideoTextModeCGA03,
-        .type = kVideoTextMode,
+        // .type = kVideoTextMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 640,
         .height = 200,
+        .num_pages = 4,
         .columns = 80,
         .rows = 25,
         .char_width = kCGACharWidth,
@@ -1645,29 +1672,35 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
     // CGA graphics mode 0x04: Graphics, 4 colors, 320×200
     {
         .mode = kVideoGraphicsModeCGA04,
-        .type = kVideoGraphicsMode,
+        // .type = kVideoGraphicsMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 1,
     },
     // CGA graphics mode 0x05: Graphics, grayscale, 320×200
     {
         .mode = kVideoGraphicsModeCGA05,
-        .type = kVideoGraphicsMode,
+        // .type = kVideoGraphicsMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 320,
         .height = 200,
+        .num_pages = 1,
     },
     // CGA graphics mode 0x06: Graphics, monochrome, 640×200
     {
         .mode = kVideoGraphicsModeCGA06,
-        .type = kVideoGraphicsMode,
+        // .type = kVideoGraphicsMode,
+        .type = kVideoModeUnsupported,
         .vram_address = 0xB8000,
         .vram_size = 16 * 1024,
         .width = 640,
         .height = 200,
+        .num_pages = 1,
     },
     // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
     {
@@ -1677,6 +1710,7 @@ const VideoModeMetadata kVideoModeMetadataTable[kNumVideoModes] = {
         .vram_size = 4 * 1024,
         .width = 720,
         .height = 350,
+        .num_pages = 1,
         .columns = 80,
         .rows = 25,
         .char_width = kMDACharWidth,
@@ -1688,6 +1722,14 @@ enum {
   // Position of underline in MDA text mode.
   kMDAUnderlinePosition = 12,
 };
+
+// Get default cursor start and end rows for a mode.
+YAX86_PRIVATE void GetDefaultCursorShape(
+    const VideoModeMetadata* metadata, uint8_t* start_row, uint8_t* end_row) {
+  // Default cursor type is two scan lines at bottom of the character cell.
+  *start_row = metadata->char_height - 2;
+  *end_row = metadata->char_height - 1;
+}
 
 // Check if video mode is valid and supported.
 bool IsSupportedVideoMode(uint8_t mode) {
@@ -1770,9 +1812,9 @@ bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode) {
 
     // Update cursor state.
     // Default cursor type is two scan lines at bottom of the character cell.
-    uint16_t default_cursor =
-        (metadata->char_height - 2) << 8 | (metadata->char_height - 1);
-    WriteMemoryWord(bios, kBDAAddress + kBDAVideoCursorType, default_cursor);
+    uint8_t cursor_start_row, cursor_end_row;
+    GetDefaultCursorShape(metadata, &cursor_start_row, &cursor_end_row);
+    TextSetCursorShape(bios, cursor_start_row, cursor_end_row);
     // Set cursor position to (0, 0) for all pages.
     for (uint8_t i = 0; i < 8; ++i) {
       WriteMemoryWord(bios, kBDAAddress + kBDAVideoCursorPos + i * 2, 0);
@@ -1801,10 +1843,25 @@ void TextClearScreen(struct BIOSState* bios) {
 // Text mode - get current page.
 uint8_t TextGetCurrentPage(struct BIOSState* bios) {
   const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
-  if (!metadata || metadata->type != kVideoTextMode) {
+  if (!metadata) {
     return 0;
   }
-  return ReadMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage);
+  uint8_t page = ReadMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage);
+  if (page >= metadata->num_pages) {
+    // If the page is out of bounds, default to the first page.
+    page = 0;
+  }
+  return page;
+}
+
+// Text mode - set current page.
+bool TextSetCurrentPage(struct BIOSState* bios, uint8_t page) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || page >= metadata->num_pages) {
+    return false;
+  }
+  WriteMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage, page);
+  return true;
 }
 
 // Text mode - get cursor position on a page.
@@ -1827,12 +1884,70 @@ TextPosition TextGetCursorPositionForPage(
       .col = ReadMemoryByte(bios, cursor_address),
       .row = ReadMemoryByte(bios, cursor_address + 1),
   };
+  if (position.col >= metadata->columns) {
+    position.col = metadata->columns - 1;
+  }
+  if (position.row >= metadata->rows) {
+    position.row = metadata->rows - 1;
+  }
   return position;
+}
+
+// Text mode - set cursor position for a specific page.
+bool TextSetCursorPositionForPage(
+    struct BIOSState* bios, TextPosition position, uint8_t page) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata) {
+    return false;
+  }
+  if (page >= metadata->num_pages || position.col >= metadata->columns ||
+      position.row >= metadata->rows) {
+    return false;
+  }
+  uint32_t cursor_address = kBDAAddress + kBDAVideoCursorPos + page * 2;
+  WriteMemoryByte(bios, cursor_address, position.col);
+  WriteMemoryByte(bios, cursor_address + 1, position.row);
+  return true;
 }
 
 // Text mode - get cursor position in current page.
 TextPosition TextGetCursorPosition(struct BIOSState* bios) {
   return TextGetCursorPositionForPage(bios, TextGetCurrentPage(bios));
+}
+
+// Text mode - set cursor start and end rows.
+bool TextSetCursorShape(
+    struct BIOSState* bios, uint8_t start_row, uint8_t end_row) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || metadata->type != kVideoTextMode) {
+    return false;
+  }
+  if (start_row >= metadata->char_height || end_row >= metadata->char_height) {
+    return false;
+  }
+  WriteMemoryByte(bios, kBDAAddress + kBDAVideoCursorStartRow, start_row);
+  WriteMemoryByte(bios, kBDAAddress + kBDAVideoCursorEndRow, end_row);
+  return true;
+}
+
+// Text mode - get cursor start and end rows.
+bool TextGetCursorShape(
+    struct BIOSState* bios, uint8_t* start_row, uint8_t* end_row) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || metadata->type != kVideoTextMode) {
+    return false;
+  }
+  uint8_t start_row_value =
+      ReadMemoryByte(bios, kBDAAddress + kBDAVideoCursorStartRow);
+  uint8_t end_row_value =
+      ReadMemoryByte(bios, kBDAAddress + kBDAVideoCursorEndRow);
+  if (start_row_value >= metadata->char_height ||
+      end_row_value >= metadata->char_height) {
+    return false;
+  }
+  *start_row = start_row_value;
+  *end_row = end_row_value;
+  return true;
 }
 
 YAX86_PRIVATE void InitVideo(BIOSState* bios) {
@@ -2032,6 +2147,12 @@ enum {
   // Number of BIOS functions for interrupt 0x1A.
   kNumBIOSInterrupt1AFunctions = 0x08,
 };
+
+// Helper function to execute a BIOS interrupt function handler based on the AH
+// register value.
+YAX86_PRIVATE ExecuteStatus ExecuteBIOSInterruptFunctionHandler(
+    BIOSInterruptFunctionHandler* handlers, size_t num_handlers,
+    BIOSState* bios, CPUState* cpu, uint8_t ah);
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -2264,28 +2385,6 @@ HandleBIOSInterrupt1AAH06SetAlarm(BIOSState* bios, CPUState* cpu);
 YAX86_PRIVATE ExecuteStatus
 HandleBIOSInterrupt1AAH07ResetAlarm(BIOSState* bios, CPUState* cpu);
 
-// Function handlers for BIOS interrupt 0x10.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_10_handlers[kNumBIOSInterrupt10Functions];
-// Function handlers for BIOS interrupt 0x13.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_13_handlers[kNumBIOSInterrupt13Functions];
-// Function handlers for BIOS interrupt 0x14.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_14_handlers[kNumBIOSInterrupt14Functions];
-// Function handlers for BIOS interrupt 0x15.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_15_handlers[kNumBIOSInterrupt15Functions];
-// Function handlers for BIOS interrupt 0x16.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_16_handlers[kNumBIOSInterrupt16Functions];
-// Function handlers for BIOS interrupt 0x17.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_17_handlers[kNumBIOSInterrupt17Functions];
-// Function handlers for BIOS interrupt 0x1A.
-YAX86_PRIVATE BIOSInterruptFunctionHandler
-    bios_interrupt_1A_handlers[kNumBIOSInterrupt1AFunctions];
-
 #endif  // YAX86_IMPLEMENTATION
 
 #endif  // YAX86_CPU_INSTRUCTIONS_H
@@ -2302,7 +2401,6 @@ YAX86_PRIVATE BIOSInterruptFunctionHandler
 #line 1 "./src/bios/interrupt_05.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
-#include "instructions.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -2325,38 +2423,137 @@ YAX86_PRIVATE ExecuteStatus HandleBIOSInterrupt05PrintScreen(
 // ==============================================================================
 
 // ==============================================================================
-// src/bios/bios.c start
+// src/bios/interrupt_10.c start
 // ==============================================================================
 
-#line 1 "./src/bios/bios.c"
+#line 1 "./src/bios/interrupt_10.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "interrupts.h"
 #include "public.h"
-#include "video.h"
 #endif  // YAX86_IMPLEMENTATION
 
-void InitBIOS(BIOSState* bios, BIOSConfig* config) {
-  // Zero out the BIOS state.
-  BIOSState empty_bios = {0};
-  *bios = empty_bios;
-
-  bios->config = config;
-
-  MemoryRegionsInit(&bios->memory_regions);
-  MemoryRegion conventional_memory = {
-      .region_type = kMemoryRegionConventional,
-      .start = 0x0000,
-      .size = config->memory_size_kb * (2 << 10),
-      .read_memory_byte = config->read_memory_byte,
-      .write_memory_byte = config->write_memory_byte,
-  };
-  MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
-
-  InitVideo(bios);
-
-  // TODO: Set BDA values.
+// BIOS Interrupt 0x10, AH = 0x00 - Set video mode
+YAX86_PRIVATE ExecuteStatus
+HandleBIOSInterrupt10AH00SetVideoMode(BIOSState* bios, CPUState* cpu) {
+  uint8_t al = cpu->registers[kAX] & 0xFF;  // Video mode
+  SwitchVideoMode(bios, al);
+  return kExecuteSuccess;
 }
+
+// BIOS Interrupt 0x10, AH = 0x01 - Set cursor shape
+YAX86_PRIVATE ExecuteStatus
+HandleBIOSInterrupt10AH01SetCursorShape(BIOSState* bios, CPUState* cpu) {
+  uint8_t ch = (cpu->registers[kCX] >> 8) & 0xFF;  // Cursor starting row
+  uint8_t cl = cpu->registers[kCX] & 0xFF;         // Cursor ending row
+  TextSetCursorShape(bios, ch, cl);
+  return kExecuteSuccess;
+}
+
+// BIOS Interrupt 0x10, AH = 0x02 - Set cursor position
+YAX86_PRIVATE ExecuteStatus
+HandleBIOSInterrupt10AH02SetCursorPosition(BIOSState* bios, CPUState* cpu) {
+  uint8_t dh = (cpu->registers[kDX] >> 8) & 0xFF;  // Cursor row
+  uint8_t dl = cpu->registers[kDX] & 0xFF;         // Cursor column
+  uint8_t bh = cpu->registers[kBX] & 0xFF;         // Page number
+  TextPosition cursor_pos = {
+      .col = dl,
+      .row = dh,
+  };
+  TextSetCursorPositionForPage(bios, cursor_pos, bh);
+  return kExecuteSuccess;
+}
+
+// BIOS Interrupt 0x10, AH = 0x03 - Read cursor position
+YAX86_PRIVATE ExecuteStatus
+HandleBIOSInterrupt10AH03ReadCursorPosition(BIOSState* bios, CPUState* cpu) {
+  uint8_t bh = cpu->registers[kBX] & 0xFF;  // Page number
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata) {
+    return kExecuteSuccess;
+  }
+  TextPosition cursor_pos = TextGetCursorPositionForPage(bios, bh);
+  uint8_t cursor_start_row, cursor_end_row;
+  if (!TextGetCursorShape(bios, &cursor_start_row, &cursor_end_row)) {
+    GetDefaultCursorShape(metadata, &cursor_start_row, &cursor_end_row);
+  }
+
+  uint8_t dh = cursor_pos.row;
+  uint8_t dl = cursor_pos.col;
+  cpu->registers[kDX] = (dh << 8) | dl;
+
+  uint8_t ch = cursor_start_row;
+  uint8_t cl = cursor_end_row;
+  cpu->registers[kCX] = (ch << 8) | cl;
+
+  return kExecuteSuccess;
+}
+
+// BIOS Interrupt 0x10, AH = 0x04 - Read light pen position
+YAX86_PRIVATE ExecuteStatus
+HandleBIOSInterrupt10AH04ReadLightPenPosition(BIOSState* bios, CPUState* cpu) {
+  // This is a placeholder implementation. Actual light pen support would
+  // require hardware interaction. We set AH to 0x00 to indicate no light pen.
+  cpu->registers[kAX] &= 0x00FF;
+  return kExecuteSuccess;
+}
+
+// BIOS Interrupt 0x10, AH = 0x05 - Set active display page
+YAX86_PRIVATE ExecuteStatus
+HandleBIOSInterrupt10AH05SetActiveDisplayPage(BIOSState* bios, CPUState* cpu) {
+  uint8_t al = cpu->registers[kAX] & 0xFF;  // Page number
+  TextSetCurrentPage(bios, al);
+  return kExecuteSuccess;
+}
+
+// Function handlers for BIOS interrupt 0x10.
+YAX86_PRIVATE BIOSInterruptFunctionHandler
+    kBIOSInterrupt10Handlers[kNumBIOSInterrupt10Functions] = {
+        HandleBIOSInterrupt10AH00SetVideoMode,
+        HandleBIOSInterrupt10AH01SetCursorShape,
+        HandleBIOSInterrupt10AH02SetCursorPosition,
+        HandleBIOSInterrupt10AH03ReadCursorPosition,
+        HandleBIOSInterrupt10AH04ReadLightPenPosition,
+        HandleBIOSInterrupt10AH05SetActiveDisplayPage,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+};
+
+// BIOS interrupt 0x10 - Video I/O
+YAX86_PRIVATE ExecuteStatus
+HandleBIOSInterrupt10VideoIO(BIOSState* bios, CPUState* cpu, uint8_t ah) {
+  return ExecuteBIOSInterruptFunctionHandler(
+      kBIOSInterrupt10Handlers, kNumBIOSInterrupt10Functions, bios, cpu, ah);
+}
+
+
+// ==============================================================================
+// src/bios/interrupt_10.c end
+// ==============================================================================
+
+// ==============================================================================
+// src/bios/interrupts.c start
+// ==============================================================================
+
+#line 1 "./src/bios/interrupts.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "interrupts.h"
+
+#include "../util/common.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
 
 // Table of BIOS interrupt handlers, indexed by interrupt number.
 YAX86_PRIVATE BIOSInterruptHandler bios_interrupt_handlers[] = {
@@ -2423,6 +2620,57 @@ ExecuteStatus HandleBIOSInterrupt(
     return kExecuteUnhandledInterrupt;
   }
   return handler(bios, cpu, ah);
+}
+
+// Helper function to execute a BIOS interrupt function handler based on the AH
+// register value.
+extern ExecuteStatus ExecuteBIOSInterruptFunctionHandler(
+    BIOSInterruptFunctionHandler* handlers, size_t num_handlers,
+    BIOSState* bios, CPUState* cpu, uint8_t ah) {
+  // When invoked with invalid AH value, no-op and return.
+  if (ah >= num_handlers || !handlers[ah]) {
+    return kExecuteSuccess;
+  }
+  return handlers[ah](bios, cpu);
+}
+
+
+// ==============================================================================
+// src/bios/interrupts.c end
+// ==============================================================================
+
+// ==============================================================================
+// src/bios/bios.c start
+// ==============================================================================
+
+#line 1 "./src/bios/bios.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "../util/common.h"
+#include "interrupts.h"
+#include "public.h"
+#include "video.h"
+#endif  // YAX86_IMPLEMENTATION
+
+void InitBIOS(BIOSState* bios, BIOSConfig* config) {
+  // Zero out the BIOS state.
+  BIOSState empty_bios = {0};
+  *bios = empty_bios;
+
+  bios->config = config;
+
+  MemoryRegionsInit(&bios->memory_regions);
+  MemoryRegion conventional_memory = {
+      .region_type = kMemoryRegionConventional,
+      .start = 0x0000,
+      .size = config->memory_size_kb * (2 << 10),
+      .read_memory_byte = config->read_memory_byte,
+      .write_memory_byte = config->write_memory_byte,
+  };
+  MemoryRegionsAppend(&bios->memory_regions, &conventional_memory);
+
+  InitVideo(bios);
+
+  // TODO: Set BDA values.
 }
 
 

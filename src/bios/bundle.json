@@ -9,6 +9,8 @@
     "video.c",
     "interrupts.h",
     "interrupt_05.c",
+    "interrupt_10.c",
+    "interrupts.c",
     "bios.c"
   ]
 }
