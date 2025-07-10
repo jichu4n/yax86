@@ -182,6 +182,11 @@ enum {
   kMDACharHeight = 14,
 };
 
+enum {
+  // Invalid memory offset.
+  kInvalidMemoryOffset = 0xFFFFFF,
+};
+
 // Check if video mode is valid and supported.
 extern bool IsSupportedVideoMode(uint8_t mode);
 // Get current video mode. Returns kInvalidVideoMode if the video mode in the
@@ -194,12 +199,22 @@ extern const VideoModeMetadata* GetCurrentVideoModeMetadata(
 // Switch video mode.
 extern bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode);
 
+// Text mode - clear a region of the screen to a specific attribute byte.
+extern bool TextClearRegion(
+    struct BIOSState* bios, uint8_t page, TextPosition top_left,
+    TextPosition bottom_right, uint8_t attr);
 // Text mode - clear screen.
 extern void TextClearScreen(struct BIOSState* bios);
 // Text mode - get current page.
 extern uint8_t TextGetCurrentPage(struct BIOSState* bios);
 // Text mode - set current page.
 extern bool TextSetCurrentPage(struct BIOSState* bios, uint8_t page);
+// Text mode - get the memory offset of a page relevant to VRAM start address.
+extern uint32_t TextGetPageOffset(struct BIOSState* bios, uint8_t page);
+// Text mode - get the memory offset of a character relevant to VRAM start
+// address.
+extern uint32_t TextGetCharOffset(
+    struct BIOSState* bios, uint8_t page, TextPosition position);
 // Text mode - get cursor position on a page.
 extern TextPosition TextGetCursorPositionForPage(
     struct BIOSState* bios, uint8_t page);
@@ -214,6 +229,14 @@ extern bool TextSetCursorShape(
 // Text mode - get cursor start and end rows.
 extern bool TextGetCursorShape(
     struct BIOSState* bios, uint8_t* start_row, uint8_t* end_row);
+// Text mode - scroll up a region.
+extern bool TextScrollUp(
+    struct BIOSState* bios, uint8_t page, TextPosition top_left,
+    TextPosition bottom_right, uint8_t lines, uint8_t attr);
+// Text mode - scroll down a region.
+extern bool TextScrollDown(
+    struct BIOSState* bios, uint8_t page, TextPosition top_left,
+    TextPosition bottom_right, uint8_t lines, uint8_t attr);
 
 // Render the current page in the emulated video RAM to the real display.
 // Invokes the write_pixel callback to do the actual pixel rendering.

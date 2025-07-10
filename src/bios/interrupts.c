@@ -23,7 +23,7 @@ YAX86_PRIVATE BIOSInterruptHandler bios_interrupt_handlers[] = {
     0,                                 // 0x0D
     0,                                 // 0x0E
     0,                                 // 0x0F
-    0,                                 // 0x10 - Video I/O
+    HandleBIOSInterrupt10VideoIO,      // 0x10 - Video I/O
     0,                                 // 0x11 - Equipment determination
     0,                                 // 0x12 - Memory size determination
     0,                                 // 0x13 - Disk I/O

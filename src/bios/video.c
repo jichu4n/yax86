@@ -225,6 +225,31 @@ bool SwitchVideoMode(struct BIOSState* bios, VideoMode mode) {
   return true;
 }
 
+// Text mode - clear a region of the screen to a specific attribute byte.
+extern bool TextClearRegion(
+    struct BIOSState* bios, uint8_t page, TextPosition top_left,
+    TextPosition bottom_right, uint8_t attr) {
+  if (bottom_right.row < top_left.row || bottom_right.col < top_left.col) {
+    return false;
+  }
+  for (uint8_t row = top_left.row; row <= bottom_right.row; ++row) {
+    TextPosition row_start_pos = {
+        .col = top_left.col,
+        .row = row,
+    };
+    uint32_t offset = TextGetCharOffset(bios, page, row_start_pos);
+    if (offset == kInvalidMemoryOffset) {
+      return false;
+    }
+    for (uint8_t col = top_left.col; col <= bottom_right.col;
+         ++col, offset += 2) {
+      WriteVRAMByte(bios, offset, ' ');
+      WriteVRAMByte(bios, offset + 1, attr);
+    }
+  }
+  return true;
+}
+
 // Text mode - clear screen.
 void TextClearScreen(struct BIOSState* bios) {
   const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
@@ -260,6 +285,29 @@ bool TextSetCurrentPage(struct BIOSState* bios, uint8_t page) {
   }
   WriteMemoryByte(bios, kBDAAddress + kBDAVideoCurrentPage, page);
   return true;
+}
+
+// Text mode - get the memory address of a page.
+uint32_t TextGetPageOffset(struct BIOSState* bios, uint8_t page) {
+  const TextPosition position = {
+      .col = 0,
+      .row = 0,
+  };
+  return TextGetCharOffset(bios, page, position);
+}
+
+// Text mode - get the memory offset of a character relevant to VRAM start
+// address.
+uint32_t TextGetCharOffset(
+    struct BIOSState* bios, uint8_t page, TextPosition position) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata || page >= metadata->num_pages ||
+      position.col >= metadata->columns || position.row >= metadata->rows) {
+    return kInvalidMemoryOffset;
+  }
+  return (page * metadata->columns * metadata->rows +
+          position.row * metadata->columns + position.col) *
+         2;
 }
 
 // Text mode - get cursor position on a page.
@@ -348,6 +396,85 @@ bool TextGetCursorShape(
   return true;
 }
 
+// Text mode - common logic to scroll up or down a region.
+static bool TextScrollCommon(
+    struct BIOSState* bios, uint8_t page, TextPosition top_left,
+    TextPosition bottom_right, uint8_t lines, uint8_t attr, bool scroll_up) {
+  if (bottom_right.row <= top_left.row || bottom_right.col <= top_left.col) {
+    return false;
+  }
+
+  // Do nothing if scrolling by zero lines.
+  if (lines == 0) {
+    return true;
+  }
+  // Clear screen if scrolling by more lines than the height of the region.
+  const uint8_t height = bottom_right.row - top_left.row + 1;
+  if (lines >= height) {
+    return TextClearRegion(bios, page, top_left, bottom_right, attr);
+  }
+
+  // Copy each line upwards or downwards by the specified number of lines.
+  for (uint8_t row = top_left.row; row <= bottom_right.row - lines; ++row) {
+    TextPosition src_row_pos = {
+        .col = top_left.col,
+    };
+    TextPosition dest_row_pos = {
+        .col = top_left.col,
+    };
+    if (scroll_up) {
+      src_row_pos.row = row + lines;
+      dest_row_pos.row = row;
+    } else {
+      src_row_pos.row = row;
+      dest_row_pos.row = row + lines;
+    }
+    uint32_t src_offset = TextGetCharOffset(bios, page, src_row_pos);
+    uint32_t dest_offset = TextGetCharOffset(bios, page, dest_row_pos);
+    if (src_offset == kInvalidMemoryOffset ||
+        dest_offset == kInvalidMemoryOffset) {
+      return false;
+    }
+    for (uint8_t col = top_left.col; col <= bottom_right.col;
+         ++col, src_offset += 2, dest_offset += 2) {
+      WriteVRAMByte(bios, dest_offset, ReadVRAMByte(bios, src_offset));
+      WriteVRAMByte(bios, dest_offset + 1, ReadVRAMByte(bios, src_offset + 1));
+    }
+  }
+
+  // Clear the top / bottom lines newly scrolled in.
+  TextPosition clear_top_left = {
+      .col = top_left.col,
+  };
+  TextPosition clear_bottom_right = {
+      .col = bottom_right.col,
+  };
+  if (scroll_up) {
+    clear_top_left.row = bottom_right.row - lines + 1;
+    clear_bottom_right.row = bottom_right.row;
+  } else {
+    clear_top_left.row = top_left.row;
+    clear_bottom_right.row = top_left.row + lines - 1;
+  }
+  return TextClearRegion(bios, page, clear_top_left, clear_bottom_right, attr);
+}
+
+// Text mode - scroll up a region.
+bool TextScrollUp(
+    struct BIOSState* bios, uint8_t page, TextPosition top_left,
+    TextPosition bottom_right, uint8_t lines, uint8_t attr) {
+  return TextScrollCommon(
+      bios, page, top_left, bottom_right, lines, attr, true);
+}
+
+// Text mode - scroll down a region.
+bool TextScrollDown(
+    struct BIOSState* bios, uint8_t page, TextPosition top_left,
+    TextPosition bottom_right, uint8_t lines, uint8_t attr) {
+  return TextScrollCommon(
+      bios, page, top_left, bottom_right, lines, attr, false);
+}
+
 YAX86_PRIVATE void InitVideo(BIOSState* bios) {
   // Set initial video mode in BDA equipment list word, bits 4-5.
   //   00b - EGA, VGA, or other (use other BIOS data area locations)
@@ -383,13 +510,10 @@ YAX86_PRIVATE void InitVideo(BIOSState* bios) {
 YAX86_PRIVATE void WriteCharMDA(
     BIOSState* bios, const VideoModeMetadata* metadata, uint8_t page,
     TextPosition char_pos) {
-  if (char_pos.col >= metadata->columns || char_pos.row >= metadata->rows) {
+  uint32_t char_address = TextGetCharOffset(bios, page, char_pos);
+  if (char_address == kInvalidMemoryOffset) {
     return;
   }
-
-  uint32_t char_address = (page * metadata->rows * metadata->columns +
-                           char_pos.row * metadata->columns + char_pos.col) *
-                          2;
   uint8_t char_value = ReadVRAMByte(bios, char_address);
   uint8_t attr_value = ReadVRAMByte(bios, char_address + 1);
   const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
