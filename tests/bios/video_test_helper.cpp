@@ -1,7 +1,9 @@
 #include "video_test_helper.h"
 
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 
 using namespace std;
 
@@ -56,7 +58,7 @@ VideoTestHelper::VideoTestHelper() {
   InitBIOS(&bios_state_, &config_);
 }
 
-bool VideoTestHelper::RenderToPPM(const string& file_path) {
+bool VideoTestHelper::RenderToFile(const string& file_prefix) {
   const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(&bios_state_);
   if (!metadata) {
     return false;
@@ -65,6 +67,7 @@ bool VideoTestHelper::RenderToPPM(const string& file_path) {
     return false;
   }
 
+  const string file_path = file_prefix + ".ppm";
   ofstream file(file_path);
   if (!file) {
     return false;
@@ -85,4 +88,51 @@ bool VideoTestHelper::RenderToPPM(const string& file_path) {
   }
   file.close();
   return true;
+}
+
+bool VideoTestHelper::CheckGolden(const string& file_name_prefix) {
+  const string rendered_file_path = file_name_prefix + ".ppm";
+  ifstream rendered_file(rendered_file_path);
+  if (!rendered_file) {
+    cerr << "Rendered file not found: " << rendered_file_path << endl;
+    return false;
+  }
+
+  const string golden_file_path =
+      GetGoldenFilePath(file_name_prefix + "-golden.ppm");
+  ifstream golden_file(golden_file_path);
+  if (!golden_file) {
+    cerr << "Golden file not found: " << golden_file_path << endl
+         << "Copying rendered file to golden file." << endl;
+    // Copy the rendered file to the golden file.
+    ofstream golden_file(golden_file_path);
+    if (!golden_file) {
+      cerr << "Failed to copy rendered file to golden file." << endl;
+      return false;
+    }
+    golden_file << rendered_file.rdbuf();
+    golden_file.close();
+    return true;
+  }
+
+  string golden_line, rendered_line;
+  while (getline(golden_file, golden_line) &&
+         getline(rendered_file, rendered_line)) {
+    if (golden_line != rendered_line) {
+      cerr << "Mismatch in PPM files" << endl
+           << "Rendered file: " << rendered_file_path << endl
+           << "Golden file: " << golden_file_path << endl;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+std::string VideoTestHelper::GetGoldenFilePath(
+    const std::string& file_name) const {
+  const filesystem::path current_file_path = __FILE__;
+  filesystem::path file_path =
+      current_file_path.parent_path() / "testdata" / file_name;
+  return file_path.string();
 }

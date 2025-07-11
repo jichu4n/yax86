@@ -10,7 +10,7 @@ class MDATest : public ::testing::Test {};
 TEST_F(MDATest, RenderBlankScreen) {
   VideoTestHelper helper;
   SwitchVideoMode(&helper.bios_state_, kVideoTextModeMDA07);
-  EXPECT_TRUE(helper.RenderToPPM("mda_test_blank.ppm"));
+  EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_blank"));
 }
 
 TEST_F(MDATest, RenderHelloWorld) {
@@ -24,7 +24,7 @@ TEST_F(MDATest, RenderHelloWorld) {
     WriteMemoryByte(&helper.bios_state_, address, text[i]);
     WriteMemoryByte(&helper.bios_state_, address + 1, 0x07);
   }
-  EXPECT_TRUE(helper.RenderToPPM("mda_test_hello.ppm"));
+  EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_hello"));
 }
 
 TEST_F(MDATest, RenderAllASCII) {
@@ -37,7 +37,7 @@ TEST_F(MDATest, RenderAllASCII) {
     WriteMemoryByte(&helper.bios_state_, address, i);
     WriteMemoryByte(&helper.bios_state_, address + 1, 0x07);
   }
-  EXPECT_TRUE(helper.RenderToPPM("mda_test_all_ascii.ppm"));
+  EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_all_ascii"));
 }
 
 TEST_F(MDATest, RenderAttributes) {
@@ -51,14 +51,14 @@ TEST_F(MDATest, RenderAttributes) {
     WriteMemoryByte(&helper.bios_state_, address, text[i]);
     WriteMemoryByte(&helper.bios_state_, address + 1, 0x70);  // Reverse video
   }
-  EXPECT_TRUE(helper.RenderToPPM("mda_test_reverse.ppm"));
+  EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_reverse"));
 
   // Now underline the text.
   for (size_t i = 0, address = metadata->vram_address; i < text.size();
        ++i, address += 2) {
     WriteMemoryByte(&helper.bios_state_, address + 1, 0x01);  // Underline
   }
-  EXPECT_TRUE(helper.RenderToPPM("mda_test_underline.ppm"));
+  EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_underline"));
 
   // Now set intense foreground color.
   for (size_t i = 0, address = metadata->vram_address; i < text.size();
@@ -66,7 +66,7 @@ TEST_F(MDATest, RenderAttributes) {
     WriteMemoryByte(
         &helper.bios_state_, address + 1, 0x08);  // Intense foreground
   }
-  EXPECT_TRUE(helper.RenderToPPM("mda_test_intense.ppm"));
+  EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_intense"));
 
   // Test intense + underline.
   for (size_t i = 0, address = metadata->vram_address; i < text.size();
@@ -74,5 +74,5 @@ TEST_F(MDATest, RenderAttributes) {
     WriteMemoryByte(
         &helper.bios_state_, address + 1, 0x09);  // Intense + underline
   }
-  EXPECT_TRUE(helper.RenderToPPM("mda_test_intense_underline.ppm"));
+  EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_intense_underline"));
 }

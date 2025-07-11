@@ -17,4 +17,11 @@
 #define YAX86_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Macro to mark a function or parameter as unused.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_UNUSED __attribute__((unused))
+#else
+#define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 #endif  // YAX86_UTIL_COMMON_H

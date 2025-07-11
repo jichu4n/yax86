@@ -341,7 +341,7 @@ TextPosition TextGetCursorPositionForPage(
 
 // Text mode - set cursor position for a specific page.
 bool TextSetCursorPositionForPage(
-    struct BIOSState* bios, TextPosition position, uint8_t page) {
+    struct BIOSState* bios, uint8_t page, TextPosition position) {
   const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
   if (!metadata) {
     return false;
@@ -473,6 +473,24 @@ bool TextScrollDown(
     TextPosition bottom_right, uint8_t lines, uint8_t attr) {
   return TextScrollCommon(
       bios, page, top_left, bottom_right, lines, attr, false);
+}
+
+// Text mode - scroll up entire page.
+extern bool TextScrollUpPage(
+    struct BIOSState* bios, uint8_t page, uint8_t lines, uint8_t attr) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
+  if (!metadata) {
+    return false;
+  }
+  TextPosition top_left = {
+      .col = 0,
+      .row = 0,
+  };
+  TextPosition bottom_right = {
+      .col = metadata->columns - 1,
+      .row = metadata->rows - 1,
+  };
+  return TextScrollUp(bios, page, top_left, bottom_right, lines, attr);
 }
 
 YAX86_PRIVATE void InitVideo(BIOSState* bios) {

@@ -220,7 +220,7 @@ extern TextPosition TextGetCursorPositionForPage(
     struct BIOSState* bios, uint8_t page);
 // Text mode - set cursor position for a specific page.
 extern bool TextSetCursorPositionForPage(
-    struct BIOSState* bios, TextPosition position, uint8_t page);
+    struct BIOSState* bios, uint8_t page, TextPosition position);
 // Text mode - get cursor position in current page.
 extern TextPosition TextGetCursorPosition(struct BIOSState* bios);
 // Text mode - set cursor start and end rows.
@@ -237,6 +237,9 @@ extern bool TextScrollUp(
 extern bool TextScrollDown(
     struct BIOSState* bios, uint8_t page, TextPosition top_left,
     TextPosition bottom_right, uint8_t lines, uint8_t attr);
+// Text mode - scroll up entire page.
+extern bool TextScrollUpPage(
+    struct BIOSState* bios, uint8_t page, uint8_t lines, uint8_t attr);
 
 // Render the current page in the emulated video RAM to the real display.
 // Invokes the write_pixel callback to do the actual pixel rendering.

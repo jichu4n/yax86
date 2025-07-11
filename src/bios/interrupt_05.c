@@ -10,8 +10,7 @@
 //   - 0x01: Print screen in progress
 //   - 0xFF: Print screen failed
 YAX86_PRIVATE ExecuteStatus HandleBIOSInterrupt05PrintScreen(
-    BIOSState* bios, __attribute__((unused)) CPUState* cpu,
-    __attribute__((unused)) uint8_t ah) {
+    BIOSState* bios, YAX86_UNUSED CPUState* cpu, YAX86_UNUSED uint8_t ah) {
   WriteMemoryByte(bios, 0x0500, 0x00);
   return kExecuteSuccess;
 }
