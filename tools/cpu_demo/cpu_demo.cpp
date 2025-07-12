@@ -141,8 +141,7 @@ int main(int argc, char* argv[]) {
 
   // Initialize CPU state
   CPUState cpu;
-  InitCPU(&cpu);
-  cpu.config = &config;
+  InitCPU(&cpu, &config);
 
   // Load the assembly program into memory
   auto machine_code = Assemble(argv[1]);

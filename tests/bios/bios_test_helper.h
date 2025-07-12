@@ -5,15 +5,16 @@
 
 #include "bios.h"
 
-class VideoTestHelper {
+class BIOSTestHelper {
  public:
   static constexpr size_t kMemorySizeKB = 16;
   static constexpr size_t kVRAMSizeKB = 16;
   static constexpr size_t kFramebufferSizeKB = 256;
 
-  BIOSState bios_state_;
+  CPUState cpu_;
+  BIOSState bios_;
 
-  VideoTestHelper();
+  BIOSTestHelper();
 
   // Render the current framebuffer to a PPM file.
   bool RenderToFile(const std::string& file_name_prefix);
@@ -26,7 +27,8 @@ class VideoTestHelper {
   }
 
  private:
-  BIOSConfig config_ = {0};
+  CPUConfig cpu_config_ = {0};
+  BIOSConfig bios_config_ = {0};
   uint8_t memory_[kMemorySizeKB * 1024] = {0};
   uint8_t vram_[kVRAMSizeKB * 1024] = {0};
   RGB framebuffer_[kFramebufferSizeKB * 1024] = {0};

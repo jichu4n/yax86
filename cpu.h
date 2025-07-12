@@ -209,7 +209,7 @@ typedef struct CPUState {
 } CPUState;
 
 // Initialize CPU state.
-void InitCPU(CPUState* cpu);
+void InitCPU(CPUState* cpu, CPUConfig* config);
 
 // Get the value of a CPU flag.
 static inline bool GetFlag(const CPUState* cpu, Flag flag) {
@@ -5548,11 +5548,12 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
 // CPU state
 // ============================================================================
 
-void InitCPU(CPUState* cpu) {
+void InitCPU(CPUState* cpu, CPUConfig* config) {
   // Zero out the CPU state
   const CPUState zero_cpu_state = {0};
   *cpu = zero_cpu_state;
   cpu->flags = kInitialFlags;
+  cpu->config = config;
 }
 
 // ============================================================================

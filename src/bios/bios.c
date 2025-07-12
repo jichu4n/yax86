@@ -26,3 +26,28 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config) {
 
   // TODO: Set BDA values.
 }
+
+static inline uint8_t CPUReadMemoryByte(CPUState* cpu, uint32_t address) {
+  return ReadMemoryByte((BIOSState*)cpu->config->context, address);
+}
+
+static inline void CPUWriteMemoryByte(
+    CPUState* cpu, uint32_t address, uint8_t value) {
+  WriteMemoryByte((BIOSState*)cpu->config->context, address, value);
+}
+
+static inline ExecuteStatus CPUHandleBIOSInterrupt(
+    CPUState* cpu, uint8_t interrupt_number) {
+  return HandleBIOSInterrupt(
+      (BIOSState*)cpu->config->context, cpu, interrupt_number);
+}
+
+// Register BIOS handlers on the CPU. This should be invoked after InitBIOS to
+// configure the CPU to invoke the BIOS for memory access and interrupt
+// handling.
+void RegisterBIOSHandlers(BIOSState* bios, CPUState* cpu) {
+  cpu->config->context = bios;
+  cpu->config->read_memory_byte = CPUReadMemoryByte;
+  cpu->config->write_memory_byte = CPUWriteMemoryByte;
+  cpu->config->handle_interrupt = CPUHandleBIOSInterrupt;
+}

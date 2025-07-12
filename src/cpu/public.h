@@ -193,7 +193,7 @@ typedef struct CPUState {
 } CPUState;
 
 // Initialize CPU state.
-void InitCPU(CPUState* cpu);
+void InitCPU(CPUState* cpu, CPUConfig* config);
 
 // Get the value of a CPU flag.
 static inline bool GetFlag(const CPUState* cpu, Flag flag) {

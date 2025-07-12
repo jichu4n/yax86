@@ -333,6 +333,13 @@ void InitBIOS(BIOSState* bios, BIOSConfig* config);
 ExecuteStatus HandleBIOSInterrupt(
     BIOSState* bios, CPUState* cpu, uint8_t interrupt_number);
 
+// Register BIOS handlers on the CPU. This should be invoked after InitBIOS to
+// configure the CPU to invoke the BIOS for memory access and interrupt
+// handling.
+//
+// This will overwrite the CPUConfig context and handlers.
+void RegisterBIOSHandlers(BIOSState* bios, CPUState* cpu);
+
 // ============================================================================
 // BIOS Data Area (BDA)
 // ============================================================================

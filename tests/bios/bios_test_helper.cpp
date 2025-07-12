@@ -1,4 +1,4 @@
-#include "video_test_helper.h"
+#include "bios_test_helper.h"
 
 #include <filesystem>
 #include <fstream>
@@ -7,47 +7,51 @@
 
 using namespace std;
 
-VideoTestHelper::VideoTestHelper() {
-  config_.context = this;
-  config_.memory_size_kb = 16;
-  config_.mda_config = kDefaultMDAConfig;
-  config_.read_memory_byte = [](BIOSState* bios, uint32_t address) -> uint8_t {
-    VideoTestHelper* helper =
-        static_cast<VideoTestHelper*>(bios->config->context);
+BIOSTestHelper::BIOSTestHelper() {
+  InitCPU(&cpu_, &cpu_config_);
+
+  bios_config_.context = this;
+  bios_config_.memory_size_kb = 16;
+  bios_config_.mda_config = kDefaultMDAConfig;
+  bios_config_.read_memory_byte = [](BIOSState* bios,
+                                     uint32_t address) -> uint8_t {
+    BIOSTestHelper* helper =
+        static_cast<BIOSTestHelper*>(bios->config->context);
     if (address >= sizeof(memory_)) {
       return 0xFF;
     }
     return helper->memory_[address];
   };
-  config_.write_memory_byte = [](BIOSState* bios, uint32_t address,
-                                 uint8_t value) {
-    VideoTestHelper* helper =
-        static_cast<VideoTestHelper*>(bios->config->context);
+  bios_config_.write_memory_byte = [](BIOSState* bios, uint32_t address,
+                                      uint8_t value) {
+    BIOSTestHelper* helper =
+        static_cast<BIOSTestHelper*>(bios->config->context);
     if (address >= sizeof(memory_)) {
       return;
     }
     helper->memory_[address] = value;
   };
-  config_.read_vram_byte = [](BIOSState* bios, uint32_t address) -> uint8_t {
-    VideoTestHelper* helper =
-        static_cast<VideoTestHelper*>(bios->config->context);
+  bios_config_.read_vram_byte = [](BIOSState* bios,
+                                   uint32_t address) -> uint8_t {
+    BIOSTestHelper* helper =
+        static_cast<BIOSTestHelper*>(bios->config->context);
     if (address >= sizeof(vram_)) {
       return 0xFF;
     }
     return helper->vram_[address];
   };
-  config_.write_vram_byte = [](BIOSState* bios, uint32_t address,
-                               uint8_t value) {
-    VideoTestHelper* helper =
-        static_cast<VideoTestHelper*>(bios->config->context);
+  bios_config_.write_vram_byte = [](BIOSState* bios, uint32_t address,
+                                    uint8_t value) {
+    BIOSTestHelper* helper =
+        static_cast<BIOSTestHelper*>(bios->config->context);
     if (address >= sizeof(vram_)) {
       return;
     }
     helper->vram_[address] = value;
   };
-  config_.write_pixel = [](BIOSState* bios, Position position, RGB rgb) {
-    VideoTestHelper* helper =
-        static_cast<VideoTestHelper*>(bios->config->context);
+  bios_config_.write_pixel = [](BIOSState* bios, Position position, RGB rgb) {
+    BIOSTestHelper* helper =
+        static_cast<BIOSTestHelper*>(bios->config->context);
     const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(bios);
     size_t index = position.y * metadata->width + position.x;
     if (index >= sizeof(framebuffer_) / sizeof(RGB)) {
@@ -55,15 +59,16 @@ VideoTestHelper::VideoTestHelper() {
     }
     helper->framebuffer_[index] = rgb;
   };
-  InitBIOS(&bios_state_, &config_);
+  InitBIOS(&bios_, &bios_config_);
+  RegisterBIOSHandlers(&bios_, &cpu_);
 }
 
-bool VideoTestHelper::RenderToFile(const string& file_prefix) {
-  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(&bios_state_);
+bool BIOSTestHelper::RenderToFile(const string& file_prefix) {
+  const VideoModeMetadata* metadata = GetCurrentVideoModeMetadata(&bios_);
   if (!metadata) {
     return false;
   }
-  if (!RenderCurrentVideoPage(&bios_state_)) {
+  if (!RenderCurrentVideoPage(&bios_)) {
     return false;
   }
 
@@ -90,7 +95,7 @@ bool VideoTestHelper::RenderToFile(const string& file_prefix) {
   return true;
 }
 
-bool VideoTestHelper::CheckGolden(const string& file_name_prefix) {
+bool BIOSTestHelper::CheckGolden(const string& file_name_prefix) {
   const string rendered_file_path = file_name_prefix + ".ppm";
   ifstream rendered_file(rendered_file_path);
   if (!rendered_file) {
@@ -129,7 +134,7 @@ bool VideoTestHelper::CheckGolden(const string& file_name_prefix) {
   return true;
 }
 
-std::string VideoTestHelper::GetGoldenFilePath(
+std::string BIOSTestHelper::GetGoldenFilePath(
     const std::string& file_name) const {
   const filesystem::path current_file_path = __FILE__;
   filesystem::path file_path =
