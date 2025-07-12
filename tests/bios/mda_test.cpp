@@ -64,7 +64,7 @@ TEST_F(MDATest, RenderAttributes) {
   for (size_t i = 0, address = metadata->vram_address; i < text.size();
        ++i, address += 2) {
     WriteMemoryByte(
-        &helper.bios_state_, address + 1, 0x08);  // Intense foreground
+        &helper.bios_state_, address + 1, 0x0F);  // Intense foreground
   }
   EXPECT_TRUE(helper.RenderToFileAndCheckGolden("mda_test_intense"));
 
