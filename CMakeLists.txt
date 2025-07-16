@@ -32,9 +32,26 @@ generate_header_bundle("cpu")
 generate_header_bundle("platform")
 
 # =============================================================================
+# BIOS ROM data file generation
+# =============================================================================
+function(generate_bios_rom_data_file rom_file data_file)
+    set(generate_bios_rom_data_file "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-bios-rom-data-file.js")
+    add_custom_command(
+        OUTPUT ${data_file}
+        COMMAND ${generate_bios_rom_data_file} ARGS ${rom_file} ${data_file}
+        DEPENDS ${generate_bios_rom_data_file} ${rom_file}
+        COMMENT "Generating BIOS ROM data file ${rom_file} => ${data_file}"
+    )
+endfunction()
+
+set(bios_rom_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/GLABIOS_0.2.5_8T.ROM")
+set(bios_rom_data_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/bios_rom_data.c")
+generate_bios_rom_data_file("${bios_rom_file}" "${bios_rom_data_file}")
+
+# =============================================================================
 # Main library
 # =============================================================================
-add_library(yax86 STATIC all.c ${ALL_HEADER_BUNDLES})
+add_library(yax86 STATIC all.c ${ALL_HEADER_BUNDLES} ${bios_rom_data_file})
 
 # =============================================================================
 # SDL

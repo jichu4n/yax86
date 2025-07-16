@@ -94,7 +94,7 @@ async function generateHeaderBundle({
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args.length < 1) {
-    console.error('Usage: build-header-bundle.js bundle.json');
+    console.error('Usage: generate-header-bundle.js bundle.json');
     process.exit(1);
   }
   const moduleName = args[0];

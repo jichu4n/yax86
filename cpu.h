@@ -338,9 +338,11 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 
 #endif  // YAX86_CPU_PUBLIC_H
 
+
 // ==============================================================================
 // src/cpu/public.h end
 // ==============================================================================
+
 
 #ifdef YAX86_IMPLEMENTATION
 
@@ -376,6 +378,7 @@ ExecuteStatus RunMainLoop(CPUState* cpu);
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 #endif  // YAX86_UTIL_COMMON_H
+
 
 // ==============================================================================
 // src/util/common.h end
@@ -534,6 +537,7 @@ typedef struct OpcodeMetadata {
 } OpcodeMetadata;
 
 #endif  // YAX86_CPU_TYPES_H
+
 
 // ==============================================================================
 // src/cpu/types.h end
@@ -706,6 +710,7 @@ extern OperandValue ReadImmediate(const InstructionContext* ctx);
 
 #endif  // YAX86_CPU_OPERANDS_H
 
+
 // ==============================================================================
 // src/cpu/operands.h end
 // ==============================================================================
@@ -716,8 +721,9 @@ extern OperandValue ReadImmediate(const InstructionContext* ctx);
 
 #line 1 "./src/cpu/operands.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../util/common.h"
 #include "operands.h"
+
+#include "../util/common.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Helper functions to construct OperandValue.
@@ -1178,6 +1184,7 @@ YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
   Width width = ctx->metadata->width;
   return kReadImmediateValueFn[width](ctx->instruction);
 }
+
 
 // ==============================================================================
 // src/cpu/operands.c end
@@ -1647,6 +1654,7 @@ extern ExecuteStatus ExecuteGroup5Instruction(const InstructionContext* ctx);
 
 #endif  // YAX86_CPU_INSTRUCTIONS_H
 
+
 // ==============================================================================
 // src/cpu/instructions.h end
 // ==============================================================================
@@ -1714,6 +1722,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
   (void)ctx;
   return kExecuteSuccess;
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_helpers.c end
@@ -1898,6 +1907,7 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_mov.c end
 // ==============================================================================
@@ -1966,6 +1976,7 @@ YAX86_PRIVATE ExecuteStatus
 ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kDS);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_lea.c end
@@ -2124,6 +2135,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteIncRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   return ExecuteInc(ctx, &dest);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_add.c end
@@ -2296,6 +2308,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
   return ExecuteDec(ctx, &dest);
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_sub.c end
 // ==============================================================================
@@ -2330,6 +2343,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteCwd(const InstructionContext* ctx) {
       (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
   return kExecuteSuccess;
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_sign_ext.c end
@@ -2388,6 +2402,7 @@ ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteCmp(ctx, &dest, &src_value);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_cmp.c end
@@ -2558,6 +2573,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, &dest, &src_value);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_bool.c end
@@ -2843,6 +2859,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
   return kExecuteHalt;
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_ctrl_flow.c end
 // ==============================================================================
@@ -2966,6 +2983,7 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_stack.c end
 // ==============================================================================
@@ -3013,6 +3031,7 @@ ExecuteComplementCarryFlag(const InstructionContext* ctx) {
   SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
   return kExecuteSuccess;
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_flags.c end
@@ -3114,6 +3133,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteOutImmediate(const InstructionContext* ctx) {
 YAX86_PRIVATE ExecuteStatus ExecuteOutDX(const InstructionContext* ctx) {
   return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_io.c end
@@ -3332,6 +3352,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteCmps(const InstructionContext* ctx) {
       ctx, ExecuteCmpsIteration);
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_string.c end
 // ==============================================================================
@@ -3464,6 +3485,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_bcd_ascii.c end
 // ==============================================================================
@@ -3523,6 +3545,7 @@ ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   // Sign-extend the immediate value to the destination width.
   return fn(ctx, &dest, &src_value_extended);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_group_1.c end
@@ -3754,6 +3777,7 @@ ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
   return fn(ctx, &op, ctx->cpu->registers[kCX] & 0xFF);
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_group_2.c end
 // ==============================================================================
@@ -3954,6 +3978,7 @@ ExecuteGroup3Instruction(const InstructionContext* ctx) {
   return fn(ctx, &dest);
 }
 
+
 // ==============================================================================
 // src/cpu/instructions_group_3.c end
 // ==============================================================================
@@ -3992,6 +4017,7 @@ ExecuteGroup4Instruction(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_group_4.c end
@@ -4088,6 +4114,7 @@ ExecuteGroup5Instruction(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
+
 
 // ==============================================================================
 // src/cpu/instructions_group_5.c end
@@ -5499,6 +5526,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .handler = ExecuteGroup5Instruction},
 };
 
+
 // ==============================================================================
 // src/cpu/opcode_table.c end
 // ==============================================================================
@@ -5771,9 +5799,11 @@ ExecuteStatus RunMainLoop(CPUState* cpu) {
   }
 }
 
+
 // ==============================================================================
 // src/cpu/cpu.c end
 // ==============================================================================
+
 
 #endif  // YAX86_IMPLEMENTATION
 
@@ -5782,3 +5812,4 @@ ExecuteStatus RunMainLoop(CPUState* cpu) {
 #endif  // __cplusplus
 
 #endif  // YAX86_CPU_BUNDLE_H
+
