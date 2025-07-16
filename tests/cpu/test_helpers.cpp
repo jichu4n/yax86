@@ -121,7 +121,7 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
       memory_(make_unique<uint8_t[]>(memory_size)),
       context_{this, memory_.get(), memory_size},
       config_{0} {
-  InitCPU(&cpu_, &config_);
+  CPUInit(&cpu_, &config_);
 
   config_.context = &context_;
   config_.read_memory_byte = [](CPUState* cpu, uint32_t address) {

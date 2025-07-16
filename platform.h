@@ -140,9 +140,18 @@ enum {
   // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
   // 0x9FFFF (640KB).
   kMemoryMapEntryConventional = 0,
+  // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
+  kMemoryMapEntryBIOSROM = 1,
 
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,
+
+  // Maximum size of physical memory in bytes.
+  kMaxPhysicalMemorySize = 640 * 1024,
+  // Minimum size of physical memory in bytes.
+  kMinPhysicalMemorySize = 64 * 1024,
+  // Maximum size of BIOS ROM in bytes.
+  kMaxBIOSROMSize = 64 * 1024,
 };
 
 // A memory map entry for a region in logical address space. Memory regions
@@ -208,17 +217,17 @@ void WriteMemoryWord(
 // ============================================================================
 
 // Type ID of an I/O port map entry.
-typedef uint8_t IOPortMapEntryType;
+typedef uint8_t PortMapEntryType;
 
 enum {
   // Maximum number of I/O port mapping entries.
-  kMaxIOPortMapEntries = 16,
+  kMaxPortMapEntries = 16,
 };
 
 // An I/O port map entry. Entries should not overlap.
-typedef struct IOPortMapEntry {
-  // The I/O port map entry type, such as kIOPortMapEntryConventional.
-  IOPortMapEntryType entry_type;
+typedef struct PortMapEntry {
+  // The I/O port map entry type, such as kPortMapEntryConventional.
+  PortMapEntryType entry_type;
   // Start of the I/O port range.
   uint16_t start;
   // Inclusive end of the I/O port range.
@@ -228,36 +237,36 @@ typedef struct IOPortMapEntry {
   // Callback to write a byte an I/O port within the range.
   void (*write_byte)(
       struct PlatformState* platform, uint16_t port, uint8_t value);
-} IOPortMapEntry;
+} PortMapEntry;
 
 // Register an I/O port map entry in the platform state. Returns true if the
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-bool RegisterIOPortMapEntry(
-    struct PlatformState* platform, const IOPortMapEntry* entry);
+bool RegisterPortMapEntry(
+    struct PlatformState* platform, const PortMapEntry* entry);
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-IOPortMapEntry* GetIOPortMapEntryForPort(
+PortMapEntry* GetPortMapEntryForPort(
     struct PlatformState* platform, uint16_t port);
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-IOPortMapEntry* GetIOPortMapEntryByType(
-    struct PlatformState* platform, IOPortMapEntryType entry_type);
+PortMapEntry* GetPortMapEntryByType(
+    struct PlatformState* platform, PortMapEntryType entry_type);
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-uint8_t ReadIOPortByte(struct PlatformState* platform, uint16_t port);
+uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
 // Read a word from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback. This reads two consecutive bytes from the port.
-uint16_t ReadIOPortWord(struct PlatformState* platform, uint16_t port);
+uint16_t ReadPortWord(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-void WriteIOPortByte(
+void WritePortByte(
     struct PlatformState* platform, uint16_t port, uint8_t value);
 // Write a word to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback. This writes two consecutive bytes to the port.
-void WriteIOPortWord(
+void WritePortWord(
     struct PlatformState* platform, uint16_t port, uint16_t value);
 
 // ============================================================================
@@ -269,8 +278,8 @@ typedef struct PlatformConfig {
   // Custom data passed through to callbacks.
   void* context;
 
-  // Physical memory size in KB (1024 bytes). Must be between 64 and 640.
-  uint16_t physical_memory_size_kb;
+  // Physical memory size in bytes. Must be between 64K and 640K.
+  uint32_t physical_memory_size;
 
   // Callback to read a byte from physical memory.
   //
@@ -293,20 +302,42 @@ typedef struct PlatformConfig {
   // to the real-life 8088.
   void (*write_physical_memory_byte)(
       struct PlatformState* platform, uint32_t address, uint8_t value);
+
+  // BIOS ROM size in bytes. Must be between 0 and 64KB.
+  uint32_t bios_rom_size;
+  // Callback to read a byte from BIOS ROM. Address is relative to the
+  // start of the BIOS ROM memory map entry, 0xF0000.
+  uint8_t (*read_bios_rom_byte)(
+      struct PlatformState* platform, uint32_t address);
 } PlatformConfig;
 
 STATIC_VECTOR_TYPE(MemoryMap, MemoryMapEntry, kMaxMemoryMapEntries)
-STATIC_VECTOR_TYPE(IOPortMap, IOPortMapEntry, kMaxIOPortMapEntries)
+STATIC_VECTOR_TYPE(PortMap, PortMapEntry, kMaxPortMapEntries)
 
 // State of the platform.
 typedef struct PlatformState {
-  // Pointer to caller-provided runtime configuration
+  // Pointer to caller-provided runtime configuration.
   PlatformConfig* config;
+
+  // CPU runtime configuration.
+  CPUConfig cpu_config;
+  // CPU state.
+  CPUState cpu;
+
   // Memory map.
   MemoryMap memory_map;
   // I/O port map.
-  IOPortMap io_port_map;
+  PortMap io_port_map;
 } PlatformState;
+
+// Initialize the platform state with the provided configuration. Returns true
+// if the platform state was successfully initialized, or false if:
+//   - The physical memory size is not between 64K and 640K.
+//   - The BIOS ROM size is not between 0 and 64K.
+bool PlatformInit(PlatformState* platform, PlatformConfig* config);
+
+// Boot the virtual machine and start execution.
+ExecuteStatus PlatformBoot(PlatformState* platform);
 
 #endif  // YAX86_PLATFORM_PUBLIC_H
 
@@ -354,6 +385,264 @@ typedef struct PlatformState {
 
 // ==============================================================================
 // src/util/common.h end
+// ==============================================================================
+
+// ==============================================================================
+// src/platform/platform.c start
+// ==============================================================================
+
+#line 1 "./src/platform/platform.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "../util/common.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// Register a memory map entry in the platform state. Returns true if the entry
+// was successfully registered, or false if:
+//   - There already exists a memory map entry with the same type.
+//   - The new entry's memory region overlaps with an existing entry.
+//   - The number of memory map entries would exceed kMaxMemoryMapEntries.
+bool RegisterMemoryMapEntry(
+    PlatformState* platform, const MemoryMapEntry* entry) {
+  if (MemoryMapLength(&platform->memory_map) >= kMaxMemoryMapEntries) {
+    return false;
+  }
+  for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
+    MemoryMapEntry* existing_entry = MemoryMapGet(&platform->memory_map, i);
+    if (existing_entry->entry_type == entry->entry_type) {
+      return false;
+    }
+    if (!(existing_entry->start > entry->end ||
+          entry->start > existing_entry->end)) {
+      return false;
+    }
+  }
+  return MemoryMapAppend(&platform->memory_map, entry);
+}
+
+// Look up the memory region corresponding to an address. Returns NULL if the
+// address is not mapped to a known memory region.
+MemoryMapEntry* GetMemoryMapEntryForAddress(
+    PlatformState* platform, uint32_t address) {
+  // TODO: Use a more efficient data structure for lookups, such as a sorted
+  // array with binary search.
+  for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
+    MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
+    if (address >= entry->start && address <= entry->end) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+// Look up a memory region by type. Returns NULL if no region found with the
+// specified type.
+MemoryMapEntry* GetMemoryMapEntryByType(
+    PlatformState* platform, uint8_t entry_type) {
+  for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
+    MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
+    if (entry->entry_type == entry_type) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+// Read a byte from a logical memory address.
+uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
+  if (!entry || !entry->read_byte) {
+    return 0xFF;
+  }
+  return entry->read_byte(platform, address - entry->start);
+}
+
+// Read a word from a logical memory address.
+uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
+  uint8_t low_byte = ReadMemoryByte(platform, address);
+  uint8_t high_byte = ReadMemoryByte(platform, address + 1);
+  return (high_byte << 8) | low_byte;
+}
+
+// Write a byte to a logical memory address.
+void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
+  MemoryMapEntry* region = GetMemoryMapEntryForAddress(platform, address);
+  if (!region || !region->write_byte) {
+    return;
+  }
+  region->write_byte(platform, address - region->start, value);
+}
+
+// Write a word to a logical memory address.
+void WriteMemoryWord(
+    PlatformState* platform, uint32_t address, uint16_t value) {
+  WriteMemoryByte(platform, address, value & 0xFF);
+  WriteMemoryByte(platform, address + 1, (value >> 8) & 0xFF);
+}
+
+// Register an I/O port map entry in the platform state. Returns true if the
+// entry was successfully registered, or false if:
+//   - There already exists an I/O port map entry with the same type.
+//   - The new entry's I/O port range overlaps with an existing entry.
+bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
+  if (PortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
+    return false;
+  }
+  for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
+    PortMapEntry* existing_entry = PortMapGet(&platform->io_port_map, i);
+    if (existing_entry->entry_type == entry->entry_type) {
+      return false;
+    }
+    if (!(existing_entry->start > entry->end ||
+          entry->start > existing_entry->end)) {
+      return false;
+    }
+  }
+  return PortMapAppend(&platform->io_port_map, entry);
+}
+
+// Look up the I/O port map entry corresponding to a port. Returns NULL if the
+// port is not mapped to a known I/O port map entry.
+PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
+  for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
+    PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
+    if (port >= entry->start && port <= entry->end) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+// Look up an I/O port map entry by type. Returns NULL if no entry found with
+// the specified type.
+PortMapEntry* GetPortMapEntryByType(
+    PlatformState* platform, PortMapEntryType entry_type) {
+  for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
+    PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
+    if (entry->entry_type == entry_type) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+// Read a byte from an I/O port by invoking the corresponding I/O port map
+// entry's read_byte callback.
+uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
+  PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
+  if (!entry || !entry->read_byte) {
+    return 0xFF;
+  }
+  return entry->read_byte(platform, port);
+}
+
+// Read a word from an I/O port by invoking the corresponding I/O port map
+// entry's read_byte callback. This reads two consecutive bytes from the port.
+uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
+  uint8_t low_byte = ReadPortByte(platform, port);
+  uint8_t high_byte = ReadPortByte(platform, port + 1);
+  return (high_byte << 8) | low_byte;
+}
+
+// Write a byte to an I/O port by invoking the corresponding I/O port map
+// entry's write_byte callback.
+void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
+  PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
+  if (!entry || !entry->write_byte) {
+    return;
+  }
+  entry->write_byte(platform, port, value);
+}
+
+// Write a word to an I/O port by invoking the corresponding I/O port map
+// entry's write_byte callback. This writes two consecutive bytes to the port.
+void WritePortWord(PlatformState* platform, uint16_t port, uint16_t value) {
+  WritePortByte(platform, port, value & 0xFF);
+  WritePortByte(platform, port + 1, (value >> 8) & 0xFF);
+}
+
+static uint8_t CPUReadMemoryByte(CPUState* cpu, uint32_t address) {
+  return ReadMemoryByte((PlatformState*)cpu->config->context, address);
+}
+
+static void CPUWriteMemoryByte(CPUState* cpu, uint32_t address, uint8_t value) {
+  WriteMemoryByte((PlatformState*)cpu->config->context, address, value);
+}
+
+static uint8_t CPUReadPortByte(CPUState* cpu, uint16_t port) {
+  return ReadPortByte((PlatformState*)cpu->config->context, port);
+}
+
+static void CPUWritePortByte(CPUState* cpu, uint16_t port, uint8_t value) {
+  WritePortByte((PlatformState*)cpu->config->context, port, value);
+}
+
+static const CPUConfig kEmptyCPUConfig = {0};
+
+// Initialize the platform state with the provided configuration. Returns true
+// if the platform state was successfully initialized, or false if:
+//   - The physical memory size is not between 64K and 640K.
+//   - The BIOS ROM size is not between 0 and 64K.
+bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
+  if (config->physical_memory_size < kMinPhysicalMemorySize ||
+      config->physical_memory_size > kMaxPhysicalMemorySize) {
+    return false;
+  }
+  if (config->bios_rom_size > kMaxBIOSROMSize) {
+    return false;
+  }
+
+  platform->config = config;
+
+  // Set up CPU.
+  platform->cpu_config = kEmptyCPUConfig;
+  platform->cpu_config.context = platform;
+  platform->cpu_config.read_memory_byte = CPUReadMemoryByte;
+  platform->cpu_config.write_memory_byte = CPUWriteMemoryByte;
+  platform->cpu_config.read_port = CPUReadPortByte;
+  platform->cpu_config.write_port = CPUWritePortByte;
+  CPUInit(&platform->cpu, &platform->cpu_config);
+
+  // Set up initial memory map.
+  MemoryMapInit(&platform->memory_map);
+  MemoryMapEntry conventional_memory = {
+      .entry_type = kMemoryMapEntryConventional,
+      .start = 0x0000,
+      .end = config->physical_memory_size - 1,
+      .read_byte = config->read_physical_memory_byte,
+      .write_byte = config->write_physical_memory_byte,
+  };
+  MemoryMapAppend(&platform->memory_map, &conventional_memory);
+  if (config->bios_rom_size > 0) {
+    MemoryMapEntry bios_rom = {
+        .entry_type = kMemoryMapEntryBIOSROM,
+        .start = 0xF0000,
+        .end = 0xF0000 + config->bios_rom_size - 1,
+        .read_byte = config->read_bios_rom_byte,
+        .write_byte = NULL,  // BIOS ROM is read-only.
+    };
+    MemoryMapAppend(&platform->memory_map, &bios_rom);
+  }
+
+  return true;
+}
+
+// Boot the virtual machine and start execution.
+ExecuteStatus PlatformBoot(PlatformState* platform) {
+  // Initialize CPU registers.
+  // CS:IP points to the BIOS entry point at 0xFFFF0.
+  platform->cpu.registers[kCS] = 0xF000;
+  platform->cpu.registers[kIP] = 0xFFF0;
+  platform->cpu.registers[kDS] = 0x0000;
+  platform->cpu.registers[kSS] = 0x0000;
+  platform->cpu.registers[kES] = 0x0000;
+  platform->cpu.registers[kSP] = 0xFFFE;
+
+  return RunMainLoop(&platform->cpu);
+}
+
+
+// ==============================================================================
+// src/platform/platform.c end
 // ==============================================================================
 
 

@@ -10,7 +10,7 @@
 // CPU state
 // ============================================================================
 
-void InitCPU(CPUState* cpu, CPUConfig* config) {
+void CPUInit(CPUState* cpu, CPUConfig* config) {
   // Zero out the CPU state
   const CPUState zero_cpu_state = {0};
   *cpu = zero_cpu_state;

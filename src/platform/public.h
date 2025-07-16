@@ -25,9 +25,18 @@ enum {
   // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
   // 0x9FFFF (640KB).
   kMemoryMapEntryConventional = 0,
+  // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
+  kMemoryMapEntryBIOSROM = 1,
 
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,
+
+  // Maximum size of physical memory in bytes.
+  kMaxPhysicalMemorySize = 640 * 1024,
+  // Minimum size of physical memory in bytes.
+  kMinPhysicalMemorySize = 64 * 1024,
+  // Maximum size of BIOS ROM in bytes.
+  kMaxBIOSROMSize = 64 * 1024,
 };
 
 // A memory map entry for a region in logical address space. Memory regions
@@ -93,17 +102,17 @@ void WriteMemoryWord(
 // ============================================================================
 
 // Type ID of an I/O port map entry.
-typedef uint8_t IOPortMapEntryType;
+typedef uint8_t PortMapEntryType;
 
 enum {
   // Maximum number of I/O port mapping entries.
-  kMaxIOPortMapEntries = 16,
+  kMaxPortMapEntries = 16,
 };
 
 // An I/O port map entry. Entries should not overlap.
-typedef struct IOPortMapEntry {
-  // The I/O port map entry type, such as kIOPortMapEntryConventional.
-  IOPortMapEntryType entry_type;
+typedef struct PortMapEntry {
+  // The I/O port map entry type, such as kPortMapEntryConventional.
+  PortMapEntryType entry_type;
   // Start of the I/O port range.
   uint16_t start;
   // Inclusive end of the I/O port range.
@@ -113,36 +122,36 @@ typedef struct IOPortMapEntry {
   // Callback to write a byte an I/O port within the range.
   void (*write_byte)(
       struct PlatformState* platform, uint16_t port, uint8_t value);
-} IOPortMapEntry;
+} PortMapEntry;
 
 // Register an I/O port map entry in the platform state. Returns true if the
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-bool RegisterIOPortMapEntry(
-    struct PlatformState* platform, const IOPortMapEntry* entry);
+bool RegisterPortMapEntry(
+    struct PlatformState* platform, const PortMapEntry* entry);
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-IOPortMapEntry* GetIOPortMapEntryForPort(
+PortMapEntry* GetPortMapEntryForPort(
     struct PlatformState* platform, uint16_t port);
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-IOPortMapEntry* GetIOPortMapEntryByType(
-    struct PlatformState* platform, IOPortMapEntryType entry_type);
+PortMapEntry* GetPortMapEntryByType(
+    struct PlatformState* platform, PortMapEntryType entry_type);
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-uint8_t ReadIOPortByte(struct PlatformState* platform, uint16_t port);
+uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
 // Read a word from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback. This reads two consecutive bytes from the port.
-uint16_t ReadIOPortWord(struct PlatformState* platform, uint16_t port);
+uint16_t ReadPortWord(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-void WriteIOPortByte(
+void WritePortByte(
     struct PlatformState* platform, uint16_t port, uint8_t value);
 // Write a word to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback. This writes two consecutive bytes to the port.
-void WriteIOPortWord(
+void WritePortWord(
     struct PlatformState* platform, uint16_t port, uint16_t value);
 
 // ============================================================================
@@ -154,8 +163,8 @@ typedef struct PlatformConfig {
   // Custom data passed through to callbacks.
   void* context;
 
-  // Physical memory size in KB (1024 bytes). Must be between 64 and 640.
-  uint16_t physical_memory_size_kb;
+  // Physical memory size in bytes. Must be between 64K and 640K.
+  uint32_t physical_memory_size;
 
   // Callback to read a byte from physical memory.
   //
@@ -178,19 +187,41 @@ typedef struct PlatformConfig {
   // to the real-life 8088.
   void (*write_physical_memory_byte)(
       struct PlatformState* platform, uint32_t address, uint8_t value);
+
+  // BIOS ROM size in bytes. Must be between 0 and 64KB.
+  uint32_t bios_rom_size;
+  // Callback to read a byte from BIOS ROM. Address is relative to the
+  // start of the BIOS ROM memory map entry, 0xF0000.
+  uint8_t (*read_bios_rom_byte)(
+      struct PlatformState* platform, uint32_t address);
 } PlatformConfig;
 
 STATIC_VECTOR_TYPE(MemoryMap, MemoryMapEntry, kMaxMemoryMapEntries)
-STATIC_VECTOR_TYPE(IOPortMap, IOPortMapEntry, kMaxIOPortMapEntries)
+STATIC_VECTOR_TYPE(PortMap, PortMapEntry, kMaxPortMapEntries)
 
 // State of the platform.
 typedef struct PlatformState {
-  // Pointer to caller-provided runtime configuration
+  // Pointer to caller-provided runtime configuration.
   PlatformConfig* config;
+
+  // CPU runtime configuration.
+  CPUConfig cpu_config;
+  // CPU state.
+  CPUState cpu;
+
   // Memory map.
   MemoryMap memory_map;
   // I/O port map.
-  IOPortMap io_port_map;
+  PortMap io_port_map;
 } PlatformState;
+
+// Initialize the platform state with the provided configuration. Returns true
+// if the platform state was successfully initialized, or false if:
+//   - The physical memory size is not between 64K and 640K.
+//   - The BIOS ROM size is not between 0 and 64K.
+bool PlatformInit(PlatformState* platform, PlatformConfig* config);
+
+// Boot the virtual machine and start execution.
+ExecuteStatus PlatformBoot(PlatformState* platform);
 
 #endif  // YAX86_PLATFORM_PUBLIC_H

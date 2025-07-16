@@ -8,7 +8,7 @@
 using namespace std;
 
 BIOSTestHelper::BIOSTestHelper() {
-  InitCPU(&cpu_, &cpu_config_);
+  CPUInit(&cpu_, &cpu_config_);
 
   bios_config_.context = this;
   bios_config_.memory_size_kb = 16;
