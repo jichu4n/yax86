@@ -29,7 +29,7 @@ function(generate_header_bundle module)
 endfunction()
 
 generate_header_bundle("cpu")
-generate_header_bundle("bios")
+generate_header_bundle("platform")
 
 # =============================================================================
 # Main library
