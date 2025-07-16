@@ -35,10 +35,10 @@ enum {
 typedef struct MemoryMapEntry {
   // The memory map entry type, such as kMemoryMapEntryConventional.
   MemoryMapEntryType entry_type;
-  // Start address of the memory map entry.
+  // Start address of the memory region.
   uint32_t start;
-  // Size of the memory map entry in bytes.
-  uint32_t size;
+  // Inclusive end address of the memory region.
+  uint32_t end;
   // Callback to read a byte from the memory map entry, where address is
   // relative to the start of the entry.
   uint8_t (*read_byte)(
@@ -106,8 +106,8 @@ typedef struct IOPortMapEntry {
   IOPortMapEntryType entry_type;
   // Start of the I/O port range.
   uint16_t start;
-  // Number of ports in the I/O port range.
-  uint16_t size;
+  // Inclusive end of the I/O port range.
+  uint16_t end;
   // Callback to read a byte from an I/O port within the range.
   uint8_t (*read_byte)(struct PlatformState* platform, uint16_t port);
   // Callback to write a byte an I/O port within the range.
