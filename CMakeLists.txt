@@ -30,6 +30,7 @@ endfunction()
 
 generate_header_bundle("cpu")
 generate_header_bundle("platform")
+generate_header_bundle("video")
 
 # =============================================================================
 # BIOS ROM data file generation

@@ -1,0 +1,4 @@
+{
+  "public": ["public.h"],
+  "private": ["../util/common.h", "mda.c"]
+}

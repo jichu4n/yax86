@@ -42,6 +42,9 @@ enum {
 // A memory map entry for a region in logical address space. Memory regions
 // should not overlap.
 typedef struct MemoryMapEntry {
+  // Custom data passed through to callbacks.
+  void* context;
+
   // The memory map entry type, such as kMemoryMapEntryConventional.
   MemoryMapEntryType entry_type;
   // Start address of the memory region.
@@ -50,12 +53,11 @@ typedef struct MemoryMapEntry {
   uint32_t end;
   // Callback to read a byte from the memory map entry, where address is
   // relative to the start of the entry.
-  uint8_t (*read_byte)(
-      struct PlatformState* platform, uint32_t relative_address);
+  uint8_t (*read_byte)(struct MemoryMapEntry* entry, uint32_t relative_address);
   // Callback to write a byte to memory, where address is relative to the start
   // address.
   void (*write_byte)(
-      struct PlatformState* platform, uint32_t relative_address, uint8_t value);
+      struct MemoryMapEntry* entry, uint32_t relative_address, uint8_t value);
 } MemoryMapEntry;
 
 // Register a memory map entry in the platform state. Returns true if the entry
@@ -111,6 +113,9 @@ enum {
 
 // An I/O port map entry. Entries should not overlap.
 typedef struct PortMapEntry {
+  // Custom data passed through to callbacks.
+  void* context;
+
   // The I/O port map entry type, such as kPortMapEntryConventional.
   PortMapEntryType entry_type;
   // Start of the I/O port range.
@@ -118,10 +123,9 @@ typedef struct PortMapEntry {
   // Inclusive end of the I/O port range.
   uint16_t end;
   // Callback to read a byte from an I/O port within the range.
-  uint8_t (*read_byte)(struct PlatformState* platform, uint16_t port);
+  uint8_t (*read_byte)(struct PortMapEntry* entry, uint16_t port);
   // Callback to write a byte an I/O port within the range.
-  void (*write_byte)(
-      struct PlatformState* platform, uint16_t port, uint8_t value);
+  void (*write_byte)(struct PortMapEntry* entry, uint16_t port, uint8_t value);
 } PortMapEntry;
 
 // Register an I/O port map entry in the platform state. Returns true if the

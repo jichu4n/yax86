@@ -60,7 +60,7 @@ uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
   if (!entry || !entry->read_byte) {
     return 0xFF;
   }
-  return entry->read_byte(platform, address - entry->start);
+  return entry->read_byte(entry, address - entry->start);
 }
 
 // Read a word from a logical memory address.
@@ -72,11 +72,11 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 
 // Write a byte to a logical memory address.
 void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
-  MemoryMapEntry* region = GetMemoryMapEntryForAddress(platform, address);
-  if (!region || !region->write_byte) {
+  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
+  if (!entry || !entry->write_byte) {
     return;
   }
-  region->write_byte(platform, address - region->start, value);
+  entry->write_byte(entry, address - entry->start, value);
 }
 
 // Write a word to a logical memory address.
@@ -138,7 +138,7 @@ uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   if (!entry || !entry->read_byte) {
     return 0xFF;
   }
-  return entry->read_byte(platform, port);
+  return entry->read_byte(entry, port);
 }
 
 // Read a word from an I/O port by invoking the corresponding I/O port map
@@ -156,7 +156,7 @@ void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
   if (!entry || !entry->write_byte) {
     return;
   }
-  entry->write_byte(platform, port, value);
+  entry->write_byte(entry, port, value);
 }
 
 // Write a word to an I/O port by invoking the corresponding I/O port map
@@ -183,6 +183,30 @@ static void CPUWritePortByte(CPUState* cpu, uint16_t port, uint8_t value) {
 }
 
 static const CPUConfig kEmptyCPUConfig = {0};
+
+static uint8_t ReadPhysicalMemoryByte(MemoryMapEntry* entry, uint32_t address) {
+  PlatformState* platform = (PlatformState*)entry->context;
+  if (platform->config && platform->config->read_physical_memory_byte) {
+    return platform->config->read_physical_memory_byte(platform, address);
+  }
+  return 0xFF;
+}
+
+static void WritePhysicalMemoryByte(
+    MemoryMapEntry* entry, uint32_t address, uint8_t value) {
+  PlatformState* platform = (PlatformState*)entry->context;
+  if (platform->config && platform->config->write_physical_memory_byte) {
+    platform->config->write_physical_memory_byte(platform, address, value);
+  }
+}
+
+static uint8_t ReadBIOSROMByte(MemoryMapEntry* entry, uint32_t address) {
+  PlatformState* platform = (PlatformState*)entry->context;
+  if (platform->config && platform->config->read_bios_rom_byte) {
+    return platform->config->read_bios_rom_byte(platform, address);
+  }
+  return 0xFF;
+}
 
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
@@ -211,19 +235,20 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   // Set up initial memory map.
   MemoryMapInit(&platform->memory_map);
   MemoryMapEntry conventional_memory = {
+      .context = platform,
       .entry_type = kMemoryMapEntryConventional,
       .start = 0x0000,
       .end = config->physical_memory_size - 1,
-      .read_byte = config->read_physical_memory_byte,
-      .write_byte = config->write_physical_memory_byte,
-  };
+      .read_byte = ReadPhysicalMemoryByte,
+      .write_byte = WritePhysicalMemoryByte};
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
   if (config->bios_rom_size > 0) {
     MemoryMapEntry bios_rom = {
+        .context = platform,
         .entry_type = kMemoryMapEntryBIOSROM,
         .start = 0xF0000,
         .end = 0xF0000 + config->bios_rom_size - 1,
-        .read_byte = config->read_bios_rom_byte,
+        .read_byte = ReadBIOSROMByte,
         .write_byte = NULL,  // BIOS ROM is read-only.
     };
     MemoryMapAppend(&platform->memory_map, &bios_rom);
