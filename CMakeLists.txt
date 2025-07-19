@@ -30,29 +30,28 @@ endfunction()
 
 generate_header_bundle("cpu")
 generate_header_bundle("platform")
+generate_header_bundle("bios")
 generate_header_bundle("video")
 
 # =============================================================================
 # BIOS ROM data file generation
 # =============================================================================
-function(generate_bios_rom_data_file rom_file data_file)
-    set(generate_bios_rom_data_file "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-bios-rom-data-file.js")
-    add_custom_command(
-        OUTPUT ${data_file}
-        COMMAND ${generate_bios_rom_data_file} ARGS ${rom_file} ${data_file}
-        DEPENDS ${generate_bios_rom_data_file} ${rom_file}
-        COMMENT "Generating BIOS ROM data file ${rom_file} => ${data_file}"
-    )
-endfunction()
-
-set(bios_rom_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/GLABIOS_0.2.5_8T.ROM")
-set(bios_rom_data_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/bios_rom_data.c")
-generate_bios_rom_data_file("${bios_rom_file}" "${bios_rom_data_file}")
+set(bios_rom_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/GLABIOS_0.2.5_8E.rom")
+set(bios_rom_data_file_prefix "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/bios_rom_data")
+set(bios_rom_data_file_c "${bios_rom_data_file_prefix}.c")
+set(bios_rom_data_file_h "${bios_rom_data_file_prefix}.h")
+set(generate_bios_rom_data_files "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-bios-rom-data-files.js")
+add_custom_command(
+    OUTPUT ${bios_rom_data_file_c} ${bios_rom_data_file_h}
+    COMMAND ${generate_bios_rom_data_files} ARGS ${bios_rom_file} ${bios_rom_data_file_prefix}
+    DEPENDS ${generate_bios_rom_data_files} ${bios_rom_file}
+    COMMENT "Generating BIOS ROM data file ${bios_rom_file} => ${bios_rom_data_file_c} and ${bios_rom_data_file_h}"
+)
 
 # =============================================================================
 # Main library
 # =============================================================================
-add_library(yax86 STATIC all.c ${ALL_HEADER_BUNDLES} ${bios_rom_data_file})
+add_library(yax86 STATIC all.c ${ALL_HEADER_BUNDLES} ${bios_rom_data_file_c})
 
 # =============================================================================
 # SDL

@@ -200,24 +200,12 @@ static void WritePhysicalMemoryByte(
   }
 }
 
-static uint8_t ReadBIOSROMByte(MemoryMapEntry* entry, uint32_t address) {
-  PlatformState* platform = (PlatformState*)entry->context;
-  if (platform->config && platform->config->read_bios_rom_byte) {
-    return platform->config->read_bios_rom_byte(platform, address);
-  }
-  return 0xFF;
-}
-
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
-//   - The BIOS ROM size is not between 0 and 64K.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   if (config->physical_memory_size < kMinPhysicalMemorySize ||
       config->physical_memory_size > kMaxPhysicalMemorySize) {
-    return false;
-  }
-  if (config->bios_rom_size > kMaxBIOSROMSize) {
     return false;
   }
 
@@ -242,17 +230,6 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .read_byte = ReadPhysicalMemoryByte,
       .write_byte = WritePhysicalMemoryByte};
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
-  if (config->bios_rom_size > 0) {
-    MemoryMapEntry bios_rom = {
-        .context = platform,
-        .entry_type = kMemoryMapEntryBIOSROM,
-        .start = 0xF0000,
-        .end = 0xF0000 + config->bios_rom_size - 1,
-        .read_byte = ReadBIOSROMByte,
-        .write_byte = NULL,  // BIOS ROM is read-only.
-    };
-    MemoryMapAppend(&platform->memory_map, &bios_rom);
-  }
 
   return true;
 }

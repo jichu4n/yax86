@@ -25,8 +25,6 @@ enum {
   // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
   // 0x9FFFF (640KB).
   kMemoryMapEntryConventional = 0,
-  // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
-  kMemoryMapEntryBIOSROM = 1,
 
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,
@@ -35,8 +33,6 @@ enum {
   kMaxPhysicalMemorySize = 640 * 1024,
   // Minimum size of physical memory in bytes.
   kMinPhysicalMemorySize = 64 * 1024,
-  // Maximum size of BIOS ROM in bytes.
-  kMaxBIOSROMSize = 64 * 1024,
 };
 
 // A memory map entry for a region in logical address space. Memory regions
@@ -191,13 +187,6 @@ typedef struct PlatformConfig {
   // to the real-life 8088.
   void (*write_physical_memory_byte)(
       struct PlatformState* platform, uint32_t address, uint8_t value);
-
-  // BIOS ROM size in bytes. Must be between 0 and 64KB.
-  uint32_t bios_rom_size;
-  // Callback to read a byte from BIOS ROM. Address is relative to the
-  // start of the BIOS ROM memory map entry, 0xF0000.
-  uint8_t (*read_bios_rom_byte)(
-      struct PlatformState* platform, uint32_t address);
 } PlatformConfig;
 
 STATIC_VECTOR_TYPE(MemoryMap, MemoryMapEntry, kMaxMemoryMapEntries)
@@ -222,7 +211,6 @@ typedef struct PlatformState {
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
-//   - The BIOS ROM size is not between 0 and 64K.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 
 // Boot the virtual machine and start execution.

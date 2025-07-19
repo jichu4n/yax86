@@ -1,16 +1,4 @@
 {
-  "public": ["../util/static_vector.h", "public.h"],
-  "private": [
-    "../util/common.h",
-    "memory.c",
-    "fonts.h",
-    "fonts.c",
-    "video.h",
-    "video.c",
-    "interrupts.h",
-    "interrupt_05.c",
-    "interrupt_10.c",
-    "interrupts.c",
-    "bios.c"
-  ]
+  "public": ["public.h"],
+  "private": ["bios_rom_data.h", "bios_rom_data.c", "bios.c"]
 }
