@@ -168,24 +168,24 @@ typedef struct VideoModeMetadata {
 
 // MDA registers
 enum {
-  kMDAHorizontalTotal = 0,
-  kMDAHorizontalDisplayed,
-  kMDAHorizontalSyncPosition,
-  kMDAHorizontalSyncWidth,
-  kMDAVerticalTotal,
-  kMDAVerticalTotalAdjust,
-  kMDAVerticalDisplayed,
-  kMDAVerticalSyncPosition,
-  kMDAInterlaceMode,
-  kMDAMaximumScanLine,
-  kMDA0CursorStart,
-  kMDA1CursorEnd,
-  kMDA2StartAddressH,
-  kMDA3StartAddressL,
-  kMDA4CursorH,
-  kMDA5CursorL,
-  kMDAReserved16,
-  kMDAReserved17,
+  kMDARegisterHorizontalTotal = 0,
+  kMDARegisterHorizontalDisplayed,
+  kMDARegisterHorizontalSyncPosition,
+  kMDARegisterHorizontalSyncWidth,
+  kMDARegisterVerticalTotal,
+  kMDARegisterVerticalTotalAdjust,
+  kMDARegisterVerticalDisplayed,
+  kMDARegisterVerticalSyncPosition,
+  kMDARegisterInterlaceMode,
+  kMDARegisterMaximumScanLine,
+  kMDARegisterCursorStart,
+  kMDARegisterCursorEnd,
+  kMDARegisterStartAddressH,
+  kMDARegisterStartAddressL,
+  kMDARegisterCursorH,
+  kMDARegisterCursorL,
+  kMDARegisterReserved16,
+  kMDARegisterReserved17,
 
   // Total number of MDA registers.
   kMDANumRegisters,
@@ -203,9 +203,12 @@ enum {
 };
 
 enum {
-  // Memory map entry type.
+  // MDA memory map entry type.
   kMemoryMapEntryMDAVRAM = 0x10,
-  // Port map entry type.
+  // MDA VRAM size.
+  kMDAVRAMSize = 4 * 1024,  // 4K
+
+  // MDA port map entry type.
   kPortMapEntryMDA = 0x10,
 };
 
@@ -214,7 +217,7 @@ static const VideoModeMetadata kMDAModeMetadata = {
     .mode = kMDAText07,
     .type = kVideoModeText,
     .vram_address = 0xB0000,
-    .vram_size = 4 * 1024,
+    .vram_size = kMDAVRAMSize,
     .width = 720,
     .height = 350,
     .num_pages = 1,
@@ -285,6 +288,6 @@ bool MDASetup(MDAState* mda, struct PlatformState* platform);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.
-bool MDARender(MDAState* mda);
+void MDARender(MDAState* mda);
 
 #endif  // YAX86_VIDEO_PUBLIC_H

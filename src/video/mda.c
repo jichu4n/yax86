@@ -1,4 +1,5 @@
 #ifndef YAX86_IMPLEMENTATION
+#include "fonts.h"
 #include "platform.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
@@ -145,6 +146,96 @@ enum {
   kMDAUnderlinePosition = 12,
 };
 
+// Write a character to display in MDA text mode. For the attribute byte, we
+// only support the officially documented combinations of values.
+//
+// Attribute byte structure:
+//   - Bit 7: blink (0 = normal, 1 = blink)
+//   - Bits 6-4: background
+//   - Bit 3: intense foreground (0 = normal, 1 = intense)
+//   - Bits 2-0: foreground
+//
+// Valid MDA character background and foreground attribute combinations:
+//   - Normal: background = 000, foreground = 111
+//   - Inverse video: background = 111, foreground = 000
+//   - Invisible: background = 000, foreground = 000
+//   - Underline: background = 000, foreground = 001
+//
+// Other combinations are undefined, but we will treat them as normal.
+// TODO: Support blinking.
+static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
+  uint32_t char_address =
+      (char_pos.row * kMDAModeMetadata.columns + char_pos.col) *
+      2;  // Each character takes 2 bytes (char + attr).
+  uint8_t char_value = ReadVRAMByte(mda, char_address);
+  uint8_t attr_value = ReadVRAMByte(mda, char_address + 1);
+  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+
+  const RGB* foreground;
+  const RGB* background;
+  bool underline = false;
+
+  bool intense = ((attr_value >> 3) & 0x01) != 0;
+  uint8_t background_attr = (attr_value >> 4) & 0x07;
+  uint8_t foreground_attr = attr_value & 0x07;
+  if (background_attr == 0x00 && foreground_attr == 0x07) {
+    // Normal video mode.
+    foreground =
+        intense ? &mda->config->intense_foreground : &mda->config->foreground;
+    background = &mda->config->background;
+  } else if (background_attr == 0x07 && foreground_attr == 0x00) {
+    // Inverse video mode.
+    foreground = &mda->config->background;
+    background = &mda->config->foreground;
+  } else if (background_attr == 0x00 && foreground_attr == 0x00) {
+    // Invisible mode.
+    foreground = &mda->config->background;
+    background = &mda->config->background;
+  } else if (background_attr == 0x00 && foreground_attr == 0x01) {
+    // Underline mode.
+    underline = true;
+    foreground = &mda->config->foreground;
+    background = &mda->config->background;
+  } else {
+    // Other combinations are treated as normal.
+    foreground =
+        intense ? &mda->config->intense_foreground : &mda->config->foreground;
+    background = &mda->config->background;
+  }
+
+  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  Position origin_pixel_pos = {
+      .x = char_pos.col * metadata->char_width,
+      .y = char_pos.row * metadata->char_height,
+  };
+  for (uint8_t y = 0; y < metadata->char_height; ++y) {
+    uint16_t row_bitmap;
+    // If underline, set entire underline row to foreground color.
+    if (y == kMDAUnderlinePosition && underline) {
+      row_bitmap = 0xFFFF;
+    } else {
+      row_bitmap = char_bitmap[y];
+    }
+    for (uint8_t x = 0; x < metadata->char_width; ++x) {
+      Position pixel_pos = {
+          .x = origin_pixel_pos.x + x,
+          .y = origin_pixel_pos.y + y,
+      };
+      bool is_foreground =
+          (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+      const RGB* pixel_rgb = is_foreground ? foreground : background;
+      mda->config->write_pixel(mda, pixel_pos, *pixel_rgb);
+    }
+  }
+}
+
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.
-bool MDARender(MDAState* mda) { return true; }
+void MDARender(MDAState* mda) {
+  for (uint8_t row = 0; row < kMDAModeMetadata.rows; ++row) {
+    for (uint8_t col = 0; col < kMDAModeMetadata.columns; ++col) {
+      TextPosition char_pos = {.col = col, .row = row};
+      MDAWriteChar(mda, char_pos);
+    }
+  }
+}
