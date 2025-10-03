@@ -2,10 +2,10 @@
 
 ## Project Goals
 
-This project is a small modular IBM PC emulator for minimal MCU platforms like
+This project is a small IBM PC emulator for minimal MCU platforms like
 the Raspberry Pi Pico.
-- Emulates IBM PC, PC/XT, and PC/AT systems with 8086/8088 processors
-- Runs MS-DOS 3.3
+- Emulates a basic IBM PC, PC/XT, and PC/AT system with an 8086/8088 processor
+- Runs MS-DOS 3.3 on top of GlaBIOS
 
 ## Codebase
 
@@ -49,4 +49,18 @@ To run tests:
 ```
 ctest --test-dir build -j$(nproc) --output-on-failure
 ```
+
+## Additional Notes
+
+- The project should NOT implement emulation for features not used on the IBM PC, PC/XT, or
+  PC/AT systems by the IBM BIOS or MS-DOS. The project does not attempt to
+  support other hypothetical x86 operating systems, only MS-DOS and
+  era-accurate software.
+    - For example, we should NOT implement advanced features of the Intel
+      8259A PIC like level-triggered interrupts, auto-EOI mode, or specific
+      end-of-interrupt mode, because the IBM PC/XT and PC/AT systems only use
+      edge-triggered interrupts, manual EOI mode, and normal fully-nested mode.
+- The project uses GlaBIOS as the BIOS implementation. The project SHOULD
+  implement emulation for any functionality required by GlaBIOS to run MS-DOS
+  3.3 and basic DOS applications.
 
