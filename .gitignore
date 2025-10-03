@@ -1,3 +1,6 @@
 /build/
 /.ccls-cache/
 /.vscode/
+/.cache/
+/.claude/
+

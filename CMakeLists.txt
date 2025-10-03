@@ -32,6 +32,7 @@ generate_header_bundle("cpu")
 generate_header_bundle("platform")
 generate_header_bundle("bios")
 generate_header_bundle("video")
+generate_header_bundle("pic")
 
 # =============================================================================
 # BIOS ROM data file generation
