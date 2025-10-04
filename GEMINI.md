@@ -56,9 +56,9 @@ ctest --test-dir build -j8 --output-on-failure
 
 ## Additional Notes
 
-- The project should NOT implement emulation for features not used on the IBM PC, PC/XT, or
-  PC/AT systems by the IBM BIOS or MS-DOS. The project does not attempt to
-  support other hypothetical x86 operating systems, only MS-DOS and
+- The project should NOT implement emulation for features not used on the IBM
+  PC, PC/XT, or PC/AT systems by the IBM BIOS or MS-DOS. The project does not
+  attempt to support other hypothetical x86 operating systems, only MS-DOS and
   era-accurate software.
     - For example, we should NOT implement advanced features of the Intel
       8259A PIC like level-triggered interrupts, auto-EOI mode, or specific
@@ -67,6 +67,20 @@ ctest --test-dir build -j8 --output-on-failure
 - The project uses GlaBIOS as the BIOS implementation. The project SHOULD
   implement emulation for any functionality required by GlaBIOS to run MS-DOS
   3.3 and basic DOS applications.
-- The source code for GLaBIOS is found at
-  https://github.com/640-KB/GLaBIOS/blob/main/src/GLABIOS.ASM
+- The source code for GLaBIOS is found at `.cache/GLaBIOS` under the project
+  root.
+- When considering how to implement emulation for a hardware component or a
+  feature of a hardware component, fetch and review the source code of similar
+  projects listed below for reference.
+
+## Similar projects
+
+- 8086tiny - https://github.com/adriancable/8086tiny
+- pico-xt - https://github.com/xrip/pico-xt
+- picox86 - https://github.com/mathijsvandenberg/picox86
+- XTulator - https://github.com/mikechambers84/XTulator
+- Faux86 - https://github.com/jhhoward/Faux86
+
+For each project, the source code can be found in the `.cache` directory under
+the project root.
 
