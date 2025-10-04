@@ -15,7 +15,6 @@ the Raspberry Pi Pico.
     - For example, the source code in the CPU module `src/cpu` is bundled
       based on `src/cpu/bundle.json` into `cpu.h` in root directory
     - The external interface of each module is defined in `public.h`
-    - The bundler is `tools/generate-header-bundle.js`
 - The `tests` directory contains unit tests for each emulator module
 - Uses CMake as the build system
     - The `build` directory contains build artifacts

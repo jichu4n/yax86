@@ -1,7 +1,9 @@
 #include "public.h"
 
-void PITInit(PITState* pit) {
-  // TODO: Implement PIT initialization.
+void PITInit(PITState* pit, PITConfig* config) {
+  static const PITState zero_pit_state = {0};
+  *pit = zero_pit_state;
+  pit->config = config;
 }
 
 void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {

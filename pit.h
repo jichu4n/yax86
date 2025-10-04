@@ -18,8 +18,29 @@ extern "C" {
 #ifndef YAX86_PIT_PUBLIC_H
 #define YAX86_PIT_PUBLIC_H
 
+// This module emulates the Intel 8253/8254 PIT on the IBM PC series.
+//
+// Note that we do not support all features of the 8253/8254 PIT, notably:
+// - BCD mode
+// - Modes 1, 4, and 5
+//
+// Channel 0 is the system timer (IRQ 0).
+// Channel 1 is for DRAM refresh (not connected).
+// Channel 2 is for the PC speaker.
+
 #include <stdbool.h>
 #include <stdint.h>
+
+struct PITState;
+
+// Caller-provided runtime configuration for the PIT.
+typedef struct PITConfig {
+  // Custom data passed through to callbacks.
+  void* context;
+
+  // Callback to raise an IRQ.
+  void (*raise_irq)(void* context, uint8_t irq);
+} PITConfig;
 
 // State of a single PIT timer channel.
 typedef struct PITTimer {
@@ -43,20 +64,24 @@ typedef struct PITTimer {
 
 // State of the PIT.
 typedef struct PITState {
+  // Pointer to the PIT configuration.
+  PITConfig* config;
+
   // The three timer channels.
   PITTimer timers[3];
 } PITState;
 
 // Initializes the PIT to its power-on state.
-void PITInit(PITState* pit);
-
-// Handles writes to the PIT's I/O ports (0x40-0x43).
-void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
+void PITInit(PITState* pit, PITConfig* config);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
 uint8_t PITReadPort(PITState* pit, uint16_t port);
 
-// Simulates a single tick of the PIT's input clock.
+// Handles writes to the PIT's I/O ports (0x40-0x43).
+void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
+
+// Simulates a single tick of the PIT's input clock. This method should be
+// invoked at a frequency of 1.193182 MHz for accurate timing.
 void PITTick(PITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H
@@ -77,8 +102,10 @@ void PITTick(PITState* pit);
 #line 1 "./src/pit/pit.c"
 #include "public.h"
 
-void PITInit(PITState* pit) {
-  // TODO: Implement PIT initialization.
+void PITInit(PITState* pit, PITConfig* config) {
+  static const PITState zero_pit_state = {0};
+  *pit = zero_pit_state;
+  pit->config = config;
 }
 
 void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
