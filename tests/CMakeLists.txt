@@ -19,4 +19,5 @@ FetchContent_MakeAvailable(googletest)
 # =============================================================================
 
 add_subdirectory(cpu)
+add_subdirectory(pic)
 # add_subdirectory(bios)
