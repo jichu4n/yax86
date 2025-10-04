@@ -1,3 +1,4 @@
+#include "pic.h"
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
@@ -182,6 +183,26 @@ static void CPUWritePortByte(CPUState* cpu, uint16_t port, uint8_t value) {
   WritePortByte((PlatformState*)cpu->config->context, port, value);
 }
 
+// Callback for the CPU to check for pending interrupts from the PIC after an
+// instruction has been executed. This is how we connect the PIC(s) to the
+// CPU's interrupt handling flow.
+static ExecuteStatus CPUOnAfterExecuteInstruction(
+    CPUState* cpu,
+    const struct Instruction* instruction __attribute__((unused))) {
+  PlatformState* platform = (PlatformState*)cpu->config->context;
+
+  if (!GetFlag(cpu, kIF)) {
+    return kExecuteSuccess;
+  }
+
+  uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->master_pic);
+  if (interrupt_vector != kNoPendingInterrupt) {
+    SetPendingInterrupt(cpu, interrupt_vector);
+  }
+
+  return kExecuteSuccess;
+}
+
 static const CPUConfig kEmptyCPUConfig = {0};
 
 static uint8_t ReadPhysicalMemoryByte(MemoryMapEntry* entry, uint32_t address) {
@@ -198,6 +219,15 @@ static void WritePhysicalMemoryByte(
   if (platform->config && platform->config->write_physical_memory_byte) {
     platform->config->write_physical_memory_byte(platform, address, value);
   }
+}
+
+static uint8_t PICReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return PICReadPort((PICState*)entry->context, port);
+}
+
+static void PICWritePortByte(
+    PortMapEntry* entry, uint16_t port, uint8_t value) {
+  PICWritePort((PICState*)entry->context, port, value);
 }
 
 // Initialize the platform state with the provided configuration. Returns true
@@ -218,6 +248,8 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->cpu_config.write_memory_byte = CPUWriteMemoryByte;
   platform->cpu_config.read_port = CPUReadPortByte;
   platform->cpu_config.write_port = CPUWritePortByte;
+  platform->cpu_config.on_after_execute_instruction =
+      CPUOnAfterExecuteInstruction;
   CPUInit(&platform->cpu, &platform->cpu_config);
 
   // Set up initial memory map.
@@ -231,7 +263,59 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .write_byte = WritePhysicalMemoryByte};
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
 
+  // Set up master PIC.
+  platform->master_pic_config.sp = false;
+  PICInit(&platform->master_pic, &platform->master_pic_config);
+  PortMapEntry master_pic_entry = {
+      .entry_type = kPortMapEntryPICMaster,
+      .start = 0x20,
+      .end = 0x21,
+      .read_byte = PICReadPortByte,
+      .write_byte = PICWritePortByte,
+      .context = &platform->master_pic,
+  };
+  RegisterPortMapEntry(platform, &master_pic_entry);
+
+  // Set up slave PIC if in dual PIC mode.
+  if (config->pic_mode == kPlatformPICModeDual) {
+    platform->slave_pic_config.sp = true;
+    PICInit(&platform->slave_pic, &platform->slave_pic_config);
+    platform->master_pic.cascade_pic = &platform->slave_pic;
+    platform->slave_pic.cascade_pic = &platform->master_pic;
+    PortMapEntry slave_pic_entry = {
+        .entry_type = kPortMapEntryPICSlave,
+        .start = 0xA0,
+        .end = 0xA1,
+        .read_byte = PICReadPortByte,
+        .write_byte = PICWritePortByte,
+        .context = &platform->slave_pic,
+    };
+    RegisterPortMapEntry(platform, &slave_pic_entry);
+  }
+
   return true;
+}
+
+bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
+  switch (platform->config->pic_mode) {
+    case kPlatformPICModeSingle:
+      if (irq >= 8) {
+        return false;
+      }
+      PICRaiseIRQ(&platform->master_pic, irq);
+      return true;
+    case kPlatformPICModeDual: {
+      if (irq >= 16) {
+        return false;
+      }
+      PICState* target_pic =
+          (irq < 8) ? &platform->master_pic : &platform->slave_pic;
+      PICRaiseIRQ(target_pic, irq % 8);
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 // Boot the virtual machine and start execution.

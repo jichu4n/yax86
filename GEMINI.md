@@ -5,7 +5,7 @@
 This project is a small IBM PC emulator for minimal MCU platforms like
 the Raspberry Pi Pico.
 - Emulates a basic IBM PC, PC/XT, and PC/AT system with an 8086/8088 processor
-- Runs MS-DOS 3.3 on top of GlaBIOS
+- Runs MS-DOS 3.3 on top of GLaBIOS
 
 ## Codebase
 
@@ -39,17 +39,19 @@ the Raspberry Pi Pico.
   interfaces like function signatures and struct members
 - Define structs and enums with `typedef struct Name { ... } Name;` or 
   `typedef enum Name { ... } Name;`
+- For unused function parameters, use `__attribute__((unused))` to avoid
+  compiler warnings
 
 ## Commands
 
 To build the emulator from the project root directory:
 ```
-cmake -B build && cmake --build build -j$(nproc)
+cmake -B build && cmake --build build -j8
 ```
 
 To run tests:
 ```
-ctest --test-dir build -j$(nproc) --output-on-failure
+ctest --test-dir build -j8 --output-on-failure
 ```
 
 ## Additional Notes
@@ -65,4 +67,6 @@ ctest --test-dir build -j$(nproc) --output-on-failure
 - The project uses GlaBIOS as the BIOS implementation. The project SHOULD
   implement emulation for any functionality required by GlaBIOS to run MS-DOS
   3.3 and basic DOS applications.
+- The source code for GLaBIOS is found at
+  https://github.com/640-KB/GLaBIOS/blob/main/src/GLABIOS.ASM
 

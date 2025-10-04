@@ -15,10 +15,6 @@
 //    is connected to the master's IRQ2 line. Only the master PIC is directly
 //    connected to the CPU.
 //
-// Documentation:
-//    -
-//    https://www.geeksforgeeks.org/computer-organization-architecture/command-words-of-8259-pic/
-//
 // Note that we do not support all features of the 8259 PIC, such as auto EOI,
 // rotating priorities, etc., as they are not used by MS-DOS or the IBM PC
 // BIOS.
@@ -67,9 +63,6 @@ struct PICState;
 
 // Caller-provided runtime configuration.
 typedef struct PICConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
   // State of the SP pin.
   // - Single PIC on IBM PC and PC/XT => false
   // - Master PIC on IBM PC/AT and PS/2 => false
