@@ -32,6 +32,8 @@ the Raspberry Pi Pico.
   compile-time constants and macros like `NULL`
 - Uses `clang-format` for code formatting
 - Prefer enums over `#define` for constants
+- Prefer enums over numeric literals - create `enum { kFoo = 0xF8 };` instead of
+  referencing `0xF8` directly in the logic.
 - Prefer `static inline` functions over macros
 - Prefer specific types like `uint8_t` over generic types like `int` for
   interfaces like function signatures and struct members

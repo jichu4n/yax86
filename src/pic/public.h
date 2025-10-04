@@ -9,7 +9,7 @@
 //    The system has a single PIC at I/O ports 0x20/0x21, handling IRQs 0-7,
 //    connected to the CPU.
 //
-// 2. Cascaded PIC - IBM PC/AT and PS/2
+// 2. Cascaded PICs - IBM PC/AT and PS/2
 //    The system has a master PIC at I/O ports 0x20/0x21 handling IRQs 0-7,
 //    and a slave PIC at I/O ports 0xA0/0xA1 handling IRQs 8-15. The slave PIC
 //    is connected to the master's IRQ2 line. Only the master PIC is directly
@@ -56,8 +56,12 @@ typedef enum PICInitState {
   kPICReady,
 } PICInitState;
 
-// Indicates no pending interrupt.
-enum { kNoPendingInterrupt = 0xFF };
+enum {
+  // Indicates no pending interrupt. In normal operation, valid ranges of
+  // interrupt vectors are 0x08-0x0F for a single PIC or master PIC, and
+  // 0x70-0x77 for a slave PIC.
+  kNoPendingInterrupt = 0xFF,
+};
 
 struct PICState;
 
