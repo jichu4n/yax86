@@ -23,8 +23,9 @@ cd .cache
 # Clone each project
 for url in "${PROJECTS[@]}"; do
     project_name=$(basename "${url}")
-    if [ -d "${project_path}" ]; then
-        echo "Project ${project_name} already exists, skipping..."
+    if [ -d "${project_name}" ]; then
+        echo "Project ${project_name} already exists, pulling..."
+        git -C "${project_name}" pull
     else
         echo "Cloning ${project_name}..."
         git clone --depth 1 "${url}.git"
