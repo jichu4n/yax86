@@ -1,3 +1,4 @@
+#include "../util/common.h"
 #include "public.h"
 
 enum {
@@ -241,9 +242,63 @@ void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
   }
 }
 
+// Helper function to handle a read from a channel's data port.
+static inline uint8_t PITChannelReadPort(
+    YAX86_UNUSED PITState* pit, PITChannelState* channel,
+    YAX86_UNUSED int channel_index) {
+  uint16_t value = channel->latch_active ? channel->latch : channel->counter;
+  uint8_t result = 0;
+
+  switch (channel->access_mode) {
+    case kPITAccessLatch:
+      // This is a command, not a persistent access mode. Ignore.
+      break;
+    case kPITAccessLSBOnly:
+      result = value & 0xFF;
+      channel->latch_active = false;
+      break;
+    case kPITAccessMSBOnly:
+      result = (value >> 8) & 0xFF;
+      channel->latch_active = false;
+      break;
+    case kPITAccessLSBThenMSB:
+      switch (channel->rw_byte) {
+        case kPITByteLSB:
+          result = value & 0xFF;
+          channel->rw_byte = kPITByteMSB;
+          break;
+        case kPITByteMSB:
+          result = (value >> 8) & 0xFF;
+          channel->rw_byte = kPITByteLSB;
+          // The full value has been read, so deactivate the latch.
+          channel->latch_active = false;
+          break;
+        default:
+          // Should not happen.
+          break;
+      }
+      break;
+    default:
+      // Invalid access mode.
+      break;
+  }
+  return result;
+}
+
 uint8_t PITReadPort(PITState* pit, uint16_t port) {
-  // TODO: Implement PIT read logic.
-  return 0;
+  switch (port) {
+    case kPITPortChannel0:
+    case kPITPortChannel1:
+    case kPITPortChannel2: {
+      // Data port for a channel.
+      int channel_index = port - kPITPortChannel0;
+      PITChannelState* channel = &pit->channels[channel_index];
+      return PITChannelReadPort(pit, channel, channel_index);
+    }
+    default:
+      // Invalid port - return 0xFF as is common for reads from unused ports.
+      return 0xFF;
+  }
 }
 
 void PITTick(PITState* pit) {

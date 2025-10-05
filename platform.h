@@ -606,8 +606,7 @@ static void CPUWritePortByte(CPUState* cpu, uint16_t port, uint8_t value) {
 // instruction has been executed. This is how we connect the PIC(s) to the
 // CPU's interrupt handling flow.
 static ExecuteStatus CPUOnAfterExecuteInstruction(
-    CPUState* cpu,
-    const struct Instruction* instruction __attribute__((unused))) {
+    CPUState* cpu, YAX86_UNUSED const struct Instruction* instruction) {
   PlatformState* platform = (PlatformState*)cpu->config->context;
 
   if (!GetFlag(cpu, kIF)) {
