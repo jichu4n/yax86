@@ -34,6 +34,9 @@ extern "C" {
 enum {
   // Number of PIT channels.
   kPITNumChannels = 3,
+  // Total number of operating modes (0-5).
+  // We only implement modes 0, 2, and 3.
+  kPITNumModes = 6,
 };
 
 // I/O ports exposed by the PIT.
@@ -47,6 +50,25 @@ typedef enum PITPort {
   // Control word port
   kPITPortControl = 0x43,
 } PITPort;
+
+// Channel read/write access modes. This corresponds to bits 4-5 of the control
+// word written to port 0x43.
+typedef enum PITAccessMode {
+  // Latch count value command
+  kPITAccessLatch = 0,
+  // Read/write lower byte only
+  kPITAccessLSBOnly = 1,
+  // Read/write upper byte only
+  kPITAccessMSBOnly = 2,
+  // Read/write lower byte then upper byte
+  kPITAccessLSBThenMSB = 3,
+} PITAccessMode;
+
+// Which byte to read/write next when in mode kPITAccessLSBThenMSB.
+typedef enum PITByte {
+  kPITByteLSB = 0,
+  kPITByteMSB = 1,
+} PITByte;
 
 struct PITState;
 
@@ -62,7 +84,7 @@ typedef struct PITConfig {
 } PITConfig;
 
 // State of a single PIT timer channel.
-typedef struct PITTimer {
+typedef struct PITChannelState {
   // The 16-bit counter value.
   uint16_t counter;
   // The 16-bit latched value for reading.
@@ -72,16 +94,14 @@ typedef struct PITTimer {
   // The operating mode (0-5).
   uint8_t mode;
   // The read/write access mode.
-  uint8_t access_mode;
-  // BCD mode flag.
-  bool bcd_mode;
-  // The output state of the timer.
+  PITAccessMode access_mode;
+  // The current output state of the channel.
   bool output_state;
-  // Read/write byte toggle for 16-bit access.
-  bool rw_byte_toggle;
+  // Which byte to read/write next when in mode kPITAccessLSBThenMSB.
+  PITByte rw_byte;
   // Whether a latch command is active.
   bool latch_active;
-} PITTimer;
+} PITChannelState;
 
 // State of the PIT.
 typedef struct PITState {
@@ -89,7 +109,7 @@ typedef struct PITState {
   PITConfig* config;
 
   // The three timer channels.
-  PITTimer timers[kPITNumChannels];
+  PITChannelState channels[kPITNumChannels];
 } PITState;
 
 // Initializes the PIT to its power-on state.
@@ -123,59 +143,197 @@ void PITTick(PITState* pit);
 #line 1 "./src/pit/pit.c"
 #include "public.h"
 
-// Tick frequency of the PIT in Hz.
 enum {
+  // Tick frequency of the PIT in Hz.
   kPITTickFrequencyHz = 1193182,
+  // Fallback reload value when 0 is written to the counter. The hardware
+  // treats a reload value of 0 as 0x10000.
+  kPITFallbackReloadValue = 0x10000,
+};
+
+// Specifies the behavior of a timer channel in a specific mode (0-5).
+typedef struct PITModeMetadata {
+  // Initial output state when a timer channel is programmed in this mode.
+  bool initial_output_state;
+  // Callback to handle a tick for this mode.
+  void (*handle_tick)(
+      PITState* pit, PITChannelState* channel, int channel_index);
+} PITModeMetadata;
+
+// Metadata for unsupported modes (1, 4, 5).
+static const PITModeMetadata kPITUnsupportedMode = {0};
+
+// Handles a channel reaching terminal count.
+static inline void PITChannelSetOutputState(
+    PITState* pit, PITChannelState* channel, int channel_index,
+    bool new_output_state) {
+  // No-op if the output state is unchanged.
+  if (channel->output_state == new_output_state) {
+    return;
+  }
+
+  // Set the new output state.
+  channel->output_state = new_output_state;
+
+  // On rising edge of channel 0 output state, raise IRQ 0.
+  if (channel_index == 0 && new_output_state && pit->config &&
+      pit->config->raise_irq_0) {
+    pit->config->raise_irq_0(pit->config->context);
+  }
+}
+
+// Tick handler for Mode 0: Interrupt on Terminal Count.
+static void PITMode0HandleTick(
+    PITState* pit, PITChannelState* channel, int channel_index) {
+  // Since this is a one-shot timer, do nothing if the counter is already 0.
+  if (channel->counter == 0) {
+    return;
+  }
+
+  // Decrement the counter by 1.
+  --channel->counter;
+
+  // If at terminal count, set output high and trigger terminal count.
+  if (channel->counter == 0) {
+    PITChannelSetOutputState(pit, channel, channel_index, true);
+  }
+}
+
+// Metadata for Mode 0: Interrupt on Terminal Count.
+static const PITModeMetadata kPITMode0Metadata = {
+    .initial_output_state = false,
+    .handle_tick = PITMode0HandleTick,
+};
+
+// Tick handler for Mode 2: Rate Generator.
+static void PITMode2HandleTick(
+    PITState* pit, PITChannelState* channel, int channel_index) {
+  // Decrement the counter by 1.
+  --channel->counter;
+
+  switch (channel->counter) {
+    case 1:
+      // When the counter reaches 1, set output low for one tick.
+      PITChannelSetOutputState(pit, channel, channel_index, false);
+      break;
+    case 0:
+      // When the counter reaches 0, reload, set output high again.
+      channel->counter = channel->reload_value;
+      PITChannelSetOutputState(pit, channel, channel_index, true);
+      break;
+    default:
+      break;
+  }
+}
+
+// Metadata for Mode 2: Rate Generator.
+static const PITModeMetadata kPITMode2Metadata = {
+    .initial_output_state = true,
+    .handle_tick = PITMode2HandleTick,
+};
+
+// Tick handler for Mode 3: Square Wave Generator.
+static void PITMode3HandleTick(
+    PITState* pit, PITChannelState* channel, int channel_index) {
+  // In Mode 3, the counter decrements by 2 each tick. We reach terminal count
+  // when we reach either 0 or wrap around to 0xFFFF.
+  channel->counter -= 2;
+
+  switch (channel->counter) {
+    case 0:
+    case 0xFFFF:
+      // When the counter reaches terminal count, reload and toggle output.
+      channel->counter = channel->reload_value;
+      PITChannelSetOutputState(
+          pit, channel, channel_index, !channel->output_state);
+      break;
+    default:
+      break;
+  }
+}
+
+// Metadata for Mode 3: Square Wave Generator.
+static const PITModeMetadata kPITMode3Metadata = {
+    .initial_output_state = true,
+    .handle_tick = PITMode3HandleTick,
+};
+
+// Array of mode metadata indexed by mode number.
+static const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
+    &kPITMode0Metadata,    // Mode 0
+    &kPITUnsupportedMode,  // Mode 1 (unsupported)
+    &kPITMode2Metadata,    // Mode 2
+    &kPITMode3Metadata,    // Mode 3
+    &kPITUnsupportedMode,  // Mode 4 (unsupported)
+    &kPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
 void PITInit(PITState* pit, PITConfig* config) {
   static const PITState zero_pit_state = {0};
   *pit = zero_pit_state;
   pit->config = config;
+
+  // On the IBM PC, the output pins of all three channels are initially pulled
+  // high.
+  for (int i = 0; i < kPITNumChannels; ++i) {
+    pit->channels[i].output_state = true;
+  }
 }
 
 // Helper function to load the counter and handle side effects.
-static inline void LoadCounter(PITState* pit, int i) {
-  PITTimer* timer = &pit->timers[i];
-
+static inline void PITChannelLoadCounter(
+    PITState* pit, PITChannelState* channel, int channel_index) {
   // A reload value of 0 is treated as 0x10000 by the hardware.
-  // This will wrap to 0 when assigned to the 16-bit counter, which is correct.
-  timer->counter = timer->reload_value;
+  // This will wrap to 0 when assigned to the 16-bit counter.
+  channel->counter = channel->reload_value;
 
-  // If this is channel 2, notify the platform of the new frequency.
-  if (i == 2 && pit->config && pit->config->set_pc_speaker_frequency) {
-    uint32_t frequency = (timer->reload_value == 0)
-                             ? 0
-                             : kPITTickFrequencyHz / timer->reload_value;
+  // If this is channel 2, notify the platform of the new PC speaker frequency.
+  if (channel_index == 2 && pit->config &&
+      pit->config->set_pc_speaker_frequency) {
+    uint32_t frequency =
+        kPITTickFrequencyHz / (channel->reload_value ? channel->reload_value
+                                                     : kPITFallbackReloadValue);
     pit->config->set_pc_speaker_frequency(pit->config->context, frequency);
   }
 }
 
-// Helper function to handle a data write to a channel.
-static inline void WriteData(PITState* pit, int i, uint8_t value) {
-  PITTimer* timer = &pit->timers[i];
-
-  switch (timer->access_mode) {
-    case 1:  // LSB-only
-      timer->reload_value = value;
-      LoadCounter(pit, i);
+// Helper function to handle a write to a channel's data port.
+static inline void PITChannelWritePort(
+    PITState* pit, PITChannelState* channel, int channel_index, uint8_t value) {
+  switch (channel->access_mode) {
+    case kPITAccessLatch:
+      // If latch command, ignore data writes.
       break;
-    case 2:  // MSB-only
-      timer->reload_value = (uint16_t)value << 8;
-      LoadCounter(pit, i);
+    case kPITAccessLSBOnly:
+      channel->reload_value = (channel->reload_value & 0xFF00) | value;
+      PITChannelLoadCounter(pit, channel, channel_index);
       break;
-    case 3:  // LSB then MSB
-      if (!timer->rw_byte_toggle) {
-        // LSB
-        timer->reload_value = (timer->reload_value & 0xFF00) | value;
-        timer->rw_byte_toggle = true;
-      } else {
-        // MSB
-        timer->reload_value =
-            (timer->reload_value & 0x00FF) | ((uint16_t)value << 8);
-        timer->rw_byte_toggle = false;
-        LoadCounter(pit, i);
+    case kPITAccessMSBOnly:
+      channel->reload_value =
+          (channel->reload_value & 0x00FF) | ((uint16_t)value << 8);
+      PITChannelLoadCounter(pit, channel, channel_index);
+      break;
+    case kPITAccessLSBThenMSB:
+      switch (channel->rw_byte) {
+        case kPITByteLSB:
+          // LSB
+          channel->reload_value = (channel->reload_value & 0xFF00) | value;
+          channel->rw_byte = kPITByteMSB;
+          break;
+        case kPITByteMSB:
+          // MSB
+          channel->reload_value =
+              (channel->reload_value & 0x00FF) | ((uint16_t)value << 8);
+          channel->rw_byte = kPITByteLSB;
+          PITChannelLoadCounter(pit, channel, channel_index);
+          break;
+        default:
+          // Should not happen - ignore.
+          break;
       }
+      break;
+    default:
+      // Invalid access mode - ignore.
       break;
   }
 }
@@ -183,45 +341,43 @@ static inline void WriteData(PITState* pit, int i, uint8_t value) {
 void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
   switch (port) {
     case kPITPortControl: {
-      uint8_t channel = (value >> 6) & 0x03;
-      if (channel > 2) {
+      // Control word.
+      int channel_index = (value >> 6) & 0x03;
+      if (channel_index >= kPITNumChannels) {
         // Invalid channel, or read-back command (not supported).
         return;
       }
+      PITChannelState* channel = &pit->channels[channel_index];
 
-      PITTimer* timer = &pit->timers[channel];
-      uint8_t access_mode = (value >> 4) & 0x03;
-
-      if (access_mode == 0) {
+      PITAccessMode access_mode = (PITAccessMode)((value >> 4) & 0x03);
+      if (access_mode == kPITAccessLatch) {
         // Latch command.
-        timer->latch = timer->counter;
-        timer->latch_active = true;
+        channel->latch = channel->counter;
+        channel->latch_active = true;
       } else {
         // Programming command.
-        timer->access_mode = access_mode;
-        timer->mode = (value >> 1) & 0x07;
-        timer->bcd_mode = (value & 0x01);
-        timer->rw_byte_toggle = false;
-
-        // Set initial output state based on mode.
-        switch (timer->mode) {
-          case 0:
-            timer->output_state = false;
-            break;
-          case 2:
-          case 3:
-            timer->output_state = true;
-            break;
+        channel->access_mode = access_mode;
+        channel->mode = (value >> 1) & 0x07;
+        if (channel->mode >= kPITNumModes) {
+          // Modes 6 and 7 are equivalent to modes 2 and 3.
+          channel->mode -= 4;
         }
+        channel->rw_byte = kPITByteLSB;
+        PITChannelSetOutputState(
+            pit, channel, channel_index,
+            kPITModeMetadata[channel->mode]->initial_output_state);
       }
       break;
     }
-
     case kPITPortChannel0:
     case kPITPortChannel1:
-    case kPITPortChannel2:
-      WriteData(pit, port - kPITPortChannel0, value);
+    case kPITPortChannel2: {
+      // Data port for a channel.
+      int channel_index = port - kPITPortChannel0;
+      PITChannelState* channel = &pit->channels[channel_index];
+      PITChannelWritePort(pit, channel, channel_index, value);
       break;
+    }
     default:
       // Invalid port - ignore.
       break;
@@ -233,55 +389,16 @@ uint8_t PITReadPort(PITState* pit, uint16_t port) {
   return 0;
 }
 
-// Helper function to handle common logic on terminal count.
-static inline void HandleTerminalCount(PITState* pit, int i) {
-  PITTimer* timer = &pit->timers[i];
-
-  // Perform mode-specific actions for output and reloading.
-  switch (timer->mode) {
-    case 0:  // Mode 0: Interrupt on Terminal Count
-      timer->output_state = true;
-      // Do not reload.
-      break;
-    case 2:  // Mode 2: Rate Generator
-      timer->output_state = true;
-      timer->counter = timer->reload_value;
-      break;
-    case 3:  // Mode 3: Square Wave Generator
-      timer->output_state = !timer->output_state;
-      timer->counter = timer->reload_value;
-      break;
-  }
-
-  if (i == 0 && pit->config && pit->config->raise_irq_0) {
-    pit->config->raise_irq_0(pit->config->context);
-  }
-}
-
 void PITTick(PITState* pit) {
-  // Iterate through all three timer channels.
-  for (int i = 0; i < kPITNumChannels; ++i) {
-    PITTimer* timer = &pit->timers[i];
-
-    // Don't tick a one-shot timer that has already fired.
-    if (timer->mode == 0 && timer->counter == 0) {
+  PITChannelState* channel = &pit->channels[0];
+  for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
+    if (channel->mode >= kPITNumModes) {
+      // Invalid mode - ignore.
       continue;
     }
-
-    // Handle the 1-tick low pulse for Mode 2 before decrementing.
-    if (timer->mode == 2 && timer->counter == 1) {
-      timer->output_state = false;
-    }
-
-    // In Mode 3, the counter decrements by 2, otherwise by 1.
-    if (timer->mode == 3 && timer->counter >= 2) {
-      timer->counter -= 2;
-    } else {
-      timer->counter--;
-    }
-
-    if (timer->counter == 0) {
-      HandleTerminalCount(pit, i);
+    const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+    if (mode_metadata->handle_tick) {
+      mode_metadata->handle_tick(pit, channel, i);
     }
   }
 }

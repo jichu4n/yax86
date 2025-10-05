@@ -18,6 +18,9 @@
 enum {
   // Number of PIT channels.
   kPITNumChannels = 3,
+  // Total number of operating modes (0-5).
+  // We only implement modes 0, 2, and 3.
+  kPITNumModes = 6,
 };
 
 // I/O ports exposed by the PIT.
@@ -31,6 +34,25 @@ typedef enum PITPort {
   // Control word port
   kPITPortControl = 0x43,
 } PITPort;
+
+// Channel read/write access modes. This corresponds to bits 4-5 of the control
+// word written to port 0x43.
+typedef enum PITAccessMode {
+  // Latch count value command
+  kPITAccessLatch = 0,
+  // Read/write lower byte only
+  kPITAccessLSBOnly = 1,
+  // Read/write upper byte only
+  kPITAccessMSBOnly = 2,
+  // Read/write lower byte then upper byte
+  kPITAccessLSBThenMSB = 3,
+} PITAccessMode;
+
+// Which byte to read/write next when in mode kPITAccessLSBThenMSB.
+typedef enum PITByte {
+  kPITByteLSB = 0,
+  kPITByteMSB = 1,
+} PITByte;
 
 struct PITState;
 
@@ -46,7 +68,7 @@ typedef struct PITConfig {
 } PITConfig;
 
 // State of a single PIT timer channel.
-typedef struct PITTimer {
+typedef struct PITChannelState {
   // The 16-bit counter value.
   uint16_t counter;
   // The 16-bit latched value for reading.
@@ -56,16 +78,14 @@ typedef struct PITTimer {
   // The operating mode (0-5).
   uint8_t mode;
   // The read/write access mode.
-  uint8_t access_mode;
-  // BCD mode flag.
-  bool bcd_mode;
-  // The output state of the timer.
+  PITAccessMode access_mode;
+  // The current output state of the channel.
   bool output_state;
-  // Read/write byte toggle for 16-bit access.
-  bool rw_byte_toggle;
+  // Which byte to read/write next when in mode kPITAccessLSBThenMSB.
+  PITByte rw_byte;
   // Whether a latch command is active.
   bool latch_active;
-} PITTimer;
+} PITChannelState;
 
 // State of the PIT.
 typedef struct PITState {
@@ -73,7 +93,7 @@ typedef struct PITState {
   PITConfig* config;
 
   // The three timer channels.
-  PITTimer timers[kPITNumChannels];
+  PITChannelState channels[kPITNumChannels];
 } PITState;
 
 // Initializes the PIT to its power-on state.
