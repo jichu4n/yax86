@@ -12,6 +12,7 @@
 
 #include "cpu.h"
 #include "pic.h"
+#include "pit.h"
 
 struct PlatformState;
 
@@ -106,12 +107,12 @@ typedef uint8_t PortMapEntryType;
 enum {
   // Maximum number of I/O port mapping entries.
   kMaxPortMapEntries = 16,
-
   // I/O port map entry for the master PIC (ports 0x20-0x21).
-  kPortMapEntryPICMaster = 1,
-
+  kPortMapEntryPICMaster = 0x20,
   // I/O port map entry for the slave PIC (ports 0xA0-0xA1).
-  kPortMapEntryPICSlave = 2,
+  kPortMapEntryPICSlave = 0xA0,
+  // I/O port map entry for the PIT (ports 0x40-0x43).
+  kPortMapEntryPIT = 0x40,
 };
 
 // An I/O port map entry. Entries should not overlap.
@@ -230,6 +231,11 @@ typedef struct PlatformState {
   PICConfig slave_pic_config;
   // Slave PIC state. Only valid if pic_mode is kPlatformPICModeDual.
   PICState slave_pic;
+
+  // PIT runtime configuration.
+  PITConfig pit_config;
+  // PIT state.
+  PITState pit;
 
   // Memory map.
   MemoryMap memory_map;

@@ -35,7 +35,7 @@ typedef enum PICMode {
   // Slave PIC on IBM PC/AT and PS/2
   kPICSlave,
   // Number of PIC modes
-  kNumPICModes,
+  kPICNumModes,
 } PICMode;
 
 // Initialization state of a PIC.
@@ -56,7 +56,7 @@ enum {
   // Indicates no pending interrupt. In normal operation, valid ranges of
   // interrupt vectors are 0x08-0x0F for a single PIC or master PIC, and
   // 0x70-0x77 for a slave PIC.
-  kNoPendingInterrupt = 0xFF,
+  kPICNoPendingInterrupt = 0xFF,
 };
 
 struct PICState;
@@ -148,7 +148,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
 
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
-// PIC as well. If no interrupts are pending, returns kNoPendingInterrupt.
+// PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
 uint8_t PICGetPendingInterrupt(PICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H

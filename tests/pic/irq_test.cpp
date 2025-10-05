@@ -1,6 +1,6 @@
-#include "pic.h"
-
 #include <gtest/gtest.h>
+
+#include "pic.h"
 
 namespace {
 
@@ -68,7 +68,7 @@ TEST_F(IRQTest, SinglePIC_BasicIRQ) {
 
   EXPECT_EQ(master_.irr, 1 << 3);
   EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 3);
-  EXPECT_EQ(master_.irr, 0);  // IRR bit should be cleared after ack.
+  EXPECT_EQ(master_.irr, 0);       // IRR bit should be cleared after ack.
   EXPECT_EQ(master_.isr, 1 << 3);  // ISR bit should be set.
 }
 
@@ -89,7 +89,7 @@ TEST_F(IRQTest, SinglePIC_Masking) {
 
   // Mask IRQ 4.
   master_.imr = (1 << 4);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kNoPendingInterrupt);
+  EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Unmask IRQ 4.
   master_.imr = 0;
@@ -106,7 +106,7 @@ TEST_F(IRQTest, SinglePIC_InServicePriority) {
 
   // Raise a lower-priority interrupt (IRQ 7). It should not be serviced.
   PICRaiseIRQ(&master_, 7);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kNoPendingInterrupt);
+  EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Raise a higher-priority interrupt (IRQ 3). It should be serviced.
   PICRaiseIRQ(&master_, 3);
@@ -123,7 +123,7 @@ TEST_F(IRQTest, SinglePIC_EOIInteraction) {
 
   // Raise IRQ 5. It shouldn't be serviced yet.
   PICRaiseIRQ(&master_, 5);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kNoPendingInterrupt);
+  EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Issue an EOI for IRQ 4.
   PICWritePort(&master_, 0x20, kOCW2_EOI);

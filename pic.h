@@ -51,7 +51,7 @@ typedef enum PICMode {
   // Slave PIC on IBM PC/AT and PS/2
   kPICSlave,
   // Number of PIC modes
-  kNumPICModes,
+  kPICNumModes,
 } PICMode;
 
 // Initialization state of a PIC.
@@ -72,7 +72,7 @@ enum {
   // Indicates no pending interrupt. In normal operation, valid ranges of
   // interrupt vectors are 0x08-0x0F for a single PIC or master PIC, and
   // 0x70-0x77 for a slave PIC.
-  kNoPendingInterrupt = 0xFF,
+  kPICNoPendingInterrupt = 0xFF,
 };
 
 struct PICState;
@@ -164,7 +164,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
 
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
-// PIC as well. If no interrupts are pending, returns kNoPendingInterrupt.
+// PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
 uint8_t PICGetPendingInterrupt(PICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H
@@ -220,7 +220,7 @@ typedef enum PICPort {
 } PICPort;
 
 // Map a PIC mode to its base I/O port.
-static const uint16_t kPICBasePorts[kNumPICModes] = {
+static const uint16_t kPICBasePorts[kPICNumModes] = {
     0x20,  // kPICSingle
     0x20,  // kPICMaster
     0xA0,  // kPICSlave
@@ -449,7 +449,7 @@ uint8_t PICGetPendingInterrupt(PICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {
-    return kNoPendingInterrupt;
+    return kPICNoPendingInterrupt;
   }
   uint8_t pending_irq = 0, pending_irq_mask = 1;
   for (; pending_irq < 8; ++pending_irq, pending_irq_mask <<= 1) {
@@ -469,7 +469,7 @@ uint8_t PICGetPendingInterrupt(PICState* pic) {
     }
     if (pending_irq >= in_service_irq) {
       // New interrupt does not have higher priority than in-service interrupt.
-      return kNoPendingInterrupt;
+      return kPICNoPendingInterrupt;
     }
   }
 
@@ -478,7 +478,7 @@ uint8_t PICGetPendingInterrupt(PICState* pic) {
   if (PICIsMaster(pic) && pending_irq == kMasterCascadeIRQ &&
       pic->cascade_pic) {
     uint8_t slave_vector = PICGetPendingInterrupt(pic->cascade_pic);
-    if (slave_vector != kNoPendingInterrupt) {
+    if (slave_vector != kPICNoPendingInterrupt) {
       pic->isr |= pending_irq_mask;
     }
     return slave_vector;
