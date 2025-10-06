@@ -30,11 +30,12 @@ function(generate_header_bundle module)
     set(ALL_HEADER_BUNDLES ${ALL_HEADER_BUNDLES} PARENT_SCOPE)
 endfunction()
 
+generate_header_bundle("bios")
 generate_header_bundle("cpu")
 generate_header_bundle("pic")
 generate_header_bundle("pit")
 generate_header_bundle("platform")
-generate_header_bundle("bios")
+generate_header_bundle("ppi")
 generate_header_bundle("video")
 
 # =============================================================================

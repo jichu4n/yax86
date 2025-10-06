@@ -6,4 +6,5 @@
 #include "pic.h"
 #include "pit.h"
 #include "platform.h"
+#include "ppi.h"
 #include "video.h"
