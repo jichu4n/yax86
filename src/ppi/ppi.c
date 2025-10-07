@@ -6,7 +6,7 @@
 enum {
   kPortBTimer2Gate = (1 << 0),
   kPortBSpeakerData = (1 << 1),
-  kPortBReadSwitches = (1 << 2), // 0 = SW1, 1 = SW2
+  kPortBReadSwitches = (1 << 2),  // 0 = SW1, 1 = SW2
   kPortBCassetteMotor = (1 << 3),
   kPortBIOChannelCheck = (1 << 4),
   kPortBParityCheck = (1 << 5),
@@ -28,15 +28,9 @@ uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
     case kPPIPortB:
       // Reading Port B returns its last written value.
       return ppi->port_b;
-    case kPPIPortC: {
-      // Reading Port C gets the DIP switch state.
-      // The bank of switches to read is determined by Port B, bit 2.
-      if (!ppi->config || !ppi->config->read_dip_switches) {
-        return 0xFF; // Return all high if not configured
-      }
-      int bank = (ppi->port_b & kPortBReadSwitches) ? 1 : 0;
-      return ppi->config->read_dip_switches(ppi->config->context, bank);
-    }
+    case kPPIPortC:
+      // TODO: Implement reading DIP switches. For now, return 0xFF.
+      return 0xFF;
     default:
       // Invalid port.
       return 0xFF;
@@ -54,36 +48,7 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
       ppi->port_b = value;
 
       // Check for changes in control bits and fire callbacks.
-
-      // Bit 0: Timer 2 Gate
-      if ((value & kPortBTimer2Gate) != (old_port_b & kPortBTimer2Gate)) {
-        if (ppi->config->set_pit_gate_2) {
-          ppi->config->set_pit_gate_2(ppi->config->context, value & kPortBTimer2Gate);
-        }
-      }
-
-      // Bit 1: Speaker Data
-      if ((value & kPortBSpeakerData) != (old_port_b & kPortBSpeakerData)) {
-        if (ppi->config->set_speaker_data) {
-          ppi->config->set_speaker_data(ppi->config->context, value & kPortBSpeakerData);
-        }
-      }
-
-      // Bit 6: Keyboard Clock Inhibit
-      if ((value & kPortBKeyboardClock) != (old_port_b & kPortBKeyboardClock)) {
-        if (ppi->config->set_keyboard_inhibited) {
-          ppi->config->set_keyboard_inhibited(ppi->config->context, !!(value & kPortBKeyboardClock));
-        }
-      }
-
-      // Bit 7: Keyboard Data (Reset Pulse)
-      // The BIOS pulses this bit (high then low) to reset the keyboard.
-      // We trigger on the rising edge.
-      if ((value & kPortBKeyboardData) && !(old_port_b & kPortBKeyboardData)) {
-        if (ppi->config->reset_keyboard) {
-          ppi->config->reset_keyboard(ppi->config->context);
-        }
-      }
+      // TODO
 
       break;
     }

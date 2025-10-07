@@ -37,32 +37,6 @@ typedef struct PPIConfig {
   // Opaque context pointer, passed to all callbacks.
   void* context;
 
-  // --- Keyboard Interface Callbacks ---
-
-  // Callback to change the keyboard's inhibited state. When 'inhibited' is
-  // true, the keyboard should be blocked from sending data. This corresponds to
-  // port B, bit 6
-  void (*set_keyboard_inhibited)(void* context, bool inhibited);
-
-  // Callback to signal a reset to the keyboard controller. This corresponds to
-  // port B, bit 7.
-  void (*reset_keyboard)(void* context);
-
-  // --- PIT Interface Callbacks ---
-
-  // Callback to set the gate for PIT channel 2.
-  void (*set_pit_gate_2)(void* context, bool level);
-
-  // --- Speaker Interface Callbacks ---
-
-  // Callback to set the speaker data level.
-  void (*set_speaker_data)(void* context, bool level);
-
-  // --- DIP Switch Interface ---
-
-  // Callback to read the DIP switch bank.
-  // bank = 0 for low switches (SW1), 1 for high switches (SW2)
-  uint8_t (*read_dip_switches)(void* context, int bank);
 } PPIConfig;
 
 // State of the PPI.
