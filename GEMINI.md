@@ -74,12 +74,10 @@ ctest --test-dir build -j8 --output-on-failure
 
 ## Similar projects
 
-- 8086tiny - https://github.com/adriancable/8086tiny
-- pico-xt - https://github.com/xrip/pico-xt
-- picox86 - https://github.com/mathijsvandenberg/picox86
-- XTulator - https://github.com/mikechambers84/XTulator
-- Faux86 - https://github.com/jhhoward/Faux86
+The source code for the following similar projects can be found in the
+`.cache` directory under the project root:
 
-For each project, the source code can be found in the `.cache` directory under
-the project root.
+- 8086tiny - `.cache/8086tiny`
+- 86Box - `.cache/86Box`
+- MartyPC - `.cache/martypc`
 

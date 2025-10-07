@@ -4,14 +4,16 @@
 
 // Port B bit definitions
 enum {
+  // Port B bit 0: Timer 2 gate control
   kPortBTimer2Gate = (1 << 0),
+  // Port B bit 1: PC speaker enable / disable
   kPortBSpeakerData = (1 << 1),
   kPortBReadSwitches = (1 << 2),  // 0 = SW1, 1 = SW2
   kPortBCassetteMotor = (1 << 3),
   kPortBIOChannelCheck = (1 << 4),
   kPortBParityCheck = (1 << 5),
   kPortBKeyboardClock = (1 << 6),
-  kPortBKeyboardData = (1 << 7),
+  kPortBKeyboardDisable = (1 << 7),
 };
 
 void PPIInit(PPIState* ppi, PPIConfig* config) {
@@ -44,12 +46,17 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
 
   switch (port) {
     case kPPIPortB: {
-      uint8_t old_port_b = ppi->port_b;
+      bool old_pc_speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
       ppi->port_b = value;
 
       // Check for changes in control bits and fire callbacks.
-      // TODO
-
+      bool pc_speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
+      if (old_pc_speaker_enabled != pc_speaker_enabled && ppi->config &&
+          ppi->config->set_pc_speaker_frequency) {
+        uint32_t frequency =
+            pc_speaker_enabled ? ppi->pc_speaker_frequency_from_pit : 0;
+        ppi->config->set_pc_speaker_frequency(ppi->config->context, frequency);
+      }
       break;
     }
     case kPPIPortControl:
@@ -60,6 +67,19 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
     default:
       // Writes to Port A or C are ignored as they are inputs.
       break;
+  }
+}
+
+bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
+  return (ppi->port_b & kPortBTimer2Gate) && (ppi->port_b & kPortBSpeakerData);
+}
+
+void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
+  uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
+  ppi->pc_speaker_frequency_from_pit = frequency_hz;
+  if (PPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
+      ppi->config && ppi->config->set_pc_speaker_frequency) {
+    ppi->config->set_pc_speaker_frequency(ppi->config->context, frequency_hz);
   }
 }
 

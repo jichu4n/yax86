@@ -13,6 +13,7 @@
 #include "cpu.h"
 #include "pic.h"
 #include "pit.h"
+#include "ppi.h"
 
 struct PlatformState;
 
@@ -113,6 +114,8 @@ enum {
   kPortMapEntryPICSlave = 0xA0,
   // I/O port map entry for the PIT (ports 0x40-0x43).
   kPortMapEntryPIT = 0x40,
+  // I/O port map entry for the PPI (ports 0x60-0x63).
+  kPortMapEntryPPI = 0x60,
 };
 
 // An I/O port map entry. Entries should not overlap.
@@ -236,6 +239,11 @@ typedef struct PlatformState {
   PITConfig pit_config;
   // PIT state.
   PITState pit;
+
+  // PPI runtime configuration.
+  PPIConfig ppi_config;
+  // PPI state.
+  PPIState ppi;
 
   // Memory map.
   MemoryMap memory_map;

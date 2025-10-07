@@ -128,6 +128,7 @@ typedef struct StaticVectorHeader {
 #include "cpu.h"
 #include "pic.h"
 #include "pit.h"
+#include "ppi.h"
 
 struct PlatformState;
 
@@ -228,6 +229,8 @@ enum {
   kPortMapEntryPICSlave = 0xA0,
   // I/O port map entry for the PIT (ports 0x40-0x43).
   kPortMapEntryPIT = 0x40,
+  // I/O port map entry for the PPI (ports 0x60-0x63).
+  kPortMapEntryPPI = 0x60,
 };
 
 // An I/O port map entry. Entries should not overlap.
@@ -351,6 +354,11 @@ typedef struct PlatformState {
   PITConfig pit_config;
   // PIT state.
   PITState pit;
+
+  // PPI runtime configuration.
+  PPIConfig ppi_config;
+  // PPI state.
+  PPIState ppi;
 
   // Memory map.
   MemoryMap memory_map;
@@ -668,6 +676,20 @@ static void PITWritePortByte(
   PITWritePort((PITState*)entry->context, port, value);
 }
 
+static void PITSetPCSpeakerFrequency(void* context, uint32_t frequency_hz) {
+  PlatformState* platform = (PlatformState*)context;
+  PPISetPCSpeakerFrequencyFromPIT(&platform->ppi, frequency_hz);
+}
+
+static uint8_t PPIReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return PPIReadPort((PPIState*)entry->context, port);
+}
+
+static void PPIWritePortByte(
+    PortMapEntry* entry, uint16_t port, uint8_t value) {
+  PPIWritePort((PPIState*)entry->context, port, value);
+}
+
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
@@ -734,7 +756,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   // Set up PIT.
   platform->pit_config.context = platform;
   platform->pit_config.raise_irq_0 = PlatformRaiseIRQ0;
-  platform->pit_config.set_pc_speaker_frequency = NULL;  // TODO
+  platform->pit_config.set_pc_speaker_frequency = PITSetPCSpeakerFrequency;
   PITInit(&platform->pit, &platform->pit_config);
   PortMapEntry pit_entry = {
       .entry_type = kPortMapEntryPIT,
@@ -745,6 +767,20 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .context = &platform->pit,
   };
   RegisterPortMapEntry(platform, &pit_entry);
+
+  // Set up PPI.
+  platform->ppi_config.context = platform;
+  platform->ppi_config.set_pc_speaker_frequency = NULL;  // TODO
+  PPIInit(&platform->ppi, &platform->ppi_config);
+  PortMapEntry ppi_entry = {
+      .entry_type = kPortMapEntryPPI,
+      .start = 0x60,
+      .end = 0x63,
+      .read_byte = PPIReadPortByte,
+      .write_byte = PPIWritePortByte,
+      .context = &platform->ppi,
+  };
+  RegisterPortMapEntry(platform, &ppi_entry);
 
   return true;
 }

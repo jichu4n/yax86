@@ -63,6 +63,7 @@ typedef struct PITConfig {
 
   // Callback to raise IRQ 0.
   void (*raise_irq_0)(void* context);
+
   // Callback to set PC speaker frequency in Hz.
   void (*set_pc_speaker_frequency)(void* context, uint32_t frequency_hz);
 } PITConfig;

@@ -6,11 +6,9 @@ set -e
 # Array of project URLs
 declare -a PROJECTS=(
     "https://github.com/adriancable/8086tiny"
-    "https://github.com/xrip/pico-xt"
-    "https://github.com/mathijsvandenberg/picox86"
-    "https://github.com/mikechambers84/XTulator"
-    "https://github.com/jhhoward/Faux86"
     "https://github.com/640-KB/GLaBIOS"
+    "https://github.com/dbalsom/martypc"
+    "https://github.com/86Box/86Box"
 )
 
 # Project root directory
