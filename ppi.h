@@ -151,10 +151,6 @@ uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
 }
 
 void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
-  if (!ppi->config) {
-    return;
-  }
-
   switch (port) {
     case kPPIPortB: {
       bool old_pc_speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
@@ -171,8 +167,8 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
       break;
     }
     case kPPIPortControl:
-      // The BIOS writes 0x99 to set up Mode 0. We don't need to do anything
-      // since our emulation is hardcoded to this mode.
+      // The BIOS always writes 0x99 (0b10011001) to set up the PPI. We can
+      // ignore it since our emulation is hardcoded to behave accordingly.
       break;
 
     default:
@@ -188,6 +184,8 @@ bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
 void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
+  // Invoke the callback only if the speaker is currently enabled and the
+  // frequency has changed.
   if (PPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
       ppi->config && ppi->config->set_pc_speaker_frequency) {
     ppi->config->set_pc_speaker_frequency(ppi->config->context, frequency_hz);
