@@ -14,7 +14,9 @@ void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config) {
   *keyboard = zero_keyboard_state;
   keyboard->config = config;
 
-  // Default to clock low (input inhibited) and enabled.
+  // Default to keyboard enabled (enable_clear = false) with clock held low
+  // (clock_low = true). This allows us to detect a falling edge on clock_low
+  // which triggers the reset timer.
   keyboard->enable_clear = false;
   keyboard->clock_low = true;
   keyboard->clock_low_ms = 0;
@@ -68,7 +70,8 @@ void KeyboardHandleControl(
   // Falling edge of enable_clear bit indicates ack from BIOS. we clear the
   // waiting_for_ack bit, allowing the next queued scancode to be sent on the
   // next tick.
-  if (old_enable_clear == true && keyboard->enable_clear == false) {
+  if (old_enable_clear == true && keyboard->enable_clear == false &&
+      keyboard->clock_low == true) {
     keyboard->waiting_for_ack = false;
   }
 
