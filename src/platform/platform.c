@@ -169,26 +169,32 @@ void WritePortWord(PlatformState* platform, uint16_t port, uint16_t value) {
   WritePortByte(platform, port + 1, (value >> 8) & 0xFF);
 }
 
-static uint8_t CPUReadMemoryByte(CPUState* cpu, uint32_t address) {
+// ============================================================================
+// Callbacks for CPU module
+// ============================================================================
+
+static uint8_t CPUCallbackReadMemoryByte(CPUState* cpu, uint32_t address) {
   return ReadMemoryByte((PlatformState*)cpu->config->context, address);
 }
 
-static void CPUWriteMemoryByte(CPUState* cpu, uint32_t address, uint8_t value) {
+static void CPUCallbackWriteMemoryByte(
+    CPUState* cpu, uint32_t address, uint8_t value) {
   WriteMemoryByte((PlatformState*)cpu->config->context, address, value);
 }
 
-static uint8_t CPUReadPortByte(CPUState* cpu, uint16_t port) {
+static uint8_t CPUCallbackReadPortByte(CPUState* cpu, uint16_t port) {
   return ReadPortByte((PlatformState*)cpu->config->context, port);
 }
 
-static void CPUWritePortByte(CPUState* cpu, uint16_t port, uint8_t value) {
+static void CPUCallbackWritePortByte(
+    CPUState* cpu, uint16_t port, uint8_t value) {
   WritePortByte((PlatformState*)cpu->config->context, port, value);
 }
 
 // Callback for the CPU to check for pending interrupts from the PIC after an
 // instruction has been executed. This is how we connect the PIC(s) to the
 // CPU's interrupt handling flow.
-static ExecuteStatus CPUOnAfterExecuteInstruction(
+static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
     CPUState* cpu, YAX86_UNUSED const struct Instruction* instruction) {
   PlatformState* platform = (PlatformState*)cpu->config->context;
 
@@ -206,6 +212,9 @@ static ExecuteStatus CPUOnAfterExecuteInstruction(
 
 static const CPUConfig kEmptyCPUConfig = {0};
 
+// ============================================================================
+// Callbacks for physical memory
+// ============================================================================
 static uint8_t ReadPhysicalMemoryByte(MemoryMapEntry* entry, uint32_t address) {
   PlatformState* platform = (PlatformState*)entry->context;
   if (platform->config && platform->config->read_physical_memory_byte) {
@@ -222,59 +231,95 @@ static void WritePhysicalMemoryByte(
   }
 }
 
-static uint8_t PICReadPortByte(PortMapEntry* entry, uint16_t port) {
+// ============================================================================
+// Callbacks for 8259 PIC module
+// ============================================================================
+
+static uint8_t PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PICReadPort((PICState*)entry->context, port);
 }
 
-static void PICWritePortByte(
+static void PICCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PICWritePort((PICState*)entry->context, port, value);
 }
 
-void PlatformRaiseIRQ0(void* context) {
+static void PICCallbackPlatformRaiseIRQ0(void* context) {
   PlatformState* platform = (PlatformState*)context;
   PlatformRaiseIRQ(platform, 0);
 }
 
-void PlatformRaiseIRQ1(void* context) {
-  PlatformState* platform = (PlatformState*)context;
-  PlatformRaiseIRQ(platform, 1);
-}
+// ============================================================================
+// Callbacks for 8253 PIT module
+// ============================================================================
 
-static uint8_t PITReadPortByte(PortMapEntry* entry, uint16_t port) {
+static uint8_t PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PITReadPort((PITState*)entry->context, port);
 }
 
-static void PITWritePortByte(
+static void PITCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PITWritePort((PITState*)entry->context, port, value);
 }
 
-static void PITSetPCSpeakerFrequency(void* context, uint32_t frequency_hz) {
+static void PITCallbackSetPCSpeakerFrequency(
+    void* context, uint32_t frequency_hz) {
   PlatformState* platform = (PlatformState*)context;
   PPISetPCSpeakerFrequencyFromPIT(&platform->ppi, frequency_hz);
 }
 
-static uint8_t PPIReadPortByte(PortMapEntry* entry, uint16_t port) {
+// ============================================================================
+// Callbacks for 8255 PPI module
+// ============================================================================
+
+static uint8_t PPICallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PPIReadPort((PPIState*)entry->context, port);
 }
 
-static void PPIWritePortByte(
+static void PPICallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PPIWritePort((PPIState*)entry->context, port, value);
 }
 
-static void PlatformSetKeyboardControl(
+static void PPICallbackSetKeyboardControl(
     void* context, bool keyboard_enable_clear, bool keyboard_clock_low) {
   PlatformState* platform = (PlatformState*)context;
   KeyboardHandleControl(
       &platform->keyboard, keyboard_enable_clear, keyboard_clock_low);
 }
 
-static void PlatformSendScancode(void* context, uint8_t scancode) {
+// ============================================================================
+// Callbacks for Keyboard module
+// ============================================================================
+
+static void KeyboardCallbackPlatformRaiseIRQ1(void* context) {
+  PlatformState* platform = (PlatformState*)context;
+  PlatformRaiseIRQ(platform, 1);
+}
+
+static void KeyboardCallbackSendScancode(void* context, uint8_t scancode) {
   PlatformState* platform = (PlatformState*)context;
   PPISetScancode(&platform->ppi, scancode);
 }
+
+// ============================================================================
+// Callbacks for DMA module
+// ============================================================================
+
+static uint8_t DMACallbackReadMemoryByte(void* context, uint32_t address) {
+  PlatformState* platform = (PlatformState*)context;
+  return ReadMemoryByte(platform, address);
+}
+
+static void DMACallbackWriteMemoryByte(
+    void* context, uint32_t address, uint8_t value) {
+  PlatformState* platform = (PlatformState*)context;
+  WriteMemoryByte(platform, address, value);
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
 
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
@@ -290,12 +335,12 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   // Set up CPU.
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
-  platform->cpu_config.read_memory_byte = CPUReadMemoryByte;
-  platform->cpu_config.write_memory_byte = CPUWriteMemoryByte;
-  platform->cpu_config.read_port = CPUReadPortByte;
-  platform->cpu_config.write_port = CPUWritePortByte;
+  platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
+  platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
+  platform->cpu_config.read_port = CPUCallbackReadPortByte;
+  platform->cpu_config.write_port = CPUCallbackWritePortByte;
   platform->cpu_config.on_after_execute_instruction =
-      CPUOnAfterExecuteInstruction;
+      CPUCallbackOnAfterExecuteInstruction;
   CPUInit(&platform->cpu, &platform->cpu_config);
 
   // Set up initial memory map.
@@ -316,8 +361,8 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .entry_type = kPortMapEntryPICMaster,
       .start = 0x20,
       .end = 0x21,
-      .read_byte = PICReadPortByte,
-      .write_byte = PICWritePortByte,
+      .read_byte = PICCallbackReadPortByte,
+      .write_byte = PICCallbackWritePortByte,
       .context = &platform->master_pic,
   };
   RegisterPortMapEntry(platform, &master_pic_entry);
@@ -332,8 +377,8 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
         .entry_type = kPortMapEntryPICSlave,
         .start = 0xA0,
         .end = 0xA1,
-        .read_byte = PICReadPortByte,
-        .write_byte = PICWritePortByte,
+        .read_byte = PICCallbackReadPortByte,
+        .write_byte = PICCallbackWritePortByte,
         .context = &platform->slave_pic,
     };
     RegisterPortMapEntry(platform, &slave_pic_entry);
@@ -341,15 +386,16 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 
   // Set up PIT.
   platform->pit_config.context = platform;
-  platform->pit_config.raise_irq_0 = PlatformRaiseIRQ0;
-  platform->pit_config.set_pc_speaker_frequency = PITSetPCSpeakerFrequency;
+  platform->pit_config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
+  platform->pit_config.set_pc_speaker_frequency =
+      PITCallbackSetPCSpeakerFrequency;
   PITInit(&platform->pit, &platform->pit_config);
   PortMapEntry pit_entry = {
       .entry_type = kPortMapEntryPIT,
       .start = 0x40,
       .end = 0x43,
-      .read_byte = PITReadPortByte,
-      .write_byte = PITWritePortByte,
+      .read_byte = PITCallbackReadPortByte,
+      .write_byte = PITCallbackWritePortByte,
       .context = &platform->pit,
   };
   RegisterPortMapEntry(platform, &pit_entry);
@@ -361,23 +407,31 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->ppi_config.display_mode = kPPIDisplayMDA;
   platform->ppi_config.fpu_installed = false;
   platform->ppi_config.set_pc_speaker_frequency = NULL;  // TODO
-  platform->ppi_config.set_keyboard_control = PlatformSetKeyboardControl;
+  platform->ppi_config.set_keyboard_control = PPICallbackSetKeyboardControl;
   PPIInit(&platform->ppi, &platform->ppi_config);
   PortMapEntry ppi_entry = {
       .entry_type = kPortMapEntryPPI,
       .start = 0x60,
       .end = 0x63,
-      .read_byte = PPIReadPortByte,
-      .write_byte = PPIWritePortByte,
+      .read_byte = PPICallbackReadPortByte,
+      .write_byte = PPICallbackWritePortByte,
       .context = &platform->ppi,
   };
   RegisterPortMapEntry(platform, &ppi_entry);
 
   // Set up keyboard.
   platform->keyboard_config.context = platform;
-  platform->keyboard_config.raise_irq1 = PlatformRaiseIRQ1;
-  platform->keyboard_config.send_scancode = PlatformSendScancode;
+  platform->keyboard_config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
+  platform->keyboard_config.send_scancode = KeyboardCallbackSendScancode;
   KeyboardInit(&platform->keyboard, &platform->keyboard_config);
+
+  // Set up DMA controller.
+  platform->dma_config.context = platform;
+  platform->dma_config.read_memory_byte = DMACallbackReadMemoryByte;
+  platform->dma_config.write_memory_byte = DMACallbackWriteMemoryByte;
+  platform->dma_config.read_device_byte = NULL;   // TODO
+  platform->dma_config.write_device_byte = NULL;  // TODO
+  DMAInit(&platform->dma, &platform->dma_config);
 
   return true;
 }

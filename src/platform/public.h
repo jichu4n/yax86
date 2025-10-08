@@ -11,6 +11,7 @@
 #endif  // YAX86_PLATFORM_BUNDLE_H
 
 #include "cpu.h"
+#include "dma.h"
 #include "keyboard.h"
 #include "pic.h"
 #include "pit.h"
@@ -250,6 +251,11 @@ typedef struct PlatformState {
   KeyboardConfig keyboard_config;
   // Keyboard state.
   KeyboardState keyboard;
+
+  // DMA controller runtime configuration.
+  DMAConfig dma_config;
+  // DMA controller state.
+  DMAState dma;
 
   // Memory map.
   MemoryMap memory_map;
