@@ -192,8 +192,8 @@ static void CPUCallbackWritePortByte(
 }
 
 // Callback for the CPU to check for pending interrupts from the PIC after an
-// instruction has been executed. This is how we connect the PIC(s) to the
-// CPU's interrupt handling flow.
+// instruction has been executed. This is how we connect the PIC to the CPU's
+// interrupt handling flow.
 static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
     CPUState* cpu, YAX86_UNUSED const struct Instruction* instruction) {
   PlatformState* platform = (PlatformState*)cpu->config->context;
@@ -202,7 +202,7 @@ static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
     return kExecuteSuccess;
   }
 
-  uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->master_pic);
+  uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector != kPICNoPendingInterrupt) {
     SetPendingInterrupt(cpu, interrupt_vector);
   }
@@ -354,35 +354,18 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .write_byte = WritePhysicalMemoryByte};
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
 
-  // Set up master PIC.
-  platform->master_pic_config.sp = false;
-  PICInit(&platform->master_pic, &platform->master_pic_config);
-  PortMapEntry master_pic_entry = {
-      .entry_type = kPortMapEntryPICMaster,
+  // Set up PIC.
+  platform->pic_config.sp = false;
+  PICInit(&platform->pic, &platform->pic_config);
+  PortMapEntry pic_entry = {
+      .entry_type = kPortMapEntryPIC,
       .start = 0x20,
       .end = 0x21,
       .read_byte = PICCallbackReadPortByte,
       .write_byte = PICCallbackWritePortByte,
-      .context = &platform->master_pic,
+      .context = &platform->pic,
   };
-  RegisterPortMapEntry(platform, &master_pic_entry);
-
-  // Set up slave PIC if in dual PIC mode.
-  if (config->pic_mode == kPlatformPICModeDual) {
-    platform->slave_pic_config.sp = true;
-    PICInit(&platform->slave_pic, &platform->slave_pic_config);
-    platform->master_pic.cascade_pic = &platform->slave_pic;
-    platform->slave_pic.cascade_pic = &platform->master_pic;
-    PortMapEntry slave_pic_entry = {
-        .entry_type = kPortMapEntryPICSlave,
-        .start = 0xA0,
-        .end = 0xA1,
-        .read_byte = PICCallbackReadPortByte,
-        .write_byte = PICCallbackWritePortByte,
-        .context = &platform->slave_pic,
-    };
-    RegisterPortMapEntry(platform, &slave_pic_entry);
-  }
+  RegisterPortMapEntry(platform, &pic_entry);
 
   // Set up PIT.
   platform->pit_config.context = platform;
@@ -437,25 +420,11 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 }
 
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
-  switch (platform->config->pic_mode) {
-    case kPlatformPICModeSingle:
-      if (irq >= 8) {
-        return false;
-      }
-      PICRaiseIRQ(&platform->master_pic, irq);
-      return true;
-    case kPlatformPICModeDual: {
-      if (irq >= 16) {
-        return false;
-      }
-      PICState* target_pic =
-          (irq < 8) ? &platform->master_pic : &platform->slave_pic;
-      PICRaiseIRQ(target_pic, irq % 8);
-      return true;
-    }
-    default:
-      return false;
+  if (irq >= 8) {
+    return false;
   }
+  PICRaiseIRQ(&platform->pic, irq);
+  return true;
 }
 
 // Boot the virtual machine and start execution.

@@ -111,9 +111,7 @@ enum {
   // Maximum number of I/O port mapping entries.
   kMaxPortMapEntries = 16,
   // I/O port map entry for the master PIC (ports 0x20-0x21).
-  kPortMapEntryPICMaster = 0x20,
-  // I/O port map entry for the slave PIC (ports 0xA0-0xA1).
-  kPortMapEntryPICSlave = 0xA0,
+  kPortMapEntryPIC = 0x20,
   // I/O port map entry for the PIT (ports 0x40-0x43).
   kPortMapEntryPIT = 0x40,
   // I/O port map entry for the PPI (ports 0x60-0x63).
@@ -171,14 +169,6 @@ void WritePortWord(
 // Platform state
 // ============================================================================
 
-// PIC configuration.
-typedef enum PlatformPICMode {
-  // Single PIC - IBM PC, PC/XT.
-  kPlatformPICModeSingle,
-  // Dual PIC (master and slave) - IBM PC/AT, PS/2.
-  kPlatformPICModeDual,
-} PlatformPICMode;
-
 // Caller-provided runtime configuration.
 typedef struct PlatformConfig {
   // Custom data passed through to callbacks.
@@ -186,9 +176,6 @@ typedef struct PlatformConfig {
 
   // Physical memory size in bytes. Must be between 64K and 640K.
   uint32_t physical_memory_size;
-
-  // PIC configuration.
-  PlatformPICMode pic_mode;
 
   // Callback to read a byte from physical memory.
   //
@@ -226,16 +213,10 @@ typedef struct PlatformState {
   // CPU state.
   CPUState cpu;
 
-  // Master PIC runtime configuration.
-  PICConfig master_pic_config;
-  // Master PIC state.
-  PICState master_pic;
-
-  // Slave PIC runtime configuration. Only valid if pic_mode is
-  // kPlatformPICModeDual.
-  PICConfig slave_pic_config;
-  // Slave PIC state. Only valid if pic_mode is kPlatformPICModeDual.
-  PICState slave_pic;
+  // PIC runtime configuration.
+  PICConfig pic_config;
+  // PIC state.
+  PICState pic;
 
   // PIT runtime configuration.
   PITConfig pit_config;
@@ -268,7 +249,7 @@ typedef struct PlatformState {
 //   - The physical memory size is not between 64K and 640K.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 
-// Raise a hardware interrupt to the CPU via the PIC(s). Returns true if the
+// Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 

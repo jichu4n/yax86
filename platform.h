@@ -228,9 +228,7 @@ enum {
   // Maximum number of I/O port mapping entries.
   kMaxPortMapEntries = 16,
   // I/O port map entry for the master PIC (ports 0x20-0x21).
-  kPortMapEntryPICMaster = 0x20,
-  // I/O port map entry for the slave PIC (ports 0xA0-0xA1).
-  kPortMapEntryPICSlave = 0xA0,
+  kPortMapEntryPIC = 0x20,
   // I/O port map entry for the PIT (ports 0x40-0x43).
   kPortMapEntryPIT = 0x40,
   // I/O port map entry for the PPI (ports 0x60-0x63).
@@ -288,14 +286,6 @@ void WritePortWord(
 // Platform state
 // ============================================================================
 
-// PIC configuration.
-typedef enum PlatformPICMode {
-  // Single PIC - IBM PC, PC/XT.
-  kPlatformPICModeSingle,
-  // Dual PIC (master and slave) - IBM PC/AT, PS/2.
-  kPlatformPICModeDual,
-} PlatformPICMode;
-
 // Caller-provided runtime configuration.
 typedef struct PlatformConfig {
   // Custom data passed through to callbacks.
@@ -303,9 +293,6 @@ typedef struct PlatformConfig {
 
   // Physical memory size in bytes. Must be between 64K and 640K.
   uint32_t physical_memory_size;
-
-  // PIC configuration.
-  PlatformPICMode pic_mode;
 
   // Callback to read a byte from physical memory.
   //
@@ -343,16 +330,10 @@ typedef struct PlatformState {
   // CPU state.
   CPUState cpu;
 
-  // Master PIC runtime configuration.
-  PICConfig master_pic_config;
-  // Master PIC state.
-  PICState master_pic;
-
-  // Slave PIC runtime configuration. Only valid if pic_mode is
-  // kPlatformPICModeDual.
-  PICConfig slave_pic_config;
-  // Slave PIC state. Only valid if pic_mode is kPlatformPICModeDual.
-  PICState slave_pic;
+  // PIC runtime configuration.
+  PICConfig pic_config;
+  // PIC state.
+  PICState pic;
 
   // PIT runtime configuration.
   PITConfig pit_config;
@@ -385,7 +366,7 @@ typedef struct PlatformState {
 //   - The physical memory size is not between 64K and 640K.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 
-// Raise a hardware interrupt to the CPU via the PIC(s). Returns true if the
+// Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
@@ -639,8 +620,8 @@ static void CPUCallbackWritePortByte(
 }
 
 // Callback for the CPU to check for pending interrupts from the PIC after an
-// instruction has been executed. This is how we connect the PIC(s) to the
-// CPU's interrupt handling flow.
+// instruction has been executed. This is how we connect the PIC to the CPU's
+// interrupt handling flow.
 static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
     CPUState* cpu, YAX86_UNUSED const struct Instruction* instruction) {
   PlatformState* platform = (PlatformState*)cpu->config->context;
@@ -649,7 +630,7 @@ static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
     return kExecuteSuccess;
   }
 
-  uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->master_pic);
+  uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector != kPICNoPendingInterrupt) {
     SetPendingInterrupt(cpu, interrupt_vector);
   }
@@ -801,35 +782,18 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .write_byte = WritePhysicalMemoryByte};
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
 
-  // Set up master PIC.
-  platform->master_pic_config.sp = false;
-  PICInit(&platform->master_pic, &platform->master_pic_config);
-  PortMapEntry master_pic_entry = {
-      .entry_type = kPortMapEntryPICMaster,
+  // Set up PIC.
+  platform->pic_config.sp = false;
+  PICInit(&platform->pic, &platform->pic_config);
+  PortMapEntry pic_entry = {
+      .entry_type = kPortMapEntryPIC,
       .start = 0x20,
       .end = 0x21,
       .read_byte = PICCallbackReadPortByte,
       .write_byte = PICCallbackWritePortByte,
-      .context = &platform->master_pic,
+      .context = &platform->pic,
   };
-  RegisterPortMapEntry(platform, &master_pic_entry);
-
-  // Set up slave PIC if in dual PIC mode.
-  if (config->pic_mode == kPlatformPICModeDual) {
-    platform->slave_pic_config.sp = true;
-    PICInit(&platform->slave_pic, &platform->slave_pic_config);
-    platform->master_pic.cascade_pic = &platform->slave_pic;
-    platform->slave_pic.cascade_pic = &platform->master_pic;
-    PortMapEntry slave_pic_entry = {
-        .entry_type = kPortMapEntryPICSlave,
-        .start = 0xA0,
-        .end = 0xA1,
-        .read_byte = PICCallbackReadPortByte,
-        .write_byte = PICCallbackWritePortByte,
-        .context = &platform->slave_pic,
-    };
-    RegisterPortMapEntry(platform, &slave_pic_entry);
-  }
+  RegisterPortMapEntry(platform, &pic_entry);
 
   // Set up PIT.
   platform->pit_config.context = platform;
@@ -884,25 +848,11 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 }
 
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
-  switch (platform->config->pic_mode) {
-    case kPlatformPICModeSingle:
-      if (irq >= 8) {
-        return false;
-      }
-      PICRaiseIRQ(&platform->master_pic, irq);
-      return true;
-    case kPlatformPICModeDual: {
-      if (irq >= 16) {
-        return false;
-      }
-      PICState* target_pic =
-          (irq < 8) ? &platform->master_pic : &platform->slave_pic;
-      PICRaiseIRQ(target_pic, irq % 8);
-      return true;
-    }
-    default:
-      return false;
+  if (irq >= 8) {
+    return false;
   }
+  PICRaiseIRQ(&platform->pic, irq);
+  return true;
 }
 
 // Boot the virtual machine and start execution.

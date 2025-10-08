@@ -25,7 +25,6 @@ class PCSpeakerTest : public ::testing::Test {
 
     // Initialize platform config.
     platform_config_.physical_memory_size = 64 * 1024;
-    platform_config_.pic_mode = kPlatformPICModeSingle;
 
     // Initialize the platform.
     ASSERT_TRUE(PlatformInit(&platform_, &platform_config_));
