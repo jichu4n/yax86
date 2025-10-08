@@ -432,6 +432,7 @@ ExecuteStatus PlatformBoot(PlatformState* platform);
 
 #line 1 "./src/platform/platform.c"
 #include "pic.h"
+#include "ppi.h"
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
@@ -770,7 +771,12 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 
   // Set up PPI.
   platform->ppi_config.context = platform;
+  platform->ppi_config.num_floppy_drives = 1;
+  platform->ppi_config.memory_size = kPPIMemorySize256KB;
+  platform->ppi_config.display_mode = kPPIDisplayMDA;
+  platform->ppi_config.fpu_installed = false;
   platform->ppi_config.set_pc_speaker_frequency = NULL;  // TODO
+  platform->ppi_config.set_keyboard_control = NULL;      // TODO
   PPIInit(&platform->ppi, &platform->ppi_config);
   PortMapEntry ppi_entry = {
       .entry_type = kPortMapEntryPPI,
