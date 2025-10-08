@@ -11,6 +11,7 @@
 #endif  // YAX86_PLATFORM_BUNDLE_H
 
 #include "cpu.h"
+#include "keyboard.h"
 #include "pic.h"
 #include "pit.h"
 #include "ppi.h"
@@ -244,6 +245,11 @@ typedef struct PlatformState {
   PPIConfig ppi_config;
   // PPI state.
   PPIState ppi;
+
+  // Keyboard runtime configuration.
+  KeyboardConfig keyboard_config;
+  // Keyboard state.
+  KeyboardState keyboard;
 
   // Memory map.
   MemoryMap memory_map;

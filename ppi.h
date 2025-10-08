@@ -99,7 +99,7 @@ enum {
   // Bit 5: I/O channel check enable/disable. Not supported.
   kPPIPortBIoChannelCheck = (1 << 5),
   // Bit 6: Keyboard clock control (0 = hold low, 1 = enable).
-  kPPIPortBKeyboardClock = (1 << 6),
+  kPPIPortBKeyboardClockLow = (1 << 6),
   // Bit 7: Keyboard enable/clear (0 = enable read, 1 = clear).
   kPPIPortBKeyboardEnableClear = (1 << 7),
 };
@@ -151,7 +151,7 @@ typedef struct PPIConfig {
       // Port B bit 7
       bool keyboard_enable_clear,
       // Port B bit 6
-      bool keyboard_clock);
+      bool keyboard_clock_low);
 } PPIConfig;
 
 // State of the PPI.
@@ -266,7 +266,7 @@ bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
 
 static inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
   return (
-      ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClock));
+      ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
 void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
@@ -294,7 +294,7 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
         ppi->config->set_keyboard_control(
             ppi->config->context,
             (ppi->port_b & kPPIPortBKeyboardEnableClear) != 0,
-            (ppi->port_b & kPPIPortBKeyboardClock) != 0);
+            (ppi->port_b & kPPIPortBKeyboardClockLow) != 0);
       }
       break;
     }

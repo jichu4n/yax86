@@ -10,9 +10,8 @@ static bool g_last_kb_enable_clear;
 static bool g_last_kb_clock;
 
 // Mock callback function to capture calls and arguments.
-static void MockSetKeyboardControl(void* context,
-                                   bool keyboard_enable_clear,
-                                   bool keyboard_clock) {
+static void MockSetKeyboardControl(
+    void* context, bool keyboard_enable_clear, bool keyboard_clock) {
   g_callback_count++;
   g_last_kb_enable_clear = keyboard_enable_clear;
   g_last_kb_clock = keyboard_clock;
@@ -51,7 +50,7 @@ TEST_F(KeyboardControlTest, NoChangeNoCallback) {
 
 TEST_F(KeyboardControlTest, CallbackOnBit6Change) {
   // Act: Write a value to flip bit 6 on.
-  PPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardClock);
+  PPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardClockLow);
 
   // Assert: Callback was called once with the correct state.
   EXPECT_EQ(g_callback_count, 1);
@@ -72,7 +71,7 @@ TEST_F(KeyboardControlTest, CallbackOnBit7Change) {
 TEST_F(KeyboardControlTest, CallbackOnBothBitsChange) {
   // Act: Write a value to flip both bits 6 and 7 on.
   const uint8_t both_bits =
-      kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClock;
+      kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow;
   PPIWritePort(&ppi_, kPPIPortB, both_bits);
 
   // Assert: Callback was called once with the correct state.
@@ -84,7 +83,7 @@ TEST_F(KeyboardControlTest, CallbackOnBothBitsChange) {
 TEST_F(KeyboardControlTest, CallbackOnFlipOff) {
   // Arrange: Start with both bits on.
   const uint8_t both_bits =
-      kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClock;
+      kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow;
   PPIWritePort(&ppi_, kPPIPortB, both_bits);
   // Reset trackers after setup.
   g_callback_count = 0;
@@ -103,7 +102,7 @@ TEST_F(KeyboardControlTest, NoCallbackIfNull) {
   config_.set_keyboard_control = nullptr;
 
   // Act: Write a value that would normally trigger the callback.
-  PPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardClock);
+  PPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardClockLow);
 
   // Assert: Callback was not called and the program did not crash.
   EXPECT_EQ(g_callback_count, 0);

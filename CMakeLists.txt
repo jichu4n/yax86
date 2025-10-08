@@ -35,6 +35,7 @@ generate_header_bundle("cpu")
 generate_header_bundle("pic")
 generate_header_bundle("pit")
 generate_header_bundle("ppi")
+generate_header_bundle("keyboard")
 generate_header_bundle("platform")
 generate_header_bundle("video")
 

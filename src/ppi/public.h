@@ -83,7 +83,7 @@ enum {
   // Bit 5: I/O channel check enable/disable. Not supported.
   kPPIPortBIoChannelCheck = (1 << 5),
   // Bit 6: Keyboard clock control (0 = hold low, 1 = enable).
-  kPPIPortBKeyboardClock = (1 << 6),
+  kPPIPortBKeyboardClockLow = (1 << 6),
   // Bit 7: Keyboard enable/clear (0 = enable read, 1 = clear).
   kPPIPortBKeyboardEnableClear = (1 << 7),
 };
@@ -135,7 +135,7 @@ typedef struct PPIConfig {
       // Port B bit 7
       bool keyboard_enable_clear,
       // Port B bit 6
-      bool keyboard_clock);
+      bool keyboard_clock_low);
 } PPIConfig;
 
 // State of the PPI.

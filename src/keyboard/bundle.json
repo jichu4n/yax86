@@ -1,0 +1,4 @@
+{
+  "public": ["../util/static_vector.h", "public.h"],
+  "private": ["keyboard.c"]
+}

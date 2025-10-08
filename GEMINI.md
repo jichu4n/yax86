@@ -38,8 +38,8 @@ the Raspberry Pi Pico.
   interfaces like function signatures and struct members
 - Define structs and enums with `typedef struct Name { ... } Name;` or 
   `typedef enum Name { ... } Name;`
-- For unused function parameters, use `__attribute__((unused))` to avoid
-  compiler warnings
+- Unused function parameters should be annotated with `YAX86_UNUSED` from the
+  util/common.h header to avoid unused parameter warnings
 
 ## Commands
 

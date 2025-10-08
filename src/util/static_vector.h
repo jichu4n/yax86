@@ -83,6 +83,8 @@ typedef struct StaticVectorHeader {
     }                                                                     \
     --vector->header.length;                                              \
     return true;                                                          \
-  }
+  }                                                                       \
+  static void name##Clear(name* vector) __attribute__((unused));          \
+  static void name##Clear(name* vector) { vector->header.length = 0; }
 
 #endif  // YAX86_UTIL_STATIC_VECTOR_H

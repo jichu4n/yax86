@@ -3,6 +3,7 @@
 #define YAX86_IMPLEMENTATION
 #include "bios.h"
 #include "cpu.h"
+#include "keyboard.h"
 #include "pic.h"
 #include "pit.h"
 #include "platform.h"

@@ -99,7 +99,9 @@ typedef struct StaticVectorHeader {
     }                                                                     \
     --vector->header.length;                                              \
     return true;                                                          \
-  }
+  }                                                                       \
+  static void name##Clear(name* vector) __attribute__((unused));          \
+  static void name##Clear(name* vector) { vector->header.length = 0; }
 
 #endif  // YAX86_UTIL_STATIC_VECTOR_H
 
@@ -126,6 +128,7 @@ typedef struct StaticVectorHeader {
 #endif  // YAX86_PLATFORM_BUNDLE_H
 
 #include "cpu.h"
+#include "keyboard.h"
 #include "pic.h"
 #include "pit.h"
 #include "ppi.h"
@@ -360,6 +363,11 @@ typedef struct PlatformState {
   // PPI state.
   PPIState ppi;
 
+  // Keyboard runtime configuration.
+  KeyboardConfig keyboard_config;
+  // Keyboard state.
+  KeyboardState keyboard;
+
   // Memory map.
   MemoryMap memory_map;
   // I/O port map.
@@ -433,6 +441,7 @@ ExecuteStatus PlatformBoot(PlatformState* platform);
 #line 1 "./src/platform/platform.c"
 #include "pic.h"
 #include "ppi.h"
+
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
@@ -668,6 +677,11 @@ void PlatformRaiseIRQ0(void* context) {
   PlatformRaiseIRQ(platform, 0);
 }
 
+void PlatformRaiseIRQ1(void* context) {
+  PlatformState* platform = (PlatformState*)context;
+  PlatformRaiseIRQ(platform, 1);
+}
+
 static uint8_t PITReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PITReadPort((PITState*)entry->context, port);
 }
@@ -689,6 +703,18 @@ static uint8_t PPIReadPortByte(PortMapEntry* entry, uint16_t port) {
 static void PPIWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PPIWritePort((PPIState*)entry->context, port, value);
+}
+
+static void PlatformSetKeyboardControl(
+    void* context, bool keyboard_enable_clear, bool keyboard_clock_low) {
+  PlatformState* platform = (PlatformState*)context;
+  KeyboardHandleControl(
+      &platform->keyboard, keyboard_enable_clear, keyboard_clock_low);
+}
+
+static void PlatformSendScancode(void* context, uint8_t scancode) {
+  PlatformState* platform = (PlatformState*)context;
+  PPISetScancode(&platform->ppi, scancode);
 }
 
 // Initialize the platform state with the provided configuration. Returns true
@@ -776,7 +802,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->ppi_config.display_mode = kPPIDisplayMDA;
   platform->ppi_config.fpu_installed = false;
   platform->ppi_config.set_pc_speaker_frequency = NULL;  // TODO
-  platform->ppi_config.set_keyboard_control = NULL;      // TODO
+  platform->ppi_config.set_keyboard_control = PlatformSetKeyboardControl;
   PPIInit(&platform->ppi, &platform->ppi_config);
   PortMapEntry ppi_entry = {
       .entry_type = kPortMapEntryPPI,
@@ -787,6 +813,12 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .context = &platform->ppi,
   };
   RegisterPortMapEntry(platform, &ppi_entry);
+
+  // Set up keyboard.
+  platform->keyboard_config.context = platform;
+  platform->keyboard_config.raise_irq1 = PlatformRaiseIRQ1;
+  platform->keyboard_config.send_scancode = PlatformSendScancode;
+  KeyboardInit(&platform->keyboard, &platform->keyboard_config);
 
   return true;
 }

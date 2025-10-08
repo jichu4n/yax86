@@ -59,7 +59,7 @@ bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
 
 static inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
   return (
-      ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClock));
+      ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
 void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
@@ -87,7 +87,7 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
         ppi->config->set_keyboard_control(
             ppi->config->context,
             (ppi->port_b & kPPIPortBKeyboardEnableClear) != 0,
-            (ppi->port_b & kPPIPortBKeyboardClock) != 0);
+            (ppi->port_b & kPPIPortBKeyboardClockLow) != 0);
       }
       break;
     }
