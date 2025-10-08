@@ -2,9 +2,9 @@
 
 ## Project Goals
 
-This project is a small IBM PC emulator for minimal MCU platforms like
+This project is a small IBM PC/XT emulator for minimal MCU platforms like
 the Raspberry Pi Pico.
-- Emulates a basic IBM PC, PC/XT, and PC/AT system with an 8086/8088 processor
+- Emulates a basic PC/XT system with an 8086/8088 processor
 - Runs MS-DOS 3.3 on top of GLaBIOS
 
 ## Codebase
@@ -24,15 +24,17 @@ the Raspberry Pi Pico.
 - Main emulator code is written in portable C99
 - Tests are written in C++14 and use the Google Test framework
 - All C/C++ code conforms to Google C++ style guide
-- No dependencies on libc functions like `printf`
+- No dependencies on libc functions like `printf`, `memset`.
 - No dynamic memory allocation - only uses compile-time static memory
   allocation and stack allocation
+- For zero-initialized data, use static zero-initialization instead of
+  `memset`, for example `static MyStruct data = {0};`
 - OK to include standard library headers for types like `uint8_t` and
   compile-time constants and macros like `NULL`
 - Uses `clang-format` for code formatting
 - Prefer enums over `#define` for constants
-- Prefer enums over numeric literals - create `enum { kFoo = 0xF8 };` instead of
-  referencing `0xF8` directly in the logic.
+- Prefer enums over numeric literals - define an enum value `enum { kFoo = 0xF8
+  };` instead of referencing `0xF8` directly in the logic.
 - Prefer `static inline` functions over macros
 - Prefer specific types like `uint8_t` over generic types like `int` for
   interfaces like function signatures and struct members
@@ -40,6 +42,16 @@ the Raspberry Pi Pico.
   `typedef enum Name { ... } Name;`
 - Unused function parameters should be annotated with `YAX86_UNUSED` from the
   util/common.h header to avoid unused parameter warnings
+- When incrementing or decrementing a variable, prefer prefix syntax
+  `++var` or `--var` instead of the suffix syntax `var++` or `var--`
+- Comments should generally be added on the line before a variable, field or
+  type, rather than on the same line. For example:
+    ```c
+    // Good comment - do this
+    int var1;
+
+    int var2;  // Bad comment - don't do this
+    ```
 
 ## Commands
 
@@ -56,18 +68,18 @@ ctest --test-dir build -j8 --output-on-failure
 ## Additional Notes
 
 - The project should NOT implement emulation for features not used on the IBM
-  PC, PC/XT, or PC/AT systems by the IBM BIOS or MS-DOS. The project does not
-  attempt to support other hypothetical x86 operating systems, only MS-DOS and
-  era-accurate software.
-    - For example, we should NOT implement advanced features of the Intel
-      8259A PIC like level-triggered interrupts, auto-EOI mode, or specific
-      end-of-interrupt mode, because the IBM PC/XT and PC/AT systems only use
-      edge-triggered interrupts, manual EOI mode, and normal fully-nested mode.
+  PC/XT by GLaBIOS or MS-DOS. The project does not attempt to support other
+  hypothetical x86 operating systems, only MS-DOS and era-accurate software.
+    - For example, we should NOT implement advanced features of the Intel 8259A
+      PIC like level-triggered interrupts, auto-EOI mode, or specific
+      end-of-interrupt mode, because the IBM PC/XT only uses edge-triggered
+      interrupts, manual EOI mode, and normal fully-nested mode.
 - The project uses GlaBIOS as the BIOS implementation. The project SHOULD
   implement emulation for any functionality required by GlaBIOS to run MS-DOS
   3.3 and basic DOS applications.
-- The source code for GLaBIOS is found at `.cache/GLaBIOS` under the project
-  root.
+- The source code for GLaBIOS is found at `.cache/GLaBIOS/src/GLABIOS.ASM`
+  under the project root. Specifically, we target GLaBIOS's `ARCH_TYPE_EMU`
+  build type.
 - When considering how to implement emulation for a hardware component or a
   feature of a hardware component, fetch and review the source code of similar
   projects listed below for reference.

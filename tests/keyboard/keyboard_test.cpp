@@ -1,7 +1,8 @@
-#include <gtest/gtest.h>
-#include <vector>
-
 #include "keyboard.h"
+
+#include <gtest/gtest.h>
+
+#include <vector>
 
 namespace {
 
@@ -13,7 +14,7 @@ int g_irq1_count;
 void MockSendScancode(void* context, uint8_t scancode) {
   g_sent_scancodes.push_back(scancode);
 }
-void MockRaiseIrq1(void* context) { g_irq1_count++; }
+void MockRaiseIrq1(void* context) { ++g_irq1_count; }
 
 class KeyboardTest : public ::testing::Test {
  protected:

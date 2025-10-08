@@ -443,13 +443,13 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
 
   // Update address register
   if ((channel->mode & kDMAModeAddressDecrement) == 0) {
-    channel->current_address++;
+    ++channel->current_address;
   } else {
-    channel->current_address--;
+    --channel->current_address;
   }
 
   // Update count register and check for Terminal Count (TC)
-  channel->current_count--;
+  --channel->current_count;
   if (channel->current_count == 0xFFFF) {
     // Set TC bit in status register
     dma->status_register |= (1 << channel_index);
