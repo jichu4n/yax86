@@ -4,6 +4,7 @@
 #include "bios.h"
 #include "cpu.h"
 #include "dma.h"
+#include "fdc.h"
 #include "keyboard.h"
 #include "pic.h"
 #include "pit.h"

@@ -37,6 +37,7 @@ generate_header_bundle("pit")
 generate_header_bundle("ppi")
 generate_header_bundle("keyboard")
 generate_header_bundle("dma")
+generate_header_bundle("fdc")
 generate_header_bundle("platform")
 generate_header_bundle("video")
 
