@@ -92,18 +92,26 @@ enum {
 // Note that GLaBIOS in ARCH_TYPE_EMU mode does not actually make use of these
 // and instead performs its own memory detection based on the video card type.
 typedef enum PPIMemorySize {
-  kPPIMemorySize64KB = 0,   // 00
-  kPPIMemorySize128KB = 1,  // 01
-  kPPIMemorySize192KB = 2,  // 10
-  kPPIMemorySize256KB = 3,  // 11
+  // 00 = 64KB
+  kPPIMemorySize64KB = 0,
+  // 01 = 128KB
+  kPPIMemorySize128KB = 1,
+  // 10 = 192KB
+  kPPIMemorySize192KB = 2,
+  // 11 = 256KB
+  kPPIMemorySize256KB = 3,
 } PPIMemorySize;
 
 // Display mode at boot time, corresponding to Port A bits 4-5.
 typedef enum PPIDisplayMode {
-  kPPIDisplayEGA = 0,       // 00: EGA/VGA
-  kPPIDisplayCGA40x25 = 1,  // 01: CGA 40x25
-  kPPIDisplayCGA80x25 = 2,  // 10: CGA 80x25
-  kPPIDisplayMDA = 3,       // 11: MDA 80x25
+  // 00 = EGA/VGA (ROM)
+  kPPIDisplayEGA = 0,
+  // 01 = CGA 40x25
+  kPPIDisplayCGA40x25 = 1,
+  // 10 = CGA 80x25
+  kPPIDisplayCGA80x25 = 2,
+  // 11 = MDA 80x25
+  kPPIDisplayMDA = 3,
 } PPIDisplayMode;
 
 struct PPIState;

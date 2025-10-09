@@ -9,6 +9,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef YAX86_FDC_BUNDLE_H
+#include "../util/static_vector.h"
+#endif  // YAX86_FDC_BUNDLE_H
+
 // Floppy disk format configuration.
 typedef struct FDCDiskFormat {
   // Number of heads (1 or 2).
@@ -34,6 +38,50 @@ struct FDCState;
 enum {
   // Number of floppy drives supported by the FDC.
   kFDCNumDrives = 4,
+  // Maximum size of a command result.
+  kFDCResultBufferSize = 7,
+};
+
+// Command phases of the FDC.
+typedef enum FDCCommandPhase {
+  // No command in progress.
+  kFDCPhaseIdle = 0,
+  // Command has been issued, waiting for parameters.
+  kFDCPhaseCommand,
+  // Command parameters received, executing command.
+  kFDCPhaseExecution,
+  // Command execution complete, sending result bytes.
+  kFDCPhaseResult,
+} FDCCommandPhase;
+
+// I/O ports for the FDC.
+typedef enum FDCPort {
+  // Digital Output Register (write-only).
+  kFDCPortDOR = 0x3F2,
+  // Main Status Register (read-only).
+  kFDCPortMSR = 0x3F4,
+  // Data Register (read/write).
+  kFDCPortData = 0x3F5,
+} FDCPort;
+
+// Flags for the Main Status Register (MSR).
+enum {
+  // Drive 0 is busy with a seek or recalibrate command.
+  kFDCMSRDrive0Busy = 1 << 0,
+  // Drive 1 is busy with a seek or recalibrate command.
+  kFDCMSRDrive1Busy = 1 << 1,
+  // Drive 2 is busy with a seek or recalibrate command.
+  kFDCMSRDrive2Busy = 1 << 2,
+  // Drive 3 is busy with a seek or recalibrate command.
+  kFDCMSRDrive3Busy = 1 << 3,
+  // A command is in progress.
+  kFDCMSRBusy = 1 << 4,
+  // The FDC is in non-DMA mode.
+  kFDCMSRNonDMAMode = 1 << 5,
+  // Indicates direction of data transfer. 0 = write to FDC, 1 = read from FDC.
+  kFDCMSRDataDirection = 1 << 6,
+  // The Data Register is ready to send or receive data to/from the CPU.
+  kFDCMSRRequestForMaster = 1 << 7,
 };
 
 // State for a single floppy drive.
@@ -48,6 +96,8 @@ typedef struct FDCDriveState {
   uint8_t track;
   // The currently active head (0 or 1).
   uint8_t head;
+  // Whether the drive is currently busy.
+  bool busy;
 } FDCDriveState;
 
 // Caller-provided runtime configuration for the FDC.
@@ -74,6 +124,8 @@ typedef struct FDCConfig {
       uint8_t value);
 } FDCConfig;
 
+STATIC_VECTOR_TYPE(FDCResultBuffer, uint8_t, kFDCResultBufferSize)
+
 // State of the Floppy Disk Controller.
 typedef struct FDCState {
   // Pointer to the FDC configuration.
@@ -82,7 +134,13 @@ typedef struct FDCState {
   // Per-drive state.
   FDCDriveState drives[kFDCNumDrives];
 
-  // Other FDC state will be added here.
+  // Current command phase.
+  FDCCommandPhase phase;
+
+  // Result buffer.
+  FDCResultBuffer result_buffer;
+  // Next index to read from result buffer.
+  uint8_t next_result_byte_index;
 } FDCState;
 
 // Initializes the FDC to its power-on state.
@@ -99,6 +157,9 @@ void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
 void FDCEjectDisk(FDCState* fdc, uint8_t drive);
+
+// Simulates a tick of the FDC, handling any timed operations.
+void FDCTick(FDCState* fdc);
 
 #endif  // YAX86_FDC_PUBLIC_H
 

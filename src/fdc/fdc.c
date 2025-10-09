@@ -49,9 +49,57 @@ void FDCInit(FDCState* fdc, FDCConfig* config) {
   fdc->config = config;
 }
 
-uint8_t FDCReadPort(YAX86_UNUSED FDCState* fdc, YAX86_UNUSED uint16_t port) {
-  // TODO: Implement FDC register reads.
-  return 0xFF;  // Per convention for reads from unused/invalid ports.
+uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
+  switch (port) {
+    case kFDCPortMSR: {  // Main Status Register (MSR)
+      uint8_t msr = 0;
+      switch (fdc->phase) {
+        case kFDCPhaseIdle:
+        case kFDCPhaseCommand:
+          // FDC is ready to receive a command or parameter byte.
+          msr = kFDCMSRRequestForMaster;
+          break;
+        case kFDCPhaseResult:
+          // FDC has result bytes to send and is still busy with the command.
+          msr = kFDCMSRRequestForMaster | kFDCMSRDataDirection | kFDCMSRBusy;
+          break;
+        case kFDCPhaseExecution:
+          // FDC is busy executing a command.
+          msr |= kFDCMSRBusy;
+          break;
+      }
+      // Set drive busy flags.
+      for (int i = 0; i < kFDCNumDrives; ++i) {
+        if (fdc->drives[i].busy) {
+          msr |= (1 << i);
+        }
+      }
+      return msr;
+    }
+    case kFDCPortData: {  // Data Register
+      if (fdc->phase != kFDCPhaseResult) {
+        return 0xFF;  // Invalid read.
+      }
+      if (fdc->next_result_byte_index >=
+          FDCResultBufferLength(&fdc->result_buffer)) {
+        return 0xFF;  // All result bytes have been read.
+      }
+      uint8_t value =
+          *FDCResultBufferGet(&fdc->result_buffer, fdc->next_result_byte_index);
+      fdc->next_result_byte_index++;
+      if (fdc->next_result_byte_index >=
+          FDCResultBufferLength(&fdc->result_buffer)) {
+        // Last result byte was read, reset to idle.
+        fdc->phase = kFDCPhaseIdle;
+        fdc->next_result_byte_index = 0;
+        FDCResultBufferClear(&fdc->result_buffer);
+      }
+      return value;
+    }
+    default:
+      // Per convention for reads from unused/invalid ports.
+      return 0xFF;
+  }
 }
 
 void FDCWritePort(
