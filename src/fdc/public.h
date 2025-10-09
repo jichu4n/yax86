@@ -38,6 +38,8 @@ struct FDCState;
 enum {
   // Number of floppy drives supported by the FDC.
   kFDCNumDrives = 4,
+  // Maximum size of a command request.
+  kFDCCommandBufferSize = 9,
   // Maximum size of a command result.
   kFDCResultBufferSize = 7,
 };
@@ -84,6 +86,23 @@ enum {
   kFDCMSRRequestForMaster = 1 << 7,
 };
 
+// Flags for Status Register 0 (ST0).
+enum {
+  // Bits 7-6: Interrupt Code
+  // 00 = Normal termination
+  // 01 = Abnormal termination
+  // 10 = Invalid command
+  // 11 = Abnormal termination due to polling
+  kFDCST0InterruptCodeMask = 0xC0,
+  kFDCST0InvalidCommand = 0x80,
+
+  // Bit 5: Seek End
+  // Bit 4: Equipment Check
+  // Bit 3: Not Ready
+  // Bit 2: Head Address
+  // Bits 1-0: Drive Select
+};
+
 // State for a single floppy drive.
 typedef struct FDCDriveState {
   // Whether there is a disk inserted in the drive, i.e. whether an image is
@@ -124,7 +143,10 @@ typedef struct FDCConfig {
       uint8_t value);
 } FDCConfig;
 
+STATIC_VECTOR_TYPE(FDCCommandBuffer, uint8_t, kFDCCommandBufferSize)
 STATIC_VECTOR_TYPE(FDCResultBuffer, uint8_t, kFDCResultBufferSize)
+
+struct FDCCommandMetadata;
 
 // State of the Floppy Disk Controller.
 typedef struct FDCState {
@@ -137,7 +159,13 @@ typedef struct FDCState {
   // Current command phase.
   FDCCommandPhase phase;
 
-  // Result buffer.
+  // Metadata for the command currently being processed.
+  const struct FDCCommandMetadata* current_command;
+
+  // Command buffer to receive command and parameters from the CPU.
+  FDCCommandBuffer command_buffer;
+
+  // Result buffer to send to the CPU.
   FDCResultBuffer result_buffer;
   // Next index to read from result buffer.
   uint8_t next_result_byte_index;

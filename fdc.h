@@ -54,6 +54,8 @@ struct FDCState;
 enum {
   // Number of floppy drives supported by the FDC.
   kFDCNumDrives = 4,
+  // Maximum size of a command request.
+  kFDCCommandBufferSize = 9,
   // Maximum size of a command result.
   kFDCResultBufferSize = 7,
 };
@@ -100,6 +102,23 @@ enum {
   kFDCMSRRequestForMaster = 1 << 7,
 };
 
+// Flags for Status Register 0 (ST0).
+enum {
+  // Bits 7-6: Interrupt Code
+  // 00 = Normal termination
+  // 01 = Abnormal termination
+  // 10 = Invalid command
+  // 11 = Abnormal termination due to polling
+  kFDCST0InterruptCodeMask = 0xC0,
+  kFDCST0InvalidCommand = 0x80,
+
+  // Bit 5: Seek End
+  // Bit 4: Equipment Check
+  // Bit 3: Not Ready
+  // Bit 2: Head Address
+  // Bits 1-0: Drive Select
+};
+
 // State for a single floppy drive.
 typedef struct FDCDriveState {
   // Whether there is a disk inserted in the drive, i.e. whether an image is
@@ -140,7 +159,10 @@ typedef struct FDCConfig {
       uint8_t value);
 } FDCConfig;
 
+STATIC_VECTOR_TYPE(FDCCommandBuffer, uint8_t, kFDCCommandBufferSize)
 STATIC_VECTOR_TYPE(FDCResultBuffer, uint8_t, kFDCResultBufferSize)
+
+struct FDCCommandMetadata;
 
 // State of the Floppy Disk Controller.
 typedef struct FDCState {
@@ -153,7 +175,13 @@ typedef struct FDCState {
   // Current command phase.
   FDCCommandPhase phase;
 
-  // Result buffer.
+  // Metadata for the command currently being processed.
+  const struct FDCCommandMetadata* current_command;
+
+  // Command buffer to receive command and parameters from the CPU.
+  FDCCommandBuffer command_buffer;
+
+  // Result buffer to send to the CPU.
   FDCResultBuffer result_buffer;
   // Next index to read from result buffer.
   uint8_t next_result_byte_index;
@@ -203,6 +231,83 @@ void FDCTick(FDCState* fdc);
 enum {
   // Invalid offset.
   kFDCInvalidOffset = 0xFFFFFFF,
+};
+
+// FDC command opcodes.
+typedef enum FDCCommand {
+  // Read a Track
+  kFDCCmdReadTrack = 0x02,
+  // Specify
+  kFDCCmdSpecify = 0x03,
+  // Sense Drive Status
+  kFDCCmdSenseDriveStatus = 0x04,
+  // Write Data
+  kFDCCmdWriteData = 0x05,
+  // Read Data
+  kFDCCmdReadData = 0x06,
+  // Recalibrate
+  kFDCCmdRecalibrate = 0x07,
+  // Sense Interrupt Status
+  kFDCCmdSenseInterruptStatus = 0x08,
+  // Write Deleted Data
+  kFDCCmdWriteDeletedData = 0x09,
+  // Read ID
+  kFDCCmdReadID = 0x0A,
+  // Read Deleted Data
+  kFDCCmdReadDeletedData = 0x0C,
+  // Format a Track
+  kFDCCmdFormatTrack = 0x0D,
+  // Seek
+  kFDCCmdSeek = 0x0F,
+  // Scan Equal
+  kFDCCmdScanEqual = 0x11,
+  // Scan Low or Equal
+  kFDCCmdScanLowOrEqual = 0x19,
+  // Scan High or Equal
+  kFDCCmdScanHighOrEqual = 0x1D,
+} FDCCommand;
+
+// Metadata for each FDC command.
+typedef struct FDCCommandMetadata {
+  // Base opcode of the command (lower 5 bits).
+  uint8_t opcode;
+  // Number of parameter bytes expected.
+  uint8_t num_param_bytes;
+} FDCCommandMetadata;
+
+// List of supported FDC commands.
+// The opcodes here represent the base 5-bit command.
+static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
+    // Read a Track
+    {.opcode = kFDCCmdReadTrack, .num_param_bytes = 8},
+    // Specify
+    {.opcode = kFDCCmdSpecify, .num_param_bytes = 2},
+    // Sense Drive Status
+    {.opcode = kFDCCmdSenseDriveStatus, .num_param_bytes = 1},
+    // Write Data
+    {.opcode = kFDCCmdWriteData, .num_param_bytes = 8},
+    // Read Data
+    {.opcode = kFDCCmdReadData, .num_param_bytes = 8},
+    // Recalibrate
+    {.opcode = kFDCCmdRecalibrate, .num_param_bytes = 1},
+    // Sense Interrupt Status
+    {.opcode = kFDCCmdSenseInterruptStatus, .num_param_bytes = 0},
+    // Write Deleted Data
+    {.opcode = kFDCCmdWriteDeletedData, .num_param_bytes = 8},
+    // Read ID
+    {.opcode = kFDCCmdReadID, .num_param_bytes = 1},
+    // Read Deleted Data
+    {.opcode = kFDCCmdReadDeletedData, .num_param_bytes = 8},
+    // Format a Track
+    {.opcode = kFDCCmdFormatTrack, .num_param_bytes = 5},
+    // Seek
+    {.opcode = kFDCCmdSeek, .num_param_bytes = 2},
+    // Scan Equal
+    {.opcode = kFDCCmdScanEqual, .num_param_bytes = 8},
+    // Scan Low or Equal
+    {.opcode = kFDCCmdScanLowOrEqual, .num_param_bytes = 8},
+    // Scan High or Equal
+    {.opcode = kFDCCmdScanHighOrEqual, .num_param_bytes = 8},
 };
 
 // Compute the byte offset within a disk image for the given address. Returns
@@ -297,10 +402,97 @@ uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
   }
 }
 
-void FDCWritePort(
-    YAX86_UNUSED FDCState* fdc, YAX86_UNUSED uint16_t port,
-    YAX86_UNUSED uint8_t value) {
-  // TODO: Implement FDC register writes.
+// Looks up command metadata by opcode. Returns NULL if not found. This is a
+// linear search, but the command table is small enough that this is fine.
+static const FDCCommandMetadata* FDCFindCommandMetadata(uint8_t opcode) {
+  for (size_t i = 0;
+       i < sizeof(kFDCCommandMetadataTable) / sizeof(FDCCommandMetadata); ++i) {
+    if (kFDCCommandMetadataTable[i].opcode == opcode) {
+      return &kFDCCommandMetadataTable[i];
+    }
+  }
+  return NULL;
+}
+
+static void FDCHandleDataPortWrite(FDCState* fdc, uint8_t value) {
+  switch (fdc->phase) {
+    case kFDCPhaseIdle: {
+      // This is the first byte of a new command.
+      // Extract the opcode (lower 5 bits).
+      uint8_t opcode = value & 0x1F;
+      fdc->current_command = FDCFindCommandMetadata(opcode);
+
+      if (!fdc->current_command) {
+        // Invalid command. Set up the result phase with an error.
+        FDCResultBufferClear(&fdc->result_buffer);
+        uint8_t status = kFDCST0InvalidCommand;
+        FDCResultBufferAppend(&fdc->result_buffer, &status);
+        fdc->next_result_byte_index = 0;
+        fdc->phase = kFDCPhaseResult;
+        // TODO: Trigger IRQ6 to signal command completion/error.
+        return;
+      }
+
+      // Clear previous command and store the first byte.
+      FDCCommandBufferClear(&fdc->command_buffer);
+      FDCCommandBufferAppend(&fdc->command_buffer, &value);
+
+      if (fdc->current_command->num_param_bytes == 0) {
+        // Command has no parameters, move directly to execution.
+        fdc->phase = kFDCPhaseExecution;
+        // TODO: Trigger command execution logic here in the future.
+      } else {
+        // Wait for parameter bytes.
+        fdc->phase = kFDCPhaseCommand;
+      }
+      break;
+    }
+
+    case kFDCPhaseCommand: {
+      // This is a parameter byte for the current command.
+      if (!fdc->current_command) {
+        // Should not happen, but as a safeguard, reset to idle.
+        fdc->phase = kFDCPhaseIdle;
+        return;
+      }
+
+      // Store the parameter byte.
+      FDCCommandBufferAppend(&fdc->command_buffer, &value);
+
+      // Check if all parameters have been received.
+      // Total bytes = 1 (command) + num_param_bytes.
+      if (FDCCommandBufferLength(&fdc->command_buffer) >=
+          (fdc->current_command->num_param_bytes + 1)) {
+        // All bytes received, move to execution phase.
+        fdc->phase = kFDCPhaseExecution;
+        // TODO: Trigger command execution logic here in the future.
+      }
+      break;
+    }
+
+    case kFDCPhaseExecution:
+    case kFDCPhaseResult:
+      // The FDC is busy. Ignore any writes to the data port.
+      break;
+  }
+}
+
+void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
+  switch (port) {
+    case kFDCPortDOR:  // Digital Output Register
+      // TODO: Handle motor control, drive selection, and FDC reset based on
+      // 'value'.
+      break;
+
+    case kFDCPortData:  // Data Register
+      // Logic will be based on the current FDC phase.
+      FDCHandleDataPortWrite(fdc, value);
+      break;
+
+    default:
+      // Ignore writes to other ports.
+      break;
+  }
 }
 
 void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
