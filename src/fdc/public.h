@@ -124,6 +124,9 @@ typedef struct FDCConfig {
   // Custom data passed through to callbacks.
   void* context;
 
+  // Callback to raise an IRQ6 (FDC interrupt) to the CPU.
+  void (*raise_irq6)(void* context);
+
   // Callback to read a byte from a floppy image.
   uint8_t (*read_image_byte)(
       void* context,
@@ -159,11 +162,12 @@ typedef struct FDCState {
   // Current command phase.
   FDCCommandPhase phase;
 
-  // Metadata for the command currently being processed.
-  const struct FDCCommandMetadata* current_command;
-
   // Command buffer to receive command and parameters from the CPU.
   FDCCommandBuffer command_buffer;
+  // Metadata for the command currently being processed.
+  const struct FDCCommandMetadata* current_command;
+  // How many ticks the current command has been executing.
+  uint32_t current_command_ticks;
 
   // Result buffer to send to the CPU.
   FDCResultBuffer result_buffer;
