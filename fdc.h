@@ -515,7 +515,7 @@ static void FDCHandleDataPortWrite(FDCState* fdc, uint8_t value) {
       // Check if all parameters have been received.
       // Total bytes = 1 (command) + num_param_bytes.
       if (FDCCommandBufferLength(&fdc->command_buffer) >=
-          (fdc->current_command->num_param_bytes + 1)) {
+          (uint8_t)(fdc->current_command->num_param_bytes + 1)) {
         // All bytes received, move to execution phase.
         FDCStartCommandExecution(fdc);
       }
