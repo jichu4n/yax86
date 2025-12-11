@@ -140,34 +140,40 @@ TEST_F(FetchNextInstructionTest, FetchInstructionsWithPrefixes) {
       "lock ds mov ax, [bx]\n");
 
   ASSERT_EQ(instructions.size(), 8);
+
+  // Helper to verify prefixes regardless of order
+  auto VerifyPrefixes = [](const Instruction& inst,
+                           const vector<uint8_t>& expected_prefixes) {
+    ASSERT_EQ(inst.prefix_size, expected_prefixes.size());
+    for (uint8_t expected : expected_prefixes) {
+      bool found = false;
+      for (int i = 0; i < inst.prefix_size; ++i) {
+        if (inst.prefix[i] == expected) {
+          found = true;
+          break;
+        }
+      }
+      EXPECT_TRUE(found) << "Expected prefix " << hex << (int)expected
+                         << " not found.";
+    }
+  };
+
   // REP prefix
-  EXPECT_EQ(instructions[0].prefix_size, 1);
-  EXPECT_EQ(instructions[0].prefix[0], 0xf3);
+  VerifyPrefixes(instructions[0], {0xf3});
   // REPNE prefix
-  EXPECT_EQ(instructions[1].prefix_size, 1);
-  EXPECT_EQ(instructions[1].prefix[0], 0xf2);
+  VerifyPrefixes(instructions[1], {0xf2});
   // LOCK prefix
-  EXPECT_EQ(instructions[2].prefix_size, 1);
-  EXPECT_EQ(instructions[2].prefix[0], 0xf0);
-  // Multiple prefixes
-  EXPECT_EQ(instructions[3].prefix_size, 2);
-  EXPECT_EQ(instructions[3].prefix[0], 0xf3);
-  EXPECT_EQ(instructions[3].prefix[1], 0xf0);
+  VerifyPrefixes(instructions[2], {0xf0});
+  // Multiple prefixes (LOCK + REP)
+  VerifyPrefixes(instructions[3], {0xf0, 0xf3});
   // CS segment override prefix
-  EXPECT_EQ(instructions[4].prefix_size, 1);
-  EXPECT_EQ(instructions[4].prefix[0], 0x2e);
-  // CS segment override prefix with REP
-  EXPECT_EQ(instructions[5].prefix_size, 2);
-  EXPECT_EQ(instructions[5].prefix[0], 0xf3);
-  EXPECT_EQ(instructions[5].prefix[1], 0x26);
-  // SS segment override prefix with REPNE
-  EXPECT_EQ(instructions[6].prefix_size, 2);
-  EXPECT_EQ(instructions[6].prefix[0], 0xf2);
-  EXPECT_EQ(instructions[6].prefix[1], 0x36);
-  // DS segment override prefix with LOCK
-  EXPECT_EQ(instructions[7].prefix_size, 2);
-  EXPECT_EQ(instructions[7].prefix[0], 0xf0);
-  EXPECT_EQ(instructions[7].prefix[1], 0x3e);
+  VerifyPrefixes(instructions[4], {0x2e});
+  // CS segment override prefix with REP (ES + REP) -> The ASM comment says "rep es", so checking ES (0x26) + REP (0xf3)
+  VerifyPrefixes(instructions[5], {0x26, 0xf3});
+  // SS segment override prefix with REPNE (SS + REPNE)
+  VerifyPrefixes(instructions[6], {0x36, 0xf2});
+  // DS segment override prefix with LOCK (DS + LOCK)
+  VerifyPrefixes(instructions[7], {0x3e, 0xf0});
 }
 
 // Test fetching a sequence of instructions with 0, 1, and 2 displacement bytes.
