@@ -1,4 +1,4 @@
 {
-  "public": ["public.h"],
+  "public": ["../util/static_vector.h", "public.h"],
   "private": ["fdc.c"]
 }

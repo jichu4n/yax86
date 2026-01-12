@@ -94,13 +94,20 @@ enum {
   // 10 = Invalid command
   // 11 = Abnormal termination due to polling
   kFDCST0InterruptCodeMask = 0xC0,
+  kFDCST0NormalTermination = 0x00,
+  kFDCST0AbnormalTermination = 0x40,
   kFDCST0InvalidCommand = 0x80,
 
   // Bit 5: Seek End
+  kFDCST0SeekEnd = 1 << 5,
   // Bit 4: Equipment Check
+  kFDCST0EquipmentCheck = 1 << 4,
   // Bit 3: Not Ready
+  kFDCST0NotReady = 1 << 3,
   // Bit 2: Head Address
+  kFDCST0HeadAddress = 1 << 2,
   // Bits 1-0: Drive Select
+  kFDCST0UnitSelectMask = 0x03,
 };
 
 // State for a single floppy drive.
@@ -117,6 +124,12 @@ typedef struct FDCDriveState {
   uint8_t head;
   // Whether the drive is currently busy.
   bool busy;
+  // Status Register 0 (ST0) for the last completed Seek or Recalibrate
+  // operation on this drive.
+  uint8_t st0;
+  // Whether there is a pending interrupt from a completed Seek or Recalibrate
+  // operation on this drive.
+  bool has_pending_interrupt;
 } FDCDriveState;
 
 // Caller-provided runtime configuration for the FDC.

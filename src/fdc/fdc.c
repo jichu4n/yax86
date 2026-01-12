@@ -77,7 +77,6 @@ static inline void FDCFinishCommandExecution(FDCState* fdc) {
     fdc->phase = kFDCPhaseResult;
     fdc->next_result_byte_index = 0;
   }
-  FDCRaiseIRQ6(fdc);
 }
 
 // Handler for Recalibrate command.
@@ -92,11 +91,47 @@ static void FDCHandleRecalibrate(FDCState* fdc) {
     return;
   }
 
-  // Seek is complete.
+  // On 2nd tick, seek is complete.
   drive->track = 0;
   drive->busy = false;
-  // TODO: Store ST0, PCN, interrupt pending bit,
 
+  // Set Status Register 0 (ST0)
+  // Bits 7-6: Interrupt Code = 00 (Normal Termination)
+  // Bit 5: Seek End = 1
+  // Bits 1-0: Unit Select (Drive Index)
+  drive->st0 = kFDCST0NormalTermination | kFDCST0SeekEnd | drive_index;
+
+  // Set interrupt pending flag for this drive.
+  drive->has_pending_interrupt = true;
+
+  // Raise Interrupt (IRQ6).
+  FDCRaiseIRQ6(fdc);
+
+  FDCFinishCommandExecution(fdc);
+}
+
+// Handler for Sense Interrupt Status command.
+static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
+  // Check for any pending interrupts.
+  for (int i = 0; i < kFDCNumDrives; ++i) {
+    FDCDriveState* drive = &fdc->drives[i];
+    if (drive->has_pending_interrupt) {
+      // Clear the pending interrupt flag.
+      drive->has_pending_interrupt = false;
+
+      // Result Byte 0: ST0 (Status Register 0)
+      FDCResultBufferAppend(&fdc->result_buffer, &drive->st0);
+      // Result Byte 1: PCN (Present Cylinder Number)
+      FDCResultBufferAppend(&fdc->result_buffer, &drive->track);
+
+      FDCFinishCommandExecution(fdc);
+      return;
+    }
+  }
+
+  // No pending interrupts found. This is treated as an invalid command.
+  uint8_t st0 = kFDCST0InvalidCommand;
+  FDCResultBufferAppend(&fdc->result_buffer, &st0);
   FDCFinishCommandExecution(fdc);
 }
 
@@ -120,7 +155,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Sense Interrupt Status
     {.opcode = kFDCCmdSenseInterruptStatus,
      .num_param_bytes = 0,
-     .handler = NULL},
+     .handler = FDCHandleSenseInterruptStatus},
     // Write Deleted Data
     {.opcode = kFDCCmdWriteDeletedData, .num_param_bytes = 8, .handler = NULL},
     // Read ID

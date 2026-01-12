@@ -10,6 +10,107 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
+// src/util/static_vector.h start
+// ==============================================================================
+
+#line 1 "./src/util/static_vector.h"
+// Static vector library.
+//
+// A static vector is a vector backed by a fixed-size array. It's essentially
+// a vector, but whose underlying storage is statically allocated and does not
+// rely on dynamic memory allocation.
+
+#ifndef YAX86_UTIL_STATIC_VECTOR_H
+#define YAX86_UTIL_STATIC_VECTOR_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+// Header structure at the beginning of a static vector.
+typedef struct StaticVectorHeader {
+  // Element size in bytes.
+  size_t element_size;
+  // Maximum number of elements the vector can hold.
+  size_t max_length;
+  // Number of elements currently in the vector.
+  size_t length;
+} StaticVectorHeader;
+
+// Define a static vector type with an element type.
+#define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
+  typedef struct name {                                                   \
+    StaticVectorHeader header;                                            \
+    element_type elements[max_length_value];                              \
+  } name;                                                                 \
+  static void name##Init(name* vector) __attribute__((unused));           \
+  static void name##Init(name* vector) {                                  \
+    static const StaticVectorHeader header = {                            \
+        .element_size = sizeof(element_type),                             \
+        .max_length = (max_length_value),                                 \
+        .length = 0,                                                      \
+    };                                                                    \
+    vector->header = header;                                              \
+  }                                                                       \
+  static size_t name##Length(const name* vector) __attribute__((unused)); \
+  static size_t name##Length(const name* vector) {                        \
+    return vector->header.length;                                         \
+  }                                                                       \
+  static element_type* name##Get(name* vector, size_t index)              \
+      __attribute__((unused));                                            \
+  static element_type* name##Get(name* vector, size_t index) {            \
+    if (index >= (max_length_value)) {                                    \
+      return NULL;                                                        \
+    }                                                                     \
+    return &(vector->elements[index]);                                    \
+  }                                                                       \
+  static bool name##Append(name* vector, const element_type* element)     \
+      __attribute__((unused));                                            \
+  static bool name##Append(name* vector, const element_type* element) {   \
+    if (vector->header.length >= (max_length_value)) {                    \
+      return false;                                                       \
+    }                                                                     \
+    vector->elements[vector->header.length++] = *element;                 \
+    return true;                                                          \
+  }                                                                       \
+  static bool name##Insert(                                               \
+      name* vector, size_t index, const element_type* element)            \
+      __attribute__((unused));                                            \
+  static bool name##Insert(                                               \
+      name* vector, size_t index, const element_type* element) {          \
+    if (index > vector->header.length ||                                  \
+        vector->header.length >= (max_length_value)) {                    \
+      return false;                                                       \
+    }                                                                     \
+    for (size_t i = vector->header.length; i > index; --i) {              \
+      vector->elements[i] = vector->elements[i - 1];                      \
+    }                                                                     \
+    vector->elements[index] = *element;                                   \
+    ++vector->header.length;                                              \
+    return true;                                                          \
+  }                                                                       \
+  static bool name##Remove(name* vector, size_t index)                    \
+      __attribute__((unused));                                            \
+  static bool name##Remove(name* vector, size_t index) {                  \
+    if (index >= vector->header.length) {                                 \
+      return false;                                                       \
+    }                                                                     \
+    for (size_t i = index; i < vector->header.length - 1; ++i) {          \
+      vector->elements[i] = vector->elements[i + 1];                      \
+    }                                                                     \
+    --vector->header.length;                                              \
+    return true;                                                          \
+  }                                                                       \
+  static void name##Clear(name* vector) __attribute__((unused));          \
+  static void name##Clear(name* vector) { vector->header.length = 0; }
+
+#endif  // YAX86_UTIL_STATIC_VECTOR_H
+
+
+// ==============================================================================
+// src/util/static_vector.h end
+// ==============================================================================
+
+// ==============================================================================
 // src/fdc/public.h start
 // ==============================================================================
 
@@ -110,13 +211,20 @@ enum {
   // 10 = Invalid command
   // 11 = Abnormal termination due to polling
   kFDCST0InterruptCodeMask = 0xC0,
+  kFDCST0NormalTermination = 0x00,
+  kFDCST0AbnormalTermination = 0x40,
   kFDCST0InvalidCommand = 0x80,
 
   // Bit 5: Seek End
+  kFDCST0SeekEnd = 1 << 5,
   // Bit 4: Equipment Check
+  kFDCST0EquipmentCheck = 1 << 4,
   // Bit 3: Not Ready
+  kFDCST0NotReady = 1 << 3,
   // Bit 2: Head Address
+  kFDCST0HeadAddress = 1 << 2,
   // Bits 1-0: Drive Select
+  kFDCST0UnitSelectMask = 0x03,
 };
 
 // State for a single floppy drive.
@@ -133,6 +241,12 @@ typedef struct FDCDriveState {
   uint8_t head;
   // Whether the drive is currently busy.
   bool busy;
+  // Status Register 0 (ST0) for the last completed Seek or Recalibrate
+  // operation on this drive.
+  uint8_t st0;
+  // Whether there is a pending interrupt from a completed Seek or Recalibrate
+  // operation on this drive.
+  bool has_pending_interrupt;
 } FDCDriveState;
 
 // Caller-provided runtime configuration for the FDC.
@@ -304,7 +418,6 @@ static inline void FDCFinishCommandExecution(FDCState* fdc) {
     fdc->phase = kFDCPhaseResult;
     fdc->next_result_byte_index = 0;
   }
-  FDCRaiseIRQ6(fdc);
 }
 
 // Handler for Recalibrate command.
@@ -322,8 +435,44 @@ static void FDCHandleRecalibrate(FDCState* fdc) {
   // Seek is complete.
   drive->track = 0;
   drive->busy = false;
-  // TODO: Store ST0, PCN, interrupt pending bit,
 
+  // Set Status Register 0 (ST0)
+  // Bits 7-6: Interrupt Code = 00 (Normal Termination)
+  // Bit 5: Seek End = 1
+  // Bits 1-0: Unit Select (Drive Index)
+  drive->st0 = kFDCST0NormalTermination | kFDCST0SeekEnd | drive_index;
+
+  // Set interrupt pending flag for this drive.
+  drive->has_pending_interrupt = true;
+
+  // Raise Interrupt (IRQ6).
+  FDCRaiseIRQ6(fdc);
+
+  FDCFinishCommandExecution(fdc);
+}
+
+// Handler for Sense Interrupt Status command.
+static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
+  // Check for any pending interrupts.
+  for (int i = 0; i < kFDCNumDrives; ++i) {
+    FDCDriveState* drive = &fdc->drives[i];
+    if (drive->has_pending_interrupt) {
+      // Clear the pending interrupt flag.
+      drive->has_pending_interrupt = false;
+
+      // Result Byte 0: ST0 (Status Register 0)
+      FDCResultBufferAppend(&fdc->result_buffer, &drive->st0);
+      // Result Byte 1: PCN (Present Cylinder Number)
+      FDCResultBufferAppend(&fdc->result_buffer, &drive->track);
+
+      FDCFinishCommandExecution(fdc);
+      return;
+    }
+  }
+
+  // No pending interrupts found. This is treated as an invalid command.
+  uint8_t st0 = kFDCST0InvalidCommand;
+  FDCResultBufferAppend(&fdc->result_buffer, &st0);
   FDCFinishCommandExecution(fdc);
 }
 
@@ -347,7 +496,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Sense Interrupt Status
     {.opcode = kFDCCmdSenseInterruptStatus,
      .num_param_bytes = 0,
-     .handler = NULL},
+     .handler = FDCHandleSenseInterruptStatus},
     // Write Deleted Data
     {.opcode = kFDCCmdWriteDeletedData, .num_param_bytes = 8, .handler = NULL},
     // Read ID

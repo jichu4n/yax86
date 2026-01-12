@@ -25,4 +25,5 @@ add_subdirectory(ppi)
 add_subdirectory(dma)
 
 add_subdirectory(keyboard)
+add_subdirectory(fdc)
 # add_subdirectory(bios)
