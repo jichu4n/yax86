@@ -317,6 +317,133 @@ TEST_F(FDCTest, ReadDataMultiTrack) {
   EXPECT_EQ(r, 2);
 }
 
+TEST_F(FDCTest, GLaBIOSBootSequence) {
+  // Simulate the full GLaBIOS initialization and boot sequence.
+  
+  // 0. Initial State: No disk, Reset active?
+  // We assume power-on state.
+  FDCInit(&fdc_, &config_);
+  FDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+
+  // 1. Reset FDC (GLaBIOS FDC_RESET)
+  // Disable FDC, Disable DMA/IRQ (Bit 3=0), Reset (Bit 2=0) -> 0x00
+  FDCWritePort(&fdc_, kFDCPortDOR, 0x00);
+  
+  // Enable FDC, Enable DMA/IRQ (Bit 3=1), Release Reset (Bit 2=1) -> 0x0C
+  // This triggers the Reset Interrupt.
+  irq6_raised_ = false;
+  FDCWritePort(&fdc_, kFDCPortDOR, 0x0C);
+  
+  // Verify Reset Interrupt.
+  EXPECT_TRUE(irq6_raised_);
+  irq6_raised_ = false;
+
+  // 2. Sense Interrupt Status Loop (GLaBIOS FDC_SENSE_INT)
+  // After reset, FDC enters polling mode. GLaBIOS checks status for all 4 drives.
+  for (int i = 0; i < 4; ++i) {
+    SendCommand(0x08); // Sense Interrupt Status
+    FDCTick(&fdc_);
+    
+    // Result Phase
+    EXPECT_EQ(fdc_.phase, kFDCPhaseResult);
+    uint8_t st0 = ReadResult();
+    uint8_t pcn = ReadResult();
+    
+    // ST0 should indicate Polling (0x80) or similar abnormal termination due to reset.
+    // Our implementation sets kFDCST0AbnormalTerminationPolling (0xC0) | i.
+    EXPECT_EQ(st0 & 0xC3, 0xC0 | (i & 0x03)); 
+    (void)pcn;
+  }
+  EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
+
+  // 3. Specify (GLaBIOS FDC_SPECIFY)
+  // Command: 0x03
+  // Params: SRT/HUT (e.g., 0xDF), HLT/ND (e.g., 0x02)
+  SendCommand(0x03);
+  SendParameter(0xDF);
+  SendParameter(0x02);
+  FDCTick(&fdc_);
+  // No interrupt expected.
+  EXPECT_FALSE(irq6_raised_);
+  EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
+
+  // 4. Recalibrate Drive 0 (GLaBIOS FDC_RECALIBRATE)
+  // Command: 0x07
+  // Param: Drive 0
+  SendCommand(0x07);
+  SendParameter(0x00);
+  
+  // Execution (Seek)
+  FDCTick(&fdc_); // Start Seek
+  FDCTick(&fdc_); // Finish Seek
+  
+  // Verify Interrupt.
+  EXPECT_TRUE(irq6_raised_);
+  irq6_raised_ = false;
+
+  // 5. Sense Interrupt Status (Check Recalibrate Result)
+  SendCommand(0x08);
+  FDCTick(&fdc_);
+  
+  uint8_t st0 = ReadResult();
+  uint8_t pcn = ReadResult();
+  
+  // ST0: Seek End (0x20) set.
+  EXPECT_TRUE(st0 & 0x20);
+  // PCN: Should be 0.
+  EXPECT_EQ(pcn, 0);
+
+  // 6. Read Boot Sector (GLaBIOS INT 13h, AH=02h)
+  // Read Data (0x06), MT=0, MFM=1 (0x46 usually, but 0x06 base)
+  // C=0, H=0, R=1, N=2 (512b)
+  
+  dma_requested_ = false;
+  dma_mode_ = kDmaModeRead;
+  
+  SendCommand(0x06); 
+  SendParameter(0x00); // Drive 0, Head 0
+  SendParameter(0x00); // C
+  SendParameter(0x00); // H
+  SendParameter(0x01); // R=1
+  SendParameter(0x02); // N=2
+  SendParameter(0x09); // EOT
+  SendParameter(0x2A); // GPL
+  SendParameter(0xFF); // DTL
+
+  // Init Tick
+  FDCTick(&fdc_);
+  
+  // Read 512 bytes
+  for (int i = 0; i < 512; ++i) {
+    dma_requested_ = false;
+    FDCTick(&fdc_);
+    EXPECT_TRUE(dma_requested_);
+    // Byte 0 of disk image is 0x00, etc.
+    EXPECT_EQ(last_dma_byte_, (uint8_t)(i & 0xFF));
+  }
+
+  // TC
+  FDCHandleTC(&fdc_);
+  
+  // Terminate
+  FDCTick(&fdc_);
+  
+  // Verify Completion
+  EXPECT_TRUE(irq6_raised_);
+  
+  // Result Phase
+  st0 = ReadResult(); // ST0
+  ReadResult(); // ST1
+  ReadResult(); // ST2
+  ReadResult(); // C
+  ReadResult(); // H
+  ReadResult(); // R
+  ReadResult(); // N
+  
+  // Success (Bits 7-6 = 00)
+  EXPECT_EQ(st0 & 0xC0, 0x00);
+}
+
 TEST_F(FDCTest, RecalibrateAndSenseInterruptStatus) {
   // 1. Issue Recalibrate command for Drive 0.
   irq6_raised_ = false;
