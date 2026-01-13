@@ -373,6 +373,7 @@ typedef struct FDCState {
     // Command parameters governing the transfer.
     uint8_t sector_size_code;  // N
     uint8_t eot;               // End of Track sector number
+    bool multi_track;          // MT bit set (read/write across heads)
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.
@@ -585,6 +586,9 @@ static void FDCFinishReadWrite(FDCState* fdc, uint8_t st0, uint8_t st1,
 static void FDCHandleReadData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
+    uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
+    fdc->transfer.multi_track = (cmd_byte & 0x80) != 0;
+
     uint8_t drive_head = *FDCCommandBufferGet(&fdc->command_buffer, 1);
     uint8_t drive_index = drive_head & 0x03;
     uint8_t head_address = (drive_head >> 2) & 0x01;
@@ -676,12 +680,28 @@ static void FDCHandleReadData(FDCState* fdc) {
   if (fdc->transfer.sector_byte_index >= sector_size) {
     // Sector done.
     if (fdc->transfer.sector >= fdc->transfer.eot) {
-      // End of Track reached. Terminate successfully (unless Multi-Track).
-      // Increment sector so result phase reports the *next* logical sector
-      // (e.g. 10 if we just read 9), which allows the driver to calculate
-      // the correct sector count.
-      fdc->transfer.sector++;
-      fdc->transfer.tc_received = true;
+      // End of Track reached.
+      if (fdc->transfer.multi_track && (fdc->transfer.head & 1) == 0) {
+        // Multi-Track rollover: Side 0 -> Side 1.
+        fdc->transfer.head ^= 1;   // Flip to Head 1
+        fdc->transfer.sector = 1;  // Reset to Sector 1
+        fdc->transfer.sector_byte_index = 0;
+
+        // Recompute offset for new head/sector.
+        FDCDriveState* drive = &fdc->drives[drive_index];
+        fdc->transfer.current_offset = FDCComputeOffset(
+            *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
+            fdc->transfer.sector, 0);
+
+        if (fdc->transfer.current_offset == kFDCInvalidOffset) {
+          fdc->transfer.tc_received = true;
+        }
+      } else {
+        // Standard termination (MT=0 or already on Head 1).
+        // Increment sector so result phase reports the *next* logical sector.
+        fdc->transfer.sector++;
+        fdc->transfer.tc_received = true;
+      }
     } else {
       // Move to next sector.
       fdc->transfer.sector++;
@@ -691,11 +711,11 @@ static void FDCHandleReadData(FDCState* fdc) {
       fdc->transfer.current_offset = FDCComputeOffset(
           *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
           fdc->transfer.sector, 0);
-          
+
       if (fdc->transfer.current_offset == kFDCInvalidOffset) {
-          // Should not happen if EOT is correct, but if we ran off the end
-          // of the image despite EOT, terminate.
-          fdc->transfer.tc_received = true;
+        // Should not happen if EOT is correct, but if we ran off the end
+        // of the image despite EOT, terminate.
+        fdc->transfer.tc_received = true;
       }
     }
   }

@@ -256,6 +256,7 @@ typedef struct FDCState {
     // Command parameters governing the transfer.
     uint8_t sector_size_code;  // N
     uint8_t eot;               // End of Track sector number
+    bool multi_track;          // MT bit set (read/write across heads)
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.

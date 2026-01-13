@@ -179,6 +179,68 @@ TEST_F(FDCTest, ReadTrackEnd) {
   EXPECT_EQ(r, 10);
 }
 
+TEST_F(FDCTest, ReadDataMultiTrack) {
+  // Insert a disk into Drive 0.
+  FDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+
+  // Issue Read Data command (0x06) with MT bit set.
+  irq6_raised_ = false;
+  dma_requested_ = false;
+  // Command 0x86: MT=1, MFM=0, SK=0, CMD=06
+  SendCommand(0x86); 
+  SendParameter(0x00); // Drive 0, Head 0
+  SendParameter(0x00); // C=0
+  SendParameter(0x00); // H=0
+  SendParameter(0x09); // R=9 (Last Sector of Side 0)
+  SendParameter(0x02); // N=2 (512 bytes)
+  SendParameter(0x09); // EOT=9
+  SendParameter(0x2A); 
+  SendParameter(0xFF); 
+
+  // Tick 1: Init.
+  FDCTick(&fdc_);
+
+  // Read 512 bytes (Sector 9, Head 0).
+  for (int i = 0; i < 512; ++i) {
+    FDCTick(&fdc_); 
+    dma_requested_ = false;
+  }
+
+  // At this point, we finished Head 0, Sector 9.
+  // With MT=1, it should rollover to Head 1, Sector 1.
+  // dma_requested_ should be true again for the next byte (from Head 1).
+  
+  // Read 512 bytes (Sector 1, Head 1).
+  for (int i = 0; i < 512; ++i) {
+    FDCTick(&fdc_); 
+    EXPECT_TRUE(dma_requested_);
+    dma_requested_ = false;
+  }
+
+  // Simulate Terminal Count (TC) at end of 2nd sector read.
+  FDCHandleTC(&fdc_);
+
+  // Tick: Terminate command.
+  FDCTick(&fdc_);
+
+  // Verify IRQ6.
+  EXPECT_TRUE(irq6_raised_);
+
+  // Check Result Phase.
+  ReadResult(); // ST0
+  ReadResult(); // ST1
+  ReadResult(); // ST2
+  ReadResult(); // C
+  uint8_t h = ReadResult(); // H
+  uint8_t r = ReadResult(); // R
+  ReadResult(); // N
+
+  // Expect Head = 1 (Rolled over).
+  EXPECT_EQ(h, 1);
+  // Expect Sector = 2 (Read Sector 1, incremented to 2).
+  EXPECT_EQ(r, 2);
+}
+
 TEST_F(FDCTest, RecalibrateAndSenseInterruptStatus) {
   // 1. Issue Recalibrate command for Drive 0.
   irq6_raised_ = false;
