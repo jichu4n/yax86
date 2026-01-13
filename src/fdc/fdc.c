@@ -127,6 +127,13 @@ static void FDCHandleSeek(FDCState* fdc) {
   FDCPerformSeek(fdc, drive_index, target_track);
 }
 
+// Handler for Specify command.
+static void FDCHandleSpecify(FDCState* fdc) {
+  // We don't currently support changing timings or non-DMA mode, so we just
+  // ignore the parameters.
+  FDCFinishCommandExecution(fdc);
+}
+
 // Handler for Sense Interrupt Status command.
 static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
   // Check for any pending interrupts.
@@ -158,7 +165,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Read a Track
     {.opcode = kFDCCmdReadTrack, .num_param_bytes = 8, .handler = NULL},
     // Specify
-    {.opcode = kFDCCmdSpecify, .num_param_bytes = 2, .handler = NULL},
+    {.opcode = kFDCCmdSpecify, .num_param_bytes = 2, .handler = FDCHandleSpecify},
     // Sense Drive Status
     {.opcode = kFDCCmdSenseDriveStatus, .num_param_bytes = 1, .handler = NULL},
     // Write Data

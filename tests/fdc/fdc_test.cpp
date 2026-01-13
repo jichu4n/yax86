@@ -177,4 +177,22 @@ TEST_F(FDCTest, SeekAndSenseInterruptStatus) {
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
 }
 
+TEST_F(FDCTest, SpecifyCommand) {
+  // Issue Specify command (0x03).
+  SendCommand(0x03);
+  // Send Parameter 1 (SRT/HUT).
+  SendParameter(0xDF); 
+  // Send Parameter 2 (HLT/ND).
+  SendParameter(0x03);
+
+  // Tick to execute.
+  FDCTick(&fdc_);
+
+  // Verify FDC returned to Idle.
+  EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
+  
+  // Verify no interrupt was raised.
+  EXPECT_FALSE(irq6_raised_);
+}
+
 } // namespace
