@@ -143,4 +143,38 @@ TEST_F(FDCTest, DORResetAndInterrupt) {
   EXPECT_EQ(st0, 0x80); // Invalid Command
 }
 
+TEST_F(FDCTest, SeekAndSenseInterruptStatus) {
+  // 1. Issue Seek command for Drive 1 to Cylinder 10.
+  irq6_raised_ = false;
+  SendCommand(0x0F); // Seek
+  SendParameter(0x01); // Drive 1
+  SendParameter(0x0A); // NCN = 10
+
+  // Tick the FDC to process the command (start seek, finish seek).
+  FDCTick(&fdc_);
+  FDCTick(&fdc_);
+
+  // Verify IRQ6 was raised.
+  EXPECT_TRUE(irq6_raised_);
+  EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
+
+  // 2. Issue Sense Interrupt Status command.
+  SendCommand(0x08); // Sense Interrupt Status
+  FDCTick(&fdc_);
+
+  uint8_t st0 = ReadResult();
+  // Bits 7-6: 00 (Normal Termination)
+  // Bit 5: 1 (Seek End)
+  // Bits 1-0: 01 (Drive 1)
+  // Expected: 00100001 = 0x21
+  EXPECT_EQ(st0, 0x21);
+
+  // Read PCN (Present Cylinder Number).
+  uint8_t pcn = ReadResult();
+  EXPECT_EQ(pcn, 0x0A); // Should be 10.
+
+  // Verify we are back to Idle.
+  EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
+}
+
 } // namespace

@@ -80,10 +80,9 @@ static inline void FDCFinishCommandExecution(FDCState* fdc) {
   }
 }
 
-// Handler for Recalibrate command.
-static void FDCHandleRecalibrate(FDCState* fdc) {
-  // Recalibrate command has one parameter byte: drive number (0-3).
-  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+// Helper to perform a seek operation (for Seek and Recalibrate).
+static void FDCPerformSeek(FDCState* fdc, uint8_t drive_index,
+                           uint8_t target_track) {
   FDCDriveState* drive = &fdc->drives[drive_index];
 
   // On initial tick, start seeking.
@@ -93,7 +92,7 @@ static void FDCHandleRecalibrate(FDCState* fdc) {
   }
 
   // On 2nd tick, seek is complete.
-  drive->track = 0;
+  drive->track = target_track;
   drive->busy = false;
 
   // Set Status Register 0 (ST0)
@@ -109,6 +108,23 @@ static void FDCHandleRecalibrate(FDCState* fdc) {
   FDCRaiseIRQ6(fdc);
 
   FDCFinishCommandExecution(fdc);
+}
+
+// Handler for Recalibrate command.
+static void FDCHandleRecalibrate(FDCState* fdc) {
+  // Recalibrate command has one parameter byte: drive number (0-3).
+  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  FDCPerformSeek(fdc, drive_index, 0);
+}
+
+// Handler for Seek command.
+static void FDCHandleSeek(FDCState* fdc) {
+  // Seek command parameters:
+  // Byte 1: Drive number (0-3) and Head address (ignored for seek).
+  // Byte 2: New Cylinder Number (NCN).
+  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  uint8_t target_track = *FDCCommandBufferGet(&fdc->command_buffer, 2);
+  FDCPerformSeek(fdc, drive_index, target_track);
 }
 
 // Handler for Sense Interrupt Status command.
@@ -166,7 +182,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Format a Track
     {.opcode = kFDCCmdFormatTrack, .num_param_bytes = 5, .handler = NULL},
     // Seek
-    {.opcode = kFDCCmdSeek, .num_param_bytes = 2, .handler = NULL},
+    {.opcode = kFDCCmdSeek, .num_param_bytes = 2, .handler = FDCHandleSeek},
     // Scan Equal
     {.opcode = kFDCCmdScanEqual, .num_param_bytes = 8, .handler = NULL},
     // Scan Low or Equal
