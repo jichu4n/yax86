@@ -198,6 +198,8 @@ static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
     CPUState* cpu, YAX86_UNUSED const struct Instruction* instruction) {
   PlatformState* platform = (PlatformState*)cpu->config->context;
 
+  FDCTick(&platform->fdc);
+
   if (!GetFlag(cpu, kIF)) {
     return kExecuteSuccess;
   }
@@ -303,6 +305,33 @@ static void KeyboardCallbackSendScancode(void* context, uint8_t scancode) {
 }
 
 // ============================================================================
+// Callbacks for uPD765 FDC module
+// ============================================================================
+
+enum {
+  kPlatformDMAChannelFloppy = 2,
+};
+
+static void FDCCallbackRaiseIRQ6(void* context) {
+  PlatformState* platform = (PlatformState*)context;
+  PlatformRaiseIRQ(platform, 6);
+}
+
+static void FDCCallbackRequestDMA(void* context) {
+  PlatformState* platform = (PlatformState*)context;
+  DMATransferByte(&platform->dma, kPlatformDMAChannelFloppy);
+}
+
+static uint8_t FDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return FDCReadPort((FDCState*)entry->context, port);
+}
+
+static void FDCCallbackWritePortByte(
+    PortMapEntry* entry, uint16_t port, uint8_t value) {
+  FDCWritePort((FDCState*)entry->context, port, value);
+}
+
+// ============================================================================
 // Callbacks for DMA module
 // ============================================================================
 
@@ -315,6 +344,48 @@ static void DMACallbackWriteMemoryByte(
     void* context, uint32_t address, uint8_t value) {
   PlatformState* platform = (PlatformState*)context;
   WriteMemoryByte(platform, address, value);
+}
+
+static uint8_t DMACallbackReadDeviceByte(void* context, uint8_t channel) {
+  PlatformState* platform = (PlatformState*)context;
+  switch (channel) {
+    case kPlatformDMAChannelFloppy:
+      return FDCReadPort(&platform->fdc, kFDCPortData);
+    default:
+      return 0xFF;
+  }
+}
+
+static void DMACallbackWriteDeviceByte(
+    void* context, uint8_t channel, uint8_t value) {
+  PlatformState* platform = (PlatformState*)context;
+  switch (channel) {
+    case kPlatformDMAChannelFloppy:
+      FDCWritePort(&platform->fdc, kFDCPortData, value);
+      break;
+    default:
+      break;
+  }
+}
+
+static void DMACallbackOnTerminalCount(void* context, uint8_t channel) {
+  PlatformState* platform = (PlatformState*)context;
+  switch (channel) {
+    case kPlatformDMAChannelFloppy:
+      FDCHandleTC(&platform->fdc);
+      break;
+    default:
+      break;
+  }
+}
+
+static uint8_t DMACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return DMAReadPort((DMAState*)entry->context, port);
+}
+
+static void DMACallbackWritePortByte(
+    PortMapEntry* entry, uint16_t port, uint8_t value) {
+  DMAWritePort((DMAState*)entry->context, port, value);
 }
 
 // ============================================================================
@@ -408,13 +479,49 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->keyboard_config.send_scancode = KeyboardCallbackSendScancode;
   KeyboardInit(&platform->keyboard, &platform->keyboard_config);
 
+  // Set up FDC.
+  platform->fdc_config.context = platform;
+  platform->fdc_config.raise_irq6 = FDCCallbackRaiseIRQ6;
+  platform->fdc_config.request_dma = FDCCallbackRequestDMA;
+  platform->fdc_config.read_image_byte = NULL;
+  platform->fdc_config.write_image_byte = NULL;
+  FDCInit(&platform->fdc, &platform->fdc_config);
+  PortMapEntry fdc_entry = {
+      .entry_type = (PortMapEntryType)kPortMapEntryFDC,
+      .start = 0x3F0,
+      .end = 0x3F7,
+      .read_byte = FDCCallbackReadPortByte,
+      .write_byte = FDCCallbackWritePortByte,
+      .context = &platform->fdc,
+  };
+  RegisterPortMapEntry(platform, &fdc_entry);
+
   // Set up DMA controller.
   platform->dma_config.context = platform;
   platform->dma_config.read_memory_byte = DMACallbackReadMemoryByte;
   platform->dma_config.write_memory_byte = DMACallbackWriteMemoryByte;
-  platform->dma_config.read_device_byte = NULL;   // TODO
-  platform->dma_config.write_device_byte = NULL;  // TODO
+  platform->dma_config.read_device_byte = DMACallbackReadDeviceByte;
+  platform->dma_config.write_device_byte = DMACallbackWriteDeviceByte;
+  platform->dma_config.on_terminal_count = DMACallbackOnTerminalCount;
   DMAInit(&platform->dma, &platform->dma_config);
+  PortMapEntry dma_entry = {
+      .entry_type = (PortMapEntryType)kPortMapEntryDMA,
+      .start = 0x00,
+      .end = 0x0F,
+      .read_byte = DMACallbackReadPortByte,
+      .write_byte = DMACallbackWritePortByte,
+      .context = &platform->dma,
+  };
+  RegisterPortMapEntry(platform, &dma_entry);
+  PortMapEntry dma_page_entry = {
+      .entry_type = (PortMapEntryType)kPortMapEntryDMAPage,
+      .start = 0x80,
+      .end = 0x8F,
+      .read_byte = DMACallbackReadPortByte,
+      .write_byte = DMACallbackWritePortByte,
+      .context = &platform->dma,
+  };
+  RegisterPortMapEntry(platform, &dma_page_entry);
 
   return true;
 }

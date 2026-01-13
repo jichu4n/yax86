@@ -12,6 +12,7 @@
 
 #include "cpu.h"
 #include "dma.h"
+#include "fdc.h"
 #include "keyboard.h"
 #include "pic.h"
 #include "pit.h"
@@ -105,7 +106,7 @@ void WriteMemoryWord(
 // ============================================================================
 
 // Type ID of an I/O port map entry.
-typedef uint8_t PortMapEntryType;
+typedef uint16_t PortMapEntryType;
 
 enum {
   // Maximum number of I/O port mapping entries.
@@ -116,6 +117,12 @@ enum {
   kPortMapEntryPIT = 0x40,
   // I/O port map entry for the PPI (ports 0x60-0x63).
   kPortMapEntryPPI = 0x60,
+  // I/O port map entry for the FDC (ports 0x3F0-0x3F7).
+  kPortMapEntryFDC = 0x3F0,
+  // I/O port map entry for the DMA controller (ports 0x00-0x0F).
+  kPortMapEntryDMA = 0x00,
+  // I/O port map entry for the DMA Page Registers (ports 0x80-0x8F).
+  kPortMapEntryDMAPage = 0x80,
 };
 
 // An I/O port map entry. Entries should not overlap.
@@ -237,6 +244,10 @@ typedef struct PlatformState {
   DMAConfig dma_config;
   // DMA controller state.
   DMAState dma;
+
+  // FDC state.
+  FDCConfig fdc_config;
+  FDCState fdc;
 
   // Memory map.
   MemoryMap memory_map;

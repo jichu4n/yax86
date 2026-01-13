@@ -22,6 +22,7 @@ add_subdirectory(cpu)
 add_subdirectory(pic)
 add_subdirectory(pit)
 add_subdirectory(ppi)
+add_subdirectory(platform)
 add_subdirectory(dma)
 
 add_subdirectory(keyboard)

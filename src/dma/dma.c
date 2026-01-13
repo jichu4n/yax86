@@ -208,6 +208,8 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
       break;
   }
 
+
+
   // Update address register
   if ((channel->mode & kDMAModeAddressDecrement) == 0) {
     ++channel->current_address;
@@ -220,6 +222,11 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
   if (channel->current_count == 0xFFFF) {
     // Set TC bit in status register
     dma->status_register |= (1 << channel_index);
+
+    // Notify the system that TC has been reached.
+    if (dma->config->on_terminal_count) {
+      dma->config->on_terminal_count(dma->config->context, channel_index);
+    }
 
     // Handle auto-initialization or mask the channel
     if ((channel->mode & kDMAModeAutoInitialize) != 0) {

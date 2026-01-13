@@ -150,6 +150,11 @@ typedef struct DMAConfig {
   uint8_t (*read_device_byte)(void* context, uint8_t channel);
   // Callback to write a byte to a peripheral for a specific DMA channel.
   void (*write_device_byte)(void* context, uint8_t channel, uint8_t value);
+
+  // Callback to notify the system that a channel has reached its terminal count.
+  // This corresponds to the EOP (End of Process) signal on the 8237, which is
+  // connected to the TC (Terminal Count) pin on devices like the FDC.
+  void (*on_terminal_count)(void* context, uint8_t channel);
 } DMAConfig;
 
 // State for a single DMA channel.
@@ -441,6 +446,8 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
       break;
   }
 
+
+
   // Update address register
   if ((channel->mode & kDMAModeAddressDecrement) == 0) {
     ++channel->current_address;
@@ -453,6 +460,11 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
   if (channel->current_count == 0xFFFF) {
     // Set TC bit in status register
     dma->status_register |= (1 << channel_index);
+
+    // Notify the system that TC has been reached.
+    if (dma->config->on_terminal_count) {
+      dma->config->on_terminal_count(dma->config->context, channel_index);
+    }
 
     // Handle auto-initialization or mask the channel
     if ((channel->mode & kDMAModeAutoInitialize) != 0) {

@@ -134,6 +134,11 @@ typedef struct DMAConfig {
   uint8_t (*read_device_byte)(void* context, uint8_t channel);
   // Callback to write a byte to a peripheral for a specific DMA channel.
   void (*write_device_byte)(void* context, uint8_t channel, uint8_t value);
+
+  // Callback to notify the system that a channel has reached its terminal count.
+  // This corresponds to the EOP (End of Process) signal on the 8237, which is
+  // connected to the TC (Terminal Count) pin on devices like the FDC.
+  void (*on_terminal_count)(void* context, uint8_t channel);
 } DMAConfig;
 
 // State for a single DMA channel.
