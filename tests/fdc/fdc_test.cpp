@@ -3,6 +3,11 @@
 
 namespace {
 
+enum DmaMode {
+  kDmaModeRead,
+  kDmaModeWrite,
+};
+
 class FDCTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -14,12 +19,17 @@ class FDCTest : public ::testing::Test {
       // Return a pattern based on offset.
       return (uint8_t)(offset & 0xFF);
     };
-    config_.write_image_byte = NULL;
+    config_.write_image_byte = [](void* context, uint8_t drive, uint32_t offset, uint8_t value) {
+      FDCTest* test = static_cast<FDCTest*>(context);
+      test->last_written_byte_ = value;
+      test->last_written_offset_ = offset;
+    };
     config_.request_dma = [](void* context) {
       FDCTest* test = static_cast<FDCTest*>(context);
       test->dma_requested_ = true;
-      // Simulate DMA controller reading the byte.
-      test->last_dma_byte_ = FDCReadPort(&test->fdc_, kFDCPortData);
+      if (test->dma_mode_ == kDmaModeRead) {
+        test->last_dma_byte_ = FDCReadPort(&test->fdc_, kFDCPortData);
+      }
     };
 
     FDCInit(&fdc_, &config_);
@@ -37,6 +47,7 @@ class FDCTest : public ::testing::Test {
     // Clear the IRQ flag so tests start fresh.
     irq6_raised_ = false;
     dma_requested_ = false;
+    dma_mode_ = kDmaModeRead;
   }
 
   void SendCommand(uint8_t cmd) {
@@ -47,6 +58,10 @@ class FDCTest : public ::testing::Test {
     FDCWritePort(&fdc_, kFDCPortData, param);
   }
 
+  void WriteDmaByte(uint8_t value) {
+    FDCWritePort(&fdc_, kFDCPortData, value);
+  }
+
   uint8_t ReadResult() {
     return FDCReadPort(&fdc_, kFDCPortData);
   }
@@ -55,7 +70,10 @@ class FDCTest : public ::testing::Test {
   FDCState fdc_;
   bool irq6_raised_ = false;
   bool dma_requested_ = false;
+  DmaMode dma_mode_ = kDmaModeRead;
   uint8_t last_dma_byte_ = 0;
+  uint8_t last_written_byte_ = 0;
+  uint32_t last_written_offset_ = 0;
 };
 
 TEST_F(FDCTest, ReadData) {
@@ -66,6 +84,8 @@ TEST_F(FDCTest, ReadData) {
   // Parameters: Head/Drive, C, H, R, N, EOT, GPL, DTL.
   irq6_raised_ = false;
   dma_requested_ = false;
+  dma_mode_ = kDmaModeRead;
+
   SendCommand(0x06); // Read Data
   SendParameter(0x00); // Drive 0, Head 0
   SendParameter(0x00); // C=0
@@ -130,6 +150,60 @@ TEST_F(FDCTest, ReadData) {
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
 }
 
+TEST_F(FDCTest, WriteData) {
+  // Insert a disk into Drive 0.
+  FDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+
+  irq6_raised_ = false;
+  dma_requested_ = false;
+  dma_mode_ = kDmaModeWrite;
+
+  // Issue Write Data command (0x05).
+  SendCommand(0x05); 
+  SendParameter(0x00); // Drive 0
+  SendParameter(0x00); 
+  SendParameter(0x00); 
+  SendParameter(0x01); // Sector 1
+  SendParameter(0x02); 
+  SendParameter(0x09); 
+  SendParameter(0x2A); 
+  SendParameter(0xFF); 
+
+  // Tick 1: Initialization. 
+  // NOTE: Write Data requests first byte immediately in Init block.
+  FDCTick(&fdc_);
+  EXPECT_TRUE(dma_requested_);
+  EXPECT_EQ(fdc_.phase, kFDCPhaseExecution);
+
+  // Provide first byte (0xAA).
+  dma_requested_ = false;
+  WriteDmaByte(0xAA);
+
+  // Tick 2: Process byte 0xAA, request next.
+  FDCTick(&fdc_);
+  EXPECT_EQ(last_written_byte_, 0xAA);
+  EXPECT_EQ(last_written_offset_, 0);
+  EXPECT_TRUE(dma_requested_);
+
+  // Provide second byte (0xBB).
+  dma_requested_ = false;
+  WriteDmaByte(0xBB);
+
+  // Tick 3: Process byte 0xBB.
+  FDCTick(&fdc_);
+  EXPECT_EQ(last_written_byte_, 0xBB);
+  EXPECT_EQ(last_written_offset_, 1);
+  EXPECT_TRUE(dma_requested_);
+
+  // Simulate TC.
+  FDCHandleTC(&fdc_);
+
+  // Tick: Terminate.
+  FDCTick(&fdc_);
+  EXPECT_TRUE(irq6_raised_);
+  EXPECT_EQ(fdc_.phase, kFDCPhaseResult);
+}
+
 TEST_F(FDCTest, ReadTrackEnd) {
   // Insert a disk into Drive 0.
   FDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
@@ -137,6 +211,7 @@ TEST_F(FDCTest, ReadTrackEnd) {
   // Issue Read Data command for Sector 9 (End of Track).
   irq6_raised_ = false;
   dma_requested_ = false;
+  dma_mode_ = kDmaModeRead;
   SendCommand(0x06); 
   SendParameter(0x00); 
   SendParameter(0x00); 
@@ -186,6 +261,7 @@ TEST_F(FDCTest, ReadDataMultiTrack) {
   // Issue Read Data command (0x06) with MT bit set.
   irq6_raised_ = false;
   dma_requested_ = false;
+  dma_mode_ = kDmaModeRead;
   // Command 0x86: MT=1, MFM=0, SK=0, CMD=06
   SendCommand(0x86); 
   SendParameter(0x00); // Drive 0, Head 0
