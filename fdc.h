@@ -243,6 +243,40 @@ enum {
   kFDCST0UnitSelectMask = 0x03,
 };
 
+// Flags for Status Register 1 (ST1).
+enum {
+  // Bit 7: End of Cylinder
+  kFDCST1EndOfCylinder = 1 << 7,
+  // Bit 5: Data Error
+  kFDCST1DataError = 1 << 5,
+  // Bit 4: Overrun
+  kFDCST1Overrun = 1 << 4,
+  // Bit 2: No Data
+  kFDCST1NoData = 1 << 2,
+  // Bit 1: Not Writable
+  kFDCST1NotWritable = 1 << 1,
+  // Bit 0: Missing Address Mark
+  kFDCST1MissingAddressMark = 1 << 0,
+};
+
+// Flags for Status Register 2 (ST2).
+enum {
+  // Bit 6: Control Mark
+  kFDCST2ControlMark = 1 << 6,
+  // Bit 5: Data Error in Data Field
+  kFDCST2DataErrorInDataField = 1 << 5,
+  // Bit 4: Wrong Cylinder
+  kFDCST2WrongCylinder = 1 << 4,
+  // Bit 3: Scan Equal Hit
+  kFDCST2ScanEqualHit = 1 << 3,
+  // Bit 2: Scan Not Satisfied
+  kFDCST2ScanNotSatisfied = 1 << 2,
+  // Bit 1: Bad Cylinder
+  kFDCST2BadCylinder = 1 << 1,
+  // Bit 0: Missing Address Mark in Data Field
+  kFDCST2MissingAddressMarkInDataField = 1 << 0,
+};
+
 // State for a single floppy drive.
 typedef struct FDCDriveState {
   // Whether there is a disk inserted in the drive, i.e. whether an image is
@@ -273,6 +307,10 @@ typedef struct FDCConfig {
   // Callback to raise an IRQ6 (FDC interrupt) to the CPU.
   void (*raise_irq6)(void* context);
 
+  // Callback to signal the platform to execute a DMA cycle for Channel 2.
+  // This represents the DREQ (DMA Request) signal.
+  void (*request_dma)(void* context);
+
   // Callback to read a byte from a floppy image.
   uint8_t (*read_image_byte)(
       void* context,
@@ -302,7 +340,8 @@ typedef struct FDCState {
   // Pointer to the FDC configuration.
   FDCConfig* config;
 
-  // Value of the Digital Output Register (DOR) from the last write to port 0x3F2.
+  // Value of the Digital Output Register (DOR) from the last write to port
+  // 0x3F2.
   uint8_t dor;
 
   // Per-drive state.
@@ -322,6 +361,27 @@ typedef struct FDCState {
   FDCResultBuffer result_buffer;
   // Next index to read from result buffer.
   uint8_t next_result_byte_index;
+
+  // State specific to the execution of a data transfer command
+  // (Read/Write/Format).
+  struct {
+    // Current logical position on the disk during transfer.
+    uint8_t cylinder;
+    uint8_t head;
+    uint8_t sector;
+
+    // Command parameters governing the transfer.
+    uint8_t sector_size_code;  // N
+    uint8_t eot;               // End of Track sector number
+
+    // Internal tracking.
+    uint32_t current_offset;  // Current byte offset in the disk image.
+    uint16_t
+        sector_byte_index;  // Current byte index within the current sector.
+    uint8_t data_register;  // Buffer for the byte currently being transferred.
+    bool dma_request_active;  // DREQ is asserted, waiting for DMA access.
+    bool tc_received;         // TC (Terminal Count) signal received from DMA.
+  } transfer;
 } FDCState;
 
 // Initializes the FDC to its power-on state.
@@ -332,6 +392,10 @@ uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
 void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
+
+// Signals to the FDC that the DMA controller has reached the terminal count.
+// This represents the TC signal.
+void FDCHandleTC(FDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
 void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
@@ -470,6 +534,173 @@ static void FDCPerformSeek(FDCState* fdc, uint8_t drive_index,
   FDCFinishCommandExecution(fdc);
 }
 
+// Compute the byte offset within a disk image for the given address. Returns
+// kFDCInvalidOffset if the address is out of range.
+//
+// In a raw image file, the data is laid out track by track, starting from the
+// outermost track (Track 0). Within each track, it reads all the data from the
+// first head (Head 0, the top side) and then all the data from the second head
+// (Head 1, the bottom side) before moving to the next track.
+// In other words, the layout is an array of
+// [num_tracks][num_heads][num_sectors_per_track].
+static inline uint32_t FDCComputeOffset(
+    FDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
+    uint16_t sector_offset) {
+  if (head >= format.num_heads || track >= format.num_tracks || sector == 0 ||
+      sector > format.num_sectors_per_track ||
+      sector_offset >= format.sector_size) {
+    return kFDCInvalidOffset;
+  }
+
+  uint32_t offset = 0;
+  // Seek to start of the track
+  offset += (uint32_t)track * format.num_heads * format.num_sectors_per_track *
+            format.sector_size;
+  // Seek to start of the head within the track
+  offset += (uint32_t)head * format.num_sectors_per_track * format.sector_size;
+  // Seek to start of the sector within the head
+  offset += (uint32_t)(sector - 1) * format.sector_size;
+  // Add byte offset within the sector
+  offset += (uint32_t)sector_offset;
+
+  return offset;
+}
+
+// Helper to finish a read/write command.
+static void FDCFinishReadWrite(FDCState* fdc, uint8_t st0, uint8_t st1,
+                               uint8_t st2) {
+  FDCResultBufferAppend(&fdc->result_buffer, &st0);
+  FDCResultBufferAppend(&fdc->result_buffer, &st1);
+  FDCResultBufferAppend(&fdc->result_buffer, &st2);
+  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.cylinder);
+  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.head);
+  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.sector);
+  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.sector_size_code);
+
+  FDCRaiseIRQ6(fdc);
+  FDCFinishCommandExecution(fdc);
+}
+
+// Handler for Read Data command.
+static void FDCHandleReadData(FDCState* fdc) {
+  if (fdc->current_command_ticks == 0) {
+    // Initialization.
+    uint8_t drive_head = *FDCCommandBufferGet(&fdc->command_buffer, 1);
+    uint8_t drive_index = drive_head & 0x03;
+    uint8_t head_address = (drive_head >> 2) & 0x01;
+
+    fdc->transfer.cylinder = *FDCCommandBufferGet(&fdc->command_buffer, 2);
+    fdc->transfer.head = *FDCCommandBufferGet(&fdc->command_buffer, 3);
+    fdc->transfer.sector = *FDCCommandBufferGet(&fdc->command_buffer, 4);
+    fdc->transfer.sector_size_code =
+        *FDCCommandBufferGet(&fdc->command_buffer, 5);
+    fdc->transfer.eot = *FDCCommandBufferGet(&fdc->command_buffer, 6);
+    // GPL and DTL are ignored as we don't simulate gap timings or use DTL for init.
+
+    FDCDriveState* drive = &fdc->drives[drive_index];
+    if (!drive->present) {
+      // Drive not ready.
+      FDCFinishReadWrite(fdc, kFDCST0AbnormalTermination | kFDCST0NotReady |
+                                  head_address << 2 | drive_index,
+                         0, 0);
+      return;
+    }
+
+    // Calculate offset for the first byte.
+    fdc->transfer.current_offset = FDCComputeOffset(
+        *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
+        fdc->transfer.sector, 0);
+
+    if (fdc->transfer.current_offset == kFDCInvalidOffset) {
+      // Invalid sector/track.
+      // If the sector is physically out of bounds for the format, report No Data (Sector Not Found).
+      FDCFinishReadWrite(fdc, kFDCST0AbnormalTermination | head_address << 2 |
+                                  drive_index,
+                         kFDCST1NoData, 0);
+      return;
+    }
+
+    fdc->transfer.sector_byte_index = 0;
+    fdc->transfer.dma_request_active = false;
+    fdc->transfer.tc_received = false;
+    return;
+  }
+
+  // Execution Loop.
+
+  // Check for Terminal Count (TC).
+  if (fdc->transfer.tc_received) {
+    // Transfer complete.
+    uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+    uint8_t head_address = (fdc->transfer.head & 0x01);
+    FDCFinishReadWrite(fdc, kFDCST0NormalTermination | head_address << 2 |
+                                drive_index,
+                       0, 0);
+    return;
+  }
+
+  // If DREQ is active, wait for the system to service it.
+  if (fdc->transfer.dma_request_active) {
+    return;
+  }
+
+  // Read next byte.
+  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  if (fdc->config && fdc->config->read_image_byte) {
+    fdc->transfer.data_register = fdc->config->read_image_byte(
+        fdc->config->context, drive_index, fdc->transfer.current_offset);
+  } else {
+    fdc->transfer.data_register = 0;
+  }
+
+  // Advance pointers.
+  fdc->transfer.current_offset++;
+  fdc->transfer.sector_byte_index++;
+
+  // Request DMA transfer.
+  fdc->transfer.dma_request_active = true;
+  if (fdc->config && fdc->config->request_dma) {
+    fdc->config->request_dma(fdc->config->context);
+  }
+
+  // Calculate sector size again for boundary check.
+  uint16_t sector_size;
+  uint8_t dtl = *FDCCommandBufferGet(&fdc->command_buffer, 8);
+  if (fdc->transfer.sector_size_code == 0) {
+    sector_size = dtl;
+  } else {
+    sector_size = 128 << fdc->transfer.sector_size_code;
+  }
+
+  // Check for sector boundary.
+  if (fdc->transfer.sector_byte_index >= sector_size) {
+    // Sector done.
+    if (fdc->transfer.sector >= fdc->transfer.eot) {
+      // End of Track reached. Terminate successfully (unless Multi-Track).
+      // Increment sector so result phase reports the *next* logical sector
+      // (e.g. 10 if we just read 9), which allows the driver to calculate
+      // the correct sector count.
+      fdc->transfer.sector++;
+      fdc->transfer.tc_received = true;
+    } else {
+      // Move to next sector.
+      fdc->transfer.sector++;
+      fdc->transfer.sector_byte_index = 0;
+      // Recompute offset for new sector.
+      FDCDriveState* drive = &fdc->drives[drive_index];
+      fdc->transfer.current_offset = FDCComputeOffset(
+          *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
+          fdc->transfer.sector, 0);
+          
+      if (fdc->transfer.current_offset == kFDCInvalidOffset) {
+          // Should not happen if EOT is correct, but if we ran off the end
+          // of the image despite EOT, terminate.
+          fdc->transfer.tc_received = true;
+      }
+    }
+  }
+}
+
 // Handler for Recalibrate command.
 static void FDCHandleRecalibrate(FDCState* fdc) {
   // Recalibrate command has one parameter byte: drive number (0-3).
@@ -531,7 +762,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Write Data
     {.opcode = kFDCCmdWriteData, .num_param_bytes = 8, .handler = NULL},
     // Read Data
-    {.opcode = kFDCCmdReadData, .num_param_bytes = 8, .handler = NULL},
+    {.opcode = kFDCCmdReadData, .num_param_bytes = 8, .handler = FDCHandleReadData},
     // Recalibrate
     {.opcode = kFDCCmdRecalibrate,
      .num_param_bytes = 1,
@@ -558,37 +789,6 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     {.opcode = kFDCCmdScanHighOrEqual, .num_param_bytes = 8, .handler = NULL},
 };
 
-// Compute the byte offset within a disk image for the given address. Returns
-// kFDCInvalidOffset if the address is out of range.
-//
-// In a raw image file, the data is laid out track by track, starting from the
-// outermost track (Track 0). Within each track, it reads all the data from the
-// first head (Head 0, the top side) and then all the data from the second head
-// (Head 1, the bottom side) before moving to the next track.
-// In other words, the layout is an array of
-// [num_tracks][num_heads][num_sectors_per_track].
-static inline uint32_t FDCComputeOffset(
-    FDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
-    uint16_t sector_offset) {
-  if (head >= format.num_heads || track >= format.num_tracks || sector == 0 ||
-      sector > format.num_sectors_per_track ||
-      sector_offset >= format.sector_size) {
-    return kFDCInvalidOffset;
-  }
-
-  uint32_t offset = 0;
-  // Seek to start of the track
-  offset += (uint32_t)track * format.num_heads * format.num_sectors_per_track *
-            format.sector_size;
-  // Seek to start of the head within the track
-  offset += (uint32_t)head * format.num_sectors_per_track * format.sector_size;
-  // Seek to start of the sector within the head
-  offset += (uint32_t)(sector - 1) * format.sector_size;
-  // Add byte offset within the sector
-  offset += (uint32_t)sector_offset;
-
-  return offset;
-}
 
 void FDCInit(FDCState* fdc, FDCConfig* config) {
   static const FDCState zero_fdc_state = {0};
@@ -625,6 +825,11 @@ uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
       return msr;
     }
     case kFDCPortData: {  // Data Register
+      if (fdc->phase == kFDCPhaseExecution) {
+        // DMA or Polling read during execution.
+        fdc->transfer.dma_request_active = false;
+        return fdc->transfer.data_register;
+      }
       if (fdc->phase != kFDCPhaseResult) {
         return 0xFF;  // Invalid read.
       }
@@ -762,6 +967,8 @@ void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
       break;
   }
 }
+
+void FDCHandleTC(FDCState* fdc) { fdc->transfer.tc_received = true; }
 
 void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   if (drive >= kFDCNumDrives) {

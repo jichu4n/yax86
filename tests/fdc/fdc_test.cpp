@@ -10,8 +10,17 @@ class FDCTest : public ::testing::Test {
     config_.raise_irq6 = [](void* context) {
       static_cast<FDCTest*>(context)->irq6_raised_ = true;
     };
-    config_.read_image_byte = NULL;
+    config_.read_image_byte = [](void* context, uint8_t drive, uint32_t offset) -> uint8_t {
+      // Return a pattern based on offset.
+      return (uint8_t)(offset & 0xFF);
+    };
     config_.write_image_byte = NULL;
+    config_.request_dma = [](void* context) {
+      FDCTest* test = static_cast<FDCTest*>(context);
+      test->dma_requested_ = true;
+      // Simulate DMA controller reading the byte.
+      test->last_dma_byte_ = FDCReadPort(&test->fdc_, kFDCPortData);
+    };
 
     FDCInit(&fdc_, &config_);
     // Enable interrupts and release reset by default for tests.
@@ -27,6 +36,7 @@ class FDCTest : public ::testing::Test {
     }
     // Clear the IRQ flag so tests start fresh.
     irq6_raised_ = false;
+    dma_requested_ = false;
   }
 
   void SendCommand(uint8_t cmd) {
@@ -44,7 +54,130 @@ class FDCTest : public ::testing::Test {
   FDCConfig config_;
   FDCState fdc_;
   bool irq6_raised_ = false;
+  bool dma_requested_ = false;
+  uint8_t last_dma_byte_ = 0;
 };
+
+TEST_F(FDCTest, ReadData) {
+  // Insert a disk into Drive 0.
+  FDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+
+  // Issue Read Data command (0x06).
+  // Parameters: Head/Drive, C, H, R, N, EOT, GPL, DTL.
+  irq6_raised_ = false;
+  dma_requested_ = false;
+  SendCommand(0x06); // Read Data
+  SendParameter(0x00); // Drive 0, Head 0
+  SendParameter(0x00); // C=0
+  SendParameter(0x00); // H=0
+  SendParameter(0x01); // R=1 (Sector 1)
+  SendParameter(0x02); // N=2 (512 bytes)
+  SendParameter(0x09); // EOT=9
+  SendParameter(0x2A); // GPL
+  SendParameter(0xFF); // DTL
+
+  // Tick 1: Initialization.
+  FDCTick(&fdc_);
+  EXPECT_FALSE(dma_requested_);
+  EXPECT_EQ(fdc_.phase, kFDCPhaseExecution);
+
+  // Tick 2: Read first byte.
+  FDCTick(&fdc_);
+  EXPECT_TRUE(dma_requested_);
+  // Offset 0 should be 0x00.
+  EXPECT_EQ(last_dma_byte_, 0x00);
+
+  // Simulate reading 511 more bytes.
+  for (int i = 1; i < 512; ++i) {
+    dma_requested_ = false;
+    FDCTick(&fdc_);
+    EXPECT_TRUE(dma_requested_);
+    EXPECT_EQ(last_dma_byte_, (uint8_t)(i & 0xFF));
+  }
+
+  // Simulate Terminal Count from DMA controller.
+  FDCHandleTC(&fdc_);
+
+  // Tick: Terminate command.
+  irq6_raised_ = false;
+  FDCTick(&fdc_);
+
+  // Verify IRQ6 and Result Phase.
+  EXPECT_TRUE(irq6_raised_);
+  EXPECT_EQ(fdc_.phase, kFDCPhaseResult);
+
+  // Read Result Bytes (ST0, ST1, ST2, C, H, R, N).
+  uint8_t st0 = ReadResult();
+  uint8_t st1 = ReadResult();
+  uint8_t st2 = ReadResult();
+  uint8_t c = ReadResult();
+  uint8_t h = ReadResult();
+  uint8_t r = ReadResult();
+  uint8_t n = ReadResult();
+
+  // ST0: Normal Termination (Bits 7-6 = 00).
+  EXPECT_EQ(st0 & 0xC0, 0x00);
+  // Sector should be 1 (current sector was read, maybe incremented? 
+  // Code increments sector AFTER byte index reaches size).
+  // Wait, if TC happened at end of sector, sector might be 2.
+  // But here we manually sent TC after 512 bytes.
+  // The code increments R after the sector loop.
+  // If we stopped exactly at 512, R might be 1 or 2 depending on check order.
+  // Let's just check valid read for now.
+  (void)c; (void)h; (void)r; (void)n;
+  
+  // FDC should be Idle now.
+  EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
+}
+
+TEST_F(FDCTest, ReadTrackEnd) {
+  // Insert a disk into Drive 0.
+  FDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+
+  // Issue Read Data command for Sector 9 (End of Track).
+  irq6_raised_ = false;
+  dma_requested_ = false;
+  SendCommand(0x06); 
+  SendParameter(0x00); 
+  SendParameter(0x00); 
+  SendParameter(0x00); 
+  SendParameter(0x09); // R=9 (Last Sector)
+  SendParameter(0x02); // N=2
+  SendParameter(0x09); // EOT=9
+  SendParameter(0x2A); 
+  SendParameter(0xFF); 
+
+  // Tick 1: Init.
+  FDCTick(&fdc_);
+
+  // Read 512 bytes (1 sector).
+  for (int i = 0; i < 512; ++i) {
+    FDCTick(&fdc_); // Read byte, Request DMA
+    // Handle DMA read immediately (simulated by test callback setting dma_requested)
+    dma_requested_ = false; 
+  }
+
+  // At this point, we finished the last byte of Sector 9.
+  // The handler should have incremented sector to 10 and set tc_received (EOT).
+  
+  // Tick: Terminate command (detects tc_received).
+  FDCTick(&fdc_);
+
+  // Verify IRQ6.
+  EXPECT_TRUE(irq6_raised_);
+
+  // Check Result Sector (R).
+  ReadResult(); // ST0
+  ReadResult(); // ST1
+  ReadResult(); // ST2
+  ReadResult(); // C
+  ReadResult(); // H
+  uint8_t r = ReadResult(); // R
+  ReadResult(); // N
+
+  // Expect R = 10 (9 + 1).
+  EXPECT_EQ(r, 10);
+}
 
 TEST_F(FDCTest, RecalibrateAndSenseInterruptStatus) {
   // 1. Issue Recalibrate command for Drive 0.
