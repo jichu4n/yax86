@@ -86,17 +86,33 @@ enum {
   kFDCMSRRequestForMaster = 1 << 7,
 };
 
+// Flags for the Digital Output Register (DOR).
+enum {
+  // Drive selection (0-3).
+  kFDCDORDriveSelectMask = 0x03,
+  // Controller reset (0 = Reset active, 1 = Controller enabled).
+  kFDCDORReset = 1 << 2,
+  // DMA and Interrupt enable (1 = enabled).
+  kFDCDORInterruptEnable = 1 << 3,
+  // Motor enable flags for drives 0-3.
+  kFDCDORMotor0Enable = 1 << 4,
+  kFDCDORMotor1Enable = 1 << 5,
+  kFDCDORMotor2Enable = 1 << 6,
+  kFDCDORMotor3Enable = 1 << 7,
+};
+
 // Flags for Status Register 0 (ST0).
 enum {
   // Bits 7-6: Interrupt Code
   // 00 = Normal termination
   // 01 = Abnormal termination
   // 10 = Invalid command
-  // 11 = Abnormal termination due to polling
+  // 11 = Abnormal termination due to polling (Post-reset)
   kFDCST0InterruptCodeMask = 0xC0,
   kFDCST0NormalTermination = 0x00,
   kFDCST0AbnormalTermination = 0x40,
   kFDCST0InvalidCommand = 0x80,
+  kFDCST0AbnormalTerminationPolling = 0xC0,
 
   // Bit 5: Seek End
   kFDCST0SeekEnd = 1 << 5,
@@ -168,6 +184,9 @@ struct FDCCommandMetadata;
 typedef struct FDCState {
   // Pointer to the FDC configuration.
   FDCConfig* config;
+
+  // Value of the Digital Output Register (DOR) from the last write to port 0x3F2.
+  uint8_t dor;
 
   // Per-drive state.
   FDCDriveState drives[kFDCNumDrives];

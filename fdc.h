@@ -203,17 +203,33 @@ enum {
   kFDCMSRRequestForMaster = 1 << 7,
 };
 
+// Flags for the Digital Output Register (DOR).
+enum {
+  // Drive selection (0-3).
+  kFDCDORDriveSelectMask = 0x03,
+  // Controller reset (0 = Reset active, 1 = Controller enabled).
+  kFDCDORReset = 1 << 2,
+  // DMA and Interrupt enable (1 = enabled).
+  kFDCDORInterruptEnable = 1 << 3,
+  // Motor enable flags for drives 0-3.
+  kFDCDORMotor0Enable = 1 << 4,
+  kFDCDORMotor1Enable = 1 << 5,
+  kFDCDORMotor2Enable = 1 << 6,
+  kFDCDORMotor3Enable = 1 << 7,
+};
+
 // Flags for Status Register 0 (ST0).
 enum {
   // Bits 7-6: Interrupt Code
   // 00 = Normal termination
   // 01 = Abnormal termination
   // 10 = Invalid command
-  // 11 = Abnormal termination due to polling
+  // 11 = Abnormal termination due to polling (Post-reset)
   kFDCST0InterruptCodeMask = 0xC0,
   kFDCST0NormalTermination = 0x00,
   kFDCST0AbnormalTermination = 0x40,
   kFDCST0InvalidCommand = 0x80,
+  kFDCST0AbnormalTerminationPolling = 0xC0,
 
   // Bit 5: Seek End
   kFDCST0SeekEnd = 1 << 5,
@@ -285,6 +301,9 @@ struct FDCCommandMetadata;
 typedef struct FDCState {
   // Pointer to the FDC configuration.
   FDCConfig* config;
+
+  // Value of the Digital Output Register (DOR) from the last write to port 0x3F2.
+  uint8_t dor;
 
   // Per-drive state.
   FDCDriveState drives[kFDCNumDrives];
@@ -395,9 +414,10 @@ typedef struct FDCCommandMetadata {
   void (*handler)(FDCState* fdc);
 } FDCCommandMetadata;
 
-// Helper to raise an IRQ6 if the callback is set.
+// Helper to raise an IRQ6 if the callback is set and interrupts are enabled in DOR.
 static inline void FDCRaiseIRQ6(FDCState* fdc) {
-  if (fdc->config && fdc->config->raise_irq6) {
+  if (fdc->config && fdc->config->raise_irq6 &&
+      (fdc->dor & kFDCDORInterruptEnable)) {
     fdc->config->raise_irq6(fdc->config->context);
   }
 }
@@ -432,7 +452,7 @@ static void FDCHandleRecalibrate(FDCState* fdc) {
     return;
   }
 
-  // Seek is complete.
+  // On 2nd tick, seek is complete.
   drive->track = 0;
   drive->busy = false;
 
@@ -680,10 +700,34 @@ static void FDCHandleDataPortWrite(FDCState* fdc, uint8_t value) {
 
 void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
-    case kFDCPortDOR:  // Digital Output Register
-      // TODO: Handle motor control, drive selection, and FDC reset based on
-      // 'value'.
+    case kFDCPortDOR: {  // Digital Output Register
+      uint8_t old_dor = fdc->dor;
+      fdc->dor = value;
+
+      bool old_reset_bit = (old_dor & kFDCDORReset) != 0;
+      bool new_reset_bit = (value & kFDCDORReset) != 0;
+
+      if (!new_reset_bit && old_reset_bit) {
+        // Entering reset state (1 -> 0).
+        fdc->phase = kFDCPhaseIdle;
+        FDCCommandBufferClear(&fdc->command_buffer);
+        FDCResultBufferClear(&fdc->result_buffer);
+        for (int i = 0; i < kFDCNumDrives; ++i) {
+          fdc->drives[i].busy = false;
+          fdc->drives[i].has_pending_interrupt = false;
+        }
+      } else if (new_reset_bit && !old_reset_bit) {
+        // Exiting reset state (0 -> 1).
+        // The FDC generates an interrupt and sets up status for Sense
+        // Interrupt Status for all drives.
+        for (int i = 0; i < kFDCNumDrives; ++i) {
+          fdc->drives[i].has_pending_interrupt = true;
+          fdc->drives[i].st0 = kFDCST0AbnormalTerminationPolling | (uint8_t)i;
+        }
+        FDCRaiseIRQ6(fdc);
+      }
       break;
+    }
 
     case kFDCPortData:  // Data Register
       // Logic will be based on the current FDC phase.

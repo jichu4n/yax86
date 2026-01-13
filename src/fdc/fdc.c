@@ -54,9 +54,10 @@ typedef struct FDCCommandMetadata {
   void (*handler)(FDCState* fdc);
 } FDCCommandMetadata;
 
-// Helper to raise an IRQ6 if the callback is set.
+// Helper to raise an IRQ6 if the callback is set and interrupts are enabled in DOR.
 static inline void FDCRaiseIRQ6(FDCState* fdc) {
-  if (fdc->config && fdc->config->raise_irq6) {
+  if (fdc->config && fdc->config->raise_irq6 &&
+      (fdc->dor & kFDCDORInterruptEnable)) {
     fdc->config->raise_irq6(fdc->config->context);
   }
 }
@@ -339,10 +340,34 @@ static void FDCHandleDataPortWrite(FDCState* fdc, uint8_t value) {
 
 void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
-    case kFDCPortDOR:  // Digital Output Register
-      // TODO: Handle motor control, drive selection, and FDC reset based on
-      // 'value'.
+    case kFDCPortDOR: {  // Digital Output Register
+      uint8_t old_dor = fdc->dor;
+      fdc->dor = value;
+
+      bool old_reset_bit = (old_dor & kFDCDORReset) != 0;
+      bool new_reset_bit = (value & kFDCDORReset) != 0;
+
+      if (!new_reset_bit && old_reset_bit) {
+        // Entering reset state (1 -> 0).
+        fdc->phase = kFDCPhaseIdle;
+        FDCCommandBufferClear(&fdc->command_buffer);
+        FDCResultBufferClear(&fdc->result_buffer);
+        for (int i = 0; i < kFDCNumDrives; ++i) {
+          fdc->drives[i].busy = false;
+          fdc->drives[i].has_pending_interrupt = false;
+        }
+      } else if (new_reset_bit && !old_reset_bit) {
+        // Exiting reset state (0 -> 1).
+        // The FDC generates an interrupt and sets up status for Sense
+        // Interrupt Status for all drives.
+        for (int i = 0; i < kFDCNumDrives; ++i) {
+          fdc->drives[i].has_pending_interrupt = true;
+          fdc->drives[i].st0 = kFDCST0AbnormalTerminationPolling | (uint8_t)i;
+        }
+        FDCRaiseIRQ6(fdc);
+      }
       break;
+    }
 
     case kFDCPortData:  // Data Register
       // Logic will be based on the current FDC phase.
