@@ -3,4 +3,6 @@
 /.vscode/
 /.cache/
 /.claude/
+.gemini/
+gha-creds-*.json
 
