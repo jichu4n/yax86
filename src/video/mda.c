@@ -160,7 +160,8 @@ static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
   } else if (background_attr == 0x00 && foreground_attr == 0x01) {
     // Underline mode.
     underline = true;
-    foreground = &mda->config->foreground;
+    foreground =
+        intense ? &mda->config->intense_foreground : &mda->config->foreground;
     background = &mda->config->background;
   } else {
     // Other combinations are treated as normal.
