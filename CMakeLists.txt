@@ -59,7 +59,7 @@ add_custom_command(
 # =============================================================================
 # Main library
 # =============================================================================
-add_library(yax86 STATIC all.c ${ALL_HEADER_BUNDLES} ${bios_rom_data_file_c})
+add_library(yax86 STATIC libyax86.c ${ALL_HEADER_BUNDLES} ${bios_rom_data_file_c})
 
 # =============================================================================
 # SDL
