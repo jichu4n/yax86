@@ -228,7 +228,6 @@ static const VideoModeMetadata kMDAModeMetadata = {
 };
 
 struct MDAState;
-struct PlatformState;
 
 // Caller-provided configuration for MDA text mode rendering.
 typedef struct MDAConfig {
@@ -283,8 +282,16 @@ typedef struct MDAState {
 
 // Initialize MDA state with the provided configuration.
 void MDAInit(MDAState* mda, MDAConfig* config);
-// Register memory map and I/O ports.
-bool MDASetup(MDAState* mda, struct PlatformState* platform);
+
+// Read a byte from an MDA I/O port.
+uint8_t MDAReadPort(MDAState* mda, uint16_t port);
+// Write a byte to an MDA I/O port.
+void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value);
+
+// Read a byte from MDA VRAM.
+uint8_t MDAReadVRAM(MDAState* mda, uint32_t address);
+// Write a byte to MDA VRAM.
+void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.

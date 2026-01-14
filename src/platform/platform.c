@@ -389,21 +389,33 @@ static void DMACallbackWritePortByte(
 }
 
 // ============================================================================
+// Callbacks for MDA module
+// ============================================================================
+
+static uint8_t MDACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return MDAReadPort((MDAState*)entry->context, port);
+}
+
+static void MDACallbackWritePortByte(
+    PortMapEntry* entry, uint16_t port, uint8_t value) {
+  MDAWritePort((MDAState*)entry->context, port, value);
+}
+
+static uint8_t MDACallbackReadVRAMByte(
+    MemoryMapEntry* entry, uint32_t address) {
+  return MDAReadVRAM((MDAState*)entry->context, address);
+}
+
+static void MDACallbackWriteVRAMByte(
+    MemoryMapEntry* entry, uint32_t address, uint8_t value) {
+  MDAWriteVRAM((MDAState*)entry->context, address, value);
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
-// Initialize the platform state with the provided configuration. Returns true
-// if the platform state was successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
-bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
-  if (config->physical_memory_size < kMinPhysicalMemorySize ||
-      config->physical_memory_size > kMaxPhysicalMemorySize) {
-    return false;
-  }
-
-  platform->config = config;
-
-  // Set up CPU.
+static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
@@ -413,19 +425,21 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->cpu_config.on_after_execute_instruction =
       CPUCallbackOnAfterExecuteInstruction;
   CPUInit(&platform->cpu, &platform->cpu_config);
+}
 
-  // Set up initial memory map.
+static void PlatformInitMemoryMap(PlatformState* platform) {
   MemoryMapInit(&platform->memory_map);
   MemoryMapEntry conventional_memory = {
       .context = platform,
       .entry_type = kMemoryMapEntryConventional,
       .start = 0x0000,
-      .end = config->physical_memory_size - 1,
+      .end = platform->config->physical_memory_size - 1,
       .read_byte = ReadPhysicalMemoryByte,
       .write_byte = WritePhysicalMemoryByte};
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
+}
 
-  // Set up PIC.
+static void PlatformInitPIC(PlatformState* platform) {
   platform->pic_config.sp = false;
   PICInit(&platform->pic, &platform->pic_config);
   PortMapEntry pic_entry = {
@@ -437,8 +451,9 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .context = &platform->pic,
   };
   RegisterPortMapEntry(platform, &pic_entry);
+}
 
-  // Set up PIT.
+static void PlatformInitPIT(PlatformState* platform) {
   platform->pit_config.context = platform;
   platform->pit_config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
   platform->pit_config.set_pc_speaker_frequency =
@@ -453,8 +468,9 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .context = &platform->pit,
   };
   RegisterPortMapEntry(platform, &pit_entry);
+}
 
-  // Set up PPI.
+static void PlatformInitPPI(PlatformState* platform) {
   platform->ppi_config.context = platform;
   platform->ppi_config.num_floppy_drives = 1;
   platform->ppi_config.memory_size = kPPIMemorySize256KB;
@@ -472,14 +488,16 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .context = &platform->ppi,
   };
   RegisterPortMapEntry(platform, &ppi_entry);
+}
 
-  // Set up keyboard.
+static void PlatformInitKeyboard(PlatformState* platform) {
   platform->keyboard_config.context = platform;
   platform->keyboard_config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
   platform->keyboard_config.send_scancode = KeyboardCallbackSendScancode;
   KeyboardInit(&platform->keyboard, &platform->keyboard_config);
+}
 
-  // Set up FDC.
+static void PlatformInitFDC(PlatformState* platform) {
   platform->fdc_config.context = platform;
   platform->fdc_config.raise_irq6 = FDCCallbackRaiseIRQ6;
   platform->fdc_config.request_dma = FDCCallbackRequestDMA;
@@ -495,8 +513,9 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .context = &platform->fdc,
   };
   RegisterPortMapEntry(platform, &fdc_entry);
+}
 
-  // Set up DMA controller.
+static void PlatformInitDMA(PlatformState* platform) {
   platform->dma_config.context = platform;
   platform->dma_config.read_memory_byte = DMACallbackReadMemoryByte;
   platform->dma_config.write_memory_byte = DMACallbackWriteMemoryByte;
@@ -522,6 +541,54 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
       .context = &platform->dma,
   };
   RegisterPortMapEntry(platform, &dma_page_entry);
+}
+
+static void PlatformInitMDA(PlatformState* platform) {
+  platform->mda_config = kDefaultMDAConfig;
+  platform->mda_config.context = platform;
+  MDAInit(&platform->mda, &platform->mda_config);
+
+  MemoryMapEntry vram_entry = {
+      .context = &platform->mda,
+      .entry_type = kMemoryMapEntryMDAVRAM,
+      .start = kMDAModeMetadata.vram_address,
+      .end = kMDAModeMetadata.vram_address + kMDAModeMetadata.vram_size - 1,
+      .read_byte = MDACallbackReadVRAMByte,
+      .write_byte = MDACallbackWriteVRAMByte,
+  };
+  RegisterMemoryMapEntry(platform, &vram_entry);
+
+  PortMapEntry port_entry = {
+      .context = &platform->mda,
+      .entry_type = kPortMapEntryMDA,
+      .start = 0x3B0,
+      .end = 0x3BF,
+      .read_byte = MDACallbackReadPortByte,
+      .write_byte = MDACallbackWritePortByte,
+  };
+  RegisterPortMapEntry(platform, &port_entry);
+}
+
+// Initialize the platform state with the provided configuration. Returns true
+// if the platform state was successfully initialized, or false if:
+//   - The physical memory size is not between 64K and 640K.
+bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
+  if (config->physical_memory_size < kMinPhysicalMemorySize ||
+      config->physical_memory_size > kMaxPhysicalMemorySize) {
+    return false;
+  }
+
+  platform->config = config;
+
+  PlatformInitCPU(platform);
+  PlatformInitMemoryMap(platform);
+  PlatformInitPIC(platform);
+  PlatformInitPIT(platform);
+  PlatformInitPPI(platform);
+  PlatformInitKeyboard(platform);
+  PlatformInitFDC(platform);
+  PlatformInitDMA(platform);
+  PlatformInitMDA(platform);
 
   return true;
 }

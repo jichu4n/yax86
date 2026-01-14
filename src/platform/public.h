@@ -17,6 +17,7 @@
 #include "pic.h"
 #include "pit.h"
 #include "ppi.h"
+#include "video.h"
 
 struct PlatformState;
 
@@ -248,6 +249,11 @@ typedef struct PlatformState {
   // FDC state.
   FDCConfig fdc_config;
   FDCState fdc;
+
+  // MDA runtime configuration.
+  MDAConfig mda_config;
+  // MDA state.
+  MDAState mda;
 
   // Memory map.
   MemoryMap memory_map;

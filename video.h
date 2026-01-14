@@ -244,7 +244,6 @@ static const VideoModeMetadata kMDAModeMetadata = {
 };
 
 struct MDAState;
-struct PlatformState;
 
 // Caller-provided configuration for MDA text mode rendering.
 typedef struct MDAConfig {
@@ -299,8 +298,16 @@ typedef struct MDAState {
 
 // Initialize MDA state with the provided configuration.
 void MDAInit(MDAState* mda, MDAConfig* config);
-// Register memory map and I/O ports.
-bool MDASetup(MDAState* mda, struct PlatformState* platform);
+
+// Read a byte from an MDA I/O port.
+uint8_t MDAReadPort(MDAState* mda, uint16_t port);
+// Write a byte to an MDA I/O port.
+void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value);
+
+// Read a byte from MDA VRAM.
+uint8_t MDAReadVRAM(MDAState* mda, uint32_t address);
+// Write a byte to MDA VRAM.
+void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.
@@ -1186,7 +1193,6 @@ YAX86_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
 #line 1 "./src/video/mda.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "fonts.h"
-#include "platform.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -1247,19 +1253,15 @@ void MDAInit(MDAState* mda, MDAConfig* config) {
   }
 }
 
-static uint8_t PlatformReadVRAMByte(MemoryMapEntry* entry, uint32_t address) {
-  MDAState* mda = (MDAState*)entry->context;
+uint8_t MDAReadVRAM(MDAState* mda, uint32_t address) {
   return ReadVRAMByte(mda, address);
 }
 
-static void PlatformWriteVRAMByte(
-    MemoryMapEntry* entry, uint32_t address, uint8_t value) {
-  MDAState* mda = (MDAState*)entry->context;
+void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value) {
   WriteVRAMByte(mda, address, value);
 }
 
-static uint8_t PlatformReadPortByte(PortMapEntry* entry, uint16_t port) {
-  MDAState* mda = (MDAState*)entry->context;
+uint8_t MDAReadPort(MDAState* mda, uint16_t port) {
   switch (port) {
     case kMDAPortRegisterIndex:
       return mda->selected_register;
@@ -1277,9 +1279,7 @@ static uint8_t PlatformReadPortByte(PortMapEntry* entry, uint16_t port) {
   }
 }
 
-static void PlatformWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
-  MDAState* mda = (MDAState*)entry->context;
+void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value) {
   switch (port) {
     case kMDAPortRegisterIndex:
       mda->selected_register = value;
@@ -1298,33 +1298,6 @@ static void PlatformWritePortByte(
     default:
       break;
   }
-}
-
-// Register memory map and I/O ports.
-bool MDASetup(MDAState* mda, PlatformState* platform) {
-  bool status = true;
-
-  MemoryMapEntry vram_entry = {
-      .context = mda,
-      .entry_type = kMemoryMapEntryMDAVRAM,
-      .start = kMDAModeMetadata.vram_address,
-      .end = kMDAModeMetadata.vram_address + kMDAModeMetadata.vram_size - 1,
-      .read_byte = PlatformReadVRAMByte,
-      .write_byte = PlatformWriteVRAMByte,
-  };
-  status = status && RegisterMemoryMapEntry(platform, &vram_entry);
-
-  PortMapEntry port_entry = {
-      .context = mda,
-      .entry_type = kPortMapEntryMDA,
-      .start = 0x3B0,
-      .end = 0x3BF,
-      .read_byte = PlatformReadPortByte,
-      .write_byte = PlatformWritePortByte,
-  };
-  status = status && RegisterPortMapEntry(platform, &port_entry);
-
-  return status;
 }
 
 enum {

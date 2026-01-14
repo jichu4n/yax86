@@ -1,6 +1,5 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "fonts.h"
-#include "platform.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -61,19 +60,15 @@ void MDAInit(MDAState* mda, MDAConfig* config) {
   }
 }
 
-static uint8_t PlatformReadVRAMByte(MemoryMapEntry* entry, uint32_t address) {
-  MDAState* mda = (MDAState*)entry->context;
+uint8_t MDAReadVRAM(MDAState* mda, uint32_t address) {
   return ReadVRAMByte(mda, address);
 }
 
-static void PlatformWriteVRAMByte(
-    MemoryMapEntry* entry, uint32_t address, uint8_t value) {
-  MDAState* mda = (MDAState*)entry->context;
+void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value) {
   WriteVRAMByte(mda, address, value);
 }
 
-static uint8_t PlatformReadPortByte(PortMapEntry* entry, uint16_t port) {
-  MDAState* mda = (MDAState*)entry->context;
+uint8_t MDAReadPort(MDAState* mda, uint16_t port) {
   switch (port) {
     case kMDAPortRegisterIndex:
       return mda->selected_register;
@@ -91,9 +86,7 @@ static uint8_t PlatformReadPortByte(PortMapEntry* entry, uint16_t port) {
   }
 }
 
-static void PlatformWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
-  MDAState* mda = (MDAState*)entry->context;
+void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value) {
   switch (port) {
     case kMDAPortRegisterIndex:
       mda->selected_register = value;
@@ -112,33 +105,6 @@ static void PlatformWritePortByte(
     default:
       break;
   }
-}
-
-// Register memory map and I/O ports.
-bool MDASetup(MDAState* mda, PlatformState* platform) {
-  bool status = true;
-
-  MemoryMapEntry vram_entry = {
-      .context = mda,
-      .entry_type = kMemoryMapEntryMDAVRAM,
-      .start = kMDAModeMetadata.vram_address,
-      .end = kMDAModeMetadata.vram_address + kMDAModeMetadata.vram_size - 1,
-      .read_byte = PlatformReadVRAMByte,
-      .write_byte = PlatformWriteVRAMByte,
-  };
-  status = status && RegisterMemoryMapEntry(platform, &vram_entry);
-
-  PortMapEntry port_entry = {
-      .context = mda,
-      .entry_type = kPortMapEntryMDA,
-      .start = 0x3B0,
-      .end = 0x3BF,
-      .read_byte = PlatformReadPortByte,
-      .write_byte = PlatformWritePortByte,
-  };
-  status = status && RegisterPortMapEntry(platform, &port_entry);
-
-  return status;
 }
 
 enum {
