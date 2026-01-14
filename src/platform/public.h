@@ -32,6 +32,8 @@ enum {
   // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
   // 0x9FFFF (640KB).
   kMemoryMapEntryConventional = 0,
+  // BIOS ROM memory map entry type - mapped to 0xF0000 to up to 0xFFFFF (64KB).
+  kMemoryMapEntryBIOSROM = 0x01,
 
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,

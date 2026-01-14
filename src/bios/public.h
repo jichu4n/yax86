@@ -5,15 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "platform.h"
-
-// Memory region types.
-enum {
-  // BIOS ROM memory map entry type - mapped to 0xF0000 to up to 0xFFFFF (64KB).
-  kMemoryMapEntryBIOSROM = 0x01,
-};
-
-// Register memory map.
-bool BIOSSetup(PlatformState* platform);
+// Note: The BIOS module no longer has a public API.
+// BIOS initialization is now handled by the Platform module.
 
 #endif  // YAX86_BIOS_PUBLIC_H

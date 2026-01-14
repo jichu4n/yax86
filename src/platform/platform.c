@@ -4,6 +4,13 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
+#else
+// When bundled, bios.h is already included before platform.h in all.c
+#endif  // YAX86_IMPLEMENTATION
+
+#ifndef YAX86_IMPLEMENTATION
+// Include BIOS ROM data for BIOS memory mapping.
+#include "../bios/bios_rom_data.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Register a memory map entry in the platform state. Returns true if the entry
@@ -439,6 +446,30 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
 }
 
+// ============================================================================
+// Callbacks for BIOS ROM
+// ============================================================================
+
+static uint8_t BIOSROMCallbackReadByte(
+    YAX86_UNUSED MemoryMapEntry* entry, uint32_t address) {
+  if (address >= kBIOSROMDataSize) {
+    return 0xFF;
+  }
+  return kBIOSROMData[address];
+}
+
+static void PlatformInitBIOS(PlatformState* platform) {
+  MemoryMapEntry bios_rom = {
+      .context = NULL,
+      .entry_type = kMemoryMapEntryBIOSROM,
+      .start = 0xF0000,
+      .end = 0xF0000 + kBIOSROMDataSize - 1,
+      .read_byte = BIOSROMCallbackReadByte,
+      .write_byte = NULL,  // BIOS ROM is read-only.
+  };
+  RegisterMemoryMapEntry(platform, &bios_rom);
+}
+
 static void PlatformInitPIC(PlatformState* platform) {
   platform->pic_config.sp = false;
   PICInit(&platform->pic, &platform->pic_config);
@@ -582,6 +613,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 
   PlatformInitCPU(platform);
   PlatformInitMemoryMap(platform);
+  PlatformInitBIOS(platform);
   PlatformInitPIC(platform);
   PlatformInitPIT(platform);
   PlatformInitPPI(platform);
