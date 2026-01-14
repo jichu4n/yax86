@@ -5,15 +5,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "platform.h"
-
 // Memory region types.
 enum {
   // BIOS ROM memory map entry type - mapped to 0xF0000 to up to 0xFFFFF (64KB).
   kMemoryMapEntryBIOSROM = 0x01,
+  // Start address of the BIOS ROM.
+  kBIOSROMStartAddress = 0xF0000,
 };
 
-// Register memory map.
-bool BIOSSetup(PlatformState* platform);
+// Get size of BIOS ROM data.
+uint32_t BIOSGetROMSize(void);
+
+// Read a byte from the BIOS ROM.
+uint8_t BIOSReadROMByte(uint32_t offset);
 
 #endif  // YAX86_BIOS_PUBLIC_H

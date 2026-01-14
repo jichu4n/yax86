@@ -1,5 +1,6 @@
 #include "pic.h"
 #include "ppi.h"
+#include "bios.h"
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -412,8 +413,30 @@ static void MDACallbackWriteVRAMByte(
 }
 
 // ============================================================================
+// Callbacks for BIOS module
+// ============================================================================
+
+static uint8_t BIOSCallbackReadROMByte(
+    YAX86_UNUSED MemoryMapEntry* entry, uint32_t address) {
+  return BIOSReadROMByte(address);
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
+
+static void PlatformInitBIOS(PlatformState* platform) {
+  uint32_t bios_size = BIOSGetROMSize();
+  MemoryMapEntry bios_rom = {
+      .context = NULL,
+      .entry_type = kMemoryMapEntryBIOSROM,
+      .start = kBIOSROMStartAddress,
+      .end = kBIOSROMStartAddress + bios_size - 1,
+      .read_byte = BIOSCallbackReadROMByte,
+      .write_byte = NULL,  // BIOS ROM is read-only.
+  };
+  RegisterMemoryMapEntry(platform, &bios_rom);
+}
 
 static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
@@ -582,6 +605,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 
   PlatformInitCPU(platform);
   PlatformInitMemoryMap(platform);
+  PlatformInitBIOS(platform);
   PlatformInitPIC(platform);
   PlatformInitPIT(platform);
   PlatformInitPPI(platform);
