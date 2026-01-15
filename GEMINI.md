@@ -3,23 +3,31 @@
 ## Project Goals
 
 This project is a small IBM PC/XT emulator for minimal MCU platforms like
-the Raspberry Pi Pico.
+the Raspberry Pi Pico, as well as WebAssembly with SDL.
 - Emulates a basic PC/XT system with an 8086/8088 processor
 - Runs MS-DOS 3.3 on top of GLaBIOS
 
 ## Codebase
 
-- The `src` directory contains the main emulator code
-- Each directory in `src` is a module, bundled into a single header in the root
+### libyax86 - main emulation logic
+
+- The `libyax86` directory contains the main emulator logic
+- Each directory in `libyax86/src` is a module, bundled into a single header in the root
   directory based on `bundle.json`
     - For example, the source code in the CPU module `src/cpu` is bundled
       based on `src/cpu/bundle.json` into `cpu.h` in root directory
     - The external interface of each module is defined in `public.h`
-- The `tests` directory contains unit tests for each emulator module
+- The `libyax86/tests` directory contains unit tests for each module
 - Uses CMake as the build system
     - The `build` directory contains build artifacts
 
-## Coding Style
+### web - WebAssembly + SDL port
+
+- The `web` directory contains the WebAssembly + SDL port of the emulator
+- Uses Emscripten as the toolchain and CMake as the build system
+
+
+## Code Style
 
 - Main emulator code is written in portable C99
 - Tests are written in C++14 and use the Google Test framework
@@ -62,7 +70,7 @@ cmake -B build && cmake --build build -j8
 
 To run tests:
 ```
-ctest --test-dir build -j8 --output-on-failure
+ctest --test-dir build/libyax86 -j8 --output-on-failure
 ```
 
 ## Additional Notes
