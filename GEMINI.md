@@ -3,7 +3,7 @@
 ## Project Goals
 
 This project is a small IBM PC/XT emulator for minimal MCU platforms like
-the Raspberry Pi Pico, as well as WebAssembly with SDL.
+the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - Emulates a basic PC/XT system with an 8086/8088 processor
 - Runs MS-DOS 3.3 on top of GLaBIOS
 

@@ -25,6 +25,10 @@ if [ $? != 0 ]; then
   tmux new-window -t "$SESSION_NAME":2 -n "gemini" -c "$PROJECT_ROOT"
   tmux send-keys -t "$SESSION_NAME":gemini "gemini" C-m
 
+  # Create window 3, name it "claude", and run the claude command
+  tmux new-window -t "$SESSION_NAME":3 -n "claude" -c "$PROJECT_ROOT"
+  tmux send-keys -t "$SESSION_NAME":claude "claude" C-m
+
   # Select window 0 to be the default active window
   tmux select-window -t "$SESSION_NAME":0
 fi
