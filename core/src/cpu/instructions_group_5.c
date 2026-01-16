@@ -5,8 +5,6 @@
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#include <stddef.h>
-
 // ============================================================================
 // Group 5 - INC, DEC, CALL, JMP, PUSH
 // ============================================================================
@@ -81,16 +79,8 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
 // Group 5 instruction handler.
 YAX86_PRIVATE ExecuteStatus
 ExecuteGroup5Instruction(const InstructionContext* ctx) {
-  if (ctx->instruction->mod_rm.reg >=
-      sizeof(kGroup5ExecuteInstructionFns) /
-          sizeof(kGroup5ExecuteInstructionFns[0])) {
-    return kExecuteInvalidOpcode;
-  }
   const Group5ExecuteInstructionFn fn =
       kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  if (fn == NULL) {
-    return kExecuteInvalidOpcode;
-  }
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }

@@ -22,11 +22,6 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
 // Group 4 instruction handler.
 YAX86_PRIVATE ExecuteStatus
 ExecuteGroup4Instruction(const InstructionContext* ctx) {
-  if (ctx->instruction->mod_rm.reg >=
-      sizeof(kGroup4ExecuteInstructionFns) /
-          sizeof(kGroup4ExecuteInstructionFns[0])) {
-    return kExecuteInvalidOpcode;
-  }
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
