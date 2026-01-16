@@ -9,15 +9,15 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
 ## Codebase
 
-### libyax86 - main emulation logic
+### core - main emulation logic
 
-- The `libyax86` directory contains the main emulator logic
-- Each directory in `libyax86/src` is a module, bundled into a single header in the root
+- The `core` directory contains the main emulator logic
+- Each directory in `core/src` is a module, bundled into a single header in the root
   directory based on `bundle.json`
-    - For example, the source code in the CPU module `src/cpu` is bundled
-      based on `src/cpu/bundle.json` into `cpu.h` in root directory
+    - For example, the source code in the CPU module `core/src/cpu` is bundled
+      based on `core/src/cpu/bundle.json` into `cpu.h` in `core` directory
     - The external interface of each module is defined in `public.h`
-- The `libyax86/tests` directory contains unit tests for each module
+- The `core/tests` directory contains unit tests for each module
 - Uses CMake as the build system
     - The `build` directory contains build artifacts
 
@@ -70,7 +70,7 @@ cmake -B build && cmake --build build -j8
 
 To run tests:
 ```
-ctest --test-dir build/libyax86 -j8 --output-on-failure
+ctest --test-dir build/core -j8 --output-on-failure
 ```
 
 ## Additional Notes

@@ -3,8 +3,8 @@
 root_dir="$(dirname "$0")/../../.."
 cd "$root_dir" || exit 1
 
-cpu_demo=./build/libyax86/tools/cpu_demo/cpu_demo
-asm_dir=./libyax86/tools/cpu_demo
+cpu_demo=./build/core/tools/cpu_demo/cpu_demo
+asm_dir=./core/tools/cpu_demo
 
 set -xe
 
@@ -13,5 +13,5 @@ echo -e '12\n15\n' | $cpu_demo $asm_dir/horoscope.asm | grep Sagittarius
 echo -e '05\n01\n' | $cpu_demo $asm_dir/horoscope.asm | grep Taurus
 
 for i in {1..12}; do
-  echo -e "2025\n${i}\n" | build/libyax86/tools/cpu_demo/cpu_demo $asm_dir/cal.asm
+  echo -e "2025\n${i}\n" | build/core/tools/cpu_demo/cpu_demo $asm_dir/cal.asm
 done

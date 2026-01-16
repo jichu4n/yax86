@@ -3,7 +3,7 @@
 # =============================================================================
 file(GLOB TEST_SOURCES "*.cpp")
 add_executable(cpu_tests ${TEST_SOURCES})
-target_link_libraries(cpu_tests gtest_main yax86)
+target_link_libraries(cpu_tests gtest_main yax86_core)
 
 include(GoogleTest)
 gtest_discover_tests(cpu_tests)

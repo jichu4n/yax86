@@ -1,4 +1,0 @@
-add_executable(platform_fdc_integration_test platform_fdc_integration_test.cpp)
-target_link_libraries(platform_fdc_integration_test PRIVATE yax86 gtest_main)
-
-gtest_discover_tests(platform_fdc_integration_test)
