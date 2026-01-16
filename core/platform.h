@@ -872,11 +872,12 @@ static uint8_t BIOSCallbackReadROMByte(
 
 static void PlatformInitBIOS(PlatformState* platform) {
   uint32_t bios_size = BIOSGetROMSize();
+  uint32_t start_address = 0x100000 - bios_size;
   MemoryMapEntry bios_rom = {
       .context = NULL,
       .entry_type = kMemoryMapEntryBIOSROM,
-      .start = kBIOSROMStartAddress,
-      .end = kBIOSROMStartAddress + bios_size - 1,
+      .start = start_address,
+      .end = 0xFFFFF,
       .read_byte = BIOSCallbackReadROMByte,
       .write_byte = NULL,  // BIOS ROM is read-only.
   };

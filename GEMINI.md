@@ -9,49 +9,60 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
 ## Codebase
 
-### core - main emulation logic
+### core - core emulation logic
 
-- The `core` directory contains the main emulator logic
-- Each directory in `core/src` is a module, bundled into a single header in the root
-  directory based on `bundle.json`
+- The `core` directory contains the core emulation logic, including modules
+  that emulate the CPU and hardware such as video adapter, keyboard and floppy.
+- Importantly, `core` modules do NOT depend on any external runtime (SDL etc)
+  and only interact with the host via callbacks.
+- Each directory under `core/src` corresponds to a module. Each module bundled
+  into a single header in the root directory based on `bundle.json`.
     - For example, the source code in the CPU module `core/src/cpu` is bundled
       based on `core/src/cpu/bundle.json` into `cpu.h` in `core` directory
-    - The external interface of each module is defined in `public.h`
-- The `core/tests` directory contains unit tests for each module
-- Uses CMake as the build system
-    - The `build` directory contains build artifacts
+    - The external interface of each module is defined in its `public.h`.
+- The `platform` module in `core/src/platform` is the "virtual motherboard"
+  that connects the other modules together, including memory and port mapping.
+- The `core/tests` directory contains unit tests for each module.
+- The output of the build system for `core` is a static library
+  `libyax86_core.a`.
 
-### web - WebAssembly + SDL port
+### sdl - SDL runtime
 
-- The `web` directory contains the WebAssembly + SDL port of the emulator
-- Uses Emscripten as the toolchain and CMake as the build system
+- The `sdl` directory contains an SDL3-based runtime for the emulator.
+- It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
+  wrapper.
 
+### web - full emulator as a web app
+
+- The `web` directory contains the web app that hosts the SDL-based runtime in
+  a browser.
+- It's a React app bootstrapped via Vite.
 
 ## Code Style
 
-- Main emulator code is written in portable C99
-- Tests are written in C++14 and use the Google Test framework
-- All C/C++ code conforms to Google C++ style guide
+- Core emulator code is written in portable C99.
+- Tests are written in C++14 and use the Google Test framework.
+- All C/C++ code conforms to Google C++ style guide.
 - No dependencies on libc functions like `printf`, `memset`.
 - No dynamic memory allocation - only uses compile-time static memory
-  allocation and stack allocation
+  allocation and stack allocation.
 - For zero-initialized data, use static zero-initialization instead of
-  `memset`, for example `static MyStruct data = {0};`
+  `memset`, for example `static MyStruct data = {0};`.
 - OK to include standard library headers for types like `uint8_t` and
-  compile-time constants and macros like `NULL`
-- Uses `clang-format` for code formatting
-- Prefer enums over `#define` for constants
+  compile-time constants and macros like `NULL`.
+- Uses `clang-format` for code formatting.
+- Prefer enums over `#define` for constants.
 - Prefer enums over numeric literals - define an enum value `enum { kFoo = 0xF8
   };` instead of referencing `0xF8` directly in the logic.
-- Prefer `static inline` functions over macros
+- Prefer `static inline` functions over macros.
 - Prefer specific types like `uint8_t` over generic types like `int` for
-  interfaces like function signatures and struct members
+  interfaces like function signatures and struct members.
 - Define structs and enums with `typedef struct Name { ... } Name;` or 
-  `typedef enum Name { ... } Name;`
+  `typedef enum Name { ... } Name;`.
 - Unused function parameters should be annotated with `YAX86_UNUSED` from the
-  util/common.h header to avoid unused parameter warnings
+  util/common.h header to avoid unused parameter warnings.
 - When incrementing or decrementing a variable, prefer prefix syntax
-  `++var` or `--var` instead of the suffix syntax `var++` or `var--`
+  `++var` or `--var` instead of the suffix syntax `var++` or `var--`.
 - Comments should generally be added on the line before a variable, field or
   type, rather than on the same line. For example:
     ```c
@@ -62,6 +73,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
     ```
 
 ## Commands
+
+The project uses CMake as the build system. The `build` directory contains
+build artifacts.
 
 To build the emulator from the project root directory:
 ```

@@ -19,6 +19,8 @@ jobs:
           sudo dpkg-reconfigure man-db && \
           sudo apt-get update && \
           sudo apt-get install -y nasm
+      - name: Install SDL3
+        run: sudo tools/install-sdl3.sh
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
           cmake -B ${{github.workspace}}/build \

@@ -4012,6 +4012,11 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
 // Group 4 instruction handler.
 YAX86_PRIVATE ExecuteStatus
 ExecuteGroup4Instruction(const InstructionContext* ctx) {
+  if (ctx->instruction->mod_rm.reg >=
+      sizeof(kGroup4ExecuteInstructionFns) /
+          sizeof(kGroup4ExecuteInstructionFns[0])) {
+    return kExecuteInvalidOpcode;
+  }
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -4034,6 +4039,8 @@ ExecuteGroup4Instruction(const InstructionContext* ctx) {
 #include "operands.h"
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
+
+#include <stddef.h>
 
 // ============================================================================
 // Group 5 - INC, DEC, CALL, JMP, PUSH
@@ -4109,8 +4116,16 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
 // Group 5 instruction handler.
 YAX86_PRIVATE ExecuteStatus
 ExecuteGroup5Instruction(const InstructionContext* ctx) {
+  if (ctx->instruction->mod_rm.reg >=
+      sizeof(kGroup5ExecuteInstructionFns) /
+          sizeof(kGroup5ExecuteInstructionFns[0])) {
+    return kExecuteInvalidOpcode;
+  }
   const Group5ExecuteInstructionFn fn =
       kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+  if (fn == NULL) {
+    return kExecuteInvalidOpcode;
+  }
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }

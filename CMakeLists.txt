@@ -9,4 +9,5 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wall -Wextra -Wpedantic -Werror")
 
 add_subdirectory(core)
+add_subdirectory(sdl)
 
