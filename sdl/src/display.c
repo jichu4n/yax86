@@ -14,7 +14,7 @@ static uint32_t* g_pixel_buffer = NULL;
 static int g_width = 0;
 static int g_height = 0;
 
-bool Display_Init(void) {
+bool DisplayInit(void) {
   g_width = kMDAModeMetadata.width;
   g_height = kMDAModeMetadata.height;
 
@@ -48,7 +48,7 @@ bool Display_Init(void) {
   return true;
 }
 
-void Display_Quit(void) {
+void DisplayQuit(void) {
   if (g_pixel_buffer) {
     SDL_free(g_pixel_buffer);
     g_pixel_buffer = NULL;
@@ -68,7 +68,7 @@ void Display_Quit(void) {
   SDL_Quit();
 }
 
-void Display_Render(void) {
+void DisplayRender(void) {
   if (!g_renderer || !g_texture || !g_pixel_buffer) {
     return;
   }
@@ -80,7 +80,7 @@ void Display_Render(void) {
   SDL_RenderPresent(g_renderer);
 }
 
-void Display_PutPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+void DisplayPutPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   if (x < 0 || x >= g_width || y < 0 || y >= g_height) {
     return;
   }

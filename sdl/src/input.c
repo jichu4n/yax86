@@ -110,7 +110,7 @@ static uint8_t SDLToXTScancode(SDL_Keycode key) {
   }
 }
 
-void Input_HandleEvent(const SDL_Event* event, PlatformState* platform) {
+void InputHandleEvent(const SDL_Event* event, PlatformState* platform) {
   if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP) {
     uint8_t scancode = SDLToXTScancode(event->key.key);
     if (scancode) {

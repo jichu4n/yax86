@@ -81,7 +81,7 @@ To build the emulator from the project root directory:
 
 To run tests:
 ```
-ctest --test-dir build-native/core -j$(nproc) --output-on-failure
+./tools/run_tests.sh
 ```
 
 To debug the WASM version of the emulator, use Chrome DevTools MCP server to

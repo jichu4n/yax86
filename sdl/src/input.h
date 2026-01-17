@@ -5,6 +5,6 @@
 #include "core/platform.h"
 
 // Handle SDL events (keyboard, etc.) and update platform state.
-void Input_HandleEvent(const SDL_Event* event, PlatformState* platform);
+void InputHandleEvent(const SDL_Event* event, PlatformState* platform);
 
 #endif  // YAX86_SDL_INPUT_H
