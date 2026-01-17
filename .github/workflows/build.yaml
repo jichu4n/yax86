@@ -27,8 +27,7 @@ jobs:
               -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
               -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
       - run: cmake --build ${{github.workspace}}/build-native -j$(nproc)
-      - run: ctest --test-dir build-native/core --verbose -j$(nproc)
-      - run: core/tests/cpu/cpu_demo_test.sh
+      - run: tools/run-tests.sh
       - working-directory: ${{github.workspace}}/build-native/core
         run: ls -lh *.a
       - run: emcmake cmake -B ${{github.workspace}}/build-emscripten

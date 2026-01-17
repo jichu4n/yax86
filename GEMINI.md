@@ -76,8 +76,7 @@ The project uses CMake as the build system.
 
 To build the emulator from the project root directory:
 ```
-cmake -B build-native && cmake --build build -j$(nproc)
-emcmake cmake -B build-emscripten && cmake --build build-emscripten -j$(nproc)
+./tools/build.sh
 ```
 
 To run tests:
