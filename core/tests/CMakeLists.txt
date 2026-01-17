@@ -24,8 +24,6 @@ add_subdirectory(pit)
 add_subdirectory(ppi)
 add_subdirectory(platform)
 add_subdirectory(dma)
-
 add_subdirectory(keyboard)
 add_subdirectory(fdc)
 add_subdirectory(video)
-# add_subdirectory(bios)

@@ -28,6 +28,10 @@ class KeyboardControlTest : public ::testing::Test {
     // Initialize config and PPI state.
     config_ = {0};
     PPIInit(&ppi_, &config_);
+    // Explicitly reset port B to 0 for these tests. PPIInit initializes it to
+    // a non-zero default (kPPIPortBKeyboardClockLow), but these tests assume
+    // a zero-initialized state to verify state transitions.
+    ppi_.port_b = 0;
 
     // Wire up the mock callback.
     config_.set_keyboard_control = MockSetKeyboardControl;

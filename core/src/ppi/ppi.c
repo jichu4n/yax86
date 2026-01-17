@@ -6,6 +6,9 @@ void PPIInit(PPIState* ppi, PPIConfig* config) {
   static const PPIState zero_ppi_state = {0};
   *ppi = zero_ppi_state;
   ppi->config = config;
+  // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is 
+  // enabled (bit 7 = 0).
+  ppi->port_b = kPPIPortBKeyboardClockLow;
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
@@ -70,6 +73,11 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
       uint8_t old_keyboard_control = PPIGetKeyboardControl(ppi);
 
       ppi->port_b = value;
+
+      // Bit 7: Keyboard enable/clear (0 = enable read, 1 = clear).
+      if (value & kPPIPortBKeyboardEnableClear) {
+        ppi->port_a_latch = 0;
+      }
 
       // Check for changes in PC speaker control bits and fire callback.
       bool speaker_enabled = PPIIsPCSpeakerEnabled(ppi);

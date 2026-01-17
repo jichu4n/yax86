@@ -19,15 +19,22 @@ jobs:
           sudo dpkg-reconfigure man-db && \
           sudo apt-get update && \
           sudo apt-get install -y nasm
+      - uses: libsdl-org/setup-sdl@main
+        with:
+          version: 3-latest
+      - uses: mymindstorm/setup-emsdk@v14
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
-          cmake -B ${{github.workspace}}/build \
+          cmake -B ${{github.workspace}}/build-native \
               -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
               -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
               -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
-      - run: cmake --build ${{github.workspace}}/build -j$(nproc)
-      - run: ctest --test-dir build/core --verbose -j$(nproc)
-      - run: core/tests/cpu/cpu_demo_test.sh
-      - working-directory: ${{github.workspace}}/build/core
+      - run: cmake --build ${{github.workspace}}/build-native -j$(nproc)
+      - run: tools/run-tests.sh
+      - working-directory: ${{github.workspace}}/build-native/core
         run: ls -lh *.a
+      - run: emcmake cmake -B ${{github.workspace}}/build-emscripten
+      - run: cmake --build ${{github.workspace}}/build-emscripten -j$(nproc)
+      - working-directory: ${{github.workspace}}/build-emscripten/sdl
+        run: ls -lh yax86_sdl.*
       - run: git diff --exit-code

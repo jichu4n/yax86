@@ -1,4 +1,5 @@
-/build/
+/build-native/
+/build-emscripten/
 /.ccls-cache/
 /.vscode/
 /.cache/

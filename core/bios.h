@@ -26,7 +26,7 @@ enum {
   // BIOS ROM memory map entry type - mapped to 0xF0000 to up to 0xFFFFF (64KB).
   kMemoryMapEntryBIOSROM = 0x01,
   // Start address of the BIOS ROM.
-  kBIOSROMStartAddress = 0xF0000,
+  kBIOSROMStartAddress = 0xFE000,
 };
 
 // Get size of BIOS ROM data.
