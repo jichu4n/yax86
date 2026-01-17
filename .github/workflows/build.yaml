@@ -19,17 +19,20 @@ jobs:
           sudo dpkg-reconfigure man-db && \
           sudo apt-get update && \
           sudo apt-get install -y nasm
-      - name: Install SDL3
-        run: sudo tools/install-sdl3.sh
+      - run: tools/install-sdl3.sh
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
-          cmake -B ${{github.workspace}}/build \
+          cmake -B ${{github.workspace}}/build-native \
               -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
               -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
               -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
-      - run: cmake --build ${{github.workspace}}/build -j$(nproc)
-      - run: ctest --test-dir build/core --verbose -j$(nproc)
+      - run: cmake --build ${{github.workspace}}/build-native -j$(nproc)
+      - run: ctest --test-dir build-native/core --verbose -j$(nproc)
       - run: core/tests/cpu/cpu_demo_test.sh
-      - working-directory: ${{github.workspace}}/build/core
+      - working-directory: ${{github.workspace}}/build-native/core
         run: ls -lh *.a
+      - run: emcmake cmake -B ${{github.workspace}}/build-emscripten
+      - run: cmake --build ${{github.workspace}}/build-emscripten -j$(nproc)
+      - working-directory: ${{github.workspace}}/build-emscripten/sdl
+        run: ls -lh yax86_sdl.*
       - run: git diff --exit-code

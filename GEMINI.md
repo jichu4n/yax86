@@ -30,13 +30,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
 - The `sdl` directory contains an SDL3-based runtime for the emulator.
 - It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
-  wrapper.
-
-### web - full emulator as a web app
-
-- The `web` directory contains the web app that hosts the SDL-based runtime in
-  a browser.
-- It's a React app bootstrapped via Vite.
+  wrapper (`yax86_sdl.{wasm,js}`).
 
 ## Code Style
 
@@ -74,18 +68,25 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
 ## Commands
 
-The project uses CMake as the build system. The `build` directory contains
-build artifacts.
+The project uses CMake as the build system.
+- The `build-native` directory contains output of native builds - native static
+  libraries, test binaries and executables.
+- The `build-emscripten` directory contains output of Emscripten builds -
+  WebAssembly binary and JavaScript wrapper.
 
 To build the emulator from the project root directory:
 ```
-cmake -B build && cmake --build build -j8
+cmake -B build-native && cmake --build build -j$(nproc)
+emcmake cmake -B build-emscripten && cmake --build build-emscripten -j$(nproc)
 ```
 
 To run tests:
 ```
-ctest --test-dir build/core -j8 --output-on-failure
+ctest --test-dir build-native/core -j$(nproc) --output-on-failure
 ```
+
+To debug the WASM version of the emulator, use Chrome DevTools MCP server to
+open `http://localhost:3000/yax86_sdl.html`.
 
 ## Additional Notes
 

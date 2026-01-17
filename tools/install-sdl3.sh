@@ -4,9 +4,6 @@ set -e
 # Install dependencies for SDL3
 sudo apt-get update
 sudo apt-get install -y \
-    build-essential \
-    cmake \
-    git \
     libasound2-dev \
     libpulse-dev \
     libaudio-dev \
