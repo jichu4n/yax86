@@ -49,20 +49,24 @@ add_custom_command(
 # =============================================================================
 add_library(yax86_core STATIC yax86_core.c ${ALL_HEADER_BUNDLES} ${bios_rom_data_file_c})
 
-# =============================================================================
-# Tests
-# =============================================================================
-if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-    enable_testing()
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-    add_subdirectory(tests)
-endif()
 
-# =============================================================================
-# Demo programs
-# =============================================================================
-if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-    add_subdirectory(tools/cpu_demo)
-endif()
+if(NOT EMSCRIPTEN)
 
+  # =============================================================================
+  # Tests
+  # =============================================================================
+  if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+      enable_testing()
+      include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+      add_subdirectory(tests)
+  endif()
+
+  # =============================================================================
+  # Demo programs
+  # =============================================================================
+  if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+      include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+      add_subdirectory(tools/cpu_demo)
+  endif()
+
+endif()
