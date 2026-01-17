@@ -19,7 +19,10 @@ jobs:
           sudo dpkg-reconfigure man-db && \
           sudo apt-get update && \
           sudo apt-get install -y nasm
-      - run: tools/install-sdl3.sh
+      - uses: libsdl-org/setup-sdl@main
+        with:
+          version: 3-latest
+      - uses: mymindstorm/setup-emsdk@v14
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
           cmake -B ${{github.workspace}}/build-native \
