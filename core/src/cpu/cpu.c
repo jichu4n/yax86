@@ -185,6 +185,7 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
   CPUClearPendingInterrupt(cpu);
 
   // Prepare for interrupt processing.
+  cpu->is_halted = false;
   Push(cpu, WordValue(cpu->flags));
   CPUSetFlag(cpu, kIF, false);
   CPUSetFlag(cpu, kTF, false);
@@ -221,19 +222,24 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
 }
 
 ExecuteStatus CPUTick(CPUState* cpu) {
-  // Step 1: Fetch the next instruction, and increment IP.
-  Instruction instruction;
-  CPUFetchNextInstructionStatus fetch_status =
-      CPUFetchNextInstruction(cpu, &instruction);
-  if (fetch_status != kFetchSuccess) {
-    return kExecuteInvalidInstruction;
-  }
-  cpu->registers[kIP] += instruction.size;
-
-  // Step 2: Execute the instruction.
   ExecuteStatus status;
-  if ((status = CPUExecuteInstruction(cpu, &instruction)) != kExecuteSuccess) {
-    return status;
+
+  // Execute next CPU instruction if not halted.
+  if (!cpu->is_halted) {
+    // Step 1: Fetch the next instruction, and increment IP.
+    Instruction instruction;
+    CPUFetchNextInstructionStatus fetch_status =
+        CPUFetchNextInstruction(cpu, &instruction);
+    if (fetch_status != kFetchSuccess) {
+      return kExecuteInvalidInstruction;
+    }
+    cpu->registers[kIP] += instruction.size;
+
+    // Step 2: Execute the instruction.
+    status = CPUExecuteInstruction(cpu, &instruction);
+    if (status != kExecuteSuccess && status != kExecuteHalt) {
+      return status;
+    }
   }
 
   // Step 3: Handle pending interrupts.
@@ -252,11 +258,3 @@ ExecuteStatus CPUTick(CPUState* cpu) {
   return kExecuteSuccess;
 }
 
-ExecuteStatus CPURunMainLoop(CPUState* cpu) {
-  ExecuteStatus status;
-  for (;;) {
-    if ((status = CPUTick(cpu)) != kExecuteSuccess) {
-      return status;
-    }
-  }
-}

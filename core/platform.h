@@ -376,6 +376,9 @@ typedef struct PlatformState {
   MemoryMap memory_map;
   // I/O port map.
   PortMap io_port_map;
+
+  // How many ticks have run.
+  uint32_t ticks;
 } PlatformState;
 
 // Initialize the platform state with the provided configuration. Returns true
@@ -387,8 +390,9 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 // IRQ was successfully raised, or false if the IRQ number is invalid.
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
-// Boot the virtual machine and start execution.
-ExecuteStatus PlatformBoot(PlatformState* platform);
+// Run a single cycle of the platform, including ticking all sub-modules. This
+// should be called at the CPU clock rate (4.77MHz for the 8088).
+void PlatformTick(PlatformState* platform);
 
 #endif  // YAX86_PLATFORM_PUBLIC_H
 
@@ -443,9 +447,9 @@ ExecuteStatus PlatformBoot(PlatformState* platform);
 // ==============================================================================
 
 #line 1 "./src/platform/platform.c"
+#include "bios.h"
 #include "pic.h"
 #include "ppi.h"
-#include "bios.h"
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -635,27 +639,6 @@ static uint8_t CPUCallbackReadPortByte(CPUState* cpu, uint16_t port) {
 static void CPUCallbackWritePortByte(
     CPUState* cpu, uint16_t port, uint8_t value) {
   WritePortByte((PlatformState*)cpu->config->context, port, value);
-}
-
-// Callback for the CPU to check for pending interrupts from the PIC after an
-// instruction has been executed. This is how we connect the PIC to the CPU's
-// interrupt handling flow.
-static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
-    CPUState* cpu, YAX86_UNUSED const struct Instruction* instruction) {
-  PlatformState* platform = (PlatformState*)cpu->config->context;
-
-  FDCTick(&platform->fdc);
-
-  if (!CPUGetFlag(cpu, kIF)) {
-    return kExecuteSuccess;
-  }
-
-  uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
-  if (interrupt_vector != kPICNoPendingInterrupt) {
-    CPUSetPendingInterrupt(cpu, interrupt_vector);
-  }
-
-  return kExecuteSuccess;
 }
 
 static const CPUConfig kEmptyCPUConfig = {0};
@@ -890,9 +873,16 @@ static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
   platform->cpu_config.read_port = CPUCallbackReadPortByte;
   platform->cpu_config.write_port = CPUCallbackWritePortByte;
-  platform->cpu_config.on_after_execute_instruction =
-      CPUCallbackOnAfterExecuteInstruction;
   CPUInit(&platform->cpu, &platform->cpu_config);
+
+  // Initialize CPU registers.
+  // CS:IP points to the BIOS entry point at 0xFFFF0.
+  platform->cpu.registers[kCS] = 0xF000;
+  platform->cpu.registers[kIP] = 0xFFF0;
+  platform->cpu.registers[kDS] = 0x0000;
+  platform->cpu.registers[kSS] = 0x0000;
+  platform->cpu.registers[kES] = 0x0000;
+  platform->cpu.registers[kSP] = 0xFFFE;
 }
 
 static void PlatformInitMemoryMap(PlatformState* platform) {
@@ -1059,6 +1049,8 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   PlatformInitDMA(platform);
   PlatformInitMDA(platform);
 
+  platform->ticks = 0;
+
   return true;
 }
 
@@ -1070,19 +1062,38 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
   return true;
 }
 
-// Boot the virtual machine and start execution.
-ExecuteStatus PlatformBoot(PlatformState* platform) {
-  // Initialize CPU registers.
-  // CS:IP points to the BIOS entry point at 0xFFFF0.
-  platform->cpu.registers[kCS] = 0xF000;
-  platform->cpu.registers[kIP] = 0xFFF0;
-  platform->cpu.registers[kDS] = 0x0000;
-  platform->cpu.registers[kSS] = 0x0000;
-  platform->cpu.registers[kES] = 0x0000;
-  platform->cpu.registers[kSP] = 0xFFFE;
+void PlatformTick(PlatformState* platform) {
+  // Tick the CPU.
+  CPUTick(&platform->cpu);
 
-  return CPURunMainLoop(&platform->cpu);
+  // Check for pending interrupts from the PIC after an
+  // instruction has been executed. This is how we connect the PIC to the CPU's
+  // interrupt handling flow.
+  if (CPUGetFlag(&platform->cpu, kIF)) {
+    uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
+    if (interrupt_vector != kPICNoPendingInterrupt) {
+      CPUSetPendingInterrupt(&platform->cpu, interrupt_vector);
+    }
+  }
+
+  // PIT ticks at 1.19MHz, CPU at 4.77MHz. 4.77 / 1.19 ~= 4.
+  if (platform->ticks % 4 == 0) {
+    PITTick(&platform->pit);
+  }
+
+  // The main clock on the FDC is 8MHz. 8MHz / 4.77MHz ~= 2.
+  if (platform->ticks % 2 == 0) {
+    FDCTick(&platform->fdc);
+  }
+
+  // The keyboard ticks every 1ms.
+  if (platform->ticks % 4770 == 0) {
+    KeyboardTickMs(&platform->keyboard);
+  }
+
+  ++platform->ticks;
 }
+
 
 
 // ==============================================================================

@@ -99,7 +99,7 @@ typedef enum ExecuteStatus {
   // The interrupt was not handled by the interrupt handler callback, and should
   // be handled by the VM instead.
   kExecuteUnhandledInterrupt,
-  // The VM should stop execution.
+  // The CPU should be halted.
   kExecuteHalt,
 } ExecuteStatus;
 
@@ -190,6 +190,11 @@ typedef struct CPUState {
   bool has_pending_interrupt;
   // The interrupt number of the pending interrupt.
   uint8_t pending_interrupt_number;
+
+  // Whether the CPU is in halted state. When true, CPUTick() will not fetch
+  // or execute any instructions until an external event (e.g., an interrupt)
+  // clears this state.
+  bool is_halted;
 } CPUState;
 
 // Initialize CPU state.
@@ -313,11 +318,5 @@ ExecuteStatus CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
 // Run a single instruction cycle, including fetching and executing the next
 // instruction at CS:IP, and handling interrupts.
 ExecuteStatus CPUTick(CPUState* cpu);
-
-// Convenience utility to run instruction execution loop.
-//
-// Terminates when an instruction execution or handler returns a non-success
-// status.
-ExecuteStatus CPURunMainLoop(CPUState* cpu);
 
 #endif  // YAX86_CPU_PUBLIC_H

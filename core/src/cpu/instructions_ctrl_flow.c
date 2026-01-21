@@ -116,8 +116,9 @@ ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
 // JLE/JG and JNLE/JG
 YAX86_PRIVATE ExecuteStatus
 ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
-  const bool is_greater = !CPUGetFlag(ctx->cpu, kZF) &&
-                          (CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF));
+  const bool is_greater =
+      !CPUGetFlag(ctx->cpu, kZF) &&
+      (CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF));
   const bool success_value = (ctx->instruction->opcode & 0x1);
   return ExecuteConditionalJump(ctx, is_greater, success_value);
 }
@@ -268,7 +269,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
 }
 
 // HLT
-YAX86_PRIVATE ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
-  (void)ctx;
+YAX86_PRIVATE ExecuteStatus
+ExecuteHlt(YAX86_UNUSED const InstructionContext* ctx) {
+  ctx->cpu->is_halted = true;
   return kExecuteHalt;
 }

@@ -153,8 +153,11 @@ int main(int argc, char* argv[]) {
   // Set stack pointer to the top of the stack
   cpu.registers[kSP] = sizeof(memory);
 
-  // Execute the program!
-  ExecuteStatus status = CPURunMainLoop(&cpu);
+  // Execute the program until halt, interrupt or error.
+  ExecuteStatus status;
+  do {
+    status = CPUTick(&cpu);
+  } while (status == kExecuteSuccess);
   if (status != kExecuteSuccess && status != kExecuteHalt) {
     cerr << "Program execution failed with status: " << status << endl;
     return EXIT_FAILURE;

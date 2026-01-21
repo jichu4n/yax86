@@ -259,6 +259,9 @@ typedef struct PlatformState {
   MemoryMap memory_map;
   // I/O port map.
   PortMap io_port_map;
+
+  // How many ticks have run.
+  uint32_t ticks;
 } PlatformState;
 
 // Initialize the platform state with the provided configuration. Returns true
@@ -270,7 +273,8 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 // IRQ was successfully raised, or false if the IRQ number is invalid.
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
-// Boot the virtual machine and start execution.
-ExecuteStatus PlatformBoot(PlatformState* platform);
+// Run a single cycle of the platform, including ticking all sub-modules. This
+// should be called at the CPU clock rate (4.77MHz for the 8088).
+void PlatformTick(PlatformState* platform);
 
 #endif  // YAX86_PLATFORM_PUBLIC_H

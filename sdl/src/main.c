@@ -22,9 +22,9 @@ static bool g_running = true;
 // Approx 4,770,000 / 60 = 79,500 cycles.
 // Assuming ~4-10 cycles per instruction on average for 8086.
 // Let's be conservative/simple and run a fixed batch.
-// 20,000 instructions per frame is a reasonable starting point for smooth operation
-// without blocking the UI thread too long.
-#define INSTRUCTIONS_PER_FRAME 100000
+// 20,000 instructions per frame is a reasonable starting point for smooth
+// operation without blocking the UI thread too long.
+#define INSTRUCTIONS_PER_FRAME 20000
 
 static uint8_t MainReadMemory(PlatformState* platform, uint32_t address) {
   (void)platform;
@@ -34,8 +34,8 @@ static uint8_t MainReadMemory(PlatformState* platform, uint32_t address) {
   return 0xFF;
 }
 
-static void MainWriteMemory(PlatformState* platform, uint32_t address,
-                             uint8_t value) {
+static void MainWriteMemory(
+    PlatformState* platform, uint32_t address, uint8_t value) {
   (void)platform;
   if (address < INTERNAL_RAM_SIZE) {
     g_memory[address] = value;
@@ -47,7 +47,8 @@ static uint8_t MainReadVRAM(struct MDAState* mda, uint32_t address) {
   return MainReadMemory(&g_platform, 0xB0000 + address);
 }
 
-static void MainWriteVRAM(struct MDAState* mda, uint32_t address, uint8_t value) {
+static void MainWriteVRAM(
+    struct MDAState* mda, uint32_t address, uint8_t value) {
   (void)mda;
   MainWriteMemory(&g_platform, 0xB0000 + address, value);
 }
@@ -76,36 +77,12 @@ void MainTick(void) {
 
   // 2. Run CPU Instructions
   for (int i = 0; i < INSTRUCTIONS_PER_FRAME; ++i) {
-    ExecuteStatus status = CPUTick(&g_platform.cpu);
-    
-    // PIT ticks at 1.19MHz, CPU at 4.77MHz.
-    // 4.77 / 1.19 ~= 4.
-    // Use a static counter to persist across calls.
-    static uint32_t g_pit_tick_counter = 0;
-    if (++g_pit_tick_counter % 4 == 0) {
-        PITTick(&g_platform.pit);
-    }
-
-    if (status != kExecuteSuccess && status != kExecuteUnhandledInterrupt) {
-      if (status == kExecuteHalt) {
-        // CPU Halted (waiting for IRQ). Stop executing instructions for this frame, 
-        // but keep the loop and hardware ticking.
-        break;
-      } else {
-        printf("CPU Error: %d\n", status);
-        g_running = false;
-        break;
-      }
-    }
-
-    if (i % 5000 == 0) {
-      KeyboardTickMs(&g_platform.keyboard);
-    }
+    PlatformTick(&g_platform);
   }
 
   // 3. Render
-  MDARender(&g_platform.mda); // Update virtual buffer
-  DisplayRender();         // Update screen
+  MDARender(&g_platform.mda);  // Update virtual buffer
+  DisplayRender();             // Update screen
 }
 
 int main(int argc, char* argv[]) {
@@ -122,7 +99,8 @@ int main(int argc, char* argv[]) {
 
   // Initialize Platform
   PlatformConfig config = {0};
-  config.physical_memory_size = 640 * 1024; // Use max allowed conventional memory
+  config.physical_memory_size =
+      640 * 1024;  // Use max allowed conventional memory
   config.read_physical_memory_byte = MainReadMemory;
   config.write_physical_memory_byte = MainWriteMemory;
 
@@ -138,22 +116,13 @@ int main(int argc, char* argv[]) {
   g_platform.mda_config.write_vram_byte = MainWriteVRAM;
   g_platform.mda_config.write_pixel = MainWritePixel;
 
-  // Initialize CPU Registers (Manual Boot)
-  // Replicating PlatformBoot logic without the loop.
-  g_platform.cpu.registers[kCS] = 0xF000;
-  g_platform.cpu.registers[kIP] = 0xFFF0;
-  g_platform.cpu.registers[kDS] = 0x0000;
-  g_platform.cpu.registers[kSS] = 0x0000;
-  g_platform.cpu.registers[kES] = 0x0000;
-  g_platform.cpu.registers[kSP] = 0xFFFE;
-
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(MainTick, 0, 1);
 #else
   while (g_running) {
     MainTick();
     // 4. Delay
-    SDL_Delay(16); // ~60 FPS cap
+    SDL_Delay(16);  // ~60 FPS cap
   }
 #endif
 

@@ -115,7 +115,7 @@ typedef enum ExecuteStatus {
   // The interrupt was not handled by the interrupt handler callback, and should
   // be handled by the VM instead.
   kExecuteUnhandledInterrupt,
-  // The VM should stop execution.
+  // The CPU should be halted.
   kExecuteHalt,
 } ExecuteStatus;
 
@@ -206,6 +206,11 @@ typedef struct CPUState {
   bool has_pending_interrupt;
   // The interrupt number of the pending interrupt.
   uint8_t pending_interrupt_number;
+
+  // Whether the CPU is in halted state. When true, CPUTick() will not fetch
+  // or execute any instructions until an external event (e.g., an interrupt)
+  // clears this state.
+  bool is_halted;
 } CPUState;
 
 // Initialize CPU state.
@@ -329,12 +334,6 @@ ExecuteStatus CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
 // Run a single instruction cycle, including fetching and executing the next
 // instruction at CS:IP, and handling interrupts.
 ExecuteStatus CPUTick(CPUState* cpu);
-
-// Convenience utility to run instruction execution loop.
-//
-// Terminates when an instruction execution or handler returns a non-success
-// status.
-ExecuteStatus CPURunMainLoop(CPUState* cpu);
 
 #endif  // YAX86_CPU_PUBLIC_H
 
@@ -2702,8 +2701,9 @@ ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
 // JLE/JG and JNLE/JG
 YAX86_PRIVATE ExecuteStatus
 ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
-  const bool is_greater = !CPUGetFlag(ctx->cpu, kZF) &&
-                          (CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF));
+  const bool is_greater =
+      !CPUGetFlag(ctx->cpu, kZF) &&
+      (CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF));
   const bool success_value = (ctx->instruction->opcode & 0x1);
   return ExecuteConditionalJump(ctx, is_greater, success_value);
 }
@@ -2854,8 +2854,9 @@ YAX86_PRIVATE ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
 }
 
 // HLT
-YAX86_PRIVATE ExecuteStatus ExecuteHlt(const InstructionContext* ctx) {
-  (void)ctx;
+YAX86_PRIVATE ExecuteStatus
+ExecuteHlt(YAX86_UNUSED const InstructionContext* ctx) {
+  ctx->cpu->is_halted = true;
   return kExecuteHalt;
 }
 
@@ -5723,6 +5724,7 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
   CPUClearPendingInterrupt(cpu);
 
   // Prepare for interrupt processing.
+  cpu->is_halted = false;
   Push(cpu, WordValue(cpu->flags));
   CPUSetFlag(cpu, kIF, false);
   CPUSetFlag(cpu, kTF, false);
@@ -5759,19 +5761,24 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
 }
 
 ExecuteStatus CPUTick(CPUState* cpu) {
-  // Step 1: Fetch the next instruction, and increment IP.
-  Instruction instruction;
-  CPUFetchNextInstructionStatus fetch_status =
-      CPUFetchNextInstruction(cpu, &instruction);
-  if (fetch_status != kFetchSuccess) {
-    return kExecuteInvalidInstruction;
-  }
-  cpu->registers[kIP] += instruction.size;
-
-  // Step 2: Execute the instruction.
   ExecuteStatus status;
-  if ((status = CPUExecuteInstruction(cpu, &instruction)) != kExecuteSuccess) {
-    return status;
+
+  // Execute next CPU instruction if not halted.
+  if (!cpu->is_halted) {
+    // Step 1: Fetch the next instruction, and increment IP.
+    Instruction instruction;
+    CPUFetchNextInstructionStatus fetch_status =
+        CPUFetchNextInstruction(cpu, &instruction);
+    if (fetch_status != kFetchSuccess) {
+      return kExecuteInvalidInstruction;
+    }
+    cpu->registers[kIP] += instruction.size;
+
+    // Step 2: Execute the instruction.
+    status = CPUExecuteInstruction(cpu, &instruction);
+    if (status != kExecuteSuccess && status != kExecuteHalt) {
+      return status;
+    }
   }
 
   // Step 3: Handle pending interrupts.
@@ -5790,14 +5797,6 @@ ExecuteStatus CPUTick(CPUState* cpu) {
   return kExecuteSuccess;
 }
 
-ExecuteStatus CPURunMainLoop(CPUState* cpu) {
-  ExecuteStatus status;
-  for (;;) {
-    if ((status = CPUTick(cpu)) != kExecuteSuccess) {
-      return status;
-    }
-  }
-}
 
 
 // ==============================================================================
