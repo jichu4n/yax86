@@ -297,27 +297,27 @@ typedef struct Instruction {
 // ============================================================================
 
 // Result status from fetching the next instruction.
-typedef enum FetchNextInstructionStatus {
+typedef enum CPUFetchNextInstructionStatus {
   kFetchSuccess = 0,
   // Prefix exceeds maximum allowed size.
   kFetchPrefixTooLong = -1,
-} FetchNextInstructionStatus;
+} CPUFetchNextInstructionStatus;
 
 // Fetch the next instruction from CS:IP.
-FetchNextInstructionStatus FetchNextInstruction(
+CPUFetchNextInstructionStatus CPUFetchNextInstruction(
     CPUState* cpu, Instruction* instruction);
 
 // Execute a single fetched instruction.
-ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction);
+ExecuteStatus CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
 
 // Run a single instruction cycle, including fetching and executing the next
 // instruction at CS:IP, and handling interrupts.
-ExecuteStatus RunInstructionCycle(CPUState* cpu);
+ExecuteStatus CPUTick(CPUState* cpu);
 
-// Run instruction execution loop.
+// Convenience utility to run instruction execution loop.
 //
 // Terminates when an instruction execution or handler returns a non-success
 // status.
-ExecuteStatus RunMainLoop(CPUState* cpu);
+ExecuteStatus CPURunMainLoop(CPUState* cpu);
 
 #endif  // YAX86_CPU_PUBLIC_H

@@ -77,7 +77,7 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
   }
 }
 
-FetchNextInstructionStatus FetchNextInstruction(
+CPUFetchNextInstructionStatus CPUFetchNextInstruction(
     CPUState* cpu, Instruction* dest_instruction) {
   Instruction instruction = {0};
   uint8_t current_byte;
@@ -131,7 +131,7 @@ FetchNextInstructionStatus FetchNextInstruction(
 // Execution
 // ============================================================================
 
-ExecuteStatus ExecuteInstruction(CPUState* cpu, Instruction* instruction) {
+ExecuteStatus CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   ExecuteStatus status;
 
   // Run the on_before_execute_instruction callback if provided.
@@ -220,11 +220,11 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
   }
 }
 
-ExecuteStatus RunInstructionCycle(CPUState* cpu) {
+ExecuteStatus CPUTick(CPUState* cpu) {
   // Step 1: Fetch the next instruction, and increment IP.
   Instruction instruction;
-  FetchNextInstructionStatus fetch_status =
-      FetchNextInstruction(cpu, &instruction);
+  CPUFetchNextInstructionStatus fetch_status =
+      CPUFetchNextInstruction(cpu, &instruction);
   if (fetch_status != kFetchSuccess) {
     return kExecuteInvalidInstruction;
   }
@@ -232,7 +232,7 @@ ExecuteStatus RunInstructionCycle(CPUState* cpu) {
 
   // Step 2: Execute the instruction.
   ExecuteStatus status;
-  if ((status = ExecuteInstruction(cpu, &instruction)) != kExecuteSuccess) {
+  if ((status = CPUExecuteInstruction(cpu, &instruction)) != kExecuteSuccess) {
     return status;
   }
 
@@ -252,10 +252,10 @@ ExecuteStatus RunInstructionCycle(CPUState* cpu) {
   return kExecuteSuccess;
 }
 
-ExecuteStatus RunMainLoop(CPUState* cpu) {
+ExecuteStatus CPURunMainLoop(CPUState* cpu) {
   ExecuteStatus status;
   for (;;) {
-    if ((status = RunInstructionCycle(cpu)) != kExecuteSuccess) {
+    if ((status = CPUTick(cpu)) != kExecuteSuccess) {
       return status;
     }
   }

@@ -27,7 +27,7 @@ vector<Instruction> TestFetchInstructions(
   vector<Instruction> instructions;
   while (*ip < kCOMFileLoadOffset + machine_code_size) {
     Instruction instruction;
-    auto status = FetchNextInstruction(cpu, &instruction);
+    auto status = CPUFetchNextInstruction(cpu, &instruction);
     if (status != kFetchSuccess) {
       throw runtime_error(
           "Failed to fetch instruction at IP: " + to_string(*ip) +

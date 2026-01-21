@@ -1081,7 +1081,7 @@ ExecuteStatus PlatformBoot(PlatformState* platform) {
   platform->cpu.registers[kES] = 0x0000;
   platform->cpu.registers[kSP] = 0xFFFE;
 
-  return RunMainLoop(&platform->cpu);
+  return CPURunMainLoop(&platform->cpu);
 }
 
 

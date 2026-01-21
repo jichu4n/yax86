@@ -76,7 +76,7 @@ void MainTick(void) {
 
   // 2. Run CPU Instructions
   for (int i = 0; i < INSTRUCTIONS_PER_FRAME; ++i) {
-    ExecuteStatus status = RunInstructionCycle(&g_platform.cpu);
+    ExecuteStatus status = CPUTick(&g_platform.cpu);
     
     // PIT ticks at 1.19MHz, CPU at 4.77MHz.
     // 4.77 / 1.19 ~= 4.

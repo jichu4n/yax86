@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
   cpu.registers[kSP] = sizeof(memory);
 
   // Execute the program!
-  ExecuteStatus status = RunMainLoop(&cpu);
+  ExecuteStatus status = CPURunMainLoop(&cpu);
   if (status != kExecuteSuccess && status != kExecuteHalt) {
     cerr << "Program execution failed with status: " << status << endl;
     return EXIT_FAILURE;
