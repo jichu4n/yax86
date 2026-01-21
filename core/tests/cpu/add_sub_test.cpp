@@ -126,7 +126,7 @@ TEST_F(AddSubTest, ADC) {
   helper->cpu_.registers[kBX] = 0x0400;
   helper->memory_[0x400] = 0x34;
   helper->memory_[0x401] = 0x12;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1236);
   helper->CheckFlags(
@@ -140,7 +140,7 @@ TEST_F(AddSubTest, ADC) {
   // ax = 0002, bx = 0400, memory[0400] = 1234, CF = 1, result = 1237
   helper->cpu_.registers[kIP] -= 2;
   helper->cpu_.registers[kAX] = 0x0002;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1237);
   helper->CheckFlags(
@@ -155,7 +155,7 @@ TEST_F(AddSubTest, ADC) {
   helper->cpu_.registers[kCX] = 0xEFFF;
   helper->memory_[0x400] = 0x34;
   helper->memory_[0x401] = 0x12;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x400], 0x33);
   EXPECT_EQ(helper->memory_[0x401], 0x02);
@@ -171,7 +171,7 @@ TEST_F(AddSubTest, ADC) {
   helper->cpu_.registers[kIP] -= 2;
   helper->memory_[0x400] = 0x34;
   helper->memory_[0x401] = 0x12;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x400], 0x34);
   EXPECT_EQ(helper->memory_[0x401], 0x02);
@@ -186,7 +186,7 @@ TEST_F(AddSubTest, ADC) {
   // cx = EFFF, ax = 1237 (from test case 2), CF = 0, result = 0236
   helper->cpu_.registers[kCX] = 0xEFFF;
   helper->cpu_.registers[kAX] = 0x1237;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0x0236);
   helper->CheckFlags(
@@ -200,7 +200,7 @@ TEST_F(AddSubTest, ADC) {
   // cx = EFFF, ax = 1237, CF = 1, result = 0237
   helper->cpu_.registers[kIP] -= 2;      // Rewind IP
   helper->cpu_.registers[kCX] = 0xEFFF;  // Reset CX
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0x0237);
   helper->CheckFlags(
@@ -215,7 +215,7 @@ TEST_F(AddSubTest, ADC) {
   helper->cpu_.registers[kDI] = 0x0500;
   helper->memory_[0x0501] = 0xAE;
   // CX is 0x0237, so CH is 0x02
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ((helper->cpu_.registers[kCX] >> 8) & 0xFF, 0xB0);
   helper->CheckFlags(
@@ -230,7 +230,7 @@ TEST_F(AddSubTest, ADC) {
   helper->cpu_.registers[kIP] -= 3;
   helper->cpu_.registers[kCX] =
       (0x02 << 8) | (helper->cpu_.registers[kCX] & 0xFF);
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ((helper->cpu_.registers[kCX] >> 8) & 0xFF, 0xB1);
   helper->CheckFlags(
@@ -243,7 +243,7 @@ TEST_F(AddSubTest, ADC) {
 
   // cl = 37, di-1 = 04FF, memory[04FF] = CB, CF = 0, result = 02
   helper->memory_[0x04FF] = 0xCB;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0x02);
   helper->CheckFlags(
@@ -270,7 +270,7 @@ TEST_F(AddSubTest, ADC) {
 
   // al = 55, immediate = AA, CF = 0, result = FF
   helper->cpu_.registers[kAX] = 0x5555;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xFF);
   helper->CheckFlags(
@@ -284,7 +284,7 @@ TEST_F(AddSubTest, ADC) {
   // al = 55, immediate = AA, CF = 1, result = 00
   helper->cpu_.registers[kIP] -= 2;
   helper->cpu_.registers[kAX] = 0x5555;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x00);
   helper->CheckFlags(
@@ -297,7 +297,7 @@ TEST_F(AddSubTest, ADC) {
 
   // ax = 5555, immediate = AAAA, CF = 0, result = FFFF
   helper->cpu_.registers[kAX] = 0x5555;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFF);
   helper->CheckFlags(
@@ -311,7 +311,7 @@ TEST_F(AddSubTest, ADC) {
   // ax = 5555, immediate = AAAA, CF = 1 (previous was true), result = 0000
   helper->cpu_.registers[kIP] -= 3;
   helper->cpu_.registers[kAX] = 0x5555;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x0000);
   helper->CheckFlags(
@@ -339,7 +339,7 @@ TEST_F(AddSubTest, INC) {
   // Test incrementing AX from 0x0000 to 0x0001, CF flag should remain unchanged
   helper->cpu_.registers[kAX] = 0x0000;
   // Set CF flag to verify INC doesn't change it
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x0001);
   helper->CheckFlags(
@@ -353,7 +353,7 @@ TEST_F(AddSubTest, INC) {
   // Test incrementing CX from 0xFFFF to 0x0000 (overflow)
   helper->cpu_.registers[kCX] = 0xFFFF;
   // Reset CF flag to verify INC doesn't change it
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0x0000);
   helper->CheckFlags(
@@ -582,7 +582,7 @@ TEST_F(AddSubTest, SBB) {
   helper->cpu_.registers[kBX] = 0x0400;
   helper->memory_[0x0400] = 0x02;  // LSB
   helper->memory_[0x0401] = 0x00;  // MSB
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
   // Flags: ZF=0, SF=0, PF=0 (0x34 is odd), CF=0, AF=1, OF=0
@@ -599,7 +599,7 @@ TEST_F(AddSubTest, SBB) {
   // 0x1233
   helper->cpu_.registers[kIP] -= 2;  // Rewind IP to rerun the instruction
   helper->cpu_.registers[kAX] = 0x1236;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1233);
   // Flags: ZF=0, SF=0, PF=1 (0x33 is even parity), CF=0, AF=1, OF=0
@@ -617,7 +617,7 @@ TEST_F(AddSubTest, SBB) {
   helper->memory_[0x0400] = 0x36;
   helper->memory_[0x0401] = 0x12;
   helper->cpu_.registers[kCX] = 0x0002;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0400], 0x34);
   EXPECT_EQ(helper->memory_[0x0401], 0x12);
@@ -636,7 +636,7 @@ TEST_F(AddSubTest, SBB) {
   helper->cpu_.registers[kIP] -= 2;  // Rewind IP
   helper->memory_[0x0400] = 0x36;
   helper->memory_[0x0401] = 0x12;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0400], 0x33);
   EXPECT_EQ(helper->memory_[0x0401], 0x12);
@@ -653,7 +653,7 @@ TEST_F(AddSubTest, SBB) {
   // cx = 0x1236, ax = 0x0002, CF = 0. Result cx = 0x1234
   helper->cpu_.registers[kCX] = 0x1236;
   helper->cpu_.registers[kAX] = 0x0002;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0x1234);
   // Flags: ZF=0, SF=0, PF=0, CF=0, AF=1, OF=0
@@ -669,7 +669,7 @@ TEST_F(AddSubTest, SBB) {
   // cx = 0x1236, ax = 0x0002, CF = 1. Result cx = 0x1233
   helper->cpu_.registers[kIP] -= 2;  // Rewind IP
   helper->cpu_.registers[kCX] = 0x1236;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0x1233);
   // Flags: ZF=0, SF=0, PF=1, CF=0, AF=0, OF=0
@@ -686,7 +686,7 @@ TEST_F(AddSubTest, SBB) {
   helper->cpu_.registers[kCX] = 0x1234;
   helper->cpu_.registers[kDI] = 0x0500;
   helper->memory_[0x0501] = 0x02;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ((helper->cpu_.registers[kCX] >> 8) & 0xFF, 0x10);
   // Flags: ZF=0, SF=0, PF=0, CF=0, AF=1, OF=0
@@ -702,7 +702,7 @@ TEST_F(AddSubTest, SBB) {
   // cx = 0x1234, di = 0x0500, memory[0x0501] = 0x02, CF = 1. Result ch = 0x0F
   helper->cpu_.registers[kIP] -= 3;  // Rewind IP
   helper->cpu_.registers[kCX] = 0x1234;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ((helper->cpu_.registers[kCX] >> 8) & 0xFF, 0x0F);
   // Flags: ZF=0, SF=0, PF=1, CF=0, AF=1, OF=0
@@ -719,7 +719,7 @@ TEST_F(AddSubTest, SBB) {
   // 0xFF
   helper->cpu_.registers[kCX] = (0x0F << 8) | 0x34;
   helper->memory_[0x04FF] = 0x35;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0xFF);
   // Flags: ZF=0, SF=1, PF=1, CF=1, AF=1, OF=0
@@ -736,7 +736,7 @@ TEST_F(AddSubTest, SBB) {
   // 0xFE
   helper->cpu_.registers[kIP] -= 3;  // Rewind IP
   helper->cpu_.registers[kCX] = (0x0F << 8) | 0x34;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX] & 0xFF, 0xFE);
   // Flags: ZF=0, SF=1, PF=0, CF=1, AF=1, OF=0
@@ -751,7 +751,7 @@ TEST_F(AddSubTest, SBB) {
   // Test 6: sbb al, 0AAh with CF = 0
   // ax = 0x0055, CF = 0. Result al = 0xAB
   helper->cpu_.registers[kAX] = 0x0055;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xAB);
   // Flags: ZF=0, SF=1, PF=0, CF=1, AF=1, OF=1 (pos - neg = neg_result)
@@ -767,7 +767,7 @@ TEST_F(AddSubTest, SBB) {
   // ax = 0x0055, CF = 1. Result al = 0xAA
   helper->cpu_.registers[kIP] -= 2;  // Rewind IP
   helper->cpu_.registers[kAX] = 0x0055;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xAA);
   // Flags: ZF=0, SF=1, PF=0, CF=1, AF=1, OF=1
@@ -782,7 +782,7 @@ TEST_F(AddSubTest, SBB) {
   // Test 7: sbb ax, 0AAAAh with CF = 0
   // ax = 0xBBBB, CF = 0. Result ax = 0x1111
   helper->cpu_.registers[kAX] = 0xBBBB;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1111);
   // Flags: ZF=0, SF=0, PF=1, CF=0, AF=0, OF=0
@@ -798,7 +798,7 @@ TEST_F(AddSubTest, SBB) {
   // ax = 0xBBBB, CF = 1. Result ax = 0x1110
   helper->cpu_.registers[kIP] -= 3;  // Rewind IP
   helper->cpu_.registers[kAX] = 0xBBBB;
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1110);
   // Flags: ZF=0, SF=0, PF=0, CF=0, AF=0, OF=0
@@ -827,7 +827,7 @@ TEST_F(AddSubTest, DEC) {
   // Test decrementing AX from 0x0001 to 0x0000, CF flag should remain unchanged
   helper->cpu_.registers[kAX] = 0x0001;
   // Set CF flag to verify DEC doesn't change it
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x0000);
   helper->CheckFlags(
@@ -841,7 +841,7 @@ TEST_F(AddSubTest, DEC) {
   // Test decrementing CX from 0x0000 to 0xFFFF (underflow)
   helper->cpu_.registers[kCX] = 0x0000;
   // Reset CF flag to verify DEC doesn't change it
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
   helper->CheckFlags(

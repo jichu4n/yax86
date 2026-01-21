@@ -24,10 +24,10 @@ static void SetFlagsAfterInc(
   bool op1_sign = (op1 & sign_bit) != 0;
   bool op2_sign = (op2 & sign_bit) != 0;
   bool result_sign = (result & sign_bit) != 0;
-  SetFlag(ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
+  CPUSetFlag(ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
 
   // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-  SetFlag(
+  CPUSetFlag(
       ctx->cpu, kAF, ((op1 & 0xF) + (op2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
 }
 
@@ -40,7 +40,7 @@ static void SetFlagsAfterAdd(
     bool did_carry) {
   SetFlagsAfterInc(ctx, op1, op2, result, did_carry);
   // Carry Flag (CF)
-  SetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
+  CPUSetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
 }
 
 // Common signature of SetFlagsAfterAdd and SetFlagsAfterInc.
@@ -54,7 +54,7 @@ static ExecuteStatus ExecuteAddCommon(
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
-  bool should_carry = carry && GetFlag(ctx->cpu, kCF);
+  bool should_carry = carry && CPUGetFlag(ctx->cpu, kCF);
   uint32_t result = raw_dest_value + raw_src_value + (should_carry ? 1 : 0);
   WriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(

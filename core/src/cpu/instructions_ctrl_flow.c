@@ -108,7 +108,7 @@ ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
 YAX86_PRIVATE ExecuteStatus
 ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
-      GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF);
+      CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF);
   const bool success_value = (ctx->instruction->opcode & 0x1);
   return ExecuteConditionalJump(ctx, is_greater_or_equal, success_value);
 }
@@ -116,8 +116,8 @@ ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
 // JLE/JG and JNLE/JG
 YAX86_PRIVATE ExecuteStatus
 ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
-  const bool is_greater = !GetFlag(ctx->cpu, kZF) &&
-                          (GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF));
+  const bool is_greater = !CPUGetFlag(ctx->cpu, kZF) &&
+                          (CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF));
   const bool success_value = (ctx->instruction->opcode & 0x1);
   return ExecuteConditionalJump(ctx, is_greater, success_value);
 }
@@ -136,7 +136,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteLoop(const InstructionContext* ctx) {
 YAX86_PRIVATE ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
   bool condition1 = --(ctx->cpu->registers[kCX]) != 0;
   bool condition2 =
-      GetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
+      CPUGetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
   return ExecuteConditionalJump(ctx, condition1 && condition2, true);
 }
 
@@ -248,14 +248,14 @@ YAX86_PRIVATE ExecuteStatus ExecuteIret(const InstructionContext* ctx) {
 
 // INT 3
 YAX86_PRIVATE ExecuteStatus ExecuteInt3(const InstructionContext* ctx) {
-  SetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
+  CPUSetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
   return kExecuteSuccess;
 }
 
 // INTO
 YAX86_PRIVATE ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kOF)) {
-    SetPendingInterrupt(ctx->cpu, kInterruptOverflow);
+  if (CPUGetFlag(ctx->cpu, kOF)) {
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptOverflow);
   }
   return kExecuteSuccess;
 }
@@ -263,7 +263,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
 // INT n
 YAX86_PRIVATE ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
-  SetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
+  CPUSetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
   return kExecuteSuccess;
 }
 

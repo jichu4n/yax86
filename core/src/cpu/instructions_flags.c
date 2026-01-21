@@ -22,7 +22,7 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
   Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
-  SetFlag(ctx->cpu, flag, value);
+  CPUSetFlag(ctx->cpu, flag, value);
   return kExecuteSuccess;
 }
 
@@ -33,6 +33,6 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
 // CMC
 YAX86_PRIVATE ExecuteStatus
 ExecuteComplementCarryFlag(const InstructionContext* ctx) {
-  SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
+  CPUSetFlag(ctx->cpu, kCF, !CPUGetFlag(ctx->cpu, kCF));
   return kExecuteSuccess;
 }

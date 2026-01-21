@@ -18,7 +18,7 @@ TEST_F(StringRepTest, MOVSBBasic) {
   helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -46,7 +46,7 @@ TEST_F(StringRepTest, MOVSWBasic) {
   helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data (little-endian word)
   helper->memory_[0x0400] = 0x34;  // LSB
@@ -93,7 +93,7 @@ TEST_F(StringRepTest, MOVSBBackward) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x04FF);
 
   // Check that direction flag is set
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kDF));
 }
 
 TEST_F(StringRepTest, MOVSWBackward) {
@@ -126,7 +126,7 @@ TEST_F(StringRepTest, MOVSWBackward) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x04FE);
 
   // Check that direction flag is set
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kDF));
 }
 
 TEST_F(StringRepTest, REPMOVSBBasic) {
@@ -141,7 +141,7 @@ TEST_F(StringRepTest, REPMOVSBBasic) {
   helper->cpu_.registers[kCX] = 5;       // Repeat count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x10;
@@ -187,7 +187,7 @@ TEST_F(StringRepTest, REPMOVSWBasic) {
   helper->cpu_.registers[kCX] = 3;       // Repeat count (3 words)
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data (little-endian words)
   helper->memory_[0x0400] = 0x34;  // Word 1 LSB
@@ -278,7 +278,7 @@ TEST_F(StringRepTest, REPMOVSBZeroCount) {
   helper->cpu_.registers[kCX] = 0;       // Zero repeat count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -310,7 +310,7 @@ TEST_F(StringRepTest, MOVSBSegmentOverride) {
   helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data at ES:SI
   helper->memory_[0x0400] = 0x42;  // Source data
@@ -338,13 +338,13 @@ TEST_F(StringRepTest, MOVSBNoFlagsAffected) {
   helper->cpu_.registers[kDI] = 0x0500;
 
   // Set various flags before the operation
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -377,7 +377,7 @@ TEST_F(StringRepTest, STOSBBasic) {
   helper->cpu_.registers[kAX] = 0x1242;  // AL = 0x42
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Clear destination
   helper->memory_[0x0400] = 0x00;
@@ -405,7 +405,7 @@ TEST_F(StringRepTest, STOSWBasic) {
   helper->cpu_.registers[kAX] = 0x1234;  // AX = 0x1234
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Clear destination
   helper->memory_[0x0400] = 0x00;
@@ -449,7 +449,7 @@ TEST_F(StringRepTest, STOSBBackward) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03FF);
 
   // Check that direction flag is set
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kDF));
 }
 
 TEST_F(StringRepTest, STOSWBackward) {
@@ -478,7 +478,7 @@ TEST_F(StringRepTest, STOSWBackward) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03FE);
 
   // Check that direction flag is set
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kDF));
 }
 
 TEST_F(StringRepTest, REPSTOSBBasic) {
@@ -492,7 +492,7 @@ TEST_F(StringRepTest, REPSTOSBBasic) {
   helper->cpu_.registers[kCX] = 5;       // Repeat count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Clear destination
   for (int i = 0; i < 5; i++) {
@@ -527,7 +527,7 @@ TEST_F(StringRepTest, REPSTOSWBasic) {
   helper->cpu_.registers[kCX] = 3;       // Repeat count (3 words)
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Clear destination
   for (int i = 0; i < 6; i++) {
@@ -598,7 +598,7 @@ TEST_F(StringRepTest, REPSTOSBZeroCount) {
   helper->cpu_.registers[kCX] = 0;       // Zero repeat count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up destination data
   helper->memory_[0x0300] = 0x99;  // Should remain unchanged
@@ -626,13 +626,13 @@ TEST_F(StringRepTest, STOSBNoFlagsAffected) {
   helper->cpu_.registers[kAX] = 0x00DD;  // AL = 0xDD
 
   // Set various flags before the operation
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Execute STOSB
   helper->ExecuteInstructions(1);
@@ -661,7 +661,7 @@ TEST_F(StringRepTest, LODSBBasic) {
   helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -689,7 +689,7 @@ TEST_F(StringRepTest, LODSWBasic) {
   helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data (little-endian word)
   helper->memory_[0x0400] = 0x34;  // LSB
@@ -734,7 +734,7 @@ TEST_F(StringRepTest, LODSBBackward) {
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FF);
 
   // Check that direction flag is set
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kDF));
 }
 
 TEST_F(StringRepTest, LODSWBackward) {
@@ -764,7 +764,7 @@ TEST_F(StringRepTest, LODSWBackward) {
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FE);
 
   // Check that direction flag is set
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kDF));
 }
 
 TEST_F(StringRepTest, LODSBSegmentOverride) {
@@ -778,7 +778,7 @@ TEST_F(StringRepTest, LODSBSegmentOverride) {
   helper->cpu_.registers[kSI] = 0x0400;  // Source at ES:SI (with override)
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data at ES:SI
   helper->memory_[0x0400] = 0x42;  // Source data
@@ -805,13 +805,13 @@ TEST_F(StringRepTest, LODSBNoFlagsAffected) {
   helper->cpu_.registers[kSI] = 0x0400;
 
   // Set various flags before the operation
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -840,7 +840,7 @@ TEST_F(StringRepTest, REPLODSBBasic) {
   helper->cpu_.registers[kCX] = 5;       // Repeat count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x10;
@@ -876,7 +876,7 @@ TEST_F(StringRepTest, REPLODSWBasic) {
   helper->cpu_.registers[kCX] = 3;       // Repeat count (3 words)
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data (little-endian words)
   helper->memory_[0x0400] = 0x34;  // Word 1 LSB
@@ -948,7 +948,7 @@ TEST_F(StringRepTest, REPLODSBZeroCount) {
   helper->cpu_.registers[kCX] = 0;       // Zero repeat count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -981,7 +981,7 @@ TEST_F(StringRepTest, LODSBMultipleOperations) {
   helper->cpu_.registers[kSI] = 0x0300;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data
   helper->memory_[0x0300] = 0xAA;
@@ -1018,7 +1018,7 @@ TEST_F(StringRepTest, LODSWMultipleOperations) {
   helper->cpu_.registers[kSI] = 0x0300;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source data (little-endian words)
   helper->memory_[0x0300] = 0x11;  // Word 1 LSB

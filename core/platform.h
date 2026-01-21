@@ -646,13 +646,13 @@ static ExecuteStatus CPUCallbackOnAfterExecuteInstruction(
 
   FDCTick(&platform->fdc);
 
-  if (!GetFlag(cpu, kIF)) {
+  if (!CPUGetFlag(cpu, kIF)) {
     return kExecuteSuccess;
   }
 
   uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector != kPICNoPendingInterrupt) {
-    SetPendingInterrupt(cpu, interrupt_vector);
+    CPUSetPendingInterrupt(cpu, interrupt_vector);
   }
 
   return kExecuteSuccess;

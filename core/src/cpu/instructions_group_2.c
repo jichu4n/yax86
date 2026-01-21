@@ -27,10 +27,10 @@ static ExecuteStatus ExecuteGroup2Shl(
   WriteOperand(ctx, op, result);
   bool last_msb =
       ((value << (count - 1)) & kSignBit[ctx->metadata->width]) != 0;
-  SetFlag(ctx->cpu, kCF, last_msb);
+  CPUSetFlag(ctx->cpu, kCF, last_msb);
   if (count == 1) {
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_msb != current_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
   return kExecuteSuccess;
@@ -50,10 +50,10 @@ static ExecuteStatus ExecuteGroup2Shr(
   uint32_t result = value >> count;
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (count - 1)) & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
     bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, original_msb);
+    CPUSetFlag(ctx->cpu, kOF, original_msb);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
   return kExecuteSuccess;
@@ -73,9 +73,9 @@ static ExecuteStatus ExecuteGroup2Sar(
   int32_t result = value >> count;
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (count - 1)) & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
-    SetFlag(ctx->cpu, kOF, false);
+    CPUSetFlag(ctx->cpu, kOF, false);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
   return kExecuteSuccess;
@@ -100,10 +100,10 @@ static ExecuteStatus ExecuteGroup2Rol(
       (value >> (kNumBits[ctx->metadata->width] - effective_count));
   WriteOperand(ctx, op, result);
   bool last_msb = (result & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_msb);
+  CPUSetFlag(ctx->cpu, kCF, last_msb);
   if (count == 1) {
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_msb != current_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
   return kExecuteSuccess;
 }
@@ -127,10 +127,10 @@ static ExecuteStatus ExecuteGroup2Ror(
       (value << (kNumBits[ctx->metadata->width] - effective_count));
   WriteOperand(ctx, op, result);
   bool last_lsb = (result & kSignBit[ctx->metadata->width]) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
     bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_lsb != original_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_lsb != original_msb);
   }
   return kExecuteSuccess;
 }
@@ -145,7 +145,7 @@ static ExecuteStatus ExecuteGroup2Rcl(
   if (effective_count == 0) {
     return kExecuteSuccess;
   }
-  uint32_t cf_value = GetFlag(ctx->cpu, kCF) ? (1 << (effective_count - 1)) : 0;
+  uint32_t cf_value = CPUGetFlag(ctx->cpu, kCF) ? (1 << (effective_count - 1)) : 0;
   uint32_t value = FromOperand(op);
   uint32_t result =
       (value << effective_count) | cf_value |
@@ -153,10 +153,10 @@ static ExecuteStatus ExecuteGroup2Rcl(
   WriteOperand(ctx, op, result);
   bool last_msb =
       ((value << (effective_count - 1)) & kSignBit[ctx->metadata->width]) != 0;
-  SetFlag(ctx->cpu, kCF, last_msb);
+  CPUSetFlag(ctx->cpu, kCF, last_msb);
   if (count == 1) {
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_msb != current_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
   return kExecuteSuccess;
 }
@@ -172,7 +172,7 @@ static ExecuteStatus ExecuteGroup2Rcr(
     return kExecuteSuccess;
   }
   uint32_t cf_value =
-      GetFlag(ctx->cpu, kCF)
+      CPUGetFlag(ctx->cpu, kCF)
           ? (kSignBit[ctx->metadata->width] >> (effective_count - 1))
           : 0;
   uint32_t value = FromOperand(op);
@@ -181,11 +181,11 @@ static ExecuteStatus ExecuteGroup2Rcr(
       (value << (kNumBits[ctx->metadata->width] - (effective_count - 1)));
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (effective_count - 1)) & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
     bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, current_msb != original_msb);
+    CPUSetFlag(ctx->cpu, kOF, current_msb != original_msb);
   }
   return kExecuteSuccess;
 }

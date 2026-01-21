@@ -14,7 +14,7 @@ TEST_F(StringRepCmpTest, SCASBBasic) {
       (helper->cpu_.registers[kAX] & 0xFF00) | 0x55;  // Set AL = 0x55
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory value to compare
   helper->memory_[0x300] = 0x55;
@@ -23,8 +23,8 @@ TEST_F(StringRepCmpTest, SCASBBasic) {
   helper->ExecuteInstructions(1);
 
   // Check flags - equal comparison should set ZF
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // DI should increment by 1
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x01);
@@ -40,7 +40,7 @@ TEST_F(StringRepCmpTest, SCASBNotEqual) {
       (helper->cpu_.registers[kAX] & 0xFF00) | 0x33;  // Set AL = 0x33
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory value
   helper->memory_[0x300] = 0x55;
@@ -49,8 +49,8 @@ TEST_F(StringRepCmpTest, SCASBNotEqual) {
   helper->ExecuteInstructions(1);
 
   // Check flags - unequal comparison, 0x33 < 0x55
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kCF));  // Carry flag set when AL < memory
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kCF));  // Carry flag set when AL < memory
 
   // DI should increment by 1
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x01);
@@ -64,7 +64,7 @@ TEST_F(StringRepCmpTest, SCASWBasic) {
   helper->cpu_.registers[kAX] = 0x1234;
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory value to compare (little endian)
   helper->memory_[0x400] = 0x34;
@@ -74,8 +74,8 @@ TEST_F(StringRepCmpTest, SCASWBasic) {
   helper->ExecuteInstructions(1);
 
   // Check flags - equal comparison should set ZF
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // DI should increment by 2
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x02);
@@ -91,7 +91,7 @@ TEST_F(StringRepCmpTest, SCASBBackward) {
       (helper->cpu_.registers[kAX] & 0xFF00) | 0x77;  // Set AL = 0x77
 
   // Set direction flag (backward direction)
-  SetFlag(&helper->cpu_, kDF, true);
+  CPUSetFlag(&helper->cpu_, kDF, true);
 
   // Set up memory value
   helper->memory_[0x500] = 0x77;
@@ -100,8 +100,8 @@ TEST_F(StringRepCmpTest, SCASBBackward) {
   helper->ExecuteInstructions(1);
 
   // Check flags
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // DI should decrement by 1
   EXPECT_EQ(helper->cpu_.registers[kDI], 0xFFFF);
@@ -116,7 +116,7 @@ TEST_F(StringRepCmpTest, SCASWBackward) {
   helper->cpu_.registers[kAX] = 0xABCD;
 
   // Set direction flag (backward direction)
-  SetFlag(&helper->cpu_, kDF, true);
+  CPUSetFlag(&helper->cpu_, kDF, true);
 
   // Set up memory value (little endian)
   helper->memory_[0x600] = 0xCD;
@@ -126,8 +126,8 @@ TEST_F(StringRepCmpTest, SCASWBackward) {
   helper->ExecuteInstructions(1);
 
   // Check flags
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // DI should decrement by 2
   EXPECT_EQ(helper->cpu_.registers[kDI], 0xFFFE);
@@ -144,7 +144,7 @@ TEST_F(StringRepCmpTest, REPEScasbFound) {
   helper->cpu_.registers[kCX] = 4;                    // Check 4 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory - first two bytes match, third doesn't
   helper->memory_[0x700] = 0xAA;  // First byte matches
@@ -160,7 +160,7 @@ TEST_F(StringRepCmpTest, REPEScasbFound) {
       helper->cpu_.registers[kDI], 0x03);     // Points after the unequal byte
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);  // One iteration left
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 TEST_F(StringRepCmpTest, REPEScasbNotFound) {
@@ -174,7 +174,7 @@ TEST_F(StringRepCmpTest, REPEScasbNotFound) {
   helper->cpu_.registers[kCX] = 3;                    // Check 3 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory - all bytes match
   helper->memory_[0x800] = 0xCC;
@@ -188,7 +188,7 @@ TEST_F(StringRepCmpTest, REPEScasbNotFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03);  // Moved through all 3 bytes
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);     // All iterations completed
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
 }
 
 TEST_F(StringRepCmpTest, REPEScaswFound) {
@@ -201,7 +201,7 @@ TEST_F(StringRepCmpTest, REPEScaswFound) {
   helper->cpu_.registers[kCX] = 3;  // Check 3 words
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory - first word matches, second doesn't (little endian)
   helper->memory_[0x900] = 0x11;  // First word matches
@@ -220,7 +220,7 @@ TEST_F(StringRepCmpTest, REPEScaswFound) {
       helper->cpu_.registers[kDI], 0x04);     // Points after the unequal word
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);  // One iteration left
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 TEST_F(StringRepCmpTest, REPNEScasbFound) {
@@ -234,7 +234,7 @@ TEST_F(StringRepCmpTest, REPNEScasbFound) {
   helper->cpu_.registers[kCX] = 4;                    // Check up to 4 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory - first two bytes don't match, third matches
   helper->memory_[0xA00] = 0x11;  // First byte doesn't match
@@ -249,7 +249,7 @@ TEST_F(StringRepCmpTest, REPNEScasbFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03);  // Points after the equal byte
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);     // One iteration left
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
 }
 
 TEST_F(StringRepCmpTest, REPNEScasbNotFound) {
@@ -263,7 +263,7 @@ TEST_F(StringRepCmpTest, REPNEScasbNotFound) {
   helper->cpu_.registers[kCX] = 3;                    // Check 3 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory - all bytes don't match
   helper->memory_[0xB00] = 0x11;
@@ -277,7 +277,7 @@ TEST_F(StringRepCmpTest, REPNEScasbNotFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03);  // Moved through all 3 bytes
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);     // All iterations completed
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 TEST_F(StringRepCmpTest, REPNEScaswFound) {
@@ -290,7 +290,7 @@ TEST_F(StringRepCmpTest, REPNEScaswFound) {
   helper->cpu_.registers[kCX] = 3;  // Check up to 3 words
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory - first word doesn't match, second matches (little endian)
   helper->memory_[0xC00] = 0x11;  // First word doesn't match
@@ -307,7 +307,7 @@ TEST_F(StringRepCmpTest, REPNEScaswFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x04);  // Points after the equal word
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);     // One iteration left
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
 }
 
 TEST_F(StringRepCmpTest, SCASBZeroCount) {
@@ -321,7 +321,7 @@ TEST_F(StringRepCmpTest, SCASBZeroCount) {
   helper->cpu_.registers[kCX] = 0;                    // Zero count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory value
   helper->memory_[0xD00] = 0x99;
@@ -345,7 +345,7 @@ TEST_F(StringRepCmpTest, SCASBSignedComparison) {
       0x7F;  // Set AL = 0x7F (+127 in signed interpretation)
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up memory value
   helper->memory_[0xE00] = 0x80;  // -128 in signed interpretation
@@ -354,12 +354,12 @@ TEST_F(StringRepCmpTest, SCASBSignedComparison) {
   helper->ExecuteInstructions(1);
 
   // Check flags - 0x7F compared to 0x80
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kZF));  // Not equal
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kZF));  // Not equal
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kCF));  // 0x7F < 0x80 in unsigned comparison
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kSF));  // Sign flag reflects result sign
+      CPUGetFlag(&helper->cpu_, kCF));  // 0x7F < 0x80 in unsigned comparison
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kSF));  // Sign flag reflects result sign
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kOF));  // Overflow: positive - negative = overflow
+      CPUGetFlag(&helper->cpu_, kOF));  // Overflow: positive - negative = overflow
 }
 
 TEST_F(StringRepCmpTest, REPEScasbBackward) {
@@ -373,7 +373,7 @@ TEST_F(StringRepCmpTest, REPEScasbBackward) {
   helper->cpu_.registers[kCX] = 3;                    // Check 3 bytes
 
   // Set direction flag (backward direction)
-  SetFlag(&helper->cpu_, kDF, true);
+  CPUSetFlag(&helper->cpu_, kDF, true);
 
   // Set up memory
   helper->memory_[0xF02] = 0x55;  // Third byte matches
@@ -388,7 +388,7 @@ TEST_F(StringRepCmpTest, REPEScasbBackward) {
       helper->cpu_.registers[kDI], 0xFFFF);   // Points to 0xF00-1 (wrapped)
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);  // All iterations completed
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 // ============================================================================
@@ -404,7 +404,7 @@ TEST_F(StringRepCmpTest, CMPSBBasic) {
   helper->cpu_.registers[kDI] = 0x00;
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - equal bytes
   helper->memory_[0x200] = 0x55;
@@ -414,8 +414,8 @@ TEST_F(StringRepCmpTest, CMPSBBasic) {
   helper->ExecuteInstructions(1);
 
   // Check flags - equal comparison should set ZF
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // SI and DI should both increment by 1
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x01);
@@ -432,7 +432,7 @@ TEST_F(StringRepCmpTest, CMPSBNotEqual) {
   helper->cpu_.registers[kDI] = 0x00;
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - source < destination
   helper->memory_[0x200] = 0x33;
@@ -442,9 +442,9 @@ TEST_F(StringRepCmpTest, CMPSBNotEqual) {
   helper->ExecuteInstructions(1);
 
   // Check flags - unequal comparison, 0x33 < 0x55
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kZF));
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kCF));  // Carry flag set when source < dest
+      CPUGetFlag(&helper->cpu_, kCF));  // Carry flag set when source < dest
 
   // SI and DI should both increment by 1
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x01);
@@ -460,7 +460,7 @@ TEST_F(StringRepCmpTest, CMPSWBasic) {
   helper->cpu_.registers[kDI] = 0x00;
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - equal words (little endian)
   helper->memory_[0x200] = 0x34;  // Low byte of 0x1234
@@ -472,8 +472,8 @@ TEST_F(StringRepCmpTest, CMPSWBasic) {
   helper->ExecuteInstructions(1);
 
   // Check flags - equal comparison should set ZF
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // SI and DI should both increment by 2
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x02);
@@ -490,7 +490,7 @@ TEST_F(StringRepCmpTest, CMPSBBackward) {
   helper->cpu_.registers[kDI] = 0x05;
 
   // Set direction flag (backward direction)
-  SetFlag(&helper->cpu_, kDF, true);
+  CPUSetFlag(&helper->cpu_, kDF, true);
 
   // Set up source and destination data
   helper->memory_[0x205] = 0x77;
@@ -500,8 +500,8 @@ TEST_F(StringRepCmpTest, CMPSBBackward) {
   helper->ExecuteInstructions(1);
 
   // Check flags
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // SI and DI should both decrement by 1
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x04);
@@ -518,7 +518,7 @@ TEST_F(StringRepCmpTest, CMPSWBackward) {
   helper->cpu_.registers[kDI] = 0x05;
 
   // Set direction flag (backward direction)
-  SetFlag(&helper->cpu_, kDF, true);
+  CPUSetFlag(&helper->cpu_, kDF, true);
 
   // Set up source and destination data (little endian)
   helper->memory_[0x204] = 0xCD;  // Low byte of 0xABCD
@@ -530,8 +530,8 @@ TEST_F(StringRepCmpTest, CMPSWBackward) {
   helper->ExecuteInstructions(1);
 
   // Check flags
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kCF));
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kCF));
 
   // SI and DI should both decrement by 2
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x03);
@@ -549,7 +549,7 @@ TEST_F(StringRepCmpTest, REPECmpsbFound) {
   helper->cpu_.registers[kCX] = 4;  // Compare up to 4 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - first two bytes match, third doesn't
   helper->memory_[0x200] = 0xAA;  // First byte matches
@@ -572,7 +572,7 @@ TEST_F(StringRepCmpTest, REPECmpsbFound) {
       helper->cpu_.registers[kDI], 0x03);     // Points after the unequal byte
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);  // One iteration left
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 TEST_F(StringRepCmpTest, REPECmpsbNotFound) {
@@ -586,7 +586,7 @@ TEST_F(StringRepCmpTest, REPECmpsbNotFound) {
   helper->cpu_.registers[kCX] = 3;  // Compare 3 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - all bytes match
   helper->memory_[0x200] = 0xCC;
@@ -604,7 +604,7 @@ TEST_F(StringRepCmpTest, REPECmpsbNotFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03);  // Moved through all 3 bytes
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);     // All iterations completed
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
 }
 
 TEST_F(StringRepCmpTest, REPECmpswFound) {
@@ -618,7 +618,7 @@ TEST_F(StringRepCmpTest, REPECmpswFound) {
   helper->cpu_.registers[kCX] = 3;  // Compare up to 3 words
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - first word matches, second doesn't
   // (little endian)
@@ -648,7 +648,7 @@ TEST_F(StringRepCmpTest, REPECmpswFound) {
       helper->cpu_.registers[kDI], 0x04);     // Points after the unequal word
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);  // One iteration left
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 TEST_F(StringRepCmpTest, REPNECmpsbFound) {
@@ -662,7 +662,7 @@ TEST_F(StringRepCmpTest, REPNECmpsbFound) {
   helper->cpu_.registers[kCX] = 4;  // Compare up to 4 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - first two bytes don't match, third
   // matches
@@ -684,7 +684,7 @@ TEST_F(StringRepCmpTest, REPNECmpsbFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03);  // Points after the equal byte
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);     // One iteration left
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
 }
 
 TEST_F(StringRepCmpTest, REPNECmpsbNotFound) {
@@ -698,7 +698,7 @@ TEST_F(StringRepCmpTest, REPNECmpsbNotFound) {
   helper->cpu_.registers[kCX] = 3;  // Compare 3 bytes
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - all bytes don't match
   helper->memory_[0x200] = 0x11;
@@ -716,7 +716,7 @@ TEST_F(StringRepCmpTest, REPNECmpsbNotFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x03);  // Moved through all 3 bytes
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);     // All iterations completed
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 TEST_F(StringRepCmpTest, REPNECmpswFound) {
@@ -730,7 +730,7 @@ TEST_F(StringRepCmpTest, REPNECmpswFound) {
   helper->cpu_.registers[kCX] = 3;  // Compare up to 3 words
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data - first word doesn't match, second
   // matches (little endian)
@@ -756,7 +756,7 @@ TEST_F(StringRepCmpTest, REPNECmpswFound) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x04);  // Points after the equal word
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);     // One iteration left
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF set because last comparison succeeded
 }
 
 TEST_F(StringRepCmpTest, CMPSBZeroCount) {
@@ -770,7 +770,7 @@ TEST_F(StringRepCmpTest, CMPSBZeroCount) {
   helper->cpu_.registers[kCX] = 0;  // Zero count
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data
   helper->memory_[0x200] = 0x99;
@@ -795,7 +795,7 @@ TEST_F(StringRepCmpTest, CMPSBSignedComparison) {
   helper->cpu_.registers[kDI] = 0x00;
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data
   helper->memory_[0x200] = 0x7F;  // +127 in signed interpretation
@@ -805,12 +805,12 @@ TEST_F(StringRepCmpTest, CMPSBSignedComparison) {
   helper->ExecuteInstructions(1);
 
   // Check flags - 0x7F compared to 0x80
-  EXPECT_FALSE(GetFlag(&helper->cpu_, kZF));  // Not equal
+  EXPECT_FALSE(CPUGetFlag(&helper->cpu_, kZF));  // Not equal
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kCF));  // 0x7F < 0x80 in unsigned comparison
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kSF));  // Sign flag reflects result sign
+      CPUGetFlag(&helper->cpu_, kCF));  // 0x7F < 0x80 in unsigned comparison
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kSF));  // Sign flag reflects result sign
   EXPECT_TRUE(
-      GetFlag(&helper->cpu_, kOF));  // Overflow: positive - negative = overflow
+      CPUGetFlag(&helper->cpu_, kOF));  // Overflow: positive - negative = overflow
 }
 
 TEST_F(StringRepCmpTest, REPECmpsbBackward) {
@@ -824,7 +824,7 @@ TEST_F(StringRepCmpTest, REPECmpsbBackward) {
   helper->cpu_.registers[kCX] = 3;     // Compare 3 bytes
 
   // Set direction flag (backward direction)
-  SetFlag(&helper->cpu_, kDF, true);
+  CPUSetFlag(&helper->cpu_, kDF, true);
 
   // Set up source and destination data
   helper->memory_[0x202] = 0x55;  // Third byte matches
@@ -845,7 +845,7 @@ TEST_F(StringRepCmpTest, REPECmpsbBackward) {
       helper->cpu_.registers[kDI], 0xFFFF);   // Points to 0x300-1 (wrapped)
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);  // All iterations completed
   EXPECT_FALSE(
-      GetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
+      CPUGetFlag(&helper->cpu_, kZF));  // ZF clear because last comparison failed
 }
 
 TEST_F(StringRepCmpTest, CMPSSegmentOverride) {
@@ -858,7 +858,7 @@ TEST_F(StringRepCmpTest, CMPSSegmentOverride) {
   helper->cpu_.registers[kDI] = 0x00;
 
   // Clear direction flag (forward direction)
-  SetFlag(&helper->cpu_, kDF, false);
+  CPUSetFlag(&helper->cpu_, kDF, false);
 
   // Set up source and destination data
   // With ES override, source should come from ES:SI instead of DS:SI
@@ -870,7 +870,7 @@ TEST_F(StringRepCmpTest, CMPSSegmentOverride) {
   helper->ExecuteInstructions(1);
 
   // Check that data was compared from ES:SI to ES:DI
-  EXPECT_TRUE(GetFlag(&helper->cpu_, kZF));  // Should be equal (0x42 == 0x42)
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kZF));  // Should be equal (0x42 == 0x42)
 
   // Check that SI and DI were incremented by 1
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x01);

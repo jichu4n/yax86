@@ -14,14 +14,14 @@ YAX86_PRIVATE ExecuteStatus ExecuteAaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al += 6;
     ++ah;
-    SetFlag(ctx->cpu, kAF, true);
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   al &= 0x0F;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -33,14 +33,14 @@ YAX86_PRIVATE ExecuteStatus ExecuteAas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al -= 6;
     --ah;
-    SetFlag(ctx->cpu, kAF, true);
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   al &= 0x0F;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -80,18 +80,18 @@ YAX86_PRIVATE ExecuteStatus ExecuteDaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al += 6;
-    SetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
   }
   uint8_t al_high = (al >> 4) & 0x0F;
-  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+  if (al_high > 9 || CPUGetFlag(ctx->cpu, kCF)) {
     al += 0x60;
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   SetCommonFlagsAfterInstruction(ctx, al);
@@ -103,18 +103,18 @@ YAX86_PRIVATE ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al -= 6;
-    SetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
   }
   uint8_t al_high = (al >> 4) & 0x0F;
-  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+  if (al_high > 9 || CPUGetFlag(ctx->cpu, kCF)) {
     al -= 0x60;
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   SetCommonFlagsAfterInstruction(ctx, al);

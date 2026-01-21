@@ -100,7 +100,7 @@ TEST_F(Group2Test, ShlByteCL) {
   // Test 1: Shift by 0 (no change, no flags affected)
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;
-  SetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x55);
   helper->CheckFlags({{kCF, true}});  // CF should remain unchanged
@@ -162,7 +162,7 @@ TEST_F(Group2Test, ShlWordCL) {
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;        // Low byte
   helper->memory_[0x0801] = 0xAA;        // High byte (0xAA55)
-  SetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0xAA55);
@@ -397,7 +397,7 @@ TEST_F(Group2Test, ShrByteCL) {
   // Test 1: Shift by 0 (no change, no flags affected)
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;
-  SetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x55);
   helper->CheckFlags({{kCF, true}});  // CF should remain unchanged
@@ -448,7 +448,7 @@ TEST_F(Group2Test, ShrWordCL) {
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;        // Low byte
   helper->memory_[0x0801] = 0xAA;        // High byte (0xAA55)
-  SetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0xAA55);
@@ -591,7 +591,7 @@ TEST_F(Group2Test, RolByteCL) {
   // Test 1: Rotate by 0 (no change, no flags affected)
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;
-  SetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x55);
   helper->CheckFlags({{kCF, true}});  // CF should remain unchanged
@@ -655,7 +655,7 @@ TEST_F(Group2Test, RolWordCL) {
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;        // Low byte
   helper->memory_[0x0801] = 0xAA;        // High byte (0xAA55)
-  SetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0xAA55);
@@ -888,7 +888,7 @@ TEST_F(Group2Test, RorByteCL) {
   // Test 1: Rotate by 0 (no change, no flags affected)
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;
-  SetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x55);
   helper->CheckFlags({{kCF, true}});  // CF should remain unchanged
@@ -954,7 +954,7 @@ TEST_F(Group2Test, RorWordCL) {
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;        // Low byte
   helper->memory_[0x0801] = 0xAA;        // High byte (0xAA55)
-  SetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0xAA55);

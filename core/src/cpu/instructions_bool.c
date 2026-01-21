@@ -13,9 +13,9 @@ YAX86_PRIVATE void SetFlagsAfterBooleanInstruction(
     const InstructionContext* ctx, uint32_t result) {
   SetCommonFlagsAfterInstruction(ctx, result);
   // Carry Flag (CF) should be cleared
-  SetFlag(ctx->cpu, kCF, false);
+  CPUSetFlag(ctx->cpu, kCF, false);
   // Overflow Flag (OF) should be cleared
-  SetFlag(ctx->cpu, kOF, false);
+  CPUSetFlag(ctx->cpu, kOF, false);
 }
 
 // Common logic for AND instructions.

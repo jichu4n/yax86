@@ -20,12 +20,12 @@ TEST_F(LeaLesLdsTest, LEA) {
       0;  // LEA calculates offset, DS doesn't affect result unless overridden
 
   // Set various flags to verify LEA instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: lea ax, [bx+si]
   // Set up: BX=0x1000, SI=0x0200. Expected AX = 0x1000 + 0x0200 = 0x1200
@@ -118,12 +118,12 @@ TEST_F(LeaLesLdsTest, LES) {
   helper->cpu_.registers[kDS] = 0;  // Use DS=0 for memory addressing
 
   // Set various flags to verify LES instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test: les di, [bx]
   // Set up: BX=0x0400. Memory at [0x0400] should contain a 32-bit pointer.
@@ -156,12 +156,12 @@ TEST_F(LeaLesLdsTest, LDS) {
   helper->cpu_.registers[kDS] = 0;  // Use DS=0 for memory addressing
 
   // Set various flags to verify LDS instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test: lds si, [0200h]
   // Memory at [0x0200] should contain a 32-bit pointer.

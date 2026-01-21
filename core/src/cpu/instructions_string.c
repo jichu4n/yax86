@@ -76,7 +76,7 @@ static Operand GetStringDestinationOperand(const InstructionContext* ctx) {
 
 // Update the source address register (SI) after a string operation.
 static void UpdateStringSourceAddress(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kDF)) {
+  if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
   } else {
     ctx->cpu->registers[kSI] += kNumBytes[ctx->metadata->width];
@@ -85,7 +85,7 @@ static void UpdateStringSourceAddress(const InstructionContext* ctx) {
 
 // Update the destination address register (DI) after a string operation.
 static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kDF)) {
+  if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
   } else {
     ctx->cpu->registers[kDI] += kNumBytes[ctx->metadata->width];
@@ -168,7 +168,7 @@ static ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
       return status;
     }
     --ctx->cpu->registers[kCX];
-    if (GetFlag(ctx->cpu, kZF) == terminate_zf_value) {
+    if (CPUGetFlag(ctx->cpu, kZF) == terminate_zf_value) {
       break;
     }
   }

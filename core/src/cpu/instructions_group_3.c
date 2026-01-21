@@ -78,8 +78,8 @@ static ExecuteStatus ExecuteMulCommon(
   WriteOperandAddress(
       ctx, &kMulDivResultHighHalfAddress[width], result_high_half);
 
-  SetFlag(ctx->cpu, kCF, overflow);
-  SetFlag(ctx->cpu, kOF, overflow);
+  CPUSetFlag(ctx->cpu, kCF, overflow);
+  CPUSetFlag(ctx->cpu, kOF, overflow);
 
   return kExecuteSuccess;
 }
@@ -118,7 +118,7 @@ static ExecuteStatus WriteDivResult(
 static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
 
@@ -132,7 +132,7 @@ static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
                             << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
@@ -143,7 +143,7 @@ static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
 static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
 
@@ -158,7 +158,7 @@ static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   int32_t quotient = dividend / divisor;
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < kMinSignedValue[ctx->metadata->width]) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);

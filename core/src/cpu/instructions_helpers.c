@@ -14,16 +14,16 @@ YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];
   // Zero flag (ZF)
-  SetFlag(ctx->cpu, kZF, result == 0);
+  CPUSetFlag(ctx->cpu, kZF, result == 0);
   // Sign flag (SF)
-  SetFlag(ctx->cpu, kSF, result & kSignBit[width]);
+  CPUSetFlag(ctx->cpu, kSF, result & kSignBit[width]);
   // Parity flag (PF)
   // Set if the number of set bits in the least significant byte is even
   uint8_t parity = result & 0xFF;  // Check only the low byte for parity
   parity ^= parity >> 4;
   parity ^= parity >> 2;
   parity ^= parity >> 1;
-  SetFlag(ctx->cpu, kPF, (parity & 1) == 0);
+  CPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
 YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {

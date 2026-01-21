@@ -19,12 +19,12 @@ TEST_F(MovXchgXlatTest, MOVRegisterAndMemory) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify MOV instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: mov ax, [bx] - Load word from memory into AX
   // Set up: BX points to memory location 0x0400, memory contains 0x1234
@@ -127,12 +127,12 @@ TEST_F(MovXchgXlatTest, MOVSegmentRegister) {
   helper->cpu_.registers[kDS] = 0;  // Initial DS value
 
   // Set various flags to verify MOV instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: mov ds, ax - Move register to segment register
   // Set up: AX contains 0x1234
@@ -206,12 +206,12 @@ TEST_F(MovXchgXlatTest, MOVImmediateToRegister) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify MOV instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: mov al, 42h - Move immediate to 8-bit low register
   helper->ExecuteInstructions(1);
@@ -287,12 +287,12 @@ TEST_F(MovXchgXlatTest, MOVMemoryOffsetAndALOrAX) {
       "mov [0800h], ax\n");  // Store AX to direct memory address
 
   // Set various flags to verify MOV instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test with DS = 0 (direct physical address = offset)
   helper->cpu_.registers[kDS] = 0;
@@ -396,12 +396,12 @@ TEST_F(MovXchgXlatTest, MOVImmediateToRegisterOrMemory) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify MOV instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Setup memory addresses
   helper->cpu_.registers[kBX] = 0x0400;
@@ -514,12 +514,12 @@ TEST_F(MovXchgXlatTest, XCHGRegister) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify XCHG instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: xchg ax, ax - NOP operation
   // Set up: AX contains 0x1234
@@ -628,12 +628,12 @@ TEST_F(MovXchgXlatTest, XCHGRegisterAndMemory) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify XCHG instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: xchg al, [bx] - Exchange AL with byte in memory
   // Set up: AL=0x42, memory at BX=0x0400 contains 0x78
@@ -720,12 +720,12 @@ TEST_F(MovXchgXlatTest, XLAT) {
   helper->cpu_.registers[kDS] = 0;  // Assume DS is 0 for direct addressing
 
   // Set various flags to verify XLAT instructions don't affect them
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, true);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test XLAT: AL should be replaced by the value at [DS:BX+AL]
   // Set up: BX = 0x0700 (table base), AL = 0x05 (index)
@@ -758,12 +758,12 @@ TEST_F(MovXchgXlatTest, XLAT) {
   // Memory at [0x0800 + 0x0A] = 0x080A contains 0x42
   helper = CPUTestHelper::CreateWithProgram("execute-xlat-test-2", "xlat");
   helper->cpu_.registers[kDS] = 0;
-  SetFlag(&helper->cpu_, kCF, false);  // Change some flags for variety
-  SetFlag(&helper->cpu_, kZF, false);
-  SetFlag(&helper->cpu_, kSF, false);
-  SetFlag(&helper->cpu_, kPF, false);
-  SetFlag(&helper->cpu_, kOF, false);
-  SetFlag(&helper->cpu_, kAF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);  // Change some flags for variety
+  CPUSetFlag(&helper->cpu_, kZF, false);
+  CPUSetFlag(&helper->cpu_, kSF, false);
+  CPUSetFlag(&helper->cpu_, kPF, false);
+  CPUSetFlag(&helper->cpu_, kOF, false);
+  CPUSetFlag(&helper->cpu_, kAF, false);
 
   helper->cpu_.registers[kBX] = 0x0800;
   helper->cpu_.registers[kAX] = 0xDD0A;  // AL = 0x0A, AH = 0xDD

@@ -17,7 +17,7 @@ TEST_F(Group2Part2Test, RclByte1) {
 
   // Test 1: No carry in, no carry out, no overflow
   helper->memory_[0x0800] = 0x40;  // 01000000b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x80);  // 10000000b
   helper->CheckFlags({{kCF, false}, {kOF, true}});
@@ -28,7 +28,7 @@ TEST_F(Group2Part2Test, RclByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x40;  // 01000000b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x81);  // 10000001b (carry in becomes LSB)
   helper->CheckFlags({{kCF, false}, {kOF, true}});
@@ -39,7 +39,7 @@ TEST_F(Group2Part2Test, RclByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x80;  // 10000000b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x00);  // 00000000b (MSB rotated to CF)
   helper->CheckFlags({{kCF, true}, {kOF, true}});
@@ -50,7 +50,7 @@ TEST_F(Group2Part2Test, RclByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x80;  // 10000000b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x01);  // 00000001b (MSB to CF, CF to LSB)
   helper->CheckFlags({{kCF, true}, {kOF, true}});
@@ -61,7 +61,7 @@ TEST_F(Group2Part2Test, RclByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0xAA;  // 10101010b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x54);  // 01010100b
   helper->CheckFlags({{kCF, true}, {kOF, true}});
@@ -78,7 +78,7 @@ TEST_F(Group2Part2Test, RclWord1) {
   // Test 1: No carry in, no carry out, no overflow
   helper->memory_[0x0800] = 0x00;  // Low byte
   helper->memory_[0x0801] = 0x40;  // High byte (0x4000)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x8000);
@@ -91,7 +91,7 @@ TEST_F(Group2Part2Test, RclWord1) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x00;  // Low byte
   helper->memory_[0x0801] = 0x40;  // High byte (0x4000)
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x8001);  // Carry in becomes LSB
@@ -104,7 +104,7 @@ TEST_F(Group2Part2Test, RclWord1) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x00;  // Low byte
   helper->memory_[0x0801] = 0x80;  // High byte (0x8000)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x0000);  // MSB rotated to CF
@@ -117,7 +117,7 @@ TEST_F(Group2Part2Test, RclWord1) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x00;  // Low byte
   helper->memory_[0x0801] = 0x80;  // High byte (0x8000)
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x0001);  // MSB to CF, CF to LSB
@@ -130,7 +130,7 @@ TEST_F(Group2Part2Test, RclWord1) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0xAA;  // Low byte
   helper->memory_[0x0801] = 0xAA;  // High byte (0xAAAA)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x5554);  // 0xAAAA << 1 = 0x5554
@@ -148,7 +148,7 @@ TEST_F(Group2Part2Test, RclByteCL) {
   // Test 1: Rotate by 0 (no change, no flags affected)
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;
-  SetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x55);
   helper->CheckFlags({{kCF, true}});  // CF should remain unchanged
@@ -160,7 +160,7 @@ TEST_F(Group2Part2Test, RclByteCL) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0800] = 0x55;        // 01010101b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x54);  // 01010100b (shifted left by 2)
   helper->CheckFlags({{kCF, true}});         // MSB shifted into CF
@@ -172,7 +172,7 @@ TEST_F(Group2Part2Test, RclByteCL) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->cpu_.registers[kCX] = 0x0003;  // CL = 3
   helper->memory_[0x0800] = 0x21;        // 00100001b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       helper->memory_[0x0800], 0x0C);  // 00001100b (shifted left by 3, CF in)
@@ -185,7 +185,7 @@ TEST_F(Group2Part2Test, RclByteCL) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->cpu_.registers[kCX] = 0x0004;  // CL = 4
   helper->memory_[0x0800] = 0xF0;        // 11110000b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       helper->memory_[0x0800],
@@ -199,7 +199,7 @@ TEST_F(Group2Part2Test, RclByteCL) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->cpu_.registers[kCX] = 0x0008;  // CL = 8
   helper->memory_[0x0800] = 0x42;        // 01000010b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       helper->memory_[0x0800], 0x21);  // Original value becomes the CF position
@@ -212,7 +212,7 @@ TEST_F(Group2Part2Test, RclByteCL) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->cpu_.registers[kCX] = 0x0009;  // CL = 9 (mod 9 = 0, so no change)
   helper->memory_[0x0800] = 0x42;        // 01000010b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x42);  // Same as original
   helper->CheckFlags({{kCF, true}});         // CF unchanged
@@ -230,7 +230,7 @@ TEST_F(Group2Part2Test, RclWordCL) {
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0800] = 0x55;        // Low byte
   helper->memory_[0x0801] = 0xAA;        // High byte (0xAA55)
-  SetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0xAA55);
@@ -244,7 +244,7 @@ TEST_F(Group2Part2Test, RclWordCL) {
   helper->cpu_.registers[kCX] = 0x0004;  // CL = 4
   helper->memory_[0x0800] = 0x34;        // Low byte
   helper->memory_[0x0801] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x2340);          // 0x1234 << 4 = 0x2340
@@ -258,7 +258,7 @@ TEST_F(Group2Part2Test, RclWordCL) {
   helper->cpu_.registers[kCX] = 0x0008;  // CL = 8
   helper->memory_[0x0800] = 0x34;        // Low byte
   helper->memory_[0x0801] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(
@@ -274,7 +274,7 @@ TEST_F(Group2Part2Test, RclWordCL) {
   helper->cpu_.registers[kCX] = 0x0010;  // CL = 16
   helper->memory_[0x0800] = 0x34;        // Low byte
   helper->memory_[0x0801] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x091A);           // 0x1234 >> 1 = 0x091A (with CF=0)
@@ -288,7 +288,7 @@ TEST_F(Group2Part2Test, RclWordCL) {
   helper->cpu_.registers[kCX] = 0x0011;  // CL = 17 (mod 17 = 0, so no change)
   helper->memory_[0x0800] = 0x34;        // Low byte
   helper->memory_[0x0801] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(result, 0x1234);          // Same as original
@@ -302,7 +302,7 @@ TEST_F(Group2Part2Test, RclRegisterByte) {
       CPUTestHelper::CreateWithProgram("group2-rcl-al-1-test", "rcl al, 1\n");
 
   helper->cpu_.registers[kAX] = 0x1242;  // AL = 0x42
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x84);         // AL = 0x84
   EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0x12);  // AH unchanged
@@ -312,7 +312,7 @@ TEST_F(Group2Part2Test, RclRegisterByte) {
   helper =
       CPUTestHelper::CreateWithProgram("group2-rcl-bh-1-test", "rcl bh, 1\n");
   helper->cpu_.registers[kBX] = 0x8078;  // BH = 0x80
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       (helper->cpu_.registers[kBX] >> 8) & 0xFF,
@@ -328,7 +328,7 @@ TEST_F(Group2Part2Test, RclRegisterWord) {
       CPUTestHelper::CreateWithProgram("group2-rcl-ax-1-test", "rcl ax, 1\n");
 
   helper->cpu_.registers[kAX] = 0x8234;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x0468);  // MSB to CF, shift left
   helper->CheckFlags({{kCF, true}, {kOF, true}});
@@ -337,7 +337,7 @@ TEST_F(Group2Part2Test, RclRegisterWord) {
   helper =
       CPUTestHelper::CreateWithProgram("group2-rcl-cx-cl-test", "rcl cx, cl\n");
   helper->cpu_.registers[kCX] = 0x1204;  // CH = 0x12, CL = 0x04
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   // Note: CL is used as the rotate count, so CL = 0x04 = 4.
   // For the 8086, the lower 5 bits of CL are used, so the effective count is 4.
   helper->ExecuteInstructions(1);
@@ -354,7 +354,7 @@ TEST_F(Group2Part2Test, RclMemoryWithDisplacement) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0802] = 0x81;  // 10000001b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
@@ -372,7 +372,7 @@ TEST_F(Group2Part2Test, RclOverflowFlag) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x20;  // 00100000b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x40);          // 01000000b
   helper->CheckFlags({{kCF, false}, {kOF, false}});  // OF=0 (MSB: 0->0)
@@ -383,7 +383,7 @@ TEST_F(Group2Part2Test, RclOverflowFlag) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x60;  // 01100000b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0xC0);         // 11000000b
   helper->CheckFlags({{kCF, false}, {kOF, true}});  // OF=1 (MSB: 0->1)
@@ -395,8 +395,8 @@ TEST_F(Group2Part2Test, RclOverflowFlag) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0300] = 0x60;        // 01100000b
-  SetFlag(&helper->cpu_, kCF, false);
-  SetFlag(&helper->cpu_, kOF, true);  // Set OF to see it's not changed
+  CPUSetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it's not changed
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x80);  // 10000000b
   helper->CheckFlags(
@@ -413,7 +413,7 @@ TEST_F(Group2Part2Test, RcrByte1) {
 
   // Test 1: No carry in, no carry out, no overflow
   helper->memory_[0x0300] = 0x02;  // 00000010b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x01);  // 00000001b
   helper->CheckFlags({{kCF, false}, {kOF, false}});
@@ -424,7 +424,7 @@ TEST_F(Group2Part2Test, RcrByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x02;  // 00000010b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x81);  // 10000001b (carry in becomes MSB)
   helper->CheckFlags({{kCF, false}, {kOF, true}});
@@ -435,7 +435,7 @@ TEST_F(Group2Part2Test, RcrByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x01;  // 00000001b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x00);  // 00000000b (LSB rotated to CF)
   helper->CheckFlags({{kCF, true}, {kOF, false}});
@@ -446,7 +446,7 @@ TEST_F(Group2Part2Test, RcrByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x01;  // 00000001b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x80);  // 10000000b (LSB to CF, CF to MSB)
   helper->CheckFlags({{kCF, true}, {kOF, true}});
@@ -457,7 +457,7 @@ TEST_F(Group2Part2Test, RcrByte1) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0xAA;  // 10101010b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x55);  // 01010101b
   helper->CheckFlags({{kCF, false}, {kOF, true}});
@@ -474,7 +474,7 @@ TEST_F(Group2Part2Test, RcrWord1) {
   // Test 1: No carry in, no carry out, no overflow
   helper->memory_[0x0300] = 0x00;  // Low byte
   helper->memory_[0x0301] = 0x20;  // High byte (0x2000)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x1000);
@@ -487,7 +487,7 @@ TEST_F(Group2Part2Test, RcrWord1) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x00;  // Low byte
   helper->memory_[0x0301] = 0x20;  // High byte (0x2000)
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x9000);  // Carry in becomes MSB
@@ -500,7 +500,7 @@ TEST_F(Group2Part2Test, RcrWord1) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x01;  // Low byte
   helper->memory_[0x0301] = 0x00;  // High byte (0x0001)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x0000);  // LSB rotated to CF
@@ -513,7 +513,7 @@ TEST_F(Group2Part2Test, RcrWord1) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x01;  // Low byte
   helper->memory_[0x0301] = 0x00;  // High byte (0x0001)
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x8000);  // LSB to CF, CF to MSB
@@ -526,7 +526,7 @@ TEST_F(Group2Part2Test, RcrWord1) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0xAA;  // Low byte
   helper->memory_[0x0301] = 0xAA;  // High byte (0xAAAA)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x5555);  // 0xAAAA >> 1 = 0x5555
@@ -544,7 +544,7 @@ TEST_F(Group2Part2Test, RcrByteCL) {
   // Test 1: Rotate by 0 (no change, no flags affected)
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0300] = 0x55;
-  SetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x55);
   helper->CheckFlags({{kCF, true}});  // CF should remain unchanged
@@ -556,7 +556,7 @@ TEST_F(Group2Part2Test, RcrByteCL) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0300] = 0x55;        // 01010101b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       helper->memory_[0x0300], 0x95);  // Result from actual implementation
@@ -569,7 +569,7 @@ TEST_F(Group2Part2Test, RcrByteCL) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->cpu_.registers[kCX] = 0x0003;  // CL = 3
   helper->memory_[0x0300] = 0x84;        // 10000100b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x30);  // Keep expected value, fix CF
   helper->CheckFlags({{kCF, true}});  // CF result from actual implementation
@@ -581,7 +581,7 @@ TEST_F(Group2Part2Test, RcrByteCL) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->cpu_.registers[kCX] = 0x0004;  // CL = 4
   helper->memory_[0x0300] = 0x0F;        // 00001111b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       helper->memory_[0x0300],
@@ -595,7 +595,7 @@ TEST_F(Group2Part2Test, RcrByteCL) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->cpu_.registers[kCX] = 0x0008;  // CL = 8
   helper->memory_[0x0300] = 0x42;        // 01000010b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       helper->memory_[0x0300], 0x84);  // Original value shifted by CF position
@@ -608,7 +608,7 @@ TEST_F(Group2Part2Test, RcrByteCL) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->cpu_.registers[kCX] = 0x0009;  // CL = 9 (mod 9 = 0, so no change)
   helper->memory_[0x0300] = 0x42;        // 01000010b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x42);  // Same as original
   helper->CheckFlags({{kCF, true}});         // CF unchanged
@@ -626,7 +626,7 @@ TEST_F(Group2Part2Test, RcrWordCL) {
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0300] = 0x55;        // Low byte
   helper->memory_[0x0301] = 0xAA;        // High byte (0xAA55)
-  SetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0xAA55);
@@ -640,7 +640,7 @@ TEST_F(Group2Part2Test, RcrWordCL) {
   helper->cpu_.registers[kCX] = 0x0004;  // CL = 4
   helper->memory_[0x0300] = 0x34;        // Low byte
   helper->memory_[0x0301] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x8123);  // Result from actual implementation (was 0x4123)
@@ -654,7 +654,7 @@ TEST_F(Group2Part2Test, RcrWordCL) {
   helper->cpu_.registers[kCX] = 0x0008;  // CL = 8
   helper->memory_[0x0300] = 0x34;        // Low byte
   helper->memory_[0x0301] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x6812);  // Result from actual implementation (was 0x3412)
@@ -668,7 +668,7 @@ TEST_F(Group2Part2Test, RcrWordCL) {
   helper->cpu_.registers[kCX] = 0x0010;  // CL = 16
   helper->memory_[0x0300] = 0x34;        // Low byte
   helper->memory_[0x0301] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x2468);  // Result from actual implementation (was 0x091A)
@@ -682,7 +682,7 @@ TEST_F(Group2Part2Test, RcrWordCL) {
   helper->cpu_.registers[kCX] = 0x0011;  // CL = 17 (mod 17 = 0, so no change)
   helper->memory_[0x0300] = 0x34;        // Low byte
   helper->memory_[0x0301] = 0x12;        // High byte (0x1234)
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   result = helper->memory_[0x0300] | (helper->memory_[0x0301] << 8);
   EXPECT_EQ(result, 0x1234);          // Same as original
@@ -696,7 +696,7 @@ TEST_F(Group2Part2Test, RcrRegisterByte) {
       CPUTestHelper::CreateWithProgram("group2-rcr-al-1-test", "rcr al, 1\n");
 
   helper->cpu_.registers[kAX] = 0x1242;  // AL = 0x42
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x21);         // AL = 0x21
   EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0x12);  // AH unchanged
@@ -706,7 +706,7 @@ TEST_F(Group2Part2Test, RcrRegisterByte) {
   helper =
       CPUTestHelper::CreateWithProgram("group2-rcr-bh-1-test", "rcr bh, 1\n");
   helper->cpu_.registers[kBX] = 0x8078;  // BH = 0x80
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
       (helper->cpu_.registers[kBX] >> 8) & 0xFF,
@@ -724,7 +724,7 @@ TEST_F(Group2Part2Test, RcrRegisterWord) {
       CPUTestHelper::CreateWithProgram("group2-rcr-ax-1-test", "rcr ax, 1\n");
 
   helper->cpu_.registers[kAX] = 0x8234;
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x411A);  // LSB to CF, shift right
   helper->CheckFlags({{kCF, false}, {kOF, true}});
@@ -733,7 +733,7 @@ TEST_F(Group2Part2Test, RcrRegisterWord) {
   helper =
       CPUTestHelper::CreateWithProgram("group2-rcr-cx-cl-test", "rcr cx, cl\n");
   helper->cpu_.registers[kCX] = 0x1204;  // CH = 0x12, CL = 0x04
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   // Note: CL is used as the rotate count, so CL = 0x04 = 4.
   // For the 8086, the lower 5 bits of CL are used, so the effective count is 4.
   helper->ExecuteInstructions(1);
@@ -750,7 +750,7 @@ TEST_F(Group2Part2Test, RcrMemoryWithDisplacement) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0302] = 0x81;  // 10000001b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
@@ -768,7 +768,7 @@ TEST_F(Group2Part2Test, RcrOverflowFlag) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x04;  // 00000100b
-  SetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x02);          // 00000010b
   helper->CheckFlags({{kCF, false}, {kOF, false}});  // OF=0 (MSB: 0->0)
@@ -779,7 +779,7 @@ TEST_F(Group2Part2Test, RcrOverflowFlag) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0300;
   helper->memory_[0x0300] = 0x06;  // 00000110b
-  SetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x83);         // 10000011b
   helper->CheckFlags({{kCF, false}, {kOF, true}});  // OF=1 (MSB: 0->1)
@@ -791,8 +791,8 @@ TEST_F(Group2Part2Test, RcrOverflowFlag) {
   helper->cpu_.registers[kBX] = 0x0300;
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0300] = 0x06;        // 00000110b
-  SetFlag(&helper->cpu_, kCF, false);
-  SetFlag(&helper->cpu_, kOF, true);  // Set OF to see it's not changed
+  CPUSetFlag(&helper->cpu_, kCF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it's not changed
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x01);  // 00000001b
   helper->CheckFlags(
@@ -931,7 +931,7 @@ TEST_F(Group2Part2Test, SarByteCL) {
   // Test 1: Shift by 0 (no change, no flags affected)
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0400] = 0x55;
-  SetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);  // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0400], 0x55);
   helper->CheckFlags({{kCF, true}});  // CF should remain unchanged
@@ -1004,7 +1004,7 @@ TEST_F(Group2Part2Test, SarWordCL) {
   helper->cpu_.registers[kCX] = 0x0000;  // CL = 0
   helper->memory_[0x0400] = 0x55;        // Low byte
   helper->memory_[0x0401] = 0xAA;        // High byte (0xAA55)
-  SetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
+  CPUSetFlag(&helper->cpu_, kCF, true);     // Set carry to verify it's unchanged
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0400] | (helper->memory_[0x0401] << 8);
   EXPECT_EQ(result, 0xAA55);
@@ -1147,7 +1147,7 @@ TEST_F(Group2Part2Test, SarOverflowFlag) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0400;
   helper->memory_[0x0400] = 0x80;     // 10000000b (negative)
-  SetFlag(&helper->cpu_, kOF, true);  // Set OF to see it gets cleared
+  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it gets cleared
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0400], 0xC0);          // 11000000b
   helper->CheckFlags({{kCF, false}, {kOF, false}});  // OF=0 for SAR count=1
@@ -1159,7 +1159,7 @@ TEST_F(Group2Part2Test, SarOverflowFlag) {
   helper->cpu_.registers[kBX] = 0x0400;
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0400] = 0x80;        // 10000000b (negative)
-  SetFlag(&helper->cpu_, kOF, true);     // Set OF to see it's not changed
+  CPUSetFlag(&helper->cpu_, kOF, true);     // Set OF to see it's not changed
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0400], 0xE0);  // 11100000b
   helper->CheckFlags(
@@ -1171,7 +1171,7 @@ TEST_F(Group2Part2Test, SarOverflowFlag) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0400;
   helper->memory_[0x0400] = 0x7E;     // 01111110b (positive)
-  SetFlag(&helper->cpu_, kOF, true);  // Set OF to see it gets cleared
+  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it gets cleared
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0400], 0x3F);          // 00111111b
   helper->CheckFlags({{kCF, false}, {kOF, false}});  // OF=0 for SAR count=1

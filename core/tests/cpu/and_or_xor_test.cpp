@@ -20,12 +20,12 @@ TEST_F(AndOrXorTest, AND) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify they are properly affected by AND
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, false);
-  SetFlag(&helper->cpu_, kSF, false);
-  SetFlag(&helper->cpu_, kPF, false);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, false);
+  CPUSetFlag(&helper->cpu_, kSF, false);
+  CPUSetFlag(&helper->cpu_, kPF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: and ax, [bx] - Register & Memory (word)
   // ax = 0xFFFF, bx = 0x0400, memory[0x0400] = 0x1234
@@ -143,12 +143,12 @@ TEST_F(AndOrXorTest, OR) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify they are properly affected by OR
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, false);
-  SetFlag(&helper->cpu_, kPF, false);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, false);
+  CPUSetFlag(&helper->cpu_, kPF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: or ax, [bx] - Register | Memory (word)
   // ax = 0x1200, bx = 0x0400, memory[0x0400] = 0x0034
@@ -272,12 +272,12 @@ TEST_F(AndOrXorTest, XOR) {
   helper->cpu_.registers[kDS] = 0;
 
   // Set various flags to verify they are properly affected by XOR
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, false);
-  SetFlag(&helper->cpu_, kSF, false);
-  SetFlag(&helper->cpu_, kPF, false);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, false);
+  CPUSetFlag(&helper->cpu_, kSF, false);
+  CPUSetFlag(&helper->cpu_, kPF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
 
   // Test 1: xor ax, [bx] - Register ^ Memory (word)
   // ax = 0x1200, bx = 0x0400, memory[0x0400] = 0x0034
@@ -396,9 +396,9 @@ TEST_F(AndOrXorTest, XOR) {
   // Set some values and flags
   helper2->cpu_.registers[kAX] = 0x1234;
   helper2->cpu_.registers[kCX] = 0xABCD;
-  SetFlag(&helper2->cpu_, kCF, true);
-  SetFlag(&helper2->cpu_, kSF, true);
-  SetFlag(&helper2->cpu_, kOF, true);
+  CPUSetFlag(&helper2->cpu_, kCF, true);
+  CPUSetFlag(&helper2->cpu_, kSF, true);
+  CPUSetFlag(&helper2->cpu_, kOF, true);
 
   // Test: xor ax, ax - XOR register with itself
   // Result should be 0 and ZF should be set
@@ -428,12 +428,12 @@ TEST_F(AndOrXorTest, TEST) {
   // ax = 0x1200, bx = 0x0034
   // Result of 0x1200 & 0x0034 is 0x0000.
   // ZF = true, SF = false, PF = true (for 0x00 LSB), CF = false, OF = false
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, false);
-  SetFlag(&helper->cpu_, kSF, false);
-  SetFlag(&helper->cpu_, kPF, false);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, false);
+  CPUSetFlag(&helper->cpu_, kSF, false);
+  CPUSetFlag(&helper->cpu_, kPF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
   helper->cpu_.registers[kAX] = 0x1200;
   helper->cpu_.registers[kBX] = 0x0034;
   helper->ExecuteInstructions(1);
@@ -445,12 +445,12 @@ TEST_F(AndOrXorTest, TEST) {
   // al = 0x55 (from ax = 0x1255), immediate = 0xAA
   // Result of 0x55 & 0xAA is 0x00.
   // ZF = true, SF = false, PF = true, CF = false, OF = false
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, true);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, false);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, true);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
   helper->cpu_.registers[kAX] = 0x1255;  // Set AL to 0x55, AH to 0x12
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x1255);  // AX unchanged
@@ -461,12 +461,12 @@ TEST_F(AndOrXorTest, TEST) {
   // ax = 0x5555, immediate = 0xAAAA
   // Result of 0x5555 & 0xAAAA is 0x0000.
   // ZF = true, SF = false, PF = true, CF = false, OF = false
-  SetFlag(&helper->cpu_, kCF, true);
-  SetFlag(&helper->cpu_, kZF, false);
-  SetFlag(&helper->cpu_, kSF, true);
-  SetFlag(&helper->cpu_, kPF, false);
-  SetFlag(&helper->cpu_, kOF, true);
-  SetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kZF, false);
+  CPUSetFlag(&helper->cpu_, kSF, true);
+  CPUSetFlag(&helper->cpu_, kPF, false);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
   helper->cpu_.registers[kAX] = 0x5555;
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x5555);  // AX unchanged

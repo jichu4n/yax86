@@ -182,12 +182,12 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
     return kExecuteSuccess;
   }
   uint8_t interrupt_number = cpu->pending_interrupt_number;
-  ClearPendingInterrupt(cpu);
+  CPUClearPendingInterrupt(cpu);
 
   // Prepare for interrupt processing.
   Push(cpu, WordValue(cpu->flags));
-  SetFlag(cpu, kIF, false);
-  SetFlag(cpu, kTF, false);
+  CPUSetFlag(cpu, kIF, false);
+  CPUSetFlag(cpu, kTF, false);
   Push(cpu, WordValue(cpu->registers[kCS]));
   Push(cpu, WordValue(cpu->registers[kIP]));
 
@@ -242,8 +242,8 @@ ExecuteStatus CPUTick(CPUState* cpu) {
   }
 
   // Step 4: If trap flag is set, handle single-step execution.
-  if (GetFlag(cpu, kTF)) {
-    SetPendingInterrupt(cpu, kInterruptSingleStep);
+  if (CPUGetFlag(cpu, kTF)) {
+    CPUSetPendingInterrupt(cpu, kInterruptSingleStep);
     if ((status = ExecutePendingInterrupt(cpu)) != kExecuteSuccess) {
       return status;
     }

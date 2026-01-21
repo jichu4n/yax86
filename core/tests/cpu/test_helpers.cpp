@@ -216,9 +216,9 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
 
 void CPUTestHelper::CheckFlags(const vector<pair<Flag, bool> >& flags) {
   for (const auto& it : flags) {
-    EXPECT_EQ(GetFlag(&cpu_, it.first), it.second)
+    EXPECT_EQ(CPUGetFlag(&cpu_, it.first), it.second)
         << "Flag " << GetFlagName(it.first) << " expected to be "
         << (it.second ? "set" : "not set") << ", but was "
-        << (GetFlag(&cpu_, it.first) ? "set" : "not set");
+        << (CPUGetFlag(&cpu_, it.first) ? "set" : "not set");
   }
 }

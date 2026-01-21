@@ -32,13 +32,13 @@ static void SetFlagsAfterDec(
   // op2 was max_val.
   bool val_being_subtracted_sign =
       ((val_being_subtracted & max_val) & sign_bit) != 0;
-  SetFlag(
+  CPUSetFlag(
       ctx->cpu, kOF,
       (op1_sign != val_being_subtracted_sign) &&
           (result_sign == val_being_subtracted_sign));
 
   // Auxiliary Carry Flag (AF) - borrow from bit 3 to bit 4
-  SetFlag(ctx->cpu, kAF, (op1 & 0xF) < ((op2 & 0xF) + (did_borrow ? 1 : 0)));
+  CPUSetFlag(ctx->cpu, kAF, (op1 & 0xF) < ((op2 & 0xF) + (did_borrow ? 1 : 0)));
 }
 
 // Set CPU flags after a SUB, SBB, CMP or NEG instruction.
@@ -52,7 +52,7 @@ YAX86_PRIVATE void SetFlagsAfterSub(
   // CF is set if op1 < (op2 + did_borrow) (unsigned comparison)
   uint32_t val_being_subtracted =
       (op2 & kMaxValue[ctx->metadata->width]) + (did_borrow ? 1 : 0);
-  SetFlag(ctx->cpu, kCF, op1 < val_being_subtracted);
+  CPUSetFlag(ctx->cpu, kCF, op1 < val_being_subtracted);
 }
 
 // Common signature of SetFlagsAfterSub and SetFlagsAfterDec.
@@ -66,7 +66,7 @@ static ExecuteStatus ExecuteSubCommon(
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
-  bool should_borrow = borrow && GetFlag(ctx->cpu, kCF);
+  bool should_borrow = borrow && CPUGetFlag(ctx->cpu, kCF);
   uint32_t result = raw_dest_value - raw_src_value - (should_borrow ? 1 : 0);
   WriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(

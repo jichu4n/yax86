@@ -196,11 +196,11 @@ typedef struct CPUState {
 void CPUInit(CPUState* cpu, CPUConfig* config);
 
 // Get the value of a CPU flag.
-static inline bool GetFlag(const CPUState* cpu, Flag flag) {
+static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-static inline void SetFlag(CPUState* cpu, Flag flag, bool value) {
+static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -209,14 +209,14 @@ static inline void SetFlag(CPUState* cpu, Flag flag, bool value) {
 }
 
 // Set pending interrupt to be executed at the end of the current instruction.
-static inline void SetPendingInterrupt(
+static inline void CPUSetPendingInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_interrupt = true;
   cpu->pending_interrupt_number = interrupt_number;
 }
 
 // Clear pending interrupt.
-static inline void ClearPendingInterrupt(CPUState* cpu) {
+static inline void CPUClearPendingInterrupt(CPUState* cpu) {
   cpu->has_pending_interrupt = false;
   cpu->pending_interrupt_number = 0;
 }

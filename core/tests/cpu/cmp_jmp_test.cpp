@@ -20,7 +20,7 @@ TEST_F(CmpJmpTest, CMPJE) {
   helper->cpu_.registers[kBX] = 0x42;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
   EXPECT_EQ(helper->cpu_.registers[kCX], 2);
 
   // Test 2: Should not jump to b2
@@ -29,7 +29,7 @@ TEST_F(CmpJmpTest, CMPJE) {
   helper->cpu_.registers[kBX] = 0x43;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 }
 
@@ -45,7 +45,7 @@ TEST_F(CmpJmpTest, CMPJNE) {
   helper->cpu_.registers[kAX] = 0x1234;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 
   // Test 2: Should jump to b2
@@ -53,7 +53,7 @@ TEST_F(CmpJmpTest, CMPJNE) {
   helper->cpu_.registers[kAX] = 0x1235;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 2);
 }
 
@@ -69,7 +69,7 @@ TEST_F(CmpJmpTest, CMPJB) {
   helper->cpu_.registers[kAX] = 0x41;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), true);
   EXPECT_EQ(helper->cpu_.registers[kCX], 2);
 
   // Test 2: Should not jump to b2
@@ -77,7 +77,7 @@ TEST_F(CmpJmpTest, CMPJB) {
   helper->cpu_.registers[kAX] = 0x42;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 
   // Test 3: Should not jump to b2
@@ -85,7 +85,7 @@ TEST_F(CmpJmpTest, CMPJB) {
   helper->cpu_.registers[kAX] = 0x43;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 }
 
@@ -101,8 +101,8 @@ TEST_F(CmpJmpTest, CMPJA) {
   helper->cpu_.registers[kAX] = 0x43;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 2);
 
   // Test 2: Should not jump to b2
@@ -110,8 +110,8 @@ TEST_F(CmpJmpTest, CMPJA) {
   helper->cpu_.registers[kAX] = 0x42;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 
   // Test 2: Should not jump to b2
@@ -119,8 +119,8 @@ TEST_F(CmpJmpTest, CMPJA) {
   helper->cpu_.registers[kAX] = 0x41;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), true);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 }
 
@@ -136,8 +136,8 @@ TEST_F(CmpJmpTest, CMPJBE) {
   helper->cpu_.registers[kAX] = 0x41;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), true);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 2);
 
   // Test 2: Should jump to b2
@@ -145,8 +145,8 @@ TEST_F(CmpJmpTest, CMPJBE) {
   helper->cpu_.registers[kAX] = 0x42;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
   EXPECT_EQ(helper->cpu_.registers[kCX], 2);
 
   // Test 3: Should not jump to b2
@@ -154,8 +154,8 @@ TEST_F(CmpJmpTest, CMPJBE) {
   helper->cpu_.registers[kAX] = 0x43;
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kCF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kCF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 }
 
@@ -171,9 +171,9 @@ TEST_F(CmpJmpTest, CMPJG) {
   helper->cpu_.registers[kAX] = 0xFB;  // -5
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kSF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kOF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kSF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kOF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 2);
 
   // Test 2: Should not jump to b2
@@ -181,9 +181,9 @@ TEST_F(CmpJmpTest, CMPJG) {
   helper->cpu_.registers[kAX] = 0xF6;  // -10
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kSF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kOF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kSF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kOF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 
   // Test 3: Should not jump to b2
@@ -191,9 +191,9 @@ TEST_F(CmpJmpTest, CMPJG) {
   helper->cpu_.registers[kAX] = 0xEC;  // -20
   helper->cpu_.registers[kCX] = 0;
   helper->ExecuteInstructions(3);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kSF), true);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kOF), false);
-  EXPECT_EQ(GetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kSF), true);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kOF), false);
+  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
 }
 

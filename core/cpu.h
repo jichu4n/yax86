@@ -212,11 +212,11 @@ typedef struct CPUState {
 void CPUInit(CPUState* cpu, CPUConfig* config);
 
 // Get the value of a CPU flag.
-static inline bool GetFlag(const CPUState* cpu, Flag flag) {
+static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-static inline void SetFlag(CPUState* cpu, Flag flag, bool value) {
+static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -225,14 +225,14 @@ static inline void SetFlag(CPUState* cpu, Flag flag, bool value) {
 }
 
 // Set pending interrupt to be executed at the end of the current instruction.
-static inline void SetPendingInterrupt(
+static inline void CPUSetPendingInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_interrupt = true;
   cpu->pending_interrupt_number = interrupt_number;
 }
 
 // Clear pending interrupt.
-static inline void ClearPendingInterrupt(CPUState* cpu) {
+static inline void CPUClearPendingInterrupt(CPUState* cpu) {
   cpu->has_pending_interrupt = false;
   cpu->pending_interrupt_number = 0;
 }
@@ -1680,16 +1680,16 @@ YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];
   // Zero flag (ZF)
-  SetFlag(ctx->cpu, kZF, result == 0);
+  CPUSetFlag(ctx->cpu, kZF, result == 0);
   // Sign flag (SF)
-  SetFlag(ctx->cpu, kSF, result & kSignBit[width]);
+  CPUSetFlag(ctx->cpu, kSF, result & kSignBit[width]);
   // Parity flag (PF)
   // Set if the number of set bits in the least significant byte is even
   uint8_t parity = result & 0xFF;  // Check only the low byte for parity
   parity ^= parity >> 4;
   parity ^= parity >> 2;
   parity ^= parity >> 1;
-  SetFlag(ctx->cpu, kPF, (parity & 1) == 0);
+  CPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
 YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
@@ -2013,10 +2013,10 @@ static void SetFlagsAfterInc(
   bool op1_sign = (op1 & sign_bit) != 0;
   bool op2_sign = (op2 & sign_bit) != 0;
   bool result_sign = (result & sign_bit) != 0;
-  SetFlag(ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
+  CPUSetFlag(ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
 
   // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-  SetFlag(
+  CPUSetFlag(
       ctx->cpu, kAF, ((op1 & 0xF) + (op2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
 }
 
@@ -2029,7 +2029,7 @@ static void SetFlagsAfterAdd(
     bool did_carry) {
   SetFlagsAfterInc(ctx, op1, op2, result, did_carry);
   // Carry Flag (CF)
-  SetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
+  CPUSetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
 }
 
 // Common signature of SetFlagsAfterAdd and SetFlagsAfterInc.
@@ -2043,7 +2043,7 @@ static ExecuteStatus ExecuteAddCommon(
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
-  bool should_carry = carry && GetFlag(ctx->cpu, kCF);
+  bool should_carry = carry && CPUGetFlag(ctx->cpu, kCF);
   uint32_t result = raw_dest_value + raw_src_value + (should_carry ? 1 : 0);
   WriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
@@ -2180,13 +2180,13 @@ static void SetFlagsAfterDec(
   // op2 was max_val.
   bool val_being_subtracted_sign =
       ((val_being_subtracted & max_val) & sign_bit) != 0;
-  SetFlag(
+  CPUSetFlag(
       ctx->cpu, kOF,
       (op1_sign != val_being_subtracted_sign) &&
           (result_sign == val_being_subtracted_sign));
 
   // Auxiliary Carry Flag (AF) - borrow from bit 3 to bit 4
-  SetFlag(ctx->cpu, kAF, (op1 & 0xF) < ((op2 & 0xF) + (did_borrow ? 1 : 0)));
+  CPUSetFlag(ctx->cpu, kAF, (op1 & 0xF) < ((op2 & 0xF) + (did_borrow ? 1 : 0)));
 }
 
 // Set CPU flags after a SUB, SBB, CMP or NEG instruction.
@@ -2200,7 +2200,7 @@ YAX86_PRIVATE void SetFlagsAfterSub(
   // CF is set if op1 < (op2 + did_borrow) (unsigned comparison)
   uint32_t val_being_subtracted =
       (op2 & kMaxValue[ctx->metadata->width]) + (did_borrow ? 1 : 0);
-  SetFlag(ctx->cpu, kCF, op1 < val_being_subtracted);
+  CPUSetFlag(ctx->cpu, kCF, op1 < val_being_subtracted);
 }
 
 // Common signature of SetFlagsAfterSub and SetFlagsAfterDec.
@@ -2214,7 +2214,7 @@ static ExecuteStatus ExecuteSubCommon(
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
-  bool should_borrow = borrow && GetFlag(ctx->cpu, kCF);
+  bool should_borrow = borrow && CPUGetFlag(ctx->cpu, kCF);
   uint32_t result = raw_dest_value - raw_src_value - (should_borrow ? 1 : 0);
   WriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
@@ -2428,9 +2428,9 @@ YAX86_PRIVATE void SetFlagsAfterBooleanInstruction(
     const InstructionContext* ctx, uint32_t result) {
   SetCommonFlagsAfterInstruction(ctx, result);
   // Carry Flag (CF) should be cleared
-  SetFlag(ctx->cpu, kCF, false);
+  CPUSetFlag(ctx->cpu, kCF, false);
   // Overflow Flag (OF) should be cleared
-  SetFlag(ctx->cpu, kOF, false);
+  CPUSetFlag(ctx->cpu, kOF, false);
 }
 
 // Common logic for AND instructions.
@@ -2694,7 +2694,7 @@ ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
 YAX86_PRIVATE ExecuteStatus
 ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
-      GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF);
+      CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF);
   const bool success_value = (ctx->instruction->opcode & 0x1);
   return ExecuteConditionalJump(ctx, is_greater_or_equal, success_value);
 }
@@ -2702,8 +2702,8 @@ ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
 // JLE/JG and JNLE/JG
 YAX86_PRIVATE ExecuteStatus
 ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
-  const bool is_greater = !GetFlag(ctx->cpu, kZF) &&
-                          (GetFlag(ctx->cpu, kSF) == GetFlag(ctx->cpu, kOF));
+  const bool is_greater = !CPUGetFlag(ctx->cpu, kZF) &&
+                          (CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF));
   const bool success_value = (ctx->instruction->opcode & 0x1);
   return ExecuteConditionalJump(ctx, is_greater, success_value);
 }
@@ -2722,7 +2722,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteLoop(const InstructionContext* ctx) {
 YAX86_PRIVATE ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
   bool condition1 = --(ctx->cpu->registers[kCX]) != 0;
   bool condition2 =
-      GetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
+      CPUGetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
   return ExecuteConditionalJump(ctx, condition1 && condition2, true);
 }
 
@@ -2834,14 +2834,14 @@ YAX86_PRIVATE ExecuteStatus ExecuteIret(const InstructionContext* ctx) {
 
 // INT 3
 YAX86_PRIVATE ExecuteStatus ExecuteInt3(const InstructionContext* ctx) {
-  SetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
+  CPUSetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
   return kExecuteSuccess;
 }
 
 // INTO
 YAX86_PRIVATE ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kOF)) {
-    SetPendingInterrupt(ctx->cpu, kInterruptOverflow);
+  if (CPUGetFlag(ctx->cpu, kOF)) {
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptOverflow);
   }
   return kExecuteSuccess;
 }
@@ -2849,7 +2849,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
 // INT n
 YAX86_PRIVATE ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
-  SetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
+  CPUSetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
   return kExecuteSuccess;
 }
 
@@ -3017,7 +3017,7 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
   Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
-  SetFlag(ctx->cpu, flag, value);
+  CPUSetFlag(ctx->cpu, flag, value);
   return kExecuteSuccess;
 }
 
@@ -3028,7 +3028,7 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
 // CMC
 YAX86_PRIVATE ExecuteStatus
 ExecuteComplementCarryFlag(const InstructionContext* ctx) {
-  SetFlag(ctx->cpu, kCF, !GetFlag(ctx->cpu, kCF));
+  CPUSetFlag(ctx->cpu, kCF, !CPUGetFlag(ctx->cpu, kCF));
   return kExecuteSuccess;
 }
 
@@ -3222,7 +3222,7 @@ static Operand GetStringDestinationOperand(const InstructionContext* ctx) {
 
 // Update the source address register (SI) after a string operation.
 static void UpdateStringSourceAddress(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kDF)) {
+  if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
   } else {
     ctx->cpu->registers[kSI] += kNumBytes[ctx->metadata->width];
@@ -3231,7 +3231,7 @@ static void UpdateStringSourceAddress(const InstructionContext* ctx) {
 
 // Update the destination address register (DI) after a string operation.
 static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
-  if (GetFlag(ctx->cpu, kDF)) {
+  if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
   } else {
     ctx->cpu->registers[kDI] += kNumBytes[ctx->metadata->width];
@@ -3314,7 +3314,7 @@ static ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
       return status;
     }
     --ctx->cpu->registers[kCX];
-    if (GetFlag(ctx->cpu, kZF) == terminate_zf_value) {
+    if (CPUGetFlag(ctx->cpu, kZF) == terminate_zf_value) {
       break;
     }
   }
@@ -3378,14 +3378,14 @@ YAX86_PRIVATE ExecuteStatus ExecuteAaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al += 6;
     ++ah;
-    SetFlag(ctx->cpu, kAF, true);
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   al &= 0x0F;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -3397,14 +3397,14 @@ YAX86_PRIVATE ExecuteStatus ExecuteAas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al -= 6;
     --ah;
-    SetFlag(ctx->cpu, kAF, true);
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   al &= 0x0F;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -3444,18 +3444,18 @@ YAX86_PRIVATE ExecuteStatus ExecuteDaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al += 6;
-    SetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
   }
   uint8_t al_high = (al >> 4) & 0x0F;
-  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+  if (al_high > 9 || CPUGetFlag(ctx->cpu, kCF)) {
     al += 0x60;
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   SetCommonFlagsAfterInstruction(ctx, al);
@@ -3467,18 +3467,18 @@ YAX86_PRIVATE ExecuteStatus ExecuteDas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || GetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
     al -= 6;
-    SetFlag(ctx->cpu, kAF, true);
+    CPUSetFlag(ctx->cpu, kAF, true);
   } else {
-    SetFlag(ctx->cpu, kAF, false);
+    CPUSetFlag(ctx->cpu, kAF, false);
   }
   uint8_t al_high = (al >> 4) & 0x0F;
-  if (al_high > 9 || GetFlag(ctx->cpu, kCF)) {
+  if (al_high > 9 || CPUGetFlag(ctx->cpu, kCF)) {
     al -= 0x60;
-    SetFlag(ctx->cpu, kCF, true);
+    CPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    SetFlag(ctx->cpu, kCF, false);
+    CPUSetFlag(ctx->cpu, kCF, false);
   }
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   SetCommonFlagsAfterInstruction(ctx, al);
@@ -3585,10 +3585,10 @@ static ExecuteStatus ExecuteGroup2Shl(
   WriteOperand(ctx, op, result);
   bool last_msb =
       ((value << (count - 1)) & kSignBit[ctx->metadata->width]) != 0;
-  SetFlag(ctx->cpu, kCF, last_msb);
+  CPUSetFlag(ctx->cpu, kCF, last_msb);
   if (count == 1) {
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_msb != current_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
   return kExecuteSuccess;
@@ -3608,10 +3608,10 @@ static ExecuteStatus ExecuteGroup2Shr(
   uint32_t result = value >> count;
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (count - 1)) & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
     bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, original_msb);
+    CPUSetFlag(ctx->cpu, kOF, original_msb);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
   return kExecuteSuccess;
@@ -3631,9 +3631,9 @@ static ExecuteStatus ExecuteGroup2Sar(
   int32_t result = value >> count;
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (count - 1)) & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
-    SetFlag(ctx->cpu, kOF, false);
+    CPUSetFlag(ctx->cpu, kOF, false);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
   return kExecuteSuccess;
@@ -3658,10 +3658,10 @@ static ExecuteStatus ExecuteGroup2Rol(
       (value >> (kNumBits[ctx->metadata->width] - effective_count));
   WriteOperand(ctx, op, result);
   bool last_msb = (result & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_msb);
+  CPUSetFlag(ctx->cpu, kCF, last_msb);
   if (count == 1) {
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_msb != current_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
   return kExecuteSuccess;
 }
@@ -3685,10 +3685,10 @@ static ExecuteStatus ExecuteGroup2Ror(
       (value << (kNumBits[ctx->metadata->width] - effective_count));
   WriteOperand(ctx, op, result);
   bool last_lsb = (result & kSignBit[ctx->metadata->width]) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
     bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_lsb != original_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_lsb != original_msb);
   }
   return kExecuteSuccess;
 }
@@ -3703,7 +3703,7 @@ static ExecuteStatus ExecuteGroup2Rcl(
   if (effective_count == 0) {
     return kExecuteSuccess;
   }
-  uint32_t cf_value = GetFlag(ctx->cpu, kCF) ? (1 << (effective_count - 1)) : 0;
+  uint32_t cf_value = CPUGetFlag(ctx->cpu, kCF) ? (1 << (effective_count - 1)) : 0;
   uint32_t value = FromOperand(op);
   uint32_t result =
       (value << effective_count) | cf_value |
@@ -3711,10 +3711,10 @@ static ExecuteStatus ExecuteGroup2Rcl(
   WriteOperand(ctx, op, result);
   bool last_msb =
       ((value << (effective_count - 1)) & kSignBit[ctx->metadata->width]) != 0;
-  SetFlag(ctx->cpu, kCF, last_msb);
+  CPUSetFlag(ctx->cpu, kCF, last_msb);
   if (count == 1) {
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, last_msb != current_msb);
+    CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
   return kExecuteSuccess;
 }
@@ -3730,7 +3730,7 @@ static ExecuteStatus ExecuteGroup2Rcr(
     return kExecuteSuccess;
   }
   uint32_t cf_value =
-      GetFlag(ctx->cpu, kCF)
+      CPUGetFlag(ctx->cpu, kCF)
           ? (kSignBit[ctx->metadata->width] >> (effective_count - 1))
           : 0;
   uint32_t value = FromOperand(op);
@@ -3739,11 +3739,11 @@ static ExecuteStatus ExecuteGroup2Rcr(
       (value << (kNumBits[ctx->metadata->width] - (effective_count - 1)));
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (effective_count - 1)) & 1) != 0;
-  SetFlag(ctx->cpu, kCF, last_lsb);
+  CPUSetFlag(ctx->cpu, kCF, last_lsb);
   if (count == 1) {
     bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
-    SetFlag(ctx->cpu, kOF, current_msb != original_msb);
+    CPUSetFlag(ctx->cpu, kOF, current_msb != original_msb);
   }
   return kExecuteSuccess;
 }
@@ -3867,8 +3867,8 @@ static ExecuteStatus ExecuteMulCommon(
   WriteOperandAddress(
       ctx, &kMulDivResultHighHalfAddress[width], result_high_half);
 
-  SetFlag(ctx->cpu, kCF, overflow);
-  SetFlag(ctx->cpu, kOF, overflow);
+  CPUSetFlag(ctx->cpu, kCF, overflow);
+  CPUSetFlag(ctx->cpu, kOF, overflow);
 
   return kExecuteSuccess;
 }
@@ -3907,7 +3907,7 @@ static ExecuteStatus WriteDivResult(
 static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
 
@@ -3921,7 +3921,7 @@ static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
                             << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
@@ -3932,7 +3932,7 @@ static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
 static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
 
@@ -3947,7 +3947,7 @@ static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   int32_t quotient = dividend / divisor;
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < kMinSignedValue[ctx->metadata->width]) {
-    SetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
     return kExecuteSuccess;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
@@ -5720,12 +5720,12 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
     return kExecuteSuccess;
   }
   uint8_t interrupt_number = cpu->pending_interrupt_number;
-  ClearPendingInterrupt(cpu);
+  CPUClearPendingInterrupt(cpu);
 
   // Prepare for interrupt processing.
   Push(cpu, WordValue(cpu->flags));
-  SetFlag(cpu, kIF, false);
-  SetFlag(cpu, kTF, false);
+  CPUSetFlag(cpu, kIF, false);
+  CPUSetFlag(cpu, kTF, false);
   Push(cpu, WordValue(cpu->registers[kCS]));
   Push(cpu, WordValue(cpu->registers[kIP]));
 
@@ -5780,8 +5780,8 @@ ExecuteStatus CPUTick(CPUState* cpu) {
   }
 
   // Step 4: If trap flag is set, handle single-step execution.
-  if (GetFlag(cpu, kTF)) {
-    SetPendingInterrupt(cpu, kInterruptSingleStep);
+  if (CPUGetFlag(cpu, kTF)) {
+    CPUSetPendingInterrupt(cpu, kInterruptSingleStep);
     if ((status = ExecutePendingInterrupt(cpu)) != kExecuteSuccess) {
       return status;
     }
