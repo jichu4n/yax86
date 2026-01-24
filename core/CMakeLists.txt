@@ -20,14 +20,28 @@ endfunction()
 
 generate_header_bundle("bios")
 generate_header_bundle("cpu")
-generate_header_bundle("pic")
-generate_header_bundle("pit")
-generate_header_bundle("ppi")
-generate_header_bundle("keyboard")
 generate_header_bundle("dma")
 generate_header_bundle("fdc")
+generate_header_bundle("keyboard")
+generate_header_bundle("pic")
+generate_header_bundle("pit")
 generate_header_bundle("platform")
+generate_header_bundle("ppi")
 generate_header_bundle("video")
+
+# =============================================================================
+# All-in-one header bundle
+# =============================================================================
+set(YAX86_CORE_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/yax86_core.h")
+# Use space separation for shell command
+string(REPLACE ";" " " HEADER_BUNDLES_SPACE_SEPARATED "${ALL_HEADER_BUNDLES}")
+add_custom_command(
+    OUTPUT ${YAX86_CORE_HEADER}
+    COMMAND sh -c "cat ${HEADER_BUNDLES_SPACE_SEPARATED} > ${YAX86_CORE_HEADER}"
+    DEPENDS ${ALL_HEADER_BUNDLES}
+    COMMENT "Generating monolithic header ${YAX86_CORE_HEADER}"
+    VERBATIM
+)
 
 # =============================================================================
 # BIOS ROM data file generation
@@ -47,7 +61,7 @@ add_custom_command(
 # =============================================================================
 # Main library
 # =============================================================================
-add_library(yax86_core STATIC yax86_core.c ${ALL_HEADER_BUNDLES} ${bios_rom_data_file_c})
+add_library(yax86_core STATIC yax86_core.c ${YAX86_CORE_HEADER} ${bios_rom_data_file_c})
 
 
 if(NOT EMSCRIPTEN)

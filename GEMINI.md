@@ -23,7 +23,8 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - The `platform` module in `core/src/platform` is the "virtual motherboard"
   that connects the other modules together, including memory and port mapping.
 - The `core/tests` directory contains unit tests for each module.
-- The output of the build system for `core` is a static library
+- All the module header bundles are concatenated into a single header
+  `core/yax86_core.h`. It is also built into a static library
   `libyax86_core.a`.
 
 ### sdl - SDL runtime
