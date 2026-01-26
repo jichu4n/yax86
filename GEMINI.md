@@ -82,7 +82,7 @@ To build the emulator from the project root directory:
 
 To run tests:
 ```
-./tools/run_tests.sh
+./tools/run-tests.sh
 ```
 
 To debug the WASM version of the emulator, use Chrome DevTools MCP server to
