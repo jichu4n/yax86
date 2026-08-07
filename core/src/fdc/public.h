@@ -10,9 +10,10 @@
 #include <stdint.h>
 
 #ifndef YAX86_FDC_BUNDLE_H
-#include "../log/public.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_FDC_BUNDLE_H
+
+#include "log.h"
 
 enum {
   // Log category ID for the FDC module.

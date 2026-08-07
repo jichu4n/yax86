@@ -56,9 +56,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_PPI_BUNDLE_H
-#include "../log/public.h"
-#endif  // YAX86_PPI_BUNDLE_H
+#include "log.h"
 
 enum {
   // Log category ID for the PPI module.

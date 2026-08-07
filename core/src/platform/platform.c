@@ -7,6 +7,9 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define PLATFORM_LOG(level, ...) \
+  YAX86_LOG(&platform->logger, &kLogCategoryPlatform, level, __VA_ARGS__)
+
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
 //   - There already exists a memory map entry with the same type.
@@ -62,6 +65,7 @@ MemoryMapEntry* GetMemoryMapEntryByType(
 uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->read_byte) {
+    PLATFORM_LOG(kLogLevelWarn, "read from unmapped address %05X", address);
     return 0xFF;
   }
   return entry->read_byte(entry, address - entry->start);
@@ -78,6 +82,9 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->write_byte) {
+    PLATFORM_LOG(
+        kLogLevelWarn, "write of %02X to unmapped address %05X", value,
+        address);
     return;
   }
   entry->write_byte(entry, address - entry->start, value);
@@ -140,6 +147,7 @@ PortMapEntry* GetPortMapEntryByType(
 uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
+    PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
     return 0xFF;
   }
   return entry->read_byte(entry, port);
@@ -158,6 +166,8 @@ uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
 void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
+    PLATFORM_LOG(
+        kLogLevelWarn, "write of %02X to unmapped port %04X", value, port);
     return;
   }
   entry->write_byte(entry, port, value);

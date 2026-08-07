@@ -1,5 +1,5 @@
 {
-  "public": ["../log/public.h", "public.h"],
+  "public": ["public.h"],
   "private": [
     "../util/common.h",
     "types.h",

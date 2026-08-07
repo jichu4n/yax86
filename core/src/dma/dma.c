@@ -2,6 +2,9 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define DMA_LOG(level, ...) \
+  YAX86_LOG(dma->config->logger, &kLogCategoryDMA, level, __VA_ARGS__)
+
 void DMAInit(DMAState* dma, DMAConfig* config) {
   static const DMAState zero_dma_state = {0};
   *dma = zero_dma_state;
@@ -117,6 +120,14 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
         dma->mask_register |= (1 << channel_index);
       } else {
         dma->mask_register &= ~(1 << channel_index);
+        // Unmasking is the point at which a channel becomes live, so the
+        // address, count and page registers are final here.
+        const DMAChannelState* channel = &dma->channels[channel_index];
+        DMA_LOG(
+            kLogLevelDebug,
+            "channel %d enabled: address %02X:%04X count %04X mode %02X",
+            channel_index, channel->page_register, channel->current_address,
+            channel->current_count, channel->mode);
       }
       break;
     }
@@ -208,8 +219,6 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
       break;
   }
 
-
-
   // Update address register
   if ((channel->mode & kDMAModeAddressDecrement) == 0) {
     ++channel->current_address;
@@ -237,4 +246,3 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
     }
   }
 }
-

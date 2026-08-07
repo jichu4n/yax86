@@ -5,9 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_CPU_BUNDLE_H
-#include "../log/public.h"
-#endif  // YAX86_CPU_BUNDLE_H
+#include "log.h"
 
 enum {
   // Log category ID for the CPU module.

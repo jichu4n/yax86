@@ -6,6 +6,9 @@
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define CPU_LOG(level, ...) \
+  YAX86_LOG(cpu->config->logger, &kLogCategoryCPU, level, __VA_ARGS__)
+
 // ============================================================================
 // CPU state
 // ============================================================================
@@ -228,9 +231,14 @@ ExecuteStatus CPUTick(CPUState* cpu) {
   if (!cpu->is_halted) {
     // Step 1: Fetch the next instruction, and increment IP.
     Instruction instruction;
+    uint16_t instruction_cs = cpu->registers[kCS];
+    uint16_t instruction_ip = cpu->registers[kIP];
     CPUFetchNextInstructionStatus fetch_status =
         CPUFetchNextInstruction(cpu, &instruction);
     if (fetch_status != kFetchSuccess) {
+      CPU_LOG(
+          kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
+          instruction_cs, instruction_ip, (int)fetch_status);
       return kExecuteInvalidInstruction;
     }
     cpu->registers[kIP] += instruction.size;
@@ -238,6 +246,9 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     // Step 2: Execute the instruction.
     status = CPUExecuteInstruction(cpu, &instruction);
     if (status != kExecuteSuccess && status != kExecuteHalt) {
+      CPU_LOG(
+          kLogLevelError, "%04X:%04X opcode %02X failed with status %d",
+          instruction_cs, instruction_ip, instruction.opcode, (int)status);
       return status;
     }
   }
@@ -257,4 +268,3 @@ ExecuteStatus CPUTick(CPUState* cpu) {
 
   return kExecuteSuccess;
 }
-

@@ -1199,155 +1199,6 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
-
-// ==============================================================================
 // src/cpu/public.h start
 // ==============================================================================
 
@@ -1359,9 +1210,7 @@ static inline void LoggerDisableCategory(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_CPU_BUNDLE_H
-#include "../log/public.h"
-#endif  // YAX86_CPU_BUNDLE_H
+#include "log.h"
 
 enum {
   // Log category ID for the CPU module.
@@ -6910,6 +6759,9 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define CPU_LOG(level, ...) \
+  YAX86_LOG(cpu->config->logger, &kLogCategoryCPU, level, __VA_ARGS__)
+
 // ============================================================================
 // CPU state
 // ============================================================================
@@ -7132,9 +6984,14 @@ ExecuteStatus CPUTick(CPUState* cpu) {
   if (!cpu->is_halted) {
     // Step 1: Fetch the next instruction, and increment IP.
     Instruction instruction;
+    uint16_t instruction_cs = cpu->registers[kCS];
+    uint16_t instruction_ip = cpu->registers[kIP];
     CPUFetchNextInstructionStatus fetch_status =
         CPUFetchNextInstruction(cpu, &instruction);
     if (fetch_status != kFetchSuccess) {
+      CPU_LOG(
+          kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
+          instruction_cs, instruction_ip, (int)fetch_status);
       return kExecuteInvalidInstruction;
     }
     cpu->registers[kIP] += instruction.size;
@@ -7142,6 +6999,9 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     // Step 2: Execute the instruction.
     status = CPUExecuteInstruction(cpu, &instruction);
     if (status != kExecuteSuccess && status != kExecuteHalt) {
+      CPU_LOG(
+          kLogLevelError, "%04X:%04X opcode %02X failed with status %d",
+          instruction_cs, instruction_ip, instruction.opcode, (int)status);
       return status;
     }
   }
@@ -7161,7 +7021,6 @@ ExecuteStatus CPUTick(CPUState* cpu) {
 
   return kExecuteSuccess;
 }
-
 
 
 // ==============================================================================
@@ -7187,155 +7046,6 @@ ExecuteStatus CPUTick(CPUState* cpu) {
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
-
-// ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
 
 // ==============================================================================
 // src/dma/public.h start
@@ -7369,9 +7079,7 @@ static inline void LoggerDisableCategory(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_DMA_BUNDLE_H
-#include "../log/public.h"
-#endif  // YAX86_DMA_BUNDLE_H
+#include "log.h"
 
 enum {
   // Log category ID for the DMA module.
@@ -7585,6 +7293,9 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define DMA_LOG(level, ...) \
+  YAX86_LOG(dma->config->logger, &kLogCategoryDMA, level, __VA_ARGS__)
+
 void DMAInit(DMAState* dma, DMAConfig* config) {
   static const DMAState zero_dma_state = {0};
   *dma = zero_dma_state;
@@ -7700,6 +7411,14 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
         dma->mask_register |= (1 << channel_index);
       } else {
         dma->mask_register &= ~(1 << channel_index);
+        // Unmasking is the point at which a channel becomes live, so the
+        // address, count and page registers are final here.
+        const DMAChannelState* channel = &dma->channels[channel_index];
+        DMA_LOG(
+            kLogLevelDebug,
+            "channel %d enabled: address %02X:%04X count %04X mode %02X",
+            channel_index, channel->page_register, channel->current_address,
+            channel->current_count, channel->mode);
       }
       break;
     }
@@ -7791,8 +7510,6 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
       break;
   }
 
-
-
   // Update address register
   if ((channel->mode & kDMAModeAddressDecrement) == 0) {
     ++channel->current_address;
@@ -7822,7 +7539,6 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
 }
 
 
-
 // ==============================================================================
 // src/dma/dma.c end
 // ==============================================================================
@@ -7846,155 +7562,6 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index) {
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
-
-// ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
 
 // ==============================================================================
 // src/util/static_vector.h start
@@ -8114,9 +7681,10 @@ typedef struct StaticVectorHeader {
 #include <stdint.h>
 
 #ifndef YAX86_FDC_BUNDLE_H
-#include "../log/public.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_FDC_BUNDLE_H
+
+#include "log.h"
 
 enum {
   // Log category ID for the FDC module.
@@ -8429,6 +7997,9 @@ void FDCTick(FDCState* fdc);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define FDC_LOG(level, ...) \
+  YAX86_LOG(fdc->config->logger, &kLogCategoryFDC, level, __VA_ARGS__)
+
 #include <stddef.h>
 
 enum {
@@ -8491,12 +8062,22 @@ static inline void FDCRaiseIRQ6(FDCState* fdc) {
 
 // Transition into execution phase.
 static inline void FDCStartCommandExecution(FDCState* fdc) {
+  FDC_LOG(
+      kLogLevelDebug, "executing command %02X with %u parameter bytes",
+      fdc->current_command ? fdc->current_command->opcode : 0,
+      (unsigned)FDCCommandBufferLength(&fdc->command_buffer) - 1);
   fdc->phase = kFDCPhaseExecution;
   fdc->current_command_ticks = 0;
 }
 
 // Transition into result phase after command execution.
 static inline void FDCFinishCommandExecution(FDCState* fdc) {
+  FDC_LOG(
+      kLogLevelDebug, "command finished with %u result bytes, st0 %02X",
+      (unsigned)FDCResultBufferLength(&fdc->result_buffer),
+      FDCResultBufferLength(&fdc->result_buffer) > 0
+          ? *FDCResultBufferGet(&fdc->result_buffer, 0)
+          : 0);
   if (FDCResultBufferLength(&fdc->result_buffer) == 0) {
     // No result bytes to send, go back to idle phase.
     fdc->phase = kFDCPhaseIdle;
@@ -9084,6 +8665,7 @@ static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
       fdc->current_command = FDCFindCommandMetadata(opcode);
 
       if (!fdc->current_command) {
+        FDC_LOG(kLogLevelWarn, "invalid command opcode %02X", opcode);
         // Invalid command. Set up the result phase with an error.
         FDCResultBufferClear(&fdc->result_buffer);
         uint8_t status = kFDCST0InvalidCommand;
@@ -9218,155 +8800,6 @@ void FDCTick(FDCState* fdc) {
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
-
-// ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
 
 // ==============================================================================
 // src/util/static_vector.h start
@@ -9517,9 +8950,10 @@ typedef struct StaticVectorHeader {
 #include <stdint.h>
 
 #ifndef YAX86_KEYBOARD_BUNDLE_H
-#include "../log/public.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_KEYBOARD_BUNDLE_H
+
+#include "log.h"
 
 enum {
   // Log category ID for the Keyboard module.
@@ -9763,155 +9197,6 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
-
-// ==============================================================================
 // src/pic/public.h start
 // ==============================================================================
 
@@ -9940,9 +9225,7 @@ static inline void LoggerDisableCategory(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_PIC_BUNDLE_H
-#include "../log/public.h"
-#endif  // YAX86_PIC_BUNDLE_H
+#include "log.h"
 
 enum {
   // Log category ID for the PIC module.
@@ -10106,6 +9389,9 @@ uint8_t PICGetPendingInterrupt(PICState* pic);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define PIC_LOG(level, ...) \
+  YAX86_LOG(pic->config->logger, &kLogCategoryPIC, level, __VA_ARGS__)
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -10212,8 +9498,12 @@ void PICInit(PICState* pic, PICConfig* config) {
 
 void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   if (irq > 7) {
+    PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
   }
+  PIC_LOG(
+      kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
+      pic->isr);
   pic->irr |= (1 << irq);
 
   // If this is a slave PIC, also raise the cascade IRQ on the master.
@@ -10300,11 +9590,13 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
             if (value & kOCW2_SL) {
               // Specific EOI: clear specified ISR bit.
               uint8_t irq = value & 0x07;
+              PIC_LOG(kLogLevelDebug, "specific EOI for IRQ %u", irq);
               pic->isr &= ~(1 << irq);
             } else {
               // Non-Specific EOI: clear highest priority ISR bit.
               for (uint8_t i = 0, isr_mask = 1; i < 8; ++i, isr_mask <<= 1) {
                 if (pic->isr & isr_mask) {
+                  PIC_LOG(kLogLevelDebug, "non-specific EOI for IRQ %u", i);
                   pic->isr &= ~isr_mask;
                   break;
                 }
@@ -10412,7 +9704,6 @@ uint8_t PICGetPendingInterrupt(PICState* pic) {
 }
 
 
-
 // ==============================================================================
 // src/pic/pic.c end
 // ==============================================================================
@@ -10438,155 +9729,6 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
-
-// ==============================================================================
 // src/pit/public.h start
 // ==============================================================================
 
@@ -10608,9 +9750,7 @@ static inline void LoggerDisableCategory(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_PIT_BUNDLE_H
-#include "../log/public.h"
-#endif  // YAX86_PIT_BUNDLE_H
+#include "log.h"
 
 enum {
   // Log category ID for the PIT module.
@@ -11081,155 +10221,6 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
-
-// ==============================================================================
 // src/util/static_vector.h start
 // ==============================================================================
 
@@ -11344,9 +10335,10 @@ typedef struct StaticVectorHeader {
 #include <stdint.h>
 
 #ifndef YAX86_PLATFORM_BUNDLE_H
-#include "../log/public.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_PLATFORM_BUNDLE_H
+
+#include "log.h"
 
 enum {
   // Log category ID for the Platform module.
@@ -11699,6 +10691,9 @@ void PlatformTick(PlatformState* platform);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define PLATFORM_LOG(level, ...) \
+  YAX86_LOG(&platform->logger, &kLogCategoryPlatform, level, __VA_ARGS__)
+
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
 //   - There already exists a memory map entry with the same type.
@@ -11754,6 +10749,7 @@ MemoryMapEntry* GetMemoryMapEntryByType(
 uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->read_byte) {
+    PLATFORM_LOG(kLogLevelWarn, "read from unmapped address %05X", address);
     return 0xFF;
   }
   return entry->read_byte(entry, address - entry->start);
@@ -11770,6 +10766,9 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->write_byte) {
+    PLATFORM_LOG(
+        kLogLevelWarn, "write of %02X to unmapped address %05X", value,
+        address);
     return;
   }
   entry->write_byte(entry, address - entry->start, value);
@@ -11832,6 +10831,7 @@ PortMapEntry* GetPortMapEntryByType(
 uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
+    PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
     return 0xFF;
   }
   return entry->read_byte(entry, port);
@@ -11850,6 +10850,8 @@ uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
 void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
+    PLATFORM_LOG(
+        kLogLevelWarn, "write of %02X to unmapped port %04X", value, port);
     return;
   }
   entry->write_byte(entry, port, value);
@@ -12372,155 +11374,6 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
-
-// ==============================================================================
 // src/ppi/public.h start
 // ==============================================================================
 
@@ -12583,9 +11436,7 @@ static inline void LoggerDisableCategory(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_PPI_BUNDLE_H
-#include "../log/public.h"
-#endif  // YAX86_PPI_BUNDLE_H
+#include "log.h"
 
 enum {
   // Log category ID for the PPI module.
@@ -12895,155 +11746,6 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
-// src/log/public.h start
-// ==============================================================================
-
-#line 1 "./src/log/public.h"
-// Public interface for the logging module.
-#ifndef YAX86_LOG_PUBLIC_H
-#define YAX86_LOG_PUBLIC_H
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-// ============================================================================
-// Levels and categories
-// ============================================================================
-
-// Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
-  // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
-  // memory access.
-  kLogLevelError = 0,
-  // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
-  // Diagnostic detail.
-  kLogLevelDebug,
-} LogLevel;
-
-enum {
-  // Maximum length of a formatted log message, including the terminating null
-  // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
-};
-
-// Identifies the module a log message originated from.
-//
-// Each module declares its own category in its own public header, so that
-// modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
-  uint8_t id;
-  // Human-readable module name, e.g. "FDC".
-  const char* name;
-} LogCategory;
-
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
-}
-
-// ============================================================================
-// Logger
-// ============================================================================
-
-// Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
-  // Custom data passed through to callbacks.
-  void* context;
-
-  // Callback to write a formatted log message. The message is null-terminated
-  // and carries no prefix or trailing newline - the host composes the final
-  // output line.
-  void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
-      const char* message, size_t length);
-
-  // Callback returning the current tick count. The platform wires this to its
-  // own tick counter. May be NULL, in which case the tick passed to write_line
-  // is 0.
-  uint64_t (*get_tick)(void* context);
-
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
-
-  // Maximum severity level to emit. Messages with a level greater than this
-  // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
-
-// State of a logger.
-typedef struct Logger {
-  // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
-
-  // Scratch buffer used to format a single message. A logger is therefore not
-  // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
-} Logger;
-
-// Initialize a logger with the provided configuration.
-void LoggerInit(Logger* logger, LoggerConfig* config);
-
-// Whether a message with the given category and level would be emitted. This
-// is checked before a message is formatted, so that disabled log statements
-// cost only a few comparisons.
-static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
-  return logger != NULL && logger->config != NULL &&
-         logger->config->write_line != NULL &&
-         level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
-}
-
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
-// formatting when the message would be suppressed.
-void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
-
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
-  }
-}
-
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
-  if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
-  }
-}
-
-// Emit a log message, skipping formatting if it would be suppressed.
-//
-// This is a macro rather than a function because it takes a variable number of
-// arguments and must avoid the cost of formatting a message that will be
-// discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
-  } while (0)
-
-#endif  // YAX86_LOG_PUBLIC_H
-
-
-// ==============================================================================
-// src/log/public.h end
-// ==============================================================================
-
-// ==============================================================================
 // src/video/public.h start
 // ==============================================================================
 
@@ -13057,9 +11759,10 @@ static inline void LoggerDisableCategory(
 #include <stdint.h>
 
 #ifndef YAX86_VIDEO_BUNDLE_H
-#include "../log/public.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_VIDEO_BUNDLE_H
+
+#include "log.h"
 
 enum {
   // Log category ID for the Video module.

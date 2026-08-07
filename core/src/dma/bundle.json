@@ -1,4 +1,4 @@
 {
-  "public": ["../log/public.h", "public.h"],
+  "public": ["public.h"],
   "private": ["dma.c"]
 }
