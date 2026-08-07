@@ -18,6 +18,9 @@ function(generate_header_bundle module)
     set(ALL_HEADER_BUNDLES ${ALL_HEADER_BUNDLES} PARENT_SCOPE)
 endfunction()
 
+# The log module must come first, as other modules depend on its types and the
+# all-in-one header bundle below is a concatenation in this order.
+generate_header_bundle("log")
 generate_header_bundle("bios")
 generate_header_bundle("cpu")
 generate_header_bundle("dma")

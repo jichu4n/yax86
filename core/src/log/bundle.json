@@ -1,0 +1,4 @@
+{
+  "public": ["public.h"],
+  "private": ["../util/common.h", "../util/snprintf.h", "log.c"]
+}
