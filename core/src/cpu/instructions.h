@@ -371,6 +371,8 @@ extern InstructionResult ExecuteClearOrSetFlag(const InstructionContext* ctx);
 // CMC
 extern InstructionResult ExecuteComplementCarryFlag(
     const InstructionContext* ctx);
+// SALC
+extern InstructionResult ExecuteSetALFromCarry(const InstructionContext* ctx);
 
 // ============================================================================
 // IN and OUT instructions - instructions_io.c

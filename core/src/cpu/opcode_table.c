@@ -101,8 +101,16 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushSegmentRegister},
-    // 0x0F - UNSUPPORTED
-    {.opcode = 0x0F, .handler = 0},
+    // POP CS
+    //
+    // Undocumented, but real: on the 8086/8088 the segment register field of a
+    // POP sreg is only two bits wide, so 0x0F decodes as POP CS. Later x86
+    // parts repurposed 0x0F as the two-byte opcode prefix.
+    {.opcode = 0x0F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopSegmentRegister},
     // ADC r/m8, r8
     {.opcode = 0x10,
      .has_modrm = true,
@@ -566,22 +574,108 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecutePopRegister},
     // 0x60 - 0x6F - UNSUPPORTED
-    {.opcode = 0x60, .handler = 0},
-    {.opcode = 0x61, .handler = 0},
-    {.opcode = 0x62, .handler = 0},
-    {.opcode = 0x63, .handler = 0},
-    {.opcode = 0x64, .handler = 0},
-    {.opcode = 0x65, .handler = 0},
-    {.opcode = 0x66, .handler = 0},
-    {.opcode = 0x67, .handler = 0},
-    {.opcode = 0x68, .handler = 0},
-    {.opcode = 0x69, .handler = 0},
-    {.opcode = 0x6A, .handler = 0},
-    {.opcode = 0x6B, .handler = 0},
-    {.opcode = 0x6C, .handler = 0},
-    {.opcode = 0x6D, .handler = 0},
-    {.opcode = 0x6E, .handler = 0},
-    {.opcode = 0x6F, .handler = 0},
+    // 0x60-0x6F - conditional jumps, aliases of 0x70-0x7F
+    //
+    // Undocumented, but real: the 8086/8088 decoder ignores bit 4 of these
+    // opcodes, so each one behaves exactly like its 0x7X counterpart. They are
+    // two bytes wide, so decoding them as unknown single-byte opcodes would
+    // desynchronize the instruction stream.
+    // JO rel8 (alias of 0x70)
+    {.opcode = 0x60,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNO rel8 (alias of 0x71)
+    {.opcode = 0x61,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JB/JNAE/JC rel8 (alias of 0x72)
+    {.opcode = 0x62,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNB/JAE/JNC rel8 (alias of 0x73)
+    {.opcode = 0x63,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JE/JZ rel8 (alias of 0x74)
+    {.opcode = 0x64,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNE/JNZ rel8 (alias of 0x75)
+    {.opcode = 0x65,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JBE/JNA rel8 (alias of 0x76)
+    {.opcode = 0x66,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNBE/JA rel8 (alias of 0x77)
+    {.opcode = 0x67,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JS rel8 (alias of 0x78)
+    {.opcode = 0x68,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNS rel8 (alias of 0x79)
+    {.opcode = 0x69,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JP/JPE rel8 (alias of 0x7A)
+    {.opcode = 0x6A,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNP/JPO rel8 (alias of 0x7B)
+    {.opcode = 0x6B,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JL/JNGE rel8 (alias of 0x7C)
+    {.opcode = 0x6C,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLOrJNL},
+    // JNL/JGE rel8 (alias of 0x7D)
+    {.opcode = 0x6D,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLOrJNL},
+    // JLE/JNG rel8 (alias of 0x7E)
+    {.opcode = 0x6E,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
+    // JNLE/JG rel8 (alias of 0x7F)
+    {.opcode = 0x6F,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // JO rel8
     {.opcode = 0x70,
      .has_modrm = false,
@@ -1061,10 +1155,22 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
-    // 0xC0 - UNSUPPORTED
-    {.opcode = 0xC0, .handler = 0},
-    // 0xC1 - UNSUPPORTED
-    {.opcode = 0xC1, .handler = 0},
+    // RET imm16 (alias of 0xC2)
+    //
+    // Undocumented, but real: the 8086/8088 decoder ignores bit 1 of these
+    // opcodes. 0xC0 takes a 16-bit immediate, so decoding it as an unknown
+    // single-byte opcode would desynchronize the instruction stream.
+    {.opcode = 0xC0,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteNearReturnAndPop},
+    // RET (alias of 0xC3)
+    {.opcode = 0xC1,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteNearReturn},
     // RET imm16
     {.opcode = 0xC2,
      .has_modrm = false,
@@ -1101,10 +1207,18 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegisterOrMemory},
-    // 0xC8 - UNSUPPORTED
-    {.opcode = 0xC8, .handler = 0},
-    // 0xC9 - UNSUPPORTED
-    {.opcode = 0xC9, .handler = 0},
+    // RETF imm16 (alias of 0xCA)
+    {.opcode = 0xC8,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteFarReturnAndPop},
+    // RETF (alias of 0xCB)
+    {.opcode = 0xC9,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteFarReturn},
     // RETF imm16
     {.opcode = 0xCA,
      .has_modrm = false,
@@ -1173,8 +1287,15 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteAad},
-    // 0xD6 - UNSUPPORTED
-    {.opcode = 0xD6, .handler = 0},
+    // SALC - Set AL from Carry
+    //
+    // Undocumented, but real and stable across x86 generations: sets AL to
+    // 0xFF if CF is set and 0x00 otherwise. Affects no flags.
+    {.opcode = 0xD6,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteSetALFromCarry},
     // XLAT/XLATB
     {.opcode = 0xD7,
      .has_modrm = false,
@@ -1319,7 +1440,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .handler = ExecuteOutDX},
     // 0xF0 - LOCK prefix
     {.opcode = 0xF0, .handler = 0},
-    // 0xF1 - UNSUPPORTED
+    // LOCK prefix (alias of 0xF0) - consumed by the prefix decoder.
     {.opcode = 0xF1, .handler = 0},
     // 0xF2 - REPNE prefix
     {.opcode = 0xF2, .handler = 0},

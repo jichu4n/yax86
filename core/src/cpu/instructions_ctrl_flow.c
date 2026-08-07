@@ -82,7 +82,8 @@ static InstructionResult ExecuteConditionalJump(
 }
 
 // Table of flag register bitmasks for conditional jumps. The index corresponds
-// to (opcode - 0x70) / 2.
+// to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
+// entries of their 0x70-0x7F counterparts.
 static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
     kOF,        // 0x70 - JO, 0x71 - JNO
     kCF,        // 0x72 - JC, 0x73 - JNC
@@ -95,8 +96,10 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 // Unsigned conditional jumps.
 YAX86_PRIVATE InstructionResult
 ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
+  // Masking off the high nibble handles both 0x70-0x7F and their undocumented
+  // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
   uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
-      [(ctx->instruction->opcode - 0x70) / 2];
+      [(ctx->instruction->opcode & 0x0F) / 2];
   bool flag_value = (ctx->cpu->flags & flag_mask) != 0;
   // Even opcode => jump if the flag is set
   // Odd opcode => jump if the flag is not set

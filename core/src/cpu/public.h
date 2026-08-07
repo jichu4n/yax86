@@ -292,11 +292,14 @@ enum {
 
 // Instruction prefixes.
 typedef enum {
-  kPrefixES = 0x26,     // ES segment override
-  kPrefixCS = 0x2E,     // CS segment override
-  kPrefixSS = 0x36,     // SS segment override
-  kPrefixDS = 0x3E,     // DS segment override
-  kPrefixLOCK = 0xF0,   // LOCK
+  kPrefixES = 0x26,    // ES segment override
+  kPrefixCS = 0x2E,    // CS segment override
+  kPrefixSS = 0x36,    // SS segment override
+  kPrefixDS = 0x3E,    // DS segment override
+  kPrefixLOCK = 0xF0,  // LOCK
+  // Undocumented alias of LOCK on the 8086/8088, which does not decode bit 0
+  // of this opcode.
+  kPrefixLOCKAlt = 0xF1,
   kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
   kPrefixREP = 0xF3,    // REP/REPE/REPZ
 } InstructionPrefix;

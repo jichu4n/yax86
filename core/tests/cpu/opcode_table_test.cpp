@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #define YAX86_IMPLEMENTATION
 #include "cpu.h"
 
@@ -46,5 +48,21 @@ TEST_F(OpcodeTableTest, InstructionPrefixMetadataIntegrity) {
         << "Opcode mismatch at index 0x" << hex << prefix;
     EXPECT_EQ(metadata.handler, nullptr)
         << "Handler should be null for prefix opcode 0x" << hex << prefix;
+  }
+}
+
+TEST_F(OpcodeTableTest, EveryOpcodeByteDecodes) {
+  // The 8086/8088 has no invalid opcode exception - every one of the 256
+  // opcode bytes decodes to something. The only entries without a handler are
+  // the prefixes, which the prefix decoder consumes before an opcode is ever
+  // looked up.
+  static const uint8_t kPrefixes[] = {0x26, 0x2E, 0x36, 0x3E,
+                                      0xF0, 0xF1, 0xF2, 0xF3};
+
+  for (int opcode = 0; opcode < 256; ++opcode) {
+    const bool is_prefix =
+        find(begin(kPrefixes), end(kPrefixes), opcode) != end(kPrefixes);
+    EXPECT_EQ(opcode_table[opcode].handler != nullptr, !is_prefix)
+        << "opcode 0x" << hex << opcode;
   }
 }

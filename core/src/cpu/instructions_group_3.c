@@ -174,7 +174,9 @@ static InstructionResult ExecuteIdiv(
 // value in the ModRM byte and data width.
 static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
     ExecuteGroup3Test,  // 0 - TEST
-    0,                  // 1 - Reserved
+    // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not decode
+    // bit 0 of the REG field for this group.
+    ExecuteGroup3Test,  // 1 - TEST
     ExecuteNot,         // 2 - NOT
     ExecuteNeg,         // 3 - NEG
     ExecuteMul,         // 4 - MUL
@@ -188,9 +190,6 @@ YAX86_PRIVATE InstructionResult
 ExecuteGroup3Instruction(const InstructionContext* ctx) {
   const Group3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  if (fn == 0) {
-    return kInstructionInvalid;
-  }
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
