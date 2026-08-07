@@ -925,3 +925,46 @@ TEST_F(AddSubTest, DEC) {
        {kAF, false},
        {kOF, false}});
 }
+
+// A subtraction overflows when the operands have different signs and the
+// result takes the sign of the subtrahend. The borrow does not enter into that
+// test, so folding it into the subtrahend - which flips that operand's sign
+// when it is 0x7F - gives the wrong answer.
+TEST_F(AddSubTest, SbbOverflowWithBorrowIntoLargestPositiveByte) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-sbb-overflow-borrow-test", "sbb al, 7Fh\n");
+  // -128 - 127 - 1 underflows the signed byte range, so this overflows.
+  helper->cpu_.registers[kAX] = 0x0080;
+  CPUSetFlag(&helper->cpu_, kCF, true);
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x00);
+  helper->CheckFlags({{kOF, true}, {kCF, false}, {kZF, true}, {kSF, false}});
+}
+
+TEST_F(AddSubTest, SbbOverflowWithBorrowIntoLargestPositiveWord) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-sbb-overflow-borrow-word-test", "sbb ax, 7FFFh\n");
+  helper->cpu_.registers[kAX] = 0x8000;
+  CPUSetFlag(&helper->cpu_, kCF, true);
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0000);
+  helper->CheckFlags({{kOF, true}, {kCF, false}, {kZF, true}, {kSF, false}});
+}
+
+// The same operands without a borrow stay inside the signed range, so no
+// overflow - this is the case the old computation happened to get right.
+TEST_F(AddSubTest, SbbWithoutBorrowIntoLargestPositiveByteDoesNotOverflow) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-sbb-no-overflow-borrow-test", "sbb al, 7Fh\n");
+  helper->cpu_.registers[kAX] = 0x007F;
+  CPUSetFlag(&helper->cpu_, kCF, false);
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x00);
+  helper->CheckFlags({{kOF, false}, {kCF, false}, {kZF, true}});
+}

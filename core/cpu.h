@@ -2828,20 +2828,17 @@ static void SetFlagsAfterDec(
   uint32_t max_val = kMaxValue[ctx->metadata->width];
 
   // Overflow Flag (OF)
-  // OF is set if op1_sign != val_being_subtracted_sign AND result_sign ==
-  // val_being_subtracted_sign where val_being_subtracted = (op2 + did_borrow)
+  // A subtraction overflows when the operands have different signs and the
+  // result takes the sign of the subtrahend rather than the minuend. The
+  // borrow does not enter into it: it shifts the result by one, and the result
+  // is already what the test looks at. Folding the borrow into the subtrahend
+  // instead would change that operand's sign whenever it is 0x7F or 0x7FFF,
+  // and give the wrong answer for exactly those values.
   bool op1_sign = (op1 & sign_bit) != 0;
+  bool op2_sign = ((op2 & max_val) & sign_bit) != 0;
   bool result_sign = (result & sign_bit) != 0;
-  uint32_t val_being_subtracted = (op2 & max_val) + (did_borrow ? 1 : 0);
-  // Mask val_being_subtracted to current width before checking its sign,
-  // in case (op2 & max_val) + 1 caused a temporary overflow beyond max_val if
-  // op2 was max_val.
-  bool val_being_subtracted_sign =
-      ((val_being_subtracted & max_val) & sign_bit) != 0;
   CPUSetFlag(
-      ctx->cpu, kOF,
-      (op1_sign != val_being_subtracted_sign) &&
-          (result_sign == val_being_subtracted_sign));
+      ctx->cpu, kOF, (op1_sign != op2_sign) && (result_sign != op1_sign));
 
   // Auxiliary Carry Flag (AF) - borrow from bit 3 to bit 4
   CPUSetFlag(ctx->cpu, kAF, (op1 & 0xF) < ((op2 & 0xF) + (did_borrow ? 1 : 0)));
