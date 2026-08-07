@@ -709,6 +709,18 @@ typedef struct CPUConfig {
   void (*write_memory_byte)(
       struct CPUState* cpu, uint32_t address, uint8_t value);
 
+  // Callback modeling the interrupt acknowledge cycle the CPU runs in response
+  // to a request on its INTR pin. Returns false if no external interrupt is
+  // requested; otherwise stores the vector number and marks the interrupt in
+  // service in the controller, exactly as the two INTA pulses do on real
+  // hardware.
+  //
+  // The CPU only calls this at an instruction boundary with interrupts
+  // enabled, so acknowledging and taking the interrupt are a single step and
+  // no request can be latched, stranded, or overwritten in between. If NULL,
+  // the CPU takes no external interrupts.
+  bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
+
   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
   // through the Interrupt Vector Table.
   InterruptHandlerResult (*handle_interrupt)(
@@ -763,17 +775,6 @@ typedef struct CPUState {
   // Interrupt number of the pending internal interrupt.
   uint8_t pending_internal_interrupt_number;
 
-  // The INTR pin: a maskable interrupt request from an external interrupt
-  // controller, which supplies the vector number during the acknowledge cycle.
-  //
-  // This is held separately from an internal interrupt because the two have
-  // genuinely independent sources. On real hardware INTR is a line the
-  // controller holds asserted until the CPU acknowledges it, so an instruction
-  // that raises an interrupt of its own cannot make the request go away.
-  bool is_intr_asserted;
-  // Vector number the interrupt controller supplied along with the request.
-  uint8_t intr_vector;
-
   // Whether the CPU is in halted state. When true, CPUTick() will not fetch
   // or execute any instructions until an external event (e.g., an interrupt)
   // clears this state.
@@ -803,7 +804,8 @@ static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
 // Raise an interrupt from within the CPU, to be taken at the end of the
 // instruction currently executing. This is for the sources the 8086 calls
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
-// are not maskable by IF. External requests arrive via CPUAssertINTR().
+// are not maskable by IF. External requests arrive on the INTR pin instead,
+// via the acknowledge_interrupt callback.
 static inline void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
@@ -814,19 +816,6 @@ static inline void CPURaiseInternalInterrupt(
 static inline void CPUClearInternalInterrupt(CPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
-}
-
-// Assert an external interrupt request on the INTR line, as an interrupt
-// controller does. The CPU takes it at the end of the next instruction at
-// which interrupts are enabled, so unlike CPURaiseInternalInterrupt() this does
-// not disturb an internal interrupt that is already pending.
-//
-// Callers should check is_intr_asserted first: the CPU has a single INTR slot,
-// so asserting a second request before the first is taken would drop it,
-// leaving the controller waiting for an end-of-interrupt that never comes.
-static inline void CPUAssertINTR(CPUState* cpu, uint8_t vector) {
-  cpu->is_intr_asserted = true;
-  cpu->intr_vector = vector;
 }
 
 // Request that the current tick stop as soon as the instruction in progress
@@ -6571,13 +6560,13 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
     return true;
   }
 
-  // A request on the INTR pin is only taken while interrupts are enabled. It
-  // stays asserted until then rather than being discarded, as the line does on
-  // real hardware.
-  if (cpu->is_intr_asserted && CPUGetFlag(cpu, kIF)) {
-    const uint8_t interrupt_number = cpu->intr_vector;
-    cpu->is_intr_asserted = false;
-    DispatchInterrupt(cpu, interrupt_number);
+  // An external request on the INTR pin is only taken while interrupts are
+  // enabled. Acknowledging it is what produces its vector - there is nothing to
+  // latch beforehand, and the controller keeps requesting until acknowledged.
+  uint8_t intr_vector;
+  if (CPUGetFlag(cpu, kIF) && cpu->config->acknowledge_interrupt &&
+      cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
+    DispatchInterrupt(cpu, intr_vector);
     return true;
   }
 

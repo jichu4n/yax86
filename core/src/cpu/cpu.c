@@ -222,13 +222,13 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
     return true;
   }
 
-  // A request on the INTR pin is only taken while interrupts are enabled. It
-  // stays asserted until then rather than being discarded, as the line does on
-  // real hardware.
-  if (cpu->is_intr_asserted && CPUGetFlag(cpu, kIF)) {
-    const uint8_t interrupt_number = cpu->intr_vector;
-    cpu->is_intr_asserted = false;
-    DispatchInterrupt(cpu, interrupt_number);
+  // An external request on the INTR pin is only taken while interrupts are
+  // enabled. Acknowledging it is what produces its vector - there is nothing to
+  // latch beforehand, and the controller keeps requesting until acknowledged.
+  uint8_t intr_vector;
+  if (CPUGetFlag(cpu, kIF) && cpu->config->acknowledge_interrupt &&
+      cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
+    DispatchInterrupt(cpu, intr_vector);
     return true;
   }
 

@@ -1589,12 +1589,27 @@ static void PlatformInitBIOS(PlatformState* platform) {
   RegisterMemoryMapEntry(platform, &bios_rom);
 }
 
+// Runs the CPU's interrupt acknowledge cycle against the PIC. This is the
+// only path by which an external interrupt reaches the CPU, and the PIC marks
+// the interrupt in service as part of it - so a vector is never produced
+// unless the CPU is taking it right now.
+static bool CPUCallbackAcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
+  PlatformState* platform = (PlatformState*)cpu->config->context;
+  const uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
+  if (interrupt_vector == kPICNoPendingInterrupt) {
+    return false;
+  }
+  *vector = interrupt_vector;
+  return true;
+}
+
 static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
   platform->cpu_config.logger = &platform->logger;
   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
+  platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
   platform->cpu_config.read_port = CPUCallbackReadPortByte;
   platform->cpu_config.write_port = CPUCallbackWritePortByte;
   CPUInit(&platform->cpu, &platform->cpu_config);
@@ -1833,21 +1848,6 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
 
   // Tick the CPU.
   CPUTickResult cpu_result = CPUTick(&platform->cpu);
-
-  // Check for pending interrupts from the PIC after an
-  // instruction has been executed. This is how we connect the PIC to the CPU's
-  // interrupt handling flow.
-  // Acknowledging an interrupt marks it in-service in the PIC, so only do it
-  // when the CPU has a free INTR slot to hold the vector. Otherwise the second
-  // vector would overwrite the first, and the PIC would wait forever for an
-  // end-of-interrupt that the lost handler never sends - which blocks every
-  // lower priority IRQ behind it.
-  if (CPUGetFlag(&platform->cpu, kIF) && !platform->cpu.is_intr_asserted) {
-    uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
-    if (interrupt_vector != kPICNoPendingInterrupt) {
-      CPUAssertINTR(&platform->cpu, interrupt_vector);
-    }
-  }
 
   // PIT ticks at 1.19MHz, CPU at 4.77MHz. 4.77 / 1.19 ~= 4.
   if (platform->ticks % 4 == 0) {

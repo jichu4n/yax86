@@ -52,6 +52,31 @@ void PushFlags(CPUTestHelper* helper, uint16_t flags) {
   helper->memory_[sp + 1] = flags >> 8;
 }
 
+// A stand-in interrupt controller. Like a real one it keeps requesting until
+// the CPU runs an acknowledge cycle, and supplies the vector as part of it.
+struct FakeController {
+  bool requesting = false;
+  uint8_t vector = 0;
+  int acknowledge_count = 0;
+};
+FakeController g_controller;
+
+bool AcknowledgeInterrupt(YAX86_UNUSED CPUState* cpu, uint8_t* vector) {
+  if (!g_controller.requesting) {
+    return false;
+  }
+  g_controller.requesting = false;
+  ++g_controller.acknowledge_count;
+  *vector = g_controller.vector;
+  return true;
+}
+
+// Raises a request, as a controller driving INTR does.
+void RaiseINTR(uint8_t vector) {
+  g_controller.requesting = true;
+  g_controller.vector = vector;
+}
+
 // Builds a helper running hand-assembled code, with interrupts dispatched
 // through the interrupt vector table rather than the default test callback,
 // which throws.
@@ -59,6 +84,8 @@ unique_ptr<CPUTestHelper> WithCode(const vector<uint8_t>& code) {
   auto helper = make_unique<CPUTestHelper>();
   helper->LoadCOM(code);
   helper->cpu_.config->handle_interrupt = nullptr;
+  g_controller = FakeController();
+  helper->cpu_.config->acknowledge_interrupt = AcknowledgeInterrupt;
   helper->cpu_.registers[kSS] = 0;
   helper->cpu_.registers[kSP] = 0x0800;
   return helper;
@@ -291,21 +318,25 @@ TEST_F(TickTest, SoftwareInterruptDoesNotDeassertINTR) {
   CPUSetFlag(&helper->cpu_, kIF, true);
 
   // The controller asserts IRQ0 just before the INT instruction executes.
-  CPUAssertINTR(&helper->cpu_, 0x08);
+  RaiseINTR(0x08);
 
   // The INT instruction is taken first, since it was raised by the instruction
   // that just executed.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0050);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
-  // The external request must survive it.
-  EXPECT_TRUE(helper->cpu_.is_intr_asserted);
+  // The external request must survive it: no acknowledge cycle has run, so the
+  // controller is still requesting and no vector has been produced.
+  EXPECT_TRUE(g_controller.requesting);
+  EXPECT_EQ(g_controller.acknowledge_count, 0);
 
   // IRET restores IF, and the request is then taken.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
-  EXPECT_FALSE(helper->cpu_.is_intr_asserted);
+  EXPECT_FALSE(g_controller.requesting);
+  // Acknowledged exactly once, at the moment it was taken.
+  EXPECT_EQ(g_controller.acknowledge_count, 1);
 }
 
 TEST_F(TickTest, AssertedINTRWaitsForInterruptsToBeEnabled) {
@@ -314,19 +345,19 @@ TEST_F(TickTest, AssertedINTRWaitsForInterruptsToBeEnabled) {
   helper->memory_[0x700] = kOpNop;
 
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // CLI
-  CPUAssertINTR(&helper->cpu_, 0x08);
+  RaiseINTR(0x08);
 
   // Not taken while interrupts are disabled - and not thrown away either.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
-  EXPECT_TRUE(helper->cpu_.is_intr_asserted);
+  EXPECT_TRUE(g_controller.requesting);
   EXPECT_NE(helper->cpu_.registers[kCS], 0x0060);
 
   // Once interrupts are enabled again the request is taken.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
-  for (int i = 0; i < 2 && helper->cpu_.is_intr_asserted; ++i) {
+  for (int i = 0; i < 2 && g_controller.requesting; ++i) {
     ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   }
-  EXPECT_FALSE(helper->cpu_.is_intr_asserted);
+  EXPECT_FALSE(g_controller.requesting);
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
 }
@@ -340,7 +371,7 @@ TEST_F(TickTest, AssertedINTRWakesHaltedCPU) {
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // HLT
   ASSERT_TRUE(helper->cpu_.is_halted);
 
-  CPUAssertINTR(&helper->cpu_, 0x08);
+  RaiseINTR(0x08);
   EXPECT_EQ(CPUTick(&helper->cpu_), kCPUTickHalted);
 
   EXPECT_FALSE(helper->cpu_.is_halted);
