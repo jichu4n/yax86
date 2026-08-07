@@ -4,7 +4,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config->logger, &kLogCategoryFDC, level, __VA_ARGS__)
+  YAX86_LOG(fdc->config->logger, &kLogModuleFDC, level, __VA_ARGS__)
 
 #include <stddef.h>
 

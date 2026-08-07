@@ -25,13 +25,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the PIC module.
-  kLogCategoryIDPIC = 2,
+  // Log module ID for the PIC.
+  kLogModuleIDPIC = 2,
 };
 
-// Log category for the PIC module.
-static const LogCategory kLogCategoryPIC = {
-    .id = kLogCategoryIDPIC,
+// Log module for the PIC.
+static const LogModule kLogModulePIC = {
+    .id = kLogModuleIDPIC,
     .name = "PIC",
 };
 

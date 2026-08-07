@@ -8,13 +8,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the CPU module.
-  kLogCategoryIDCPU = 1,
+  // Log module ID for the CPU.
+  kLogModuleIDCPU = 1,
 };
 
-// Log category for the CPU module.
-static const LogCategory kLogCategoryCPU = {
-    .id = kLogCategoryIDCPU,
+// Log module for the CPU.
+static const LogModule kLogModuleCPU = {
+    .id = kLogModuleIDCPU,
     .name = "CPU",
 };
 

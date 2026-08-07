@@ -3,7 +3,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define PIC_LOG(level, ...) \
-  YAX86_LOG(pic->config->logger, &kLogCategoryPIC, level, __VA_ARGS__)
+  YAX86_LOG(pic->config->logger, &kLogModulePIC, level, __VA_ARGS__)
 
 // ============================================================================
 // Constants

@@ -16,13 +16,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the FDC module.
-  kLogCategoryIDFDC = 5,
+  // Log module ID for the FDC.
+  kLogModuleIDFDC = 5,
 };
 
-// Log category for the FDC module.
-static const LogCategory kLogCategoryFDC = {
-    .id = kLogCategoryIDFDC,
+// Log module for the FDC.
+static const LogModule kLogModuleFDC = {
+    .id = kLogModuleIDFDC,
     .name = "FDC",
 };
 

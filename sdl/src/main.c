@@ -17,12 +17,12 @@ static uint8_t g_memory[INTERNAL_RAM_SIZE];
 static PlatformState g_platform;
 static bool g_running = true;
 
-// Log category for the SDL runtime itself.
+// Log module for the SDL runtime itself.
 enum {
-  kLogCategoryIDApp = 16,
+  kLogModuleIDApp = 16,
 };
-static const LogCategory kLogCategoryApp = {
-    .id = kLogCategoryIDApp,
+static const LogModule kLogModuleApp = {
+    .id = kLogModuleIDApp,
     .name = "APP",
 };
 
@@ -43,13 +43,13 @@ static const char* MainLogLevelName(LogLevel level) {
 
 // Log sink. Under Emscripten, stdout is routed to the browser console.
 static void MainWriteLogLine(
-    void* context, const LogCategory* category, LogLevel level, uint64_t tick,
+    void* context, const LogModule* module, LogLevel level, uint64_t tick,
     const char* message, size_t length) {
   (void)context;
   (void)length;
   printf(
       "[%llu] %-5s %-8s %s\n", (unsigned long long)tick,
-      MainLogLevelName(level), category->name, message);
+      MainLogLevelName(level), module->name, message);
 }
 
 static uint64_t MainGetTick(void* context) {
@@ -137,12 +137,12 @@ int main(int argc, char* argv[]) {
   // Initialize Memory
   memset(g_memory, 0, INTERNAL_RAM_SIZE);
 
-  // Initialize logging. All categories are enabled, but only errors are shown
+  // Initialize logging. All modules are enabled, but only errors are shown
   // by default - raise min_level to kLogLevelWarn or kLogLevelDebug to see
-  // more, or narrow enabled_categories to a specific module.
+  // more, or narrow enabled_modules to a specific module.
   g_logger_config.write_line = MainWriteLogLine;
   g_logger_config.get_tick = MainGetTick;
-  g_logger_config.enabled_categories = 0xFFFFFFFF;
+  g_logger_config.enabled_modules = 0xFFFFFFFF;
   g_logger_config.min_level = kLogLevelError;
 
   // Initialize Platform
@@ -160,7 +160,7 @@ int main(int argc, char* argv[]) {
   }
 
   YAX86_LOG(
-      &g_platform.logger, &kLogCategoryApp, kLogLevelError,
+      &g_platform.logger, &kLogModuleApp, kLogLevelError,
       "yax86 started with %u KB of conventional memory",
       config.physical_memory_size / 1024);
 

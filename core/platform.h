@@ -130,13 +130,13 @@ typedef struct StaticVectorHeader {
 #include "log.h"
 
 enum {
-  // Log category ID for the Platform module.
-  kLogCategoryIDPlatform = 0,
+  // Log module ID for the Platform.
+  kLogModuleIDPlatform = 0,
 };
 
-// Log category for the Platform module.
-static const LogCategory kLogCategoryPlatform = {
-    .id = kLogCategoryIDPlatform,
+// Log module for the Platform.
+static const LogModule kLogModulePlatform = {
+    .id = kLogModuleIDPlatform,
     .name = "PLATFORM",
 };
 
@@ -481,7 +481,7 @@ void PlatformTick(PlatformState* platform);
 #endif  // YAX86_IMPLEMENTATION
 
 #define PLATFORM_LOG(level, ...) \
-  YAX86_LOG(&platform->logger, &kLogCategoryPlatform, level, __VA_ARGS__)
+  YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:

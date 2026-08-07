@@ -47,13 +47,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the Keyboard module.
-  kLogCategoryIDKeyboard = 7,
+  // Log module ID for the Keyboard.
+  kLogModuleIDKeyboard = 7,
 };
 
-// Log category for the Keyboard module.
-static const LogCategory kLogCategoryKeyboard = {
-    .id = kLogCategoryIDKeyboard,
+// Log module for the Keyboard.
+static const LogModule kLogModuleKeyboard = {
+    .id = kLogModuleIDKeyboard,
     .name = "KEYBOARD",
 };
 

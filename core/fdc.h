@@ -133,13 +133,13 @@ typedef struct StaticVectorHeader {
 #include "log.h"
 
 enum {
-  // Log category ID for the FDC module.
-  kLogCategoryIDFDC = 5,
+  // Log module ID for the FDC.
+  kLogModuleIDFDC = 5,
 };
 
-// Log category for the FDC module.
-static const LogCategory kLogCategoryFDC = {
-    .id = kLogCategoryIDFDC,
+// Log module for the FDC.
+static const LogModule kLogModuleFDC = {
+    .id = kLogModuleIDFDC,
     .name = "FDC",
 };
 
@@ -444,7 +444,7 @@ void FDCTick(FDCState* fdc);
 #endif  // YAX86_IMPLEMENTATION
 
 #define FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config->logger, &kLogCategoryFDC, level, __VA_ARGS__)
+  YAX86_LOG(fdc->config->logger, &kLogModuleFDC, level, __VA_ARGS__)
 
 #include <stddef.h>
 

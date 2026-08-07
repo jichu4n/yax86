@@ -23,7 +23,7 @@ extern "C" {
 #include <stdint.h>
 
 // ============================================================================
-// Levels and categories
+// Levels and modules
 // ============================================================================
 
 // Log severity levels, in decreasing order of severity.
@@ -41,27 +41,26 @@ enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
   kLogMaxLineLength = 256,
-  // Maximum number of distinct log categories, bounded by the width of
-  // LoggerConfig.enabled_categories.
-  kLogMaxCategories = 32,
+  // Maximum number of distinct log modules, bounded by the width of
+  // LoggerConfig.enabled_modules.
+  kLogMaxModules = 32,
 };
 
 // Identifies the module a log message originated from.
 //
-// Each module declares its own category in its own public header, so that
+// Each module declares its own LogModule in its own public header, so that
 // modules do not need to know about one another. IDs must be unique across
-// modules - see the category ID test in core/tests/log.
-typedef struct LogCategory {
-  // Bit index used for mask-based filtering. Must be less than
-  // kLogMaxCategories.
+// modules - see the module ID test in core/tests/log.
+typedef struct LogModule {
+  // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
-} LogCategory;
+} LogModule;
 
-// Returns the filter mask bit for a category.
-static inline uint32_t LogCategoryMask(const LogCategory* category) {
-  return (uint32_t)1 << category->id;
+// Returns the filter mask bit for a module.
+static inline uint32_t LogModuleMask(const LogModule* module) {
+  return (uint32_t)1 << module->id;
 }
 
 // ============================================================================
@@ -77,7 +76,7 @@ typedef struct LoggerConfig {
   // and carries no prefix or trailing newline - the host composes the final
   // output line.
   void (*write_line)(
-      void* context, const LogCategory* category, LogLevel level, uint64_t tick,
+      void* context, const LogModule* module, LogLevel level, uint64_t tick,
       const char* message, size_t length);
 
   // Callback returning the current tick count. The platform wires this to its
@@ -85,8 +84,8 @@ typedef struct LoggerConfig {
   // is 0.
   uint64_t (*get_tick)(void* context);
 
-  // Bit mask of enabled categories, indexed by LogCategory.id.
-  uint32_t enabled_categories;
+  // Bit mask of enabled modules, indexed by LogModule.id.
+  uint32_t enabled_modules;
 
   // Maximum severity level to emit. Messages with a level greater than this
   // are suppressed.
@@ -106,36 +105,35 @@ typedef struct Logger {
 // Initialize a logger with the provided configuration.
 void LoggerInit(Logger* logger, LoggerConfig* config);
 
-// Whether a message with the given category and level would be emitted. This
+// Whether a message with the given module and level would be emitted. This
 // is checked before a message is formatted, so that disabled log statements
 // cost only a few comparisons.
 static inline bool LoggerIsEnabled(
-    const Logger* logger, const LogCategory* category, LogLevel level) {
+    const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
-         (logger->config->enabled_categories & LogCategoryMask(category)) != 0;
+         (logger->config->enabled_modules & LogModuleMask(module)) != 0;
 }
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
 void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...);
+    Logger* logger, const LogModule* module, LogLevel level, const char* format,
+    ...);
 
-// Enable a category on a logger.
-static inline void LoggerEnableCategory(
-    Logger* logger, const LogCategory* category) {
+// Enable a module on a logger.
+static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories |= LogCategoryMask(category);
+    logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
-// Disable a category on a logger.
-static inline void LoggerDisableCategory(
-    Logger* logger, const LogCategory* category) {
+// Disable a module on a logger.
+static inline void LoggerDisableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_categories &= ~LogCategoryMask(category);
+    logger->config->enabled_modules &= ~LogModuleMask(module);
   }
 }
 
@@ -144,11 +142,11 @@ static inline void LoggerDisableCategory(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, category, level, ...)                \
-  do {                                                         \
-    if (LoggerIsEnabled((logger), (category), (level))) {      \
-      LoggerWrite((logger), (category), (level), __VA_ARGS__); \
-    }                                                          \
+#define YAX86_LOG(logger, module, level, ...)                \
+  do {                                                       \
+    if (LoggerIsEnabled((logger), (module), (level))) {      \
+      LoggerWrite((logger), (module), (level), __VA_ARGS__); \
+    }                                                        \
   } while (0)
 
 #endif  // YAX86_LOG_PUBLIC_H
@@ -502,11 +500,11 @@ void LoggerInit(Logger* logger, LoggerConfig* config) {
 }
 
 void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...) {
+    Logger* logger, const LogModule* module, LogLevel level, const char* format,
+    ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, category, level)) {
+  if (!LoggerIsEnabled(logger, module, level)) {
     return;
   }
 
@@ -529,7 +527,7 @@ void LoggerWrite(
                       ? logger->config->get_tick(logger->config->context)
                       : 0;
   logger->config->write_line(
-      logger->config->context, category, level, tick, logger->buffer, length);
+      logger->config->context, module, level, tick, logger->buffer, length);
 }
 
 
@@ -1213,13 +1211,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the CPU module.
-  kLogCategoryIDCPU = 1,
+  // Log module ID for the CPU.
+  kLogModuleIDCPU = 1,
 };
 
-// Log category for the CPU module.
-static const LogCategory kLogCategoryCPU = {
-    .id = kLogCategoryIDCPU,
+// Log module for the CPU.
+static const LogModule kLogModuleCPU = {
+    .id = kLogModuleIDCPU,
     .name = "CPU",
 };
 
@@ -6760,7 +6758,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config->logger, &kLogCategoryCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state
@@ -7082,13 +7080,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the DMA module.
-  kLogCategoryIDDMA = 6,
+  // Log module ID for the DMA.
+  kLogModuleIDDMA = 6,
 };
 
-// Log category for the DMA module.
-static const LogCategory kLogCategoryDMA = {
-    .id = kLogCategoryIDDMA,
+// Log module for the DMA.
+static const LogModule kLogModuleDMA = {
+    .id = kLogModuleIDDMA,
     .name = "DMA",
 };
 
@@ -7294,7 +7292,7 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #endif  // YAX86_IMPLEMENTATION
 
 #define DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config->logger, &kLogCategoryDMA, level, __VA_ARGS__)
+  YAX86_LOG(dma->config->logger, &kLogModuleDMA, level, __VA_ARGS__)
 
 void DMAInit(DMAState* dma, DMAConfig* config) {
   static const DMAState zero_dma_state = {0};
@@ -7687,13 +7685,13 @@ typedef struct StaticVectorHeader {
 #include "log.h"
 
 enum {
-  // Log category ID for the FDC module.
-  kLogCategoryIDFDC = 5,
+  // Log module ID for the FDC.
+  kLogModuleIDFDC = 5,
 };
 
-// Log category for the FDC module.
-static const LogCategory kLogCategoryFDC = {
-    .id = kLogCategoryIDFDC,
+// Log module for the FDC.
+static const LogModule kLogModuleFDC = {
+    .id = kLogModuleIDFDC,
     .name = "FDC",
 };
 
@@ -7998,7 +7996,7 @@ void FDCTick(FDCState* fdc);
 #endif  // YAX86_IMPLEMENTATION
 
 #define FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config->logger, &kLogCategoryFDC, level, __VA_ARGS__)
+  YAX86_LOG(fdc->config->logger, &kLogModuleFDC, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -8956,13 +8954,13 @@ typedef struct StaticVectorHeader {
 #include "log.h"
 
 enum {
-  // Log category ID for the Keyboard module.
-  kLogCategoryIDKeyboard = 7,
+  // Log module ID for the Keyboard.
+  kLogModuleIDKeyboard = 7,
 };
 
-// Log category for the Keyboard module.
-static const LogCategory kLogCategoryKeyboard = {
-    .id = kLogCategoryIDKeyboard,
+// Log module for the Keyboard.
+static const LogModule kLogModuleKeyboard = {
+    .id = kLogModuleIDKeyboard,
     .name = "KEYBOARD",
 };
 
@@ -9228,13 +9226,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the PIC module.
-  kLogCategoryIDPIC = 2,
+  // Log module ID for the PIC.
+  kLogModuleIDPIC = 2,
 };
 
-// Log category for the PIC module.
-static const LogCategory kLogCategoryPIC = {
-    .id = kLogCategoryIDPIC,
+// Log module for the PIC.
+static const LogModule kLogModulePIC = {
+    .id = kLogModuleIDPIC,
     .name = "PIC",
 };
 
@@ -9390,7 +9388,7 @@ uint8_t PICGetPendingInterrupt(PICState* pic);
 #endif  // YAX86_IMPLEMENTATION
 
 #define PIC_LOG(level, ...) \
-  YAX86_LOG(pic->config->logger, &kLogCategoryPIC, level, __VA_ARGS__)
+  YAX86_LOG(pic->config->logger, &kLogModulePIC, level, __VA_ARGS__)
 
 // ============================================================================
 // Constants
@@ -9753,13 +9751,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the PIT module.
-  kLogCategoryIDPIT = 3,
+  // Log module ID for the PIT.
+  kLogModuleIDPIT = 3,
 };
 
-// Log category for the PIT module.
-static const LogCategory kLogCategoryPIT = {
-    .id = kLogCategoryIDPIT,
+// Log module for the PIT.
+static const LogModule kLogModulePIT = {
+    .id = kLogModuleIDPIT,
     .name = "PIT",
 };
 
@@ -10341,13 +10339,13 @@ typedef struct StaticVectorHeader {
 #include "log.h"
 
 enum {
-  // Log category ID for the Platform module.
-  kLogCategoryIDPlatform = 0,
+  // Log module ID for the Platform.
+  kLogModuleIDPlatform = 0,
 };
 
-// Log category for the Platform module.
-static const LogCategory kLogCategoryPlatform = {
-    .id = kLogCategoryIDPlatform,
+// Log module for the Platform.
+static const LogModule kLogModulePlatform = {
+    .id = kLogModuleIDPlatform,
     .name = "PLATFORM",
 };
 
@@ -10692,7 +10690,7 @@ void PlatformTick(PlatformState* platform);
 #endif  // YAX86_IMPLEMENTATION
 
 #define PLATFORM_LOG(level, ...) \
-  YAX86_LOG(&platform->logger, &kLogCategoryPlatform, level, __VA_ARGS__)
+  YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
@@ -11444,13 +11442,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the PPI module.
-  kLogCategoryIDPPI = 4,
+  // Log module ID for the PPI.
+  kLogModuleIDPPI = 4,
 };
 
-// Log category for the PPI module.
-static const LogCategory kLogCategoryPPI = {
-    .id = kLogCategoryIDPPI,
+// Log module for the PPI.
+static const LogModule kLogModulePPI = {
+    .id = kLogModuleIDPPI,
     .name = "PPI",
 };
 
@@ -11770,13 +11768,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the Video module.
-  kLogCategoryIDVideo = 8,
+  // Log module ID for the Video.
+  kLogModuleIDVideo = 8,
 };
 
-// Log category for the Video module.
-static const LogCategory kLogCategoryVideo = {
-    .id = kLogCategoryIDVideo,
+// Log module for the Video.
+static const LogModule kLogModuleVideo = {
+    .id = kLogModuleIDVideo,
     .name = "VIDEO",
 };
 

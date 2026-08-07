@@ -3,7 +3,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config->logger, &kLogCategoryDMA, level, __VA_ARGS__)
+  YAX86_LOG(dma->config->logger, &kLogModuleDMA, level, __VA_ARGS__)
 
 void DMAInit(DMAState* dma, DMAConfig* config) {
   static const DMAState zero_dma_state = {0};

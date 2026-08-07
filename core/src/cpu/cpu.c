@@ -7,7 +7,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config->logger, &kLogCategoryCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state

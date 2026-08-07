@@ -29,13 +29,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the Video module.
-  kLogCategoryIDVideo = 8,
+  // Log module ID for the Video.
+  kLogModuleIDVideo = 8,
 };
 
-// Log category for the Video module.
-static const LogCategory kLogCategoryVideo = {
-    .id = kLogCategoryIDVideo,
+// Log module for the Video.
+static const LogModule kLogModuleVideo = {
+    .id = kLogModuleIDVideo,
     .name = "VIDEO",
 };
 

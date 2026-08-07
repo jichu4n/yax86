@@ -8,7 +8,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define PLATFORM_LOG(level, ...) \
-  YAX86_LOG(&platform->logger, &kLogCategoryPlatform, level, __VA_ARGS__)
+  YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:

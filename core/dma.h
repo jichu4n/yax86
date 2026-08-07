@@ -44,13 +44,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the DMA module.
-  kLogCategoryIDDMA = 6,
+  // Log module ID for the DMA.
+  kLogModuleIDDMA = 6,
 };
 
-// Log category for the DMA module.
-static const LogCategory kLogCategoryDMA = {
-    .id = kLogCategoryIDDMA,
+// Log module for the DMA.
+static const LogModule kLogModuleDMA = {
+    .id = kLogModuleIDDMA,
     .name = "DMA",
 };
 
@@ -256,7 +256,7 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #endif  // YAX86_IMPLEMENTATION
 
 #define DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config->logger, &kLogCategoryDMA, level, __VA_ARGS__)
+  YAX86_LOG(dma->config->logger, &kLogModuleDMA, level, __VA_ARGS__)
 
 void DMAInit(DMAState* dma, DMAConfig* config) {
   static const DMAState zero_dma_state = {0};

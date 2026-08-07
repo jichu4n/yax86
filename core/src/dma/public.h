@@ -28,13 +28,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the DMA module.
-  kLogCategoryIDDMA = 6,
+  // Log module ID for the DMA.
+  kLogModuleIDDMA = 6,
 };
 
-// Log category for the DMA module.
-static const LogCategory kLogCategoryDMA = {
-    .id = kLogCategoryIDDMA,
+// Log module for the DMA.
+static const LogModule kLogModuleDMA = {
+    .id = kLogModuleIDDMA,
     .name = "DMA",
 };
 

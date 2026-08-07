@@ -24,13 +24,13 @@ extern "C" {
 #include "log.h"
 
 enum {
-  // Log category ID for the CPU module.
-  kLogCategoryIDCPU = 1,
+  // Log module ID for the CPU.
+  kLogModuleIDCPU = 1,
 };
 
-// Log category for the CPU module.
-static const LogCategory kLogCategoryCPU = {
-    .id = kLogCategoryIDCPU,
+// Log module for the CPU.
+static const LogModule kLogModuleCPU = {
+    .id = kLogModuleIDCPU,
     .name = "CPU",
 };
 
@@ -5571,7 +5571,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config->logger, &kLogCategoryCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state

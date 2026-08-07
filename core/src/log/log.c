@@ -11,11 +11,11 @@ void LoggerInit(Logger* logger, LoggerConfig* config) {
 }
 
 void LoggerWrite(
-    Logger* logger, const LogCategory* category, LogLevel level,
-    const char* format, ...) {
+    Logger* logger, const LogModule* module, LogLevel level, const char* format,
+    ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, category, level)) {
+  if (!LoggerIsEnabled(logger, module, level)) {
     return;
   }
 
@@ -38,5 +38,5 @@ void LoggerWrite(
                       ? logger->config->get_tick(logger->config->context)
                       : 0;
   logger->config->write_line(
-      logger->config->context, category, level, tick, logger->buffer, length);
+      logger->config->context, module, level, tick, logger->buffer, length);
 }

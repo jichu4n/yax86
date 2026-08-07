@@ -18,13 +18,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the PIT module.
-  kLogCategoryIDPIT = 3,
+  // Log module ID for the PIT.
+  kLogModuleIDPIT = 3,
 };
 
-// Log category for the PIT module.
-static const LogCategory kLogCategoryPIT = {
-    .id = kLogCategoryIDPIT,
+// Log module for the PIT.
+static const LogModule kLogModulePIT = {
+    .id = kLogModuleIDPIT,
     .name = "PIT",
 };
 

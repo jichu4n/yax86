@@ -13,13 +13,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the Platform module.
-  kLogCategoryIDPlatform = 0,
+  // Log module ID for the Platform.
+  kLogModuleIDPlatform = 0,
 };
 
-// Log category for the Platform module.
-static const LogCategory kLogCategoryPlatform = {
-    .id = kLogCategoryIDPlatform,
+// Log module for the Platform.
+static const LogModule kLogModulePlatform = {
+    .id = kLogModuleIDPlatform,
     .name = "PLATFORM",
 };
 

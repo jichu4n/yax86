@@ -59,13 +59,13 @@
 #include "log.h"
 
 enum {
-  // Log category ID for the PPI module.
-  kLogCategoryIDPPI = 4,
+  // Log module ID for the PPI.
+  kLogModuleIDPPI = 4,
 };
 
-// Log category for the PPI module.
-static const LogCategory kLogCategoryPPI = {
-    .id = kLogCategoryIDPPI,
+// Log module for the PPI.
+static const LogModule kLogModulePPI = {
+    .id = kLogModuleIDPPI,
     .name = "PPI",
 };
 
