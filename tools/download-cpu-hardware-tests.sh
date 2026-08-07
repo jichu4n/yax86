@@ -15,8 +15,15 @@
 set -e
 
 readonly REPO="SingleStepTests/8088"
-readonly BASE_URL="https://raw.githubusercontent.com/${REPO}/main"
+# Pinned to a commit rather than tracking a branch. The suite has no tags or
+# releases, and the results it records are what the tests compare against - so
+# upstream changing them would change what CI means with no commit here. The
+# expected number of known divergences in hardware_test.cpp is tied to this
+# revision as well.
+readonly COMMIT="aea84484abc79d09639d855b7b0ab32bc9e4dbeb"
+readonly BASE_URL="https://raw.githubusercontent.com/${REPO}/${COMMIT}"
 readonly DEST=".cache/8088-tests"
+readonly OPCODE_LIST="tools/cpu-hardware-tests-opcodes.txt"
 # Files are small and numerous, so fetch several at once.
 readonly PARALLEL_DOWNLOADS=8
 
@@ -30,23 +37,18 @@ echo "Downloading metadata..."
 curl -fsSL "${BASE_URL}/v2/metadata.json" -o "${DEST}/metadata.json"
 
 if [ $# -gt 0 ]; then
-    files=()
-    for opcode in "$@"; do
-        files+=("${opcode^^}.MOO.gz")
-    done
+    opcodes=("${@^^}")
 else
-    echo "Listing available opcodes..."
-    # The contents API returns every entry in the directory in one response.
-    mapfile -t files < <(
-        curl -fsSL "https://api.github.com/repos/${REPO}/contents/v2_binary" |
-            python3 -c "
-import json, sys
-for entry in json.load(sys.stdin):
-    if entry['name'].endswith('.MOO.gz'):
-        print(entry['name'])
-"
-    )
+    # Read the opcode list from the repository rather than listing the
+    # directory over the GitHub API, which is rate limited to 60 requests an
+    # hour per IP for anonymous callers - a limit CI runners share.
+    mapfile -t opcodes < <(grep -v '^#' "${OPCODE_LIST}" | grep -v '^[[:space:]]*$')
 fi
+
+files=()
+for opcode in "${opcodes[@]}"; do
+    files+=("${opcode}.MOO.gz")
+done
 
 echo "Downloading ${#files[@]} opcode files to ${DEST}..."
 printf '%s\n' "${files[@]}" |

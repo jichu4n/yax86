@@ -320,17 +320,33 @@ enum KnownDivergence {
   kIdivWordQuotientSign = 1 << 2,
 };
 
-unsigned KnownDivergencesForOpcode(const std::string& opcode) {
-  if (opcode == "F6.6" || opcode == "F7.6") {  // DIV r/m8, DIV r/m16
-    return kDivideErrorFlags;
+// What each opcode is allowed to diverge on, and how many mismatches that is
+// expected to let through. The counts are asserted, so that a change which
+// diverges more fails here rather than quietly printing a larger number.
+//
+// They are tied to the pinned revision of the test data - see
+// tools/download-cpu-hardware-tests.sh - and to a whole opcode file, which is
+// all or nothing, so downloading a subset does not disturb them.
+struct OpcodeDivergences {
+  const char* opcode;
+  unsigned kinds;
+  int expected_count;
+};
+
+const OpcodeDivergences kKnownDivergences[] = {
+    {"F6.6", kDivideErrorFlags, 7694},                           // DIV r/m8
+    {"F7.6", kDivideErrorFlags, 7485},                           // DIV r/m16
+    {"F6.7", kDivideErrorFlags | kIdivByteQuotientSign, 11243},  // IDIV r/m8
+    {"F7.7", kDivideErrorFlags | kIdivWordQuotientSign, 11275},  // IDIV r/m16
+};
+
+const OpcodeDivergences* FindKnownDivergences(const std::string& opcode) {
+  for (const OpcodeDivergences& entry : kKnownDivergences) {
+    if (opcode == entry.opcode) {
+      return &entry;
+    }
   }
-  if (opcode == "F6.7") {  // IDIV r/m8
-    return kDivideErrorFlags | kIdivByteQuotientSign;
-  }
-  if (opcode == "F7.7") {  // IDIV r/m16
-    return kDivideErrorFlags | kIdivWordQuotientSign;
-  }
-  return kNoKnownDivergence;
+  return nullptr;
 }
 
 uint32_t ToLinearAddress(uint16_t segment, uint16_t offset) {
@@ -495,7 +511,8 @@ TEST_P(CPUHardware, Matches8088) {
   const uint16_t flags_mask =
       mask_entry == masks.end() ? 0xFFFF : mask_entry->second;
 
-  const unsigned divergences = KnownDivergencesForOpcode(opcode);
+  const OpcodeDivergences* known = FindKnownDivergences(opcode);
+  const unsigned divergences = known ? known->kinds : kNoKnownDivergence;
 
   int failures = 0;
   int num_divergences = 0;
@@ -514,9 +531,19 @@ TEST_P(CPUHardware, Matches8088) {
   EXPECT_EQ(failures, 0) << opcode << ": " << failures << " of " << tests.size()
                          << " tests failed. First: " << first_failure;
   if (failures == 0) {
+    // A real failure returns before the rest of a test is compared, which
+    // would drag the divergence count down with it - so only hold the count to
+    // its expected value once everything else agrees.
+    const int expected_divergences = known ? known->expected_count : 0;
+    EXPECT_EQ(num_divergences, expected_divergences)
+        << opcode << " diverged from the 8088 " << num_divergences
+        << " times, expected " << expected_divergences
+        << ". A larger number means something newly disagrees with the "
+           "hardware; a smaller one means a divergence has been fixed and the "
+           "expected count in kKnownDivergences should come down.";
+
     std::cout << "  opcode " << opcode << ": " << tests.size()
               << " tests passed";
-    // Report what was let through, so that a divergence cannot quietly grow.
     if (num_divergences > 0) {
       std::cout << " (" << num_divergences
                 << " known divergences from the 8088 ignored)";

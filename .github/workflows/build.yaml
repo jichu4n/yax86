@@ -18,7 +18,7 @@ jobs:
           bash -c 'echo "set man-db/auto-update false" | sudo debconf-communicate' && \
           sudo dpkg-reconfigure man-db && \
           sudo apt-get update && \
-          sudo apt-get install -y nasm
+          sudo apt-get install -y nasm zlib1g-dev
       - uses: libsdl-org/setup-sdl@main
         with:
           version: 3-latest
@@ -30,7 +30,17 @@ jobs:
               -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
               -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
       - run: cmake --build ${{github.workspace}}/build-native -j$(nproc)
+      # The 8088 hardware test data, which run-tests.sh runs against the CPU.
+      # About 480MB from a pinned revision, and roughly 20 seconds - the jobs
+      # in this matrix run in parallel, so this costs wall clock once rather
+      # than once per job, and each compiler and optimization level is worth
+      # covering: undefined behavior in the emulator tends to show up as a
+      # difference from the hardware under one of them and not the others.
+      - run: tools/download-cpu-hardware-tests.sh
       - run: tools/run-tests.sh
+        env:
+          # Fail rather than skip if the suite did not get built or fetched.
+          YAX86_REQUIRE_CPU_HARDWARE_TESTS: 1
       - working-directory: ${{github.workspace}}/build-native/core
         run: ls -lh *.a
       - run: emcmake cmake -B ${{github.workspace}}/build-emscripten

@@ -93,11 +93,18 @@ picks it up along with everything else:
 ```
 ./tools/download-cpu-hardware-tests.sh
 ```
-The download fetches about 480MB into `.cache/8088-tests`. Pass opcodes to
-fetch only a subset, as in `./tools/download-cpu-hardware-tests.sh 8D 00 80.0`;
-group opcodes take a ModRM REG suffix. The suite reports no tests at all when
-nothing has been downloaded, so a fresh checkout and CI skip it rather than
-failing. It can also be run on its own, and a single opcode picked out:
+The download fetches about 480MB into `.cache/8088-tests` in around twenty
+seconds, from a revision pinned in the script - the suite has no tags or
+releases, and its recorded results are what the tests compare against, so
+tracking a branch would let upstream change what the tests mean. The opcodes to
+fetch come from `tools/cpu-hardware-tests-opcodes.txt` rather than from the
+GitHub API, which is rate limited per IP for anonymous callers.
+
+Pass opcodes to fetch only a subset, as in
+`./tools/download-cpu-hardware-tests.sh 8D 00 80.0`; group opcodes take a ModRM
+REG suffix. The suite reports no tests at all when nothing has been downloaded,
+so a fresh checkout skips it rather than failing. It can also be run on its
+own, and a single opcode picked out:
 ```
 build-native/core/tests/cpu/cpu_hardware_tests
 build-native/core/tests/cpu/cpu_hardware_tests --gtest_filter='*Opcode8D*'
@@ -125,8 +132,15 @@ step:
 
 These are matched narrowly in `core/tests/cpu/hardware_test.cpp` - see
 `KnownDivergence` - rather than by skipping the opcodes, so everything else
-those opcodes do is still checked. The count let through is printed per opcode
-so that it cannot quietly grow.
+those opcodes do is still checked. The number of mismatches let through is
+asserted per opcode in `kKnownDivergences`, so diverging more is a failure
+rather than a larger number in the output. Fixing a divergence means bringing
+the expected count down, which the failure message says.
+
+CI downloads the data and runs the suite on every leg of the build matrix.
+Both compilers and both optimization levels are worth covering: undefined
+behavior in the emulator tends to show up as a difference from the hardware
+under one of them and not the others.
 
 To debug the WASM version of the emulator, use Chrome DevTools MCP server to
 open `http://localhost:3000/yax86_sdl.html`.
