@@ -30,8 +30,9 @@ YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
   return (value | (uint16_t)kFlagsAlwaysSet) & ~(uint16_t)kFlagsAlwaysClear;
 }
 
-YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
-  cpu->registers[kSP] -= 2;
+// Write a word where the stack pointer already points. The caller is
+// responsible for having made room for it.
+static void WriteToStackTop(CPUState* cpu, OperandValue value) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .value = {
@@ -40,6 +41,25 @@ YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
               .offset = cpu->registers[kSP],
           }}};
   WriteMemoryOperandWord(cpu, &address, value);
+}
+
+YAX86_PRIVATE void PushValue(CPUState* cpu, OperandValue value) {
+  cpu->registers[kSP] -= 2;
+  WriteToStackTop(cpu, value);
+}
+
+YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
+  cpu->registers[kSP] -= 2;
+  // The 8086/8088 moves the stack pointer before it reads the source, so
+  // PUSH SP stores the value SP has after the decrement rather than the one it
+  // had on entry. SP is the only source that can tell the difference. The
+  // 80286 and later store the entry value instead.
+  const bool source_is_stack_pointer =
+      src->address.type == kOperandAddressTypeRegister &&
+      src->address.value.register_address.register_index == kSP;
+  const OperandValue value =
+      source_is_stack_pointer ? WordValue(cpu->registers[kSP]) : src->value;
+  WriteToStackTop(cpu, value);
 }
 
 YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {

@@ -91,3 +91,52 @@ TEST_F(PushPopTest, PopMemory) {
   EXPECT_EQ(helper->memory_[0x401], 0xAB);  // High byte
   EXPECT_EQ(helper->cpu_.registers[kSP], initial_sp + 2);
 }
+
+// The 8086/8088 moves the stack pointer before it reads the source, so PUSH SP
+// stores the value SP has after the decrement. The 80286 and later store the
+// value SP had on entry, so this is one of the few ways to tell the two apart.
+TEST_F(PushPopTest, PushStackPointerPushesTheDecrementedValue) {
+  auto helper =
+      CPUTestHelper::CreateWithProgram("execute-push-sp-test", "push sp\n");
+  helper->cpu_.registers[kSS] = 0;
+  const uint16_t initial_sp = 0x0800;
+  helper->cpu_.registers[kSP] = initial_sp;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kSP], initial_sp - 2);
+  EXPECT_EQ(helper->memory_[initial_sp - 2], (initial_sp - 2) & 0xFF);
+  EXPECT_EQ(helper->memory_[initial_sp - 1], (initial_sp - 2) >> 8);
+}
+
+// The same holds for the r/m16 form, including its undocumented REG 7 alias.
+TEST_F(PushPopTest, PushStackPointerViaGroup5PushesTheDecrementedValue) {
+  for (uint8_t mod_rm : {0xF4, 0xFC}) {  // FF /6 and FF /7, both with rm = SP
+    auto helper = make_unique<CPUTestHelper>();
+    helper->LoadCOM({0xFF, mod_rm});
+    helper->cpu_.registers[kSS] = 0;
+    const uint16_t initial_sp = 0x0800;
+    helper->cpu_.registers[kSP] = initial_sp;
+
+    helper->ExecuteInstructions(1);
+
+    EXPECT_EQ(helper->cpu_.registers[kSP], initial_sp - 2)
+        << "mod_rm " << hex << static_cast<int>(mod_rm);
+    EXPECT_EQ(helper->memory_[initial_sp - 2], (initial_sp - 2) & 0xFF)
+        << "mod_rm " << hex << static_cast<int>(mod_rm);
+  }
+}
+
+// A register other than SP is unaffected: its value is read as it stands.
+TEST_F(PushPopTest, PushOtherRegisterIsUnaffectedByTheOrdering) {
+  auto helper =
+      CPUTestHelper::CreateWithProgram("execute-push-bp-test", "push bp\n");
+  helper->cpu_.registers[kSS] = 0;
+  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[kBP] = 0x1234;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->memory_[0x07FE], 0x34);
+  EXPECT_EQ(helper->memory_[0x07FF], 0x12);
+}

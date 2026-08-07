@@ -158,7 +158,7 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // Common logic for near calls.
 static InstructionResult ExecuteNearCall(
     const InstructionContext* ctx, const OperandValue* offset) {
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteRelativeJump(ctx, offset);
 }
 
@@ -174,16 +174,16 @@ YAX86_PRIVATE InstructionResult ExecuteFarCall(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   // Push the current CS and IP onto the stack.
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteFarJump(ctx, segment, offset);
 }
 
 // CALL ptr16:16
 YAX86_PRIVATE InstructionResult
 ExecuteDirectFarCall(const InstructionContext* ctx) {
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteDirectFarJump(ctx);
 }
 

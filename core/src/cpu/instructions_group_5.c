@@ -33,7 +33,7 @@ static InstructionResult ExecuteIndirectNearJump(
 // CALL ptr16
 static InstructionResult ExecuteIndirectNearCall(
     const InstructionContext* ctx, Operand* dest) {
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
@@ -56,7 +56,7 @@ static InstructionResult ExecuteIndirectFarJump(
 // PUSH r/m16
 static InstructionResult ExecuteIndirectPush(
     const InstructionContext* ctx, Operand* dest) {
-  Push(ctx->cpu, dest->value);
+  PushSourceOperand(ctx->cpu, dest);
   return kInstructionExecuted;
 }
 

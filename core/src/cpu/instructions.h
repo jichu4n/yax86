@@ -21,8 +21,14 @@ extern void SetCommonFlagsAfterInstruction(
 // controls, and none of them can change these bits.
 extern uint16_t ToFlagsRegisterValue(uint16_t value);
 
-// Push a value onto the stack.
-extern void Push(CPUState* cpu, OperandValue value);
+// Push a value the caller has already worked out onto the stack - a return
+// address, the flags, a segment register. Use this wherever the value does not
+// depend on the stack pointer.
+extern void PushValue(CPUState* cpu, OperandValue value);
+// Push a PUSH instruction's source operand onto the stack. The operand is
+// taken as of after the stack pointer has moved, rather than as of the start
+// of the instruction, which is what makes PUSH SP store the decremented value.
+extern void PushSourceOperand(CPUState* cpu, const Operand* src);
 // Pop a value from the stack.
 extern OperandValue Pop(CPUState* cpu);
 

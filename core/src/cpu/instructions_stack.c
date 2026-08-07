@@ -15,7 +15,7 @@ ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx->cpu, src.value);
+  PushSourceOperand(ctx->cpu, &src);
   return kInstructionExecuted;
 }
 
@@ -36,7 +36,7 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx->cpu, src.value);
+  PushValue(ctx->cpu, src.value);
   return kInstructionExecuted;
 }
 
@@ -57,7 +57,7 @@ ExecutePopSegmentRegister(const InstructionContext* ctx) {
 // PUSHF
 YAX86_PRIVATE InstructionResult
 ExecutePushFlags(const InstructionContext* ctx) {
-  Push(ctx->cpu, WordValue(ctx->cpu->flags));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->flags));
   return kInstructionExecuted;
 }
 
