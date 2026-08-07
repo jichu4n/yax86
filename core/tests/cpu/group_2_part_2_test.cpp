@@ -388,7 +388,7 @@ TEST_F(Group2Part2Test, RclOverflowFlag) {
   EXPECT_EQ(helper->memory_[0x0300], 0xC0);         // 11000000b
   helper->CheckFlags({{kCF, false}, {kOF, true}});  // OF=1 (MSB: 0->1)
 
-  // Test 3: Count > 1, OF should not be affected
+  // Test 3: Count > 1, OF comes from the last pass
   helper = CPUTestHelper::CreateWithProgram(
       "group2-rcl-no-overflow-count2-test", "rcl byte [bx], cl\n");
   helper->cpu_.registers[kDS] = 0;
@@ -396,11 +396,12 @@ TEST_F(Group2Part2Test, RclOverflowFlag) {
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0300] = 0x60;        // 01100000b
   CPUSetFlag(&helper->cpu_, kCF, false);
-  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it's not changed
+  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it gets overwritten
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x80);  // 10000000b
-  helper->CheckFlags(
-      {{kCF, true}, {kOF, true}});  // OF unchanged when count != 1
+  // The last pass shifted a 1 out of the top and left a 1 behind, so the sign
+  // did not change.
+  helper->CheckFlags({{kCF, true}, {kOF, false}});
 }
 
 TEST_F(Group2Part2Test, RcrByte1) {
@@ -784,7 +785,7 @@ TEST_F(Group2Part2Test, RcrOverflowFlag) {
   EXPECT_EQ(helper->memory_[0x0300], 0x83);         // 10000011b
   helper->CheckFlags({{kCF, false}, {kOF, true}});  // OF=1 (MSB: 0->1)
 
-  // Test 3: Count > 1, OF should not be affected
+  // Test 3: Count > 1, OF comes from the last pass
   helper = CPUTestHelper::CreateWithProgram(
       "group2-rcr-no-overflow-count2-test", "rcr byte [bx], cl\n");
   helper->cpu_.registers[kDS] = 0;
@@ -792,11 +793,12 @@ TEST_F(Group2Part2Test, RcrOverflowFlag) {
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0300] = 0x06;        // 00000110b
   CPUSetFlag(&helper->cpu_, kCF, false);
-  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it's not changed
+  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it gets overwritten
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0300], 0x01);  // 00000001b
-  helper->CheckFlags(
-      {{kCF, true}, {kOF, true}});  // OF unchanged when count != 1
+  // The top two bits of the result agree, so the last pass did not change the
+  // sign.
+  helper->CheckFlags({{kCF, true}, {kOF, false}});
 }
 
 TEST_F(Group2Part2Test, SarByte1) {
@@ -1152,18 +1154,18 @@ TEST_F(Group2Part2Test, SarOverflowFlag) {
   EXPECT_EQ(helper->memory_[0x0400], 0xC0);          // 11000000b
   helper->CheckFlags({{kCF, false}, {kOF, false}});  // OF=0 for SAR count=1
 
-  // Test 2: Count > 1, OF should not be affected
+  // Test 2: OF is cleared for count > 1 as well
   helper = CPUTestHelper::CreateWithProgram(
       "group2-sar-no-overflow-count2-test", "sar byte [bx], cl\n");
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0400;
   helper->cpu_.registers[kCX] = 0x0002;  // CL = 2
   helper->memory_[0x0400] = 0x80;        // 10000000b (negative)
-  CPUSetFlag(&helper->cpu_, kOF, true);     // Set OF to see it's not changed
+  CPUSetFlag(&helper->cpu_, kOF, true);  // Set OF to see it gets cleared
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0400], 0xE0);  // 11100000b
-  helper->CheckFlags(
-      {{kCF, false}, {kOF, true}});  // OF unchanged when count != 1
+  // An arithmetic shift preserves the sign, so it never overflows.
+  helper->CheckFlags({{kCF, false}, {kOF, false}});
 
   // Test 3: Positive value, OF cleared for count = 1
   helper = CPUTestHelper::CreateWithProgram(
