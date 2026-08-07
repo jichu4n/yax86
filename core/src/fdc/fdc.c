@@ -116,7 +116,7 @@ static void FDCPerformSeek(
   drive->st0 = kFDCST0NormalTermination | kFDCST0SeekEnd | drive_index;
 
   // Set interrupt pending flag for this drive.
-  drive->has_pending_internal_interrupt = true;
+  drive->has_pending_interrupt = true;
 
   // Raise Interrupt (IRQ6).
   FDCRaiseIRQ6(fdc);
@@ -482,9 +482,9 @@ static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
   // Check for any pending interrupts.
   for (int i = 0; i < kFDCNumDrives; ++i) {
     FDCDriveState* drive = &fdc->drives[i];
-    if (drive->has_pending_internal_interrupt) {
+    if (drive->has_pending_interrupt) {
       // Clear the pending interrupt flag.
-      drive->has_pending_internal_interrupt = false;
+      drive->has_pending_interrupt = false;
 
       // Result Byte 0: ST0 (Status Register 0)
       FDCResultBufferAppend(&fdc->result_buffer, &drive->st0);
@@ -648,14 +648,14 @@ static void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
     FDCResultBufferClear(&fdc->result_buffer);
     for (int i = 0; i < kFDCNumDrives; ++i) {
       fdc->drives[i].busy = false;
-      fdc->drives[i].has_pending_internal_interrupt = false;
+      fdc->drives[i].has_pending_interrupt = false;
     }
   } else if (new_reset_bit && !old_reset_bit) {
     // Exiting reset state (0 -> 1).
     // The FDC generates an interrupt and sets up status for Sense
     // Interrupt Status for all drives.
     for (int i = 0; i < kFDCNumDrives; ++i) {
-      fdc->drives[i].has_pending_internal_interrupt = true;
+      fdc->drives[i].has_pending_interrupt = true;
       fdc->drives[i].st0 = kFDCST0AbnormalTerminationPolling | (uint8_t)i;
     }
     FDCRaiseIRQ6(fdc);

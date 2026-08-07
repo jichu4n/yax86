@@ -488,9 +488,10 @@ static bool CPUCallbackAcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
   const uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector == kPICNoPendingInterrupt) {
     return false;
+  } else {
+    *vector = interrupt_vector;
+    return true;
   }
-  *vector = interrupt_vector;
-  return true;
 }
 
 static void PlatformInitCPU(PlatformState* platform) {
