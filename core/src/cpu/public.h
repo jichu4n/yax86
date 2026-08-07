@@ -252,6 +252,17 @@ typedef struct CPUState {
   // Whether a stop has been requested during the current tick. See
   // CPURequestStop().
   bool stop_requested;
+
+  // Cycles charged by the instruction currently executing on top of its base
+  // cost: its time on the data bus, and whatever it adds for itself when its
+  // cost depends on its operands. CPUTick clears this before each instruction
+  // and folds it into cycles_this_tick afterwards.
+  uint16_t pending_cycles;
+
+  // Cycles the last call to CPUTick consumed, at the 4.77MHz CPU clock. The
+  // caller drives the rest of the machine from this, so that everything timed
+  // against the CPU keeps the ratio real hardware has.
+  uint16_t cycles_this_tick;
 } CPUState;
 
 // Initialize CPU state.
@@ -286,6 +297,12 @@ static inline void CPUClearInternalInterrupt(CPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
+
+// Charge the instruction currently executing for cycles beyond its base cost.
+// Used by the instructions whose cost is not a property of the opcode alone -
+// a conditional jump that is taken, a shift by a count in CL, a multiply or a
+// divide.
+void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 
 // Request that the current tick stop as soon as the instruction in progress
 // finishes, causing CPUTick() to return kCPUTickStopped.

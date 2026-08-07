@@ -1,5 +1,6 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
+#include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
@@ -282,5 +283,8 @@ ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand op = ReadRegisterOrMemoryOperand(ctx);
-  return fn(ctx, &op, ctx->cpu->registers[kCX] & 0xFF);
+  const uint8_t count = ctx->cpu->registers[kCX] & 0xFF;
+  // A shift by CL works through the count a bit at a time.
+  CPUAddCycles(ctx->cpu, (uint16_t)count * kShiftCyclesPerBit);
+  return fn(ctx, &op, count);
 }

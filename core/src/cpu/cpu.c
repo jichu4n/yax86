@@ -1,5 +1,6 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
+#include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "public.h"
@@ -40,15 +41,19 @@ static bool IsPrefixByte(uint8_t byte) {
 }
 
 // Helper to read the next instruction byte.
+//
+// This goes straight to memory rather than through ReadMemoryOperandByte, so
+// that the fetch is not charged for time on the data bus. The 8088 fetches
+// ahead into a queue while the previous instruction executes, so most of that
+// time is already paid for by the instruction being executed - and the
+// published per-instruction figures the cycle table is built from assume the
+// queue is full.
 static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
-  OperandAddress address = {
-      .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kCS,
-              .offset = (*ip)++,
-          }}};
-  return ReadMemoryOperandByte(cpu, &address).value.byte_value;
+  const MemoryAddress address = {
+      .segment_register_index = kCS,
+      .offset = (*ip)++,
+  };
+  return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.
@@ -243,6 +248,12 @@ CPUTickResult CPUTick(CPUState* cpu) {
   // interrupt wakes it.
   bool executed_instruction = false;
 
+  // A halted CPU still consumes time - it is sitting in a wait state, not
+  // stopped - so a tick that runs no instruction still has to advance the
+  // clock, or the timer that is meant to wake it would never tick either.
+  cpu->pending_cycles = 0;
+  cpu->cycles_this_tick = kHaltedCycles;
+
   // The trap flag is sampled before the instruction runs, not after. An
   // instruction that sets TF - POPF or IRET - must not trap on itself, and one
   // that clears TF still traps once for the instruction it was set during.
@@ -264,6 +275,12 @@ CPUTickResult CPUTick(CPUState* cpu) {
     }
     cpu->registers[kIP] += instruction.size;
 
+    // The cost of the instruction is its base cost plus the address it had to
+    // compute, and then whatever it charges itself as it runs - its traffic on
+    // the data bus, and any part of its cost that depends on its operands.
+    cpu->pending_cycles += kOpcodeBaseCycles[instruction.opcode];
+    cpu->pending_cycles += GetEffectiveAddressCycles(&instruction);
+
     // Step 2: Execute the instruction.
     if (CPUExecuteInstruction(cpu, &instruction) != kInstructionExecuted) {
       YAX86_CPU_LOG(
@@ -272,6 +289,7 @@ CPUTickResult CPUTick(CPUState* cpu) {
       return kCPUTickInvalid;
     }
     executed_instruction = true;
+    cpu->cycles_this_tick = cpu->pending_cycles;
   }
 
   // Step 3: Handle a pending interrupt. This runs even while halted, because

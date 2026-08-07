@@ -318,6 +318,22 @@ STATIC_VECTOR_TYPE(MemoryMap, MemoryMapEntry, kMaxMemoryMapEntries)
 STATIC_VECTOR_TYPE(PortMap, PortMapEntry, kMaxPortMapEntries)
 
 // State of the platform.
+enum {
+  // The CPU clock, in cycles per second. 4.77MHz is the IBM PC/XT's 14.318MHz
+  // crystal divided by three.
+  kCPUCyclesPerSecond = 4772727,
+  // Cycles per millisecond, near enough for the devices that want one.
+  kCyclesPerMillisecond = kCPUCyclesPerSecond / 1000,
+  // The PIT is clocked at 1.193MHz, the same crystal divided by twelve, which
+  // is a quarter of the CPU clock.
+  kCyclesPerPITTick = 4,
+  // How often to step the floppy controller's state machine. This is not a
+  // clock ratio - the controller is a state machine here rather than a
+  // modelled device - so it keeps the rate it had before cycles were counted,
+  // to leave floppy timing where it was.
+  kCyclesPerFDCTick = 20,
+};
+
 typedef struct PlatformState {
   // Pointer to caller-provided runtime configuration.
   PlatformConfig* config;
@@ -369,8 +385,15 @@ typedef struct PlatformState {
   // I/O port map.
   PortMap io_port_map;
 
-  // How many ticks have run.
+  // How many CPU clock cycles have run, at 4.77MHz. Every device in the
+  // machine is clocked from this, so that what the guest measures with the
+  // timer matches how long it spent executing.
   uint32_t ticks;
+
+  // Cycles counted towards each device's next tick but not yet used by it.
+  uint16_t pit_cycles;
+  uint16_t fdc_cycles;
+  uint16_t keyboard_cycles;
 
   // Execution breakpoints.
   PlatformBreakpoint breakpoints[kMaxBreakpoints];
@@ -416,7 +439,7 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
-PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_ticks);
+PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Add an execution breakpoint at cs:ip. Returns the breakpoint index, or
 // kInvalidWatchIndex if all kMaxBreakpoints slots are in use.

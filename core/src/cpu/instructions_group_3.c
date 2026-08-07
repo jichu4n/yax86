@@ -66,6 +66,18 @@ static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
     16,  // kWord
 };
 
+// What the multiply and divide instructions cost. These dominate their own
+// timing by an order of magnitude - the 8086/8088 works through them a bit at
+// a time in microcode - so unlike everything else in the cycle table they are
+// worth charging individually. The published figures are ranges that depend on
+// the operands; these are the low end of each.
+static const uint16_t kMulDivCycles[kNumWidths][2] = {
+    // kByte: unsigned, signed
+    {70, 80},
+    // kWord: unsigned, signed
+    {118, 128},
+};
+
 // Common logic for MUL and IMUL instructions.
 static InstructionResult ExecuteMulCommon(
     const InstructionContext* ctx, Operand* dest, uint32_t result,
@@ -90,6 +102,7 @@ static InstructionResult ExecuteMulCommon(
 // MUL r/m16
 static InstructionResult ExecuteMul(
     const InstructionContext* ctx, Operand* op) {
+  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   uint32_t result = FromOperand(&dest) * FromOperand(op);
   return ExecuteMulCommon(
@@ -100,6 +113,7 @@ static InstructionResult ExecuteMul(
 // IMUL r/m16
 static InstructionResult ExecuteImul(
     const InstructionContext* ctx, Operand* op) {
+  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   int32_t result = FromSignedOperand(&dest) * FromSignedOperand(op);
   return ExecuteMulCommon(
@@ -121,6 +135,7 @@ static InstructionResult WriteDivResult(
 // DIV r/m16
 static InstructionResult ExecuteDiv(
     const InstructionContext* ctx, Operand* op) {
+  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
     CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
@@ -147,6 +162,7 @@ static InstructionResult ExecuteDiv(
 // IDIV r/m16
 static InstructionResult ExecuteIdiv(
     const InstructionContext* ctx, Operand* op) {
+  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
     CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);

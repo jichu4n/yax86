@@ -2,6 +2,7 @@
 #include "operands.h"
 
 #include "../util/common.h"
+#include "cycles.h"
 #endif  // YAX86_IMPLEMENTATION
 
 // Helper functions to construct OperandValue.
@@ -112,6 +113,7 @@ YAX86_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
 // Read a byte from memory to an OperandValue.
 YAX86_PRIVATE OperandValue
 ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
+  AddBusCycles(cpu, 1);
   uint8_t byte_value =
       ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address->value.memory_address));
   return ByteValue(byte_value);
@@ -120,6 +122,7 @@ ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
 // Read a word from memory to an OperandValue.
 YAX86_PRIVATE OperandValue
 ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
+  AddBusCycles(cpu, 2);
   const MemoryAddress* low_byte_address = &address->value.memory_address;
   const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
   uint8_t low_byte_value =
@@ -169,6 +172,7 @@ YAX86_PRIVATE void WriteRawMemoryByte(
 // Write a byte to memory.
 YAX86_PRIVATE void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
+  AddBusCycles(cpu, 1);
   WriteRawMemoryByte(
       cpu, ToRawAddress(cpu, &address->value.memory_address),
       value.value.byte_value);
@@ -177,6 +181,7 @@ YAX86_PRIVATE void WriteMemoryOperandByte(
 // Write a word to memory.
 YAX86_PRIVATE void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
+  AddBusCycles(cpu, 2);
   const MemoryAddress* low_byte_address = &address->value.memory_address;
   const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
   WriteRawMemoryByte(

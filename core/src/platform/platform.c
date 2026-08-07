@@ -740,22 +740,30 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Tick the CPU.
   CPUTickResult cpu_result = CPUTick(&platform->cpu);
 
-  // PIT ticks at 1.19MHz, CPU at 4.77MHz. 4.77 / 1.19 ~= 4.
-  if (platform->ticks % 4 == 0) {
+  // The instruction took as long as it took, and every device is clocked from
+  // that. Each keeps its own remainder, so a device whose period does not
+  // divide the instruction's length still runs at its own rate on average
+  // rather than drifting.
+  const uint16_t cycles = platform->cpu.cycles_this_tick;
+  platform->ticks += cycles;
+
+  platform->pit_cycles += cycles;
+  while (platform->pit_cycles >= kCyclesPerPITTick) {
+    platform->pit_cycles -= kCyclesPerPITTick;
     PITTick(&platform->pit);
   }
 
-  // The main clock on the FDC is 8MHz. 8MHz / 4.77MHz ~= 2.
-  if (platform->ticks % 2 == 0) {
+  platform->fdc_cycles += cycles;
+  while (platform->fdc_cycles >= kCyclesPerFDCTick) {
+    platform->fdc_cycles -= kCyclesPerFDCTick;
     FDCTick(&platform->fdc);
   }
 
-  // The keyboard ticks every 1ms.
-  if (platform->ticks % 4770 == 0) {
+  platform->keyboard_cycles += cycles;
+  while (platform->keyboard_cycles >= kCyclesPerMillisecond) {
+    platform->keyboard_cycles -= kCyclesPerMillisecond;
     KeyboardTickMs(&platform->keyboard);
   }
-
-  ++platform->ticks;
 
   // A watchpoint may have fired from the CPU or from a DMA transfer.
   if (platform->stop_pending) {
@@ -784,8 +792,12 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   return kPlatformRunning;
 }
 
-PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_ticks) {
-  for (uint32_t i = 0; i < max_ticks; ++i) {
+PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles) {
+  // Instructions are only ever run whole, so the last one of a run generally
+  // takes the total a little past the budget. Unsigned subtraction keeps this
+  // right across the counter wrapping.
+  const uint32_t start = platform->ticks;
+  while (platform->ticks - start < max_cycles) {
     PlatformRunStatus status = PlatformTick(platform);
     if (status != kPlatformRunning) {
       return status;

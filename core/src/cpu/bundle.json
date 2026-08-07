@@ -1,9 +1,16 @@
 {
-  "public": ["../util/common.h", "../util/snprintf.h", "../util/log.h", "public.h"],
+  "public": [
+    "../util/common.h",
+    "../util/snprintf.h",
+    "../util/log.h",
+    "public.h"
+  ],
   "private": [
     "../util/common.h",
     "types.h",
+    "cycles.h",
     "operands.h",
+    "cycles.c",
     "operands.c",
     "instructions.h",
     "instructions_helpers.c",

@@ -956,6 +956,22 @@ STATIC_VECTOR_TYPE(MemoryMap, MemoryMapEntry, kMaxMemoryMapEntries)
 STATIC_VECTOR_TYPE(PortMap, PortMapEntry, kMaxPortMapEntries)
 
 // State of the platform.
+enum {
+  // The CPU clock, in cycles per second. 4.77MHz is the IBM PC/XT's 14.318MHz
+  // crystal divided by three.
+  kCPUCyclesPerSecond = 4772727,
+  // Cycles per millisecond, near enough for the devices that want one.
+  kCyclesPerMillisecond = kCPUCyclesPerSecond / 1000,
+  // The PIT is clocked at 1.193MHz, the same crystal divided by twelve, which
+  // is a quarter of the CPU clock.
+  kCyclesPerPITTick = 4,
+  // How often to step the floppy controller's state machine. This is not a
+  // clock ratio - the controller is a state machine here rather than a
+  // modelled device - so it keeps the rate it had before cycles were counted,
+  // to leave floppy timing where it was.
+  kCyclesPerFDCTick = 20,
+};
+
 typedef struct PlatformState {
   // Pointer to caller-provided runtime configuration.
   PlatformConfig* config;
@@ -1007,8 +1023,15 @@ typedef struct PlatformState {
   // I/O port map.
   PortMap io_port_map;
 
-  // How many ticks have run.
+  // How many CPU clock cycles have run, at 4.77MHz. Every device in the
+  // machine is clocked from this, so that what the guest measures with the
+  // timer matches how long it spent executing.
   uint32_t ticks;
+
+  // Cycles counted towards each device's next tick but not yet used by it.
+  uint16_t pit_cycles;
+  uint16_t fdc_cycles;
+  uint16_t keyboard_cycles;
 
   // Execution breakpoints.
   PlatformBreakpoint breakpoints[kMaxBreakpoints];
@@ -1054,7 +1077,7 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
-PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_ticks);
+PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Add an execution breakpoint at cs:ip. Returns the breakpoint index, or
 // kInvalidWatchIndex if all kMaxBreakpoints slots are in use.
@@ -1850,22 +1873,30 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Tick the CPU.
   CPUTickResult cpu_result = CPUTick(&platform->cpu);
 
-  // PIT ticks at 1.19MHz, CPU at 4.77MHz. 4.77 / 1.19 ~= 4.
-  if (platform->ticks % 4 == 0) {
+  // The instruction took as long as it took, and every device is clocked from
+  // that. Each keeps its own remainder, so a device whose period does not
+  // divide the instruction's length still runs at its own rate on average
+  // rather than drifting.
+  const uint16_t cycles = platform->cpu.cycles_this_tick;
+  platform->ticks += cycles;
+
+  platform->pit_cycles += cycles;
+  while (platform->pit_cycles >= kCyclesPerPITTick) {
+    platform->pit_cycles -= kCyclesPerPITTick;
     PITTick(&platform->pit);
   }
 
-  // The main clock on the FDC is 8MHz. 8MHz / 4.77MHz ~= 2.
-  if (platform->ticks % 2 == 0) {
+  platform->fdc_cycles += cycles;
+  while (platform->fdc_cycles >= kCyclesPerFDCTick) {
+    platform->fdc_cycles -= kCyclesPerFDCTick;
     FDCTick(&platform->fdc);
   }
 
-  // The keyboard ticks every 1ms.
-  if (platform->ticks % 4770 == 0) {
+  platform->keyboard_cycles += cycles;
+  while (platform->keyboard_cycles >= kCyclesPerMillisecond) {
+    platform->keyboard_cycles -= kCyclesPerMillisecond;
     KeyboardTickMs(&platform->keyboard);
   }
-
-  ++platform->ticks;
 
   // A watchpoint may have fired from the CPU or from a DMA transfer.
   if (platform->stop_pending) {
@@ -1894,8 +1925,12 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   return kPlatformRunning;
 }
 
-PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_ticks) {
-  for (uint32_t i = 0; i < max_ticks; ++i) {
+PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles) {
+  // Instructions are only ever run whole, so the last one of a run generally
+  // takes the total a little past the budget. Unsigned subtraction keeps this
+  // right across the counter wrapping.
+  const uint32_t start = platform->ticks;
+  while (platform->ticks - start < max_cycles) {
     PlatformRunStatus status = PlatformTick(platform);
     if (status != kPlatformRunning) {
       return status;

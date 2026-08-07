@@ -66,6 +66,22 @@ class PlatformExecutionTest : public ::testing::Test {
 
   uint16_t ip() const { return platform_.cpu.registers[kIP]; }
 
+  // Runs up to num_instructions instructions, stopping early if the platform
+  // does. PlatformRun takes a budget in CPU cycles, but what most of these
+  // tests are pinning down is execution control - how many instructions ran,
+  // and what stopped them - so they count instructions instead and stay
+  // independent of what any one of them costs.
+  PlatformRunStatus RunInstructions(int num_instructions) {
+    PlatformRunStatus status = kPlatformRunning;
+    for (int i = 0; i < num_instructions; ++i) {
+      status = PlatformTick(&platform_);
+      if (status != kPlatformRunning) {
+        return status;
+      }
+    }
+    return status;
+  }
+
   PlatformConfig config_ = {0};
   PlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
@@ -82,14 +98,14 @@ TEST_F(PlatformExecutionTest, TickReportsRunning) {
 TEST_F(PlatformExecutionTest, RunConsumesFullBudget) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop});
 
-  EXPECT_EQ(PlatformRun(&platform_, 4), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(4), kPlatformRunning);
   EXPECT_EQ(ip(), kProgramOffset + 4);
 }
 
 TEST_F(PlatformExecutionTest, UnimplementedEncodingIsReportedAsInvalid) {
   Load({kOpNop, kOpGroup4, kModRMGroup4Reg2, kOpNop});
 
-  EXPECT_EQ(PlatformRun(&platform_, 8), kPlatformInvalid);
+  EXPECT_EQ(RunInstructions(8), kPlatformInvalid);
   // IP has advanced past the offending instruction, so the caller can choose
   // to keep going.
   EXPECT_EQ(ip(), kProgramOffset + 3);
@@ -98,11 +114,11 @@ TEST_F(PlatformExecutionTest, UnimplementedEncodingIsReportedAsInvalid) {
 TEST_F(PlatformExecutionTest, RunResumesAfterInvalidInstruction) {
   Load({kOpNop, kOpGroup4, kModRMGroup4Reg2, kOpNop, kOpNop});
 
-  ASSERT_EQ(PlatformRun(&platform_, 4), kPlatformInvalid);
+  ASSERT_EQ(RunInstructions(4), kPlatformInvalid);
   // The offending tick is counted, so a host that treats an invalid
   // instruction as non-fatal can resume and make progress.
   const uint32_t ticks_before = platform_.ticks;
-  EXPECT_EQ(PlatformRun(&platform_, 2), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(2), kPlatformRunning);
   EXPECT_GT(platform_.ticks, ticks_before);
   EXPECT_EQ(ip(), kProgramOffset + 5);
 }
@@ -110,7 +126,7 @@ TEST_F(PlatformExecutionTest, RunResumesAfterInvalidInstruction) {
 TEST_F(PlatformExecutionTest, HaltWithInterruptsDisabledIsReportedAsHung) {
   Load({kOpCli, kOpHlt});
 
-  EXPECT_EQ(PlatformRun(&platform_, 8), kPlatformHung);
+  EXPECT_EQ(RunInstructions(8), kPlatformHung);
   EXPECT_TRUE(platform_.cpu.is_halted);
 }
 
@@ -121,8 +137,13 @@ TEST_F(PlatformExecutionTest, HaltWithInterruptsEnabledKeepsRunning) {
   // machine has to keep ticking so that an interrupt can arrive.
   EXPECT_EQ(PlatformRun(&platform_, 64), kPlatformRunning);
   EXPECT_TRUE(platform_.cpu.is_halted);
-  // The PIT keeps advancing even though the CPU is halted.
-  EXPECT_EQ(platform_.ticks, 64u);
+  // Time keeps passing even though the CPU is halted, which is what lets the
+  // timer that would wake it keep running. A halted tick is charged a fixed
+  // cost, so the run stops on the first one to reach the budget.
+  EXPECT_GE(platform_.ticks, 64u);
+  // A halted tick costs only a handful of cycles, so the run stops within one
+  // of them of the budget rather than far past it.
+  EXPECT_LT(platform_.ticks, 80u);
 }
 
 TEST_F(PlatformExecutionTest, BreakpointStopsBeforeExecutingInstruction) {
@@ -131,7 +152,7 @@ TEST_F(PlatformExecutionTest, BreakpointStopsBeforeExecutingInstruction) {
   const int8_t index = PlatformAddBreakpoint(&platform_, 0, kProgramOffset + 1);
   ASSERT_GE(index, 0);
 
-  EXPECT_EQ(PlatformRun(&platform_, 8), kPlatformStopped);
+  EXPECT_EQ(RunInstructions(8), kPlatformStopped);
   EXPECT_EQ(ip(), kProgramOffset + 1);
   // The MOV has not run yet.
   EXPECT_EQ(platform_.cpu.registers[kAX] & 0xFF, 0);
@@ -147,11 +168,11 @@ TEST_F(PlatformExecutionTest, BreakpointStopsBeforeExecutingInstruction) {
 TEST_F(PlatformExecutionTest, ResumingFromBreakpointMakesProgress) {
   Load({kOpNop, kOpMovAlImm8, 0x42, kOpNop});
   ASSERT_GE(PlatformAddBreakpoint(&platform_, 0, kProgramOffset + 1), 0);
-  ASSERT_EQ(PlatformRun(&platform_, 8), kPlatformStopped);
+  ASSERT_EQ(RunInstructions(8), kPlatformStopped);
 
   // Resuming must execute the instruction under the breakpoint rather than
   // stopping on it again. Two ticks run the MOV and the trailing NOP.
-  EXPECT_EQ(PlatformRun(&platform_, 2), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(2), kPlatformRunning);
   EXPECT_EQ(platform_.cpu.registers[kAX] & 0xFF, 0x42);
   EXPECT_EQ(ip(), kProgramOffset + 4);
 }
@@ -165,7 +186,7 @@ TEST_F(PlatformExecutionTest, RemovedBreakpointDoesNotFire) {
   // Removing it a second time reports failure.
   EXPECT_FALSE(PlatformRemoveBreakpoint(&platform_, index));
 
-  EXPECT_EQ(PlatformRun(&platform_, 4), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(4), kPlatformRunning);
   EXPECT_EQ(ip(), kProgramOffset + 4);
 }
 
@@ -190,7 +211,7 @@ TEST_F(PlatformExecutionTest, MemoryWatchpointStopsOnWrite) {
       /*on_write=*/true);
   ASSERT_GE(index, 0);
 
-  EXPECT_EQ(PlatformRun(&platform_, 8), kPlatformStopped);
+  EXPECT_EQ(RunInstructions(8), kPlatformStopped);
   // The instruction that tripped the watchpoint runs to completion.
   EXPECT_EQ(ram_[kDataOffset], 0x42);
 
@@ -214,7 +235,7 @@ TEST_F(PlatformExecutionTest, MemoryWatchpointIgnoresUnwatchedDirection) {
           /*on_write=*/true),
       0);
 
-  EXPECT_EQ(PlatformRun(&platform_, 3), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(3), kPlatformRunning);
   EXPECT_EQ(platform_.cpu.registers[kAX] & 0xFF, 0x99);
   EXPECT_EQ(PlatformGetStopInfo(&platform_), nullptr);
 }
@@ -229,7 +250,7 @@ TEST_F(PlatformExecutionTest, MemoryWatchpointStopsOnRead) {
           /*on_write=*/false),
       0);
 
-  EXPECT_EQ(PlatformRun(&platform_, 3), kPlatformStopped);
+  EXPECT_EQ(RunInstructions(3), kPlatformStopped);
 
   const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
   ASSERT_NE(stop_info, nullptr);
@@ -248,7 +269,7 @@ TEST_F(PlatformExecutionTest, ClearedMemoryWatchpointDoesNotFire) {
       0);
   PlatformClearMemoryWatchpoints(&platform_);
 
-  EXPECT_EQ(PlatformRun(&platform_, 3), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(3), kPlatformRunning);
 }
 
 TEST_F(PlatformExecutionTest, AddMemoryWatchpointRejectsInvalidRange) {
@@ -266,7 +287,7 @@ TEST_F(PlatformExecutionTest, StepModeStopsAfterEachInstruction) {
   PlatformSetStepMode(&platform_, true);
 
   for (int i = 1; i <= 3; ++i) {
-    EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformStopped) << "step " << i;
+    EXPECT_EQ(RunInstructions(100), kPlatformStopped) << "step " << i;
     EXPECT_EQ(ip(), kProgramOffset + i);
     const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
     ASSERT_NE(stop_info, nullptr);
@@ -275,7 +296,7 @@ TEST_F(PlatformExecutionTest, StepModeStopsAfterEachInstruction) {
   }
 
   PlatformSetStepMode(&platform_, false);
-  EXPECT_EQ(PlatformRun(&platform_, 4), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(4), kPlatformRunning);
 }
 
 TEST_F(PlatformExecutionTest, StepModeStopsOnHaltingInstruction) {
@@ -283,12 +304,12 @@ TEST_F(PlatformExecutionTest, StepModeStopsOnHaltingInstruction) {
   Load({kOpSti, kOpHlt, kOpNop});
   PlatformSetStepMode(&platform_, true);
 
-  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformStopped);
+  EXPECT_EQ(RunInstructions(100), kPlatformStopped);
   EXPECT_EQ(ip(), kProgramOffset + 1);
 
   // HLT is an instruction, so stepping must stop after it runs rather than
   // running away because the CPU happens to be halted afterwards.
-  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformStopped);
+  EXPECT_EQ(RunInstructions(100), kPlatformStopped);
   EXPECT_EQ(ip(), kProgramOffset + 2);
   const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
   ASSERT_NE(stop_info, nullptr);
@@ -297,7 +318,7 @@ TEST_F(PlatformExecutionTest, StepModeStopsOnHaltingInstruction) {
 
   // Once halted, no instruction retires, so stepping does not stop again -
   // the machine simply keeps ticking until an interrupt wakes the CPU.
-  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(100), kPlatformRunning);
   EXPECT_TRUE(platform_.cpu.is_halted);
 }
 
@@ -305,11 +326,11 @@ TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
   Load({kOpCli, kOpHlt});
   PlatformSetStepMode(&platform_, true);
 
-  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformStopped);
+  EXPECT_EQ(RunInstructions(100), kPlatformStopped);
 
   // The HLT retires, which would otherwise be a step stop, but a CPU that can
   // never be woken is the more useful thing to report.
-  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformHung);
+  EXPECT_EQ(RunInstructions(100), kPlatformHung);
 }
 
 }  // namespace
@@ -318,7 +339,9 @@ TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
 // must not discard it. Sharing one pending-interrupt slot between the two used
 // to lose the IRQ, leaving the PIC with the interrupt permanently in service
 // and every lower priority IRQ - notably the keyboard - blocked behind it.
-TEST_F(PlatformExecutionTest, SoftwareInterruptDoesNotStrandAnAcknowledgedInterrupt) {
+TEST_F(
+    PlatformExecutionTest,
+    SoftwareInterruptDoesNotStrandAnAcknowledgedInterrupt) {
   enum : uint32_t {
     // Vector table entries, at interrupt number * 4.
     kVectorIRQ0 = 0x08 * 4,
@@ -352,7 +375,7 @@ TEST_F(PlatformExecutionTest, SoftwareInterruptDoesNotStrandAnAcknowledgedInterr
   WritePortByte(&platform_, 0x21, 0xFE);  // OCW1: unmask IRQ0
 
   ASSERT_TRUE(PlatformRaiseIRQ(&platform_, 0));
-  PlatformRun(&platform_, 200);
+  RunInstructions(200);
 
   EXPECT_EQ(ram_[kMarker], 0xAA) << "IRQ0 handler never ran";
   // With the IRQ delivered, the PIC is no longer stuck with it in service.
