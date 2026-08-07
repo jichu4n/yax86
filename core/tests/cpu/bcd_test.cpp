@@ -473,7 +473,8 @@ TEST_F(BcdTest, AAM_ZeroBaseRaisesDivideError) {
   helper->ExecuteInstructions(1);
 
   EXPECT_TRUE(helper->cpu_.has_pending_internal_interrupt);
-  EXPECT_EQ(helper->cpu_.pending_internal_interrupt_number, kInterruptDivideError);
+  EXPECT_EQ(
+      helper->cpu_.pending_internal_interrupt_number, kInterruptDivideError);
   // AX is left untouched.
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x0017);
 }
@@ -1274,4 +1275,69 @@ TEST_F(BcdTest, DAS_PreservesOtherRegisters) {
   EXPECT_EQ(helper->cpu_.registers[kDI], 0x9753);
 
   helper->CheckFlags({{kAF, true}, {kCF, true}, {kZF, false}, {kSF, false}});
+}
+
+// DAA and DAS test AL as it was on entry, before the low digit was adjusted,
+// and the limit they test it against is one higher when the auxiliary carry
+// flag was already set. Intel's published pseudocode uses 0x99 throughout; the
+// hardware uses 0x9F here, and for AL between 0x9A and 0x9F that is the
+// difference between adjusting the high digit and leaving it alone.
+TEST_F(BcdTest, DAA_HighDigitLimitIsRaisedWhenAuxiliaryCarryIsSet) {
+  auto helper =
+      CPUTestHelper::CreateWithProgram("test-daa-af-set-high-limit", "daa\n");
+  helper->cpu_.registers[kAX] = 0x369E;
+  CPUSetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, false);
+
+  helper->ExecuteInstructions(1);
+
+  // The low digit is adjusted to give 0xA4, and 0x9E does not exceed the 0x9F
+  // limit, so no 0x60 is added on top and no carry comes out.
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x36A4);
+  helper->CheckFlags({{kCF, false}, {kAF, true}});
+}
+
+TEST_F(BcdTest, DAA_HighDigitLimitIsLowerWhenAuxiliaryCarryIsClear) {
+  auto helper =
+      CPUTestHelper::CreateWithProgram("test-daa-af-clear-high-limit", "daa\n");
+  // The same AL, but with no auxiliary carry the limit is 0x99, which 0x9E
+  // does exceed.
+  helper->cpu_.registers[kAX] = 0x369E;
+  CPUSetFlag(&helper->cpu_, kAF, false);
+  CPUSetFlag(&helper->cpu_, kCF, false);
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x3604);
+  helper->CheckFlags({{kCF, true}, {kAF, true}});
+}
+
+TEST_F(BcdTest, DAS_HighDigitLimitIsRaisedWhenAuxiliaryCarryIsSet) {
+  auto helper =
+      CPUTestHelper::CreateWithProgram("test-das-af-set-high-limit", "das\n");
+  helper->cpu_.registers[kAX] = 0x369E;
+  CPUSetFlag(&helper->cpu_, kAF, true);
+  CPUSetFlag(&helper->cpu_, kCF, false);
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x3698);
+  helper->CheckFlags({{kCF, false}, {kAF, true}});
+}
+
+// AAM divides by its immediate operand, so a base of 0 raises a divide error.
+// The division never produces a result, and the flags are left as though it
+// had produced zero.
+TEST_F(BcdTest, AAM_BaseZeroSetsFlagsAsThoughTheResultWereZero) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "test-aam-base-zero-flags", "db 0xd4, 0x00\n");
+  helper->cpu_.registers[kSS] = 0;
+  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[kAX] = 0x00FF;
+  CPUSetFlag(&helper->cpu_, kSF, true);
+
+  helper->ExecuteInstructions(1);
+
+  helper->CheckFlags(
+      {{kZF, true}, {kSF, false}, {kPF, true}, {kCF, false}, {kOF, false}});
 }
