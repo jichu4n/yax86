@@ -93,11 +93,16 @@ static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
 }
 
 // Execute a string instruction with optional REP prefix.
+//
+// MOVS, STOS and LODS set no flags, so a repetition prefix has no zero flag to
+// test and the 8086/8088 does not tell the two prefixes apart here: 0xF2
+// repeats exactly as 0xF3 does, counting CX down to zero. Only the comparison
+// string instructions read the prefix as a condition.
 static InstructionResult ExecuteStringInstructionWithREPPrefix(
     const InstructionContext* ctx,
     InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
-  if (prefix != kPrefixREP) {
+  if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
     return fn(ctx);
   }
   while (ctx->cpu->registers[kCX]) {

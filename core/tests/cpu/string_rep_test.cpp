@@ -1039,3 +1039,36 @@ TEST_F(StringRepTest, LODSWMultipleOperations) {
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x4433);
   EXPECT_EQ(helper->cpu_.registers[kSI], 0x0304);
 }
+
+// MOVS, STOS and LODS set no flags, so a repetition prefix has no zero flag to
+// test. The 8086/8088 treats 0xF2 exactly as 0xF3 on these, counting CX down to
+// zero either way.
+TEST_F(StringRepTest, RepneRepeatsNonComparisonStringInstructions) {
+  // Each case is the instruction byte and a label for failure messages.
+  struct Case {
+    uint8_t opcode;
+    const char* name;
+  };
+  static const Case kCases[] = {
+      {0xA4, "movsb"}, {0xA5, "movsw"}, {0xAA, "stosb"},
+      {0xAB, "stosw"}, {0xAC, "lodsb"}, {0xAD, "lodsw"},
+  };
+
+  for (const Case& test_case : kCases) {
+    auto helper = make_unique<CPUTestHelper>();
+    // 0xF2 is REPNZ, which on these instructions repeats just as REP does.
+    helper->LoadCOM({0xF2, test_case.opcode});
+    helper->cpu_.registers[kDS] = 0;
+    helper->cpu_.registers[kES] = 0;
+    helper->cpu_.registers[kSI] = 0x0400;
+    helper->cpu_.registers[kDI] = 0x0600;
+    helper->cpu_.registers[kCX] = 3;
+    CPUSetFlag(&helper->cpu_, kDF, false);
+    // A zero flag state that would stop a conditional repeat immediately.
+    CPUSetFlag(&helper->cpu_, kZF, true);
+
+    helper->ExecuteInstructions(1);
+
+    EXPECT_EQ(helper->cpu_.registers[kCX], 0) << test_case.name;
+  }
+}
