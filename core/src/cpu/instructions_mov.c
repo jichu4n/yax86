@@ -73,6 +73,8 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   // be 8 bits.
   OperandValue src_offset_value =
       kReadImmediateValueFn[kWord](ctx->instruction);
+  // The source is DS:offset by default, but can be overridden by a segment
+  // override prefix.
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
       .value = {
@@ -80,6 +82,7 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
               .segment_register_index = kDS,
               .offset = (uint16_t)FromOperandValue(&src_offset_value),
           }}};
+  ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
   OperandValue src_value = ReadOperandValue(ctx, &src_address);
   WriteOperand(ctx, &dest, FromOperandValue(&src_value));
   return kExecuteSuccess;
@@ -94,6 +97,8 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   // be 8 bits.
   OperandValue dest_offset_value =
       kReadImmediateValueFn[kWord](ctx->instruction);
+  // The destination is DS:offset by default, but can be overridden by a segment
+  // override prefix.
   OperandAddress dest_address = {
       .type = kOperandAddressTypeMemory,
       .value = {
@@ -101,6 +106,7 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
               .segment_register_index = kDS,
               .offset = (uint16_t)FromOperandValue(&dest_offset_value),
           }}};
+  ApplySegmentOverride(ctx->instruction, &dest_address.value.memory_address);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   return kExecuteSuccess;
 }
@@ -157,6 +163,8 @@ YAX86_PRIVATE ExecuteStatus
 ExecuteTranslateByte(const InstructionContext* ctx) {
   // Read the AL register
   Operand al = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  // The translation table is at DS:BX by default, but can be overridden by a
+  // segment override prefix.
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
       .value =
@@ -167,6 +175,7 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
                        (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
                }},
   };
+  ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
   OperandValue src_value = ReadMemoryOperandByte(ctx->cpu, &src_address);
   WriteOperandAddress(ctx, &al.address, FromOperandValue(&src_value));
   return kExecuteSuccess;

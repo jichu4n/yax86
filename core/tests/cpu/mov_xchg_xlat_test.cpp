@@ -784,3 +784,88 @@ TEST_F(MovXchgXlatTest, XLAT) {
        {kOF, false},
        {kAF, false}});
 }
+
+TEST_F(MovXchgXlatTest, MOVMemoryOffsetAndALOrAXWithSegmentOverride) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-mov-memory-offset-segment-override-test",
+      "mov al, [cs:0300h]\n"    // Load a byte from CS:offset into AL
+      "mov [cs:0340h], al\n"    // Store AL to CS:offset
+      "mov ax, [cs:0380h]\n"    // Load a word from CS:offset into AX
+      "mov [cs:03C0h], ax\n"    // Store AX to CS:offset
+      "mov al, [es:0010h]\n"    // Load a byte from ES:offset into AL
+      "mov [es:0020h], al\n");  // Store AL to ES:offset
+
+  // CS is 0, so a CS-overridden access resolves to the raw offset. DS points
+  // elsewhere, so an ignored override would resolve to 0x0800 + offset.
+  helper->cpu_.registers[kDS] = 0x80;
+  helper->cpu_.registers[kES] = 0x40;
+
+  // Test 1: mov al, [cs:0300h] - reads 0x0300, not DS:0300h = 0x0B00.
+  helper->memory_[0x0300] = 0x42;
+  helper->memory_[0x0B00] = 0x99;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);  // AL
+
+  // Test 2: mov [cs:0340h], al - writes 0x0340, not DS:0340h = 0x0B40.
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0340], 0x42);
+  EXPECT_EQ(helper->memory_[0x0B40], 0x00);
+
+  // Test 3: mov ax, [cs:0380h] - reads 0x0380, not DS:0380h = 0x0B80.
+  helper->memory_[0x0380] = 0x34;  // LSB
+  helper->memory_[0x0381] = 0x12;  // MSB
+  helper->memory_[0x0B80] = 0x99;
+  helper->memory_[0x0B81] = 0x99;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
+
+  // Test 4: mov [cs:03C0h], ax - writes 0x03C0, not DS:03C0h = 0x0BC0.
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x03C0], 0x34);  // LSB
+  EXPECT_EQ(helper->memory_[0x03C1], 0x12);  // MSB
+  EXPECT_EQ(helper->memory_[0x0BC0], 0x00);
+  EXPECT_EQ(helper->memory_[0x0BC1], 0x00);
+
+  // Test 5: mov al, [es:0010h] with ES = 0x40 - reads 0x0410, not DS:0010h =
+  // 0x0810.
+  helper->memory_[0x0410] = 0xAA;
+  helper->memory_[0x0810] = 0x99;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xAA);  // AL
+
+  // Test 6: mov [es:0020h], al with ES = 0x40 - writes 0x0420, not DS:0020h =
+  // 0x0820.
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->memory_[0x0420], 0xAA);
+  EXPECT_EQ(helper->memory_[0x0820], 0x00);
+}
+
+TEST_F(MovXchgXlatTest, XLATWithSegmentOverride) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-xlat-segment-override-test",
+      "es xlatb\n"    // Translate through ES:BX instead of DS:BX
+      "cs xlatb\n");  // Translate through CS:BX instead of DS:BX
+
+  // CS is 0. DS points elsewhere, so an ignored override would resolve to
+  // 0x0800 + BX + AL.
+  helper->cpu_.registers[kDS] = 0x80;
+  helper->cpu_.registers[kES] = 0x40;
+
+  // Test 1: es xlatb - reads ES:BX + AL = 0x0400 + 0x0300 + 0x05 = 0x0705,
+  // not DS:BX + AL = 0x0B05.
+  helper->cpu_.registers[kBX] = 0x0300;
+  helper->cpu_.registers[kAX] = 0xCC05;  // AL = 0x05, AH = 0xCC
+  helper->memory_[0x0705] = 0xAB;
+  helper->memory_[0x0B05] = 0x99;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xAB);         // AL
+  EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0xCC);  // AH unchanged
+
+  // Test 2: cs xlatb - reads CS:BX + AL = 0x0300 + 0xAB = 0x03AB, not
+  // DS:BX + AL = 0x0BAB.
+  helper->memory_[0x03AB] = 0x42;
+  helper->memory_[0x0BAB] = 0x99;
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);         // AL
+  EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0xCC);  // AH unchanged
+}
