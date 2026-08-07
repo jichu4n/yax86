@@ -8,6 +8,7 @@
 
 #include "core/platform.h"
 #include "core/video.h"
+#include "floppy.h"
 #include "display.h"
 #include "input.h"
 
@@ -148,7 +149,7 @@ void MainTick(void) {
   DisplayRender();             // Update screen
 }
 
-int main(YAX86_UNUSED int argc, YAX86_UNUSED char* argv[]) {
+int main(int argc, char* argv[]) {
   if (!DisplayInit()) {
     fprintf(stderr, "Failed to init display\n");
     return 1;
@@ -183,6 +184,19 @@ int main(YAX86_UNUSED int argc, YAX86_UNUSED char* argv[]) {
       &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
       "yax86 started with %u KB of conventional memory",
       config.physical_memory_size / 1024);
+
+  // Mount the boot floppy. Without one the BIOS still runs, so a failure here
+  // is reported but not fatal.
+  const char* floppy_path = argc > 1 ? argv[1] : kDefaultFloppyImagePath;
+  if (FloppyMount(&g_platform, floppy_path)) {
+    YAX86_LOG(
+        &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
+        "mounted %s in floppy drive A", floppy_path);
+  } else {
+    YAX86_LOG(
+        &g_platform.logger, &kLogModuleApp, kLogLevelError,
+        "floppy drive A is empty - could not mount %s", floppy_path);
+  }
 
   // Hook up video callback
   // PlatformInit initializes sub-modules. We override the MDA config callback.
