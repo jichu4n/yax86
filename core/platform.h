@@ -1842,7 +1842,7 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // vector would overwrite the first, and the PIC would wait forever for an
   // end-of-interrupt that the lost handler never sends - which blocks every
   // lower priority IRQ behind it.
-  if (CPUGetFlag(&platform->cpu, kIF) && !CPUIsINTRAsserted(&platform->cpu)) {
+  if (CPUGetFlag(&platform->cpu, kIF) && !platform->cpu.is_intr_asserted) {
     uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
     if (interrupt_vector != kPICNoPendingInterrupt) {
       CPUAssertINTR(&platform->cpu, interrupt_vector);

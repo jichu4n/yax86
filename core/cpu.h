@@ -821,17 +821,12 @@ static inline void CPUClearInternalInterrupt(CPUState* cpu) {
 // which interrupts are enabled, so unlike CPURaiseInternalInterrupt() this does
 // not disturb an internal interrupt that is already pending.
 //
-// Callers should check CPUIsINTRAsserted() first: the CPU has a single INTR
-// slot, so asserting a second request before the first is taken would drop it,
+// Callers should check is_intr_asserted first: the CPU has a single INTR slot,
+// so asserting a second request before the first is taken would drop it,
 // leaving the controller waiting for an end-of-interrupt that never comes.
 static inline void CPUAssertINTR(CPUState* cpu, uint8_t vector) {
   cpu->is_intr_asserted = true;
   cpu->intr_vector = vector;
-}
-
-// Whether a request on the INTR pin is still waiting to be taken.
-static inline bool CPUIsINTRAsserted(const CPUState* cpu) {
-  return cpu->is_intr_asserted;
 }
 
 // Request that the current tick stop as soon as the instruction in progress

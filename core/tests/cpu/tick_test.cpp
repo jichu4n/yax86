@@ -299,13 +299,13 @@ TEST_F(TickTest, SoftwareInterruptDoesNotDeassertINTR) {
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0050);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
   // The external request must survive it.
-  EXPECT_TRUE(CPUIsINTRAsserted(&helper->cpu_));
+  EXPECT_TRUE(helper->cpu_.is_intr_asserted);
 
   // IRET restores IF, and the request is then taken.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
-  EXPECT_FALSE(CPUIsINTRAsserted(&helper->cpu_));
+  EXPECT_FALSE(helper->cpu_.is_intr_asserted);
 }
 
 TEST_F(TickTest, AssertedINTRWaitsForInterruptsToBeEnabled) {
@@ -318,15 +318,15 @@ TEST_F(TickTest, AssertedINTRWaitsForInterruptsToBeEnabled) {
 
   // Not taken while interrupts are disabled - and not thrown away either.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
-  EXPECT_TRUE(CPUIsINTRAsserted(&helper->cpu_));
+  EXPECT_TRUE(helper->cpu_.is_intr_asserted);
   EXPECT_NE(helper->cpu_.registers[kCS], 0x0060);
 
   // Once interrupts are enabled again the request is taken.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
-  for (int i = 0; i < 2 && CPUIsINTRAsserted(&helper->cpu_); ++i) {
+  for (int i = 0; i < 2 && helper->cpu_.is_intr_asserted; ++i) {
     ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   }
-  EXPECT_FALSE(CPUIsINTRAsserted(&helper->cpu_));
+  EXPECT_FALSE(helper->cpu_.is_intr_asserted);
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
 }
