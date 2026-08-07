@@ -9,7 +9,7 @@
 // Group 4 - INC, DEC
 // ============================================================================
 
-typedef ExecuteStatus (*Group4ExecuteInstructionFn)(
+typedef InstructionResult (*Group4ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* dest);
 
 // Group 4 instruction implementations, indexed by the corresponding REG field
@@ -20,7 +20,7 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
 };
 
 // Group 4 instruction handler.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteGroup4Instruction(const InstructionContext* ctx) {
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

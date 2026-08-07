@@ -29,23 +29,25 @@ static OperandValue (*const kReadFromPortFns[])(CPUState*, uint16_t) = {
 };
 
 // Common logic for IN instructions.
-static ExecuteStatus ExecuteIn(const InstructionContext* ctx, uint16_t port) {
+static InstructionResult ExecuteIn(
+    const InstructionContext* ctx, uint16_t port) {
   OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   WriteOperand(ctx, &dest, FromOperandValue(&value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // IN AL, imm8
 // IN AX, imm8
-YAX86_PRIVATE ExecuteStatus ExecuteInImmediate(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteIn(ctx, FromOperandValue(&port));
 }
 
 // IN AL, DX
 // IN AX, DX
-YAX86_PRIVATE ExecuteStatus ExecuteInDX(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteInDX(const InstructionContext* ctx) {
   return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
 }
 
@@ -71,21 +73,23 @@ static void (*const kWriteToPortFns[])(CPUState*, uint16_t, OperandValue) = {
 };
 
 // Common logic for OUT instructions.
-static ExecuteStatus ExecuteOut(const InstructionContext* ctx, uint16_t port) {
+static InstructionResult ExecuteOut(
+    const InstructionContext* ctx, uint16_t port) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // OUT imm8, AL
 // OUT imm8, AX
-YAX86_PRIVATE ExecuteStatus ExecuteOutImmediate(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecuteOutImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteOut(ctx, FromOperandValue(&port));
 }
 
 // OUT DX, AL
 // OUT DX, AX
-YAX86_PRIVATE ExecuteStatus ExecuteOutDX(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteOutDX(const InstructionContext* ctx) {
   return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }

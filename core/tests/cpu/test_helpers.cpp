@@ -155,8 +155,8 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     }
     context->memory[address] = value;
   };
-  config_.handle_interrupt = [](CPUState* cpu,
-                                uint8_t interrupt_number) -> ExecuteStatus {
+  config_.handle_interrupt =
+      [](CPUState* cpu, uint8_t interrupt_number) -> InterruptHandlerResult {
     throw runtime_error(
         "Interrupt " + to_string(interrupt_number) + " not handled in test");
   };
@@ -206,10 +206,10 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
     cout << "[" << hex << setw(4) << setfill('0') << (*ip) << "]\t"
          << instruction << endl;
     *ip += instruction.size;
-    auto execute_status = CPUExecuteInstruction(&cpu_, &instruction);
-    if (execute_status != kExecuteSuccess) {
-      cout << "Warning: Instruction execution returned status " << dec
-           << execute_status << endl;
+    auto execute_result = CPUExecuteInstruction(&cpu_, &instruction);
+    if (execute_result != kInstructionExecuted) {
+      cout << "Warning: Instruction execution returned result " << dec
+           << execute_result << endl;
     }
   }
 }

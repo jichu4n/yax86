@@ -16,6 +16,9 @@
 static uint8_t g_memory[INTERNAL_RAM_SIZE];
 static PlatformState g_platform;
 static bool g_running = true;
+// Set once the emulated machine can no longer make progress. The window stays
+// open and keeps rendering, but the platform is no longer ticked.
+static bool g_cpu_stopped = false;
 
 // Log module for the SDL runtime itself.
 enum {
@@ -111,8 +114,20 @@ void MainTick(void) {
   if (!g_running) return;
 
   // 2. Run CPU Instructions
-  for (int i = 0; i < INSTRUCTIONS_PER_FRAME; ++i) {
-    PlatformTick(&g_platform);
+  for (int i = 0; i < INSTRUCTIONS_PER_FRAME && !g_cpu_stopped; ++i) {
+    PlatformRunStatus status = PlatformTick(&g_platform);
+    // kPlatformInvalid is deliberately not fatal here. The 8088 has no invalid
+    // opcode exception, so a real machine would keep going; CPUTick() has
+    // already logged it. Anything else means the machine cannot make progress,
+    // so stop ticking it - but keep rendering so the final screen stays up.
+    if (status != kPlatformRunning && status != kPlatformInvalid) {
+      YAX86_LOG(
+          &g_platform.logger, &kLogModuleApp, kLogLevelError,
+          "execution stopped at %04X:%04X with status %d",
+          g_platform.cpu.registers[kCS], g_platform.cpu.registers[kIP],
+          (int)status);
+      g_cpu_stopped = true;
+    }
   }
 
   // 3. Render

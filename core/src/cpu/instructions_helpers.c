@@ -52,7 +52,7 @@ YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
 }
 
 // Dummy instruction for unsupported opcodes.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }

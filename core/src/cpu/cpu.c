@@ -134,29 +134,26 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
 // Execution
 // ============================================================================
 
-ExecuteStatus CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
-  ExecuteStatus status;
-
+InstructionResult CPUExecuteInstruction(
+    CPUState* cpu, Instruction* instruction) {
   // Run the on_before_execute_instruction callback if provided.
-  if (cpu->config->on_before_execute_instruction &&
-      (status = cpu->config->on_before_execute_instruction(cpu, instruction)) !=
-          kExecuteSuccess) {
-    return status;
+  if (cpu->config->on_before_execute_instruction) {
+    cpu->config->on_before_execute_instruction(cpu, instruction);
   }
 
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
   if (!metadata->handler) {
-    return kExecuteInvalidOpcode;
+    return kInstructionInvalid;
   }
 
   // Check encoded instruction against expected instruction format.
   if (instruction->has_mod_rm != metadata->has_modrm) {
-    return kExecuteInvalidInstruction;
+    return kInstructionInvalid;
   }
   if (instruction->immediate_size !=
       (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
                            : metadata->immediate_size)) {
-    return kExecuteInvalidInstruction;
+    return kInstructionInvalid;
   }
 
   // Run the instruction handler.
@@ -165,24 +162,23 @@ ExecuteStatus CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
       .instruction = instruction,
       .metadata = metadata,
   };
-  if ((status = metadata->handler(&context)) != kExecuteSuccess) {
-    return status;
+  InstructionResult result = metadata->handler(&context);
+  if (result != kInstructionExecuted) {
+    return result;
   }
 
   // Run the on_after_execute_instruction callback if provided.
-  if (cpu->config->on_after_execute_instruction &&
-      (status = cpu->config->on_after_execute_instruction(cpu, instruction)) !=
-          kExecuteSuccess) {
-    return status;
+  if (cpu->config->on_after_execute_instruction) {
+    cpu->config->on_after_execute_instruction(cpu, instruction);
   }
 
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Process pending interrupt, if any.
-static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
+static void ExecutePendingInterrupt(CPUState* cpu) {
   if (!cpu->has_pending_interrupt) {
-    return kExecuteSuccess;
+    return;
   }
   uint8_t interrupt_number = cpu->pending_interrupt_number;
   CPUClearPendingInterrupt(cpu);
@@ -198,34 +194,28 @@ static ExecuteStatus ExecutePendingInterrupt(CPUState* cpu) {
   // Invoke the interrupt handler callback first. If the caller did not provide
   // an interrupt handler callback, handle the interrupt within the VM using the
   // Interrupt Vector Table.
-  ExecuteStatus interrupt_handler_status =
+  InterruptHandlerResult interrupt_handler_result =
       cpu->config->handle_interrupt
           ? cpu->config->handle_interrupt(cpu, interrupt_number)
-          : kExecuteUnhandledInterrupt;
+          : kInterruptHandlerUnhandled;
 
-  switch (interrupt_handler_status) {
-    case kExecuteSuccess: {
-      // If the interrupt was handled by the caller-provided interrupt handler
-      // callback, restore state and continue execution.
-      return ExecuteReturnFromInterrupt(cpu);
-    }
-    case kExecuteUnhandledInterrupt: {
-      // If the interrupt was not handled by the caller-provided interrupt
-      // handler callback, handle it within the VM using the Interrupt Vector
-      // Table.
-      uint16_t ivt_entry_offset = interrupt_number << 2;
-      cpu->registers[kIP] = ReadRawMemoryWord(cpu, ivt_entry_offset);
-      cpu->registers[kCS] = ReadRawMemoryWord(cpu, ivt_entry_offset + 2);
-      return kExecuteSuccess;
-    }
-    default:
-      // If the interrupt handler returned an error, return it.
-      return interrupt_handler_status;
+  if (interrupt_handler_result == kInterruptHandlerHandled) {
+    // If the interrupt was handled by the caller-provided interrupt handler
+    // callback, restore state and continue execution.
+    ExecuteReturnFromInterrupt(cpu);
+    return;
   }
+
+  // If the interrupt was not handled by the caller-provided interrupt handler
+  // callback, handle it within the VM using the Interrupt Vector Table.
+  uint16_t ivt_entry_offset = interrupt_number << 2;
+  cpu->registers[kIP] = ReadRawMemoryWord(cpu, ivt_entry_offset);
+  cpu->registers[kCS] = ReadRawMemoryWord(cpu, ivt_entry_offset + 2);
 }
 
-ExecuteStatus CPUTick(CPUState* cpu) {
-  ExecuteStatus status;
+CPUTickResult CPUTick(CPUState* cpu) {
+  // A stop request only applies to the tick during which it was made.
+  cpu->stop_requested = false;
 
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
@@ -239,32 +229,32 @@ ExecuteStatus CPUTick(CPUState* cpu) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
           instruction_cs, instruction_ip, (int)fetch_status);
-      return kExecuteInvalidInstruction;
+      return kCPUTickInvalid;
     }
     cpu->registers[kIP] += instruction.size;
 
     // Step 2: Execute the instruction.
-    status = CPUExecuteInstruction(cpu, &instruction);
-    if (status != kExecuteSuccess && status != kExecuteHalt) {
+    if (CPUExecuteInstruction(cpu, &instruction) != kInstructionExecuted) {
       YAX86_CPU_LOG(
-          kLogLevelError, "%04X:%04X opcode %02X failed with status %d",
-          instruction_cs, instruction_ip, instruction.opcode, (int)status);
-      return status;
+          kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
+          instruction_cs, instruction_ip, instruction.opcode);
+      return kCPUTickInvalid;
     }
   }
 
   // Step 3: Handle pending interrupts.
-  if ((status = ExecutePendingInterrupt(cpu)) != kExecuteSuccess) {
-    return status;
-  }
+  ExecutePendingInterrupt(cpu);
 
   // Step 4: If trap flag is set, handle single-step execution.
   if (CPUGetFlag(cpu, kTF)) {
     CPUSetPendingInterrupt(cpu, kInterruptSingleStep);
-    if ((status = ExecutePendingInterrupt(cpu)) != kExecuteSuccess) {
-      return status;
-    }
+    ExecutePendingInterrupt(cpu);
   }
 
-  return kExecuteSuccess;
+  // A stop requested from within a callback takes precedence over the halted
+  // state: the caller asked to be handed control back at this exact point.
+  if (cpu->stop_requested) {
+    return kCPUTickStopped;
+  }
+  return cpu->is_halted ? kCPUTickHalted : kCPUTickExecuted;
 }

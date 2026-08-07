@@ -19,18 +19,18 @@ YAX86_PRIVATE void SetFlagsAfterBooleanInstruction(
 }
 
 // Common logic for AND instructions.
-YAX86_PRIVATE ExecuteStatus ExecuteBooleanAnd(
+YAX86_PRIVATE InstructionResult ExecuteBooleanAnd(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // AND r/m8, r8
 // AND r/m16, r16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -39,7 +39,7 @@ ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // AND r8, r/m8
 // AND r16, r/m16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -48,7 +48,7 @@ ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // AND AL, imm8
 // AND AX, imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -56,18 +56,18 @@ ExecuteBooleanAndImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for OR instructions.
-YAX86_PRIVATE ExecuteStatus ExecuteBooleanOr(
+YAX86_PRIVATE InstructionResult ExecuteBooleanOr(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // OR r/m8, r8
 // OR r/m16, r16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -76,7 +76,7 @@ ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // OR r8, r/m8
 // OR r16, r/m16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -85,7 +85,7 @@ ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // OR AL, imm8
 // OR AX, imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -93,18 +93,18 @@ ExecuteBooleanOrImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for XOR instructions.
-YAX86_PRIVATE ExecuteStatus ExecuteBooleanXor(
+YAX86_PRIVATE InstructionResult ExecuteBooleanXor(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -113,7 +113,7 @@ ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // XOR r8, r/m8
 // XOR r16, r/m16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -122,7 +122,7 @@ ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // XOR AL, imm8
 // XOR AX, imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -134,16 +134,16 @@ ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for TEST instructions.
-YAX86_PRIVATE ExecuteStatus ExecuteTest(
+YAX86_PRIVATE InstructionResult ExecuteTest(
     const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   SetFlagsAfterBooleanInstruction(ctx, result);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -152,7 +152,7 @@ ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // TEST AL, imm8
 // TEST AX, imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);

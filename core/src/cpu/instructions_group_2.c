@@ -9,18 +9,18 @@
 // Group 2 - ROL, ROR, RCL, RCR, SHL, SHR, SAL, SAR
 // ============================================================================
 
-typedef ExecuteStatus (*Group2ExecuteInstructionFn)(
+typedef InstructionResult (*Group2ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* op, uint8_t count);
 
 // SHL r/m8, 1
 // SHL r/m16, 1
 // SHL r/m8, CL
 // SHL r/m16, CL
-static ExecuteStatus ExecuteGroup2Shl(
+static InstructionResult ExecuteGroup2Shl(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   uint32_t value = FromOperand(op);
   uint32_t result = (value << count) & kMaxValue[ctx->metadata->width];
@@ -33,18 +33,18 @@ static ExecuteStatus ExecuteGroup2Shl(
     CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // SHR r/m8, 1
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-static ExecuteStatus ExecuteGroup2Shr(
+static InstructionResult ExecuteGroup2Shr(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   uint32_t value = FromOperand(op);
   uint32_t result = value >> count;
@@ -56,18 +56,18 @@ static ExecuteStatus ExecuteGroup2Shr(
     CPUSetFlag(ctx->cpu, kOF, original_msb);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // SAR r/m8, 1
 // SAR r/m16, 1
 // SAR r/m8, CL
 // SAR r/m16, CL
-static ExecuteStatus ExecuteGroup2Sar(
+static InstructionResult ExecuteGroup2Sar(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   int32_t value = FromSignedOperand(op);
   int32_t result = value >> count;
@@ -78,18 +78,18 @@ static ExecuteStatus ExecuteGroup2Sar(
     CPUSetFlag(ctx->cpu, kOF, false);
   }
   SetCommonFlagsAfterInstruction(ctx, result);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // ROL r/m8, 1
 // ROL r/m16, 1
 // ROL r/m8, CL
 // ROL r/m16, CL
-static ExecuteStatus ExecuteGroup2Rol(
+static InstructionResult ExecuteGroup2Rol(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   // The 8086 computes the modulus of the count after the zero check, which is
   // different than the 80286 and later processors.
@@ -105,18 +105,18 @@ static ExecuteStatus ExecuteGroup2Rol(
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
     CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // ROR r/m8, 1
 // ROR r/m16, 1
 // ROR r/m8, CL
 // ROR r/m16, CL
-static ExecuteStatus ExecuteGroup2Ror(
+static InstructionResult ExecuteGroup2Ror(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   // The 8086 computes the modulus of the count after the zero check, which is
   // different than the 80286 and later processors.
@@ -132,20 +132,21 @@ static ExecuteStatus ExecuteGroup2Ror(
     bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
     CPUSetFlag(ctx->cpu, kOF, last_lsb != original_msb);
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // RCL r/m8, 1
 // RCL r/m16, 1
 // RCL r/m8, CL
 // RCL r/m16, CL
-static ExecuteStatus ExecuteGroup2Rcl(
+static InstructionResult ExecuteGroup2Rcl(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   uint8_t effective_count = count % (kNumBits[ctx->metadata->width] + 1);
   if (effective_count == 0) {
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
-  uint32_t cf_value = CPUGetFlag(ctx->cpu, kCF) ? (1 << (effective_count - 1)) : 0;
+  uint32_t cf_value =
+      CPUGetFlag(ctx->cpu, kCF) ? (1 << (effective_count - 1)) : 0;
   uint32_t value = FromOperand(op);
   uint32_t result =
       (value << effective_count) | cf_value |
@@ -158,18 +159,18 @@ static ExecuteStatus ExecuteGroup2Rcl(
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
     CPUSetFlag(ctx->cpu, kOF, last_msb != current_msb);
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // RCR r/m8, 1
 // RCR r/m16, 1
 // RCR r/m8, CL
 // RCR r/m16, CL
-static ExecuteStatus ExecuteGroup2Rcr(
+static InstructionResult ExecuteGroup2Rcr(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   uint8_t effective_count = count % (kNumBits[ctx->metadata->width] + 1);
   if (effective_count == 0) {
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   uint32_t cf_value =
       CPUGetFlag(ctx->cpu, kCF)
@@ -187,7 +188,7 @@ static ExecuteStatus ExecuteGroup2Rcr(
     bool current_msb = ((result & kSignBit[ctx->metadata->width]) != 0);
     CPUSetFlag(ctx->cpu, kOF, current_msb != original_msb);
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
@@ -202,7 +203,7 @@ static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
 };
 
 // Group 2 shift / rotate by 1.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -211,7 +212,7 @@ ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 2 shift / rotate by CL.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

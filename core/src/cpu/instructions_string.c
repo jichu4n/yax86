@@ -93,78 +93,78 @@ static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
 }
 
 // Execute a string instruction with optional REP prefix.
-static ExecuteStatus ExecuteStringInstructionWithREPPrefix(
+static InstructionResult ExecuteStringInstructionWithREPPrefix(
     const InstructionContext* ctx,
-    ExecuteStatus (*fn)(const InstructionContext*)) {
+    InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP) {
     return fn(ctx);
   }
   while (ctx->cpu->registers[kCX]) {
-    ExecuteStatus status = fn(ctx);
-    if (status != kExecuteSuccess) {
+    InstructionResult status = fn(ctx);
+    if (status != kInstructionExecuted) {
       return status;
     }
     --ctx->cpu->registers[kCX];
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Single MOVS iteration.
-static ExecuteStatus ExecuteMovsIteration(const InstructionContext* ctx) {
+static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
   Operand src = GetStringSourceOperand(ctx);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   UpdateStringSourceAddress(ctx);
   UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // MOVS
-YAX86_PRIVATE ExecuteStatus ExecuteMovs(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteMovs(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteMovsIteration);
 }
 
 // Single STOS iteration.
-static ExecuteStatus ExecuteStosIteration(const InstructionContext* ctx) {
+static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // STOS
-YAX86_PRIVATE ExecuteStatus ExecuteStos(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteStos(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteStosIteration);
 }
 
 // Single LODS iteration.
-static ExecuteStatus ExecuteLodsIteration(const InstructionContext* ctx) {
+static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
   Operand src = GetStringSourceOperand(ctx);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   WriteOperand(ctx, &dest, FromOperand(&src));
   UpdateStringSourceAddress(ctx);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // LODS
-YAX86_PRIVATE ExecuteStatus ExecuteLods(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
 
 // Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-static ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
+static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
     const InstructionContext* ctx,
-    ExecuteStatus (*fn)(const InstructionContext*)) {
+    InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
     return fn(ctx);
   }
   bool terminate_zf_value = prefix == kPrefixREPNZ;
   while (ctx->cpu->registers[kCX]) {
-    ExecuteStatus status = fn(ctx);
-    if (status != kExecuteSuccess) {
+    InstructionResult status = fn(ctx);
+    if (status != kInstructionExecuted) {
       return status;
     }
     --ctx->cpu->registers[kCX];
@@ -172,36 +172,36 @@ static ExecuteStatus ExecuteStringInstructionWithREPZOrRepNZPrefix(
       break;
     }
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Single SCAS iteration.
-static ExecuteStatus ExecuteScasIteration(const InstructionContext* ctx) {
+static InstructionResult ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src = GetStringDestinationOperand(ctx);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   ExecuteCmp(ctx, &dest, &src.value);
   UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // SCAS
-YAX86_PRIVATE ExecuteStatus ExecuteScas(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteScasIteration);
 }
 
 // Single CMPS iteration.
-static ExecuteStatus ExecuteCmpsIteration(const InstructionContext* ctx) {
+static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
   Operand dest = GetStringSourceOperand(ctx);
   Operand src = GetStringDestinationOperand(ctx);
   ExecuteCmp(ctx, &dest, &src.value);
   UpdateStringSourceAddress(ctx);
   UpdateStringDestinationAddress(ctx);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // CMPS
-YAX86_PRIVATE ExecuteStatus ExecuteCmps(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteCmps(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteCmpsIteration);
 }

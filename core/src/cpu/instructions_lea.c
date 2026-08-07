@@ -10,14 +10,14 @@
 // ============================================================================
 
 // LEA r16, m
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   MemoryAddress memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
   uint32_t raw_address = ToRawAddress(ctx->cpu, &memory_address);
   WriteOperandAddress(ctx, &dest.address, raw_address);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // ============================================================================
@@ -25,7 +25,7 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for LES and LDS instructions.
-static ExecuteStatus ExecuteLoadSegmentWithPointer(
+static InstructionResult ExecuteLoadSegmentWithPointer(
     const InstructionContext* ctx, RegisterIndex segment_register_index) {
   Operand destRegister = ReadRegisterOperand(ctx);
   Operand destSegmentRegister =
@@ -43,17 +43,17 @@ static ExecuteStatus ExecuteLoadSegmentWithPointer(
 
   WriteOperand(ctx, &destRegister, FromOperandValue(&src_offset_value));
   WriteOperand(ctx, &destSegmentRegister, FromOperandValue(&src_segment_value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // LES r16, m
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteLoadESWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kES);
 }
 
 // LDS r16, m
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kDS);
 }

@@ -408,7 +408,8 @@ TEST_F(BcdTest, AAM_StandardDecimalBase) {
   // Test case 1: AL = 0x17 (23 decimal), base = 10
   // Should result in AH = 2, AL = 3 (23 / 10 = 2 remainder 3)
   helper->cpu_.registers[kAX] = 0x0017;  // AH = 00, AL = 17
-  CPUSetFlag(&helper->cpu_, kCF, true);  // Set some flags to test they're changed
+  CPUSetFlag(
+      &helper->cpu_, kCF, true);  // Set some flags to test they're changed
   CPUSetFlag(&helper->cpu_, kOF, true);
 
   helper->ExecuteInstructions(1);
@@ -459,6 +460,22 @@ TEST_F(BcdTest, AAM_EdgeCases) {
 
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x0100);  // AH = 01, AL = 00
   helper->CheckFlags({{kZF, true}, {kSF, false}, {kPF, true}});
+}
+
+TEST_F(BcdTest, AAM_ZeroBaseRaisesDivideError) {
+  // AAM divides AL by its immediate operand, so a base of 0 raises a divide
+  // error just like DIV by zero does. Assemblers reject "aam 0", so the
+  // instruction is encoded by hand: D4 00.
+  auto helper = std::make_unique<CPUTestHelper>();
+  helper->LoadCOM({0xD4, 0x00});
+  helper->cpu_.registers[kAX] = 0x0017;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_TRUE(helper->cpu_.has_pending_interrupt);
+  EXPECT_EQ(helper->cpu_.pending_interrupt_number, kInterruptDivideError);
+  // AX is left untouched.
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0017);
 }
 
 TEST_F(BcdTest, AAM_DifferentBases) {
@@ -657,7 +674,8 @@ TEST_F(BcdTest, AAD_StandardDecimalBase) {
   // Test case 1: AH = 5, AL = 6, base = 10
   // Should result in AL = 6 + 5 * 10 = 56, AH = 0
   helper->cpu_.registers[kAX] = 0x0506;  // AH = 05, AL = 06
-  CPUSetFlag(&helper->cpu_, kCF, true);  // Set some flags to test they're changed
+  CPUSetFlag(
+      &helper->cpu_, kCF, true);  // Set some flags to test they're changed
   CPUSetFlag(&helper->cpu_, kOF, true);
 
   helper->ExecuteInstructions(1);

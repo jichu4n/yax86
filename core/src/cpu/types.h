@@ -126,7 +126,7 @@ typedef struct {
 } InstructionContext;
 
 // Handler function for an opcode.
-typedef ExecuteStatus (*OpcodeHandler)(const InstructionContext* context);
+typedef InstructionResult (*OpcodeHandler)(const InstructionContext* context);
 
 // An entry in the opcode lookup table.
 typedef struct OpcodeMetadata {

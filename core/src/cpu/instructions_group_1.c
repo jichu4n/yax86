@@ -9,7 +9,7 @@
 // Group 1 - ADD, OR, ADC, SBB, AND, SUB, XOR, CMP
 // ============================================================================
 
-typedef ExecuteStatus (*Group1ExecuteInstructionFn)(
+typedef InstructionResult (*Group1ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* dest, const OperandValue* src);
 
 // Group 1 instruction implementations, indexed by the corresponding REG field
@@ -26,7 +26,7 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -36,7 +36,7 @@ ExecuteGroup1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

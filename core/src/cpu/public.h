@@ -103,20 +103,41 @@ typedef enum InterruptNumber {
   kInterruptOverflow = 4,
 } InterruptNumer;
 
-// Result status from executing an instruction or opcode.
-typedef enum ExecuteStatus {
-  // Successfully executed the instruction or opcode.
-  kExecuteSuccess = 0,
-  // Invalid instruction opcode.
-  kExecuteInvalidOpcode,
-  // Invalid instruction operands.
-  kExecuteInvalidInstruction,
-  // The interrupt was not handled by the interrupt handler callback, and should
-  // be handled by the VM instead.
-  kExecuteUnhandledInterrupt,
-  // The CPU should be halted.
-  kExecuteHalt,
-} ExecuteStatus;
+// Result of executing a single instruction.
+typedef enum InstructionResult {
+  // The instruction was executed.
+  kInstructionExecuted = 0,
+  // The instruction could not be executed, because its opcode has no handler or
+  // because its encoding does not match the expected format for its opcode.
+  kInstructionInvalid,
+} InstructionResult;
+
+// Result of a single CPU tick.
+typedef enum CPUTickResult {
+  // An instruction was executed and the CPU is ready for the next tick.
+  kCPUTickExecuted = 0,
+  // The instruction at CS:IP could not be fetched or executed. The CPU is left
+  // pointing past the offending instruction; it is up to the caller to decide
+  // whether to continue.
+  kCPUTickInvalid,
+  // The CPU is halted and executed no instruction this tick. It stays halted
+  // until an interrupt wakes it, so the caller must keep ticking the rest of
+  // the machine.
+  kCPUTickHalted,
+  // Execution was stopped part way through the tick via CPURequestStop().
+  kCPUTickStopped,
+} CPUTickResult;
+
+// Result of the handle_interrupt callback, directing how the CPU should
+// proceed with an interrupt.
+typedef enum InterruptHandlerResult {
+  // The callback serviced the interrupt itself. The CPU restores the state
+  // saved on entry and resumes at the interrupted instruction.
+  kInterruptHandlerHandled = 0,
+  // The callback did not service the interrupt. The CPU dispatches it through
+  // the Interrupt Vector Table instead.
+  kInterruptHandlerUnhandled,
+} InterruptHandlerResult;
 
 struct CPUState;
 struct Instruction;
@@ -150,29 +171,21 @@ typedef struct CPUConfig {
   void (*write_memory_byte)(
       struct CPUState* cpu, uint32_t address, uint8_t value);
 
-  // Callback to handle an interrupt.
-  //   - Return kExecuteSuccess if the interrupt was handled and execution
-  //     should continue.
-  //   - Return kExecuteUnhandledInterrupt if the interrupt was not handled and
-  //     should be handled by the VM instead.
-  //   - Return any other value to terminate the execution loop.
-  ExecuteStatus (*handle_interrupt)(
+  // Callback to handle an interrupt. If NULL, every interrupt is dispatched
+  // through the Interrupt Vector Table.
+  InterruptHandlerResult (*handle_interrupt)(
       struct CPUState* cpu, uint8_t interrupt_number);
 
   // Callback invoked before executing an instruction. This can be used to
-  // inspect or modify the instruction before it is executed, inject pending
-  // interrupt or delay, or terminate the execution loop.
-  //   - Return kExecuteSuccess to continue execution.
-  //   - Return any other value to terminate the execution loop.
-  ExecuteStatus (*on_before_execute_instruction)(
+  // inspect or modify the instruction before it is executed, or to inject a
+  // pending interrupt. To stop execution, call CPURequestStop().
+  void (*on_before_execute_instruction)(
       struct CPUState* cpu, struct Instruction* instruction);
 
   // Callback invoked after executing an instruction. This can be used to
-  // inspect the instruction after it is executed, inject pending interrupt or
-  // delay, or terminate the execution loop.
-  //   - Return kExecuteSuccess to continue execution.
-  //   - Return any other value to terminate the execution loop.
-  ExecuteStatus (*on_after_execute_instruction)(
+  // inspect the instruction after it is executed, or to inject a pending
+  // interrupt. To stop execution, call CPURequestStop().
+  void (*on_after_execute_instruction)(
       struct CPUState* cpu, const struct Instruction* instruction);
 
   // Callback to read a byte from an I/O port.
@@ -213,6 +226,10 @@ typedef struct CPUState {
   // or execute any instructions until an external event (e.g., an interrupt)
   // clears this state.
   bool is_halted;
+
+  // Whether a stop has been requested during the current tick. See
+  // CPURequestStop().
+  bool stop_requested;
 } CPUState;
 
 // Initialize CPU state.
@@ -243,6 +260,19 @@ static inline void CPUClearPendingInterrupt(CPUState* cpu) {
   cpu->has_pending_interrupt = false;
   cpu->pending_interrupt_number = 0;
 }
+
+// Request that the current tick stop as soon as the instruction in progress
+// finishes, causing CPUTick() to return kCPUTickStopped.
+//
+// This is intended to be called from within a CPU callback - a memory or I/O
+// port access, an interrupt handler, or an instruction hook - which is why
+// stopping is signalled out of band rather than through a return value: a
+// watchpoint fires inside read_memory_byte, which returns a uint8_t and has no
+// way to carry a status.
+//
+// The request applies only to the tick during which it was made. CPUTick()
+// clears it on entry, so a request made outside a tick has no effect.
+static inline void CPURequestStop(CPUState* cpu) { cpu->stop_requested = true; }
 
 // ============================================================================
 // Instructions
@@ -331,10 +361,11 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
     CPUState* cpu, Instruction* instruction);
 
 // Execute a single fetched instruction.
-ExecuteStatus CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
+InstructionResult CPUExecuteInstruction(
+    CPUState* cpu, Instruction* instruction);
 
 // Run a single instruction cycle, including fetching and executing the next
 // instruction at CS:IP, and handling interrupts.
-ExecuteStatus CPUTick(CPUState* cpu);
+CPUTickResult CPUTick(CPUState* cpu);
 
 #endif  // YAX86_CPU_PUBLIC_H

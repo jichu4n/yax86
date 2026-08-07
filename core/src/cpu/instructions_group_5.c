@@ -24,21 +24,21 @@ static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
 }
 
 // JMP ptr16
-static ExecuteStatus ExecuteIndirectNearJump(
+static InstructionResult ExecuteIndirectNearJump(
     const InstructionContext* ctx, Operand* dest) {
   ctx->cpu->registers[kIP] = FromOperandValue(&dest->value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // CALL ptr16
-static ExecuteStatus ExecuteIndirectNearCall(
+static InstructionResult ExecuteIndirectNearCall(
     const InstructionContext* ctx, Operand* dest) {
   Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
 // CALL ptr16:16
-static ExecuteStatus ExecuteIndirectFarCall(
+static InstructionResult ExecuteIndirectFarCall(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
@@ -46,7 +46,7 @@ static ExecuteStatus ExecuteIndirectFarCall(
 }
 
 // JMP ptr16:16
-static ExecuteStatus ExecuteIndirectFarJump(
+static InstructionResult ExecuteIndirectFarJump(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
@@ -54,13 +54,13 @@ static ExecuteStatus ExecuteIndirectFarJump(
 }
 
 // PUSH r/m16
-static ExecuteStatus ExecuteIndirectPush(
+static InstructionResult ExecuteIndirectPush(
     const InstructionContext* ctx, Operand* dest) {
   Push(ctx->cpu, dest->value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
-typedef ExecuteStatus (*Group5ExecuteInstructionFn)(
+typedef InstructionResult (*Group5ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* dest);
 
 // Group 5 instruction implementations, indexed by the corresponding REG
@@ -77,7 +77,7 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
 };
 
 // Group 5 instruction handler.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteGroup5Instruction(const InstructionContext* ctx) {
   const Group5ExecuteInstructionFn fn =
       kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

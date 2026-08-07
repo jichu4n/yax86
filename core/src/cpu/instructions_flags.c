@@ -17,13 +17,13 @@ static const Flag kFlagsForClearAndSetInstructions[] = {
     kDF,  // CLD, STD
 };
 
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteClearOrSetFlag(const InstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
   Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
   CPUSetFlag(ctx->cpu, flag, value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // ============================================================================
@@ -31,8 +31,8 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
 // ============================================================================
 
 // CMC
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteComplementCarryFlag(const InstructionContext* ctx) {
   CPUSetFlag(ctx->cpu, kCF, !CPUGetFlag(ctx->cpu, kCF));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
