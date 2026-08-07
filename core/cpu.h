@@ -829,11 +829,14 @@ enum {
 
 // Instruction prefixes.
 typedef enum {
-  kPrefixES = 0x26,     // ES segment override
-  kPrefixCS = 0x2E,     // CS segment override
-  kPrefixSS = 0x36,     // SS segment override
-  kPrefixDS = 0x3E,     // DS segment override
-  kPrefixLOCK = 0xF0,   // LOCK
+  kPrefixES = 0x26,    // ES segment override
+  kPrefixCS = 0x2E,    // CS segment override
+  kPrefixSS = 0x36,    // SS segment override
+  kPrefixDS = 0x3E,    // DS segment override
+  kPrefixLOCK = 0xF0,  // LOCK
+  // Undocumented alias of LOCK on the 8086/8088, which does not decode bit 0
+  // of this opcode.
+  kPrefixLOCKAlt = 0xF1,
   kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
   kPrefixREP = 0xF3,    // REP/REPE/REPZ
 } InstructionPrefix;
@@ -2136,6 +2139,8 @@ extern InstructionResult ExecuteClearOrSetFlag(const InstructionContext* ctx);
 // CMC
 extern InstructionResult ExecuteComplementCarryFlag(
     const InstructionContext* ctx);
+// SALC
+extern InstructionResult ExecuteSetALFromCarry(const InstructionContext* ctx);
 
 // ============================================================================
 // IN and OUT instructions - instructions_io.c
@@ -3265,7 +3270,8 @@ static InstructionResult ExecuteConditionalJump(
 }
 
 // Table of flag register bitmasks for conditional jumps. The index corresponds
-// to (opcode - 0x70) / 2.
+// to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
+// entries of their 0x70-0x7F counterparts.
 static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
     kOF,        // 0x70 - JO, 0x71 - JNO
     kCF,        // 0x72 - JC, 0x73 - JNC
@@ -3278,8 +3284,10 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 // Unsigned conditional jumps.
 YAX86_PRIVATE InstructionResult
 ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
+  // Masking off the high nibble handles both 0x70-0x7F and their undocumented
+  // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
   uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
-      [(ctx->instruction->opcode - 0x70) / 2];
+      [(ctx->instruction->opcode & 0x0F) / 2];
   bool flag_value = (ctx->cpu->flags & flag_mask) != 0;
   // Even opcode => jump if the flag is set
   // Odd opcode => jump if the flag is not set
@@ -3518,12 +3526,11 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
 // POP ES/CS/SS/DS
 YAX86_PRIVATE InstructionResult
 ExecutePopSegmentRegister(const InstructionContext* ctx) {
+  // The segment register field is only two bits wide, which is what makes
+  // 0x0F decode as POP CS on the 8086/8088. Popping into CS is legal there -
+  // it just makes the next instruction fetch come from the new segment.
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
-  // Special case - disallow POP CS
-  if (register_index == kCS) {
-    return kInstructionInvalid;
-  }
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
@@ -3547,9 +3554,8 @@ YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
 // POP r/m16
 YAX86_PRIVATE InstructionResult
 ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
-  if (ctx->instruction->mod_rm.reg != 0) {
-    return kInstructionInvalid;
-  }
+  // The 8086/8088 does not decode the REG field of 0x8F at all, so every value
+  // pops. Only REG 0 is documented.
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
@@ -3636,6 +3642,21 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
 YAX86_PRIVATE InstructionResult
 ExecuteComplementCarryFlag(const InstructionContext* ctx) {
   CPUSetFlag(ctx->cpu, kCF, !CPUGetFlag(ctx->cpu, kCF));
+  return kInstructionExecuted;
+}
+
+// ============================================================================
+// SALC instruction
+// ============================================================================
+
+// SALC - Set AL from Carry
+//
+// Undocumented on every x86 generation, but consistently implemented: AL
+// becomes 0xFF if CF is set and 0x00 otherwise. No flags are affected.
+YAX86_PRIVATE InstructionResult
+ExecuteSetALFromCarry(const InstructionContext* ctx) {
+  const uint8_t value = CPUGetFlag(ctx->cpu, kCF) ? 0xFF : 0x00;
+  ctx->cpu->registers[kAX] = (ctx->cpu->registers[kAX] & 0xFF00) | value;
   return kInstructionExecuted;
 }
 
@@ -4578,7 +4599,9 @@ static InstructionResult ExecuteIdiv(
 // value in the ModRM byte and data width.
 static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
     ExecuteGroup3Test,  // 0 - TEST
-    0,                  // 1 - Reserved
+    // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not decode
+    // bit 0 of the REG field for this group.
+    ExecuteGroup3Test,  // 1 - TEST
     ExecuteNot,         // 2 - NOT
     ExecuteNeg,         // 3 - NEG
     ExecuteMul,         // 4 - MUL
@@ -4592,9 +4615,6 @@ YAX86_PRIVATE InstructionResult
 ExecuteGroup3Instruction(const InstructionContext* ctx) {
   const Group3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  if (fn == 0) {
-    return kInstructionInvalid;
-  }
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);
 }
@@ -4630,9 +4650,22 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
     ExecuteDec,  // 1 - DEC
 };
 
+enum {
+  // Number of documented REG field values for this group.
+  kNumGroup4Instructions = 2,
+};
+
 // Group 4 instruction handler.
 YAX86_PRIVATE InstructionResult
 ExecuteGroup4Instruction(const InstructionContext* ctx) {
+  // On real hardware REG 2-7 decode as byte-operand forms of the Group 5
+  // instructions rather than being rejected. That behavior is deliberately not
+  // emulated: it is unverifiable without hardware, and no assembler emits
+  // these encodings. The bounds check matters regardless, because the REG
+  // field is three bits wide and this table has only two entries.
+  if (ctx->instruction->mod_rm.reg >= kNumGroup4Instructions) {
+    return kInstructionInvalid;
+  }
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
@@ -4724,7 +4757,10 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
     ExecuteIndirectNearJump,  // 4 - JMP ptr16
     ExecuteIndirectFarJump,   // 5 - JMP ptr16:16
     ExecuteIndirectPush,      // 6 - PUSH r/m16
-                              // 7 - Reserved
+    // REG 7 is an undocumented alias of REG 6. Without this entry the lookup
+    // below would read past the end of the table, since the REG field is three
+    // bits wide.
+    ExecuteIndirectPush,  // 7 - PUSH r/m16
 };
 
 // Group 5 instruction handler.
@@ -4849,8 +4885,16 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushSegmentRegister},
-    // 0x0F - UNSUPPORTED
-    {.opcode = 0x0F, .handler = 0},
+    // POP CS
+    //
+    // Undocumented, but real: on the 8086/8088 the segment register field of a
+    // POP sreg is only two bits wide, so 0x0F decodes as POP CS. Later x86
+    // parts repurposed 0x0F as the two-byte opcode prefix.
+    {.opcode = 0x0F,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecutePopSegmentRegister},
     // ADC r/m8, r8
     {.opcode = 0x10,
      .has_modrm = true,
@@ -5314,22 +5358,108 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecutePopRegister},
     // 0x60 - 0x6F - UNSUPPORTED
-    {.opcode = 0x60, .handler = 0},
-    {.opcode = 0x61, .handler = 0},
-    {.opcode = 0x62, .handler = 0},
-    {.opcode = 0x63, .handler = 0},
-    {.opcode = 0x64, .handler = 0},
-    {.opcode = 0x65, .handler = 0},
-    {.opcode = 0x66, .handler = 0},
-    {.opcode = 0x67, .handler = 0},
-    {.opcode = 0x68, .handler = 0},
-    {.opcode = 0x69, .handler = 0},
-    {.opcode = 0x6A, .handler = 0},
-    {.opcode = 0x6B, .handler = 0},
-    {.opcode = 0x6C, .handler = 0},
-    {.opcode = 0x6D, .handler = 0},
-    {.opcode = 0x6E, .handler = 0},
-    {.opcode = 0x6F, .handler = 0},
+    // 0x60-0x6F - conditional jumps, aliases of 0x70-0x7F
+    //
+    // Undocumented, but real: the 8086/8088 decoder ignores bit 4 of these
+    // opcodes, so each one behaves exactly like its 0x7X counterpart. They are
+    // two bytes wide, so decoding them as unknown single-byte opcodes would
+    // desynchronize the instruction stream.
+    // JO rel8 (alias of 0x70)
+    {.opcode = 0x60,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNO rel8 (alias of 0x71)
+    {.opcode = 0x61,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JB/JNAE/JC rel8 (alias of 0x72)
+    {.opcode = 0x62,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNB/JAE/JNC rel8 (alias of 0x73)
+    {.opcode = 0x63,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JE/JZ rel8 (alias of 0x74)
+    {.opcode = 0x64,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNE/JNZ rel8 (alias of 0x75)
+    {.opcode = 0x65,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JBE/JNA rel8 (alias of 0x76)
+    {.opcode = 0x66,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNBE/JA rel8 (alias of 0x77)
+    {.opcode = 0x67,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JS rel8 (alias of 0x78)
+    {.opcode = 0x68,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNS rel8 (alias of 0x79)
+    {.opcode = 0x69,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JP/JPE rel8 (alias of 0x7A)
+    {.opcode = 0x6A,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JNP/JPO rel8 (alias of 0x7B)
+    {.opcode = 0x6B,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteUnsignedConditionalJump},
+    // JL/JNGE rel8 (alias of 0x7C)
+    {.opcode = 0x6C,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLOrJNL},
+    // JNL/JGE rel8 (alias of 0x7D)
+    {.opcode = 0x6D,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLOrJNL},
+    // JLE/JNG rel8 (alias of 0x7E)
+    {.opcode = 0x6E,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
+    // JNLE/JG rel8 (alias of 0x7F)
+    {.opcode = 0x6F,
+     .has_modrm = false,
+     .immediate_size = 1,
+     .width = kByte,
+     .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // JO rel8
     {.opcode = 0x70,
      .has_modrm = false,
@@ -5809,10 +5939,22 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
-    // 0xC0 - UNSUPPORTED
-    {.opcode = 0xC0, .handler = 0},
-    // 0xC1 - UNSUPPORTED
-    {.opcode = 0xC1, .handler = 0},
+    // RET imm16 (alias of 0xC2)
+    //
+    // Undocumented, but real: the 8086/8088 decoder ignores bit 1 of these
+    // opcodes. 0xC0 takes a 16-bit immediate, so decoding it as an unknown
+    // single-byte opcode would desynchronize the instruction stream.
+    {.opcode = 0xC0,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteNearReturnAndPop},
+    // RET (alias of 0xC3)
+    {.opcode = 0xC1,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteNearReturn},
     // RET imm16
     {.opcode = 0xC2,
      .has_modrm = false,
@@ -5849,10 +5991,18 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegisterOrMemory},
-    // 0xC8 - UNSUPPORTED
-    {.opcode = 0xC8, .handler = 0},
-    // 0xC9 - UNSUPPORTED
-    {.opcode = 0xC9, .handler = 0},
+    // RETF imm16 (alias of 0xCA)
+    {.opcode = 0xC8,
+     .has_modrm = false,
+     .immediate_size = 2,
+     .width = kWord,
+     .handler = ExecuteFarReturnAndPop},
+    // RETF (alias of 0xCB)
+    {.opcode = 0xC9,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kWord,
+     .handler = ExecuteFarReturn},
     // RETF imm16
     {.opcode = 0xCA,
      .has_modrm = false,
@@ -5921,8 +6071,15 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteAad},
-    // 0xD6 - UNSUPPORTED
-    {.opcode = 0xD6, .handler = 0},
+    // SALC - Set AL from Carry
+    //
+    // Undocumented, but real and stable across x86 generations: sets AL to
+    // 0xFF if CF is set and 0x00 otherwise. Affects no flags.
+    {.opcode = 0xD6,
+     .has_modrm = false,
+     .immediate_size = 0,
+     .width = kByte,
+     .handler = ExecuteSetALFromCarry},
     // XLAT/XLATB
     {.opcode = 0xD7,
      .has_modrm = false,
@@ -6067,7 +6224,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
      .handler = ExecuteOutDX},
     // 0xF0 - LOCK prefix
     {.opcode = 0xF0, .handler = 0},
-    // 0xF1 - UNSUPPORTED
+    // LOCK prefix (alias of 0xF0) - consumed by the prefix decoder.
     {.opcode = 0xF1, .handler = 0},
     // 0xF2 - REPNE prefix
     {.opcode = 0xF2, .handler = 0},
@@ -6188,7 +6345,7 @@ void CPUInit(CPUState* cpu, CPUConfig* config) {
 static bool IsPrefixByte(uint8_t byte) {
   static const uint8_t kPrefixBytes[] = {
       kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
-      kPrefixLOCK, kPrefixREPNZ, kPrefixREP,
+      kPrefixLOCK, kPrefixREPNZ, kPrefixREP, kPrefixLOCKAlt,
   };
   for (uint8_t i = 0; i < sizeof(kPrefixBytes); ++i) {
     if (byte == kPrefixBytes[i]) {
@@ -6233,7 +6390,10 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
     case 0xF6:
     // TEST r/m16, imm16
     case 0xF7:
-      return reg == 0 ? metadata->opcode - 0xF5 : 0;
+      // REG 0 and REG 1 are both TEST, which carries an immediate; the other
+      // REG values do not. The 8086/8088 does not decode bit 0 of the REG
+      // field here, which is what makes REG 1 an alias of REG 0.
+      return reg <= 1 ? metadata->opcode - 0xF5 : 0;
     default:
       return metadata->immediate_size;
   }

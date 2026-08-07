@@ -29,7 +29,7 @@ void CPUInit(CPUState* cpu, CPUConfig* config) {
 static bool IsPrefixByte(uint8_t byte) {
   static const uint8_t kPrefixBytes[] = {
       kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
-      kPrefixLOCK, kPrefixREPNZ, kPrefixREP,
+      kPrefixLOCK, kPrefixREPNZ, kPrefixREP, kPrefixLOCKAlt,
   };
   for (uint8_t i = 0; i < sizeof(kPrefixBytes); ++i) {
     if (byte == kPrefixBytes[i]) {
@@ -74,7 +74,10 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
     case 0xF6:
     // TEST r/m16, imm16
     case 0xF7:
-      return reg == 0 ? metadata->opcode - 0xF5 : 0;
+      // REG 0 and REG 1 are both TEST, which carries an immediate; the other
+      // REG values do not. The 8086/8088 does not decode bit 0 of the REG
+      // field here, which is what makes REG 1 an alias of REG 0.
+      return reg <= 1 ? metadata->opcode - 0xF5 : 0;
     default:
       return metadata->immediate_size;
   }

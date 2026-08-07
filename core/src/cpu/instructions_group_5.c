@@ -73,7 +73,10 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
     ExecuteIndirectNearJump,  // 4 - JMP ptr16
     ExecuteIndirectFarJump,   // 5 - JMP ptr16:16
     ExecuteIndirectPush,      // 6 - PUSH r/m16
-                              // 7 - Reserved
+    // REG 7 is an undocumented alias of REG 6. Without this entry the lookup
+    // below would read past the end of the table, since the REG field is three
+    // bits wide.
+    ExecuteIndirectPush,  // 7 - PUSH r/m16
 };
 
 // Group 5 instruction handler.

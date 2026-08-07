@@ -19,9 +19,22 @@ static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
     ExecuteDec,  // 1 - DEC
 };
 
+enum {
+  // Number of documented REG field values for this group.
+  kNumGroup4Instructions = 2,
+};
+
 // Group 4 instruction handler.
 YAX86_PRIVATE InstructionResult
 ExecuteGroup4Instruction(const InstructionContext* ctx) {
+  // On real hardware REG 2-7 decode as byte-operand forms of the Group 5
+  // instructions rather than being rejected. That behavior is deliberately not
+  // emulated: it is unverifiable without hardware, and no assembler emits
+  // these encodings. The bounds check matters regardless, because the REG
+  // field is three bits wide and this table has only two entries.
+  if (ctx->instruction->mod_rm.reg >= kNumGroup4Instructions) {
+    return kInstructionInvalid;
+  }
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);

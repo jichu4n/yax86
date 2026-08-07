@@ -24,8 +24,11 @@ enum : uint8_t {
   kOpMovMoffs8Al = 0xA2,
   // MOV AL, moffs8
   kOpMovAlMoffs8 = 0xA0,
-  // Undefined on the 8088 - the opcode table has no handler for it.
-  kOpUndefined = 0xF1,
+  // INC r/m8 (Group 4). Every single opcode byte now decodes to something, so
+  // the only encodings this emulator rejects are undocumented REG values
+  // within a group - here 0xFE with REG 2, i.e. a ModRM byte of 0xD0.
+  kOpGroup4 = 0xFE,
+  kModRMGroup4Reg2 = 0xD0,
 };
 
 class PlatformExecutionTest : public ::testing::Test {
@@ -83,25 +86,25 @@ TEST_F(PlatformExecutionTest, RunConsumesFullBudget) {
   EXPECT_EQ(ip(), kProgramOffset + 4);
 }
 
-TEST_F(PlatformExecutionTest, UndefinedOpcodeIsReportedAsInvalid) {
-  Load({kOpNop, kOpUndefined, kOpNop});
+TEST_F(PlatformExecutionTest, UnimplementedEncodingIsReportedAsInvalid) {
+  Load({kOpNop, kOpGroup4, kModRMGroup4Reg2, kOpNop});
 
   EXPECT_EQ(PlatformRun(&platform_, 8), kPlatformInvalid);
   // IP has advanced past the offending instruction, so the caller can choose
   // to keep going.
-  EXPECT_EQ(ip(), kProgramOffset + 2);
+  EXPECT_EQ(ip(), kProgramOffset + 3);
 }
 
-TEST_F(PlatformExecutionTest, RunResumesAfterInvalidOpcode) {
-  Load({kOpNop, kOpUndefined, kOpNop, kOpNop});
+TEST_F(PlatformExecutionTest, RunResumesAfterInvalidInstruction) {
+  Load({kOpNop, kOpGroup4, kModRMGroup4Reg2, kOpNop, kOpNop});
 
   ASSERT_EQ(PlatformRun(&platform_, 4), kPlatformInvalid);
-  // The offending tick is counted, so a host that treats an invalid opcode as
-  // non-fatal can resume and make progress.
+  // The offending tick is counted, so a host that treats an invalid
+  // instruction as non-fatal can resume and make progress.
   const uint32_t ticks_before = platform_.ticks;
   EXPECT_EQ(PlatformRun(&platform_, 2), kPlatformRunning);
   EXPECT_GT(platform_.ticks, ticks_before);
-  EXPECT_EQ(ip(), kProgramOffset + 4);
+  EXPECT_EQ(ip(), kProgramOffset + 5);
 }
 
 TEST_F(PlatformExecutionTest, HaltWithInterruptsDisabledIsReportedAsHung) {

@@ -43,12 +43,11 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
 // POP ES/CS/SS/DS
 YAX86_PRIVATE InstructionResult
 ExecutePopSegmentRegister(const InstructionContext* ctx) {
+  // The segment register field is only two bits wide, which is what makes
+  // 0x0F decode as POP CS on the 8086/8088. Popping into CS is legal there -
+  // it just makes the next instruction fetch come from the new segment.
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
-  // Special case - disallow POP CS
-  if (register_index == kCS) {
-    return kInstructionInvalid;
-  }
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
@@ -72,9 +71,8 @@ YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
 // POP r/m16
 YAX86_PRIVATE InstructionResult
 ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
-  if (ctx->instruction->mod_rm.reg != 0) {
-    return kInstructionInvalid;
-  }
+  // The 8086/8088 does not decode the REG field of 0x8F at all, so every value
+  // pops. Only REG 0 is documented.
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
