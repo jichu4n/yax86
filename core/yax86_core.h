@@ -1839,9 +1839,6 @@ extern OperandValue ReadRegisterOperandWord(
 // Write a byte as uint8_t to memory.
 extern void WriteRawMemoryByte(CPUState* cpu, uint32_t address, uint8_t value);
 
-// Write a word as uint16_t to memory.
-extern void WriteRawMemoryWord(CPUState* cpu, uint32_t address, uint16_t value);
-
 // Write a byte to memory.
 extern void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value);
@@ -2025,11 +2022,29 @@ YAX86_PRIVATE int32_t FromSignedOperand(const Operand* operand) {
   return FromSignedOperandValue(&operand->value);
 }
 
+enum {
+  // The address bus is 20 bits wide. A segment base plus an offset can sum to
+  // as much as 0x10FFEF, and the carry out of bit 19 goes nowhere, so an
+  // address past the top of memory wraps around to the bottom.
+  kPhysicalAddressMask = 0xFFFFF,
+};
+
 // Computes the raw effective address corresponding to a MemoryAddress.
 YAX86_PRIVATE uint32_t
 ToRawAddress(const CPUState* cpu, const MemoryAddress* address) {
   uint16_t segment = cpu->registers[address->segment_register_index];
-  return (((uint32_t)segment) << 4) + (uint32_t)(address->offset);
+  return ((((uint32_t)segment) << 4) + (uint32_t)(address->offset)) &
+         kPhysicalAddressMask;
+}
+
+// The address of the byte following a memory operand. The offset is 16 bits
+// wide and wraps within the segment, so the high byte of a word at offset
+// 0xFFFF comes from offset 0 of the same segment rather than from the
+// paragraph above it.
+static MemoryAddress NextMemoryAddress(const MemoryAddress* address) {
+  MemoryAddress next_address = *address;
+  ++next_address.offset;
+  return next_address;
 }
 
 // Read a byte from memory as a uint8_t.
@@ -2057,9 +2072,14 @@ ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
 // Read a word from memory to an OperandValue.
 YAX86_PRIVATE OperandValue
 ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
-  uint16_t word_value =
-      ReadRawMemoryWord(cpu, ToRawAddress(cpu, &address->value.memory_address));
-  return WordValue(word_value);
+  const MemoryAddress* low_byte_address = &address->value.memory_address;
+  const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
+  uint8_t low_byte_value =
+      ReadRawMemoryByte(cpu, ToRawAddress(cpu, low_byte_address));
+  uint8_t high_byte_value =
+      ReadRawMemoryByte(cpu, ToRawAddress(cpu, &high_byte_address));
+  return WordValue(
+      (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value);
 }
 
 // Read a byte from a register to an OperandValue.
@@ -2098,13 +2118,6 @@ YAX86_PRIVATE void WriteRawMemoryByte(
   cpu->config->write_memory_byte(cpu, address, value);
 }
 
-// Write a word as uint16_t to memory.
-YAX86_PRIVATE void WriteRawMemoryWord(
-    CPUState* cpu, uint32_t address, uint16_t value) {
-  WriteRawMemoryByte(cpu, address, value & 0xFF);
-  WriteRawMemoryByte(cpu, address + 1, (value >> 8) & 0xFF);
-}
-
 // Write a byte to memory.
 YAX86_PRIVATE void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
@@ -2116,9 +2129,13 @@ YAX86_PRIVATE void WriteMemoryOperandByte(
 // Write a word to memory.
 YAX86_PRIVATE void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
-  WriteRawMemoryWord(
-      cpu, ToRawAddress(cpu, &address->value.memory_address),
-      value.value.word_value);
+  const MemoryAddress* low_byte_address = &address->value.memory_address;
+  const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
+  WriteRawMemoryByte(
+      cpu, ToRawAddress(cpu, low_byte_address), value.value.word_value & 0xFF);
+  WriteRawMemoryByte(
+      cpu, ToRawAddress(cpu, &high_byte_address),
+      (value.value.word_value >> 8) & 0xFF);
 }
 
 // Write a byte to a register.
