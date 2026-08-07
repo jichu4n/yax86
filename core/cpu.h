@@ -1836,8 +1836,14 @@ extern void SetCommonFlagsAfterInstruction(
 // controls, and none of them can change these bits.
 extern uint16_t ToFlagsRegisterValue(uint16_t value);
 
-// Push a value onto the stack.
-extern void Push(CPUState* cpu, OperandValue value);
+// Push a value the caller has already worked out onto the stack - a return
+// address, the flags, a segment register. Use this wherever the value does not
+// depend on the stack pointer.
+extern void PushValue(CPUState* cpu, OperandValue value);
+// Push a PUSH instruction's source operand onto the stack. The operand is
+// taken as of after the stack pointer has moved, rather than as of the start
+// of the instruction, which is what makes PUSH SP store the decremented value.
+extern void PushSourceOperand(CPUState* cpu, const Operand* src);
 // Pop a value from the stack.
 extern OperandValue Pop(CPUState* cpu);
 
@@ -2336,8 +2342,9 @@ YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
   return (value | (uint16_t)kFlagsAlwaysSet) & ~(uint16_t)kFlagsAlwaysClear;
 }
 
-YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
-  cpu->registers[kSP] -= 2;
+// Write a word where the stack pointer already points. The caller is
+// responsible for having made room for it.
+static void WriteToStackTop(CPUState* cpu, OperandValue value) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .value = {
@@ -2346,6 +2353,25 @@ YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
               .offset = cpu->registers[kSP],
           }}};
   WriteMemoryOperandWord(cpu, &address, value);
+}
+
+YAX86_PRIVATE void PushValue(CPUState* cpu, OperandValue value) {
+  cpu->registers[kSP] -= 2;
+  WriteToStackTop(cpu, value);
+}
+
+YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
+  cpu->registers[kSP] -= 2;
+  // The 8086/8088 moves the stack pointer before it reads the source, so
+  // PUSH SP stores the value SP has after the decrement rather than the one it
+  // had on entry. SP is the only source that can tell the difference. The
+  // 80286 and later store the entry value instead.
+  const bool source_is_stack_pointer =
+      src->address.type == kOperandAddressTypeRegister &&
+      src->address.value.register_address.register_index == kSP;
+  const OperandValue value =
+      source_is_stack_pointer ? WordValue(cpu->registers[kSP]) : src->value;
+  WriteToStackTop(cpu, value);
 }
 
 YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
@@ -3402,7 +3428,7 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // Common logic for near calls.
 static InstructionResult ExecuteNearCall(
     const InstructionContext* ctx, const OperandValue* offset) {
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteRelativeJump(ctx, offset);
 }
 
@@ -3418,16 +3444,16 @@ YAX86_PRIVATE InstructionResult ExecuteFarCall(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   // Push the current CS and IP onto the stack.
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteFarJump(ctx, segment, offset);
 }
 
 // CALL ptr16:16
 YAX86_PRIVATE InstructionResult
 ExecuteDirectFarCall(const InstructionContext* ctx) {
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteDirectFarJump(ctx);
 }
 
@@ -3554,7 +3580,7 @@ ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx->cpu, src.value);
+  PushSourceOperand(ctx->cpu, &src);
   return kInstructionExecuted;
 }
 
@@ -3575,7 +3601,7 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
-  Push(ctx->cpu, src.value);
+  PushValue(ctx->cpu, src.value);
   return kInstructionExecuted;
 }
 
@@ -3596,7 +3622,7 @@ ExecutePopSegmentRegister(const InstructionContext* ctx) {
 // PUSHF
 YAX86_PRIVATE InstructionResult
 ExecutePushFlags(const InstructionContext* ctx) {
-  Push(ctx->cpu, WordValue(ctx->cpu->flags));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->flags));
   return kInstructionExecuted;
 }
 
@@ -4869,7 +4895,7 @@ static InstructionResult ExecuteIndirectNearJump(
 // CALL ptr16
 static InstructionResult ExecuteIndirectNearCall(
     const InstructionContext* ctx, Operand* dest) {
-  Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
@@ -4892,7 +4918,7 @@ static InstructionResult ExecuteIndirectFarJump(
 // PUSH r/m16
 static InstructionResult ExecuteIndirectPush(
     const InstructionContext* ctx, Operand* dest) {
-  Push(ctx->cpu, dest->value);
+  PushSourceOperand(ctx->cpu, dest);
   return kInstructionExecuted;
 }
 
@@ -6650,11 +6676,11 @@ InstructionResult CPUExecuteInstruction(
 static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
-  Push(cpu, WordValue(cpu->flags));
+  PushValue(cpu, WordValue(cpu->flags));
   CPUSetFlag(cpu, kIF, false);
   CPUSetFlag(cpu, kTF, false);
-  Push(cpu, WordValue(cpu->registers[kCS]));
-  Push(cpu, WordValue(cpu->registers[kIP]));
+  PushValue(cpu, WordValue(cpu->registers[kCS]));
+  PushValue(cpu, WordValue(cpu->registers[kIP]));
 
   // Invoke the interrupt handler callback first. If the caller did not provide
   // an interrupt handler callback, handle the interrupt within the VM using the

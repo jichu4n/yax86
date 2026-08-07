@@ -182,11 +182,11 @@ InstructionResult CPUExecuteInstruction(
 static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
-  Push(cpu, WordValue(cpu->flags));
+  PushValue(cpu, WordValue(cpu->flags));
   CPUSetFlag(cpu, kIF, false);
   CPUSetFlag(cpu, kTF, false);
-  Push(cpu, WordValue(cpu->registers[kCS]));
-  Push(cpu, WordValue(cpu->registers[kIP]));
+  PushValue(cpu, WordValue(cpu->registers[kCS]));
+  PushValue(cpu, WordValue(cpu->registers[kIP]));
 
   // Invoke the interrupt handler callback first. If the caller did not provide
   // an interrupt handler callback, handle the interrupt within the VM using the
