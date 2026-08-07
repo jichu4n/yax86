@@ -18,7 +18,6 @@ FetchContent_MakeAvailable(googletest)
 # Tests for each module
 # =============================================================================
 
-add_subdirectory(log)
 add_subdirectory(cpu)
 add_subdirectory(pic)
 add_subdirectory(pit)

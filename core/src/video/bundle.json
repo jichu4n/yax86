@@ -1,4 +1,4 @@
 {
-  "public": ["public.h"],
-  "private": ["../util/common.h", "fonts.h", "fonts.c", "mda.c"]
+  "public": ["../util/common.h", "../util/snprintf.h", "../util/log.h", "public.h"],
+  "private": ["fonts.h", "fonts.c", "mda.c"]
 }

@@ -55,8 +55,8 @@ TEST(SNPrintFTest, NegativePadding) {
 TEST(SNPrintFTest, Truncation) {
   char buffer[5];
   int ret = SNPrintF(buffer, sizeof(buffer), "Hello World");
-  EXPECT_EQ(ret, 11); // Returns needed size
-  EXPECT_STREQ(buffer, "Hell"); // Truncated
+  EXPECT_EQ(ret, 11);            // Returns needed size
+  EXPECT_STREQ(buffer, "Hell");  // Truncated
 }
 
 TEST(SNPrintFTest, Pointer) {
@@ -70,8 +70,8 @@ TEST(SNPrintFTest, Pointer) {
   // Check remaining characters are valid hex digits
   for (int i = 2; i < ret; ++i) {
     char c = buffer[i];
-    bool is_hex =
-        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    bool is_hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                  (c >= 'A' && c <= 'F');
     EXPECT_TRUE(is_hex) << "Char at " << i << " is " << c;
   }
 }
@@ -93,8 +93,8 @@ TEST(SNPrintFTest, SizeT) {
 }
 
 TEST(SNPrintFTest, StringPadding) {
-    char buffer[100];
-    int ret = SNPrintF(buffer, sizeof(buffer), "%5s", "Hi");
-    EXPECT_EQ(ret, 5);
-    EXPECT_STREQ(buffer, "   Hi");
+  char buffer[100];
+  int ret = SNPrintF(buffer, sizeof(buffer), "%5s", "Hi");
+  EXPECT_EQ(ret, 5);
+  EXPECT_STREQ(buffer, "   Hi");
 }

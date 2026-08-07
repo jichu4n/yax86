@@ -7,10 +7,9 @@
 #include <stdint.h>
 
 #ifndef YAX86_PLATFORM_BUNDLE_H
+#include "../util/log.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_PLATFORM_BUNDLE_H
-
-#include "log.h"
 
 enum {
   // Log module ID for the Platform.

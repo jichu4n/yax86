@@ -25,7 +25,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "log.h"
+#ifndef YAX86_DMA_BUNDLE_H
+#include "../util/log.h"
+#endif  // YAX86_DMA_BUNDLE_H
 
 enum {
   // Log module ID for the DMA.
