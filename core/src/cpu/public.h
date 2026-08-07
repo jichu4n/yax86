@@ -114,15 +114,16 @@ typedef enum InstructionResult {
 
 // Result of a single CPU tick.
 typedef enum CPUTickResult {
-  // An instruction was executed and the CPU is ready for the next tick.
+  // An instruction was executed. This includes HLT: the tick that halts the
+  // CPU still ran an instruction.
   kCPUTickExecuted = 0,
   // The instruction at CS:IP could not be fetched or executed. The CPU is left
   // pointing past the offending instruction; it is up to the caller to decide
   // whether to continue.
   kCPUTickInvalid,
-  // The CPU is halted and executed no instruction this tick. It stays halted
-  // until an interrupt wakes it, so the caller must keep ticking the rest of
-  // the machine.
+  // The CPU was already halted and executed no instruction this tick. It stays
+  // halted until an interrupt wakes it, so the caller must keep ticking the
+  // rest of the machine.
   kCPUTickHalted,
   // Execution was stopped part way through the tick via CPURequestStop().
   kCPUTickStopped,

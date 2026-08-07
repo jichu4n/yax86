@@ -651,15 +651,16 @@ typedef enum InstructionResult {
 
 // Result of a single CPU tick.
 typedef enum CPUTickResult {
-  // An instruction was executed and the CPU is ready for the next tick.
+  // An instruction was executed. This includes HLT: the tick that halts the
+  // CPU still ran an instruction.
   kCPUTickExecuted = 0,
   // The instruction at CS:IP could not be fetched or executed. The CPU is left
   // pointing past the offending instruction; it is up to the caller to decide
   // whether to continue.
   kCPUTickInvalid,
-  // The CPU is halted and executed no instruction this tick. It stays halted
-  // until an interrupt wakes it, so the caller must keep ticking the rest of
-  // the machine.
+  // The CPU was already halted and executed no instruction this tick. It stays
+  // halted until an interrupt wakes it, so the caller must keep ticking the
+  // rest of the machine.
   kCPUTickHalted,
   // Execution was stopped part way through the tick via CPURequestStop().
   kCPUTickStopped,
@@ -6375,6 +6376,10 @@ CPUTickResult CPUTick(CPUState* cpu) {
   // A stop request only applies to the tick during which it was made.
   cpu->stop_requested = false;
 
+  // Whether this tick ran an instruction. A halted CPU runs none until an
+  // interrupt wakes it.
+  bool executed_instruction = false;
+
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
     // Step 1: Fetch the next instruction, and increment IP.
@@ -6398,23 +6403,34 @@ CPUTickResult CPUTick(CPUState* cpu) {
           instruction_cs, instruction_ip, instruction.opcode);
       return kCPUTickInvalid;
     }
+    executed_instruction = true;
   }
 
-  // Step 3: Handle pending interrupts.
+  // Step 3: Handle a pending interrupt. This runs even while halted, because
+  // an interrupt is the only thing that can clear the halted state -
+  // ExecutePendingInterrupt() resets is_halted when it dispatches one.
   ExecutePendingInterrupt(cpu);
 
-  // Step 4: If trap flag is set, handle single-step execution.
-  if (CPUGetFlag(cpu, kTF)) {
+  // Step 4: The trap flag raises a single-step interrupt after an instruction
+  // executes, so a halted CPU must not trap - otherwise the trap would wake it
+  // and then fire again on every subsequent tick.
+  //
+  // Dispatching an interrupt above clears TF, which correctly suppresses the
+  // single-step trap for an instruction that was itself interrupted.
+  if (executed_instruction && CPUGetFlag(cpu, kTF)) {
     CPUSetPendingInterrupt(cpu, kInterruptSingleStep);
     ExecutePendingInterrupt(cpu);
   }
 
-  // A stop requested from within a callback takes precedence over the halted
-  // state: the caller asked to be handed control back at this exact point.
+  // A stop requested from within a callback takes precedence over everything
+  // else: the caller asked to be handed control back at this exact point.
   if (cpu->stop_requested) {
     return kCPUTickStopped;
   }
-  return cpu->is_halted ? kCPUTickHalted : kCPUTickExecuted;
+  // This reports what the tick did, not what state the CPU ended up in. A tick
+  // that executes HLT ran an instruction, so it reports kCPUTickExecuted even
+  // though the CPU is now halted; the ticks that follow report kCPUTickHalted.
+  return executed_instruction ? kCPUTickExecuted : kCPUTickHalted;
 }
 
 

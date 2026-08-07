@@ -275,4 +275,38 @@ TEST_F(PlatformExecutionTest, StepModeStopsAfterEachInstruction) {
   EXPECT_EQ(PlatformRun(&platform_, 4), kPlatformRunning);
 }
 
+TEST_F(PlatformExecutionTest, StepModeStopsOnHaltingInstruction) {
+  // STI first, so that the halt is wakeable and does not report as hung.
+  Load({kOpSti, kOpHlt, kOpNop});
+  PlatformSetStepMode(&platform_, true);
+
+  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformStopped);
+  EXPECT_EQ(ip(), kProgramOffset + 1);
+
+  // HLT is an instruction, so stepping must stop after it runs rather than
+  // running away because the CPU happens to be halted afterwards.
+  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformStopped);
+  EXPECT_EQ(ip(), kProgramOffset + 2);
+  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
+  ASSERT_NE(stop_info, nullptr);
+  EXPECT_EQ(stop_info->reason, kPlatformStopStep);
+  EXPECT_TRUE(platform_.cpu.is_halted);
+
+  // Once halted, no instruction retires, so stepping does not stop again -
+  // the machine simply keeps ticking until an interrupt wakes the CPU.
+  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformRunning);
+  EXPECT_TRUE(platform_.cpu.is_halted);
+}
+
+TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
+  Load({kOpCli, kOpHlt});
+  PlatformSetStepMode(&platform_, true);
+
+  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformStopped);
+
+  // The HLT retires, which would otherwise be a step stop, but a CPU that can
+  // never be woken is the more useful thing to report.
+  EXPECT_EQ(PlatformRun(&platform_, 100), kPlatformHung);
+}
+
 }  // namespace
