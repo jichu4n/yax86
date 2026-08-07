@@ -1396,10 +1396,20 @@ typedef struct CPUState {
   // Flag values
   uint16_t flags;
 
-  // Whether there is an active interrupt.
+  // Whether there is a pending internal interrupt - one raised by the CPU
+  // itself, such as INT n, INTO, a divide error, or a single-step trap.
   bool has_pending_interrupt;
-  // The interrupt number of the pending interrupt.
+  // The interrupt number of the pending internal interrupt.
   uint8_t pending_interrupt_number;
+
+  // Whether an external interrupt request is asserted on the INTR line. This
+  // is tracked separately from an internal interrupt because the two have
+  // independent sources: an INT instruction executed while an IRQ is waiting
+  // must not discard the IRQ.
+  bool has_pending_irq;
+  // The interrupt vector supplied by the interrupt controller for the pending
+  // external interrupt request.
+  uint8_t pending_irq_number;
 
   // Whether the CPU is in halted state. When true, CPUTick() will not fetch
   // or execute any instructions until an external event (e.g., an interrupt)
@@ -1438,6 +1448,24 @@ static inline void CPUSetPendingInterrupt(
 static inline void CPUClearPendingInterrupt(CPUState* cpu) {
   cpu->has_pending_interrupt = false;
   cpu->pending_interrupt_number = 0;
+}
+
+// Assert an external interrupt request on the INTR line, as an interrupt
+// controller does. The CPU takes it at the end of the next instruction at
+// which interrupts are enabled, so unlike CPUSetPendingInterrupt() this does
+// not disturb an internal interrupt that is already pending.
+//
+// Callers should check CPUHasPendingIRQ() first: the CPU has a single INTR
+// slot, so asserting a second request before the first is taken would drop it,
+// leaving the controller waiting for an end-of-interrupt that never comes.
+static inline void CPUSetPendingIRQ(CPUState* cpu, uint8_t interrupt_number) {
+  cpu->has_pending_irq = true;
+  cpu->pending_irq_number = interrupt_number;
+}
+
+// Whether an external interrupt request is waiting to be taken.
+static inline bool CPUHasPendingIRQ(const CPUState* cpu) {
+  return cpu->has_pending_irq;
 }
 
 // Request that the current tick stop as soon as the instruction in progress
@@ -7138,14 +7166,8 @@ InstructionResult CPUExecuteInstruction(
   return kInstructionExecuted;
 }
 
-// Process pending interrupt, if any. Returns whether one was dispatched.
-static bool ExecutePendingInterrupt(CPUState* cpu) {
-  if (!cpu->has_pending_interrupt) {
-    return false;
-  }
-  uint8_t interrupt_number = cpu->pending_interrupt_number;
-  CPUClearPendingInterrupt(cpu);
-
+// Save state and vector to the handler for an interrupt.
+static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
   Push(cpu, WordValue(cpu->flags));
@@ -7166,7 +7188,7 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
     // If the interrupt was handled by the caller-provided interrupt handler
     // callback, restore state and continue execution.
     ExecuteReturnFromInterrupt(cpu);
-    return true;
+    return;
   }
 
   // If the interrupt was not handled by the caller-provided interrupt handler
@@ -7174,7 +7196,30 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   uint16_t ivt_entry_offset = interrupt_number << 2;
   cpu->registers[kIP] = ReadRawMemoryWord(cpu, ivt_entry_offset);
   cpu->registers[kCS] = ReadRawMemoryWord(cpu, ivt_entry_offset + 2);
-  return true;
+}
+
+// Take a pending interrupt, if any. Returns whether one was dispatched.
+static bool ExecutePendingInterrupt(CPUState* cpu) {
+  // An internal interrupt goes first. It was raised by the instruction that
+  // just executed, and taking it clears IF, which correctly holds off any
+  // external request until the handler re-enables interrupts.
+  if (cpu->has_pending_interrupt) {
+    const uint8_t interrupt_number = cpu->pending_interrupt_number;
+    CPUClearPendingInterrupt(cpu);
+    DispatchInterrupt(cpu, interrupt_number);
+    return true;
+  }
+
+  // An external request on the INTR line is only taken while interrupts are
+  // enabled. It stays asserted until then rather than being discarded.
+  if (cpu->has_pending_irq && CPUGetFlag(cpu, kIF)) {
+    const uint8_t interrupt_number = cpu->pending_irq_number;
+    cpu->has_pending_irq = false;
+    DispatchInterrupt(cpu, interrupt_number);
+    return true;
+  }
+
+  return false;
 }
 
 CPUTickResult CPUTick(CPUState* cpu) {
@@ -14880,10 +14925,15 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Check for pending interrupts from the PIC after an
   // instruction has been executed. This is how we connect the PIC to the CPU's
   // interrupt handling flow.
-  if (CPUGetFlag(&platform->cpu, kIF)) {
+  // Acknowledging an interrupt marks it in-service in the PIC, so only do it
+  // when the CPU has a free INTR slot to hold the vector. Otherwise the second
+  // vector would overwrite the first, and the PIC would wait forever for an
+  // end-of-interrupt that the lost handler never sends - which blocks every
+  // lower priority IRQ behind it.
+  if (CPUGetFlag(&platform->cpu, kIF) && !CPUHasPendingIRQ(&platform->cpu)) {
     uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
     if (interrupt_vector != kPICNoPendingInterrupt) {
-      CPUSetPendingInterrupt(&platform->cpu, interrupt_vector);
+      CPUSetPendingIRQ(&platform->cpu, interrupt_vector);
     }
   }
 

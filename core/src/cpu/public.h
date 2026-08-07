@@ -218,10 +218,20 @@ typedef struct CPUState {
   // Flag values
   uint16_t flags;
 
-  // Whether there is an active interrupt.
+  // Whether there is a pending internal interrupt - one raised by the CPU
+  // itself, such as INT n, INTO, a divide error, or a single-step trap.
   bool has_pending_interrupt;
-  // The interrupt number of the pending interrupt.
+  // The interrupt number of the pending internal interrupt.
   uint8_t pending_interrupt_number;
+
+  // Whether an external interrupt request is asserted on the INTR line. This
+  // is tracked separately from an internal interrupt because the two have
+  // independent sources: an INT instruction executed while an IRQ is waiting
+  // must not discard the IRQ.
+  bool has_pending_irq;
+  // The interrupt vector supplied by the interrupt controller for the pending
+  // external interrupt request.
+  uint8_t pending_irq_number;
 
   // Whether the CPU is in halted state. When true, CPUTick() will not fetch
   // or execute any instructions until an external event (e.g., an interrupt)
@@ -260,6 +270,24 @@ static inline void CPUSetPendingInterrupt(
 static inline void CPUClearPendingInterrupt(CPUState* cpu) {
   cpu->has_pending_interrupt = false;
   cpu->pending_interrupt_number = 0;
+}
+
+// Assert an external interrupt request on the INTR line, as an interrupt
+// controller does. The CPU takes it at the end of the next instruction at
+// which interrupts are enabled, so unlike CPUSetPendingInterrupt() this does
+// not disturb an internal interrupt that is already pending.
+//
+// Callers should check CPUHasPendingIRQ() first: the CPU has a single INTR
+// slot, so asserting a second request before the first is taken would drop it,
+// leaving the controller waiting for an end-of-interrupt that never comes.
+static inline void CPUSetPendingIRQ(CPUState* cpu, uint8_t interrupt_number) {
+  cpu->has_pending_irq = true;
+  cpu->pending_irq_number = interrupt_number;
+}
+
+// Whether an external interrupt request is waiting to be taken.
+static inline bool CPUHasPendingIRQ(const CPUState* cpu) {
+  return cpu->has_pending_irq;
 }
 
 // Request that the current tick stop as soon as the instruction in progress

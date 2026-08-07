@@ -16,6 +16,7 @@ enum : uint8_t {
   kOpNop = 0x90,
   kOpHlt = 0xF4,
   kOpSti = 0xFB,
+  kOpCli = 0xFA,
   kOpPopf = 0x9D,
 };
 
@@ -265,4 +266,83 @@ TEST_F(TickTest, DispatchedInterruptTakesPrecedenceOverSingleStep) {
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0010);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
   EXPECT_FALSE(InSingleStepHandler(helper.get()));
+}
+
+// ============================================================================
+// External interrupt requests
+// ============================================================================
+//
+// An interrupt controller asserts INTR independently of anything the CPU is
+// doing, so an external request and an internal one can be outstanding at the
+// same moment. They are tracked separately: sharing one slot let an INT
+// instruction silently discard an acknowledged IRQ, leaving the controller
+// waiting forever for an end-of-interrupt.
+
+TEST_F(TickTest, SoftwareInterruptDoesNotDiscardPendingIRQ) {
+  // INT 28h, then instructions to return to.
+  auto helper = WithCode({0xCD, 0x28, kOpNop, kOpNop});
+  // INT 28h handler at 0050:0100 (linear 0x600), just an IRET.
+  SetVector(helper.get(), 0x28, 0x0050, 0x0100);
+  helper->memory_[0x600] = 0xCF;
+  // IRQ0 handler at 0060:0100 (linear 0x700).
+  SetVector(helper.get(), 0x08, 0x0060, 0x0100);
+  helper->memory_[0x700] = kOpNop;
+  CPUSetFlag(&helper->cpu_, kTF, false);
+  CPUSetFlag(&helper->cpu_, kIF, true);
+
+  // The controller asserts IRQ0 just before the INT instruction executes.
+  CPUSetPendingIRQ(&helper->cpu_, 0x08);
+
+  // The INT instruction is taken first, since it was raised by the instruction
+  // that just executed.
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0050);
+  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  // The external request must survive it.
+  EXPECT_TRUE(CPUHasPendingIRQ(&helper->cpu_));
+
+  // IRET restores IF, and the request is then taken.
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  EXPECT_FALSE(CPUHasPendingIRQ(&helper->cpu_));
+}
+
+TEST_F(TickTest, PendingIRQWaitsForInterruptsToBeEnabled) {
+  auto helper = WithCode({kOpCli, kOpNop, kOpSti, kOpNop, kOpNop});
+  SetVector(helper.get(), 0x08, 0x0060, 0x0100);
+  helper->memory_[0x700] = kOpNop;
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // CLI
+  CPUSetPendingIRQ(&helper->cpu_, 0x08);
+
+  // Not taken while interrupts are disabled - and not thrown away either.
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
+  EXPECT_TRUE(CPUHasPendingIRQ(&helper->cpu_));
+  EXPECT_NE(helper->cpu_.registers[kCS], 0x0060);
+
+  // Once interrupts are enabled again the request is taken.
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
+  for (int i = 0; i < 2 && CPUHasPendingIRQ(&helper->cpu_); ++i) {
+    ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+  }
+  EXPECT_FALSE(CPUHasPendingIRQ(&helper->cpu_));
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+}
+
+TEST_F(TickTest, PendingIRQWakesHaltedCPU) {
+  auto helper = WithCode({kOpSti, kOpHlt});
+  SetVector(helper.get(), 0x08, 0x0060, 0x0100);
+  helper->memory_[0x700] = kOpNop;
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // HLT
+  ASSERT_TRUE(helper->cpu_.is_halted);
+
+  CPUSetPendingIRQ(&helper->cpu_, 0x08);
+  EXPECT_EQ(CPUTick(&helper->cpu_), kCPUTickHalted);
+
+  EXPECT_FALSE(helper->cpu_.is_halted);
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
 }

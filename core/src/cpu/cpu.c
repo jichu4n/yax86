@@ -178,14 +178,8 @@ InstructionResult CPUExecuteInstruction(
   return kInstructionExecuted;
 }
 
-// Process pending interrupt, if any. Returns whether one was dispatched.
-static bool ExecutePendingInterrupt(CPUState* cpu) {
-  if (!cpu->has_pending_interrupt) {
-    return false;
-  }
-  uint8_t interrupt_number = cpu->pending_interrupt_number;
-  CPUClearPendingInterrupt(cpu);
-
+// Save state and vector to the handler for an interrupt.
+static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
   Push(cpu, WordValue(cpu->flags));
@@ -206,7 +200,7 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
     // If the interrupt was handled by the caller-provided interrupt handler
     // callback, restore state and continue execution.
     ExecuteReturnFromInterrupt(cpu);
-    return true;
+    return;
   }
 
   // If the interrupt was not handled by the caller-provided interrupt handler
@@ -214,7 +208,30 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   uint16_t ivt_entry_offset = interrupt_number << 2;
   cpu->registers[kIP] = ReadRawMemoryWord(cpu, ivt_entry_offset);
   cpu->registers[kCS] = ReadRawMemoryWord(cpu, ivt_entry_offset + 2);
-  return true;
+}
+
+// Take a pending interrupt, if any. Returns whether one was dispatched.
+static bool ExecutePendingInterrupt(CPUState* cpu) {
+  // An internal interrupt goes first. It was raised by the instruction that
+  // just executed, and taking it clears IF, which correctly holds off any
+  // external request until the handler re-enables interrupts.
+  if (cpu->has_pending_interrupt) {
+    const uint8_t interrupt_number = cpu->pending_interrupt_number;
+    CPUClearPendingInterrupt(cpu);
+    DispatchInterrupt(cpu, interrupt_number);
+    return true;
+  }
+
+  // An external request on the INTR line is only taken while interrupts are
+  // enabled. It stays asserted until then rather than being discarded.
+  if (cpu->has_pending_irq && CPUGetFlag(cpu, kIF)) {
+    const uint8_t interrupt_number = cpu->pending_irq_number;
+    cpu->has_pending_irq = false;
+    DispatchInterrupt(cpu, interrupt_number);
+    return true;
+  }
+
+  return false;
 }
 
 CPUTickResult CPUTick(CPUState* cpu) {

@@ -727,10 +727,15 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Check for pending interrupts from the PIC after an
   // instruction has been executed. This is how we connect the PIC to the CPU's
   // interrupt handling flow.
-  if (CPUGetFlag(&platform->cpu, kIF)) {
+  // Acknowledging an interrupt marks it in-service in the PIC, so only do it
+  // when the CPU has a free INTR slot to hold the vector. Otherwise the second
+  // vector would overwrite the first, and the PIC would wait forever for an
+  // end-of-interrupt that the lost handler never sends - which blocks every
+  // lower priority IRQ behind it.
+  if (CPUGetFlag(&platform->cpu, kIF) && !CPUHasPendingIRQ(&platform->cpu)) {
     uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
     if (interrupt_vector != kPICNoPendingInterrupt) {
-      CPUSetPendingInterrupt(&platform->cpu, interrupt_vector);
+      CPUSetPendingIRQ(&platform->cpu, interrupt_vector);
     }
   }
 
