@@ -244,7 +244,7 @@ YAX86_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
   OperandValue cs_value = Pop(cpu);
   cpu->registers[kCS] = FromOperandValue(&cs_value);
   OperandValue flags_value = Pop(cpu);
-  cpu->flags = FromOperandValue(&flags_value);
+  cpu->flags = ToFlagsRegisterValue(FromOperandValue(&flags_value));
   return kInstructionExecuted;
 }
 

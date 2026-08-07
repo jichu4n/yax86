@@ -90,8 +90,14 @@ typedef enum Flag {
 } Flag;
 
 enum {
-  // CPU flags value on reset.
-  kInitialFlags = (1 << 1),  // Reserved_1 is always 1.
+  // Bits of the flags register that are not flags. The 8086/8088 does not
+  // store them: bit 1 and bits 12 through 15 always read as one, and bits 3
+  // and 5 always read as zero, whatever gets written over them.
+  kFlagsAlwaysSet = 0xF002,
+  kFlagsAlwaysClear = 0x0028,
+  // CPU flags value on reset - no flags set, and the bits that are not flags
+  // reading the only way they can.
+  kInitialFlags = kFlagsAlwaysSet,
 };
 
 // Standard interrupts.

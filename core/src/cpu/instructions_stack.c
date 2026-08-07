@@ -64,7 +64,7 @@ ExecutePushFlags(const InstructionContext* ctx) {
 // POPF
 YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx->cpu);
-  ctx->cpu->flags = FromOperandValue(&value);
+  ctx->cpu->flags = ToFlagsRegisterValue(FromOperandValue(&value));
   return kInstructionExecuted;
 }
 
@@ -109,6 +109,7 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value =
       ReadRegisterOperandByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
-  ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
+  ctx->cpu->flags =
+      ToFlagsRegisterValue((ctx->cpu->flags & 0xFF00) | value.value.byte_value);
   return kInstructionExecuted;
 }

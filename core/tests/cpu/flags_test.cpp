@@ -14,13 +14,30 @@ TEST_F(FlagsTest, PushPopFlag) {
       "popf\n");  // Pop from the stack into flags
   helper->cpu_.registers[kSS] = 0;
   helper->cpu_.registers[kSP] = helper->memory_size_ - 2;
-  // Set up: Flags=0x1234
-  helper->cpu_.flags = 0x1234;
+  const uint16_t saved_flags = kInitialFlags | kCF | kZF | kDF;
+  helper->cpu_.flags = saved_flags;
 
   helper->ExecuteInstructions(1);
-  helper->cpu_.flags = 0x5678;
+  helper->cpu_.flags = kInitialFlags | kSF;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.flags, 0x1234);
+  EXPECT_EQ(helper->cpu_.flags, saved_flags);
+}
+
+// The bits of the flags register that are not flags cannot be changed, so a
+// POPF of a word that has them the other way round still reads back the only
+// way they can.
+TEST_F(FlagsTest, PopFlagCannotChangeTheBitsThatAreNotFlags) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "execute-pop-flag-reserved-test", "popf\n");
+  helper->cpu_.registers[kSS] = 0;
+  helper->cpu_.registers[kSP] = helper->memory_size_ - 2;
+  // Every bit that is not a flag set the wrong way: bit 1 and bits 12 to 15
+  // clear, bits 3 and 5 set.
+  helper->memory_[helper->memory_size_ - 2] = kCF | 0x28;
+  helper->memory_[helper->memory_size_ - 1] = 0x00;
+
+  helper->ExecuteInstructions(1);
+  EXPECT_EQ(helper->cpu_.flags, kInitialFlags | kCF);
 }
 
 TEST_F(FlagsTest, LAHFAndSAHF) {
@@ -28,13 +45,16 @@ TEST_F(FlagsTest, LAHFAndSAHF) {
       "execute-lahf-sahf-test",
       "lahf\n"
       "sahf\n");
-  helper->cpu_.flags = 0x1234;
+  const uint16_t flags = kInitialFlags | kCF | kPF | kAF;
+  helper->cpu_.flags = flags;
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x3400);
-  helper->cpu_.registers[kAX] = 0x5678;
+  // AH takes the low byte of the flags register as it stands.
+  EXPECT_EQ(helper->cpu_.registers[kAX], (flags & 0x00FF) << 8);
+  // Store back a low byte with the sign and zero flags set instead.
+  helper->cpu_.registers[kAX] = (kSF | kZF) << 8;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.flags, 0x1256);
+  EXPECT_EQ(helper->cpu_.flags, kInitialFlags | kSF | kZF);
 }
 
 TEST_F(FlagsTest, ClearCarryFlag) {
