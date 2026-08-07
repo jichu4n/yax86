@@ -16,7 +16,40 @@ enum : uint8_t {
   kOpNop = 0x90,
   kOpHlt = 0xF4,
   kOpSti = 0xFB,
+  kOpPopf = 0x9D,
 };
+
+// Segment and offset of the single-step handler installed by these tests,
+// chosen to land inside the helper's 4KB of memory.
+enum : uint16_t {
+  kSingleStepHandlerSegment = 0x0020,
+  kSingleStepHandlerOffset = 0x0100,
+};
+
+// Installs an interrupt vector pointing at segment:offset.
+void SetVector(
+    CPUTestHelper* helper, uint8_t interrupt_number, uint16_t segment,
+    uint16_t offset) {
+  const uint16_t vector_offset = interrupt_number * 4;
+  helper->memory_[vector_offset + 0] = offset & 0xFF;
+  helper->memory_[vector_offset + 1] = offset >> 8;
+  helper->memory_[vector_offset + 2] = segment & 0xFF;
+  helper->memory_[vector_offset + 3] = segment >> 8;
+}
+
+// Whether the CPU is sitting in the single-step handler.
+bool InSingleStepHandler(const CPUTestHelper* helper) {
+  return helper->cpu_.registers[kCS] == kSingleStepHandlerSegment &&
+         helper->cpu_.registers[kIP] == kSingleStepHandlerOffset;
+}
+
+// Pushes a flags word for POPF to pop.
+void PushFlags(CPUTestHelper* helper, uint16_t flags) {
+  helper->cpu_.registers[kSP] -= 2;
+  const uint16_t sp = helper->cpu_.registers[kSP];
+  helper->memory_[sp] = flags & 0xFF;
+  helper->memory_[sp + 1] = flags >> 8;
+}
 
 // Builds a helper running hand-assembled code, with interrupts dispatched
 // through the interrupt vector table rather than the default test callback,
@@ -163,4 +196,73 @@ TEST_F(TickTest, HaltWithTrapFlagTrapsOnceForTheHaltItself) {
   EXPECT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x1111);
   EXPECT_FALSE(helper->cpu_.is_halted);
+}
+
+// ============================================================================
+// When the trap flag is sampled
+// ============================================================================
+//
+// The trap flag is read before the instruction runs, so the decision to trap
+// reflects TF as it was at the instruction boundary. MartyPC models the same
+// rule as a pair of enable/disable delays, validated against real hardware.
+
+TEST_F(TickTest, PopfSettingTrapFlagDoesNotTrapOnItself) {
+  auto helper = WithCode({kOpPopf, kOpNop, kOpNop});
+  SetVector(
+      helper.get(), kInterruptSingleStep, kSingleStepHandlerSegment,
+      kSingleStepHandlerOffset);
+  helper->memory_[(kSingleStepHandlerSegment << 4) + kSingleStepHandlerOffset] =
+      kOpNop;
+
+  // POPF loads a flags word with TF set, starting from TF clear.
+  CPUSetFlag(&helper->cpu_, kTF, false);
+  PushFlags(helper.get(), kInitialFlags | kTF);
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+
+  // TF is now set, but the instruction that set it must not trap on itself.
+  EXPECT_TRUE(CPUGetFlag(&helper->cpu_, kTF));
+  EXPECT_FALSE(InSingleStepHandler(helper.get()));
+
+  // The following instruction does trap.
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+  EXPECT_TRUE(InSingleStepHandler(helper.get()));
+}
+
+TEST_F(TickTest, PopfClearingTrapFlagStillTrapsOnce) {
+  auto helper = WithCode({kOpPopf, kOpNop});
+  SetVector(
+      helper.get(), kInterruptSingleStep, kSingleStepHandlerSegment,
+      kSingleStepHandlerOffset);
+
+  // POPF loads a flags word with TF clear, starting from TF set.
+  CPUSetFlag(&helper->cpu_, kTF, true);
+  PushFlags(helper.get(), kInitialFlags);
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+
+  // The trap still fires for the instruction TF was set during, even though
+  // that instruction cleared it.
+  EXPECT_TRUE(InSingleStepHandler(helper.get()));
+}
+
+TEST_F(TickTest, DispatchedInterruptTakesPrecedenceOverSingleStep) {
+  auto helper = WithCode({kOpNop, kOpNop});
+  SetVector(
+      helper.get(), kInterruptSingleStep, kSingleStepHandlerSegment,
+      kSingleStepHandlerOffset);
+  // A hardware interrupt vectoring somewhere else entirely.
+  SetVector(helper.get(), 0x20, 0x0010, 0x0100);
+
+  CPUSetFlag(&helper->cpu_, kTF, true);
+  CPUSetPendingInterrupt(&helper->cpu_, 0x20);
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+
+  // Single-stepping is the lowest priority interrupt source at an instruction
+  // boundary, so the hardware interrupt takes its place rather than both
+  // firing in one tick.
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0010);
+  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  EXPECT_FALSE(InSingleStepHandler(helper.get()));
 }

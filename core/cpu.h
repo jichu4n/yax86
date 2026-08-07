@@ -6334,10 +6334,10 @@ InstructionResult CPUExecuteInstruction(
   return kInstructionExecuted;
 }
 
-// Process pending interrupt, if any.
-static void ExecutePendingInterrupt(CPUState* cpu) {
+// Process pending interrupt, if any. Returns whether one was dispatched.
+static bool ExecutePendingInterrupt(CPUState* cpu) {
   if (!cpu->has_pending_interrupt) {
-    return;
+    return false;
   }
   uint8_t interrupt_number = cpu->pending_interrupt_number;
   CPUClearPendingInterrupt(cpu);
@@ -6362,7 +6362,7 @@ static void ExecutePendingInterrupt(CPUState* cpu) {
     // If the interrupt was handled by the caller-provided interrupt handler
     // callback, restore state and continue execution.
     ExecuteReturnFromInterrupt(cpu);
-    return;
+    return true;
   }
 
   // If the interrupt was not handled by the caller-provided interrupt handler
@@ -6370,6 +6370,7 @@ static void ExecutePendingInterrupt(CPUState* cpu) {
   uint16_t ivt_entry_offset = interrupt_number << 2;
   cpu->registers[kIP] = ReadRawMemoryWord(cpu, ivt_entry_offset);
   cpu->registers[kCS] = ReadRawMemoryWord(cpu, ivt_entry_offset + 2);
+  return true;
 }
 
 CPUTickResult CPUTick(CPUState* cpu) {
@@ -6379,6 +6380,11 @@ CPUTickResult CPUTick(CPUState* cpu) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;
+
+  // The trap flag is sampled before the instruction runs, not after. An
+  // instruction that sets TF - POPF or IRET - must not trap on itself, and one
+  // that clears TF still traps once for the instruction it was set during.
+  const bool trap_flag_was_set = CPUGetFlag(cpu, kTF);
 
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
@@ -6409,15 +6415,16 @@ CPUTickResult CPUTick(CPUState* cpu) {
   // Step 3: Handle a pending interrupt. This runs even while halted, because
   // an interrupt is the only thing that can clear the halted state -
   // ExecutePendingInterrupt() resets is_halted when it dispatches one.
-  ExecutePendingInterrupt(cpu);
+  const bool dispatched_interrupt = ExecutePendingInterrupt(cpu);
 
   // Step 4: The trap flag raises a single-step interrupt after an instruction
   // executes, so a halted CPU must not trap - otherwise the trap would wake it
   // and then fire again on every subsequent tick.
   //
-  // Dispatching an interrupt above clears TF, which correctly suppresses the
-  // single-step trap for an instruction that was itself interrupted.
-  if (executed_instruction && CPUGetFlag(cpu, kTF)) {
+  // Single-stepping is the lowest priority of the interrupt sources recognized
+  // at an instruction boundary, so an interrupt dispatched above takes its
+  // place rather than both firing.
+  if (executed_instruction && trap_flag_was_set && !dispatched_interrupt) {
     CPUSetPendingInterrupt(cpu, kInterruptSingleStep);
     ExecutePendingInterrupt(cpu);
   }
