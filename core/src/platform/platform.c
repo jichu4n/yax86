@@ -732,10 +732,10 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // vector would overwrite the first, and the PIC would wait forever for an
   // end-of-interrupt that the lost handler never sends - which blocks every
   // lower priority IRQ behind it.
-  if (CPUGetFlag(&platform->cpu, kIF) && !CPUHasPendingIRQ(&platform->cpu)) {
+  if (CPUGetFlag(&platform->cpu, kIF) && !CPUIsINTRAsserted(&platform->cpu)) {
     uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
     if (interrupt_vector != kPICNoPendingInterrupt) {
-      CPUSetPendingIRQ(&platform->cpu, interrupt_vector);
+      CPUAssertINTR(&platform->cpu, interrupt_vector);
     }
   }
 
@@ -771,7 +771,7 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // the rest of the machine must keep ticking so that an interrupt can wake
   // the CPU back up.
   if (platform->cpu.is_halted && !CPUGetFlag(&platform->cpu, kIF) &&
-      !platform->cpu.has_pending_interrupt) {
+      !platform->cpu.has_pending_internal_interrupt) {
     return kPlatformHung;
   }
 

@@ -255,14 +255,14 @@ YAX86_PRIVATE InstructionResult ExecuteIret(const InstructionContext* ctx) {
 
 // INT 3
 YAX86_PRIVATE InstructionResult ExecuteInt3(const InstructionContext* ctx) {
-  CPUSetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
+  CPURaiseInternalInterrupt(ctx->cpu, kInterruptBreakpoint);
   return kInstructionExecuted;
 }
 
 // INTO
 YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kOF)) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptOverflow);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptOverflow);
   }
   return kInstructionExecuted;
 }
@@ -270,7 +270,7 @@ YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
 // INT n
 YAX86_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
-  CPUSetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
+  CPURaiseInternalInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
   return kInstructionExecuted;
 }
 

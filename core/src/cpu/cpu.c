@@ -215,18 +215,19 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   // An internal interrupt goes first. It was raised by the instruction that
   // just executed, and taking it clears IF, which correctly holds off any
   // external request until the handler re-enables interrupts.
-  if (cpu->has_pending_interrupt) {
-    const uint8_t interrupt_number = cpu->pending_interrupt_number;
-    CPUClearPendingInterrupt(cpu);
+  if (cpu->has_pending_internal_interrupt) {
+    const uint8_t interrupt_number = cpu->pending_internal_interrupt_number;
+    CPUClearInternalInterrupt(cpu);
     DispatchInterrupt(cpu, interrupt_number);
     return true;
   }
 
-  // An external request on the INTR line is only taken while interrupts are
-  // enabled. It stays asserted until then rather than being discarded.
-  if (cpu->has_pending_irq && CPUGetFlag(cpu, kIF)) {
-    const uint8_t interrupt_number = cpu->pending_irq_number;
-    cpu->has_pending_irq = false;
+  // A request on the INTR pin is only taken while interrupts are enabled. It
+  // stays asserted until then rather than being discarded, as the line does on
+  // real hardware.
+  if (cpu->is_intr_asserted && CPUGetFlag(cpu, kIF)) {
+    const uint8_t interrupt_number = cpu->intr_vector;
+    cpu->is_intr_asserted = false;
     DispatchInterrupt(cpu, interrupt_number);
     return true;
   }
@@ -286,7 +287,7 @@ CPUTickResult CPUTick(CPUState* cpu) {
   // at an instruction boundary, so an interrupt dispatched above takes its
   // place rather than both firing.
   if (executed_instruction && trap_flag_was_set && !dispatched_interrupt) {
-    CPUSetPendingInterrupt(cpu, kInterruptSingleStep);
+    CPURaiseInternalInterrupt(cpu, kInterruptSingleStep);
     ExecutePendingInterrupt(cpu);
   }
 

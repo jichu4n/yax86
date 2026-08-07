@@ -191,7 +191,7 @@ typedef struct FDCDriveState {
   uint8_t st0;
   // Whether there is a pending interrupt from a completed Seek or Recalibrate
   // operation on this drive.
-  bool has_pending_interrupt;
+  bool has_pending_internal_interrupt;
 } FDCDriveState;
 
 // Caller-provided runtime configuration for the FDC.

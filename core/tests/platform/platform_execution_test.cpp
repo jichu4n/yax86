@@ -318,7 +318,7 @@ TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
 // must not discard it. Sharing one pending-interrupt slot between the two used
 // to lose the IRQ, leaving the PIC with the interrupt permanently in service
 // and every lower priority IRQ - notably the keyboard - blocked behind it.
-TEST_F(PlatformExecutionTest, SoftwareInterruptDoesNotStrandAnAcknowledgedIRQ) {
+TEST_F(PlatformExecutionTest, SoftwareInterruptDoesNotStrandAnAcknowledgedInterrupt) {
   enum : uint32_t {
     // Vector table entries, at interrupt number * 4.
     kVectorIRQ0 = 0x08 * 4,

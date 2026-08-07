@@ -218,20 +218,24 @@ typedef struct CPUState {
   // Flag values
   uint16_t flags;
 
-  // Whether there is a pending internal interrupt - one raised by the CPU
-  // itself, such as INT n, INTO, a divide error, or a single-step trap.
-  bool has_pending_interrupt;
-  // The interrupt number of the pending internal interrupt.
-  uint8_t pending_interrupt_number;
+  // An internal interrupt, raised by the CPU itself as a result of the
+  // instruction it just executed: INT n, INT 3, INTO, a divide error, or a
+  // single-step trap. IF does not gate these - INT 21h works with interrupts
+  // disabled, which is how DOS calls inside critical sections behave.
+  bool has_pending_internal_interrupt;
+  // Interrupt number of the pending internal interrupt.
+  uint8_t pending_internal_interrupt_number;
 
-  // Whether an external interrupt request is asserted on the INTR line. This
-  // is tracked separately from an internal interrupt because the two have
-  // independent sources: an INT instruction executed while an IRQ is waiting
-  // must not discard the IRQ.
-  bool has_pending_irq;
-  // The interrupt vector supplied by the interrupt controller for the pending
-  // external interrupt request.
-  uint8_t pending_irq_number;
+  // The INTR pin: a maskable interrupt request from an external interrupt
+  // controller, which supplies the vector number during the acknowledge cycle.
+  //
+  // This is held separately from an internal interrupt because the two have
+  // genuinely independent sources. On real hardware INTR is a line the
+  // controller holds asserted until the CPU acknowledges it, so an instruction
+  // that raises an interrupt of its own cannot make the request go away.
+  bool is_intr_asserted;
+  // Vector number the interrupt controller supplied along with the request.
+  uint8_t intr_vector;
 
   // Whether the CPU is in halted state. When true, CPUTick() will not fetch
   // or execute any instructions until an external event (e.g., an interrupt)
@@ -259,35 +263,38 @@ static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
   }
 }
 
-// Set pending interrupt to be executed at the end of the current instruction.
-static inline void CPUSetPendingInterrupt(
+// Raise an interrupt from within the CPU, to be taken at the end of the
+// instruction currently executing. This is for the sources the 8086 calls
+// internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
+// are not maskable by IF. External requests arrive via CPUAssertINTR().
+static inline void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
-  cpu->has_pending_interrupt = true;
-  cpu->pending_interrupt_number = interrupt_number;
+  cpu->has_pending_internal_interrupt = true;
+  cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
-// Clear pending interrupt.
-static inline void CPUClearPendingInterrupt(CPUState* cpu) {
-  cpu->has_pending_interrupt = false;
-  cpu->pending_interrupt_number = 0;
+// Discard a pending internal interrupt without taking it.
+static inline void CPUClearInternalInterrupt(CPUState* cpu) {
+  cpu->has_pending_internal_interrupt = false;
+  cpu->pending_internal_interrupt_number = 0;
 }
 
 // Assert an external interrupt request on the INTR line, as an interrupt
 // controller does. The CPU takes it at the end of the next instruction at
-// which interrupts are enabled, so unlike CPUSetPendingInterrupt() this does
+// which interrupts are enabled, so unlike CPURaiseInternalInterrupt() this does
 // not disturb an internal interrupt that is already pending.
 //
-// Callers should check CPUHasPendingIRQ() first: the CPU has a single INTR
+// Callers should check CPUIsINTRAsserted() first: the CPU has a single INTR
 // slot, so asserting a second request before the first is taken would drop it,
 // leaving the controller waiting for an end-of-interrupt that never comes.
-static inline void CPUSetPendingIRQ(CPUState* cpu, uint8_t interrupt_number) {
-  cpu->has_pending_irq = true;
-  cpu->pending_irq_number = interrupt_number;
+static inline void CPUAssertINTR(CPUState* cpu, uint8_t vector) {
+  cpu->is_intr_asserted = true;
+  cpu->intr_vector = vector;
 }
 
-// Whether an external interrupt request is waiting to be taken.
-static inline bool CPUHasPendingIRQ(const CPUState* cpu) {
-  return cpu->has_pending_irq;
+// Whether a request on the INTR pin is still waiting to be taken.
+static inline bool CPUIsINTRAsserted(const CPUState* cpu) {
+  return cpu->is_intr_asserted;
 }
 
 // Request that the current tick stop as soon as the instruction in progress

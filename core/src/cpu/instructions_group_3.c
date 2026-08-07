@@ -123,7 +123,7 @@ static InstructionResult ExecuteDiv(
     const InstructionContext* ctx, Operand* op) {
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
 
@@ -137,7 +137,7 @@ static InstructionResult ExecuteDiv(
                             << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
@@ -149,7 +149,7 @@ static InstructionResult ExecuteIdiv(
     const InstructionContext* ctx, Operand* op) {
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
 
@@ -164,7 +164,7 @@ static InstructionResult ExecuteIdiv(
   int32_t quotient = dividend / divisor;
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < kMinSignedValue[ctx->metadata->width]) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);

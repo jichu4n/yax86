@@ -118,7 +118,7 @@ TEST_F(TickTest, PendingInterruptWakesHaltedCPU) {
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickHalted);
 
   // A hardware interrupt arrives, as the platform would inject it.
-  CPUSetPendingInterrupt(&helper->cpu_, 0x20);
+  CPURaiseInternalInterrupt(&helper->cpu_, 0x20);
   EXPECT_EQ(CPUTick(&helper->cpu_), kCPUTickHalted);
 
   // The interrupt cleared the halted state and vectored to the handler, even
@@ -256,7 +256,7 @@ TEST_F(TickTest, DispatchedInterruptTakesPrecedenceOverSingleStep) {
   SetVector(helper.get(), 0x20, 0x0010, 0x0100);
 
   CPUSetFlag(&helper->cpu_, kTF, true);
-  CPUSetPendingInterrupt(&helper->cpu_, 0x20);
+  CPURaiseInternalInterrupt(&helper->cpu_, 0x20);
 
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
 
@@ -278,7 +278,7 @@ TEST_F(TickTest, DispatchedInterruptTakesPrecedenceOverSingleStep) {
 // instruction silently discard an acknowledged IRQ, leaving the controller
 // waiting forever for an end-of-interrupt.
 
-TEST_F(TickTest, SoftwareInterruptDoesNotDiscardPendingIRQ) {
+TEST_F(TickTest, SoftwareInterruptDoesNotDeassertINTR) {
   // INT 28h, then instructions to return to.
   auto helper = WithCode({0xCD, 0x28, kOpNop, kOpNop});
   // INT 28h handler at 0050:0100 (linear 0x600), just an IRET.
@@ -291,7 +291,7 @@ TEST_F(TickTest, SoftwareInterruptDoesNotDiscardPendingIRQ) {
   CPUSetFlag(&helper->cpu_, kIF, true);
 
   // The controller asserts IRQ0 just before the INT instruction executes.
-  CPUSetPendingIRQ(&helper->cpu_, 0x08);
+  CPUAssertINTR(&helper->cpu_, 0x08);
 
   // The INT instruction is taken first, since it was raised by the instruction
   // that just executed.
@@ -299,39 +299,39 @@ TEST_F(TickTest, SoftwareInterruptDoesNotDiscardPendingIRQ) {
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0050);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
   // The external request must survive it.
-  EXPECT_TRUE(CPUHasPendingIRQ(&helper->cpu_));
+  EXPECT_TRUE(CPUIsINTRAsserted(&helper->cpu_));
 
   // IRET restores IF, and the request is then taken.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
-  EXPECT_FALSE(CPUHasPendingIRQ(&helper->cpu_));
+  EXPECT_FALSE(CPUIsINTRAsserted(&helper->cpu_));
 }
 
-TEST_F(TickTest, PendingIRQWaitsForInterruptsToBeEnabled) {
+TEST_F(TickTest, AssertedINTRWaitsForInterruptsToBeEnabled) {
   auto helper = WithCode({kOpCli, kOpNop, kOpSti, kOpNop, kOpNop});
   SetVector(helper.get(), 0x08, 0x0060, 0x0100);
   helper->memory_[0x700] = kOpNop;
 
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // CLI
-  CPUSetPendingIRQ(&helper->cpu_, 0x08);
+  CPUAssertINTR(&helper->cpu_, 0x08);
 
   // Not taken while interrupts are disabled - and not thrown away either.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
-  EXPECT_TRUE(CPUHasPendingIRQ(&helper->cpu_));
+  EXPECT_TRUE(CPUIsINTRAsserted(&helper->cpu_));
   EXPECT_NE(helper->cpu_.registers[kCS], 0x0060);
 
   // Once interrupts are enabled again the request is taken.
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
-  for (int i = 0; i < 2 && CPUHasPendingIRQ(&helper->cpu_); ++i) {
+  for (int i = 0; i < 2 && CPUIsINTRAsserted(&helper->cpu_); ++i) {
     ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
   }
-  EXPECT_FALSE(CPUHasPendingIRQ(&helper->cpu_));
+  EXPECT_FALSE(CPUIsINTRAsserted(&helper->cpu_));
   EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
 }
 
-TEST_F(TickTest, PendingIRQWakesHaltedCPU) {
+TEST_F(TickTest, AssertedINTRWakesHaltedCPU) {
   auto helper = WithCode({kOpSti, kOpHlt});
   SetVector(helper.get(), 0x08, 0x0060, 0x0100);
   helper->memory_[0x700] = kOpNop;
@@ -340,7 +340,7 @@ TEST_F(TickTest, PendingIRQWakesHaltedCPU) {
   ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // HLT
   ASSERT_TRUE(helper->cpu_.is_halted);
 
-  CPUSetPendingIRQ(&helper->cpu_, 0x08);
+  CPUAssertINTR(&helper->cpu_, 0x08);
   EXPECT_EQ(CPUTick(&helper->cpu_), kCPUTickHalted);
 
   EXPECT_FALSE(helper->cpu_.is_halted);
