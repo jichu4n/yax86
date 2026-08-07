@@ -56,9 +56,6 @@ extern OperandValue ReadRegisterOperandWord(
 // Write a byte as uint8_t to memory.
 extern void WriteRawMemoryByte(CPUState* cpu, uint32_t address, uint8_t value);
 
-// Write a word as uint16_t to memory.
-extern void WriteRawMemoryWord(CPUState* cpu, uint32_t address, uint16_t value);
-
 // Write a byte to memory.
 extern void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value);
