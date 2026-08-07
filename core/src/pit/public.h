@@ -15,6 +15,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef YAX86_PIT_BUNDLE_H
+#include "../log/public.h"
+#endif  // YAX86_PIT_BUNDLE_H
+
+enum {
+  // Log category ID for the PIT module.
+  kLogCategoryIDPIT = 3,
+};
+
+// Log category for the PIT module.
+static const LogCategory kLogCategoryPIT = {
+    .id = kLogCategoryIDPIT,
+    .name = "PIT",
+};
+
 enum {
   // Number of PIT channels.
   kPITNumChannels = 3,
@@ -60,6 +75,9 @@ struct PITState;
 typedef struct PITConfig {
   // Custom data passed through to callbacks.
   void* context;
+
+  // Logger for this module. May be NULL.
+  Logger* logger;
 
   // Callback to raise IRQ 0.
   void (*raise_irq_0)(void* context);
@@ -111,4 +129,3 @@ void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
 void PITTick(PITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H
-

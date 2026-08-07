@@ -41,8 +41,20 @@
 #include <stdint.h>
 
 #ifndef YAX86_KEYBOARD_BUNDLE_H
+#include "../log/public.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_KEYBOARD_BUNDLE_H
+
+enum {
+  // Log category ID for the Keyboard module.
+  kLogCategoryIDKeyboard = 7,
+};
+
+// Log category for the Keyboard module.
+static const LogCategory kLogCategoryKeyboard = {
+    .id = kLogCategoryIDKeyboard,
+    .name = "KEYBOARD",
+};
 
 struct KeyboardState;
 
@@ -50,6 +62,9 @@ struct KeyboardState;
 typedef struct KeyboardConfig {
   // Opaque context pointer, passed to all callbacks.
   void* context;
+
+  // Logger for this module. May be NULL.
+  Logger* logger;
 
   // Callback to send a scancode to the PPI.
   void (*send_scancode)(void* context, uint8_t scancode);
@@ -111,4 +126,3 @@ void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode);
 void KeyboardTickMs(KeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H
-

@@ -5,6 +5,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef YAX86_CPU_BUNDLE_H
+#include "../log/public.h"
+#endif  // YAX86_CPU_BUNDLE_H
+
+enum {
+  // Log category ID for the CPU module.
+  kLogCategoryIDCPU = 1,
+};
+
+// Log category for the CPU module.
+static const LogCategory kLogCategoryCPU = {
+    .id = kLogCategoryIDCPU,
+    .name = "CPU",
+};
+
 // ============================================================================
 // CPU state
 // ============================================================================
@@ -110,6 +125,9 @@ struct Instruction;
 typedef struct CPUConfig {
   // Custom data passed through to callbacks.
   void* context;
+
+  // Logger for this module. May be NULL.
+  Logger* logger;
 
   // Callback to read a byte from memory.
   //

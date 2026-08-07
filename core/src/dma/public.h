@@ -25,6 +25,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef YAX86_DMA_BUNDLE_H
+#include "../log/public.h"
+#endif  // YAX86_DMA_BUNDLE_H
+
+enum {
+  // Log category ID for the DMA module.
+  kLogCategoryIDDMA = 6,
+};
+
+// Log category for the DMA module.
+static const LogCategory kLogCategoryDMA = {
+    .id = kLogCategoryIDDMA,
+    .name = "DMA",
+};
+
 // I/O ports for the 8237 DMA Controller and Page Registers.
 typedef enum DMAPort {
   // --- 8237 DMA Controller ---
@@ -125,6 +140,9 @@ typedef struct DMAConfig {
   // Custom data passed through to callbacks.
   void* context;
 
+  // Logger for this module. May be NULL.
+  Logger* logger;
+
   // Callback to read a byte from system memory.
   uint8_t (*read_memory_byte)(void* context, uint32_t address);
   // Callback to write a byte to system memory.
@@ -135,9 +153,9 @@ typedef struct DMAConfig {
   // Callback to write a byte to a peripheral for a specific DMA channel.
   void (*write_device_byte)(void* context, uint8_t channel, uint8_t value);
 
-  // Callback to notify the system that a channel has reached its terminal count.
-  // This corresponds to the EOP (End of Process) signal on the 8237, which is
-  // connected to the TC (Terminal Count) pin on devices like the FDC.
+  // Callback to notify the system that a channel has reached its terminal
+  // count. This corresponds to the EOP (End of Process) signal on the 8237,
+  // which is connected to the TC (Terminal Count) pin on devices like the FDC.
   void (*on_terminal_count)(void* context, uint8_t channel);
 } DMAConfig;
 
@@ -205,4 +223,3 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value);
 void DMATransferByte(DMAState* dma, uint8_t channel_index);
 
 #endif  // YAX86_DMA_PUBLIC_H
-
