@@ -193,3 +193,44 @@ TEST_F(LeaLesLdsTest, LDS) {
        {kOF, true},
        {kAF, true}});
 }
+
+// LEA yields the offset within the segment, so a non-zero segment register
+// must not change its result. The tests above all run with DS = 0, which
+// cannot distinguish an offset from a linear address.
+TEST_F(LeaLesLdsTest, LEAIgnoresSegmentBase) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "test-lea-ignores-segment-base",
+      "lea ax, [bx+si]\n"       // DS-relative by default
+      "lea cx, [bp+10h]\n"      // SS-relative, because it is BP-based
+      "lea dx, [0200h]\n"       // direct offset
+      "lea di, es:[bx+si]\n");  // explicit segment override
+
+  helper->cpu_.registers[kDS] = 0x1234;
+  helper->cpu_.registers[kSS] = 0x5678;
+  helper->cpu_.registers[kES] = 0x9ABC;
+  helper->cpu_.registers[kBX] = 0x0100;
+  helper->cpu_.registers[kSI] = 0x0020;
+  helper->cpu_.registers[kBP] = 0x0300;
+
+  helper->ExecuteInstructions(4);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0120);
+  EXPECT_EQ(helper->cpu_.registers[kCX], 0x0310);
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0200);
+  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0120);
+}
+
+// The exact shape of the instruction that broke the MS-DOS boot: IO.SYS uses
+// LEA to advance a pointer before a REP MOVSB, running with DS = 0x0070.
+TEST_F(LeaLesLdsTest, LEAAdvancesPointerWithNonZeroSegment) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "test-lea-advance", "lea di, [di+2Dh]\n");
+
+  helper->cpu_.registers[kDS] = 0x0070;
+  helper->cpu_.registers[kES] = 0x0070;
+  helper->cpu_.registers[kDI] = 0x0482;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kDI], 0x04AF);
+}

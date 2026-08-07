@@ -2531,8 +2531,11 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   MemoryAddress memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
-  uint32_t raw_address = ToRawAddress(ctx->cpu, &memory_address);
-  WriteOperandAddress(ctx, &dest.address, raw_address);
+  // LEA yields the effective address - the offset within the segment - and
+  // never resolves it against a segment or touches memory. Converting to a
+  // linear address here would fold the segment base into the result, which is
+  // invisible only while the segment register happens to be zero.
+  WriteOperandAddress(ctx, &dest.address, memory_address.offset);
   return kInstructionExecuted;
 }
 
