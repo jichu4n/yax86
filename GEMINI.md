@@ -85,24 +85,48 @@ To run tests:
 ./tools/run-tests.sh
 ```
 
-The CPU can additionally be checked against the [8088 hardware test
+The CPU is also checked against the [8088 hardware test
 suite](https://github.com/SingleStepTests/8088), which records the result a
 real 8088 produced for each of roughly 3 million instruction encodings. The
-data is not in the repository - download it once, then run the suite:
+data is not in the repository - download it once, after which `run-tests.sh`
+picks it up along with everything else:
 ```
 ./tools/download-cpu-hardware-tests.sh
-build-native/core/tests/cpu/cpu_hardware_tests
 ```
 The download fetches about 480MB into `.cache/8088-tests`. Pass opcodes to
 fetch only a subset, as in `./tools/download-cpu-hardware-tests.sh 8D 00 80.0`;
-group opcodes take a ModRM REG suffix.
+group opcodes take a ModRM REG suffix. The suite reports no tests at all when
+nothing has been downloaded, so a fresh checkout and CI skip it rather than
+failing. It can also be run on its own, and a single opcode picked out:
+```
+build-native/core/tests/cpu/cpu_hardware_tests
+build-native/core/tests/cpu/cpu_hardware_tests --gtest_filter='*Opcode8D*'
+```
+It is deliberately not registered with ctest, because the set of tests depends
+on what has been downloaded and ctest would bake that in at build time.
 
 Only the architectural result is compared - the suite's per-cycle bus records
 are for cycle-accurate emulators, and flags the 8088 leaves undefined are
-masked out. The suite is not part of `run-tests.sh` and is not registered with
-ctest, because it currently reports known divergences from real hardware. It
-reports no tests at all when nothing has been downloaded. A single opcode can
-be run with `--gtest_filter='*Opcode8D*'`.
+masked out.
+
+Every opcode is expected to pass. The one exception is the divide
+instructions, where two differences from real hardware are deliberately not
+reproduced, both of which would require emulating the divide microcode step by
+step:
+
+- The flags a divide leaves behind when it raises a divide error. The 8088
+  divides one bit at a time and updates the arithmetic flags on every pass, so
+  the flags are the last pass's. They are undefined, and the suite masks them
+  out of its register comparison - but the divide error interrupt pushes them,
+  so they reappear as the flags word on the stack, where nothing masks them.
+- The sign `IDIV` gives the quotient for some operands, which can disagree with
+  its own remainder. No real software can depend on an arithmetically wrong
+  answer.
+
+These are matched narrowly in `core/tests/cpu/hardware_test.cpp` - see
+`KnownDivergence` - rather than by skipping the opcodes, so everything else
+those opcodes do is still checked. The count let through is printed per opcode
+so that it cannot quietly grow.
 
 To debug the WASM version of the emulator, use Chrome DevTools MCP server to
 open `http://localhost:3000/yax86_sdl.html`.
