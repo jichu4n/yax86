@@ -962,7 +962,7 @@ void PlatformTick(PlatformState* platform);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define PLATFORM_LOG(level, ...) \
+#define YAX86_PLATFORM_LOG(level, ...) \
   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
 // Register a memory map entry in the platform state. Returns true if the entry
@@ -1023,7 +1023,8 @@ uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
     // Logged at debug rather than warning level: scanning unmapped memory is
     // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
     // for option ROMs, for instance.
-    PLATFORM_LOG(kLogLevelDebug, "read from unmapped address %05X", address);
+    YAX86_PLATFORM_LOG(
+        kLogLevelDebug, "read from unmapped address %05X", address);
     return 0xFF;
   }
   return entry->read_byte(entry, address - entry->start);
@@ -1040,7 +1041,7 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->write_byte) {
-    PLATFORM_LOG(
+    YAX86_PLATFORM_LOG(
         kLogLevelDebug, "write of %02X to unmapped address %05X", value,
         address);
     return;
@@ -1107,7 +1108,7 @@ uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
     // missing from the port map, so this stays at warning level.
-    PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
+    YAX86_PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
     return 0xFF;
   }
   return entry->read_byte(entry, port);
@@ -1126,7 +1127,7 @@ uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
 void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
-    PLATFORM_LOG(
+    YAX86_PLATFORM_LOG(
         kLogLevelWarn, "write of %02X to unmapped port %04X", value, port);
     return;
   }

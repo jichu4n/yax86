@@ -218,8 +218,7 @@ YAX86_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
 YAX86_PRIVATE RegisterAddress
-GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
-  (void)cpu;
+GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
@@ -236,8 +235,7 @@ GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
 // Get the register operand for a word instruction based on the ModR/M byte's
 // reg or R/M field.
 YAX86_PRIVATE RegisterAddress
-GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm) {
-  (void)cpu;
+GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   const RegisterAddress address = {
       .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
   return address;

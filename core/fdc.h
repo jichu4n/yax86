@@ -963,7 +963,7 @@ void FDCTick(FDCState* fdc);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define FDC_LOG(level, ...) \
+#define YAX86_FDC_LOG(level, ...) \
   YAX86_LOG(fdc->config->logger, &kLogModuleFDC, level, __VA_ARGS__)
 
 #include <stddef.h>
@@ -1028,7 +1028,7 @@ static inline void FDCRaiseIRQ6(FDCState* fdc) {
 
 // Transition into execution phase.
 static inline void FDCStartCommandExecution(FDCState* fdc) {
-  FDC_LOG(
+  YAX86_FDC_LOG(
       kLogLevelDebug, "executing command %02X with %u parameter bytes",
       fdc->current_command ? fdc->current_command->opcode : 0,
       (unsigned)FDCCommandBufferLength(&fdc->command_buffer) - 1);
@@ -1038,7 +1038,7 @@ static inline void FDCStartCommandExecution(FDCState* fdc) {
 
 // Transition into result phase after command execution.
 static inline void FDCFinishCommandExecution(FDCState* fdc) {
-  FDC_LOG(
+  YAX86_FDC_LOG(
       kLogLevelDebug, "command finished with %u result bytes, st0 %02X",
       (unsigned)FDCResultBufferLength(&fdc->result_buffer),
       FDCResultBufferLength(&fdc->result_buffer) > 0
@@ -1631,7 +1631,7 @@ static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
       fdc->current_command = FDCFindCommandMetadata(opcode);
 
       if (!fdc->current_command) {
-        FDC_LOG(kLogLevelWarn, "invalid command opcode %02X", opcode);
+        YAX86_FDC_LOG(kLogLevelWarn, "invalid command opcode %02X", opcode);
         // Invalid command. Set up the result phase with an error.
         FDCResultBufferClear(&fdc->result_buffer);
         uint8_t status = kFDCST0InvalidCommand;

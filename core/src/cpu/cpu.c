@@ -6,7 +6,7 @@
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define CPU_LOG(level, ...) \
+#define YAX86_CPU_LOG(level, ...) \
   YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
@@ -236,7 +236,7 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     CPUFetchNextInstructionStatus fetch_status =
         CPUFetchNextInstruction(cpu, &instruction);
     if (fetch_status != kFetchSuccess) {
-      CPU_LOG(
+      YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
           instruction_cs, instruction_ip, (int)fetch_status);
       return kExecuteInvalidInstruction;
@@ -246,7 +246,7 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     // Step 2: Execute the instruction.
     status = CPUExecuteInstruction(cpu, &instruction);
     if (status != kExecuteSuccess && status != kExecuteHalt) {
-      CPU_LOG(
+      YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X opcode %02X failed with status %d",
           instruction_cs, instruction_ip, instruction.opcode, (int)status);
       return status;

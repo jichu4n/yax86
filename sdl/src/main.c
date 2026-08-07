@@ -43,17 +43,14 @@ static const char* MainLogLevelName(LogLevel level) {
 
 // Log sink. Under Emscripten, stdout is routed to the browser console.
 static void MainWriteLogLine(
-    void* context, const LogModule* module, LogLevel level, uint64_t tick,
-    const char* message, size_t length) {
-  (void)context;
-  (void)length;
+    YAX86_UNUSED void* context, const LogModule* module, LogLevel level,
+    uint64_t tick, const char* message, YAX86_UNUSED size_t length) {
   printf(
       "[%llu] %-5s %-8s %s\n", (unsigned long long)tick,
       MainLogLevelName(level), module->name, message);
 }
 
-static uint64_t MainGetTick(void* context) {
-  (void)context;
+static uint64_t MainGetTick(YAX86_UNUSED void* context) {
   return g_platform.ticks;
 }
 
@@ -66,8 +63,8 @@ static uint64_t MainGetTick(void* context) {
 // operation without blocking the UI thread too long.
 #define INSTRUCTIONS_PER_FRAME 20000
 
-static uint8_t MainReadMemory(PlatformState* platform, uint32_t address) {
-  (void)platform;
+static uint8_t MainReadMemory(
+    YAX86_UNUSED PlatformState* platform, uint32_t address) {
   if (address < INTERNAL_RAM_SIZE) {
     return g_memory[address];
   }
@@ -75,26 +72,24 @@ static uint8_t MainReadMemory(PlatformState* platform, uint32_t address) {
 }
 
 static void MainWriteMemory(
-    PlatformState* platform, uint32_t address, uint8_t value) {
-  (void)platform;
+    YAX86_UNUSED PlatformState* platform, uint32_t address, uint8_t value) {
   if (address < INTERNAL_RAM_SIZE) {
     g_memory[address] = value;
   }
 }
 
-static uint8_t MainReadVRAM(struct MDAState* mda, uint32_t address) {
-  (void)mda;
+static uint8_t MainReadVRAM(
+    YAX86_UNUSED struct MDAState* mda, uint32_t address) {
   return MainReadMemory(&g_platform, 0xB0000 + address);
 }
 
 static void MainWriteVRAM(
-    struct MDAState* mda, uint32_t address, uint8_t value) {
-  (void)mda;
+    YAX86_UNUSED struct MDAState* mda, uint32_t address, uint8_t value) {
   MainWriteMemory(&g_platform, 0xB0000 + address, value);
 }
 
-static void MainWritePixel(struct MDAState* mda, Position position, RGB rgb) {
-  (void)mda;
+static void MainWritePixel(
+    YAX86_UNUSED struct MDAState* mda, Position position, RGB rgb) {
   DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
 }
 
@@ -125,10 +120,7 @@ void MainTick(void) {
   DisplayRender();             // Update screen
 }
 
-int main(int argc, char* argv[]) {
-  (void)argc;
-  (void)argv;
-
+int main(YAX86_UNUSED int argc, YAX86_UNUSED char* argv[]) {
   if (!DisplayInit()) {
     fprintf(stderr, "Failed to init display\n");
     return 1;
@@ -160,7 +152,7 @@ int main(int argc, char* argv[]) {
   }
 
   YAX86_LOG(
-      &g_platform.logger, &kLogModuleApp, kLogLevelError,
+      &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
       "yax86 started with %u KB of conventional memory",
       config.physical_memory_size / 1024);
 

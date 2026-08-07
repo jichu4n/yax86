@@ -1478,8 +1478,7 @@ YAX86_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
 YAX86_PRIVATE RegisterAddress
-GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
-  (void)cpu;
+GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
@@ -1496,8 +1495,7 @@ GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
 // Get the register operand for a word instruction based on the ModR/M byte's
 // reg or R/M field.
 YAX86_PRIVATE RegisterAddress
-GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm) {
-  (void)cpu;
+GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   const RegisterAddress address = {
       .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
   return address;
@@ -2256,8 +2254,8 @@ YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
 }
 
 // Dummy instruction for unsupported opcodes.
-YAX86_PRIVATE ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
-  (void)ctx;
+YAX86_PRIVATE ExecuteStatus
+ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
@@ -6093,7 +6091,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define CPU_LOG(level, ...) \
+#define YAX86_CPU_LOG(level, ...) \
   YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
@@ -6323,7 +6321,7 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     CPUFetchNextInstructionStatus fetch_status =
         CPUFetchNextInstruction(cpu, &instruction);
     if (fetch_status != kFetchSuccess) {
-      CPU_LOG(
+      YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
           instruction_cs, instruction_ip, (int)fetch_status);
       return kExecuteInvalidInstruction;
@@ -6333,7 +6331,7 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     // Step 2: Execute the instruction.
     status = CPUExecuteInstruction(cpu, &instruction);
     if (status != kExecuteSuccess && status != kExecuteHalt) {
-      CPU_LOG(
+      YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X opcode %02X failed with status %d",
           instruction_cs, instruction_ip, instruction.opcode, (int)status);
       return status;

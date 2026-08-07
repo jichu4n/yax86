@@ -2119,8 +2119,7 @@ YAX86_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
 YAX86_PRIVATE RegisterAddress
-GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
-  (void)cpu;
+GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
@@ -2137,8 +2136,7 @@ GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm) {
 // Get the register operand for a word instruction based on the ModR/M byte's
 // reg or R/M field.
 YAX86_PRIVATE RegisterAddress
-GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm) {
-  (void)cpu;
+GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   const RegisterAddress address = {
       .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
   return address;
@@ -2897,8 +2895,8 @@ YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
 }
 
 // Dummy instruction for unsupported opcodes.
-YAX86_PRIVATE ExecuteStatus ExecuteNoOp(const InstructionContext* ctx) {
-  (void)ctx;
+YAX86_PRIVATE ExecuteStatus
+ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
   return kExecuteSuccess;
 }
 
@@ -6734,7 +6732,7 @@ YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define CPU_LOG(level, ...) \
+#define YAX86_CPU_LOG(level, ...) \
   YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
@@ -6964,7 +6962,7 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     CPUFetchNextInstructionStatus fetch_status =
         CPUFetchNextInstruction(cpu, &instruction);
     if (fetch_status != kFetchSuccess) {
-      CPU_LOG(
+      YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
           instruction_cs, instruction_ip, (int)fetch_status);
       return kExecuteInvalidInstruction;
@@ -6974,7 +6972,7 @@ ExecuteStatus CPUTick(CPUState* cpu) {
     // Step 2: Execute the instruction.
     status = CPUExecuteInstruction(cpu, &instruction);
     if (status != kExecuteSuccess && status != kExecuteHalt) {
-      CPU_LOG(
+      YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X opcode %02X failed with status %d",
           instruction_cs, instruction_ip, instruction.opcode, (int)status);
       return status;
@@ -7791,7 +7789,7 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define DMA_LOG(level, ...) \
+#define YAX86_DMA_LOG(level, ...) \
   YAX86_LOG(dma->config->logger, &kLogModuleDMA, level, __VA_ARGS__)
 
 void DMAInit(DMAState* dma, DMAConfig* config) {
@@ -7912,7 +7910,7 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
         // Unmasking is the point at which a channel becomes live, so the
         // address, count and page registers are final here.
         const DMAChannelState* channel = &dma->channels[channel_index];
-        DMA_LOG(
+        YAX86_DMA_LOG(
             kLogLevelDebug,
             "channel %d enabled: address %02X:%04X count %04X mode %02X",
             channel_index, channel->page_register, channel->current_address,
@@ -9015,7 +9013,7 @@ void FDCTick(FDCState* fdc);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define FDC_LOG(level, ...) \
+#define YAX86_FDC_LOG(level, ...) \
   YAX86_LOG(fdc->config->logger, &kLogModuleFDC, level, __VA_ARGS__)
 
 #include <stddef.h>
@@ -9080,7 +9078,7 @@ static inline void FDCRaiseIRQ6(FDCState* fdc) {
 
 // Transition into execution phase.
 static inline void FDCStartCommandExecution(FDCState* fdc) {
-  FDC_LOG(
+  YAX86_FDC_LOG(
       kLogLevelDebug, "executing command %02X with %u parameter bytes",
       fdc->current_command ? fdc->current_command->opcode : 0,
       (unsigned)FDCCommandBufferLength(&fdc->command_buffer) - 1);
@@ -9090,7 +9088,7 @@ static inline void FDCStartCommandExecution(FDCState* fdc) {
 
 // Transition into result phase after command execution.
 static inline void FDCFinishCommandExecution(FDCState* fdc) {
-  FDC_LOG(
+  YAX86_FDC_LOG(
       kLogLevelDebug, "command finished with %u result bytes, st0 %02X",
       (unsigned)FDCResultBufferLength(&fdc->result_buffer),
       FDCResultBufferLength(&fdc->result_buffer) > 0
@@ -9683,7 +9681,7 @@ static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
       fdc->current_command = FDCFindCommandMetadata(opcode);
 
       if (!fdc->current_command) {
-        FDC_LOG(kLogLevelWarn, "invalid command opcode %02X", opcode);
+        YAX86_FDC_LOG(kLogLevelWarn, "invalid command opcode %02X", opcode);
         // Invalid command. Set up the result phase with an error.
         FDCResultBufferClear(&fdc->result_buffer);
         uint8_t status = kFDCST0InvalidCommand;
@@ -11450,7 +11448,7 @@ uint8_t PICGetPendingInterrupt(PICState* pic);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define PIC_LOG(level, ...) \
+#define YAX86_PIC_LOG(level, ...) \
   YAX86_LOG(pic->config->logger, &kLogModulePIC, level, __VA_ARGS__)
 
 // ============================================================================
@@ -11559,10 +11557,10 @@ void PICInit(PICState* pic, PICConfig* config) {
 
 void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   if (irq > 7) {
-    PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
+    YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
   }
-  PIC_LOG(
+  YAX86_PIC_LOG(
       kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
@@ -11651,13 +11649,14 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
             if (value & kOCW2_SL) {
               // Specific EOI: clear specified ISR bit.
               uint8_t irq = value & 0x07;
-              PIC_LOG(kLogLevelDebug, "specific EOI for IRQ %u", irq);
+              YAX86_PIC_LOG(kLogLevelDebug, "specific EOI for IRQ %u", irq);
               pic->isr &= ~(1 << irq);
             } else {
               // Non-Specific EOI: clear highest priority ISR bit.
               for (uint8_t i = 0, isr_mask = 1; i < 8; ++i, isr_mask <<= 1) {
                 if (pic->isr & isr_mask) {
-                  PIC_LOG(kLogLevelDebug, "non-specific EOI for IRQ %u", i);
+                  YAX86_PIC_LOG(
+                      kLogLevelDebug, "non-specific EOI for IRQ %u", i);
                   pic->isr &= ~isr_mask;
                   break;
                 }
@@ -13757,7 +13756,7 @@ void PlatformTick(PlatformState* platform);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define PLATFORM_LOG(level, ...) \
+#define YAX86_PLATFORM_LOG(level, ...) \
   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
 // Register a memory map entry in the platform state. Returns true if the entry
@@ -13818,7 +13817,8 @@ uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
     // Logged at debug rather than warning level: scanning unmapped memory is
     // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
     // for option ROMs, for instance.
-    PLATFORM_LOG(kLogLevelDebug, "read from unmapped address %05X", address);
+    YAX86_PLATFORM_LOG(
+        kLogLevelDebug, "read from unmapped address %05X", address);
     return 0xFF;
   }
   return entry->read_byte(entry, address - entry->start);
@@ -13835,7 +13835,7 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->write_byte) {
-    PLATFORM_LOG(
+    YAX86_PLATFORM_LOG(
         kLogLevelDebug, "write of %02X to unmapped address %05X", value,
         address);
     return;
@@ -13902,7 +13902,7 @@ uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
     // missing from the port map, so this stays at warning level.
-    PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
+    YAX86_PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
     return 0xFF;
   }
   return entry->read_byte(entry, port);
@@ -13921,7 +13921,7 @@ uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
 void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
-    PLATFORM_LOG(
+    YAX86_PLATFORM_LOG(
         kLogLevelWarn, "write of %02X to unmapped port %04X", value, port);
     return;
   }
