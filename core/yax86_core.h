@@ -10749,7 +10749,10 @@ MemoryMapEntry* GetMemoryMapEntryByType(
 uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->read_byte) {
-    PLATFORM_LOG(kLogLevelWarn, "read from unmapped address %05X", address);
+    // Logged at debug rather than warning level: scanning unmapped memory is
+    // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
+    // for option ROMs, for instance.
+    PLATFORM_LOG(kLogLevelDebug, "read from unmapped address %05X", address);
     return 0xFF;
   }
   return entry->read_byte(entry, address - entry->start);
@@ -10767,7 +10770,7 @@ void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->write_byte) {
     PLATFORM_LOG(
-        kLogLevelWarn, "write of %02X to unmapped address %05X", value,
+        kLogLevelDebug, "write of %02X to unmapped address %05X", value,
         address);
     return;
   }
@@ -10831,6 +10834,8 @@ PortMapEntry* GetPortMapEntryByType(
 uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
+    // Unlike unmapped memory, an unmapped port usually means a device is
+    // missing from the port map, so this stays at warning level.
     PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
     return 0xFF;
   }
