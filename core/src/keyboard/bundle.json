@@ -1,4 +1,4 @@
 {
-  "public": ["../util/static_vector.h", "public.h"],
+  "public": ["../util/common.h", "../util/snprintf.h", "../util/log.h", "../util/static_vector.h", "public.h"],
   "private": ["keyboard.c"]
 }

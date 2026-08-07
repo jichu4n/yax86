@@ -22,6 +22,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef YAX86_PIC_BUNDLE_H
+#include "../util/log.h"
+#endif  // YAX86_PIC_BUNDLE_H
+
+enum {
+  // Log module ID for the PIC.
+  kLogModuleIDPIC = 2,
+};
+
+// Log module for the PIC.
+static const LogModule kLogModulePIC = {
+    .id = kLogModuleIDPIC,
+    .name = "PIC",
+};
+
 // ============================================================================
 // PIC state
 // ============================================================================
@@ -63,6 +78,9 @@ struct PICState;
 
 // Caller-provided runtime configuration.
 typedef struct PICConfig {
+  // Logger for this module. May be NULL.
+  Logger* logger;
+
   // State of the SP pin.
   // - Single PIC on IBM PC and PC/XT => false
   // - Master PIC on IBM PC/AT and PS/2 => false

@@ -2,6 +2,9 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define YAX86_PIC_LOG(level, ...) \
+  YAX86_LOG(pic->config->logger, &kLogModulePIC, level, __VA_ARGS__)
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -108,8 +111,12 @@ void PICInit(PICState* pic, PICConfig* config) {
 
 void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   if (irq > 7) {
+    YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
   }
+  YAX86_PIC_LOG(
+      kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
+      pic->isr);
   pic->irr |= (1 << irq);
 
   // If this is a slave PIC, also raise the cascade IRQ on the master.
@@ -196,11 +203,14 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
             if (value & kOCW2_SL) {
               // Specific EOI: clear specified ISR bit.
               uint8_t irq = value & 0x07;
+              YAX86_PIC_LOG(kLogLevelDebug, "specific EOI for IRQ %u", irq);
               pic->isr &= ~(1 << irq);
             } else {
               // Non-Specific EOI: clear highest priority ISR bit.
               for (uint8_t i = 0, isr_mask = 1; i < 8; ++i, isr_mask <<= 1) {
                 if (pic->isr & isr_mask) {
+                  YAX86_PIC_LOG(
+                      kLogLevelDebug, "non-specific EOI for IRQ %u", i);
                   pic->isr &= ~isr_mask;
                   break;
                 }
@@ -306,4 +316,3 @@ uint8_t PICGetPendingInterrupt(PICState* pic) {
 
   return (pic->icw2 & kICW2_BASE) + pending_irq;
 }
-

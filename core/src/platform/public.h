@@ -7,8 +7,20 @@
 #include <stdint.h>
 
 #ifndef YAX86_PLATFORM_BUNDLE_H
+#include "../util/log.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_PLATFORM_BUNDLE_H
+
+enum {
+  // Log module ID for the Platform.
+  kLogModuleIDPlatform = 0,
+};
+
+// Log module for the Platform.
+static const LogModule kLogModulePlatform = {
+    .id = kLogModuleIDPlatform,
+    .name = "PLATFORM",
+};
 
 #include "cpu.h"
 #include "dma.h"
@@ -182,6 +194,14 @@ typedef struct PlatformConfig {
   // Custom data passed through to callbacks.
   void* context;
 
+  // Logger configuration, shared by the platform and every module it owns. If
+  // NULL, logging is disabled. The configuration is owned by the caller and
+  // must outlive the platform.
+  //
+  // Hosts that want tick numbers in their log output should wire get_tick to
+  // return PlatformState.ticks.
+  LoggerConfig* logger_config;
+
   // Physical memory size in bytes. Must be between 64K and 640K.
   uint32_t physical_memory_size;
 
@@ -215,6 +235,9 @@ STATIC_VECTOR_TYPE(PortMap, PortMapEntry, kMaxPortMapEntries)
 typedef struct PlatformState {
   // Pointer to caller-provided runtime configuration.
   PlatformConfig* config;
+
+  // Logger shared by the platform and every module it owns.
+  Logger logger;
 
   // CPU runtime configuration.
   CPUConfig cpu_config;

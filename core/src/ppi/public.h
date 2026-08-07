@@ -56,6 +56,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef YAX86_PPI_BUNDLE_H
+#include "../util/log.h"
+#endif  // YAX86_PPI_BUNDLE_H
+
+enum {
+  // Log module ID for the PPI.
+  kLogModuleIDPPI = 4,
+};
+
+// Log module for the PPI.
+static const LogModule kLogModulePPI = {
+    .id = kLogModuleIDPPI,
+    .name = "PPI",
+};
+
 // I/O ports exposed by the PPI.
 typedef enum PPIPort {
   // Keyboard scancode
@@ -120,6 +135,9 @@ struct PPIState;
 typedef struct PPIConfig {
   // Opaque context pointer, passed to all callbacks.
   void* context;
+
+  // Logger for this module. May be NULL.
+  Logger* logger;
 
   // Number of floppy drives (1-4).
   uint8_t num_floppy_drives;

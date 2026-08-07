@@ -7,6 +7,9 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define YAX86_PLATFORM_LOG(level, ...) \
+  YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
+
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
 //   - There already exists a memory map entry with the same type.
@@ -62,6 +65,11 @@ MemoryMapEntry* GetMemoryMapEntryByType(
 uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->read_byte) {
+    // Logged at debug rather than warning level: scanning unmapped memory is
+    // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
+    // for option ROMs, for instance.
+    YAX86_PLATFORM_LOG(
+        kLogLevelDebug, "read from unmapped address %05X", address);
     return 0xFF;
   }
   return entry->read_byte(entry, address - entry->start);
@@ -78,6 +86,9 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->write_byte) {
+    YAX86_PLATFORM_LOG(
+        kLogLevelDebug, "write of %02X to unmapped address %05X", value,
+        address);
     return;
   }
   entry->write_byte(entry, address - entry->start, value);
@@ -140,6 +151,9 @@ PortMapEntry* GetPortMapEntryByType(
 uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
+    // Unlike unmapped memory, an unmapped port usually means a device is
+    // missing from the port map, so this stays at warning level.
+    YAX86_PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
     return 0xFF;
   }
   return entry->read_byte(entry, port);
@@ -158,6 +172,8 @@ uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
 void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
+    YAX86_PLATFORM_LOG(
+        kLogLevelWarn, "write of %02X to unmapped port %04X", value, port);
     return;
   }
   entry->write_byte(entry, port, value);
@@ -420,6 +436,7 @@ static void PlatformInitBIOS(PlatformState* platform) {
 static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
+  platform->cpu_config.logger = &platform->logger;
   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
   platform->cpu_config.read_port = CPUCallbackReadPortByte;
@@ -450,6 +467,7 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
 
 static void PlatformInitPIC(PlatformState* platform) {
   platform->pic_config.sp = false;
+  platform->pic_config.logger = &platform->logger;
   PICInit(&platform->pic, &platform->pic_config);
   PortMapEntry pic_entry = {
       .entry_type = kPortMapEntryPIC,
@@ -464,6 +482,7 @@ static void PlatformInitPIC(PlatformState* platform) {
 
 static void PlatformInitPIT(PlatformState* platform) {
   platform->pit_config.context = platform;
+  platform->pit_config.logger = &platform->logger;
   platform->pit_config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
   platform->pit_config.set_pc_speaker_frequency =
       PITCallbackSetPCSpeakerFrequency;
@@ -481,6 +500,7 @@ static void PlatformInitPIT(PlatformState* platform) {
 
 static void PlatformInitPPI(PlatformState* platform) {
   platform->ppi_config.context = platform;
+  platform->ppi_config.logger = &platform->logger;
   platform->ppi_config.num_floppy_drives = 1;
   platform->ppi_config.memory_size = kPPIMemorySize256KB;
   platform->ppi_config.display_mode = kPPIDisplayMDA;
@@ -501,6 +521,7 @@ static void PlatformInitPPI(PlatformState* platform) {
 
 static void PlatformInitKeyboard(PlatformState* platform) {
   platform->keyboard_config.context = platform;
+  platform->keyboard_config.logger = &platform->logger;
   platform->keyboard_config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
   platform->keyboard_config.send_scancode = KeyboardCallbackSendScancode;
   KeyboardInit(&platform->keyboard, &platform->keyboard_config);
@@ -508,6 +529,7 @@ static void PlatformInitKeyboard(PlatformState* platform) {
 
 static void PlatformInitFDC(PlatformState* platform) {
   platform->fdc_config.context = platform;
+  platform->fdc_config.logger = &platform->logger;
   platform->fdc_config.raise_irq6 = FDCCallbackRaiseIRQ6;
   platform->fdc_config.request_dma = FDCCallbackRequestDMA;
   platform->fdc_config.read_image_byte = NULL;
@@ -526,6 +548,7 @@ static void PlatformInitFDC(PlatformState* platform) {
 
 static void PlatformInitDMA(PlatformState* platform) {
   platform->dma_config.context = platform;
+  platform->dma_config.logger = &platform->logger;
   platform->dma_config.read_memory_byte = DMACallbackReadMemoryByte;
   platform->dma_config.write_memory_byte = DMACallbackWriteMemoryByte;
   platform->dma_config.read_device_byte = DMACallbackReadDeviceByte;
@@ -555,6 +578,7 @@ static void PlatformInitDMA(PlatformState* platform) {
 static void PlatformInitMDA(PlatformState* platform) {
   platform->mda_config = kDefaultMDAConfig;
   platform->mda_config.context = platform;
+  platform->mda_config.logger = &platform->logger;
   MDAInit(&platform->mda, &platform->mda_config);
 
   MemoryMapEntry vram_entry = {
@@ -588,6 +612,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   }
 
   platform->config = config;
+  LoggerInit(&platform->logger, config->logger_config);
 
   PlatformInitCPU(platform);
   PlatformInitMemoryMap(platform);
@@ -644,4 +669,3 @@ void PlatformTick(PlatformState* platform) {
 
   ++platform->ticks;
 }
-

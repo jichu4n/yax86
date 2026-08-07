@@ -7,8 +7,20 @@
 #include <stdint.h>
 
 #ifndef YAX86_VIDEO_BUNDLE_H
+#include "../util/log.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_VIDEO_BUNDLE_H
+
+enum {
+  // Log module ID for the Video.
+  kLogModuleIDVideo = 8,
+};
+
+// Log module for the Video.
+static const LogModule kLogModuleVideo = {
+    .id = kLogModuleIDVideo,
+    .name = "VIDEO",
+};
 
 // ============================================================================
 // General
@@ -233,6 +245,9 @@ struct MDAState;
 typedef struct MDAConfig {
   // Custom data passed through to callbacks.
   void* context;
+
+  // Logger for this module. May be NULL.
+  Logger* logger;
 
   // Foreground color.
   RGB foreground;

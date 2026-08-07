@@ -10,8 +10,20 @@
 #include <stdint.h>
 
 #ifndef YAX86_FDC_BUNDLE_H
+#include "../util/log.h"
 #include "../util/static_vector.h"
 #endif  // YAX86_FDC_BUNDLE_H
+
+enum {
+  // Log module ID for the FDC.
+  kLogModuleIDFDC = 5,
+};
+
+// Log module for the FDC.
+static const LogModule kLogModuleFDC = {
+    .id = kLogModuleIDFDC,
+    .name = "FDC",
+};
 
 // Floppy disk format configuration.
 typedef struct FDCDiskFormat {
@@ -187,6 +199,9 @@ typedef struct FDCConfig {
   // Custom data passed through to callbacks.
   void* context;
 
+  // Logger for this module. May be NULL.
+  Logger* logger;
+
   // Callback to raise an IRQ6 (FDC interrupt) to the CPU.
   void (*raise_irq6)(void* context);
 
@@ -291,4 +306,3 @@ void FDCEjectDisk(FDCState* fdc, uint8_t drive);
 void FDCTick(FDCState* fdc);
 
 #endif  // YAX86_FDC_PUBLIC_H
-

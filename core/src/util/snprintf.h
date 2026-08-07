@@ -6,9 +6,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef YAX86_IMPLEMENTATION
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif
+#endif  // YAX86_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
