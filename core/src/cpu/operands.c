@@ -77,20 +77,10 @@ ToRawAddress(const CPUState* cpu, const MemoryAddress* address) {
   return (((uint32_t)segment) << 4) + (uint32_t)(address->offset);
 }
 
-enum {
-  // The 8088 drives a 20 bit address bus, so an address past the top of the
-  // 1MB space wraps around to the bottom rather than running off the end. This
-  // is applied where the address reaches the bus, which covers a segment and
-  // offset that overflow together as well as a word access straddling the top
-  // of memory.
-  kPhysicalAddressMask = 0xFFFFF,
-};
-
 // Read a byte from memory as a uint8_t.
 YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   return cpu->config->read_memory_byte
-             ? cpu->config->read_memory_byte(
-                   cpu, raw_address & kPhysicalAddressMask)
+             ? cpu->config->read_memory_byte(cpu, raw_address)
              : 0xFF;
 }
 
@@ -150,7 +140,7 @@ YAX86_PRIVATE void WriteRawMemoryByte(
   if (!cpu->config->write_memory_byte) {
     return;
   }
-  cpu->config->write_memory_byte(cpu, address & kPhysicalAddressMask, value);
+  cpu->config->write_memory_byte(cpu, address, value);
 }
 
 // Write a word as uint16_t to memory.

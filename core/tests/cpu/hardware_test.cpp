@@ -7,13 +7,16 @@
 // architectural result is checked here - the per-cycle bus and prefetch queue
 // records in the suite are for cycle-accurate emulators and are skipped.
 //
-// Test data is not in the repository. Fetch an opcode with, for example:
+// Test data is not in the repository, and this is not registered with ctest.
+// Fetch the data and run it directly:
 //
-//   ./tools/download-cpu-tests.sh 8D
+//   ./tools/download-cpu-hardware-tests.sh
+//   build-native/core/tests/cpu/cpu_hardware_tests
 //
-// Tests are skipped when no data has been downloaded.
+// No tests are reported when nothing has been downloaded.
 
 #include <gtest/gtest.h>
+#include <zlib.h>
 
 #include <cctype>
 #include <cstdio>
@@ -169,14 +172,30 @@ CPUStateSnapshot ParseCPUState(const uint8_t* data, uint32_t length) {
   return state;
 }
 
-// Reads every test out of a .MOO file. Returns false if the file is unusable.
-bool LoadMooFile(const std::string& path, std::vector<MooTest>* tests) {
-  std::ifstream file(path, std::ios::binary);
-  if (!file) {
+// Decompresses a .MOO.gz file into memory. The suite ships compressed, and the
+// files expand to several times their download size, so they are read as-is
+// rather than being unpacked to disk.
+bool ReadGzipFile(const std::string& path, std::vector<uint8_t>* out) {
+  gzFile file = gzopen(path.c_str(), "rb");
+  if (file == nullptr) {
     return false;
   }
-  const std::vector<uint8_t> data(
-      (std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  uint8_t buffer[64 * 1024];
+  int bytes_read;
+  while ((bytes_read = gzread(file, buffer, sizeof(buffer))) > 0) {
+    out->insert(out->end(), buffer, buffer + bytes_read);
+  }
+  const bool ok = bytes_read == 0;
+  gzclose(file);
+  return ok;
+}
+
+// Reads every test out of a .MOO.gz file. Returns false if it is unusable.
+bool LoadMooFile(const std::string& path, std::vector<MooTest>* tests) {
+  std::vector<uint8_t> data;
+  if (!ReadGzipFile(path, &data) || data.empty()) {
+    return false;
+  }
 
   return ForEachChunk(
       data.data(), data.size(),
@@ -231,8 +250,9 @@ void WriteMemoryByte(
   }
 }
 
-// Reads the flag masks emitted by tools/download-cpu-tests.sh. Bits clear in a
-// mask are left undefined by the 8088 for that opcode, and are not compared.
+// Reads the flag masks emitted by tools/download-cpu-hardware-tests.sh. Bits
+// clear in a mask are left undefined by the 8088 for that opcode, and are not
+// compared.
 std::map<std::string, uint16_t> LoadFlagMasks(const std::string& dir) {
   std::map<std::string, uint16_t> masks;
   std::ifstream file(dir + "/flags_masks.txt");
@@ -353,17 +373,17 @@ std::string OpcodeFromPath(const std::string& path) {
   const size_t slash = path.find_last_of('/');
   const std::string base =
       slash == std::string::npos ? path : path.substr(slash + 1);
-  const size_t dot = base.rfind(".MOO");
+  const size_t dot = base.rfind(".MOO.gz");
   return dot == std::string::npos ? base : base.substr(0, dot);
 }
 
-class MooTestSuite : public ::testing::TestWithParam<std::string> {};
+class CPUHardware : public ::testing::TestWithParam<std::string> {};
 
 // There are no instances unless opcode data has been downloaded, which is the
 // normal state of a fresh checkout and of CI.
-GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(MooTestSuite);
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(CPUHardware);
 
-TEST_P(MooTestSuite, MatchesHardware) {
+TEST_P(CPUHardware, Matches8088) {
   const std::string path = GetParam();
   const std::string opcode = OpcodeFromPath(path);
 
@@ -420,7 +440,7 @@ std::vector<std::string> DownloadedTestFiles() {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    Opcodes, MooTestSuite, ::testing::ValuesIn(DownloadedTestFiles()),
+    Opcodes, CPUHardware, ::testing::ValuesIn(DownloadedTestFiles()),
     [](const ::testing::TestParamInfo<std::string>& info) {
       // Group opcodes are named like "D0.4", and a test name may only
       // contain alphanumerics and underscores.
