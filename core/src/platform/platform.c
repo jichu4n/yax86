@@ -61,8 +61,51 @@ MemoryMapEntry* GetMemoryMapEntryByType(
   return NULL;
 }
 
+// Record the details of a stop for PlatformGetStopInfo().
+static void PlatformRecordStop(
+    PlatformState* platform, PlatformStopReason reason, uint8_t index,
+    uint32_t address, bool is_write) {
+  PlatformStopInfo* stop_info = &platform->stop_info;
+  stop_info->reason = reason;
+  stop_info->cs = platform->cpu.registers[kCS];
+  stop_info->ip = platform->cpu.registers[kIP];
+  stop_info->index = index;
+  stop_info->address = address;
+  stop_info->is_write = is_write;
+  platform->has_stop_info = true;
+}
+
+// Stop if the access at address falls within an enabled memory watchpoint.
+// Only called when has_enabled_memory_watchpoints is set.
+static void PlatformCheckMemoryWatchpoints(
+    PlatformState* platform, uint32_t address, bool is_write) {
+  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
+    const PlatformMemoryWatchpoint* watchpoint =
+        &platform->memory_watchpoints[i];
+    if (!watchpoint->enabled || address < watchpoint->start ||
+        address > watchpoint->end ||
+        !(is_write ? watchpoint->on_write : watchpoint->on_read)) {
+      continue;
+    }
+    PlatformRecordStop(
+        platform, kPlatformStopMemoryWatchpoint, i, address, is_write);
+    // Unlike a breakpoint or a step, a watchpoint fires in the middle of a
+    // tick, so the stop is deferred to the end of that tick.
+    platform->stop_pending = true;
+    // Ask the CPU to hand control back as soon as the instruction in progress
+    // finishes. A watchpoint can also fire from a DMA transfer, in which case
+    // there is no CPU tick in progress and this is a no-op - PlatformTick()
+    // picks the stop up from stop_pending either way.
+    CPURequestStop(&platform->cpu);
+    return;
+  }
+}
+
 // Read a byte from a logical memory address.
 uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+  if (platform->has_enabled_memory_watchpoints) {
+    PlatformCheckMemoryWatchpoints(platform, address, false);
+  }
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->read_byte) {
     // Logged at debug rather than warning level: scanning unmapped memory is
@@ -84,6 +127,9 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 
 // Write a byte to a logical memory address.
 void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
+  if (platform->has_enabled_memory_watchpoints) {
+    PlatformCheckMemoryWatchpoints(platform, address, true);
+  }
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (!entry || !entry->write_byte) {
     YAX86_PLATFORM_LOG(
@@ -627,6 +673,13 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 
   platform->ticks = 0;
 
+  PlatformClearBreakpoints(platform);
+  PlatformClearMemoryWatchpoints(platform);
+  platform->is_step_mode = false;
+  platform->has_stop_info = false;
+  platform->stop_pending = false;
+  platform->skip_breakpoint_check = false;
+
   return true;
 }
 
@@ -638,9 +691,38 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
   return true;
 }
 
-void PlatformTick(PlatformState* platform) {
+// Stop if there is an enabled breakpoint on the instruction about to execute.
+// Only called when has_enabled_breakpoints is set. Returns true if execution
+// should stop.
+static bool PlatformCheckBreakpoints(PlatformState* platform) {
+  const uint16_t cs = platform->cpu.registers[kCS];
+  const uint16_t ip = platform->cpu.registers[kIP];
+  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
+    const PlatformBreakpoint* breakpoint = &platform->breakpoints[i];
+    if (breakpoint->enabled && breakpoint->cs == cs && breakpoint->ip == ip) {
+      PlatformRecordStop(platform, kPlatformStopBreakpoint, i, 0, false);
+      return true;
+    }
+  }
+  return false;
+}
+
+PlatformRunStatus PlatformTick(PlatformState* platform) {
+  // Stop before executing the instruction at a breakpoint. Nothing else in the
+  // machine is ticked, because no time has passed yet.
+  if (platform->has_enabled_breakpoints && !platform->cpu.is_halted) {
+    if (platform->skip_breakpoint_check) {
+      // Resuming from a breakpoint stop - execute this instruction rather than
+      // stopping on it again.
+      platform->skip_breakpoint_check = false;
+    } else if (PlatformCheckBreakpoints(platform)) {
+      platform->skip_breakpoint_check = true;
+      return kPlatformStopped;
+    }
+  }
+
   // Tick the CPU.
-  CPUTick(&platform->cpu);
+  CPUTickResult cpu_result = CPUTick(&platform->cpu);
 
   // Check for pending interrupts from the PIC after an
   // instruction has been executed. This is how we connect the PIC to the CPU's
@@ -668,4 +750,141 @@ void PlatformTick(PlatformState* platform) {
   }
 
   ++platform->ticks;
+
+  // A watchpoint may have fired from the CPU or from a DMA transfer.
+  if (platform->stop_pending) {
+    platform->stop_pending = false;
+    return kPlatformStopped;
+  }
+
+  if (cpu_result == kCPUTickInvalid) {
+    return kPlatformInvalid;
+  }
+
+  // A halted CPU with interrupts disabled and nothing pending can never be
+  // woken. Note that an ordinary halt is not reported as a stop: the PIT and
+  // the rest of the machine must keep ticking so that an interrupt can wake
+  // the CPU back up.
+  if (platform->cpu.is_halted && !CPUGetFlag(&platform->cpu, kIF) &&
+      !platform->cpu.has_pending_interrupt) {
+    return kPlatformHung;
+  }
+
+  if (platform->is_step_mode && cpu_result == kCPUTickExecuted) {
+    PlatformRecordStop(platform, kPlatformStopStep, 0, 0, false);
+    return kPlatformStopped;
+  }
+
+  return kPlatformRunning;
+}
+
+PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_ticks) {
+  for (uint32_t i = 0; i < max_ticks; ++i) {
+    PlatformRunStatus status = PlatformTick(platform);
+    if (status != kPlatformRunning) {
+      return status;
+    }
+  }
+  return kPlatformRunning;
+}
+
+// ============================================================================
+// Breakpoints and watchpoints
+// ============================================================================
+
+// Recompute the cached hot path early-out flags.
+static void PlatformUpdateEnabledFlags(PlatformState* platform) {
+  platform->has_enabled_breakpoints = false;
+  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
+    if (platform->breakpoints[i].enabled) {
+      platform->has_enabled_breakpoints = true;
+      break;
+    }
+  }
+  platform->has_enabled_memory_watchpoints = false;
+  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
+    if (platform->memory_watchpoints[i].enabled) {
+      platform->has_enabled_memory_watchpoints = true;
+      break;
+    }
+  }
+}
+
+int8_t PlatformAddBreakpoint(
+    PlatformState* platform, uint16_t cs, uint16_t ip) {
+  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
+    PlatformBreakpoint* breakpoint = &platform->breakpoints[i];
+    if (breakpoint->enabled) {
+      continue;
+    }
+    breakpoint->enabled = true;
+    breakpoint->cs = cs;
+    breakpoint->ip = ip;
+    platform->has_enabled_breakpoints = true;
+    return (int8_t)i;
+  }
+  return kInvalidWatchIndex;
+}
+
+bool PlatformRemoveBreakpoint(PlatformState* platform, uint8_t index) {
+  if (index >= kMaxBreakpoints || !platform->breakpoints[index].enabled) {
+    return false;
+  }
+  platform->breakpoints[index].enabled = false;
+  PlatformUpdateEnabledFlags(platform);
+  return true;
+}
+
+void PlatformClearBreakpoints(PlatformState* platform) {
+  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
+    platform->breakpoints[i].enabled = false;
+  }
+  platform->has_enabled_breakpoints = false;
+}
+
+int8_t PlatformAddMemoryWatchpoint(
+    PlatformState* platform, uint32_t start, uint32_t end, bool on_read,
+    bool on_write) {
+  if (start > end || (!on_read && !on_write)) {
+    return kInvalidWatchIndex;
+  }
+  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
+    PlatformMemoryWatchpoint* watchpoint = &platform->memory_watchpoints[i];
+    if (watchpoint->enabled) {
+      continue;
+    }
+    watchpoint->enabled = true;
+    watchpoint->start = start;
+    watchpoint->end = end;
+    watchpoint->on_read = on_read;
+    watchpoint->on_write = on_write;
+    platform->has_enabled_memory_watchpoints = true;
+    return (int8_t)i;
+  }
+  return kInvalidWatchIndex;
+}
+
+bool PlatformRemoveMemoryWatchpoint(PlatformState* platform, uint8_t index) {
+  if (index >= kMaxMemoryWatchpoints ||
+      !platform->memory_watchpoints[index].enabled) {
+    return false;
+  }
+  platform->memory_watchpoints[index].enabled = false;
+  PlatformUpdateEnabledFlags(platform);
+  return true;
+}
+
+void PlatformClearMemoryWatchpoints(PlatformState* platform) {
+  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
+    platform->memory_watchpoints[i].enabled = false;
+  }
+  platform->has_enabled_memory_watchpoints = false;
+}
+
+void PlatformSetStepMode(PlatformState* platform, bool is_step_mode) {
+  platform->is_step_mode = is_step_mode;
+}
+
+const PlatformStopInfo* PlatformGetStopInfo(const PlatformState* platform) {
+  return platform->has_stop_info ? &platform->stop_info : NULL;
 }

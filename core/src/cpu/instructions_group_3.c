@@ -9,12 +9,12 @@
 // Group 3 - TEST, NOT, NEG, MUL, IMUL, DIV, IDIV
 // ============================================================================
 
-typedef ExecuteStatus (*Group3ExecuteInstructionFn)(
+typedef InstructionResult (*Group3ExecuteInstructionFn)(
     const InstructionContext* ctx, Operand* op);
 
 // TEST r/m8, imm8
 // TEST r/m16, imm16
-static ExecuteStatus ExecuteGroup3Test(
+static InstructionResult ExecuteGroup3Test(
     const InstructionContext* ctx, Operand* op) {
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, op, &src_value);
@@ -22,19 +22,21 @@ static ExecuteStatus ExecuteGroup3Test(
 
 // NOT r/m8
 // NOT r/m16
-static ExecuteStatus ExecuteNot(const InstructionContext* ctx, Operand* op) {
+static InstructionResult ExecuteNot(
+    const InstructionContext* ctx, Operand* op) {
   WriteOperand(ctx, op, ~FromOperand(op));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // NEG r/m8
 // NEG r/m16
-static ExecuteStatus ExecuteNeg(const InstructionContext* ctx, Operand* op) {
+static InstructionResult ExecuteNeg(
+    const InstructionContext* ctx, Operand* op) {
   int32_t op_value = FromSignedOperand(op);
   int32_t result_value = -op_value;
   WriteOperand(ctx, op, result_value);
   SetFlagsAfterSub(ctx, 0, op_value, result_value, false);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Table of where to store the higher half of the result for
@@ -65,7 +67,7 @@ static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-static ExecuteStatus ExecuteMulCommon(
+static InstructionResult ExecuteMulCommon(
     const InstructionContext* ctx, Operand* dest, uint32_t result,
     bool overflow) {
   Width width = ctx->metadata->width;
@@ -81,12 +83,13 @@ static ExecuteStatus ExecuteMulCommon(
   CPUSetFlag(ctx->cpu, kCF, overflow);
   CPUSetFlag(ctx->cpu, kOF, overflow);
 
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // MUL r/m8
 // MUL r/m16
-static ExecuteStatus ExecuteMul(const InstructionContext* ctx, Operand* op) {
+static InstructionResult ExecuteMul(
+    const InstructionContext* ctx, Operand* op) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   uint32_t result = FromOperand(&dest) * FromOperand(op);
   return ExecuteMulCommon(
@@ -95,7 +98,8 @@ static ExecuteStatus ExecuteMul(const InstructionContext* ctx, Operand* op) {
 
 // IMUL r/m8
 // IMUL r/m16
-static ExecuteStatus ExecuteImul(const InstructionContext* ctx, Operand* op) {
+static InstructionResult ExecuteImul(
+    const InstructionContext* ctx, Operand* op) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   int32_t result = FromSignedOperand(&dest) * FromSignedOperand(op);
   return ExecuteMulCommon(
@@ -104,22 +108,23 @@ static ExecuteStatus ExecuteImul(const InstructionContext* ctx, Operand* op) {
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-static ExecuteStatus WriteDivResult(
+static InstructionResult WriteDivResult(
     const InstructionContext* ctx, Operand* dest, uint32_t quotient,
     uint32_t remainder) {
   WriteOperand(ctx, dest, quotient);
   WriteOperandAddress(
       ctx, &kMulDivResultHighHalfAddress[ctx->metadata->width], remainder);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // DIV r/m8
 // DIV r/m16
-static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
+static InstructionResult ExecuteDiv(
+    const InstructionContext* ctx, Operand* op) {
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
     CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
 
   Width width = ctx->metadata->width;
@@ -133,18 +138,19 @@ static ExecuteStatus ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
     CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
 }
 
 // IDIV r/m8
 // IDIV r/m16
-static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
+static InstructionResult ExecuteIdiv(
+    const InstructionContext* ctx, Operand* op) {
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
     CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
 
   Width width = ctx->metadata->width;
@@ -159,7 +165,7 @@ static ExecuteStatus ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < kMinSignedValue[ctx->metadata->width]) {
     CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
-    return kExecuteSuccess;
+    return kInstructionExecuted;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
 }
@@ -178,12 +184,12 @@ static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
 };
 
 // Group 3 instruction handler.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteGroup3Instruction(const InstructionContext* ctx) {
   const Group3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   if (fn == 0) {
-    return kExecuteInvalidOpcode;
+    return kInstructionInvalid;
   }
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   return fn(ctx, &dest);

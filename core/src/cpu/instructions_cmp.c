@@ -10,19 +10,19 @@
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-YAX86_PRIVATE ExecuteStatus ExecuteCmp(
+YAX86_PRIVATE InstructionResult ExecuteCmp(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
   uint32_t result = raw_dest_value - raw_src_value;
   SetFlagsAfterSub(ctx, raw_dest_value, raw_src_value, result, false);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // CMP r/m8, r8
 // CMP r/m16, r16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -31,7 +31,7 @@ ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -40,7 +40,7 @@ ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // CMP AL, imm8
 // CMP AX, imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);

@@ -61,7 +61,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-static ExecuteStatus ExecuteSubCommon(
+static InstructionResult ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -71,11 +71,11 @@ static ExecuteStatus ExecuteSubCommon(
   WriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
       ctx, raw_dest_value, raw_src_value, result, should_borrow);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Common logic for SUB instructions
-YAX86_PRIVATE ExecuteStatus ExecuteSub(
+YAX86_PRIVATE InstructionResult ExecuteSub(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -84,7 +84,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -93,7 +93,7 @@ ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -102,7 +102,7 @@ ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
 
 // SUB AL, imm8
 // SUB AX, imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -110,7 +110,7 @@ ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for SBB instructions
-YAX86_PRIVATE ExecuteStatus ExecuteSubWithBorrow(
+YAX86_PRIVATE InstructionResult ExecuteSubWithBorrow(
     const InstructionContext* ctx, Operand* dest,
     const OperandValue* src_value) {
   return ExecuteSubCommon(
@@ -119,7 +119,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteSubWithBorrow(
 
 // SBB r/m8, r8
 // SBB r/m16, r16
-YAX86_PRIVATE ExecuteStatus ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
+YAX86_PRIVATE InstructionResult
+ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
@@ -128,7 +129,8 @@ YAX86_PRIVATE ExecuteStatus ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
 
 // SBB r8, r/m8
 // SBB r16, r/m16
-YAX86_PRIVATE ExecuteStatus ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
+YAX86_PRIVATE InstructionResult
+ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
@@ -137,7 +139,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
 
 // SBB AL, imm8
 // SBB AX, imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
@@ -145,7 +147,7 @@ ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
 }
 
 // Common logic for DEC instructions
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteDec(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = WordValue(1);
   return ExecuteSubCommon(
@@ -153,7 +155,8 @@ ExecuteDec(const InstructionContext* ctx, Operand* dest) {
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE ExecuteStatus ExecuteDecRegister(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecuteDecRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x48);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);

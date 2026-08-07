@@ -186,6 +186,92 @@ void WritePortWord(
     struct PlatformState* platform, uint16_t port, uint16_t value);
 
 // ============================================================================
+// Execution control
+// ============================================================================
+
+enum {
+  // Maximum number of execution breakpoints.
+  kMaxBreakpoints = 8,
+  // Maximum number of memory watchpoints.
+  kMaxMemoryWatchpoints = 8,
+  // Returned by PlatformAddBreakpoint() and PlatformAddMemoryWatchpoint() when
+  // no slot is available.
+  kInvalidWatchIndex = -1,
+};
+
+// An execution breakpoint. Execution stops before the instruction at cs:ip is
+// executed.
+typedef struct PlatformBreakpoint {
+  // Whether this slot is in use.
+  bool enabled;
+  // Code segment of the instruction to break on.
+  uint16_t cs;
+  // Instruction pointer of the instruction to break on.
+  uint16_t ip;
+} PlatformBreakpoint;
+
+// A memory watchpoint. Execution stops once the instruction or DMA transfer
+// that accessed the watched region has finished.
+typedef struct PlatformMemoryWatchpoint {
+  // Whether this slot is in use.
+  bool enabled;
+  // Start address of the watched region.
+  uint32_t start;
+  // Inclusive end address of the watched region.
+  uint32_t end;
+  // Whether to stop on reads from the region.
+  bool on_read;
+  // Whether to stop on writes to the region.
+  bool on_write;
+} PlatformMemoryWatchpoint;
+
+// Why execution stopped.
+typedef enum PlatformStopReason {
+  // Reached an instruction with a breakpoint on it.
+  kPlatformStopBreakpoint = 0,
+  // Accessed a watched memory region.
+  kPlatformStopMemoryWatchpoint,
+  // Completed one instruction in step mode.
+  kPlatformStopStep,
+} PlatformStopReason;
+
+// Details of the most recent stop.
+typedef struct PlatformStopInfo {
+  // Why execution stopped.
+  PlatformStopReason reason;
+
+  // CS:IP at the point of the stop. For a breakpoint stop this is the
+  // breakpoint address itself, since the instruction has not run yet. For a
+  // watchpoint or step stop the instruction has completed, so this points at
+  // the next instruction.
+  uint16_t cs;
+  uint16_t ip;
+
+  // Index of the breakpoint or watchpoint that fired. Unused for a step stop.
+  uint8_t index;
+
+  // For a memory watchpoint stop, the address that was accessed.
+  uint32_t address;
+  // For a memory watchpoint stop, whether the access was a write.
+  bool is_write;
+} PlatformStopInfo;
+
+// Result of running the platform.
+typedef enum PlatformRunStatus {
+  // The machine is running normally. Also returned by PlatformRun() when it
+  // exhausts its tick budget without stopping.
+  kPlatformRunning = 0,
+  // The instruction at CS:IP could not be fetched or executed.
+  kPlatformInvalid,
+  // The CPU halted with interrupts disabled and no interrupt pending, so
+  // nothing can ever wake it. This is how GLaBIOS signals a fatal error.
+  kPlatformHung,
+  // Execution stopped at a breakpoint, watchpoint, or single step. See
+  // PlatformGetStopInfo() for which, and where.
+  kPlatformStopped,
+} PlatformRunStatus;
+
+// ============================================================================
 // Platform state
 // ============================================================================
 
@@ -285,6 +371,31 @@ typedef struct PlatformState {
 
   // How many ticks have run.
   uint32_t ticks;
+
+  // Execution breakpoints.
+  PlatformBreakpoint breakpoints[kMaxBreakpoints];
+  // Memory watchpoints.
+  PlatformMemoryWatchpoint memory_watchpoints[kMaxMemoryWatchpoints];
+
+  // Whether any breakpoint or memory watchpoint slot is in use. Cached so that
+  // the instruction and memory access hot paths can skip the checks entirely
+  // in the common case where nothing is being watched.
+  bool has_enabled_breakpoints;
+  bool has_enabled_memory_watchpoints;
+
+  // Whether to stop after each instruction.
+  bool is_step_mode;
+
+  // Whether stop_info describes a stop that has occurred.
+  bool has_stop_info;
+  // Details of the most recent stop.
+  PlatformStopInfo stop_info;
+
+  // Whether a stop has been triggered but not yet reported to the caller.
+  bool stop_pending;
+  // Set when execution stopped at a breakpoint, so that resuming executes the
+  // instruction instead of stopping again at the same address.
+  bool skip_breakpoint_check;
 } PlatformState;
 
 // Initialize the platform state with the provided configuration. Returns true
@@ -298,6 +409,50 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
 // Run a single cycle of the platform, including ticking all sub-modules. This
 // should be called at the CPU clock rate (4.77MHz for the 8088).
-void PlatformTick(PlatformState* platform);
+//
+// Returns kPlatformRunning if the machine should keep running.
+PlatformRunStatus PlatformTick(PlatformState* platform);
+
+// Run up to max_ticks cycles of the platform, stopping early if a tick returns
+// anything other than kPlatformRunning. Returns the status of the tick that
+// stopped the run, or kPlatformRunning if the full budget was consumed.
+PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_ticks);
+
+// Add an execution breakpoint at cs:ip. Returns the breakpoint index, or
+// kInvalidWatchIndex if all kMaxBreakpoints slots are in use.
+int8_t PlatformAddBreakpoint(PlatformState* platform, uint16_t cs, uint16_t ip);
+
+// Remove the breakpoint with the given index. Returns false if the index is
+// out of range or the slot is not in use.
+bool PlatformRemoveBreakpoint(PlatformState* platform, uint8_t index);
+
+// Remove all breakpoints.
+void PlatformClearBreakpoints(PlatformState* platform);
+
+// Add a memory watchpoint covering the physical addresses [start, end]
+// inclusive. Returns the watchpoint index, or kInvalidWatchIndex if all
+// kMaxMemoryWatchpoints slots are in use, if start is greater than end, or if
+// neither on_read nor on_write is set.
+//
+// A watchpoint sees every access that goes through the memory map, which
+// includes instruction fetches and DMA transfers as well as data accesses.
+int8_t PlatformAddMemoryWatchpoint(
+    PlatformState* platform, uint32_t start, uint32_t end, bool on_read,
+    bool on_write);
+
+// Remove the memory watchpoint with the given index. Returns false if the
+// index is out of range or the slot is not in use.
+bool PlatformRemoveMemoryWatchpoint(PlatformState* platform, uint8_t index);
+
+// Remove all memory watchpoints.
+void PlatformClearMemoryWatchpoints(PlatformState* platform);
+
+// Enable or disable step mode. In step mode every tick that executes an
+// instruction stops with reason kPlatformStopStep.
+void PlatformSetStepMode(PlatformState* platform, bool is_step_mode);
+
+// Returns details of the most recent stop, or NULL if execution has never
+// stopped. The returned pointer stays valid until the next stop.
+const PlatformStopInfo* PlatformGetStopInfo(const PlatformState* platform);
 
 #endif  // YAX86_PLATFORM_PUBLIC_H

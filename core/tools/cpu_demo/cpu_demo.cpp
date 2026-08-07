@@ -42,11 +42,12 @@ vector<uint8_t> Assemble(const string& asm_file_name) {
 }
 
 // Interrupt handler for the demo.
-ExecuteStatus HandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
+InterruptHandlerResult HandleInterrupt(
+    CPUState* cpu, uint8_t interrupt_number) {
   // cout << "Handling interrupt: " << hex << (int)interrupt_number
   //      << "DX = " << hex << cpu->registers[kDX] << dec << endl;
   if (interrupt_number != 0x21) {
-    return kExecuteUnhandledInterrupt;
+    return kInterruptHandlerUnhandled;
   }
 
   uint8_t ah = (cpu->registers[kAX] >> 8) & 0xFF;
@@ -57,18 +58,18 @@ ExecuteStatus HandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
       cin.get(ch);
       uint8_t ah = (cpu->registers[kAX] >> 8) & 0xFF;
       cpu->registers[kAX] = (ah << 8) | static_cast<uint8_t>(ch);
-      return kExecuteSuccess;
+      return kInterruptHandlerHandled;
     }
     case 0x02: {  // Print character
       cout << static_cast<char>(dx & 0xFF) << flush;
-      return kExecuteSuccess;
+      return kInterruptHandlerHandled;
     }
     case 0x09: {  // Print string
       for (size_t i = dx; memory[i] != '$'; ++i) {
         cout << static_cast<char>(memory[i]);
       }
       cout << flush;
-      return kExecuteSuccess;
+      return kInterruptHandlerHandled;
     }
     case 0x0A: {  // Read string
       uint16_t dx = cpu->registers[kDX];
@@ -81,10 +82,11 @@ ExecuteStatus HandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
       memory[dx + 1] = input.size();
       input += '\n';
       memcpy(memory + dx + 2, input.c_str(), input.size());
-      return kExecuteSuccess;
+      return kInterruptHandlerHandled;
     }
     case 0x4C:  // Terminate program
-      return kExecuteHalt;
+      CPURequestStop(cpu);
+      return kInterruptHandlerHandled;
     case 0x2C: {  // Get system time
       struct timeval tv;
       gettimeofday(&tv, nullptr);
@@ -95,13 +97,14 @@ ExecuteStatus HandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
       uint8_t dl = tv.tv_usec / 10000;
       cpu->registers[kCX] = (ch << 8) | cl;
       cpu->registers[kDX] = (dh << 8) | dl;
-      return kExecuteSuccess;
+      return kInterruptHandlerHandled;
     }
     default:
       cerr << "Unhandled DOS interrupt: " << hex
            << static_cast<int>(interrupt_number) << " AH = " << hex
            << static_cast<int>(ah) << endl;
-      return kExecuteHalt;
+      CPURequestStop(cpu);
+      return kInterruptHandlerHandled;
   }
 }
 
@@ -113,13 +116,12 @@ int main(int argc, char* argv[]) {
 
   CPUConfig config = {0};
   config.on_before_execute_instruction =
-      [](CPUState* cpu, Instruction* instruction) -> ExecuteStatus {
-    // cout << "Executing instruction at " << hex
-    //      << ((cpu->registers[kCS] << 4) + cpu->registers[kIP]) << " : "
-    //      << static_cast<int>(instruction->opcode) << endl;
-    // sleep(1);
-    return kExecuteSuccess;
-  };
+      [](YAX86_UNUSED CPUState* cpu, YAX86_UNUSED Instruction* instruction) {
+        // cout << "Executing instruction at " << hex
+        //      << ((cpu->registers[kCS] << 4) + cpu->registers[kIP]) << " : "
+        //      << static_cast<int>(instruction->opcode) << endl;
+        // sleep(1);
+      };
   config.read_memory_byte = [](CPUState* cpu, uint32_t address) -> uint8_t {
     if (address >= sizeof(memory)) {
       cerr << "Memory read out of bounds at address: " << hex << address
@@ -153,13 +155,15 @@ int main(int argc, char* argv[]) {
   // Set stack pointer to the top of the stack
   cpu.registers[kSP] = sizeof(memory);
 
-  // Execute the program until halt, interrupt or error.
-  ExecuteStatus status;
+  // Execute the program until it stops itself, halts, or hits a bad
+  // instruction.
+  CPUTickResult status;
   do {
     status = CPUTick(&cpu);
-  } while (status == kExecuteSuccess);
-  if (status != kExecuteSuccess && status != kExecuteHalt) {
-    cerr << "Program execution failed with status: " << status << endl;
+  } while (status == kCPUTickExecuted);
+  if (status == kCPUTickInvalid) {
+    cerr << "Program execution failed at " << hex << cpu.registers[kCS] << ":"
+         << cpu.registers[kIP] << dec << endl;
     return EXIT_FAILURE;
   }
 

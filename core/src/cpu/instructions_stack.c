@@ -10,72 +10,75 @@
 // ============================================================================
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE ExecuteStatus ExecutePushRegister(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   Push(ctx->cpu, src.value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE ExecuteStatus ExecutePopRegister(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // PUSH ES/CS/SS/DS
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   Push(ctx->cpu, src.value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // POP ES/CS/SS/DS
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecutePopSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   // Special case - disallow POP CS
   if (register_index == kCS) {
-    return kExecuteInvalidInstruction;
+    return kInstructionInvalid;
   }
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // PUSHF
-YAX86_PRIVATE ExecuteStatus ExecutePushFlags(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecutePushFlags(const InstructionContext* ctx) {
   Push(ctx->cpu, WordValue(ctx->cpu->flags));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // POPF
-YAX86_PRIVATE ExecuteStatus ExecutePopFlags(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx->cpu);
   ctx->cpu->flags = FromOperandValue(&value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // POP r/m16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   if (ctx->instruction->mod_rm.reg != 0) {
-    return kExecuteInvalidInstruction;
+    return kInstructionInvalid;
   }
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // ============================================================================
@@ -95,19 +98,19 @@ static const OperandAddress* GetAHRegisterAddress(void) {
 }
 
 // LAHF
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
   WriteRegisterOperandByte(
       ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // SAHF
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value =
       ReadRegisterOperandByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
   ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }

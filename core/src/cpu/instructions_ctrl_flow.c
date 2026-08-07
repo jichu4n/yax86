@@ -10,53 +10,53 @@
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-static ExecuteStatus ExecuteRelativeJumpByte(
+static InstructionResult ExecuteRelativeJumpByte(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Jump to a relative signed word offset.
-static ExecuteStatus ExecuteRelativeJumpWord(
+static InstructionResult ExecuteRelativeJumpWord(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Table of relative jump instructions, indexed by width.
-static ExecuteStatus (*const kRelativeJumpFn[kNumWidths])(
+static InstructionResult (*const kRelativeJumpFn[kNumWidths])(
     const InstructionContext* ctx, const OperandValue* offset_value) = {
     ExecuteRelativeJumpByte,  // kByte
     ExecuteRelativeJumpWord,  // kWord
 };
 
 // Common logic for JMP instructions.
-static ExecuteStatus ExecuteRelativeJump(
+static InstructionResult ExecuteRelativeJump(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
 // JMP rel8
 // JMP rel16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
   return ExecuteRelativeJump(ctx, &offset_value);
 }
 
 // Common logic for far jumps.
-YAX86_PRIVATE ExecuteStatus ExecuteFarJump(
+YAX86_PRIVATE InstructionResult ExecuteFarJump(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   ctx->cpu->registers[kCS] = FromOperandValue(segment);
   ctx->cpu->registers[kIP] = FromOperandValue(offset);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // JMP ptr16:16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteDirectFarJump(const InstructionContext* ctx) {
   OperandValue new_cs = WordValue(
       ((uint16_t)ctx->instruction->immediate[2]) |
@@ -72,13 +72,13 @@ ExecuteDirectFarJump(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for conditional jumps.
-static ExecuteStatus ExecuteConditionalJump(
+static InstructionResult ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     OperandValue offset_value = ReadImmediate(ctx);
     return ExecuteRelativeJump(ctx, &offset_value);
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // Table of flag register bitmasks for conditional jumps. The index corresponds
@@ -93,7 +93,7 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
   uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
       [(ctx->instruction->opcode - 0x70) / 2];
@@ -105,7 +105,7 @@ ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
 }
 
 // JL/JGNE and JNL/JGE
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
       CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF);
@@ -114,7 +114,7 @@ ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
 }
 
 // JLE/JG and JNLE/JG
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
   const bool is_greater =
       !CPUGetFlag(ctx->cpu, kZF) &&
@@ -128,13 +128,14 @@ ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
 // ============================================================================
 
 // LOOP rel8
-YAX86_PRIVATE ExecuteStatus ExecuteLoop(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteLoop(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
 }
 
 // LOOPZ rel8
 // LOOPNZ rel8
-YAX86_PRIVATE ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecuteLoopZOrNZ(const InstructionContext* ctx) {
   bool condition1 = --(ctx->cpu->registers[kCX]) != 0;
   bool condition2 =
       CPUGetFlag(ctx->cpu, kZF) == (bool)(ctx->instruction->opcode - 0xE0);
@@ -142,7 +143,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteLoopZOrNZ(const InstructionContext* ctx) {
 }
 
 // JCXZ rel8
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, ctx->cpu->registers[kCX] == 0, true);
 }
@@ -152,21 +153,21 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for near calls.
-static ExecuteStatus ExecuteNearCall(
+static InstructionResult ExecuteNearCall(
     const InstructionContext* ctx, const OperandValue* offset) {
   Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
   return ExecuteRelativeJump(ctx, offset);
 }
 
 // CALL rel16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   return ExecuteNearCall(ctx, &offset);
 }
 
 // Common logic for far calls.
-YAX86_PRIVATE ExecuteStatus ExecuteFarCall(
+YAX86_PRIVATE InstructionResult ExecuteFarCall(
     const InstructionContext* ctx, const OperandValue* segment,
     const OperandValue* offset) {
   // Push the current CS and IP onto the stack.
@@ -176,7 +177,7 @@ YAX86_PRIVATE ExecuteStatus ExecuteFarCall(
 }
 
 // CALL ptr16:16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteDirectFarCall(const InstructionContext* ctx) {
   Push(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
   Push(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
@@ -184,44 +185,46 @@ ExecuteDirectFarCall(const InstructionContext* ctx) {
 }
 
 // Common logic for RET instructions.
-static ExecuteStatus ExecuteNearReturnCommon(
+static InstructionResult ExecuteNearReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
   ctx->cpu->registers[kSP] += arg_size;
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // RET
-YAX86_PRIVATE ExecuteStatus ExecuteNearReturn(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecuteNearReturn(const InstructionContext* ctx) {
   return ExecuteNearReturnCommon(ctx, 0);
 }
 
 // RET imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteNearReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteNearReturnCommon(ctx, FromOperandValue(&arg_size_value));
 }
 
 // Common logic for RETF instructions.
-static ExecuteStatus ExecuteFarReturnCommon(
+static InstructionResult ExecuteFarReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   OperandValue new_cs = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
   ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
   ctx->cpu->registers[kSP] += arg_size;
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // RETF
-YAX86_PRIVATE ExecuteStatus ExecuteFarReturn(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult
+ExecuteFarReturn(const InstructionContext* ctx) {
   return ExecuteFarReturnCommon(ctx, 0);
 }
 
 // RETF imm16
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteFarReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteFarReturnCommon(ctx, FromOperandValue(&arg_size_value));
@@ -232,45 +235,47 @@ ExecuteFarReturnAndPop(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for returning from an interrupt.
-YAX86_PRIVATE ExecuteStatus ExecuteReturnFromInterrupt(CPUState* cpu) {
+YAX86_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
   OperandValue ip_value = Pop(cpu);
   cpu->registers[kIP] = FromOperandValue(&ip_value);
   OperandValue cs_value = Pop(cpu);
   cpu->registers[kCS] = FromOperandValue(&cs_value);
   OperandValue flags_value = Pop(cpu);
   cpu->flags = FromOperandValue(&flags_value);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // IRET
-YAX86_PRIVATE ExecuteStatus ExecuteIret(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteIret(const InstructionContext* ctx) {
   return ExecuteReturnFromInterrupt(ctx->cpu);
 }
 
 // INT 3
-YAX86_PRIVATE ExecuteStatus ExecuteInt3(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteInt3(const InstructionContext* ctx) {
   CPUSetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // INTO
-YAX86_PRIVATE ExecuteStatus ExecuteInto(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kOF)) {
     CPUSetPendingInterrupt(ctx->cpu, kInterruptOverflow);
   }
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // INT n
-YAX86_PRIVATE ExecuteStatus ExecuteIntN(const InstructionContext* ctx) {
+YAX86_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
   CPUSetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
-  return kExecuteSuccess;
+  return kInstructionExecuted;
 }
 
 // HLT
-YAX86_PRIVATE ExecuteStatus
+YAX86_PRIVATE InstructionResult
 ExecuteHlt(YAX86_UNUSED const InstructionContext* ctx) {
+  // HLT executes successfully - it just leaves the CPU halted until an
+  // interrupt wakes it. CPUTick() reports the halted state to its caller.
   ctx->cpu->is_halted = true;
-  return kExecuteHalt;
+  return kInstructionExecuted;
 }
