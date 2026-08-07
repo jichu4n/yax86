@@ -456,8 +456,13 @@ YAX86_PRIVATE Operand ReadRegisterOperand(const InstructionContext* ctx) {
 // Mod/RM byte.
 YAX86_PRIVATE Operand
 ReadSegmentRegisterOperand(const InstructionContext* ctx) {
+  // The segment register field is only two bits wide. The 8086/8088 does not
+  // decode the third bit at all, so REG 4 through 7 name the same four
+  // registers over again - which is what makes 0x8C and 0x8E accept every REG
+  // value. Masking it also keeps the index inside the register array, which
+  // REG 4 and above would otherwise run past the end of.
   return ReadRegisterOperandForRegisterIndex(
-      ctx, (RegisterIndex)(ctx->instruction->mod_rm.reg + 8));
+      ctx, (RegisterIndex)(kES + (ctx->instruction->mod_rm.reg & 0x03)));
 }
 
 // Write a value to a register or memory operand address.
