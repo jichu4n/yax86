@@ -259,3 +259,68 @@ TEST_F(UndocumentedOpcodesTest, PopRegisterOrMemoryIgnoresRegField) {
   EXPECT_EQ(helper->cpu_.registers[kBX], 0x4321);
   EXPECT_EQ(helper->cpu_.registers[kSP], 0x0802);
 }
+
+// ============================================================================
+// 0xD0-0xD3 /6 - SETMO and SETMOC
+// ============================================================================
+
+// REG 6 of the shift group is its own operation on the 8086/8088 rather than
+// an alias of SAL: it sets every bit of the operand.
+TEST_F(UndocumentedOpcodesTest, SetMinusOneByte) {
+  // D0 /6 with mod=11, rm=011: SETMO BL
+  auto helper = WithCode({0xD0, 0xF3});
+  helper->cpu_.registers[kBX] = 0x1234;
+  CPUSetFlag(&helper->cpu_, kCF, true);
+  CPUSetFlag(&helper->cpu_, kOF, true);
+  CPUSetFlag(&helper->cpu_, kAF, true);
+
+  helper->ExecuteInstructions(1);
+
+  // BL becomes 0xFF, BH is untouched.
+  EXPECT_EQ(helper->cpu_.registers[kBX], 0x12FF);
+  // Carry, overflow and auxiliary carry are cleared, and sign, zero and parity
+  // follow the all-ones result.
+  helper->CheckFlags(
+      {{kCF, false},
+       {kOF, false},
+       {kAF, false},
+       {kSF, true},
+       {kZF, false},
+       {kPF, true}});
+}
+
+TEST_F(UndocumentedOpcodesTest, SetMinusOneWord) {
+  // D1 /6 with mod=11, rm=010: SETMO DX
+  auto helper = WithCode({0xD1, 0xF2});
+  helper->cpu_.registers[kDX] = 0x1234;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kDX], 0xFFFF);
+}
+
+// The count still gates the operation, so the CL forms do nothing at all when
+// CL is zero.
+TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalByCL) {
+  // D3 /6 with mod=11, rm=001: SETMOC CX, CL
+  auto helper = WithCode({0xD3, 0xF1});
+  helper->cpu_.registers[kCX] = 0x1234;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
+}
+
+TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalIsNoOpWhenCountIsZero) {
+  // D2 /6 with mod=11, rm=011: SETMOC BL, CL
+  auto helper = WithCode({0xD2, 0xF3});
+  helper->cpu_.registers[kBX] = 0x1234;
+  helper->cpu_.registers[kCX] = 0x0000;
+  CPUSetFlag(&helper->cpu_, kCF, true);
+
+  helper->ExecuteInstructions(1);
+
+  // Neither the operand nor the flags are touched.
+  EXPECT_EQ(helper->cpu_.registers[kBX], 0x1234);
+  helper->CheckFlags({{kCF, true}});
+}
