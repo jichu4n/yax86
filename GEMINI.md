@@ -85,6 +85,17 @@ To run tests:
 ./tools/run-tests.sh
 ```
 
+The CPU can additionally be checked against the [8088 hardware test
+suite](https://github.com/SingleStepTests/8088), which records the result a
+real 8088 produced for each of thousands of instruction encodings. The data is
+not in the repository; fetch the opcodes to check, then run the tests as usual:
+```
+./tools/download-cpu-tests.sh 8D 00 F7.4
+```
+Group opcodes take a ModRM REG suffix, as in `80.0`. Only the architectural
+result is compared - the suite's per-cycle bus records are for cycle-accurate
+emulators. Tests are skipped when nothing has been downloaded.
+
 To debug the WASM version of the emulator, use Chrome DevTools MCP server to
 open `http://localhost:3000/yax86_sdl.html`.
 
