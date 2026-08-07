@@ -26,6 +26,10 @@ YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   CPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
+YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
+  return (value | (uint16_t)kFlagsAlwaysSet) & ~(uint16_t)kFlagsAlwaysClear;
+}
+
 YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
   cpu->registers[kSP] -= 2;
   OperandAddress address = {

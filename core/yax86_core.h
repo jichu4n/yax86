@@ -1268,8 +1268,14 @@ typedef enum Flag {
 } Flag;
 
 enum {
-  // CPU flags value on reset.
-  kInitialFlags = (1 << 1),  // Reserved_1 is always 1.
+  // Bits of the flags register that are not flags. The 8086/8088 does not
+  // store them: bit 1 and bits 12 through 15 always read as one, and bits 3
+  // and 5 always read as zero, whatever gets written over them.
+  kFlagsAlwaysSet = 0xF002,
+  kFlagsAlwaysClear = 0x0028,
+  // CPU flags value on reset - no flags set, and the bits that are not flags
+  // reading the only way they can.
+  kInitialFlags = kFlagsAlwaysSet,
 };
 
 // Standard interrupts.
@@ -2444,6 +2450,11 @@ YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
 extern void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result);
 
+// Apply the bits that are not flags to a value on its way into the flags
+// register. POPF, IRET and SAHF all load flags from somewhere the guest
+// controls, and none of them can change these bits.
+extern uint16_t ToFlagsRegisterValue(uint16_t value);
+
 // Push a value onto the stack.
 extern void Push(CPUState* cpu, OperandValue value);
 // Pop a value from the stack.
@@ -2938,6 +2949,10 @@ YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   parity ^= parity >> 2;
   parity ^= parity >> 1;
   CPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
+}
+
+YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
+  return (value | (uint16_t)kFlagsAlwaysSet) & ~(uint16_t)kFlagsAlwaysClear;
 }
 
 YAX86_PRIVATE void Push(CPUState* cpu, OperandValue value) {
@@ -4095,7 +4110,7 @@ YAX86_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
   OperandValue cs_value = Pop(cpu);
   cpu->registers[kCS] = FromOperandValue(&cs_value);
   OperandValue flags_value = Pop(cpu);
-  cpu->flags = FromOperandValue(&flags_value);
+  cpu->flags = ToFlagsRegisterValue(FromOperandValue(&flags_value));
   return kInstructionExecuted;
 }
 
@@ -4210,7 +4225,7 @@ ExecutePushFlags(const InstructionContext* ctx) {
 // POPF
 YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx->cpu);
-  ctx->cpu->flags = FromOperandValue(&value);
+  ctx->cpu->flags = ToFlagsRegisterValue(FromOperandValue(&value));
   return kInstructionExecuted;
 }
 
@@ -4255,7 +4270,8 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value =
       ReadRegisterOperandByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
-  ctx->cpu->flags = (ctx->cpu->flags & 0xFF00) | value.value.byte_value;
+  ctx->cpu->flags =
+      ToFlagsRegisterValue((ctx->cpu->flags & 0xFF00) | value.value.byte_value);
   return kInstructionExecuted;
 }
 

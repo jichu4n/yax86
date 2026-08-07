@@ -16,6 +16,11 @@
 extern void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result);
 
+// Apply the bits that are not flags to a value on its way into the flags
+// register. POPF, IRET and SAHF all load flags from somewhere the guest
+// controls, and none of them can change these bits.
+extern uint16_t ToFlagsRegisterValue(uint16_t value);
+
 // Push a value onto the stack.
 extern void Push(CPUState* cpu, OperandValue value);
 // Pop a value from the stack.
