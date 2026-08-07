@@ -324,3 +324,48 @@ TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalIsNoOpWhenCountIsZero) {
   EXPECT_EQ(helper->cpu_.registers[kBX], 0x1234);
   helper->CheckFlags({{kCF, true}});
 }
+
+// ============================================================================
+// 0x8C and 0x8E - MOV with a segment register, REG 4 to 7
+// ============================================================================
+
+// The segment register field is only two bits wide. The 8086/8088 does not
+// decode the third bit, so REG 4 through 7 name ES, CS, SS and DS over again.
+TEST_F(UndocumentedOpcodesTest, MoveFromSegmentRegisterIgnoresTheThirdRegBit) {
+  static const RegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
+  for (uint8_t reg = 4; reg <= 7; ++reg) {
+    // 8C /reg with mod=11, rm=000: MOV AX, sreg
+    auto helper = WithCode({0x8C, static_cast<uint8_t>(0xC0 | (reg << 3))});
+    const RegisterIndex expected = kSegmentRegisters[reg & 0x03];
+    uint16_t expected_value = 0xBEEF;
+    if (expected == kCS) {
+      // The instruction is fetched through CS, so it has to keep pointing at
+      // the code. 0010:0000 is the same address as the 0000:0100 it loaded at.
+      expected_value = 0x0010;
+      helper->cpu_.registers[kIP] = 0x0000;
+    }
+    helper->cpu_.registers[expected] = expected_value;
+    helper->cpu_.registers[kAX] = 0;
+
+    helper->ExecuteInstructions(1);
+
+    EXPECT_EQ(helper->cpu_.registers[kAX], expected_value)
+        << "reg " << static_cast<int>(reg);
+  }
+}
+
+TEST_F(UndocumentedOpcodesTest, MoveToSegmentRegisterIgnoresTheThirdRegBit) {
+  static const RegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
+  for (uint8_t reg = 4; reg <= 7; ++reg) {
+    // 8E /reg with mod=11, rm=000: MOV sreg, AX
+    auto helper = WithCode({0x8E, static_cast<uint8_t>(0xC0 | (reg << 3))});
+    const RegisterIndex expected = kSegmentRegisters[reg & 0x03];
+    helper->cpu_.registers[kAX] = 0xBEEF;
+    helper->cpu_.registers[expected] = 0;
+
+    helper->ExecuteInstructions(1);
+
+    EXPECT_EQ(helper->cpu_.registers[expected], 0xBEEF)
+        << "reg " << static_cast<int>(reg);
+  }
+}
