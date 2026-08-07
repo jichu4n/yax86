@@ -92,6 +92,18 @@ TEST_F(PlatformExecutionTest, UndefinedOpcodeIsReportedAsInvalid) {
   EXPECT_EQ(ip(), kProgramOffset + 2);
 }
 
+TEST_F(PlatformExecutionTest, RunResumesAfterInvalidOpcode) {
+  Load({kOpNop, kOpUndefined, kOpNop, kOpNop});
+
+  ASSERT_EQ(PlatformRun(&platform_, 4), kPlatformInvalid);
+  // The offending tick is counted, so a host that treats an invalid opcode as
+  // non-fatal can resume and make progress.
+  const uint32_t ticks_before = platform_.ticks;
+  EXPECT_EQ(PlatformRun(&platform_, 2), kPlatformRunning);
+  EXPECT_GT(platform_.ticks, ticks_before);
+  EXPECT_EQ(ip(), kProgramOffset + 4);
+}
+
 TEST_F(PlatformExecutionTest, HaltWithInterruptsDisabledIsReportedAsHung) {
   Load({kOpCli, kOpHlt});
 

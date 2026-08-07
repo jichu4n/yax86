@@ -114,20 +114,33 @@ void MainTick(void) {
   if (!g_running) return;
 
   // 2. Run CPU Instructions
-  for (int i = 0; i < INSTRUCTIONS_PER_FRAME && !g_cpu_stopped; ++i) {
-    PlatformRunStatus status = PlatformTick(&g_platform);
-    // kPlatformInvalid is deliberately not fatal here. The 8088 has no invalid
-    // opcode exception, so a real machine would keep going; CPUTick() has
-    // already logged it. Anything else means the machine cannot make progress,
-    // so stop ticking it - but keep rendering so the final screen stays up.
-    if (status != kPlatformRunning && status != kPlatformInvalid) {
-      YAX86_LOG(
-          &g_platform.logger, &kLogModuleApp, kLogLevelError,
-          "execution stopped at %04X:%04X with status %d",
-          g_platform.cpu.registers[kCS], g_platform.cpu.registers[kIP],
-          (int)status);
-      g_cpu_stopped = true;
+  uint32_t remaining_ticks = INSTRUCTIONS_PER_FRAME;
+  while (!g_cpu_stopped && remaining_ticks > 0) {
+    const uint32_t start_tick = g_platform.ticks;
+    const PlatformRunStatus status = PlatformRun(&g_platform, remaining_ticks);
+    // Unsigned subtraction, so this stays correct across a tick counter wrap.
+    const uint32_t consumed_ticks = g_platform.ticks - start_tick;
+    remaining_ticks -=
+        consumed_ticks < remaining_ticks ? consumed_ticks : remaining_ticks;
+
+    if (status == kPlatformRunning) {
+      // Ran the frame's full budget without stopping.
+      break;
     }
+    if (status == kPlatformInvalid) {
+      // Not fatal here. The 8088 has no invalid opcode exception, so a real
+      // machine would keep going, and CPUTick() has already logged it. The
+      // offending tick was counted, so resuming makes progress.
+      continue;
+    }
+    // Anything else means the machine cannot make progress. Stop ticking it,
+    // but keep rendering so the final screen stays up.
+    YAX86_LOG(
+        &g_platform.logger, &kLogModuleApp, kLogLevelError,
+        "execution stopped at %04X:%04X with status %d",
+        g_platform.cpu.registers[kCS], g_platform.cpu.registers[kIP],
+        (int)status);
+    g_cpu_stopped = true;
   }
 
   // 3. Render
