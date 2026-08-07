@@ -78,11 +78,22 @@ string GetFlagName(Flag flag) {
   }
 }
 
+// Where the files handed to nasm go. The build directory rather than the
+// working directory, so that running the test binary by hand from the
+// repository root does not scatter them through the source tree.
+static string ScratchFilePath(const string& file_name) {
+  return string(YAX86_TEST_SCRATCH_DIR) + "/" + file_name;
+}
+
+// Wraps a path for a shell command line, since the build directory is outside
+// our control and may contain spaces.
+static string Quoted(const string& path) { return "'" + path + "'"; }
+
 vector<uint8_t> Assemble(const string& name, const string& asm_code) {
   cout << ">> Assembling " << name << ":" << endl << asm_code << endl;
 
   // Create a temporary file for the assembly code
-  string asm_file_name = name + ".asm";
+  string asm_file_name = ScratchFilePath(name + ".asm");
   ofstream asm_file(asm_file_name);
   if (!asm_file) {
     throw runtime_error("Failed to create assembly file: " + asm_file_name);
@@ -93,8 +104,9 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
   asm_file.close();
 
   // Assemble the code to a COM file
-  string com_file_name = name + ".com";
-  string command = "nasm -f bin " + asm_file_name + " -o " + com_file_name;
+  string com_file_name = ScratchFilePath(name + ".com");
+  string command =
+      "nasm -f bin " + Quoted(asm_file_name) + " -o " + Quoted(com_file_name);
   if (system(command.c_str()) != 0) {
     throw runtime_error("Failed to run command: " + command);
   }
@@ -109,7 +121,7 @@ vector<uint8_t> Assemble(const string& name, const string& asm_code) {
   com_file.close();
 
   // Disassemble and print out the machine code
-  string disasm_command = "ndisasm -o 100h -b 16 " + com_file_name;
+  string disasm_command = "ndisasm -o 100h -b 16 " + Quoted(com_file_name);
   system(disasm_command.c_str());
   cout << endl;
 

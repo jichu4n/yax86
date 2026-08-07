@@ -7,6 +7,12 @@ list(REMOVE_ITEM TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/hardware_test.cpp")
 add_executable(cpu_tests ${TEST_SOURCES})
 target_link_libraries(cpu_tests gtest_main yax86_core)
 
+# Where the tests put the files they hand to nasm. Baked in rather than left
+# relative to the working directory, which lands them in the source tree
+# whenever the binary is run from there by hand rather than through ctest.
+target_compile_definitions(cpu_tests PRIVATE
+  YAX86_TEST_SCRATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+
 include(GoogleTest)
 gtest_discover_tests(cpu_tests)
 
