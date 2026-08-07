@@ -1350,6 +1350,18 @@ typedef struct CPUConfig {
   void (*write_memory_byte)(
       struct CPUState* cpu, uint32_t address, uint8_t value);
 
+  // Callback modeling the interrupt acknowledge cycle the CPU runs in response
+  // to a request on its INTR pin. Returns false if no external interrupt is
+  // requested; otherwise stores the vector number and marks the interrupt in
+  // service in the controller, exactly as the two INTA pulses do on real
+  // hardware.
+  //
+  // The CPU only calls this at an instruction boundary with interrupts
+  // enabled, so acknowledging and taking the interrupt are a single step and
+  // no request can be latched, stranded, or overwritten in between. If NULL,
+  // the CPU takes no external interrupts.
+  bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
+
   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
   // through the Interrupt Vector Table.
   InterruptHandlerResult (*handle_interrupt)(
@@ -1396,10 +1408,13 @@ typedef struct CPUState {
   // Flag values
   uint16_t flags;
 
-  // Whether there is an active interrupt.
-  bool has_pending_interrupt;
-  // The interrupt number of the pending interrupt.
-  uint8_t pending_interrupt_number;
+  // An internal interrupt, raised by the CPU itself as a result of the
+  // instruction it just executed: INT n, INT 3, INTO, a divide error, or a
+  // single-step trap. IF does not gate these - INT 21h works with interrupts
+  // disabled, which is how DOS calls inside critical sections behave.
+  bool has_pending_internal_interrupt;
+  // Interrupt number of the pending internal interrupt.
+  uint8_t pending_internal_interrupt_number;
 
   // Whether the CPU is in halted state. When true, CPUTick() will not fetch
   // or execute any instructions until an external event (e.g., an interrupt)
@@ -1427,17 +1442,21 @@ static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
   }
 }
 
-// Set pending interrupt to be executed at the end of the current instruction.
-static inline void CPUSetPendingInterrupt(
+// Raise an interrupt from within the CPU, to be taken at the end of the
+// instruction currently executing. This is for the sources the 8086 calls
+// internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
+// are not maskable by IF. External requests arrive on the INTR pin instead,
+// via the acknowledge_interrupt callback.
+static inline void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
-  cpu->has_pending_interrupt = true;
-  cpu->pending_interrupt_number = interrupt_number;
+  cpu->has_pending_internal_interrupt = true;
+  cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
-// Clear pending interrupt.
-static inline void CPUClearPendingInterrupt(CPUState* cpu) {
-  cpu->has_pending_interrupt = false;
-  cpu->pending_interrupt_number = 0;
+// Discard a pending internal interrupt without taking it.
+static inline void CPUClearInternalInterrupt(CPUState* cpu) {
+  cpu->has_pending_internal_interrupt = false;
+  cpu->pending_internal_interrupt_number = 0;
 }
 
 // Request that the current tick stop as soon as the instruction in progress
@@ -4087,14 +4106,14 @@ YAX86_PRIVATE InstructionResult ExecuteIret(const InstructionContext* ctx) {
 
 // INT 3
 YAX86_PRIVATE InstructionResult ExecuteInt3(const InstructionContext* ctx) {
-  CPUSetPendingInterrupt(ctx->cpu, kInterruptBreakpoint);
+  CPURaiseInternalInterrupt(ctx->cpu, kInterruptBreakpoint);
   return kInstructionExecuted;
 }
 
 // INTO
 YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kOF)) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptOverflow);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptOverflow);
   }
   return kInstructionExecuted;
 }
@@ -4102,7 +4121,7 @@ YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
 // INT n
 YAX86_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
-  CPUSetPendingInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
+  CPURaiseInternalInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
   return kInstructionExecuted;
 }
 
@@ -4695,7 +4714,7 @@ YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
   if (base_value == 0) {
     // AAM divides by its immediate operand, so a base of 0 raises a divide
     // error just like DIV by zero does, rather than being an invalid encoding.
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
   uint8_t ah = al / base_value;
@@ -5192,7 +5211,7 @@ static InstructionResult ExecuteDiv(
     const InstructionContext* ctx, Operand* op) {
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
 
@@ -5206,7 +5225,7 @@ static InstructionResult ExecuteDiv(
                             << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
@@ -5218,7 +5237,7 @@ static InstructionResult ExecuteIdiv(
     const InstructionContext* ctx, Operand* op) {
   int32_t divisor = FromSignedOperand(op);
   if (divisor == 0) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
 
@@ -5233,7 +5252,7 @@ static InstructionResult ExecuteIdiv(
   int32_t quotient = dividend / divisor;
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < kMinSignedValue[ctx->metadata->width]) {
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
   return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
@@ -7138,14 +7157,8 @@ InstructionResult CPUExecuteInstruction(
   return kInstructionExecuted;
 }
 
-// Process pending interrupt, if any. Returns whether one was dispatched.
-static bool ExecutePendingInterrupt(CPUState* cpu) {
-  if (!cpu->has_pending_interrupt) {
-    return false;
-  }
-  uint8_t interrupt_number = cpu->pending_interrupt_number;
-  CPUClearPendingInterrupt(cpu);
-
+// Save state and vector to the handler for an interrupt.
+static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
   Push(cpu, WordValue(cpu->flags));
@@ -7166,7 +7179,7 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
     // If the interrupt was handled by the caller-provided interrupt handler
     // callback, restore state and continue execution.
     ExecuteReturnFromInterrupt(cpu);
-    return true;
+    return;
   }
 
   // If the interrupt was not handled by the caller-provided interrupt handler
@@ -7174,7 +7187,31 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   uint16_t ivt_entry_offset = interrupt_number << 2;
   cpu->registers[kIP] = ReadRawMemoryWord(cpu, ivt_entry_offset);
   cpu->registers[kCS] = ReadRawMemoryWord(cpu, ivt_entry_offset + 2);
-  return true;
+}
+
+// Take a pending interrupt, if any. Returns whether one was dispatched.
+static bool ExecutePendingInterrupt(CPUState* cpu) {
+  // An internal interrupt goes first. It was raised by the instruction that
+  // just executed, and taking it clears IF, which correctly holds off any
+  // external request until the handler re-enables interrupts.
+  if (cpu->has_pending_internal_interrupt) {
+    const uint8_t interrupt_number = cpu->pending_internal_interrupt_number;
+    CPUClearInternalInterrupt(cpu);
+    DispatchInterrupt(cpu, interrupt_number);
+    return true;
+  }
+
+  // An external request on the INTR pin is only taken while interrupts are
+  // enabled. Acknowledging it is what produces its vector - there is nothing to
+  // latch beforehand, and the controller keeps requesting until acknowledged.
+  uint8_t intr_vector;
+  if (CPUGetFlag(cpu, kIF) && cpu->config->acknowledge_interrupt &&
+      cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
+    DispatchInterrupt(cpu, intr_vector);
+    return true;
+  }
+
+  return false;
 }
 
 CPUTickResult CPUTick(CPUState* cpu) {
@@ -7229,7 +7266,7 @@ CPUTickResult CPUTick(CPUState* cpu) {
   // at an instruction boundary, so an interrupt dispatched above takes its
   // place rather than both firing.
   if (executed_instruction && trap_flag_was_set && !dispatched_interrupt) {
-    CPUSetPendingInterrupt(cpu, kInterruptSingleStep);
+    CPURaiseInternalInterrupt(cpu, kInterruptSingleStep);
     ExecutePendingInterrupt(cpu);
   }
 
@@ -14632,12 +14669,28 @@ static void PlatformInitBIOS(PlatformState* platform) {
   RegisterMemoryMapEntry(platform, &bios_rom);
 }
 
+// Runs the CPU's interrupt acknowledge cycle against the PIC. This is the
+// only path by which an external interrupt reaches the CPU, and the PIC marks
+// the interrupt in service as part of it - so a vector is never produced
+// unless the CPU is taking it right now.
+static bool CPUCallbackAcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
+  PlatformState* platform = (PlatformState*)cpu->config->context;
+  const uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
+  if (interrupt_vector == kPICNoPendingInterrupt) {
+    return false;
+  } else {
+    *vector = interrupt_vector;
+    return true;
+  }
+}
+
 static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
   platform->cpu_config.logger = &platform->logger;
   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
+  platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
   platform->cpu_config.read_port = CPUCallbackReadPortByte;
   platform->cpu_config.write_port = CPUCallbackWritePortByte;
   CPUInit(&platform->cpu, &platform->cpu_config);
@@ -14877,16 +14930,6 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Tick the CPU.
   CPUTickResult cpu_result = CPUTick(&platform->cpu);
 
-  // Check for pending interrupts from the PIC after an
-  // instruction has been executed. This is how we connect the PIC to the CPU's
-  // interrupt handling flow.
-  if (CPUGetFlag(&platform->cpu, kIF)) {
-    uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
-    if (interrupt_vector != kPICNoPendingInterrupt) {
-      CPUSetPendingInterrupt(&platform->cpu, interrupt_vector);
-    }
-  }
-
   // PIT ticks at 1.19MHz, CPU at 4.77MHz. 4.77 / 1.19 ~= 4.
   if (platform->ticks % 4 == 0) {
     PITTick(&platform->pit);
@@ -14919,7 +14962,7 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   // the rest of the machine must keep ticking so that an interrupt can wake
   // the CPU back up.
   if (platform->cpu.is_halted && !CPUGetFlag(&platform->cpu, kIF) &&
-      !platform->cpu.has_pending_interrupt) {
+      !platform->cpu.has_pending_internal_interrupt) {
     return kPlatformHung;
   }
 

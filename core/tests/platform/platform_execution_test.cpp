@@ -313,3 +313,48 @@ TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
 }
 
 }  // namespace
+
+// A software interrupt executing while an acknowledged hardware IRQ is waiting
+// must not discard it. Sharing one pending-interrupt slot between the two used
+// to lose the IRQ, leaving the PIC with the interrupt permanently in service
+// and every lower priority IRQ - notably the keyboard - blocked behind it.
+TEST_F(PlatformExecutionTest, SoftwareInterruptDoesNotStrandAnAcknowledgedInterrupt) {
+  enum : uint32_t {
+    // Vector table entries, at interrupt number * 4.
+    kVectorIRQ0 = 0x08 * 4,
+    kVectorInt28 = 0x28 * 4,
+    // Handlers, placed clear of the program and the vector table.
+    kInt28Handler = 0x0200,
+    kIRQ0Handler = 0x0300,
+    // Written by the IRQ0 handler to prove it ran.
+    kMarker = 0x3000,
+  };
+
+  // STI, then a tight loop issuing INT 28h - the same idle interrupt MS-DOS
+  // spins on at its command prompt.
+  Load({kOpSti, 0xCD, 0x28, 0xEB, 0xFC});
+  // INT 28h handler: IRET.
+  ram_[kInt28Handler] = 0xCF;
+  // IRQ0 handler: MOV byte [kMarker], 0xAA / MOV AL, 20h / OUT 20h, AL / IRET.
+  const uint8_t irq0_handler[] = {0xC6, 0x06, kMarker & 0xFF, kMarker >> 8,
+                                  0xAA, 0xB0, 0x20,           0xE6,
+                                  0x20, 0xCF};
+  for (size_t i = 0; i < sizeof(irq0_handler); ++i) {
+    ram_[kIRQ0Handler + i] = irq0_handler[i];
+  }
+  ram_[kVectorInt28 + 2] = kInt28Handler >> 4;
+  ram_[kVectorIRQ0 + 2] = kIRQ0Handler >> 4;
+
+  // Initialize the PIC with a vector base of 0x08 and unmask IRQ0.
+  WritePortByte(&platform_, 0x20, 0x13);  // ICW1: init, single, ICW4 needed
+  WritePortByte(&platform_, 0x21, 0x08);  // ICW2: vector base
+  WritePortByte(&platform_, 0x21, 0x01);  // ICW4
+  WritePortByte(&platform_, 0x21, 0xFE);  // OCW1: unmask IRQ0
+
+  ASSERT_TRUE(PlatformRaiseIRQ(&platform_, 0));
+  PlatformRun(&platform_, 200);
+
+  EXPECT_EQ(ram_[kMarker], 0xAA) << "IRQ0 handler never ran";
+  // With the IRQ delivered, the PIC is no longer stuck with it in service.
+  EXPECT_EQ(platform_.pic.isr & 0x01, 0);
+}

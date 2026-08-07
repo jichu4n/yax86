@@ -55,7 +55,7 @@ YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
   if (base_value == 0) {
     // AAM divides by its immediate operand, so a base of 0 raises a divide
     // error just like DIV by zero does, rather than being an invalid encoding.
-    CPUSetPendingInterrupt(ctx->cpu, kInterruptDivideError);
+    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
   uint8_t ah = al / base_value;

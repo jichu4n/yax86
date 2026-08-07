@@ -472,8 +472,8 @@ TEST_F(BcdTest, AAM_ZeroBaseRaisesDivideError) {
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_TRUE(helper->cpu_.has_pending_interrupt);
-  EXPECT_EQ(helper->cpu_.pending_interrupt_number, kInterruptDivideError);
+  EXPECT_TRUE(helper->cpu_.has_pending_internal_interrupt);
+  EXPECT_EQ(helper->cpu_.pending_internal_interrupt_number, kInterruptDivideError);
   // AX is left untouched.
   EXPECT_EQ(helper->cpu_.registers[kAX], 0x0017);
 }

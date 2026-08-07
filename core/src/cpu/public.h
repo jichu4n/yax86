@@ -172,6 +172,18 @@ typedef struct CPUConfig {
   void (*write_memory_byte)(
       struct CPUState* cpu, uint32_t address, uint8_t value);
 
+  // Callback modeling the interrupt acknowledge cycle the CPU runs in response
+  // to a request on its INTR pin. Returns false if no external interrupt is
+  // requested; otherwise stores the vector number and marks the interrupt in
+  // service in the controller, exactly as the two INTA pulses do on real
+  // hardware.
+  //
+  // The CPU only calls this at an instruction boundary with interrupts
+  // enabled, so acknowledging and taking the interrupt are a single step and
+  // no request can be latched, stranded, or overwritten in between. If NULL,
+  // the CPU takes no external interrupts.
+  bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
+
   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
   // through the Interrupt Vector Table.
   InterruptHandlerResult (*handle_interrupt)(
@@ -218,10 +230,13 @@ typedef struct CPUState {
   // Flag values
   uint16_t flags;
 
-  // Whether there is an active interrupt.
-  bool has_pending_interrupt;
-  // The interrupt number of the pending interrupt.
-  uint8_t pending_interrupt_number;
+  // An internal interrupt, raised by the CPU itself as a result of the
+  // instruction it just executed: INT n, INT 3, INTO, a divide error, or a
+  // single-step trap. IF does not gate these - INT 21h works with interrupts
+  // disabled, which is how DOS calls inside critical sections behave.
+  bool has_pending_internal_interrupt;
+  // Interrupt number of the pending internal interrupt.
+  uint8_t pending_internal_interrupt_number;
 
   // Whether the CPU is in halted state. When true, CPUTick() will not fetch
   // or execute any instructions until an external event (e.g., an interrupt)
@@ -249,17 +264,21 @@ static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
   }
 }
 
-// Set pending interrupt to be executed at the end of the current instruction.
-static inline void CPUSetPendingInterrupt(
+// Raise an interrupt from within the CPU, to be taken at the end of the
+// instruction currently executing. This is for the sources the 8086 calls
+// internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
+// are not maskable by IF. External requests arrive on the INTR pin instead,
+// via the acknowledge_interrupt callback.
+static inline void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
-  cpu->has_pending_interrupt = true;
-  cpu->pending_interrupt_number = interrupt_number;
+  cpu->has_pending_internal_interrupt = true;
+  cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
-// Clear pending interrupt.
-static inline void CPUClearPendingInterrupt(CPUState* cpu) {
-  cpu->has_pending_interrupt = false;
-  cpu->pending_interrupt_number = 0;
+// Discard a pending internal interrupt without taking it.
+static inline void CPUClearInternalInterrupt(CPUState* cpu) {
+  cpu->has_pending_internal_interrupt = false;
+  cpu->pending_internal_interrupt_number = 0;
 }
 
 // Request that the current tick stop as soon as the instruction in progress
