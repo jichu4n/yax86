@@ -775,11 +775,17 @@ enum {
 // ========================================
 
 // Color Select Register (I/O port 3D9) - write only
-//
-// The layout of this register only matters to graphics modes, which are not
-// yet emulated; text modes take their colors from the attribute byte alone.
-// The register is still fully readable and writable so that software can set
-// it up ahead of a mode switch.
+// ========================================
+// Bit Number | Function
+//------------|-------------------------
+// 0-2        | Background / border RGB. In 640x200 graphics, this is the
+//            | foreground color instead.
+// 3          | + Intensity of the above
+// 4          | + Intensity of the 320x200 graphics palette
+// 5          | 320x200 graphics palette (0 = green/red/brown,
+//            | 1 = cyan/magenta/white)
+// 6,7        | Not Used
+// ========================================
 
 // CRT Status Register (I/O port 3DA) - read only
 // ========================================
@@ -812,6 +818,12 @@ enum {
   kCGAVRAMAddress = 0xB8000,
   // CGA VRAM size.
   kCGAVRAMSize = 16 * 1024,  // 16K
+  // Byte offset of the odd scan lines in CGA graphics modes. Graphics VRAM is
+  // interleaved - even scan lines live in the first half and odd scan lines in
+  // the second.
+  kCGAGraphicsOddScanLineOffset = 0x2000,
+  // Number of bytes per scan line in CGA graphics modes.
+  kCGAGraphicsBytesPerScanLine = 80,
   // Number of colors in the CGA palette.
   kNumCGAColors = 16,
 };
@@ -894,6 +906,18 @@ enum {
   kVideoControlHighResolutionGraphics = 1 << 4,
   // Attribute bit 7 means blinking rather than intense background.
   kVideoControlEnableBlink = 1 << 5,
+};
+
+// Bits in the CGA color select register - I/O port 3D9.
+enum {
+  // Background / border color, or the foreground color in 640x200 graphics.
+  kCGAColorSelectColorMask = 0x07,
+  // Intensity of the background / border color.
+  kCGAColorSelectIntensity = 1 << 3,
+  // Intensity of the 320x200 graphics palette.
+  kCGAColorSelectPaletteIntensity = 1 << 4,
+  // 320x200 graphics palette selection.
+  kCGAColorSelectPalette = 1 << 5,
 };
 
 // Bits in the status register - I/O port 3BA on MDA, 3DA on CGA.
@@ -2393,6 +2417,20 @@ YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+enum {
+  // Number of pixels per byte in 320x200 graphics mode.
+  kCGAPixelsPerByte320x200 = 4,
+  // Number of bits per pixel in 320x200 graphics mode.
+  kCGABitsPerPixel320x200 = 2,
+  // Mask of a single pixel in 320x200 graphics mode.
+  kCGAPixelMask320x200 = 0x03,
+  // Number of pixels per byte in 640x200 graphics mode.
+  kCGAPixelsPerByte640x200 = 8,
+  // Mask of a graphics mode address within the half of VRAM holding either the
+  // even or the odd scan lines.
+  kCGAGraphicsScanLineAddressMask = kCGAGraphicsOddScanLineOffset - 1,
+};
+
 // Look up a color in the configured CGA palette.
 static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
   return video->config->cga_palette[color & (kNumCGAColors - 1)];
@@ -2407,17 +2445,6 @@ static void CGAWritePixels(
   for (uint8_t i = 0; i < scale; ++i) {
     Position pixel_pos = {.x = x + i, .y = y};
     VideoWritePixel(video, pixel_pos, rgb);
-  }
-}
-
-// Fill the entire frame buffer with a single color.
-static void CGAFillScreen(VideoState* video, RGB rgb) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-  for (uint16_t y = 0; y < adapter->frame_buffer_height; ++y) {
-    for (uint16_t x = 0; x < adapter->frame_buffer_width; ++x) {
-      Position pixel_pos = {.x = x, .y = y};
-      VideoWritePixel(video, pixel_pos, rgb);
-    }
   }
 }
 
@@ -2534,6 +2561,121 @@ static void CGARenderText(
   CGADrawCursor(video, metadata, start_address, scale);
 }
 
+// ============================================================================
+// Graphics modes 0x04 - 0x06
+// ============================================================================
+
+// The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
+// comes from the color select register instead. The palette is chosen by the
+// palette bit of the color select register, except that the black and white bit
+// of the mode control register overrides both.
+static const uint8_t kCGAGraphicsPalettes[3][3] = {
+    // Palette 0: green, red, brown
+    {2, 4, 6},
+    // Palette 1: cyan, magenta, light gray
+    {3, 5, 7},
+    // Black and white: cyan, red, light gray
+    {3, 4, 7},
+};
+
+// Address of the first byte of a graphics mode scan line. Graphics VRAM is
+// interleaved: even scan lines live in the first half of VRAM and odd scan
+// lines in the second.
+//
+// The 6845 counts in character units, and a graphics mode fetches two bytes per
+// unit, so the start address it holds is doubled to get a byte address. It also
+// only addresses one half of VRAM - the scan line's parity picks the half - so
+// it wraps within that half rather than across the whole of VRAM. The BIOS
+// zeroes the start address on a mode set, so this only matters to software that
+// page flips or scrolls by writing it directly.
+static inline uint32_t CGAGetScanLineAddress(
+    const VideoState* video, uint16_t y) {
+  uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
+                      (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
+                     kCGAGraphicsScanLineAddressMask;
+  return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
+}
+
+// Render the current display in 320x200 graphics mode.
+static void CGARenderGraphics320x200(
+    VideoState* video, const VideoModeMetadata* metadata) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  uint8_t scale = (uint8_t)(adapter->frame_buffer_width / metadata->width);
+
+  // Resolve the four palette entries once up front.
+  const uint8_t* palette_colors;
+  if (video->control_register & kVideoControlBlackAndWhite) {
+    palette_colors = kCGAGraphicsPalettes[2];
+  } else if (video->color_select_register & kCGAColorSelectPalette) {
+    palette_colors = kCGAGraphicsPalettes[1];
+  } else {
+    palette_colors = kCGAGraphicsPalettes[0];
+  }
+  uint8_t intensity =
+      (video->color_select_register & kCGAColorSelectPaletteIntensity)
+          ? kNumCGAColors / 2
+          : 0;
+  RGB palette[4];
+  palette[0] = CGAGetColor(
+      video, video->color_select_register &
+                 (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
+  for (uint8_t i = 0; i < 3; ++i) {
+    palette[i + 1] = CGAGetColor(video, palette_colors[i] | intensity);
+  }
+
+  // Each VRAM byte holds several pixels, so the loop runs over bytes and
+  // unpacks each one, rather than re-reading the same byte once per pixel.
+  uint16_t bytes_per_scan_line = metadata->width / kCGAPixelsPerByte320x200;
+  for (uint16_t y = 0; y < metadata->height; ++y) {
+    uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
+    for (uint16_t byte_index = 0; byte_index < bytes_per_scan_line;
+         ++byte_index) {
+      uint8_t byte_value =
+          VideoReadVRAMByte(video, scan_line_address + byte_index);
+      uint16_t first_x = byte_index * kCGAPixelsPerByte320x200;
+      for (uint8_t i = 0; i < kCGAPixelsPerByte320x200; ++i) {
+        // The leftmost pixel is in the most significant bits.
+        uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 - i) *
+                                  kCGABitsPerPixel320x200);
+        uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
+        CGAWritePixels(video, (first_x + i) * scale, y, scale, palette[color]);
+      }
+    }
+  }
+}
+
+// Render the current display in 640x200 graphics mode.
+static void CGARenderGraphics640x200(
+    VideoState* video, const VideoModeMetadata* metadata) {
+  // The foreground color comes from the color select register, and the
+  // background is always black.
+  RGB foreground = CGAGetColor(
+      video, video->color_select_register &
+                 (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
+  RGB background = CGAGetColor(video, 0);
+
+  // As in 320x200 mode, each VRAM byte is fetched once and unpacked into the
+  // eight pixels it holds.
+  uint16_t bytes_per_scan_line = metadata->width / kCGAPixelsPerByte640x200;
+  for (uint16_t y = 0; y < metadata->height; ++y) {
+    uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
+    for (uint16_t byte_index = 0; byte_index < bytes_per_scan_line;
+         ++byte_index) {
+      uint8_t byte_value =
+          VideoReadVRAMByte(video, scan_line_address + byte_index);
+      uint16_t first_x = byte_index * kCGAPixelsPerByte640x200;
+      for (uint8_t i = 0; i < kCGAPixelsPerByte640x200; ++i) {
+        // The leftmost pixel is in the most significant bit.
+        uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 - i);
+        bool is_foreground = (byte_value >> shift) & 1;
+        Position pixel_pos = {.x = first_x + i, .y = y};
+        VideoWritePixel(
+            video, pixel_pos, is_foreground ? foreground : background);
+      }
+    }
+  }
+}
+
 // Render the current display on the CGA.
 YAX86_PRIVATE void CGARenderScreen(VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
@@ -2546,14 +2688,14 @@ YAX86_PRIVATE void CGARenderScreen(VideoState* video) {
       break;
     case kVideoModeCGAGraphics320x200:
     case kVideoModeCGAGraphics320x200Alt:
+      CGARenderGraphics320x200(video, metadata);
+      break;
     case kVideoModeCGAGraphics640x200:
-      // Graphics modes are not yet implemented - render blank rather than
-      // stale or garbage content.
-      CGAFillScreen(video, CGAGetColor(video, 0));
+      CGARenderGraphics640x200(video, metadata);
       break;
     default:
       // Not reachable - VideoGetMode() only ever returns a CGA mode on the CGA.
-      CGAFillScreen(video, CGAGetColor(video, 0));
+      // The branch exists so that the switch covers the enum.
       break;
   }
 }

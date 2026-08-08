@@ -58,6 +58,14 @@ class CGATest : public VideoTestBase {
   }
 
   RGB Color(uint8_t index) const { return config_.cga_palette[index]; }
+
+  // Write a byte of graphics mode VRAM. Even scan lines live in the first half
+  // of VRAM and odd scan lines in the second.
+  void WriteGraphicsByte(int y, int x_byte, uint8_t value) {
+    uint32_t address = (y % 2 ? kCGAGraphicsOddScanLineOffset : 0) +
+                       (y / 2) * kCGAGraphicsBytesPerScanLine + x_byte;
+    mock_vram[address] = value;
+  }
 };
 
 // ============================================================================
@@ -264,6 +272,154 @@ TEST_F(CGATest, StartAddressSelectsThePage) {
 
   WriteRegister(kCRTCRegisterStartAddressH, kPageSize >> 8);
   WriteRegister(kCRTCRegisterStartAddressL, kPageSize & 0xFF);
+  Render();
+  EXPECT_EQ(Pixel(0, 0), Color(kColorWhite));
+}
+
+// ============================================================================
+// Graphics mode 4 / 5 - 320x200, four colors
+// ============================================================================
+
+TEST_F(CGATest, RenderGraphics320x200) {
+  SetControl(kControlMode4);
+  ASSERT_EQ(VideoGetMode(&video_), kVideoModeCGAGraphics320x200);
+  // One byte holds four pixels, most significant bits leftmost.
+  WriteGraphicsByte(0, 0, 0x1B);  // 00 01 10 11
+  Render();
+
+  // Palette 0 at low intensity: background, green, red, brown. Every pixel is
+  // doubled horizontally into the 640 pixel wide frame buffer.
+  EXPECT_EQ(Pixel(0, 0), Color(kColorBlack));
+  EXPECT_EQ(Pixel(1, 0), Color(kColorBlack));
+  EXPECT_EQ(Pixel(2, 0), Color(kColorGreen));
+  EXPECT_EQ(Pixel(3, 0), Color(kColorGreen));
+  EXPECT_EQ(Pixel(4, 0), Color(kColorRed));
+  EXPECT_EQ(Pixel(5, 0), Color(kColorRed));
+  EXPECT_EQ(Pixel(6, 0), Color(kColorBrown));
+  EXPECT_EQ(Pixel(7, 0), Color(kColorBrown));
+  EXPECT_EQ(mock_pixel_write_count, kFrameBufferWidth * kFrameBufferHeight);
+}
+
+TEST_F(CGATest, Graphics320x200ScanLinesAreInterleaved) {
+  SetControl(kControlMode4);
+  // Scan line 1 lives in the second half of VRAM. WriteGraphicsByte does that
+  // mapping, so writing there must land on the second row of the display.
+  WriteGraphicsByte(1, 0, 0xFF);
+  Render();
+
+  EXPECT_EQ(Pixel(0, 0), Color(kColorBlack));
+  EXPECT_EQ(Pixel(0, 1), Color(kColorBrown));
+  // And the raw address it used really is in the second half.
+  EXPECT_EQ(mock_vram[kCGAGraphicsOddScanLineOffset], 0xFF);
+}
+
+TEST_F(CGATest, Graphics320x200Palettes) {
+  // 11 in every pixel, so each test sees palette entry 3.
+  WriteGraphicsByte(0, 0, 0xFF);
+  // And 01 for palette entry 1.
+  WriteGraphicsByte(0, 1, 0x55);
+
+  struct PaletteCase {
+    uint8_t control;
+    uint8_t color_select;
+    uint8_t expected_color_1;
+    uint8_t expected_color_3;
+  };
+  const PaletteCase cases[] = {
+      // Palette 0, low intensity: green, red, brown.
+      {kControlMode4, 0x00, kColorGreen, kColorBrown},
+      // Palette 1, low intensity: cyan, magenta, light gray.
+      {kControlMode4, kCGAColorSelectPalette, kColorCyan, kColorLightGray},
+      // Palette 1, high intensity.
+      {kControlMode4, kCGAColorSelectPalette | kCGAColorSelectPaletteIntensity,
+       kColorLightCyan, kColorWhite},
+      // Black and white overrides the palette bit: cyan, red, light gray.
+      {kControlMode5, kCGAColorSelectPalette, kColorCyan, kColorLightGray},
+      // Black and white at high intensity.
+      {kControlMode5, kCGAColorSelectPaletteIntensity, kColorLightCyan,
+       kColorWhite},
+  };
+  for (const PaletteCase& palette_case : cases) {
+    SetControl(palette_case.control);
+    SetColorSelect(palette_case.color_select);
+    Render();
+    EXPECT_EQ(Pixel(0, 0), Color(palette_case.expected_color_3))
+        << "control " << static_cast<int>(palette_case.control)
+        << " color select " << static_cast<int>(palette_case.color_select);
+    EXPECT_EQ(Pixel(8, 0), Color(palette_case.expected_color_1))
+        << "control " << static_cast<int>(palette_case.control)
+        << " color select " << static_cast<int>(palette_case.color_select);
+  }
+}
+
+TEST_F(CGATest, Graphics320x200BackgroundColor) {
+  SetControl(kControlMode4);
+  // Color 0 comes from the low four bits of the color select register.
+  SetColorSelect(kColorMagenta);
+  Render();
+  EXPECT_EQ(Pixel(0, 0), Color(kColorMagenta));
+
+  SetColorSelect(kColorMagenta | kCGAColorSelectIntensity);
+  Render();
+  EXPECT_EQ(Pixel(0, 0), Color(kColorLightMagenta));
+}
+
+// ============================================================================
+// Graphics mode 6 - 640x200, two colors
+// ============================================================================
+
+TEST_F(CGATest, RenderGraphics640x200) {
+  SetControl(kControlMode6);
+  ASSERT_EQ(VideoGetMode(&video_), kVideoModeCGAGraphics640x200);
+  // One byte holds eight pixels, most significant bit leftmost. The BIOS leaves
+  // the color select register at white for this mode.
+  SetColorSelect(kColorWhite);
+  WriteGraphicsByte(0, 0, 0xA0);  // 1010 0000
+  Render();
+
+  EXPECT_EQ(Pixel(0, 0), Color(kColorWhite));
+  EXPECT_EQ(Pixel(1, 0), Color(kColorBlack));
+  EXPECT_EQ(Pixel(2, 0), Color(kColorWhite));
+  EXPECT_EQ(Pixel(3, 0), Color(kColorBlack));
+  EXPECT_EQ(Pixel(7, 0), Color(kColorBlack));
+  // No pixel doubling in this mode.
+  EXPECT_EQ(mock_pixel_write_count, kFrameBufferWidth * kFrameBufferHeight);
+}
+
+TEST_F(CGATest, Graphics640x200ForegroundColor) {
+  SetControl(kControlMode6);
+  SetColorSelect(kColorCyan);
+  WriteGraphicsByte(0, 0, 0x80);
+  Render();
+
+  EXPECT_EQ(Pixel(0, 0), Color(kColorCyan));
+  EXPECT_EQ(Pixel(1, 0), Color(kColorBlack));
+}
+
+TEST_F(CGATest, Graphics640x200ScanLinesAreInterleaved) {
+  SetControl(kControlMode6);
+  SetColorSelect(kColorWhite);
+  WriteGraphicsByte(3, 0, 0x80);
+  Render();
+
+  EXPECT_EQ(Pixel(0, 3), Color(kColorWhite));
+  EXPECT_EQ(Pixel(0, 2), Color(kColorBlack));
+}
+
+TEST_F(CGATest, GraphicsStartAddressScrollsTheDisplay) {
+  SetControl(kControlMode6);
+  SetColorSelect(kColorWhite);
+  // Scan line 2 is the second row of the even half of VRAM, 80 bytes in.
+  WriteGraphicsByte(2, 0, 0x80);
+  Render();
+  EXPECT_EQ(Pixel(0, 0), Color(kColorBlack));
+  EXPECT_EQ(Pixel(0, 2), Color(kColorWhite));
+
+  // The 6845 counts in character units and a graphics mode fetches two bytes
+  // per unit, so a start address of 40 moves the display on by 80 bytes - which
+  // is exactly the row that was scan line 2.
+  WriteRegister(kCRTCRegisterStartAddressH, 0);
+  WriteRegister(kCRTCRegisterStartAddressL, 40);
   Render();
   EXPECT_EQ(Pixel(0, 0), Color(kColorWhite));
 }
