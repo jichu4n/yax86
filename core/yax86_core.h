@@ -7686,8 +7686,9 @@ CPUTickResult CPUTick(CPUState* cpu) {
     // The cost of the instruction is its base cost plus the address it had to
     // compute, and then whatever it charges itself as it runs - its traffic on
     // the data bus, and any part of its cost that depends on its operands.
-    cpu->pending_cycles += kOpcodeBaseCycles[instruction.opcode];
-    cpu->pending_cycles += GetEffectiveAddressCycles(&instruction);
+    CPUAddCycles(
+        cpu, kOpcodeBaseCycles[instruction.opcode] +
+                 GetEffectiveAddressCycles(&instruction));
 
     // Step 2: Execute the instruction.
     if (CPUExecuteInstruction(cpu, &instruction) != kInstructionExecuted) {
