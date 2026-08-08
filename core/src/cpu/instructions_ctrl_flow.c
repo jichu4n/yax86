@@ -75,6 +75,9 @@ ExecuteDirectFarJump(const InstructionContext* ctx) {
 static InstructionResult ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
+    // A taken jump throws away the prefetch queue and has to fill it again.
+    // The base cost in the cycle table is for the branch not being taken.
+    CPUAddCycles(ctx->cpu, kJumpTakenCycles);
     OperandValue offset_value = ReadImmediate(ctx);
     return ExecuteRelativeJump(ctx, &offset_value);
   }

@@ -58,14 +58,10 @@ static uint64_t MainGetTick(YAX86_UNUSED void* context) {
   return g_platform.ticks;
 }
 
-// CPU Speed: ~4.77 MHz
-// Target Instructions Per Frame (at 60 FPS):
-// Approx 4,770,000 / 60 = 79,500 cycles.
-// Assuming ~4-10 cycles per instruction on average for 8086.
-// Let's be conservative/simple and run a fixed batch.
-// 20,000 instructions per frame is a reasonable starting point for smooth
-// operation without blocking the UI thread too long.
-#define INSTRUCTIONS_PER_FRAME 20000
+// How much guest time to run per frame, in CPU cycles. A frame is a sixtieth
+// of a second, so this is what a 4.77MHz 8088 gets through in that time, and
+// running it keeps the emulated machine at roughly the speed of the real one.
+#define CYCLES_PER_FRAME (kCPUCyclesPerSecond / 60)
 
 static uint8_t MainReadMemory(
     YAX86_UNUSED PlatformState* platform, uint32_t address) {
@@ -115,7 +111,7 @@ void MainTick(void) {
   if (!g_running) return;
 
   // 2. Run CPU Instructions
-  uint32_t remaining_ticks = INSTRUCTIONS_PER_FRAME;
+  uint32_t remaining_ticks = CYCLES_PER_FRAME;
   while (!g_cpu_stopped && remaining_ticks > 0) {
     const uint32_t start_tick = g_platform.ticks;
     const PlatformRunStatus status = PlatformRun(&g_platform, remaining_ticks);
