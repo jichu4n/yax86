@@ -30,12 +30,6 @@ readonly PARALLEL_DOWNLOADS=8
 cd "$(dirname "$0")"/..
 mkdir -p "${DEST}"
 
-# The metadata lists which opcodes are undocumented and, for each, a mask of
-# the flags the 8088 leaves undefined. Tests are compared with those bits
-# cleared, so that emulating undefined behavior is not required.
-echo "Downloading metadata..."
-curl -fsSL "${BASE_URL}/v2/metadata.json" -o "${DEST}/metadata.json"
-
 if [ $# -gt 0 ]; then
     opcodes=("${@^^}")
 else
@@ -45,15 +39,37 @@ else
     mapfile -t opcodes < <(grep -v '^#' "${OPCODE_LIST}" | grep -v '^[[:space:]]*$')
 fi
 
-files=()
+# Only fetch what is not already here. The data is pinned to one revision, so
+# a file that is present is the file that is wanted, and running this a second
+# time has nothing to do - which is what lets tools/run-tests.sh call it every
+# time without paying for it.
+missing=()
 for opcode in "${opcodes[@]}"; do
-    files+=("${opcode}.MOO.gz")
+    if [ ! -s "${DEST}/${opcode}.MOO.gz" ]; then
+        missing+=("${opcode}.MOO.gz")
+    fi
 done
 
-echo "Downloading ${#files[@]} opcode files to ${DEST}..."
-printf '%s\n' "${files[@]}" |
-    xargs -P "${PARALLEL_DOWNLOADS}" -I {} \
-        curl -fsS --retry 3 "${BASE_URL}/v2_binary/{}" -o "${DEST}/{}"
+# The metadata lists which opcodes are undocumented and, for each, a mask of
+# the flags the 8088 leaves undefined. Tests are compared with those bits
+# cleared, so that emulating undefined behavior is not required.
+if [ ! -s "${DEST}/metadata.json" ]; then
+    echo "Downloading metadata..."
+    curl -fsSL "${BASE_URL}/v2/metadata.json" -o "${DEST}/metadata.json.part"
+    mv "${DEST}/metadata.json.part" "${DEST}/metadata.json"
+fi
+
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "Downloading ${#missing[@]} opcode files to ${DEST}..."
+    # Each file lands under a temporary name and is moved into place only once
+    # curl has succeeded. An interrupted run then leaves nothing half written
+    # for the next one to mistake for a complete file and skip.
+    printf '%s\n' "${missing[@]}" |
+        xargs -P "${PARALLEL_DOWNLOADS}" -I {} sh -c '
+            curl -fsS --retry 3 "$1/v2_binary/$2" -o "$3/$2.part" &&
+                mv "$3/$2.part" "$3/$2"
+        ' _ "${BASE_URL}" {} "${DEST}"
+fi
 
 # Record what is present, so the test harness can enumerate opcodes without
 # scanning the directory.
@@ -79,8 +95,8 @@ for opcode, entry in sorted(opcodes.items()):
             lines.append("%s.%s %04X" % (opcode, reg, mask))
 with open(os.path.join(dest, "flags_masks.txt"), "w") as f:
     f.write("\n".join(lines) + "\n")
-print("Wrote %d flag masks" % len(lines))
+
 PYTHON
 
-echo "Downloaded $(wc -l < "${DEST}/downloaded.txt") opcode files," \
-     "$(du -sh "${DEST}" | cut -f1) in ${DEST}"
+echo "${#opcodes[@]} opcode files present ($(du -sh "${DEST}" | cut -f1))" \
+     "in ${DEST}, ${#missing[@]} newly downloaded"
