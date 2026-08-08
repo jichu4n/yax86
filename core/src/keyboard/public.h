@@ -8,7 +8,8 @@
 // 1. [0, 0]
 //    The BIOS sets both control bits to false and holds them there for at
 //    least 20ms. The keyboard detects the clock_low line is held low, and
-//    performs a self test.
+//    performs a self test. Key presses or releases that arrive while the
+//    keyboard is held in reset are dropped rather than buffered.
 // 2. -> [1, 1] -> [0, 1]
 //    The BIOS restores the clock_low line to true, releasing the reset signal.
 //    It pulses the enable_clear line high then low to trigger the next scan

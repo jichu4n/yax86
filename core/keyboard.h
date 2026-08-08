@@ -646,7 +646,8 @@ typedef struct StaticVectorHeader {
 // 1. [0, 0]
 //    The BIOS sets both control bits to false and holds them there for at
 //    least 20ms. The keyboard detects the clock_low line is held low, and
-//    performs a self test.
+//    performs a self test. Key presses or releases that arrive while the
+//    keyboard is held in reset are dropped rather than buffered.
 // 2. -> [1, 1] -> [0, 1]
 //    The BIOS restores the clock_low line to true, releasing the reset signal.
 //    It pulses the enable_clear line high then low to trigger the next scan
@@ -863,6 +864,13 @@ void KeyboardHandleControl(
 }
 
 void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+  // Drop key presses that occur while the keyboard is running its self test.
+  // Queueing it would let it resurface once the reset ends, which lands it in
+  // the middle of the BIOS's stuck key test.
+  if (!keyboard->clock_low &&
+      keyboard->clock_low_ms == kKeyboardResetTriggered) {
+    return;
+  }
   KeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
@@ -897,7 +905,6 @@ void KeyboardTickMs(KeyboardState* keyboard) {
   // Normal operation.
   KeyboardSendNextScancode(keyboard);
 }
-
 
 
 // ==============================================================================

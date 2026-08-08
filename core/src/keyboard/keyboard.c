@@ -83,6 +83,13 @@ void KeyboardHandleControl(
 }
 
 void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+  // Drop key presses that occur while the keyboard is running its self test.
+  // Queueing it would let it resurface once the reset ends, which lands it in
+  // the middle of the BIOS's stuck key test.
+  if (!keyboard->clock_low &&
+      keyboard->clock_low_ms == kKeyboardResetTriggered) {
+    return;
+  }
   KeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
@@ -117,4 +124,3 @@ void KeyboardTickMs(KeyboardState* keyboard) {
   // Normal operation.
   KeyboardSendNextScancode(keyboard);
 }
-
