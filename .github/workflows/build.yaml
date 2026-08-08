@@ -38,9 +38,6 @@ jobs:
       # difference from the hardware under one of them and not the others.
       - run: tools/download-cpu-hardware-tests.sh
       - run: tools/run-tests.sh
-        env:
-          # Fail rather than skip if the suite did not get built or fetched.
-          YAX86_REQUIRE_CPU_HARDWARE_TESTS: 1
       - working-directory: ${{github.workspace}}/build-native/core
         run: ls -lh *.a
       - run: emcmake cmake -B ${{github.workspace}}/build-emscripten

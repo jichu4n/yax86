@@ -102,9 +102,9 @@ GitHub API, which is rate limited per IP for anonymous callers.
 
 Pass opcodes to fetch only a subset, as in
 `./tools/download-cpu-hardware-tests.sh 8D 00 80.0`; group opcodes take a ModRM
-REG suffix. The suite reports no tests at all when nothing has been downloaded,
-so a fresh checkout skips it rather than failing. It can also be run on its
-own, and a single opcode picked out:
+REG suffix. `run-tests.sh` always runs the suite; it reports no tests at all
+when nothing has been downloaded, so a fresh checkout passes trivially rather
+than failing. It can also be run on its own, and a single opcode picked out:
 ```
 build-native/core/tests/cpu/cpu_hardware_tests
 build-native/core/tests/cpu/cpu_hardware_tests --gtest_filter='*Opcode8D*'

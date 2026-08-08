@@ -12,10 +12,11 @@
 //
 //   ./tools/download-cpu-hardware-tests.sh
 //
-// No tests are reported when nothing has been downloaded, which is the state
-// of a fresh checkout and of CI, so the suite is skipped rather than failing
-// there. This is not registered with ctest because the set of tests depends on
-// what has been downloaded, which ctest would bake in at build time.
+// tools/run-tests.sh always runs this. No tests are reported when nothing has
+// been downloaded, which is the state of a fresh checkout, so it passes
+// trivially there rather than failing. This is not registered with ctest
+// because the set of tests depends on what has been downloaded, which ctest
+// would bake in at build time.
 //
 // Everything here is expected to pass apart from the divide instructions - see
 // KnownDivergence below.
