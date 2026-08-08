@@ -454,6 +454,29 @@ static void MDACallbackWriteVRAMByte(
 }
 
 // ============================================================================
+// Callbacks for CGA module
+// ============================================================================
+
+static uint8_t CGACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return CGAReadPort((CGAState*)entry->context, port);
+}
+
+static void CGACallbackWritePortByte(
+    PortMapEntry* entry, uint16_t port, uint8_t value) {
+  CGAWritePort((CGAState*)entry->context, port, value);
+}
+
+static uint8_t CGACallbackReadVRAMByte(
+    MemoryMapEntry* entry, uint32_t address) {
+  return CGAReadVRAM((CGAState*)entry->context, address);
+}
+
+static void CGACallbackWriteVRAMByte(
+    MemoryMapEntry* entry, uint32_t address, uint8_t value) {
+  CGAWriteVRAM((CGAState*)entry->context, address, value);
+}
+
+// ============================================================================
 // Callbacks for BIOS module
 // ============================================================================
 
@@ -565,7 +588,10 @@ static void PlatformInitPPI(PlatformState* platform) {
   platform->ppi_config.logger = &platform->logger;
   platform->ppi_config.num_floppy_drives = 1;
   platform->ppi_config.memory_size = kPPIMemorySize256KB;
-  platform->ppi_config.display_mode = kPPIDisplayMDA;
+  platform->ppi_config.display_mode =
+      platform->config->video_adapter == kVideoAdapterCGA
+          ? kPPIDisplayCGA80x25
+          : kPPIDisplayMDA;
   platform->ppi_config.fpu_installed = false;
   platform->ppi_config.set_pc_speaker_frequency = NULL;  // TODO
   platform->ppi_config.set_keyboard_control = PPICallbackSetKeyboardControl;
@@ -664,6 +690,33 @@ static void PlatformInitMDA(PlatformState* platform) {
   RegisterPortMapEntry(platform, &port_entry);
 }
 
+static void PlatformInitCGA(PlatformState* platform) {
+  platform->cga_config = kDefaultCGAConfig;
+  platform->cga_config.context = platform;
+  platform->cga_config.logger = &platform->logger;
+  CGAInit(&platform->cga, &platform->cga_config);
+
+  MemoryMapEntry vram_entry = {
+      .context = &platform->cga,
+      .entry_type = kMemoryMapEntryCGAVRAM,
+      .start = 0xB8000,
+      .end = 0xB8000 + kCGAVRAMSize - 1,
+      .read_byte = CGACallbackReadVRAMByte,
+      .write_byte = CGACallbackWriteVRAMByte,
+  };
+  RegisterMemoryMapEntry(platform, &vram_entry);
+
+  PortMapEntry port_entry = {
+      .context = &platform->cga,
+      .entry_type = kPortMapEntryCGA,
+      .start = 0x3D0,
+      .end = 0x3DF,
+      .read_byte = CGACallbackReadPortByte,
+      .write_byte = CGACallbackWritePortByte,
+  };
+  RegisterPortMapEntry(platform, &port_entry);
+}
+
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
@@ -685,7 +738,12 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   PlatformInitKeyboard(platform);
   PlatformInitFDC(platform);
   PlatformInitDMA(platform);
-  PlatformInitMDA(platform);
+  // Initialize the selected video adapter.
+  if (platform->config->video_adapter == kVideoAdapterCGA) {
+    PlatformInitCGA(platform);
+  } else {
+    PlatformInitMDA(platform);
+  }
 
   platform->ticks = 0;
 

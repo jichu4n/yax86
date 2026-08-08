@@ -97,6 +97,21 @@ static void MainWritePixel(
   DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
 }
 
+static uint8_t MainReadCGAVRAM(
+    YAX86_UNUSED struct CGAState* cga, uint32_t address) {
+  return MainReadMemory(&g_platform, 0xB8000 + address);
+}
+
+static void MainWriteCGAVRAM(
+    YAX86_UNUSED struct CGAState* cga, uint32_t address, uint8_t value) {
+  MainWriteMemory(&g_platform, 0xB8000 + address, value);
+}
+
+static void MainWriteCGAPixel(
+    YAX86_UNUSED struct CGAState* cga, Position position, RGB rgb) {
+  DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
+}
+
 void MainTick(void) {
   SDL_Event event;
 
@@ -145,16 +160,15 @@ void MainTick(void) {
   }
 
   // 3. Render
-  MDARender(&g_platform.mda);  // Update virtual buffer
+  if (g_platform.config->video_adapter == kVideoAdapterCGA) {
+    CGARender(&g_platform.cga);
+  } else {
+    MDARender(&g_platform.mda);  // Update virtual buffer
+  }
   DisplayRender();             // Update screen
 }
 
 int main(int argc, char* argv[]) {
-  if (!DisplayInit()) {
-    fprintf(stderr, "Failed to init display\n");
-    return 1;
-  }
-
   // Initialize Memory
   memset(g_memory, 0, INTERNAL_RAM_SIZE);
 
@@ -173,6 +187,22 @@ int main(int argc, char* argv[]) {
       640 * 1024;  // Use max allowed conventional memory
   config.read_physical_memory_byte = MainReadMemory;
   config.write_physical_memory_byte = MainWriteMemory;
+  config.video_adapter = kVideoAdapterCGA;
+
+  // Determine display dimensions from the selected adapter.
+  int display_width, display_height;
+  if (config.video_adapter == kVideoAdapterCGA) {
+    display_width = 640;
+    display_height = 200;
+  } else {
+    display_width = kMDAModeMetadata.width;
+    display_height = kMDAModeMetadata.height;
+  }
+
+  if (!DisplayInit(display_width, display_height)) {
+    fprintf(stderr, "Failed to init display\n");
+    return 1;
+  }
 
   if (!PlatformInit(&g_platform, &config)) {
     fprintf(stderr, "Failed to init platform\n");
@@ -198,11 +228,16 @@ int main(int argc, char* argv[]) {
         "floppy drive A is empty - could not mount %s", floppy_path);
   }
 
-  // Hook up video callback
-  // PlatformInit initializes sub-modules. We override the MDA config callback.
-  g_platform.mda_config.read_vram_byte = MainReadVRAM;
-  g_platform.mda_config.write_vram_byte = MainWriteVRAM;
-  g_platform.mda_config.write_pixel = MainWritePixel;
+  // Hook up video callbacks for the selected adapter.
+  if (config.video_adapter == kVideoAdapterCGA) {
+    g_platform.cga_config.read_vram_byte = MainReadCGAVRAM;
+    g_platform.cga_config.write_vram_byte = MainWriteCGAVRAM;
+    g_platform.cga_config.write_pixel = MainWriteCGAPixel;
+  } else {
+    g_platform.mda_config.read_vram_byte = MainReadVRAM;
+    g_platform.mda_config.write_vram_byte = MainWriteVRAM;
+    g_platform.mda_config.write_pixel = MainWritePixel;
+  }
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(MainTick, 0, 1);

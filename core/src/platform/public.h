@@ -275,6 +275,14 @@ typedef enum PlatformRunStatus {
 // Platform state
 // ============================================================================
 
+// Video adapter type for the platform.
+typedef enum VideoAdapterType {
+  // Monochrome Display Adapter.
+  kVideoAdapterMDA = 0,
+  // Color Graphics Adapter.
+  kVideoAdapterCGA,
+} VideoAdapterType;
+
 // Caller-provided runtime configuration.
 typedef struct PlatformConfig {
   // Custom data passed through to callbacks.
@@ -290,6 +298,9 @@ typedef struct PlatformConfig {
 
   // Physical memory size in bytes. Must be between 64K and 640K.
   uint32_t physical_memory_size;
+
+  // Video adapter type. Determines which video adapter is initialized.
+  VideoAdapterType video_adapter;
 
   // Callback to read a byte from physical memory.
   //
@@ -363,6 +374,11 @@ typedef struct PlatformState {
   MDAConfig mda_config;
   // MDA state.
   MDAState mda;
+
+  // CGA runtime configuration.
+  CGAConfig cga_config;
+  // CGA state.
+  CGAState cga;
 
   // Memory map.
   MemoryMap memory_map;

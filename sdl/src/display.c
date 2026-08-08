@@ -2,7 +2,6 @@
 
 #include <SDL3/SDL.h>
 
-#include "core/video.h"
 
 static SDL_Window* g_window = NULL;
 static SDL_Renderer* g_renderer = NULL;
@@ -14,9 +13,9 @@ static uint32_t* g_pixel_buffer = NULL;
 static int g_width = 0;
 static int g_height = 0;
 
-bool DisplayInit(void) {
-  g_width = kMDAModeMetadata.width;
-  g_height = kMDAModeMetadata.height;
+bool DisplayInit(int width, int height) {
+  g_width = width;
+  g_height = height;
 
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     SDL_Log("SDL_Init(SDL_INIT_VIDEO) failed: %s", SDL_GetError());
