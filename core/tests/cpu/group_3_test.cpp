@@ -981,3 +981,35 @@ TEST_F(Group3Test, IdivWord) {
   EXPECT_EQ(helper->cpu_.registers[kAX], 0xFFFC);  // AX = 48/(-12) = -4
   EXPECT_EQ(helper->cpu_.registers[kDX], 0x0000);  // DX = 48%(-12) = 0
 }
+
+// The 8086/8088 divides the magnitudes and checks the result against the
+// largest quotient that fits, so it rejects a quotient of -128 or -32768 even
+// though those are representable. The valid range is symmetric.
+TEST_F(Group3Test, IdivByteQuotientOfMinusOneTwentyEightRaisesDivideError) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-min-quotient", "idiv bl\n");
+  // -8383 / 65 truncates to exactly -128.
+  helper->cpu_.registers[kAX] = 0xDF41;
+  helper->cpu_.registers[kBX] = 0x0041;
+
+  helper->ExecuteInstructions(1);
+
+  // AX is left as it was, and a divide error is raised instead.
+  EXPECT_EQ(helper->cpu_.registers[kAX], 0xDF41);
+  EXPECT_TRUE(helper->cpu_.has_pending_internal_interrupt);
+  EXPECT_EQ(
+      helper->cpu_.pending_internal_interrupt_number, kInterruptDivideError);
+}
+
+TEST_F(Group3Test, IdivByteQuotientOfMinusOneTwentySevenIsAllowed) {
+  auto helper = CPUTestHelper::CreateWithProgram(
+      "group3-idiv-byte-min-allowed-quotient", "idiv bl\n");
+  // -254 / 2 is exactly -127, one inside the limit.
+  helper->cpu_.registers[kAX] = 0xFF02;
+  helper->cpu_.registers[kBX] = 0x0002;
+
+  helper->ExecuteInstructions(1);
+
+  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x81);  // -127
+  EXPECT_FALSE(helper->cpu_.has_pending_internal_interrupt);
+}

@@ -5406,8 +5406,12 @@ static InstructionResult ExecuteIdiv(
       FromOperand(&dest) | (FromSignedOperandValue(&dest_high_half)
                             << kMulDivResultHighHalfShiftWidth[width]);
   int32_t quotient = dividend / divisor;
+  // The 8086/8088 divides the magnitudes and checks the result against the
+  // largest quotient that fits, so it rejects a quotient of -128 or -32768
+  // even though those are representable. The valid range is symmetric, one
+  // narrower at the bottom than the operand's own range.
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
-      quotient < kMinSignedValue[ctx->metadata->width]) {
+      quotient < -kMaxSignedValue[ctx->metadata->width]) {
     CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }

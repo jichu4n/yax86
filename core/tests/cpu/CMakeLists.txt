@@ -13,21 +13,22 @@ gtest_discover_tests(cpu_tests)
 # =============================================================================
 # 8088 CPU hardware test suite
 # =============================================================================
-# Deliberately not registered with ctest: this reports known divergences from
-# real hardware and must not gate the normal test run. Fetch the data with
-# tools/download-cpu-hardware-tests.sh, then run the binary directly.
-find_package(ZLIB)
-if(ZLIB_FOUND)
-  add_executable(cpu_hardware_tests hardware_test.cpp)
-  target_link_libraries(cpu_hardware_tests gtest_main yax86_core ZLIB::ZLIB)
+# Deliberately not registered with ctest: the set of tests depends on which
+# opcodes have been downloaded, which ctest would bake in at build time.
+# tools/run-tests.sh runs the binary directly.
+#
+# zlib is required rather than optional. The suite ships compressed, and
+# building it conditionally would mean tools/run-tests.sh had to cope with the
+# binary not being there - which is the sort of thing that ends up reporting
+# success while checking nothing.
+find_package(ZLIB REQUIRED)
+add_executable(cpu_hardware_tests hardware_test.cpp)
+target_link_libraries(cpu_hardware_tests gtest_main yax86_core ZLIB::ZLIB)
 
-  # Location of the test data. Opcodes are enumerated when the tests run, so
-  # downloading more of them does not need a rebuild.
-  target_compile_definitions(cpu_hardware_tests PRIVATE
-    YAX86_CPU_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/.cache/8088-tests")
-else()
-  message(STATUS "zlib not found, skipping the 8088 CPU hardware test suite")
-endif()
+# Location of the test data. Opcodes are enumerated when the tests run, so
+# downloading more of them does not need a rebuild.
+target_compile_definitions(cpu_hardware_tests PRIVATE
+  YAX86_CPU_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/.cache/8088-tests")
 
 # =============================================================================
 # Dependencies
