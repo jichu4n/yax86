@@ -8,8 +8,8 @@
 
 #include "core/platform.h"
 #include "core/video.h"
-#include "floppy.h"
 #include "display.h"
+#include "floppy.h"
 #include "input.h"
 
 // 1MB of internal address space (covers conventional memory + video RAM + BIOS)
@@ -78,18 +78,24 @@ static void MainWriteMemory(
   }
 }
 
+// The video adapter installed in the emulated machine, and its metadata.
+static VideoAdapter g_video_adapter = kVideoAdapterCGA;
+static const VideoAdapterMetadata* g_video_adapter_metadata = NULL;
+
 static uint8_t MainReadVRAM(
-    YAX86_UNUSED struct MDAState* mda, uint32_t address) {
-  return MainReadMemory(&g_platform, 0xB0000 + address);
+    YAX86_UNUSED struct VideoState* video, uint32_t address) {
+  return MainReadMemory(
+      &g_platform, g_video_adapter_metadata->vram_address + address);
 }
 
 static void MainWriteVRAM(
-    YAX86_UNUSED struct MDAState* mda, uint32_t address, uint8_t value) {
-  MainWriteMemory(&g_platform, 0xB0000 + address, value);
+    YAX86_UNUSED struct VideoState* video, uint32_t address, uint8_t value) {
+  MainWriteMemory(
+      &g_platform, g_video_adapter_metadata->vram_address + address, value);
 }
 
 static void MainWritePixel(
-    YAX86_UNUSED struct MDAState* mda, Position position, RGB rgb) {
+    YAX86_UNUSED struct VideoState* video, Position position, RGB rgb) {
   DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
 }
 
@@ -141,12 +147,28 @@ void MainTick(void) {
   }
 
   // 3. Render
-  MDARender(&g_platform.mda);  // Update virtual buffer
-  DisplayRender();             // Update screen
+  VideoRender(&g_platform.video);  // Update virtual buffer
+  DisplayRender();                 // Update screen
 }
 
 int main(int argc, char* argv[]) {
-  if (!DisplayInit()) {
+  // Parse arguments: an optional adapter flag, then an optional floppy image
+  // path.
+  const char* floppy_path = kDefaultFloppyImagePath;
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--cga") == 0) {
+      g_video_adapter = kVideoAdapterCGA;
+    } else if (strcmp(argv[i], "--mda") == 0) {
+      g_video_adapter = kVideoAdapterMDA;
+    } else {
+      floppy_path = argv[i];
+    }
+  }
+  g_video_adapter_metadata = &kVideoAdapterMetadata[g_video_adapter];
+
+  if (!DisplayInit(
+          g_video_adapter_metadata->frame_buffer_width,
+          g_video_adapter_metadata->frame_buffer_height)) {
     fprintf(stderr, "Failed to init display\n");
     return 1;
   }
@@ -169,6 +191,7 @@ int main(int argc, char* argv[]) {
       640 * 1024;  // Use max allowed conventional memory
   config.read_physical_memory_byte = MainReadMemory;
   config.write_physical_memory_byte = MainWriteMemory;
+  config.video_adapter = g_video_adapter;
 
   if (!PlatformInit(&g_platform, &config)) {
     fprintf(stderr, "Failed to init platform\n");
@@ -183,7 +206,6 @@ int main(int argc, char* argv[]) {
 
   // Mount the boot floppy. Without one the BIOS still runs, so a failure here
   // is reported but not fatal.
-  const char* floppy_path = argc > 1 ? argv[1] : kDefaultFloppyImagePath;
   if (FloppyMount(&g_platform, floppy_path)) {
     YAX86_LOG(
         &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
@@ -195,10 +217,11 @@ int main(int argc, char* argv[]) {
   }
 
   // Hook up video callback
-  // PlatformInit initializes sub-modules. We override the MDA config callback.
-  g_platform.mda_config.read_vram_byte = MainReadVRAM;
-  g_platform.mda_config.write_vram_byte = MainWriteVRAM;
-  g_platform.mda_config.write_pixel = MainWritePixel;
+  // PlatformInit initializes sub-modules. We override the video config
+  // callbacks.
+  g_platform.video_config.read_vram_byte = MainReadVRAM;
+  g_platform.video_config.write_vram_byte = MainWriteVRAM;
+  g_platform.video_config.write_pixel = MainWritePixel;
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(MainTick, 0, 1);

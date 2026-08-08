@@ -929,6 +929,11 @@ typedef struct PlatformConfig {
   // Physical memory size in bytes. Must be between 64K and 640K.
   uint32_t physical_memory_size;
 
+  // The video adapter installed in the machine. This also determines the
+  // display type reported by the PPI's DIP switches, which is what the BIOS
+  // branches on when it programs the adapter.
+  VideoAdapter video_adapter;
+
   // Callback to read a byte from physical memory.
   //
   // On the 8086, accessing an invalid memory address will yield garbage data
@@ -1013,10 +1018,10 @@ typedef struct PlatformState {
   FDCConfig fdc_config;
   FDCState fdc;
 
-  // MDA runtime configuration.
-  MDAConfig mda_config;
-  // MDA state.
-  MDAState mda;
+  // Video runtime configuration.
+  VideoConfig video_config;
+  // Video state.
+  VideoState video;
 
   // Memory map.
   MemoryMap memory_map;
@@ -1564,26 +1569,26 @@ static void DMACallbackWritePortByte(
 }
 
 // ============================================================================
-// Callbacks for MDA module
+// Callbacks for Video module
 // ============================================================================
 
-static uint8_t MDACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return MDAReadPort((MDAState*)entry->context, port);
+static uint8_t VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return VideoReadPort((VideoState*)entry->context, port);
 }
 
-static void MDACallbackWritePortByte(
+static void VideoCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  MDAWritePort((MDAState*)entry->context, port, value);
+  VideoWritePort((VideoState*)entry->context, port, value);
 }
 
-static uint8_t MDACallbackReadVRAMByte(
+static uint8_t VideoCallbackReadVRAMByte(
     MemoryMapEntry* entry, uint32_t address) {
-  return MDAReadVRAM((MDAState*)entry->context, address);
+  return VideoReadVRAM((VideoState*)entry->context, address);
 }
 
-static void MDACallbackWriteVRAMByte(
+static void VideoCallbackWriteVRAMByte(
     MemoryMapEntry* entry, uint32_t address, uint8_t value) {
-  MDAWriteVRAM((MDAState*)entry->context, address, value);
+  VideoWriteVRAM((VideoState*)entry->context, address, value);
 }
 
 // ============================================================================
@@ -1698,7 +1703,11 @@ static void PlatformInitPPI(PlatformState* platform) {
   platform->ppi_config.logger = &platform->logger;
   platform->ppi_config.num_floppy_drives = 1;
   platform->ppi_config.memory_size = kPPIMemorySize256KB;
-  platform->ppi_config.display_mode = kPPIDisplayMDA;
+  // The DIP switches are what the BIOS branches on to decide which adapter to
+  // program, so they have to agree with the adapter the platform registers.
+  platform->ppi_config.display_mode =
+      platform->config->video_adapter == kVideoAdapterCGA ? kPPIDisplayCGA80x25
+                                                          : kPPIDisplayMDA;
   platform->ppi_config.fpu_installed = false;
   platform->ppi_config.set_pc_speaker_frequency = NULL;  // TODO
   platform->ppi_config.set_keyboard_control = PPICallbackSetKeyboardControl;
@@ -1770,29 +1779,33 @@ static void PlatformInitDMA(PlatformState* platform) {
   RegisterPortMapEntry(platform, &dma_page_entry);
 }
 
-static void PlatformInitMDA(PlatformState* platform) {
-  platform->mda_config = kDefaultMDAConfig;
-  platform->mda_config.context = platform;
-  platform->mda_config.logger = &platform->logger;
-  MDAInit(&platform->mda, &platform->mda_config);
+static void PlatformInitVideo(PlatformState* platform) {
+  platform->video_config = kDefaultVideoConfig;
+  platform->video_config.context = platform;
+  platform->video_config.logger = &platform->logger;
+  platform->video_config.adapter = platform->config->video_adapter;
+  VideoInit(&platform->video, &platform->video_config);
+
+  const VideoAdapterMetadata* adapter =
+      VideoGetAdapterMetadata(&platform->video);
 
   MemoryMapEntry vram_entry = {
-      .context = &platform->mda,
-      .entry_type = kMemoryMapEntryMDAVRAM,
-      .start = kMDAModeMetadata.vram_address,
-      .end = kMDAModeMetadata.vram_address + kMDAModeMetadata.vram_size - 1,
-      .read_byte = MDACallbackReadVRAMByte,
-      .write_byte = MDACallbackWriteVRAMByte,
+      .context = &platform->video,
+      .entry_type = kMemoryMapEntryVRAM,
+      .start = adapter->vram_address,
+      .end = adapter->vram_address + adapter->vram_size - 1,
+      .read_byte = VideoCallbackReadVRAMByte,
+      .write_byte = VideoCallbackWriteVRAMByte,
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
 
   PortMapEntry port_entry = {
-      .context = &platform->mda,
-      .entry_type = kPortMapEntryMDA,
-      .start = 0x3B0,
-      .end = 0x3BF,
-      .read_byte = MDACallbackReadPortByte,
-      .write_byte = MDACallbackWritePortByte,
+      .context = &platform->video,
+      .entry_type = kPortMapEntryVideo,
+      .start = adapter->port_start,
+      .end = adapter->port_end,
+      .read_byte = VideoCallbackReadPortByte,
+      .write_byte = VideoCallbackWritePortByte,
   };
   RegisterPortMapEntry(platform, &port_entry);
 }
@@ -1818,7 +1831,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   PlatformInitKeyboard(platform);
   PlatformInitFDC(platform);
   PlatformInitDMA(platform);
-  PlatformInitMDA(platform);
+  PlatformInitVideo(platform);
 
   platform->ticks = 0;
 
@@ -1897,6 +1910,10 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
     platform->keyboard_cycles -= kCyclesPerMillisecond;
     KeyboardTickMs(&platform->keyboard);
   }
+
+  // The video adapter keeps its own cycle remainder, because the MDA and the
+  // CGA scan at different rates.
+  VideoTick(&platform->video, cycles);
 
   // A watchpoint may have fired from the CPU or from a DMA transfer.
   if (platform->stop_pending) {

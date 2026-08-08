@@ -291,6 +291,11 @@ typedef struct PlatformConfig {
   // Physical memory size in bytes. Must be between 64K and 640K.
   uint32_t physical_memory_size;
 
+  // The video adapter installed in the machine. This also determines the
+  // display type reported by the PPI's DIP switches, which is what the BIOS
+  // branches on when it programs the adapter.
+  VideoAdapter video_adapter;
+
   // Callback to read a byte from physical memory.
   //
   // On the 8086, accessing an invalid memory address will yield garbage data
@@ -375,10 +380,10 @@ typedef struct PlatformState {
   FDCConfig fdc_config;
   FDCState fdc;
 
-  // MDA runtime configuration.
-  MDAConfig mda_config;
-  // MDA state.
-  MDAState mda;
+  // Video runtime configuration.
+  VideoConfig video_config;
+  // Video state.
+  VideoState video;
 
   // Memory map.
   MemoryMap memory_map;

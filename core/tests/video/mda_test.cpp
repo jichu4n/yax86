@@ -1,296 +1,257 @@
 #include <gtest/gtest.h>
-#include <vector>
 
+#include "test_helpers.h"
 #include "video.h"
 
 namespace {
 
-// Mock VRAM
-static uint8_t mock_vram[kMDAVRAMSize];
+using namespace video_test;
 
-static uint8_t MockReadVRAMByte(MDAState* mda, uint32_t address) {
-  if (address < kMDAVRAMSize) {
-    return mock_vram[address];
-  }
-  return 0xFF;
-}
-
-static void MockWriteVRAMByte(MDAState* mda, uint32_t address, uint8_t value) {
-  if (address < kMDAVRAMSize) {
-    mock_vram[address] = value;
-  }
-}
-
-// Pixel recording
-struct RecordedPixel {
-  Position position;
-  RGB rgb;
+enum {
+  kCharWidth = 9,
+  kCharHeight = 14,
+  // Scan line within a character cell that the underline occupies.
+  kUnderlinePosition = 12,
 };
 
-static std::vector<RecordedPixel> recorded_pixels;
-
-static void MockWritePixel(MDAState* mda, Position position, RGB rgb) {
-  recorded_pixels.push_back({position, rgb});
-}
-
-class MDATest : public ::testing::Test {
+class MDATest : public VideoTestBase {
  protected:
   void SetUp() override {
-    // Reset mock VRAM
-    for (int i = 0; i < kMDAVRAMSize; ++i) {
-      mock_vram[i] = 0;
-    }
-    recorded_pixels.clear();
-
-    config_.context = nullptr;
-    config_.read_vram_byte = MockReadVRAMByte;
-    config_.write_vram_byte = MockWriteVRAMByte;
-    config_.write_pixel = MockWritePixel;
-    // Set default colors
-    config_.foreground = {.r = 0xAA, .g = 0xAA, .b = 0xAA};
-    config_.intense_foreground = {.r = 0xFF, .g = 0xFF, .b = 0xFF};
-    config_.background = {.r = 0x00, .g = 0x00, .b = 0x00};
-
-    MDAInit(&mda_, &config_);
+    Init(kVideoAdapterMDA);
+    // The cursor sits over the first character cell by default, which is the
+    // cell most of these tests inspect.
+    DisableCursor();
   }
 
-  MDAConfig config_ = {0};
-  MDAState mda_ = {0};
+  // Number of pixels of the given color within the first character cell.
+  int CountPixelsInFirstCell(RGB rgb) const {
+    return CountPixels(0, 0, kCharWidth, kCharHeight, rgb);
+  }
 };
 
 TEST_F(MDATest, Initialization) {
-  EXPECT_EQ(mda_.control_port, 0x29);
-  EXPECT_EQ(mda_.selected_register, 0);
-  // Verify VRAM was cleared (initialized to space ' ' and attribute 0x07)
-  // MDAInit loops over VRAM size.
-  // Checking a few bytes is enough.
+  EXPECT_EQ(video_.adapter, kVideoAdapterMDA);
+  EXPECT_EQ(VideoGetMode(&video_), kVideoModeMDAText80x25);
+  EXPECT_EQ(video_.control_register, 0x29);
+  EXPECT_EQ(video_.selected_register, 0);
+  EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x61);
+  // Verify VRAM was cleared to spaces with the default attribute.
   EXPECT_EQ(mock_vram[0], ' ');
   EXPECT_EQ(mock_vram[1], 0x07);
   EXPECT_EQ(mock_vram[kMDAVRAMSize - 2], ' ');
   EXPECT_EQ(mock_vram[kMDAVRAMSize - 1], 0x07);
 }
 
+TEST_F(MDATest, AdapterMetadata) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  EXPECT_EQ(adapter->adapter, kVideoAdapterMDA);
+  EXPECT_EQ(adapter->frame_buffer_width, 720);
+  EXPECT_EQ(adapter->frame_buffer_height, 350);
+  EXPECT_EQ(adapter->vram_address, static_cast<uint32_t>(kMDAVRAMAddress));
+  EXPECT_EQ(adapter->vram_size, static_cast<uint32_t>(kMDAVRAMSize));
+  EXPECT_EQ(adapter->port_start, kMDAPortStart);
+  EXPECT_EQ(adapter->port_end, kMDAPortEnd);
+}
+
 TEST_F(MDATest, PortReadWrite) {
-  // Index Register
-  MDAWritePort(&mda_, kMDAPortRegisterIndex, kMDARegisterHorizontalTotal);
-  EXPECT_EQ(mda_.selected_register, kMDARegisterHorizontalTotal);
-  EXPECT_EQ(MDAReadPort(&mda_, kMDAPortRegisterIndex), kMDARegisterHorizontalTotal);
+  // Index register.
+  VideoWritePort(&video_, kMDAPortRegisterIndex, kCRTCRegisterHorizontalTotal);
+  EXPECT_EQ(video_.selected_register, kCRTCRegisterHorizontalTotal);
+  EXPECT_EQ(
+      VideoReadPort(&video_, kMDAPortRegisterIndex),
+      kCRTCRegisterHorizontalTotal);
 
-  // Data Register (write to selected register)
-  // Horizontal Total default is 0x61
-  EXPECT_EQ(MDAReadPort(&mda_, kMDAPortRegisterData), 0x61);
-  MDAWritePort(&mda_, kMDAPortRegisterData, 0x62);
-  EXPECT_EQ(mda_.registers[kMDARegisterHorizontalTotal], 0x62);
-  EXPECT_EQ(MDAReadPort(&mda_, kMDAPortRegisterData), 0x62);
+  // Data register. Horizontal Total defaults to 0x61.
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0x61);
+  VideoWritePort(&video_, kMDAPortRegisterData, 0x62);
+  EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x62);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0x62);
 
-  // Control Port
-  MDAWritePort(&mda_, kMDAPortControl, 0xAB);
-  EXPECT_EQ(mda_.control_port, 0xAB);
-  EXPECT_EQ(MDAReadPort(&mda_, kMDAPortControl), 0xAB);
+  // Mode control register.
+  VideoWritePort(&video_, kMDAPortControl, 0xAB);
+  EXPECT_EQ(video_.control_register, 0xAB);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortControl), 0xAB);
+}
 
-  // Status Port
-  MDAWritePort(&mda_, kMDAPortStatus, 0xCD);
-  EXPECT_EQ(mda_.status_port, 0xCD);
-  EXPECT_EQ(MDAReadPort(&mda_, kMDAPortStatus), 0xCD);
+TEST_F(MDATest, StatusPortIsReadOnly) {
+  uint8_t status = VideoReadPort(&video_, kMDAPortStatus);
+  VideoWritePort(&video_, kMDAPortStatus, 0xCD);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortStatus), status);
+}
+
+TEST_F(MDATest, PrinterPortsAreNotDecoded) {
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterData), 0xFF);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterStatus), 0xFF);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterControl), 0xFF);
 }
 
 TEST_F(MDATest, VRAMAccess) {
-  MDAWriteVRAM(&mda_, 0x100, 0x55);
+  VideoWriteVRAM(&video_, 0x100, 0x55);
   EXPECT_EQ(mock_vram[0x100], 0x55);
-  EXPECT_EQ(MDAReadVRAM(&mda_, 0x100), 0x55);
+  EXPECT_EQ(VideoReadVRAM(&video_, 0x100), 0x55);
 
-  MDAWriteVRAM(&mda_, 0x200, 0xAA);
+  VideoWriteVRAM(&video_, 0x200, 0xAA);
   EXPECT_EQ(mock_vram[0x200], 0xAA);
-  EXPECT_EQ(MDAReadVRAM(&mda_, 0x200), 0xAA);
+  EXPECT_EQ(VideoReadVRAM(&video_, 0x200), 0xAA);
+
+  // Out of range accesses are ignored.
+  VideoWriteVRAM(&video_, kMDAVRAMSize, 0x11);
+  EXPECT_EQ(mock_vram[kMDAVRAMSize], 0);
+  EXPECT_EQ(VideoReadVRAM(&video_, kMDAVRAMSize), 0xFF);
 }
 
 TEST_F(MDATest, RenderCharacterNormal) {
-  // Write 'A' (0x41) with Normal attribute (0x07) at (0,0)
-  MDAWriteVRAM(&mda_, 0, 'A');
-  MDAWriteVRAM(&mda_, 1, 0x07);
+  // 'A' with the normal attribute.
+  WriteChar(0, 'A', 0x07);
+  Render();
 
-  // Render
-  MDARender(&mda_);
-
-  // 'A' is 9x14 pixels.
-  // We expect calls to write_pixel.
-  // Since we render the whole screen, there will be MANY calls.
-  // However, we only care about the first char (top-left).
-  // The first 9x14 pixels correspond to 'A'.
-  
-  // Let's verify some pixels of 'A'.
-  // We need access to the font bitmap to know what to expect.
-  // But we can just check if *any* foreground pixels were written.
-  
-  // We can't easily access kFontMDA9x14Bitmap from here unless we duplicate it or it's public.
-  // It's likely not public.
-  // However, we know 'A' has some pixels.
-  
-  int foreground_pixel_count = 0;
-  int background_pixel_count = 0;
-
-  // Check the first 9x14 pixels (char at 0,0)
-  for (const auto& pixel : recorded_pixels) {
-    if (pixel.position.x < 9 && pixel.position.y < 14) {
-      if (pixel.rgb.r == config_.foreground.r &&
-          pixel.rgb.g == config_.foreground.g &&
-          pixel.rgb.b == config_.foreground.b) {
-        foreground_pixel_count++;
-      } else if (pixel.rgb.r == config_.background.r &&
-                 pixel.rgb.g == config_.background.g &&
-                 pixel.rgb.b == config_.background.b) {
-        background_pixel_count++;
-      }
-    }
-  }
-
-  // 'A' should have some foreground and some background pixels.
-  EXPECT_GT(foreground_pixel_count, 0);
-  EXPECT_GT(background_pixel_count, 0);
-  // Total pixels for one char
-  EXPECT_EQ(foreground_pixel_count + background_pixel_count, 9 * 14);
+  int foreground_pixels = CountPixelsInFirstCell(config_.foreground);
+  int background_pixels = CountPixelsInFirstCell(config_.background);
+  EXPECT_GT(foreground_pixels, 0);
+  EXPECT_GT(background_pixels, 0);
+  EXPECT_EQ(foreground_pixels + background_pixels, kCharWidth * kCharHeight);
 }
 
 TEST_F(MDATest, RenderCharacterInverse) {
-  // Write ' ' (0x20) with Inverse attribute (0x70: bg=111, fg=000)
-  MDAWriteVRAM(&mda_, 0, ' '); // Space is usually empty
-  MDAWriteVRAM(&mda_, 1, 0x70);
+  // A space with the inverse attribute is a solid block: a space has no bits
+  // set in the font, so every pixel takes the cell's background color, which
+  // inverse video swaps with the foreground.
+  WriteChar(0, ' ', 0x70);
+  Render();
 
-  MDARender(&mda_);
-
-  // Space in inverse mode should be a solid block of the "foreground" color 
-  // (which is actually the config.background color swapped).
-  // Wait, logic in MDAWriteChar:
-  // if (background_attr == 0x07 && foreground_attr == 0x00) {
-  //   foreground = &mda->config->background;
-  //   background = &mda->config->foreground;
-  // }
-  // A space ' ' has 0 bits set in the bitmap.
-  // So all pixels will use the 'background' pointer.
-  // In inverse mode, 'background' pointer points to config.foreground.
-  
-  int inverse_background_pixels = 0;
-   for (const auto& pixel : recorded_pixels) {
-    if (pixel.position.x < 9 && pixel.position.y < 14) {
-      if (pixel.rgb.r == config_.foreground.r &&
-          pixel.rgb.g == config_.foreground.g &&
-          pixel.rgb.b == config_.foreground.b) {
-        inverse_background_pixels++;
-      }
-    }
-  }
-  
-  // All 9x14 pixels should be the "foreground" color (because space is empty, showing background, which is swapped).
-  EXPECT_EQ(inverse_background_pixels, 9 * 14);
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.foreground), kCharWidth * kCharHeight);
 }
 
 TEST_F(MDATest, RenderCharacterUnderline) {
-    // Write ' ' (0x20) with Underline attribute (0x01: bg=000, fg=001)
-    MDAWriteVRAM(&mda_, 0, ' ');
-    MDAWriteVRAM(&mda_, 1, 0x01);
+  WriteChar(0, ' ', 0x01);
+  Render();
 
-    MDARender(&mda_);
-
-    // Check row 12 (12th index, 0-based) for underline.
-    // kMDAUnderlinePosition = 12.
-    int underline_pixels = 0;
-    for (const auto& pixel : recorded_pixels) {
-        if (pixel.position.x < 9 && pixel.position.y == 12) {
-            if (pixel.rgb.r == config_.foreground.r &&
-                pixel.rgb.g == config_.foreground.g &&
-                pixel.rgb.b == config_.foreground.b) {
-                underline_pixels++;
-            }
-        }
-    }
-    // All 9 pixels in the underline row should be foreground.
-    EXPECT_EQ(underline_pixels, 9);
+  EXPECT_EQ(
+      CountPixels(0, kUnderlinePosition, kCharWidth, 1, config_.foreground),
+      kCharWidth);
 }
 
 TEST_F(MDATest, RenderCharacterInvisible) {
-  // Write 'A' (0x41) with Invisible attribute (0x00: bg=000, fg=000)
-  MDAWriteVRAM(&mda_, 0, 'A');
-  MDAWriteVRAM(&mda_, 1, 0x00);
+  WriteChar(0, 'A', 0x00);
+  Render();
 
-  MDARender(&mda_);
-
-  int visible_pixels = 0;
-  for (const auto& pixel : recorded_pixels) {
-    if (pixel.position.x < 9 && pixel.position.y < 14) {
-      if (pixel.rgb.r != config_.background.r ||
-          pixel.rgb.g != config_.background.g ||
-          pixel.rgb.b != config_.background.b) {
-        visible_pixels++;
-      }
-    }
-  }
-  // All pixels should be background color (invisible).
-  EXPECT_EQ(visible_pixels, 0);
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
 }
 
 TEST_F(MDATest, RenderCharacterIntense) {
-  // Write 'A' (0x41) with Intense Normal attribute (0x0F: bg=000, intense=1, fg=111)
-  MDAWriteVRAM(&mda_, 0, 'A');
-  MDAWriteVRAM(&mda_, 1, 0x0F);
+  WriteChar(0, 'A', 0x0F);
+  Render();
 
-  MDARender(&mda_);
-
-  int intense_pixels = 0;
-  for (const auto& pixel : recorded_pixels) {
-    if (pixel.position.x < 9 && pixel.position.y < 14) {
-      if (pixel.rgb.r == config_.intense_foreground.r &&
-          pixel.rgb.g == config_.intense_foreground.g &&
-          pixel.rgb.b == config_.intense_foreground.b) {
-        intense_pixels++;
-      }
-    }
-  }
-  // 'A' should have some intense foreground pixels.
-  EXPECT_GT(intense_pixels, 0);
+  EXPECT_GT(CountPixelsInFirstCell(config_.intense_foreground), 0);
 }
 
 TEST_F(MDATest, RenderCharacterIntenseUnderline) {
-  // Write ' ' (0x20) with Intense Underline attribute (0x09: bg=000, intense=1, fg=001)
-  MDAWriteVRAM(&mda_, 0, ' ');
-  MDAWriteVRAM(&mda_, 1, 0x09);
+  WriteChar(0, ' ', 0x09);
+  Render();
 
-  MDARender(&mda_);
-
-  // Check row 12 for intense underline.
-  int intense_underline_pixels = 0;
-  for (const auto& pixel : recorded_pixels) {
-    if (pixel.position.x < 9 && pixel.position.y == 12) {
-      if (pixel.rgb.r == config_.intense_foreground.r &&
-          pixel.rgb.g == config_.intense_foreground.g &&
-          pixel.rgb.b == config_.intense_foreground.b) {
-        intense_underline_pixels++;
-      }
-    }
-  }
-  // All 9 pixels in the underline row should be intense foreground.
-  EXPECT_EQ(intense_underline_pixels, 9);
+  EXPECT_EQ(
+      CountPixels(
+          0, kUnderlinePosition, kCharWidth, 1, config_.intense_foreground),
+      kCharWidth);
 }
 
 TEST_F(MDATest, RenderCharacterFallback) {
-  // Write 'A' (0x41) with undefined attribute (0x02: bg=000, fg=010)
-  // Should be treated as Normal.
-  MDAWriteVRAM(&mda_, 0, 'A');
-  MDAWriteVRAM(&mda_, 1, 0x02);
+  // An undefined attribute combination is treated as normal.
+  WriteChar(0, 'A', 0x02);
+  Render();
 
-  MDARender(&mda_);
+  EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
+}
 
-  int normal_pixels = 0;
-  for (const auto& pixel : recorded_pixels) {
-    if (pixel.position.x < 9 && pixel.position.y < 14) {
-      if (pixel.rgb.r == config_.foreground.r &&
-          pixel.rgb.g == config_.foreground.g &&
-          pixel.rgb.b == config_.foreground.b) {
-        normal_pixels++;
-      }
-    }
-  }
-  // 'A' should have some normal foreground pixels.
-  EXPECT_GT(normal_pixels, 0);
+TEST_F(MDATest, RenderBlinkingCharacter) {
+  // Blink is enabled in the default mode control register.
+  WriteChar(0, 'A', 0x87);
+  Render();
+  int visible_pixels = CountPixelsInFirstCell(config_.foreground);
+  EXPECT_GT(visible_pixels, 0);
+
+  // Advance to the opposite blink phase - the character disappears.
+  AdvanceFrames(8);
+  Render();
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+
+  // And comes back in the phase after that.
+  AdvanceFrames(8);
+  Render();
+  EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
+}
+
+TEST_F(MDATest, BlinkIsIgnoredWhenDisabledInControlRegister) {
+  VideoWritePort(
+      &video_, kMDAPortControl,
+      video_.control_register & ~kVideoControlEnableBlink);
+  WriteChar(0, 'A', 0x87);
+  Render();
+  int visible_pixels = CountPixelsInFirstCell(config_.foreground);
+
+  AdvanceFrames(8);
+  Render();
+  EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
+}
+
+TEST_F(MDATest, RenderCursor) {
+  // The default cursor occupies scan lines 11 to 12 of the cell it is on.
+  WriteRegister(kCRTCRegisterCursorStart, 0x0B);
+  WriteRegister(kCRTCRegisterCursorEnd, 0x0C);
+  // Put the cursor on the second cell of the second row.
+  uint16_t cursor_cell = 80 + 1;
+  WriteRegister(kCRTCRegisterCursorH, cursor_cell >> 8);
+  WriteRegister(kCRTCRegisterCursorL, cursor_cell & 0xFF);
+  Render();
+
+  int cursor_x = kCharWidth;
+  int cursor_y = kCharHeight;
+  EXPECT_EQ(
+      CountPixels(cursor_x, cursor_y + 11, kCharWidth, 2, config_.foreground),
+      kCharWidth * 2);
+  // The scan lines above the cursor are untouched by it.
+  EXPECT_EQ(
+      CountPixels(cursor_x, cursor_y, kCharWidth, 11, config_.background),
+      kCharWidth * 11);
+}
+
+TEST_F(MDATest, CursorCanBeDisabled) {
+  WriteRegister(kCRTCRegisterCursorEnd, 0x0C);
+  WriteRegister(kCRTCRegisterCursorStart, 0x20);
+  Render();
+
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+}
+
+TEST_F(MDATest, StartAddressScrollsTheDisplay) {
+  // Put a character on the second row of VRAM, then scroll the display up by
+  // one row so that it appears in the top left corner.
+  WriteChar(80, 'A', 0x07);
+  Render();
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+
+  WriteRegister(kCRTCRegisterStartAddressH, 80 >> 8);
+  WriteRegister(kCRTCRegisterStartAddressL, 80 & 0xFF);
+  Render();
+  EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
+}
+
+TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
+  WriteChar(0, 'A', 0x07);
+  VideoWritePort(
+      &video_, kMDAPortControl,
+      video_.control_register & ~kVideoControlVideoEnable);
+  Render();
+
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+  // The whole frame buffer is blanked, not just the character cells.
+  EXPECT_EQ(mock_pixel_write_count, 720 * 350);
 }
 
 }  // namespace

@@ -590,10 +590,36 @@ typedef struct TextPosition {
   uint8_t row;
 } TextPosition;
 
-// Video modes.
+// Video adapters supported by this module. Only one adapter is present in a
+// machine at a time, selected before initialization.
+typedef enum VideoAdapter {
+  // Monochrome Display and Printer Adapter.
+  kVideoAdapterMDA = 0,
+  // Color Graphics Adapter.
+  kVideoAdapterCGA = 1,
+
+  // Number of adapters supported.
+  kNumVideoAdapters = 2,
+} VideoAdapter;
+
+// Video modes, numbered as in the BIOS INT 10h mode numbers.
 typedef enum VideoMode {
+  // CGA text mode 0x00: Text, 40x25, color burst off, 8x8
+  kVideoModeCGAText40x25Mono = 0x00,
+  // CGA text mode 0x01: Text, 40x25, 16 colors, 8x8
+  kVideoModeCGAText40x25Color = 0x01,
+  // CGA text mode 0x02: Text, 80x25, color burst off, 8x8
+  kVideoModeCGAText80x25Mono = 0x02,
+  // CGA text mode 0x03: Text, 80x25, 16 colors, 8x8
+  kVideoModeCGAText80x25Color = 0x03,
+  // CGA graphics mode 0x04: 320x200, 4 colors
+  kVideoModeCGAGraphics320x200 = 0x04,
+  // CGA graphics mode 0x05: 320x200, 4 colors, alternate palette
+  kVideoModeCGAGraphics320x200Alt = 0x05,
+  // CGA graphics mode 0x06: 640x200, 2 colors
+  kVideoModeCGAGraphics640x200 = 0x06,
   // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
-  kMDAText07 = 0x07,
+  kVideoModeMDAText80x25 = 0x07,
 
   // Number of video modes supported.
   kNumVideoModes = 8,
@@ -687,59 +713,6 @@ typedef struct VideoModeMetadata {
 // 3          | + Black/White Video
 // ========================================
 
-// The MDA contains a Motorola 6845 CRT controller. I/O port 3B4 is used to
-// select a register, and port I/O port 3B5 is used to read or write the data
-// for that register. Below are the registers and their default values for the
-// IBM Monochrome Display.
-// =============================================================================
-// Register | Register File              | Program Unit     | IBM Monochrome
-// Number   |                            |                  | Display
-// ---------|----------------------------|------------------|------------------
-// R0       | Horizontal Total           | Characters       | 0x61
-// R1       | Horizontal Displayed       | Characters       | 0x50
-// R2       | Horizontal Sync Position   | Characters       | 0x52
-// R3       | Horizontal Sync Width      | Characters       | 0x0F
-// R4       | Vertical Total             | Character Rows   | 0x19
-// R5       | Vertical Total Adjust      | Scan Line        | 0x06
-// R6       | Vertical Displayed         | Character Row    | 0x19
-// R7       | Vertical Sync Position     | Character Row    | 0x19
-// R8       | Interlace Mode             | --------         | 0x02
-// R9       | Maximum Scan Line          | Scan Line        | 0x0D
-// R10      | Cursor Start               | Scan Line        | 0x0B
-// R11      | Cursor End                 | Scan Line        | 0x0C
-// R12      | Start Address (H)          | --------         | 0x00
-// R13      | Start Address (L)          | --------         | 0x00
-// R14      | Cursor (H)                 | --------         | 0x00
-// R15      | Cursor (L)                 | --------         | 0x00
-// R16      | Reserved                   | --------         | --
-// R17      | Reserved                   | --------         | --
-// =============================================================================
-
-// MDA registers
-enum {
-  kMDARegisterHorizontalTotal = 0,
-  kMDARegisterHorizontalDisplayed,
-  kMDARegisterHorizontalSyncPosition,
-  kMDARegisterHorizontalSyncWidth,
-  kMDARegisterVerticalTotal,
-  kMDARegisterVerticalTotalAdjust,
-  kMDARegisterVerticalDisplayed,
-  kMDARegisterVerticalSyncPosition,
-  kMDARegisterInterlaceMode,
-  kMDARegisterMaximumScanLine,
-  kMDARegisterCursorStart,
-  kMDARegisterCursorEnd,
-  kMDARegisterStartAddressH,
-  kMDARegisterStartAddressL,
-  kMDARegisterCursorH,
-  kMDARegisterCursorL,
-  kMDARegisterReserved16,
-  kMDARegisterReserved17,
-
-  // Total number of MDA registers.
-  kMDANumRegisters,
-};
-
 // MDA I/O ports.
 enum {
   kMDAPortRegisterIndex = 0x3B4,
@@ -749,105 +722,559 @@ enum {
   kMDAPortPrinterData = 0x3BC,
   kMDAPortPrinterStatus = 0x3BD,
   kMDAPortPrinterControl = 0x3BE,
+
+  // Start of the MDA I/O port range.
+  kMDAPortStart = 0x3B0,
+  // Inclusive end of the MDA I/O port range.
+  kMDAPortEnd = 0x3BF,
 };
 
 enum {
-  // MDA memory map entry type.
-  kMemoryMapEntryMDAVRAM = 0x10,
+  // MDA VRAM address.
+  kMDAVRAMAddress = 0xB0000,
   // MDA VRAM size.
   kMDAVRAMSize = 4 * 1024,  // 4K
-
-  // MDA port map entry type.
-  kPortMapEntryMDA = 0x10,
 };
 
-// MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
-static const VideoModeMetadata kMDAModeMetadata = {
-    .mode = kMDAText07,
-    .type = kVideoModeText,
-    .vram_address = 0xB0000,
-    .vram_size = kMDAVRAMSize,
-    .width = 720,
-    .height = 350,
-    .num_pages = 1,
-    .columns = 80,
-    .rows = 25,
-    .char_width = 9,
-    .char_height = 14,
+// ============================================================================
+// Color Graphics Adapter (CGA)
+// ============================================================================
+
+// CGA I/O ports
+// ========================================
+// I/O Register |
+// Address      |  Function
+// -------------|--------------------------
+// 3D0          | 6845 Index Register (alias of 3D4)
+// 3D1          | 6845 Data Register (alias of 3D5)
+// 3D2          | 6845 Index Register (alias of 3D4)
+// 3D3          | 6845 Data Register (alias of 3D5)
+// 3D4          | 6845 Index Register
+// 3D5          | 6845 Data Register
+// 3D6          | 6845 Index Register (alias of 3D4)
+// 3D7          | 6845 Data Register (alias of 3D5)
+// 3D8          | Mode Control Register
+// 3D9          | Color Select Register
+// 3DA          | CRT Status Register
+// 3DB          | Clear Light Pen Latch
+// 3DC          | Preset Light Pen Latch
+// 3DD - 3DF    | Not Used
+// ========================================
+
+// Mode Control Register (I/O port 3D8) - write only
+// ========================================
+// Bit Number | Function
+//------------|-------------------------
+// 0          | + 80x25 Text Mode (0 = 40x25)
+// 1          | + Graphics Mode
+// 2          | + Black/White Mode (disables the color burst)
+// 3          | + Video Enable
+// 4          | + 640x200 High Resolution Graphics Mode
+// 5          | + Enable Blink
+// 6,7        | Not Used
+// ========================================
+
+// Color Select Register (I/O port 3D9) - write only
+// ========================================
+// Bit Number | Function
+//------------|-------------------------
+// 0-2        | Background / border RGB. In 640x200 graphics, this is the
+//            | foreground color instead.
+// 3          | + Intensity of the above
+// 4          | + Intensity of the 320x200 graphics palette
+// 5          | 320x200 graphics palette (0 = green/red/brown,
+//            | 1 = cyan/magenta/white)
+// 6,7        | Not Used
+// ========================================
+
+// CRT Status Register (I/O port 3DA) - read only
+// ========================================
+// Bit Number | Function
+//------------|-------------------------
+// 0          | + Display disabled - VRAM access is safe
+// 1          | + Light pen trigger set
+// 2          | - Light pen switch is on
+// 3          | + Vertical retrace in progress
+// ========================================
+
+// CGA I/O ports.
+enum {
+  kCGAPortRegisterIndex = 0x3D4,
+  kCGAPortRegisterData = 0x3D5,
+  kCGAPortControl = 0x3D8,
+  kCGAPortColorSelect = 0x3D9,
+  kCGAPortStatus = 0x3DA,
+  kCGAPortClearLightPen = 0x3DB,
+  kCGAPortPresetLightPen = 0x3DC,
+
+  // Start of the CGA I/O port range.
+  kCGAPortStart = 0x3D0,
+  // Inclusive end of the CGA I/O port range.
+  kCGAPortEnd = 0x3DF,
 };
 
-struct MDAState;
+enum {
+  // CGA VRAM address.
+  kCGAVRAMAddress = 0xB8000,
+  // CGA VRAM size.
+  kCGAVRAMSize = 16 * 1024,  // 16K
+  // Byte offset of the odd scan lines in CGA graphics modes. Graphics VRAM is
+  // interleaved - even scan lines live in the first half and odd scan lines in
+  // the second.
+  kCGAGraphicsOddScanLineOffset = 0x2000,
+  // Number of bytes per scan line in CGA graphics modes.
+  kCGAGraphicsBytesPerScanLine = 80,
+  // Number of colors in the CGA palette.
+  kNumCGAColors = 16,
+};
 
-// Caller-provided configuration for MDA text mode rendering.
-typedef struct MDAConfig {
+// ============================================================================
+// Motorola 6845 CRT controller
+// ============================================================================
+
+// Both the MDA and the CGA are built around a Motorola 6845 CRT controller. The
+// index port (3B4 on MDA, 3D4 on CGA) selects a register, and the data port
+// (3B5 / 3D5) is used to read or write the data for that register. Below are
+// the registers and their default values for the IBM Monochrome Display and for
+// the CGA in 80x25 text mode, as programmed by GLaBIOS.
+// =============================================================================
+// Register | Register File              | Program Unit     | MDA  | CGA 80x25
+// ---------|----------------------------|------------------|------|-----------
+// R0       | Horizontal Total           | Characters       | 0x61 | 0x71
+// R1       | Horizontal Displayed       | Characters       | 0x50 | 0x50
+// R2       | Horizontal Sync Position   | Characters       | 0x52 | 0x5A
+// R3       | Horizontal Sync Width      | Characters       | 0x0F | 0x0A
+// R4       | Vertical Total             | Character Rows   | 0x19 | 0x1F
+// R5       | Vertical Total Adjust      | Scan Line        | 0x06 | 0x06
+// R6       | Vertical Displayed         | Character Row    | 0x19 | 0x19
+// R7       | Vertical Sync Position     | Character Row    | 0x19 | 0x1C
+// R8       | Interlace Mode             | --------         | 0x02 | 0x02
+// R9       | Maximum Scan Line          | Scan Line        | 0x0D | 0x07
+// R10      | Cursor Start               | Scan Line        | 0x0B | 0x06
+// R11      | Cursor End                 | Scan Line        | 0x0C | 0x07
+// R12      | Start Address (H)          | --------         | 0x00 | 0x00
+// R13      | Start Address (L)          | --------         | 0x00 | 0x00
+// R14      | Cursor (H)                 | --------         | 0x00 | 0x00
+// R15      | Cursor (L)                 | --------         | 0x00 | 0x00
+// R16      | Reserved                   | --------         | --   | --
+// R17      | Reserved                   | --------         | --   | --
+// =============================================================================
+
+// 6845 CRT controller registers.
+enum {
+  kCRTCRegisterHorizontalTotal = 0,
+  kCRTCRegisterHorizontalDisplayed,
+  kCRTCRegisterHorizontalSyncPosition,
+  kCRTCRegisterHorizontalSyncWidth,
+  kCRTCRegisterVerticalTotal,
+  kCRTCRegisterVerticalTotalAdjust,
+  kCRTCRegisterVerticalDisplayed,
+  kCRTCRegisterVerticalSyncPosition,
+  kCRTCRegisterInterlaceMode,
+  kCRTCRegisterMaximumScanLine,
+  kCRTCRegisterCursorStart,
+  kCRTCRegisterCursorEnd,
+  kCRTCRegisterStartAddressH,
+  kCRTCRegisterStartAddressL,
+  kCRTCRegisterCursorH,
+  kCRTCRegisterCursorL,
+  kCRTCRegisterReserved16,
+  kCRTCRegisterReserved17,
+
+  // Total number of 6845 CRT controller registers.
+  kNumCRTCRegisters,
+};
+
+// ============================================================================
+// Register bits
+// ============================================================================
+
+// Bits in the mode control register - I/O port 3B8 on MDA, 3D8 on CGA.
+enum {
+  // CGA only - 80x25 text mode. MDA uses the same bit for high resolution mode,
+  // which it always is.
+  kVideoControlHighResolution = 1 << 0,
+  // CGA only - graphics mode.
+  kVideoControlGraphics = 1 << 1,
+  // CGA only - black and white mode, i.e. the color burst is disabled. This has
+  // no effect on an RGB monitor in text modes, but selects the third palette in
+  // 320x200 graphics mode.
+  kVideoControlBlackAndWhite = 1 << 2,
+  // Video signal enabled. When clear, the display is blank.
+  kVideoControlVideoEnable = 1 << 3,
+  // CGA only - 640x200 high resolution graphics mode.
+  kVideoControlHighResolutionGraphics = 1 << 4,
+  // Attribute bit 7 means blinking rather than intense background.
+  kVideoControlEnableBlink = 1 << 5,
+};
+
+// Bits in the CGA color select register - I/O port 3D9.
+enum {
+  // Background / border color, or the foreground color in 640x200 graphics.
+  kCGAColorSelectColorMask = 0x07,
+  // Intensity of the background / border color.
+  kCGAColorSelectIntensity = 1 << 3,
+  // Intensity of the 320x200 graphics palette.
+  kCGAColorSelectPaletteIntensity = 1 << 4,
+  // 320x200 graphics palette selection.
+  kCGAColorSelectPalette = 1 << 5,
+};
+
+// Bits in the status register - I/O port 3BA on MDA, 3DA on CGA.
+enum {
+  // Display is disabled, i.e. a horizontal or vertical retrace is in progress,
+  // so VRAM can be accessed without causing snow.
+  kVideoStatusDisplayDisabled = 1 << 0,
+  // Light pen trigger set. Always clear, as no light pen is emulated.
+  kVideoStatusLightPenTrigger = 1 << 1,
+  // Light pen switch is off. Always set, as no light pen is emulated.
+  kVideoStatusLightPenSwitchOff = 1 << 2,
+  // Vertical retrace in progress.
+  kVideoStatusVerticalRetrace = 1 << 3,
+};
+
+// Bits in a text mode attribute byte.
+enum {
+  // Foreground color.
+  kVideoAttributeForegroundMask = 0x07,
+  // Intense foreground.
+  kVideoAttributeIntenseForeground = 1 << 3,
+  // Background color.
+  kVideoAttributeBackgroundMask = 0x70,
+  // Number of bits to shift right to get the background color.
+  kVideoAttributeBackgroundShift = 4,
+  // Blinking foreground, or intense background if blinking is disabled in the
+  // mode control register.
+  kVideoAttributeBlink = 1 << 7,
+};
+
+// ============================================================================
+// Video mode and adapter metadata
+// ============================================================================
+
+// Metadata for each video mode, indexed by mode number.
+static const VideoModeMetadata kVideoModeMetadata[kNumVideoModes] = {
+    // 0x00: CGA text, 40x25, color burst off
+    {
+        .mode = kVideoModeCGAText40x25Mono,
+        .type = kVideoModeText,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .width = 320,
+        .height = 200,
+        .num_pages = 8,
+        .columns = 40,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // 0x01: CGA text, 40x25, 16 colors
+    {
+        .mode = kVideoModeCGAText40x25Color,
+        .type = kVideoModeText,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .width = 320,
+        .height = 200,
+        .num_pages = 8,
+        .columns = 40,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // 0x02: CGA text, 80x25, color burst off
+    {
+        .mode = kVideoModeCGAText80x25Mono,
+        .type = kVideoModeText,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .width = 640,
+        .height = 200,
+        .num_pages = 4,
+        .columns = 80,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // 0x03: CGA text, 80x25, 16 colors
+    {
+        .mode = kVideoModeCGAText80x25Color,
+        .type = kVideoModeText,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .width = 640,
+        .height = 200,
+        .num_pages = 4,
+        .columns = 80,
+        .rows = 25,
+        .char_width = 8,
+        .char_height = 8,
+    },
+    // 0x04: CGA graphics, 320x200, 4 colors
+    {
+        .mode = kVideoModeCGAGraphics320x200,
+        .type = kVideoModeGraphics,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .width = 320,
+        .height = 200,
+        .num_pages = 1,
+    },
+    // 0x05: CGA graphics, 320x200, 4 colors, alternate palette
+    {
+        .mode = kVideoModeCGAGraphics320x200Alt,
+        .type = kVideoModeGraphics,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .width = 320,
+        .height = 200,
+        .num_pages = 1,
+    },
+    // 0x06: CGA graphics, 640x200, 2 colors
+    {
+        .mode = kVideoModeCGAGraphics640x200,
+        .type = kVideoModeGraphics,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .width = 640,
+        .height = 200,
+        .num_pages = 1,
+    },
+    // 0x07: MDA text, 80x25, monochrome
+    {
+        .mode = kVideoModeMDAText80x25,
+        .type = kVideoModeText,
+        .vram_address = kMDAVRAMAddress,
+        .vram_size = kMDAVRAMSize,
+        .width = 720,
+        .height = 350,
+        .num_pages = 1,
+        .columns = 80,
+        .rows = 25,
+        .char_width = 9,
+        .char_height = 14,
+    },
+};
+
+// Metadata for a video adapter - the facts about an adapter that do not depend
+// on the current video mode.
+typedef struct VideoAdapterMetadata {
+  // The adapter.
+  VideoAdapter adapter;
+
+  // Width of the frame buffer the host must provide, in pixels. This does not
+  // change with the video mode: the CGA always scans the same number of dots
+  // across the screen, and modes with a lower horizontal resolution are drawn
+  // with each pixel doubled horizontally, just as on real hardware.
+  uint16_t frame_buffer_width;
+  // Height of the frame buffer the host must provide, in pixels.
+  uint16_t frame_buffer_height;
+
+  // Mapped memory address of video RAM.
+  uint32_t vram_address;
+  // Video RAM size in bytes.
+  uint32_t vram_size;
+
+  // Start of the adapter's I/O port range.
+  uint16_t port_start;
+  // Inclusive end of the adapter's I/O port range.
+  uint16_t port_end;
+
+  // Video mode at power-on.
+  VideoMode default_mode;
+  // Mode control register value at power-on.
+  uint8_t default_control_register;
+
+  // Number of CPU cycles per scan line.
+  uint16_t cycles_per_scan_line;
+  // Number of CPU cycles at the start of a scan line during which the display
+  // is active. The remainder of the scan line is the horizontal retrace.
+  uint16_t display_cycles_per_scan_line;
+  // Number of scan lines per frame, including the vertical retrace.
+  uint16_t scan_lines_per_frame;
+  // Number of scan lines at the start of a frame that are displayed. The
+  // remainder of the frame is the vertical retrace.
+  uint16_t displayed_scan_lines;
+} VideoAdapterMetadata;
+
+// Metadata for each video adapter, indexed by VideoAdapter.
+//
+// The timing values are derived from the same 14.318MHz master crystal the CPU
+// clock comes from, so they are exact in CPU cycles. The MDA scans 882 dots per
+// line at 16.257MHz over 370 lines, which is 259 cycles per line and just under
+// 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
+// 304 cycles per line and just under 60Hz.
+static const VideoAdapterMetadata kVideoAdapterMetadata[kNumVideoAdapters] = {
+    // MDA
+    {
+        .adapter = kVideoAdapterMDA,
+        .frame_buffer_width = 720,
+        .frame_buffer_height = 350,
+        .vram_address = kMDAVRAMAddress,
+        .vram_size = kMDAVRAMSize,
+        .port_start = kMDAPortStart,
+        .port_end = kMDAPortEnd,
+        .default_mode = kVideoModeMDAText80x25,
+        // High resolution mode, video enable, blink enable.
+        .default_control_register = 0x29,
+        .cycles_per_scan_line = 259,
+        .display_cycles_per_scan_line = 211,
+        .scan_lines_per_frame = 370,
+        .displayed_scan_lines = 350,
+    },
+    // CGA
+    {
+        .adapter = kVideoAdapterCGA,
+        .frame_buffer_width = 640,
+        .frame_buffer_height = 200,
+        .vram_address = kCGAVRAMAddress,
+        .vram_size = kCGAVRAMSize,
+        .port_start = kCGAPortStart,
+        .port_end = kCGAPortEnd,
+        .default_mode = kVideoModeCGAText80x25Color,
+        // 80x25 text mode, video enable, blink enable.
+        .default_control_register = 0x29,
+        .cycles_per_scan_line = 304,
+        .display_cycles_per_scan_line = 213,
+        .scan_lines_per_frame = 262,
+        .displayed_scan_lines = 200,
+    },
+};
+
+enum {
+  // Video memory map entry type.
+  kMemoryMapEntryVRAM = 0x10,
+  // Video port map entry type.
+  kPortMapEntryVideo = 0x10,
+};
+
+// ============================================================================
+// Video state
+// ============================================================================
+
+struct VideoState;
+
+// Caller-provided configuration for video rendering.
+typedef struct VideoConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
   Logger* logger;
 
-  // Foreground color.
+  // The video adapter to emulate.
+  VideoAdapter adapter;
+
+  // MDA - foreground color.
   RGB foreground;
-  // Intense foreground color.
+  // MDA - intense foreground color.
   RGB intense_foreground;
-  // Background color.
+  // MDA - background color.
   RGB background;
 
+  // CGA - the 16 color RGBI palette.
+  RGB cga_palette[kNumCGAColors];
+
   // Callback to read a byte from the emulated video RAM.
-  uint8_t (*read_vram_byte)(struct MDAState* mda, uint32_t address);
+  uint8_t (*read_vram_byte)(struct VideoState* video, uint32_t address);
   // Callback to write a byte to the emulated video RAM.
   void (*write_vram_byte)(
-      struct MDAState* mda, uint32_t address, uint8_t value);
+      struct VideoState* video, uint32_t address, uint8_t value);
 
   // Callback to write an RGB pixel value to the real display, invoked from
-  // MDARender().
-  void (*write_pixel)(struct MDAState* mda, Position position, RGB rgb);
-} MDAConfig;
+  // VideoRender().
+  void (*write_pixel)(struct VideoState* video, Position position, RGB rgb);
+} VideoConfig;
 
-// Default MDA config.
-static const MDAConfig kDefaultMDAConfig = {
+// Default video config.
+static const VideoConfig kDefaultVideoConfig = {
     .context = NULL,
+
+    .adapter = kVideoAdapterMDA,
 
     .foreground = {.r = 0xAA, .g = 0xAA, .b = 0xAA},
     .intense_foreground = {.r = 0xFF, .g = 0xFF, .b = 0xFF},
     .background = {.r = 0x00, .g = 0x00, .b = 0x00},
+
+    .cga_palette =
+        {
+            {.r = 0x00, .g = 0x00, .b = 0x00},  // 0  black
+            {.r = 0x00, .g = 0x00, .b = 0xAA},  // 1  blue
+            {.r = 0x00, .g = 0xAA, .b = 0x00},  // 2  green
+            {.r = 0x00, .g = 0xAA, .b = 0xAA},  // 3  cyan
+            {.r = 0xAA, .g = 0x00, .b = 0x00},  // 4  red
+            {.r = 0xAA, .g = 0x00, .b = 0xAA},  // 5  magenta
+            {.r = 0xAA, .g = 0x55, .b = 0x00},  // 6  brown
+            {.r = 0xAA, .g = 0xAA, .b = 0xAA},  // 7  light gray
+            {.r = 0x55, .g = 0x55, .b = 0x55},  // 8  dark gray
+            {.r = 0x55, .g = 0x55, .b = 0xFF},  // 9  light blue
+            {.r = 0x55, .g = 0xFF, .b = 0x55},  // 10 light green
+            {.r = 0x55, .g = 0xFF, .b = 0xFF},  // 11 light cyan
+            {.r = 0xFF, .g = 0x55, .b = 0x55},  // 12 light red
+            {.r = 0xFF, .g = 0x55, .b = 0xFF},  // 13 light magenta
+            {.r = 0xFF, .g = 0xFF, .b = 0x55},  // 14 yellow
+            {.r = 0xFF, .g = 0xFF, .b = 0xFF},  // 15 white
+        },
 
     .read_vram_byte = NULL,
     .write_vram_byte = NULL,
     .write_pixel = NULL,
 };
 
-// MDA state.
-typedef struct MDAState {
+// Video state.
+typedef struct VideoState {
   // Caller-provided runtime configuration.
-  MDAConfig* config;
+  VideoConfig* config;
+
+  // The video adapter being emulated, copied from the config at init time.
+  VideoAdapter adapter;
 
   // Motorola 6845 CRT controller registers.
-  uint8_t registers[kMDANumRegisters];
-  // Currently selected 6845 CRT controller register index (I/O port 3B4).
+  uint8_t registers[kNumCRTCRegisters];
+  // Currently selected 6845 CRT controller register index (I/O port 3B4/3D4).
   uint8_t selected_register;
-  // Control port value (I/O port 3B8).
-  uint8_t control_port;
-  // Status port value (I/O port 3BA).
-  uint8_t status_port;
-} MDAState;
+  // Mode control register value (I/O port 3B8/3D8).
+  uint8_t control_register;
+  // CGA color select register value (I/O port 3D9). Unused on MDA.
+  uint8_t color_select_register;
 
-// Initialize MDA state with the provided configuration.
-void MDAInit(MDAState* mda, MDAConfig* config);
+  // Current scan line within the frame, including the vertical retrace.
+  uint16_t scan_line;
+  // CPU cycles elapsed within the current scan line.
+  uint32_t scan_line_cycles;
+  // Number of frames since initialization. Drives blinking.
+  uint32_t frames;
+} VideoState;
 
-// Read a byte from an MDA I/O port.
-uint8_t MDAReadPort(MDAState* mda, uint16_t port);
-// Write a byte to an MDA I/O port.
-void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value);
+// Initialize video state with the provided configuration.
+void VideoInit(VideoState* video, VideoConfig* config);
 
-// Read a byte from MDA VRAM.
-uint8_t MDAReadVRAM(MDAState* mda, uint32_t address);
-// Write a byte to MDA VRAM.
-void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value);
+// Metadata for the adapter being emulated.
+const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
+
+// The current video mode, derived from the mode control register.
+VideoMode VideoGetMode(const VideoState* video);
+
+// Metadata for the current video mode.
+const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video);
+
+// Read a byte from a video I/O port.
+uint8_t VideoReadPort(VideoState* video, uint16_t port);
+// Write a byte to a video I/O port.
+void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
+
+// Read a byte from video RAM.
+uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
+// Write a byte to video RAM.
+void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
+
+// Advance the CRT beam by the given number of CPU cycles. This drives the
+// retrace bits in the status register and the blink phase.
+void VideoTick(VideoState* video, uint16_t cycles);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.
-void MDARender(MDAState* mda);
+void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H
 
@@ -883,6 +1310,61 @@ extern const uint8_t kFontCGA8x8Bitmap[256][8];
 
 // ==============================================================================
 // src/video/fonts.h end
+// ==============================================================================
+
+// ==============================================================================
+// src/video/internal.h start
+// ==============================================================================
+
+#line 1 "./src/video/internal.h"
+// Internal interface shared between the video module's source files.
+#ifndef YAX86_VIDEO_INTERNAL_H
+#define YAX86_VIDEO_INTERNAL_H
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../util/common.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// Read a byte from the emulated video RAM, or 0xFF if the address is out of
+// range or no callback is installed.
+YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
+
+// Write a byte to the emulated video RAM, ignored if the address is out of
+// range or no callback is installed.
+YAX86_PRIVATE void VideoWriteVRAMByte(
+    VideoState* video, uint32_t address, uint8_t value);
+
+// Write an RGB pixel value to the real display, ignored if no callback is
+// installed.
+YAX86_PRIVATE void VideoWritePixel(
+    VideoState* video, Position position, RGB rgb);
+
+// Whether blinking content is currently visible.
+YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video);
+
+// Whether the text mode cursor is enabled in the 6845 registers.
+YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
+
+// The address of the first displayed character, in character units, from the
+// 6845 start address registers.
+YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
+
+// The address of the text mode cursor, in character units, from the 6845 cursor
+// address registers.
+YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
+
+// Render the current display in MDA text mode.
+YAX86_PRIVATE void MDARenderScreen(VideoState* video);
+
+// Render the current display on the CGA.
+YAX86_PRIVATE void CGARenderScreen(VideoState* video);
+
+#endif  // YAX86_VIDEO_INTERNAL_H
+
+
+// ==============================================================================
+// src/video/internal.h end
 // ==============================================================================
 
 // ==============================================================================
@@ -1691,120 +2173,29 @@ YAX86_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
 #line 1 "./src/video/mda.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "fonts.h"
+#include "internal.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-// Default MDA state.
-static const MDAState kDefaultMDAState = {
-    .config = NULL,
-    .registers =
-        {
-            0x61,
-            0x50,
-            0x52,
-            0x0F,
-            0x19,
-            0x06,
-            0x19,
-            0x19,
-            0x02,
-            0x0D,
-            0x0B,
-            0x0C,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-        },
-    .selected_register = 0,
-    // high resolution mode, video enable, blink enable
-    .control_port = 0x29,
-    .status_port = 0x00,
-};
-
-static inline uint8_t ReadVRAMByte(MDAState* mda, uint32_t address) {
-  if (mda->config && mda->config->read_vram_byte &&
-      address < kMDAModeMetadata.vram_size) {
-    return mda->config->read_vram_byte(mda, address);
-  }
-  return 0xFF;
-}
-
-static inline void WriteVRAMByte(
-    MDAState* mda, uint32_t address, uint8_t value) {
-  if (mda->config && mda->config->write_vram_byte &&
-      address < kMDAModeMetadata.vram_size) {
-    mda->config->write_vram_byte(mda, address, value);
-  }
-}
-
-// Initialize MDA state with the provided configuration.
-void MDAInit(MDAState* mda, MDAConfig* config) {
-  *mda = kDefaultMDAState;
-  mda->config = config;
-
-  for (uint32_t i = 0; i < kMDAModeMetadata.vram_size; i += 2) {
-    WriteVRAMByte(mda, i, ' ');
-    WriteVRAMByte(mda, i + 1, 0x07 /* default attr */);
-  }
-}
-
-uint8_t MDAReadVRAM(MDAState* mda, uint32_t address) {
-  return ReadVRAMByte(mda, address);
-}
-
-void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value) {
-  WriteVRAMByte(mda, address, value);
-}
-
-uint8_t MDAReadPort(MDAState* mda, uint16_t port) {
-  switch (port) {
-    case kMDAPortRegisterIndex:
-      return mda->selected_register;
-    case kMDAPortRegisterData:
-      if (mda->selected_register < kMDANumRegisters) {
-        return mda->registers[mda->selected_register];
-      }
-      return 0xFF;
-    case kMDAPortControl:
-      return mda->control_port;
-    case kMDAPortStatus:
-      return mda->status_port;
-    default:
-      return 0xFF;
-  }
-}
-
-void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value) {
-  switch (port) {
-    case kMDAPortRegisterIndex:
-      mda->selected_register = value;
-      break;
-    case kMDAPortRegisterData:
-      if (mda->selected_register < kMDANumRegisters) {
-        mda->registers[mda->selected_register] = value;
-      }
-      break;
-    case kMDAPortControl:
-      mda->control_port = value;
-      break;
-    case kMDAPortStatus:
-      mda->status_port = value;
-      break;
-    default:
-      break;
-  }
-}
-
 enum {
-  // Position of underline in MDA text mode.
+  // Position of the underline within an MDA character cell.
   kMDAUnderlinePosition = 12,
+  // Attribute values are only meaningful in these three-bit fields, so the
+  // documented combinations are compared against them directly.
+  kMDAAttributeNormal = 0x07,
+  kMDAAttributeInverse = 0x00,
+  kMDAAttributeUnderline = 0x01,
 };
 
-// Write a character to display in MDA text mode. For the attribute byte, we
-// only support the officially documented combinations of values.
+// Colors to draw a character cell with.
+typedef struct MDACellColors {
+  const RGB* foreground;
+  const RGB* background;
+  bool underline;
+} MDACellColors;
+
+// Decode an MDA attribute byte. We only support the officially documented
+// combinations of values.
 //
 // Attribute byte structure:
 //   - Bit 7: blink (0 = normal, 1 = blink)
@@ -1819,49 +2210,70 @@ enum {
 //   - Underline: background = 000, foreground = 001
 //
 // Other combinations are undefined, but we will treat them as normal.
-// TODO: Support blinking.
-static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
-  uint32_t char_address =
-      (char_pos.row * kMDAModeMetadata.columns + char_pos.col) *
-      2;  // Each character takes 2 bytes (char + attr).
-  uint8_t char_value = ReadVRAMByte(mda, char_address);
-  uint8_t attr_value = ReadVRAMByte(mda, char_address + 1);
-  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
+  const VideoConfig* config = video->config;
+  MDACellColors colors = {
+      .foreground = &config->foreground,
+      .background = &config->background,
+      .underline = false,
+  };
 
-  const RGB* foreground;
-  const RGB* background;
-  bool underline = false;
+  bool intense = (attr_value & kVideoAttributeIntenseForeground) != 0;
+  const RGB* intense_aware_foreground =
+      intense ? &config->intense_foreground : &config->foreground;
+  uint8_t background_attr = (attr_value & kVideoAttributeBackgroundMask) >>
+                            kVideoAttributeBackgroundShift;
+  uint8_t foreground_attr = attr_value & kVideoAttributeForegroundMask;
 
-  bool intense = ((attr_value >> 3) & 0x01) != 0;
-  uint8_t background_attr = (attr_value >> 4) & 0x07;
-  uint8_t foreground_attr = attr_value & 0x07;
-  if (background_attr == 0x00 && foreground_attr == 0x07) {
+  if (background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeNormal) {
     // Normal video mode.
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
-  } else if (background_attr == 0x07 && foreground_attr == 0x00) {
+    colors.foreground = intense_aware_foreground;
+  } else if (
+      background_attr == kMDAAttributeNormal &&
+      foreground_attr == kMDAAttributeInverse) {
     // Inverse video mode.
-    foreground = &mda->config->background;
-    background = &mda->config->foreground;
-  } else if (background_attr == 0x00 && foreground_attr == 0x00) {
+    colors.foreground = &config->background;
+    colors.background = &config->foreground;
+  } else if (
+      background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeInverse) {
     // Invisible mode.
-    foreground = &mda->config->background;
-    background = &mda->config->background;
-  } else if (background_attr == 0x00 && foreground_attr == 0x01) {
+    colors.foreground = &config->background;
+  } else if (
+      background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeUnderline) {
     // Underline mode.
-    underline = true;
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
+    colors.underline = true;
+    colors.foreground = intense_aware_foreground;
   } else {
     // Other combinations are treated as normal.
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
+    colors.foreground = intense_aware_foreground;
   }
 
-  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  // Blinking characters alternate between the character and blank. The blink
+  // attribute only applies if blinking is enabled in the mode control register.
+  if ((attr_value & kVideoAttributeBlink) &&
+      (video->control_register & kVideoControlEnableBlink) &&
+      !VideoIsBlinkOn(video)) {
+    colors.foreground = colors.background;
+    colors.underline = false;
+  }
+
+  return colors;
+}
+
+// Write a character to display in MDA text mode. char_address is the address of
+// the character's first byte in VRAM.
+static void MDAWriteChar(
+    VideoState* video, TextPosition char_pos, uint32_t char_address) {
+  const VideoModeMetadata* metadata =
+      &kVideoModeMetadata[kVideoModeMDAText80x25];
+  uint8_t char_value = VideoReadVRAMByte(video, char_address);
+  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+  MDACellColors colors = MDADecodeAttribute(video, attr_value);
+
   Position origin_pixel_pos = {
       .x = char_pos.col * metadata->char_width,
       .y = char_pos.row * metadata->char_height,
@@ -1869,7 +2281,7 @@ static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
   for (uint8_t y = 0; y < metadata->char_height; ++y) {
     uint16_t row_bitmap;
     // If underline, set entire underline row to foreground color.
-    if (y == kMDAUnderlinePosition && underline) {
+    if (y == kMDAUnderlinePosition && colors.underline) {
       row_bitmap = 0xFFFF;
     } else {
       row_bitmap = char_bitmap[y];
@@ -1881,26 +2293,700 @@ static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
       };
       bool is_foreground =
           (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
-      const RGB* pixel_rgb = is_foreground ? foreground : background;
-      mda->config->write_pixel(mda, pixel_pos, *pixel_rgb);
+      const RGB* pixel_rgb =
+          is_foreground ? colors.foreground : colors.background;
+      VideoWritePixel(video, pixel_pos, *pixel_rgb);
     }
   }
 }
 
-// Render the current display. Invokes the write_pixel callback to do the actual
-// pixel rendering.
-void MDARender(MDAState* mda) {
-  for (uint8_t row = 0; row < kMDAModeMetadata.rows; ++row) {
-    for (uint8_t col = 0; col < kMDAModeMetadata.columns; ++col) {
-      TextPosition char_pos = {.col = col, .row = row};
-      MDAWriteChar(mda, char_pos);
+// Draw the text mode cursor over the character cell it occupies.
+static void MDADrawCursor(VideoState* video, uint16_t start_address) {
+  const VideoModeMetadata* metadata =
+      &kVideoModeMetadata[kVideoModeMDAText80x25];
+  if (!VideoIsCursorEnabled(video) || !VideoIsBlinkOn(video)) {
+    return;
+  }
+  uint16_t cursor_offset = VideoGetCursorAddress(video) - start_address;
+  uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
+  if (cursor_offset >= num_cells) {
+    return;
+  }
+
+  uint8_t cursor_start = video->registers[kCRTCRegisterCursorStart] & 0x1F;
+  uint8_t cursor_end = video->registers[kCRTCRegisterCursorEnd] & 0x1F;
+  if (cursor_start >= metadata->char_height) {
+    return;
+  }
+  if (cursor_end >= metadata->char_height) {
+    cursor_end = metadata->char_height - 1;
+  }
+
+  uint16_t origin_x =
+      (cursor_offset % metadata->columns) * metadata->char_width;
+  uint16_t origin_y =
+      (cursor_offset / metadata->columns) * metadata->char_height;
+  for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
+    for (uint8_t x = 0; x < metadata->char_width; ++x) {
+      Position pixel_pos = {.x = origin_x + x, .y = origin_y + y};
+      VideoWritePixel(video, pixel_pos, video->config->foreground);
     }
   }
+}
+
+// Render the current display in MDA text mode.
+YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
+  const VideoModeMetadata* metadata =
+      &kVideoModeMetadata[kVideoModeMDAText80x25];
+  uint16_t start_address = VideoGetStartAddress(video);
+  for (uint8_t row = 0; row < metadata->rows; ++row) {
+    for (uint8_t col = 0; col < metadata->columns; ++col) {
+      TextPosition char_pos = {.col = col, .row = row};
+      // Each character takes 2 bytes (char + attr).
+      uint32_t char_address =
+          ((uint32_t)start_address + row * metadata->columns + col) * 2;
+      MDAWriteChar(video, char_pos, char_address);
+    }
+  }
+  MDADrawCursor(video, start_address);
 }
 
 
 // ==============================================================================
 // src/video/mda.c end
+// ==============================================================================
+
+// ==============================================================================
+// src/video/cga.c start
+// ==============================================================================
+
+#line 1 "./src/video/cga.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "fonts.h"
+#include "internal.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+enum {
+  // Number of pixels per byte in 320x200 graphics mode.
+  kCGAPixelsPerByte320x200 = 4,
+  // Number of bits per pixel in 320x200 graphics mode.
+  kCGABitsPerPixel320x200 = 2,
+  // Mask of a single pixel in 320x200 graphics mode.
+  kCGAPixelMask320x200 = 0x03,
+  // Number of pixels per byte in 640x200 graphics mode.
+  kCGAPixelsPerByte640x200 = 8,
+};
+
+// Look up a color in the configured CGA palette.
+static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
+  return video->config->cga_palette[color & (kNumCGAColors - 1)];
+}
+
+// Write a pixel, expanding it horizontally to fill the frame buffer when the
+// mode's horizontal resolution is lower than the frame buffer's. The CGA scans
+// the same number of dots across the screen in every mode, so a 320 pixel wide
+// mode is drawn with each pixel twice as wide.
+static void CGAWritePixels(
+    VideoState* video, uint16_t x, uint16_t y, uint8_t scale, RGB rgb) {
+  for (uint8_t i = 0; i < scale; ++i) {
+    Position pixel_pos = {.x = x + i, .y = y};
+    VideoWritePixel(video, pixel_pos, rgb);
+  }
+}
+
+// Fill the entire frame buffer with a single color.
+static void CGAFillScreen(VideoState* video, RGB rgb) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  for (uint16_t y = 0; y < adapter->frame_buffer_height; ++y) {
+    for (uint16_t x = 0; x < adapter->frame_buffer_width; ++x) {
+      Position pixel_pos = {.x = x, .y = y};
+      VideoWritePixel(video, pixel_pos, rgb);
+    }
+  }
+}
+
+// ============================================================================
+// Text modes 0x00 - 0x03
+// ============================================================================
+
+// Write a character to display in a CGA text mode. char_address is the address
+// of the character's first byte in VRAM, and scale is the horizontal pixel
+// scaling factor for the mode.
+static void CGAWriteChar(
+    VideoState* video, const VideoModeMetadata* metadata, TextPosition char_pos,
+    uint32_t char_address, uint8_t scale) {
+  uint8_t char_value = VideoReadVRAMByte(video, char_address);
+  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+  const uint8_t* char_bitmap = kFontCGA8x8Bitmap[char_value];
+
+  uint8_t foreground_color = attr_value & (kVideoAttributeForegroundMask |
+                                           kVideoAttributeIntenseForeground);
+  uint8_t background_color = (attr_value & kVideoAttributeBackgroundMask) >>
+                             kVideoAttributeBackgroundShift;
+  bool blink_enabled =
+      (video->control_register & kVideoControlEnableBlink) != 0;
+  if (blink_enabled) {
+    // Attribute bit 7 means blinking, so only eight background colors are
+    // available.
+    if ((attr_value & kVideoAttributeBlink) && !VideoIsBlinkOn(video)) {
+      foreground_color = background_color;
+    }
+  } else {
+    // Attribute bit 7 is the background intensity instead, giving all sixteen
+    // background colors.
+    if (attr_value & kVideoAttributeBlink) {
+      background_color |= kNumCGAColors / 2;
+    }
+  }
+
+  RGB foreground = CGAGetColor(video, foreground_color);
+  RGB background = CGAGetColor(video, background_color);
+  Position origin_pixel_pos = {
+      .x = char_pos.col * metadata->char_width * scale,
+      .y = char_pos.row * metadata->char_height,
+  };
+  for (uint8_t y = 0; y < metadata->char_height; ++y) {
+    uint8_t row_bitmap = char_bitmap[y];
+    for (uint8_t x = 0; x < metadata->char_width; ++x) {
+      bool is_foreground =
+          (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+      CGAWritePixels(
+          video, origin_pixel_pos.x + x * scale, origin_pixel_pos.y + y, scale,
+          is_foreground ? foreground : background);
+    }
+  }
+}
+
+// Draw the text mode cursor over the character cell it occupies.
+static void CGADrawCursor(
+    VideoState* video, const VideoModeMetadata* metadata,
+    uint16_t start_address, uint8_t scale) {
+  if (!VideoIsCursorEnabled(video) || !VideoIsBlinkOn(video)) {
+    return;
+  }
+  uint16_t cursor_offset = VideoGetCursorAddress(video) - start_address;
+  uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
+  if (cursor_offset >= num_cells) {
+    return;
+  }
+
+  uint8_t cursor_start = video->registers[kCRTCRegisterCursorStart] & 0x1F;
+  uint8_t cursor_end = video->registers[kCRTCRegisterCursorEnd] & 0x1F;
+  if (cursor_start >= metadata->char_height) {
+    return;
+  }
+  if (cursor_end >= metadata->char_height) {
+    cursor_end = metadata->char_height - 1;
+  }
+
+  // The cursor is drawn in the foreground color of the cell it occupies.
+  uint32_t char_address = ((uint32_t)start_address + cursor_offset) * 2;
+  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+  RGB foreground = CGAGetColor(
+      video, attr_value & (kVideoAttributeForegroundMask |
+                           kVideoAttributeIntenseForeground));
+
+  uint16_t origin_x =
+      (cursor_offset % metadata->columns) * metadata->char_width * scale;
+  uint16_t origin_y =
+      (cursor_offset / metadata->columns) * metadata->char_height;
+  for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
+    for (uint8_t x = 0; x < metadata->char_width; ++x) {
+      CGAWritePixels(
+          video, origin_x + x * scale, origin_y + y, scale, foreground);
+    }
+  }
+}
+
+// Render the current display in a CGA text mode.
+static void CGARenderText(
+    VideoState* video, const VideoModeMetadata* metadata) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  uint8_t scale = (uint8_t)(adapter->frame_buffer_width / metadata->width);
+  uint16_t start_address = VideoGetStartAddress(video);
+
+  for (uint8_t row = 0; row < metadata->rows; ++row) {
+    for (uint8_t col = 0; col < metadata->columns; ++col) {
+      TextPosition char_pos = {.col = col, .row = row};
+      // Each character takes 2 bytes (char + attr).
+      uint32_t char_address =
+          ((uint32_t)start_address + row * metadata->columns + col) * 2;
+      CGAWriteChar(video, metadata, char_pos, char_address, scale);
+    }
+  }
+  CGADrawCursor(video, metadata, start_address, scale);
+}
+
+// ============================================================================
+// Graphics modes 0x04 - 0x06
+// ============================================================================
+
+// The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
+// comes from the color select register instead. The palette is chosen by the
+// palette bit of the color select register, except that the black and white bit
+// of the mode control register overrides both.
+static const uint8_t kCGAGraphicsPalettes[3][3] = {
+    // Palette 0: green, red, brown
+    {2, 4, 6},
+    // Palette 1: cyan, magenta, light gray
+    {3, 5, 7},
+    // Black and white: cyan, red, light gray
+    {3, 4, 7},
+};
+
+// Address of the first byte of a graphics mode scan line. Graphics VRAM is
+// interleaved: even scan lines live in the first half of VRAM and odd scan
+// lines in the second.
+static inline uint32_t CGAGetScanLineAddress(uint16_t y) {
+  return (y & 1 ? kCGAGraphicsOddScanLineOffset : 0) +
+         (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine;
+}
+
+// Render the current display in 320x200 graphics mode.
+static void CGARenderGraphics320x200(
+    VideoState* video, const VideoModeMetadata* metadata) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  uint8_t scale = (uint8_t)(adapter->frame_buffer_width / metadata->width);
+
+  // Resolve the four palette entries once up front.
+  const uint8_t* palette_colors;
+  if (video->control_register & kVideoControlBlackAndWhite) {
+    palette_colors = kCGAGraphicsPalettes[2];
+  } else if (video->color_select_register & kCGAColorSelectPalette) {
+    palette_colors = kCGAGraphicsPalettes[1];
+  } else {
+    palette_colors = kCGAGraphicsPalettes[0];
+  }
+  uint8_t intensity =
+      (video->color_select_register & kCGAColorSelectPaletteIntensity)
+          ? kNumCGAColors / 2
+          : 0;
+  RGB palette[4];
+  palette[0] = CGAGetColor(
+      video, video->color_select_register &
+                 (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
+  for (uint8_t i = 0; i < 3; ++i) {
+    palette[i + 1] = CGAGetColor(video, palette_colors[i] | intensity);
+  }
+
+  for (uint16_t y = 0; y < metadata->height; ++y) {
+    uint32_t scan_line_address = CGAGetScanLineAddress(y);
+    for (uint16_t x = 0; x < metadata->width; ++x) {
+      uint8_t byte_value = VideoReadVRAMByte(
+          video, scan_line_address + x / kCGAPixelsPerByte320x200);
+      // The leftmost pixel is in the most significant bits.
+      uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 -
+                                 (x % kCGAPixelsPerByte320x200)) *
+                                kCGABitsPerPixel320x200);
+      uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
+      CGAWritePixels(video, x * scale, y, scale, palette[color]);
+    }
+  }
+}
+
+// Render the current display in 640x200 graphics mode.
+static void CGARenderGraphics640x200(
+    VideoState* video, const VideoModeMetadata* metadata) {
+  // The foreground color comes from the color select register, and the
+  // background is always black.
+  RGB foreground = CGAGetColor(
+      video, video->color_select_register &
+                 (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
+  RGB background = CGAGetColor(video, 0);
+
+  for (uint16_t y = 0; y < metadata->height; ++y) {
+    uint32_t scan_line_address = CGAGetScanLineAddress(y);
+    for (uint16_t x = 0; x < metadata->width; ++x) {
+      uint8_t byte_value = VideoReadVRAMByte(
+          video, scan_line_address + x / kCGAPixelsPerByte640x200);
+      // The leftmost pixel is in the most significant bit.
+      uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 -
+                                (x % kCGAPixelsPerByte640x200));
+      bool is_foreground = (byte_value >> shift) & 1;
+      Position pixel_pos = {.x = x, .y = y};
+      VideoWritePixel(
+          video, pixel_pos, is_foreground ? foreground : background);
+    }
+  }
+}
+
+// Render the current display on the CGA.
+YAX86_PRIVATE void CGARenderScreen(VideoState* video) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  switch (metadata->mode) {
+    case kVideoModeCGAText40x25Mono:
+    case kVideoModeCGAText40x25Color:
+    case kVideoModeCGAText80x25Mono:
+    case kVideoModeCGAText80x25Color:
+      CGARenderText(video, metadata);
+      break;
+    case kVideoModeCGAGraphics320x200:
+    case kVideoModeCGAGraphics320x200Alt:
+      CGARenderGraphics320x200(video, metadata);
+      break;
+    case kVideoModeCGAGraphics640x200:
+      CGARenderGraphics640x200(video, metadata);
+      break;
+    default:
+      // Not reachable - VideoGetMode() only ever returns a CGA mode on the CGA.
+      CGAFillScreen(video, CGAGetColor(video, 0));
+      break;
+  }
+}
+
+
+// ==============================================================================
+// src/video/cga.c end
+// ==============================================================================
+
+// ==============================================================================
+// src/video/video.c start
+// ==============================================================================
+
+#line 1 "./src/video/video.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "internal.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// Power-on 6845 register values for the IBM Monochrome Display.
+static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
+    0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
+    0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+// Power-on 6845 register values for the CGA in 80x25 text mode, matching the
+// values GLaBIOS programs for that mode.
+static const uint8_t kDefaultCGARegisters[kNumCRTCRegisters] = {
+    0x71, 0x50, 0x5A, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02,
+    0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+enum {
+  // Number of frames between blink phase changes. At roughly 60Hz this gives a
+  // blink rate of about 3.75Hz, which is what the 6845 produces when it is
+  // configured to blink at a sixteenth of the field rate.
+  kVideoFramesPerBlinkPhase = 8,
+
+  // Value of bits 6-5 of the cursor start register that disables the cursor.
+  kCRTCCursorDisabled = 0x20,
+  // Mask of bits 6-5 of the cursor start register.
+  kCRTCCursorModeMask = 0x60,
+
+  // The 6845 latches only the low five bits of the register index.
+  kCRTCRegisterIndexMask = 0x1F,
+
+  // Value returned for reads that decode to nothing.
+  kVideoUnmappedPortValue = 0xFF,
+};
+
+const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
+  return &kVideoAdapterMetadata[video->adapter];
+}
+
+// ============================================================================
+// Video RAM
+// ============================================================================
+
+YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
+  if (!video->config || !video->config->read_vram_byte) {
+    return kVideoUnmappedPortValue;
+  }
+  // VRAM is aliased throughout the adapter's window, so an address past the end
+  // wraps around rather than reading nothing. The renderer relies on this when
+  // the 6845 start address pushes it past the end of VRAM.
+  uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
+  return video->config->read_vram_byte(video, address % vram_size);
+}
+
+YAX86_PRIVATE void VideoWriteVRAMByte(
+    VideoState* video, uint32_t address, uint8_t value) {
+  if (!video->config || !video->config->write_vram_byte) {
+    return;
+  }
+  uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
+  video->config->write_vram_byte(video, address % vram_size, value);
+}
+
+YAX86_PRIVATE void VideoWritePixel(
+    VideoState* video, Position position, RGB rgb) {
+  if (!video->config || !video->config->write_pixel) {
+    return;
+  }
+  video->config->write_pixel(video, position, rgb);
+}
+
+uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
+  if (address >= VideoGetAdapterMetadata(video)->vram_size) {
+    return kVideoUnmappedPortValue;
+  }
+  return VideoReadVRAMByte(video, address);
+}
+
+void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
+  if (address >= VideoGetAdapterMetadata(video)->vram_size) {
+    return;
+  }
+  VideoWriteVRAMByte(video, address, value);
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+void VideoInit(VideoState* video, VideoConfig* config) {
+  static const VideoState kEmptyVideoState = {0};
+  *video = kEmptyVideoState;
+  video->config = config;
+  video->adapter = config && config->adapter == kVideoAdapterCGA
+                       ? kVideoAdapterCGA
+                       : kVideoAdapterMDA;
+
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  const uint8_t* default_registers = video->adapter == kVideoAdapterCGA
+                                         ? kDefaultCGARegisters
+                                         : kDefaultMDARegisters;
+  for (uint8_t i = 0; i < kNumCRTCRegisters; ++i) {
+    video->registers[i] = default_registers[i];
+  }
+  video->control_register = adapter->default_control_register;
+
+  for (uint32_t i = 0; i < adapter->vram_size; i += 2) {
+    VideoWriteVRAMByte(video, i, ' ');
+    VideoWriteVRAMByte(video, i + 1, 0x07 /* default attr */);
+  }
+}
+
+// ============================================================================
+// Video mode
+// ============================================================================
+
+VideoMode VideoGetMode(const VideoState* video) {
+  if (video->adapter == kVideoAdapterMDA) {
+    // The MDA has only one mode.
+    return kVideoModeMDAText80x25;
+  }
+  // Derive the CGA mode from the mode control register, matching the values
+  // the BIOS writes for each of its INT 10h modes.
+  if (video->control_register & kVideoControlHighResolutionGraphics) {
+    return kVideoModeCGAGraphics640x200;
+  }
+  if (video->control_register & kVideoControlGraphics) {
+    return video->control_register & kVideoControlBlackAndWhite
+               ? kVideoModeCGAGraphics320x200Alt
+               : kVideoModeCGAGraphics320x200;
+  }
+  if (video->control_register & kVideoControlHighResolution) {
+    return video->control_register & kVideoControlBlackAndWhite
+               ? kVideoModeCGAText80x25Mono
+               : kVideoModeCGAText80x25Color;
+  }
+  return video->control_register & kVideoControlBlackAndWhite
+             ? kVideoModeCGAText40x25Mono
+             : kVideoModeCGAText40x25Color;
+}
+
+const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
+  return &kVideoModeMetadata[VideoGetMode(video)];
+}
+
+// ============================================================================
+// 6845 CRT controller
+// ============================================================================
+
+YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
+  return (uint16_t)(video->registers[kCRTCRegisterStartAddressH] << 8) |
+         video->registers[kCRTCRegisterStartAddressL];
+}
+
+YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
+  return (uint16_t)(video->registers[kCRTCRegisterCursorH] << 8) |
+         video->registers[kCRTCRegisterCursorL];
+}
+
+YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
+  return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
+         kCRTCCursorDisabled;
+}
+
+YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerBlinkPhase) % 2 == 0;
+}
+
+// ============================================================================
+// Retrace timing
+// ============================================================================
+
+void VideoTick(VideoState* video, uint16_t cycles) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  video->scan_line_cycles += cycles;
+  while (video->scan_line_cycles >= adapter->cycles_per_scan_line) {
+    video->scan_line_cycles -= adapter->cycles_per_scan_line;
+    if (++video->scan_line >= adapter->scan_lines_per_frame) {
+      video->scan_line = 0;
+      ++video->frames;
+    }
+  }
+}
+
+// The value the status port reads back, computed from where the CRT beam
+// currently is.
+static uint8_t VideoGetStatus(const VideoState* video) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
+  bool in_horizontal_retrace =
+      video->scan_line_cycles >= adapter->display_cycles_per_scan_line;
+
+  // No light pen is emulated, so its switch always reads as off.
+  uint8_t status = kVideoStatusLightPenSwitchOff;
+  if (in_vertical_retrace || in_horizontal_retrace) {
+    status |= kVideoStatusDisplayDisabled;
+  }
+  if (in_vertical_retrace) {
+    status |= kVideoStatusVerticalRetrace;
+  }
+  // Note that the unused high bits are deliberately left clear rather than
+  // floating high as they do on a real card: GLaBIOS probes bit 7 of the MDA
+  // status port to detect a Hercules adapter.
+  return status;
+}
+
+// ============================================================================
+// I/O ports
+// ============================================================================
+
+// What an I/O port in the adapter's range does.
+typedef enum VideoPortFunction {
+  // Port is not decoded by the adapter.
+  kVideoPortNone = 0,
+  // 6845 register index.
+  kVideoPortRegisterIndex,
+  // 6845 register data.
+  kVideoPortRegisterData,
+  // Mode control register.
+  kVideoPortControl,
+  // CGA color select register.
+  kVideoPortColorSelect,
+  // Status register.
+  kVideoPortStatus,
+} VideoPortFunction;
+
+// Decode an I/O port within the adapter's range.
+static VideoPortFunction VideoDecodePort(
+    const VideoState* video, uint16_t port) {
+  if (video->adapter == kVideoAdapterMDA) {
+    switch (port) {
+      case kMDAPortRegisterIndex:
+        return kVideoPortRegisterIndex;
+      case kMDAPortRegisterData:
+        return kVideoPortRegisterData;
+      case kMDAPortControl:
+        return kVideoPortControl;
+      case kMDAPortStatus:
+        return kVideoPortStatus;
+      default:
+        return kVideoPortNone;
+    }
+  }
+
+  // The CGA only decodes the low four address bits, so the 6845 index and data
+  // registers are aliased across 3D0 to 3D7.
+  uint16_t offset = port - kCGAPortStart;
+  if (offset < 8) {
+    return offset & 1 ? kVideoPortRegisterData : kVideoPortRegisterIndex;
+  }
+  switch (port) {
+    case kCGAPortControl:
+      return kVideoPortControl;
+    case kCGAPortColorSelect:
+      return kVideoPortColorSelect;
+    case kCGAPortStatus:
+      return kVideoPortStatus;
+    default:
+      // The light pen strobe ports respond but do nothing, as no light pen is
+      // emulated.
+      return kVideoPortNone;
+  }
+}
+
+uint8_t VideoReadPort(VideoState* video, uint16_t port) {
+  switch (VideoDecodePort(video, port)) {
+    case kVideoPortRegisterIndex:
+      return video->selected_register;
+    case kVideoPortRegisterData:
+      if (video->selected_register < kNumCRTCRegisters) {
+        return video->registers[video->selected_register];
+      }
+      return kVideoUnmappedPortValue;
+    case kVideoPortControl:
+      return video->control_register;
+    case kVideoPortColorSelect:
+      return video->color_select_register;
+    case kVideoPortStatus:
+      return VideoGetStatus(video);
+    default:
+      return kVideoUnmappedPortValue;
+  }
+}
+
+void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
+  switch (VideoDecodePort(video, port)) {
+    case kVideoPortRegisterIndex:
+      video->selected_register = value & kCRTCRegisterIndexMask;
+      break;
+    case kVideoPortRegisterData:
+      if (video->selected_register < kNumCRTCRegisters) {
+        video->registers[video->selected_register] = value;
+      }
+      break;
+    case kVideoPortControl:
+      video->control_register = value;
+      break;
+    case kVideoPortColorSelect:
+      video->color_select_register = value;
+      break;
+    default:
+      // The status port is read only.
+      break;
+  }
+}
+
+// ============================================================================
+// Rendering
+// ============================================================================
+
+void VideoRender(VideoState* video) {
+  if (!video->config || !video->config->write_pixel) {
+    return;
+  }
+
+  if (!(video->control_register & kVideoControlVideoEnable)) {
+    // The video signal is disabled, so the display is blank. The BIOS leaves it
+    // this way while it reprograms the 6845.
+    const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+    RGB blank = video->adapter == kVideoAdapterCGA
+                    ? video->config->cga_palette[0]
+                    : video->config->background;
+    for (uint16_t y = 0; y < adapter->frame_buffer_height; ++y) {
+      for (uint16_t x = 0; x < adapter->frame_buffer_width; ++x) {
+        Position pixel_pos = {.x = x, .y = y};
+        VideoWritePixel(video, pixel_pos, blank);
+      }
+    }
+    return;
+  }
+
+  if (video->adapter == kVideoAdapterCGA) {
+    CGARenderScreen(video);
+  } else {
+    MDARenderScreen(video);
+  }
+}
+
+
+// ==============================================================================
+// src/video/video.c end
 // ==============================================================================
 
 

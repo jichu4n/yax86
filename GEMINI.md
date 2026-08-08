@@ -32,6 +32,12 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - The `sdl` directory contains an SDL3-based runtime for the emulator.
 - It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
   wrapper (`yax86_sdl.{wasm,js}`).
+- It takes an optional floppy image path, defaulting to `floppy_a.img`, and an
+  optional `--cga` or `--mda` flag selecting the video adapter. The default is
+  CGA. The adapter is fixed for the life of the machine: it is chosen through
+  `PlatformConfig.video_adapter` before `PlatformInit()`, which decides both
+  what the platform registers and what the PPI's DIP switches report, and the
+  BIOS branches on those switches to decide which adapter to program.
 
 ## Code Style
 
