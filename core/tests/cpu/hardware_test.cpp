@@ -12,10 +12,6 @@
 //
 //   ./tools/download-cpu-hardware-tests.sh
 //
-// The test suite is registered with ctest so ./tools/run-tests.sh runs all
-// downloaded tests in parallel. No tests are reported when nothing has been
-// downloaded.
-//
 // Everything here is expected to pass apart from the divide instructions - see
 // KnownDivergence below.
 
