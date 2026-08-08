@@ -7,11 +7,3 @@
 .gemini/
 gha-creds-*.json
 
-# Assembler input and output from the CPU tests. These go to the build
-# directory now, so they should never land here - but a test binary built
-# before that change writes them relative to wherever it was run from, which
-# is how a batch of them ended up committed. Anchored to the root, so that the
-# assembly the demo tool takes as input is unaffected.
-/*.asm
-/*.com
-
