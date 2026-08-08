@@ -401,10 +401,10 @@ typedef struct PlatformState {
   // HDC state.
   HDCState hdc;
 
-  // MDA runtime configuration.
-  MDAConfig mda_config;
-  // MDA state.
-  MDAState mda;
+  // Video runtime configuration.
+  VideoConfig video_config;
+  // Video state.
+  VideoState video;
 
   // Memory map.
   MemoryMap memory_map;

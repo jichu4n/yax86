@@ -593,7 +593,7 @@ typedef struct TextPosition {
 // Video modes.
 typedef enum VideoMode {
   // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
-  kMDAText07 = 0x07,
+  kVideoModeMDAText80x25 = 0x07,
 
   // Number of video modes supported.
   kNumVideoModes = 8,
@@ -687,10 +687,50 @@ typedef struct VideoModeMetadata {
 // 3          | + Black/White Video
 // ========================================
 
-// The MDA contains a Motorola 6845 CRT controller. I/O port 3B4 is used to
-// select a register, and port I/O port 3B5 is used to read or write the data
-// for that register. Below are the registers and their default values for the
-// IBM Monochrome Display.
+// MDA I/O ports.
+enum {
+  kMDAPortRegisterIndex = 0x3B4,
+  kMDAPortRegisterData = 0x3B5,
+  kMDAPortControl = 0x3B8,
+  kMDAPortStatus = 0x3BA,
+  kMDAPortPrinterData = 0x3BC,
+  kMDAPortPrinterStatus = 0x3BD,
+  kMDAPortPrinterControl = 0x3BE,
+
+  // Start of the MDA I/O port range.
+  kMDAPortStart = 0x3B0,
+  // Inclusive end of the MDA I/O port range.
+  kMDAPortEnd = 0x3BF,
+};
+
+enum {
+  // MDA VRAM size.
+  kMDAVRAMSize = 4 * 1024,  // 4K
+};
+
+// MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
+static const VideoModeMetadata kMDAModeMetadata = {
+    .mode = kVideoModeMDAText80x25,
+    .type = kVideoModeText,
+    .vram_address = 0xB0000,
+    .vram_size = kMDAVRAMSize,
+    .width = 720,
+    .height = 350,
+    .num_pages = 1,
+    .columns = 80,
+    .rows = 25,
+    .char_width = 9,
+    .char_height = 14,
+};
+
+// ============================================================================
+// Motorola 6845 CRT controller
+// ============================================================================
+
+// The MDA is built around a Motorola 6845 CRT controller. I/O port 3B4 selects
+// a register, and port 3B5 is used to read or write the data for that register.
+// Below are the registers and their default values for the IBM Monochrome
+// Display.
 // =============================================================================
 // Register | Register File              | Program Unit     | IBM Monochrome
 // Number   |                            |                  | Display
@@ -715,71 +755,65 @@ typedef struct VideoModeMetadata {
 // R17      | Reserved                   | --------         | --
 // =============================================================================
 
-// MDA registers
+// 6845 CRT controller registers.
 enum {
-  kMDARegisterHorizontalTotal = 0,
-  kMDARegisterHorizontalDisplayed,
-  kMDARegisterHorizontalSyncPosition,
-  kMDARegisterHorizontalSyncWidth,
-  kMDARegisterVerticalTotal,
-  kMDARegisterVerticalTotalAdjust,
-  kMDARegisterVerticalDisplayed,
-  kMDARegisterVerticalSyncPosition,
-  kMDARegisterInterlaceMode,
-  kMDARegisterMaximumScanLine,
-  kMDARegisterCursorStart,
-  kMDARegisterCursorEnd,
-  kMDARegisterStartAddressH,
-  kMDARegisterStartAddressL,
-  kMDARegisterCursorH,
-  kMDARegisterCursorL,
-  kMDARegisterReserved16,
-  kMDARegisterReserved17,
+  kCRTCRegisterHorizontalTotal = 0,
+  kCRTCRegisterHorizontalDisplayed,
+  kCRTCRegisterHorizontalSyncPosition,
+  kCRTCRegisterHorizontalSyncWidth,
+  kCRTCRegisterVerticalTotal,
+  kCRTCRegisterVerticalTotalAdjust,
+  kCRTCRegisterVerticalDisplayed,
+  kCRTCRegisterVerticalSyncPosition,
+  kCRTCRegisterInterlaceMode,
+  kCRTCRegisterMaximumScanLine,
+  kCRTCRegisterCursorStart,
+  kCRTCRegisterCursorEnd,
+  kCRTCRegisterStartAddressH,
+  kCRTCRegisterStartAddressL,
+  kCRTCRegisterCursorH,
+  kCRTCRegisterCursorL,
+  kCRTCRegisterReserved16,
+  kCRTCRegisterReserved17,
 
-  // Total number of MDA registers.
-  kMDANumRegisters,
+  // Total number of 6845 CRT controller registers.
+  kNumCRTCRegisters,
 };
 
-// MDA I/O ports.
+// ============================================================================
+// Register bits
+// ============================================================================
+
+// Bits in a text mode attribute byte.
 enum {
-  kMDAPortRegisterIndex = 0x3B4,
-  kMDAPortRegisterData = 0x3B5,
-  kMDAPortControl = 0x3B8,
-  kMDAPortStatus = 0x3BA,
-  kMDAPortPrinterData = 0x3BC,
-  kMDAPortPrinterStatus = 0x3BD,
-  kMDAPortPrinterControl = 0x3BE,
+  // Foreground color.
+  kVideoAttributeForegroundMask = 0x07,
+  // Intense foreground.
+  kVideoAttributeIntenseForeground = 1 << 3,
+  // Background color.
+  kVideoAttributeBackgroundMask = 0x70,
+  // Number of bits to shift right to get the background color.
+  kVideoAttributeBackgroundShift = 4,
+  // Blinking foreground, or intense background if blinking is disabled in the
+  // mode control register.
+  kVideoAttributeBlink = 1 << 7,
 };
 
 enum {
-  // MDA memory map entry type.
-  kMemoryMapEntryMDAVRAM = 0x10,
-  // MDA VRAM size.
-  kMDAVRAMSize = 4 * 1024,  // 4K
-
-  // MDA port map entry type.
-  kPortMapEntryMDA = 0x10,
+  // Video memory map entry type.
+  kMemoryMapEntryVRAM = 0x10,
+  // Video port map entry type.
+  kPortMapEntryVideo = 0x10,
 };
 
-// MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
-static const VideoModeMetadata kMDAModeMetadata = {
-    .mode = kMDAText07,
-    .type = kVideoModeText,
-    .vram_address = 0xB0000,
-    .vram_size = kMDAVRAMSize,
-    .width = 720,
-    .height = 350,
-    .num_pages = 1,
-    .columns = 80,
-    .rows = 25,
-    .char_width = 9,
-    .char_height = 14,
-};
+// ============================================================================
+// Video state
+// ============================================================================
 
-struct MDAState;
+struct VideoState;
 
-// Caller-provided configuration for MDA text mode rendering.
-typedef struct MDAConfig {
+// Caller-provided configuration for video rendering.
+typedef struct VideoConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -794,18 +828,18 @@ typedef struct MDAConfig {
   RGB background;
 
   // Callback to read a byte from the emulated video RAM.
-  uint8_t (*read_vram_byte)(struct MDAState* mda, uint32_t address);
+  uint8_t (*read_vram_byte)(struct VideoState* video, uint32_t address);
   // Callback to write a byte to the emulated video RAM.
   void (*write_vram_byte)(
-      struct MDAState* mda, uint32_t address, uint8_t value);
+      struct VideoState* video, uint32_t address, uint8_t value);
 
   // Callback to write an RGB pixel value to the real display, invoked from
-  // MDARender().
-  void (*write_pixel)(struct MDAState* mda, Position position, RGB rgb);
-} MDAConfig;
+  // VideoRender().
+  void (*write_pixel)(struct VideoState* video, Position position, RGB rgb);
+} VideoConfig;
 
-// Default MDA config.
-static const MDAConfig kDefaultMDAConfig = {
+// Default video config.
+static const VideoConfig kDefaultVideoConfig = {
     .context = NULL,
 
     .foreground = {.r = 0xAA, .g = 0xAA, .b = 0xAA},
@@ -817,37 +851,37 @@ static const MDAConfig kDefaultMDAConfig = {
     .write_pixel = NULL,
 };
 
-// MDA state.
-typedef struct MDAState {
+// Video state.
+typedef struct VideoState {
   // Caller-provided runtime configuration.
-  MDAConfig* config;
+  VideoConfig* config;
 
   // Motorola 6845 CRT controller registers.
-  uint8_t registers[kMDANumRegisters];
+  uint8_t registers[kNumCRTCRegisters];
   // Currently selected 6845 CRT controller register index (I/O port 3B4).
   uint8_t selected_register;
-  // Control port value (I/O port 3B8).
-  uint8_t control_port;
-  // Status port value (I/O port 3BA).
-  uint8_t status_port;
-} MDAState;
+  // Mode control register value (I/O port 3B8).
+  uint8_t control_register;
+  // Status register value (I/O port 3BA).
+  uint8_t status_register;
+} VideoState;
 
-// Initialize MDA state with the provided configuration.
-void MDAInit(MDAState* mda, MDAConfig* config);
+// Initialize video state with the provided configuration.
+void VideoInit(VideoState* video, VideoConfig* config);
 
-// Read a byte from an MDA I/O port.
-uint8_t MDAReadPort(MDAState* mda, uint16_t port);
-// Write a byte to an MDA I/O port.
-void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value);
+// Read a byte from a video I/O port.
+uint8_t VideoReadPort(VideoState* video, uint16_t port);
+// Write a byte to a video I/O port.
+void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
 
-// Read a byte from MDA VRAM.
-uint8_t MDAReadVRAM(MDAState* mda, uint32_t address);
-// Write a byte to MDA VRAM.
-void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value);
+// Read a byte from video RAM.
+uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
+// Write a byte to video RAM.
+void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.
-void MDARender(MDAState* mda);
+void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H
 
@@ -883,6 +917,44 @@ extern const uint8_t kFontCGA8x8Bitmap[256][8];
 
 // ==============================================================================
 // src/video/fonts.h end
+// ==============================================================================
+
+// ==============================================================================
+// src/video/internal.h start
+// ==============================================================================
+
+#line 1 "./src/video/internal.h"
+// Internal interface shared between the video module's source files.
+#ifndef YAX86_VIDEO_INTERNAL_H
+#define YAX86_VIDEO_INTERNAL_H
+
+#ifndef YAX86_IMPLEMENTATION
+#include "../util/common.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// Read a byte from the emulated video RAM, or 0xFF if the address is out of
+// range or no callback is installed.
+YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
+
+// Write a byte to the emulated video RAM, ignored if the address is out of
+// range or no callback is installed.
+YAX86_PRIVATE void VideoWriteVRAMByte(
+    VideoState* video, uint32_t address, uint8_t value);
+
+// Write an RGB pixel value to the real display, ignored if no callback is
+// installed.
+YAX86_PRIVATE void VideoWritePixel(
+    VideoState* video, Position position, RGB rgb);
+
+// Render the current display in MDA text mode.
+YAX86_PRIVATE void MDARenderScreen(VideoState* video);
+
+#endif  // YAX86_VIDEO_INTERNAL_H
+
+
+// ==============================================================================
+// src/video/internal.h end
 // ==============================================================================
 
 // ==============================================================================
@@ -1691,120 +1763,29 @@ YAX86_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
 #line 1 "./src/video/mda.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "fonts.h"
+#include "internal.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-// Default MDA state.
-static const MDAState kDefaultMDAState = {
-    .config = NULL,
-    .registers =
-        {
-            0x61,
-            0x50,
-            0x52,
-            0x0F,
-            0x19,
-            0x06,
-            0x19,
-            0x19,
-            0x02,
-            0x0D,
-            0x0B,
-            0x0C,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-        },
-    .selected_register = 0,
-    // high resolution mode, video enable, blink enable
-    .control_port = 0x29,
-    .status_port = 0x00,
-};
-
-static inline uint8_t ReadVRAMByte(MDAState* mda, uint32_t address) {
-  if (mda->config && mda->config->read_vram_byte &&
-      address < kMDAModeMetadata.vram_size) {
-    return mda->config->read_vram_byte(mda, address);
-  }
-  return 0xFF;
-}
-
-static inline void WriteVRAMByte(
-    MDAState* mda, uint32_t address, uint8_t value) {
-  if (mda->config && mda->config->write_vram_byte &&
-      address < kMDAModeMetadata.vram_size) {
-    mda->config->write_vram_byte(mda, address, value);
-  }
-}
-
-// Initialize MDA state with the provided configuration.
-void MDAInit(MDAState* mda, MDAConfig* config) {
-  *mda = kDefaultMDAState;
-  mda->config = config;
-
-  for (uint32_t i = 0; i < kMDAModeMetadata.vram_size; i += 2) {
-    WriteVRAMByte(mda, i, ' ');
-    WriteVRAMByte(mda, i + 1, 0x07 /* default attr */);
-  }
-}
-
-uint8_t MDAReadVRAM(MDAState* mda, uint32_t address) {
-  return ReadVRAMByte(mda, address);
-}
-
-void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value) {
-  WriteVRAMByte(mda, address, value);
-}
-
-uint8_t MDAReadPort(MDAState* mda, uint16_t port) {
-  switch (port) {
-    case kMDAPortRegisterIndex:
-      return mda->selected_register;
-    case kMDAPortRegisterData:
-      if (mda->selected_register < kMDANumRegisters) {
-        return mda->registers[mda->selected_register];
-      }
-      return 0xFF;
-    case kMDAPortControl:
-      return mda->control_port;
-    case kMDAPortStatus:
-      return mda->status_port;
-    default:
-      return 0xFF;
-  }
-}
-
-void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value) {
-  switch (port) {
-    case kMDAPortRegisterIndex:
-      mda->selected_register = value;
-      break;
-    case kMDAPortRegisterData:
-      if (mda->selected_register < kMDANumRegisters) {
-        mda->registers[mda->selected_register] = value;
-      }
-      break;
-    case kMDAPortControl:
-      mda->control_port = value;
-      break;
-    case kMDAPortStatus:
-      mda->status_port = value;
-      break;
-    default:
-      break;
-  }
-}
-
 enum {
-  // Position of underline in MDA text mode.
+  // Position of the underline within an MDA character cell.
   kMDAUnderlinePosition = 12,
+  // Attribute values are only meaningful in these three-bit fields, so the
+  // documented combinations are compared against them directly.
+  kMDAAttributeNormal = 0x07,
+  kMDAAttributeInverse = 0x00,
+  kMDAAttributeUnderline = 0x01,
 };
 
-// Write a character to display in MDA text mode. For the attribute byte, we
-// only support the officially documented combinations of values.
+// Colors to draw a character cell with.
+typedef struct MDACellColors {
+  const RGB* foreground;
+  const RGB* background;
+  bool underline;
+} MDACellColors;
+
+// Decode an MDA attribute byte. We only support the officially documented
+// combinations of values.
 //
 // Attribute byte structure:
 //   - Bit 7: blink (0 = normal, 1 = blink)
@@ -1820,48 +1801,60 @@ enum {
 //
 // Other combinations are undefined, but we will treat them as normal.
 // TODO: Support blinking.
-static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
-  uint32_t char_address =
-      (char_pos.row * kMDAModeMetadata.columns + char_pos.col) *
-      2;  // Each character takes 2 bytes (char + attr).
-  uint8_t char_value = ReadVRAMByte(mda, char_address);
-  uint8_t attr_value = ReadVRAMByte(mda, char_address + 1);
-  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
+  const VideoConfig* config = video->config;
+  MDACellColors colors = {
+      .foreground = &config->foreground,
+      .background = &config->background,
+      .underline = false,
+  };
 
-  const RGB* foreground;
-  const RGB* background;
-  bool underline = false;
+  bool intense = (attr_value & kVideoAttributeIntenseForeground) != 0;
+  const RGB* intense_aware_foreground =
+      intense ? &config->intense_foreground : &config->foreground;
+  uint8_t background_attr = (attr_value & kVideoAttributeBackgroundMask) >>
+                            kVideoAttributeBackgroundShift;
+  uint8_t foreground_attr = attr_value & kVideoAttributeForegroundMask;
 
-  bool intense = ((attr_value >> 3) & 0x01) != 0;
-  uint8_t background_attr = (attr_value >> 4) & 0x07;
-  uint8_t foreground_attr = attr_value & 0x07;
-  if (background_attr == 0x00 && foreground_attr == 0x07) {
+  if (background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeNormal) {
     // Normal video mode.
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
-  } else if (background_attr == 0x07 && foreground_attr == 0x00) {
+    colors.foreground = intense_aware_foreground;
+  } else if (
+      background_attr == kMDAAttributeNormal &&
+      foreground_attr == kMDAAttributeInverse) {
     // Inverse video mode.
-    foreground = &mda->config->background;
-    background = &mda->config->foreground;
-  } else if (background_attr == 0x00 && foreground_attr == 0x00) {
+    colors.foreground = &config->background;
+    colors.background = &config->foreground;
+  } else if (
+      background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeInverse) {
     // Invisible mode.
-    foreground = &mda->config->background;
-    background = &mda->config->background;
-  } else if (background_attr == 0x00 && foreground_attr == 0x01) {
+    colors.foreground = &config->background;
+  } else if (
+      background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeUnderline) {
     // Underline mode.
-    underline = true;
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
+    colors.underline = true;
+    colors.foreground = intense_aware_foreground;
   } else {
     // Other combinations are treated as normal.
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
+    colors.foreground = intense_aware_foreground;
   }
 
+  return colors;
+}
+
+// Write a character to display in MDA text mode. char_address is the address of
+// the character's first byte in VRAM.
+static void MDAWriteChar(
+    VideoState* video, TextPosition char_pos, uint32_t char_address) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  uint8_t char_value = VideoReadVRAMByte(video, char_address);
+  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+  MDACellColors colors = MDADecodeAttribute(video, attr_value);
+
   Position origin_pixel_pos = {
       .x = char_pos.col * metadata->char_width,
       .y = char_pos.row * metadata->char_height,
@@ -1869,7 +1862,7 @@ static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
   for (uint8_t y = 0; y < metadata->char_height; ++y) {
     uint16_t row_bitmap;
     // If underline, set entire underline row to foreground color.
-    if (y == kMDAUnderlinePosition && underline) {
+    if (y == kMDAUnderlinePosition && colors.underline) {
       row_bitmap = 0xFFFF;
     } else {
       row_bitmap = char_bitmap[y];
@@ -1881,19 +1874,22 @@ static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
       };
       bool is_foreground =
           (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
-      const RGB* pixel_rgb = is_foreground ? foreground : background;
-      mda->config->write_pixel(mda, pixel_pos, *pixel_rgb);
+      const RGB* pixel_rgb =
+          is_foreground ? colors.foreground : colors.background;
+      VideoWritePixel(video, pixel_pos, *pixel_rgb);
     }
   }
 }
 
-// Render the current display. Invokes the write_pixel callback to do the actual
-// pixel rendering.
-void MDARender(MDAState* mda) {
-  for (uint8_t row = 0; row < kMDAModeMetadata.rows; ++row) {
-    for (uint8_t col = 0; col < kMDAModeMetadata.columns; ++col) {
+// Render the current display in MDA text mode.
+YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
+  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  for (uint8_t row = 0; row < metadata->rows; ++row) {
+    for (uint8_t col = 0; col < metadata->columns; ++col) {
       TextPosition char_pos = {.col = col, .row = row};
-      MDAWriteChar(mda, char_pos);
+      // Each character takes 2 bytes (char + attr).
+      uint32_t char_address = ((uint32_t)row * metadata->columns + col) * 2;
+      MDAWriteChar(video, char_pos, char_address);
     }
   }
 }
@@ -1901,6 +1897,147 @@ void MDARender(MDAState* mda) {
 
 // ==============================================================================
 // src/video/mda.c end
+// ==============================================================================
+
+// ==============================================================================
+// src/video/video.c start
+// ==============================================================================
+
+#line 1 "./src/video/video.c"
+#ifndef YAX86_IMPLEMENTATION
+#include "internal.h"
+#include "public.h"
+#endif  // YAX86_IMPLEMENTATION
+
+// Power-on 6845 register values for the IBM Monochrome Display.
+static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
+    0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
+    0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+enum {
+  // High resolution mode, video enable, blink enable.
+  kMDADefaultControlRegister = 0x29,
+
+  // Value returned for reads that decode to nothing.
+  kVideoUnmappedPortValue = 0xFF,
+};
+
+// ============================================================================
+// Video RAM
+// ============================================================================
+
+YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
+  if (!video->config || !video->config->read_vram_byte ||
+      address >= kMDAModeMetadata.vram_size) {
+    return kVideoUnmappedPortValue;
+  }
+  return video->config->read_vram_byte(video, address);
+}
+
+YAX86_PRIVATE void VideoWriteVRAMByte(
+    VideoState* video, uint32_t address, uint8_t value) {
+  if (!video->config || !video->config->write_vram_byte ||
+      address >= kMDAModeMetadata.vram_size) {
+    return;
+  }
+  video->config->write_vram_byte(video, address, value);
+}
+
+YAX86_PRIVATE void VideoWritePixel(
+    VideoState* video, Position position, RGB rgb) {
+  if (!video->config || !video->config->write_pixel) {
+    return;
+  }
+  video->config->write_pixel(video, position, rgb);
+}
+
+uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
+  return VideoReadVRAMByte(video, address);
+}
+
+void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
+  VideoWriteVRAMByte(video, address, value);
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+void VideoInit(VideoState* video, VideoConfig* config) {
+  static const VideoState kEmptyVideoState = {0};
+  *video = kEmptyVideoState;
+  video->config = config;
+
+  for (uint8_t i = 0; i < kNumCRTCRegisters; ++i) {
+    video->registers[i] = kDefaultMDARegisters[i];
+  }
+  video->control_register = kMDADefaultControlRegister;
+
+  for (uint32_t i = 0; i < kMDAModeMetadata.vram_size; i += 2) {
+    VideoWriteVRAMByte(video, i, ' ');
+    VideoWriteVRAMByte(video, i + 1, 0x07 /* default attr */);
+  }
+}
+
+// ============================================================================
+// I/O ports
+// ============================================================================
+
+uint8_t VideoReadPort(VideoState* video, uint16_t port) {
+  switch (port) {
+    case kMDAPortRegisterIndex:
+      return video->selected_register;
+    case kMDAPortRegisterData:
+      if (video->selected_register < kNumCRTCRegisters) {
+        return video->registers[video->selected_register];
+      }
+      return kVideoUnmappedPortValue;
+    case kMDAPortControl:
+      return video->control_register;
+    case kMDAPortStatus:
+      return video->status_register;
+    default:
+      return kVideoUnmappedPortValue;
+  }
+}
+
+void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
+  switch (port) {
+    case kMDAPortRegisterIndex:
+      video->selected_register = value;
+      break;
+    case kMDAPortRegisterData:
+      if (video->selected_register < kNumCRTCRegisters) {
+        video->registers[video->selected_register] = value;
+      }
+      break;
+    case kMDAPortControl:
+      video->control_register = value;
+      break;
+    case kMDAPortStatus:
+      video->status_register = value;
+      break;
+    default:
+      break;
+  }
+}
+
+// ============================================================================
+// Rendering
+// ============================================================================
+
+void VideoRender(VideoState* video) {
+  if (!video->config || !video->config->write_pixel) {
+    return;
+  }
+
+  MDARenderScreen(video);
+}
+
+
+// ==============================================================================
+// src/video/video.c end
 // ==============================================================================
 
 

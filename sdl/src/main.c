@@ -9,8 +9,8 @@
 #include "core/platform.h"
 #include "core/video.h"
 #include "audio.h"
-#include "floppy.h"
 #include "display.h"
+#include "floppy.h"
 #include "input.h"
 
 // 1MB of internal address space (covers conventional memory + video RAM + BIOS)
@@ -80,17 +80,17 @@ static void MainWriteMemory(
 }
 
 static uint8_t MainReadVRAM(
-    YAX86_UNUSED struct MDAState* mda, uint32_t address) {
-  return MainReadMemory(&g_platform, 0xB0000 + address);
+    YAX86_UNUSED struct VideoState* video, uint32_t address) {
+  return MainReadMemory(&g_platform, kMDAModeMetadata.vram_address + address);
 }
 
 static void MainWriteVRAM(
-    YAX86_UNUSED struct MDAState* mda, uint32_t address, uint8_t value) {
-  MainWriteMemory(&g_platform, 0xB0000 + address, value);
+    YAX86_UNUSED struct VideoState* video, uint32_t address, uint8_t value) {
+  MainWriteMemory(&g_platform, kMDAModeMetadata.vram_address + address, value);
 }
 
 static void MainWritePixel(
-    YAX86_UNUSED struct MDAState* mda, Position position, RGB rgb) {
+    YAX86_UNUSED struct VideoState* video, Position position, RGB rgb) {
   DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
 }
 
@@ -151,8 +151,8 @@ void MainTick(void) {
   }
 
   // 3. Render
-  MDARender(&g_platform.mda);  // Update virtual buffer
-  DisplayRender();             // Update screen
+  VideoRender(&g_platform.video);  // Update virtual buffer
+  DisplayRender();                 // Update screen
 }
 
 int main(int argc, char* argv[]) {
@@ -212,10 +212,11 @@ int main(int argc, char* argv[]) {
   }
 
   // Hook up video callback
-  // PlatformInit initializes sub-modules. We override the MDA config callback.
-  g_platform.mda_config.read_vram_byte = MainReadVRAM;
-  g_platform.mda_config.write_vram_byte = MainWriteVRAM;
-  g_platform.mda_config.write_pixel = MainWritePixel;
+  // PlatformInit initializes sub-modules. We override the video config
+  // callbacks.
+  g_platform.video_config.read_vram_byte = MainReadVRAM;
+  g_platform.video_config.write_vram_byte = MainWriteVRAM;
+  g_platform.video_config.write_pixel = MainWritePixel;
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(MainTick, 0, 1);
