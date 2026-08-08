@@ -4,8 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Initialize the display subsystem.
-bool DisplayInit(void);
+// Initialize the display subsystem with a frame buffer of the given size in
+// pixels.
+bool DisplayInit(int width, int height);
 
 // Clean up the display subsystem.
 void DisplayQuit(void);

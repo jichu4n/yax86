@@ -80,14 +80,20 @@ static void MainWriteMemory(
   }
 }
 
+// The video adapter installed in the emulated machine, and its metadata.
+static VideoAdapter g_video_adapter = kVideoAdapterCGA;
+static const VideoAdapterMetadata* g_video_adapter_metadata = NULL;
+
 static uint8_t MainReadVRAM(
     YAX86_UNUSED struct VideoState* video, uint32_t address) {
-  return MainReadMemory(&g_platform, kMDAModeMetadata.vram_address + address);
+  return MainReadMemory(
+      &g_platform, g_video_adapter_metadata->vram_address + address);
 }
 
 static void MainWriteVRAM(
     YAX86_UNUSED struct VideoState* video, uint32_t address, uint8_t value) {
-  MainWriteMemory(&g_platform, kMDAModeMetadata.vram_address + address, value);
+  MainWriteMemory(
+      &g_platform, g_video_adapter_metadata->vram_address + address, value);
 }
 
 static void MainWritePixel(
@@ -165,7 +171,11 @@ int main(int argc, char* argv[]) {
   // NULL means a blank disk, which is what the default gives.
   const char* hard_disk_path = NULL;
   for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--hdd") == 0) {
+    if (strcmp(argv[i], "--cga") == 0) {
+      g_video_adapter = kVideoAdapterCGA;
+    } else if (strcmp(argv[i], "--mda") == 0) {
+      g_video_adapter = kVideoAdapterMDA;
+    } else if (strcmp(argv[i], "--hdd") == 0) {
       attach_hard_disk = true;
       // An image path may follow, but --hdd on its own is a blank disk.
       if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -176,15 +186,20 @@ int main(int argc, char* argv[]) {
     } else if (argv[i][0] == '-') {
       fprintf(stderr, "Unknown option '%s'\n", argv[i]);
       fprintf(
-          stderr, "Usage: %s [floppy image] [--hdd [image]] [--no-hdd]\n",
+          stderr,
+          "Usage: %s [floppy image] [--mda|--cga] [--hdd [image]] "
+          "[--no-hdd]\n",
           argv[0]);
       return 1;
     } else {
       floppy_path = argv[i];
     }
   }
+  g_video_adapter_metadata = &kVideoAdapterMetadata[g_video_adapter];
 
-  if (!DisplayInit()) {
+  if (!DisplayInit(
+          g_video_adapter_metadata->frame_buffer_width,
+          g_video_adapter_metadata->frame_buffer_height)) {
     fprintf(stderr, "Failed to init display\n");
     return 1;
   }
@@ -213,6 +228,7 @@ int main(int argc, char* argv[]) {
   if (audio_available) {
     config.set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
   }
+  config.video_adapter = g_video_adapter;
 
   if (!PlatformInit(&g_platform, &config)) {
     fprintf(stderr, "Failed to init platform\n");

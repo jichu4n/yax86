@@ -591,7 +591,11 @@ static void PlatformInitPPI(PlatformState* platform) {
   platform->ppi_config.logger = &platform->logger;
   platform->ppi_config.num_floppy_drives = 1;
   platform->ppi_config.memory_size = kPPIMemorySize256KB;
-  platform->ppi_config.display_mode = kPPIDisplayMDA;
+  // The DIP switches are what the BIOS branches on to decide which adapter to
+  // program, so they have to agree with the adapter the platform registers.
+  platform->ppi_config.display_mode =
+      platform->config->video_adapter == kVideoAdapterCGA ? kPPIDisplayCGA80x25
+                                                          : kPPIDisplayMDA;
   platform->ppi_config.fpu_installed = false;
   platform->ppi_config.set_pc_speaker_frequency =
       PPICallbackSetPCSpeakerFrequency;
@@ -695,13 +699,17 @@ static void PlatformInitVideo(PlatformState* platform) {
   platform->video_config = kDefaultVideoConfig;
   platform->video_config.context = platform;
   platform->video_config.logger = &platform->logger;
+  platform->video_config.adapter = platform->config->video_adapter;
   VideoInit(&platform->video, &platform->video_config);
+
+  const VideoAdapterMetadata* adapter =
+      VideoGetAdapterMetadata(&platform->video);
 
   MemoryMapEntry vram_entry = {
       .context = &platform->video,
       .entry_type = kMemoryMapEntryVRAM,
-      .start = kMDAModeMetadata.vram_address,
-      .end = kMDAModeMetadata.vram_address + kMDAModeMetadata.vram_size - 1,
+      .start = adapter->vram_address,
+      .end = adapter->vram_address + adapter->vram_size - 1,
       .read_byte = VideoCallbackReadVRAMByte,
       .write_byte = VideoCallbackWriteVRAMByte,
   };
@@ -710,8 +718,8 @@ static void PlatformInitVideo(PlatformState* platform) {
   PortMapEntry port_entry = {
       .context = &platform->video,
       .entry_type = kPortMapEntryVideo,
-      .start = kMDAPortStart,
-      .end = kMDAPortEnd,
+      .start = adapter->port_start,
+      .end = adapter->port_end,
       .read_byte = VideoCallbackReadPortByte,
       .write_byte = VideoCallbackWritePortByte,
   };
@@ -820,9 +828,8 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
     KeyboardTickMs(&platform->keyboard);
   }
 
-  // The video adapter keeps its own cycle remainder, since it advances the CRT
-  // beam scan line by scan line rather than in a fixed period like the devices
-  // above.
+  // The video adapter keeps its own cycle remainder, because the MDA and the
+  // CGA scan at different rates.
   VideoTick(&platform->video, cycles);
 
   // A watchpoint may have fired from the CPU or from a DMA transfer.
