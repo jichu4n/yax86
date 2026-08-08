@@ -13,9 +13,8 @@ gtest_discover_tests(cpu_tests)
 # =============================================================================
 # 8088 CPU hardware test suite
 # =============================================================================
-# Deliberately not registered with ctest: the set of tests depends on which
-# opcodes have been downloaded, which ctest would bake in at build time.
-# tools/run-tests.sh runs the binary directly.
+# Registered with ctest via gtest_discover_tests so that tools/run-tests.sh
+# runs all downloaded tests in parallel.
 #
 # zlib is required rather than optional. The suite ships compressed, and
 # building it conditionally would mean tools/run-tests.sh had to cope with the
@@ -29,6 +28,8 @@ target_link_libraries(cpu_hardware_tests gtest_main yax86_core ZLIB::ZLIB)
 # downloading more of them does not need a rebuild.
 target_compile_definitions(cpu_hardware_tests PRIVATE
   YAX86_CPU_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/.cache/8088-tests")
+
+gtest_discover_tests(cpu_hardware_tests DISCOVERY_MODE PRE_TEST)
 
 # =============================================================================
 # Dependencies

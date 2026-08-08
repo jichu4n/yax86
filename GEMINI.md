@@ -109,8 +109,8 @@ than failing. It can also be run on its own, and a single opcode picked out:
 build-native/core/tests/cpu/cpu_hardware_tests
 build-native/core/tests/cpu/cpu_hardware_tests --gtest_filter='*Opcode8D*'
 ```
-It is deliberately not registered with ctest, because the set of tests depends
-on what has been downloaded and ctest would bake that in at build time.
+The suite is registered with ctest via gtest_discover_tests so that
+`./tools/run-tests.sh` runs all downloaded hardware test opcodes in parallel.
 
 Only the architectural result is compared - the suite's per-cycle bus records
 are for cycle-accurate emulators, and flags the 8088 leaves undefined are
