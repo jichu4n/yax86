@@ -118,15 +118,53 @@ static void MDAWriteChar(
   }
 }
 
+// Draw the text mode cursor over the character cell it occupies.
+static void MDADrawCursor(VideoState* video, uint16_t start_address) {
+  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  if (!VideoIsCursorEnabled(video)) {
+    return;
+  }
+  uint16_t cursor_offset = (VideoGetCursorAddress(video) - start_address) &
+                           (metadata->vram_size / 2 - 1);
+  uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
+  if (cursor_offset >= num_cells) {
+    return;
+  }
+
+  uint8_t cursor_start = video->registers[kCRTCRegisterCursorStart] & 0x1F;
+  uint8_t cursor_end = video->registers[kCRTCRegisterCursorEnd] & 0x1F;
+  if (cursor_start >= metadata->char_height) {
+    return;
+  }
+  if (cursor_end >= metadata->char_height) {
+    cursor_end = metadata->char_height - 1;
+  }
+
+  uint16_t origin_x =
+      (cursor_offset % metadata->columns) * metadata->char_width;
+  uint16_t origin_y =
+      (cursor_offset / metadata->columns) * metadata->char_height;
+  for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
+    for (uint8_t x = 0; x < metadata->char_width; ++x) {
+      Position pixel_pos = {.x = origin_x + x, .y = origin_y + y};
+      VideoWritePixel(video, pixel_pos, video->config->foreground);
+    }
+  }
+}
+
 // Render the current display in MDA text mode.
 YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  uint16_t start_address = VideoGetStartAddress(video);
   for (uint8_t row = 0; row < metadata->rows; ++row) {
     for (uint8_t col = 0; col < metadata->columns; ++col) {
       TextPosition char_pos = {.col = col, .row = row};
       // Each character takes 2 bytes (char + attr).
-      uint32_t char_address = ((uint32_t)row * metadata->columns + col) * 2;
+      uint32_t char_address =
+          ((uint32_t)start_address + row * metadata->columns + col) * 2;
+      char_address &= metadata->vram_size - 1;
       MDAWriteChar(video, char_pos, char_address);
     }
   }
+  MDADrawCursor(video, start_address);
 }
