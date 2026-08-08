@@ -54,16 +54,21 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   POST reports as `Master at 300h`. Rev 2 crosses address lines A0 and A3, so a
   physical port offset maps to an ATA register offset with bits 0 and 3
   swapped - the BIOS polls status at physical 0x30E, not 0x307.
+- An empty drive slot leaves the task file undriven, so its status register
+  reads as 0. That is how the option ROM concludes a drive is absent: it
+  selects the drive, polls status, and gives up when the ready bit never
+  appears.
+- Commands complete synchronously inside the port write that issues them, so
+  there is no HDCTick and no seek or rotational timing. The controller is
+  polled PIO, so nothing in the guest can observe the difference.
 
 ### sdl - SDL runtime
 
 - The `sdl` directory contains an SDL3-based runtime for the emulator.
 - It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
   wrapper (`yax86_sdl.{wasm,js}`).
-- It takes an optional floppy image path, defaulting to `floppy_a.img`. The
-  hard disk controller's option ROM is loaded from `hdd_rom.bin`, copied to the
-  build directory from `resources/XTIDE/ide_xtl.bin` and preloaded into the
-  Emscripten filesystem alongside the boot floppy.
+- It takes an optional floppy image path, defaulting to `floppy_a.img`, and an
+  optional `--hdd` flag that attaches a hard disk.
 - `src/audio.c` turns the frequency the core reports for the PC speaker into a
   square wave. The core hands over a frequency rather than a stream of samples,
   so nothing here has to reconcile emulated time with the audio clock - the

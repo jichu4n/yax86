@@ -133,6 +133,8 @@ enum {
   kPortMapEntryPPI = 0x60,
   // I/O port map entry for the FDC (ports 0x3F0-0x3F7).
   kPortMapEntryFDC = 0x3F0,
+  // I/O port map entry for the HDC (ports 0x300-0x30F).
+  kPortMapEntryHDC = 0x300,
   // I/O port map entry for the DMA controller (ports 0x00-0x0F).
   kPortMapEntryDMA = 0x00,
   // I/O port map entry for the DMA Page Registers (ports 0x80-0x8F).

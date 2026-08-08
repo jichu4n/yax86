@@ -11,6 +11,7 @@
 #include "audio.h"
 #include "display.h"
 #include "floppy.h"
+#include "harddisk.h"
 #include "input.h"
 
 // 1MB of internal address space (covers conventional memory + video RAM + BIOS)
@@ -156,6 +157,20 @@ void MainTick(void) {
 }
 
 int main(int argc, char* argv[]) {
+  const char* floppy_path = kDefaultFloppyImagePath;
+  bool attach_hard_disk = false;
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--hdd") == 0) {
+      attach_hard_disk = true;
+    } else if (argv[i][0] == '-') {
+      fprintf(stderr, "Unknown option '%s'\n", argv[i]);
+      fprintf(stderr, "Usage: %s [floppy image] [--hdd]\n", argv[0]);
+      return 1;
+    } else {
+      floppy_path = argv[i];
+    }
+  }
+
   if (!DisplayInit()) {
     fprintf(stderr, "Failed to init display\n");
     return 1;
@@ -200,7 +215,6 @@ int main(int argc, char* argv[]) {
 
   // Mount the boot floppy. Without one the BIOS still runs, so a failure here
   // is reported but not fatal.
-  const char* floppy_path = argc > 1 ? argv[1] : kDefaultFloppyImagePath;
   if (FloppyMount(&g_platform, floppy_path)) {
     YAX86_LOG(
         &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
@@ -209,6 +223,17 @@ int main(int argc, char* argv[]) {
     YAX86_LOG(
         &g_platform.logger, &kLogModuleApp, kLogLevelError,
         "floppy drive A is empty - could not mount %s", floppy_path);
+  }
+
+  if (attach_hard_disk) {
+    HardDiskAttach(&g_platform);
+    YAX86_LOG(
+        &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
+        "attached a %u MB hard disk",
+        (unsigned)((uint32_t)kHDCGeometry10MB.num_cylinders *
+                   kHDCGeometry10MB.num_heads *
+                   kHDCGeometry10MB.num_sectors_per_track * kHDCSectorSize /
+                   (1024 * 1024)));
   }
 
   // Hook up video callback
