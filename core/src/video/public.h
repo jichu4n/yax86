@@ -247,6 +247,19 @@ enum {
 // Register bits
 // ============================================================================
 
+// Bits in the status register - I/O port 3BA.
+enum {
+  // Display is disabled, i.e. a horizontal or vertical retrace is in progress,
+  // so VRAM can be accessed without causing snow.
+  kVideoStatusDisplayDisabled = 1 << 0,
+  // Light pen trigger set. Always clear, as no light pen is emulated.
+  kVideoStatusLightPenTrigger = 1 << 1,
+  // Light pen switch is off. Always set, as no light pen is emulated.
+  kVideoStatusLightPenSwitchOff = 1 << 2,
+  // Vertical retrace in progress.
+  kVideoStatusVerticalRetrace = 1 << 3,
+};
+
 // Bits in a text mode attribute byte.
 enum {
   // Foreground color.
@@ -260,6 +273,23 @@ enum {
   // Blinking foreground, or intense background if blinking is disabled in the
   // mode control register.
   kVideoAttributeBlink = 1 << 7,
+};
+
+// Retrace timing for the MDA, in CPU cycles. Derived from the same 14.318MHz
+// master crystal the CPU clock comes from: the MDA scans 882 dots per line at
+// 16.257MHz over 370 lines, which is 259 cycles per line and just under 50Hz.
+// 720 of those 882 dots are displayed, which is 211 cycles.
+enum {
+  // Number of CPU cycles per scan line.
+  kMDACyclesPerScanLine = 259,
+  // Number of CPU cycles at the start of a scan line during which the display
+  // is active. The remainder of the scan line is the horizontal retrace.
+  kMDADisplayCyclesPerScanLine = 211,
+  // Number of scan lines per frame, including the vertical retrace.
+  kMDAScanLinesPerFrame = 370,
+  // Number of scan lines at the start of a frame that are displayed. The
+  // remainder of the frame is the vertical retrace.
+  kMDADisplayedScanLines = 350,
 };
 
 enum {
@@ -325,8 +355,13 @@ typedef struct VideoState {
   uint8_t selected_register;
   // Mode control register value (I/O port 3B8).
   uint8_t control_register;
-  // Status register value (I/O port 3BA).
-  uint8_t status_register;
+
+  // Current scan line within the frame, including the vertical retrace.
+  uint16_t scan_line;
+  // CPU cycles elapsed within the current scan line.
+  uint32_t scan_line_cycles;
+  // Number of frames since initialization.
+  uint32_t frames;
 } VideoState;
 
 // Initialize video state with the provided configuration.
@@ -341,6 +376,10 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
 uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 // Write a byte to video RAM.
 void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
+
+// Advance the CRT beam by the given number of CPU cycles. This drives the
+// retrace bits in the status register.
+void VideoTick(VideoState* video, uint16_t cycles);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.

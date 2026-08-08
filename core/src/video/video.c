@@ -13,6 +13,9 @@ enum {
   // High resolution mode, video enable, blink enable.
   kMDADefaultControlRegister = 0x29,
 
+  // The 6845 latches only the low five bits of the register index.
+  kCRTCRegisterIndexMask = 0x1F,
+
   // Value returned for reads that decode to nothing.
   kVideoUnmappedPortValue = 0xFF,
 };
@@ -75,6 +78,42 @@ void VideoInit(VideoState* video, VideoConfig* config) {
 }
 
 // ============================================================================
+// Retrace timing
+// ============================================================================
+
+void VideoTick(VideoState* video, uint16_t cycles) {
+  video->scan_line_cycles += cycles;
+  while (video->scan_line_cycles >= kMDACyclesPerScanLine) {
+    video->scan_line_cycles -= kMDACyclesPerScanLine;
+    if (++video->scan_line >= kMDAScanLinesPerFrame) {
+      video->scan_line = 0;
+      ++video->frames;
+    }
+  }
+}
+
+// The value the status port reads back, computed from where the CRT beam
+// currently is.
+static uint8_t VideoGetStatus(const VideoState* video) {
+  bool in_vertical_retrace = video->scan_line >= kMDADisplayedScanLines;
+  bool in_horizontal_retrace =
+      video->scan_line_cycles >= kMDADisplayCyclesPerScanLine;
+
+  // No light pen is emulated, so its switch always reads as off.
+  uint8_t status = kVideoStatusLightPenSwitchOff;
+  if (in_vertical_retrace || in_horizontal_retrace) {
+    status |= kVideoStatusDisplayDisabled;
+  }
+  if (in_vertical_retrace) {
+    status |= kVideoStatusVerticalRetrace;
+  }
+  // Note that the unused high bits are deliberately left clear rather than
+  // floating high as they do on a real card: GLaBIOS probes bit 7 of the MDA
+  // status port to detect a Hercules adapter.
+  return status;
+}
+
+// ============================================================================
 // I/O ports
 // ============================================================================
 
@@ -90,7 +129,7 @@ uint8_t VideoReadPort(VideoState* video, uint16_t port) {
     case kMDAPortControl:
       return video->control_register;
     case kMDAPortStatus:
-      return video->status_register;
+      return VideoGetStatus(video);
     default:
       return kVideoUnmappedPortValue;
   }
@@ -99,7 +138,7 @@ uint8_t VideoReadPort(VideoState* video, uint16_t port) {
 void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
   switch (port) {
     case kMDAPortRegisterIndex:
-      video->selected_register = value;
+      video->selected_register = value & kCRTCRegisterIndexMask;
       break;
     case kMDAPortRegisterData:
       if (video->selected_register < kNumCRTCRegisters) {
@@ -109,10 +148,8 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
     case kMDAPortControl:
       video->control_register = value;
       break;
-    case kMDAPortStatus:
-      video->status_register = value;
-      break;
     default:
+      // The status port is read only.
       break;
   }
 }
