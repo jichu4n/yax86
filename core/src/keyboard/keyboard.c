@@ -83,14 +83,9 @@ void KeyboardHandleControl(
 }
 
 void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
-  // A keyboard running its self test is not scanning its matrix, so a key
-  // pressed now never becomes a scan code. Queueing it would let it resurface
-  // once the reset ends, which lands it in the middle of the BIOS's stuck key
-  // test - the BIOS clears the interface, re-enables the keyboard, and reports
-  // anything arriving over the next few hundred milliseconds as a stuck key.
-  //
-  // Only a reset drops keys. Holding the clock low briefly just stops the
-  // keyboard talking, and it keeps scanning and buffering through that.
+  // Drop key presses that occur while the keyboard is running its self test.
+  // Queueing it would let it resurface once the reset ends, which lands it in
+  // the middle of the BIOS's stuck key test.
   if (!keyboard->clock_low &&
       keyboard->clock_low_ms == kKeyboardResetTriggered) {
     return;

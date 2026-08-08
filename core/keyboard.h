@@ -646,7 +646,8 @@ typedef struct StaticVectorHeader {
 // 1. [0, 0]
 //    The BIOS sets both control bits to false and holds them there for at
 //    least 20ms. The keyboard detects the clock_low line is held low, and
-//    performs a self test.
+//    performs a self test. Key presses or releases that arrive while the
+//    keyboard is held in reset are dropped rather than buffered.
 // 2. -> [1, 1] -> [0, 1]
 //    The BIOS restores the clock_low line to true, releasing the reset signal.
 //    It pulses the enable_clear line high then low to trigger the next scan
@@ -674,15 +675,6 @@ typedef struct StaticVectorHeader {
 //    The BIOS's IRQ handler sends an ack by briefly pulsing the enable_clear
 //    line from false to true to false. This pulse tells the keyboard that it
 //    can now send the next scancode.
-//
-// Key presses that arrive while the keyboard is held in reset - that is, while
-// the clock line is low - are dropped rather than buffered, because a keyboard
-// being reset is not scanning its matrix. This matters more than it sounds: the
-// BIOS follows the reset by clearing the interface and then checking that
-// nothing arrives over the next few hundred milliseconds, and reports anything
-// that does as a stuck key. A keystroke buffered across the reset would land
-// squarely in that window. Being inhibited (enable_clear set) is a different
-// state, and keys pressed then are buffered as usual.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -872,14 +864,9 @@ void KeyboardHandleControl(
 }
 
 void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
-  // A keyboard running its self test is not scanning its matrix, so a key
-  // pressed now never becomes a scan code. Queueing it would let it resurface
-  // once the reset ends, which lands it in the middle of the BIOS's stuck key
-  // test - the BIOS clears the interface, re-enables the keyboard, and reports
-  // anything arriving over the next few hundred milliseconds as a stuck key.
-  //
-  // Only a reset drops keys. Holding the clock low briefly just stops the
-  // keyboard talking, and it keeps scanning and buffering through that.
+  // Drop key presses that occur while the keyboard is running its self test.
+  // Queueing it would let it resurface once the reset ends, which lands it in
+  // the middle of the BIOS's stuck key test.
   if (!keyboard->clock_low &&
       keyboard->clock_low_ms == kKeyboardResetTriggered) {
     return;
