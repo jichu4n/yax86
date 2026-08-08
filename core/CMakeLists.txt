@@ -22,6 +22,7 @@ generate_header_bundle("bios")
 generate_header_bundle("cpu")
 generate_header_bundle("dma")
 generate_header_bundle("fdc")
+generate_header_bundle("hdc")
 generate_header_bundle("keyboard")
 generate_header_bundle("pic")
 generate_header_bundle("pit")
@@ -44,24 +45,32 @@ add_custom_command(
 )
 
 # =============================================================================
-# BIOS ROM data file generation
+# ROM data file generation
 # =============================================================================
-set(bios_rom_file "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/GLABIOS_0.2.5_8E.rom")
-set(bios_rom_data_file_prefix "${CMAKE_CURRENT_SOURCE_DIR}/src/bios/bios_rom_data")
-set(bios_rom_data_file_c "${bios_rom_data_file_prefix}.c")
-set(bios_rom_data_file_h "${bios_rom_data_file_prefix}.h")
-set(generate_bios_rom_data_files "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-bios-rom-data-files.js")
-add_custom_command(
-    OUTPUT ${bios_rom_data_file_c} ${bios_rom_data_file_h}
-    COMMAND ${generate_bios_rom_data_files} ARGS ${bios_rom_file} ${bios_rom_data_file_prefix}
-    DEPENDS ${generate_bios_rom_data_files} ${bios_rom_file}
-    COMMENT "Generating BIOS ROM data file ${bios_rom_file} => ${bios_rom_data_file_c} and ${bios_rom_data_file_h}"
-)
+# ROMs are compiled into the library rather than read from a file at run time,
+# since targets like the Raspberry Pi Pico have no file system to read from.
+set(ALL_ROM_DATA_SOURCES)
+set(generate_rom_data_files "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-rom-data-files.js")
+function(generate_rom_data module rom_file_name output_name symbol)
+    set(rom_file "${CMAKE_CURRENT_SOURCE_DIR}/src/${module}/${rom_file_name}")
+    set(prefix "${CMAKE_CURRENT_SOURCE_DIR}/src/${module}/${output_name}")
+    add_custom_command(
+        OUTPUT "${prefix}.c" "${prefix}.h"
+        COMMAND ${generate_rom_data_files} ARGS ${rom_file} ${prefix} ${symbol}
+        DEPENDS ${generate_rom_data_files} ${rom_file}
+        COMMENT "Generating ROM data files ${rom_file} => ${prefix}.c and ${prefix}.h"
+    )
+    list(APPEND ALL_ROM_DATA_SOURCES "${prefix}.c")
+    set(ALL_ROM_DATA_SOURCES ${ALL_ROM_DATA_SOURCES} PARENT_SCOPE)
+endfunction()
+
+generate_rom_data("bios" "GLABIOS_0.2.5_8E.rom" "bios_rom_data" "BIOSROMData")
+generate_rom_data("hdc" "XTIDE_Universal_BIOS_XT_r631.rom" "hdc_option_rom_data" "HDCOptionROMData")
 
 # =============================================================================
 # Main library
 # =============================================================================
-add_library(yax86_core STATIC yax86_core.c ${YAX86_CORE_HEADER} ${bios_rom_data_file_c})
+add_library(yax86_core STATIC yax86_core.c ${YAX86_CORE_HEADER} ${ALL_ROM_DATA_SOURCES})
 
 
 if(NOT EMSCRIPTEN)

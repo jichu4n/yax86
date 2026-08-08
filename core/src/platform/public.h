@@ -25,6 +25,7 @@ static const LogModule kLogModulePlatform = {
 #include "cpu.h"
 #include "dma.h"
 #include "fdc.h"
+#include "hdc.h"
 #include "keyboard.h"
 #include "pic.h"
 #include "pit.h"
@@ -374,6 +375,11 @@ typedef struct PlatformState {
   // FDC state.
   FDCConfig fdc_config;
   FDCState fdc;
+
+  // HDC runtime configuration.
+  HDCConfig hdc_config;
+  // HDC state.
+  HDCState hdc;
 
   // MDA runtime configuration.
   MDAConfig mda_config;

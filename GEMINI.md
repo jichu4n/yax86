@@ -26,12 +26,44 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - All the module header bundles are concatenated into a single header
   `core/yax86_core.h`. It is also built into a static library
   `libyax86_core.a`.
+- ROMs live alongside the module that maps them and are compiled into the
+  library rather than read from a file at run time, since targets like the
+  Raspberry Pi Pico have no file system. `core/tools/generate-rom-data-files.js`
+  turns a ROM image into a C array and header - the `generate_rom_data` calls in
+  `core/CMakeLists.txt` name the module, ROM file, output name and symbol. The
+  generated `*_rom_data.{c,h}` are committed, and CI runs `git diff
+  --exit-code`, so regenerate and commit them when a ROM changes.
+
+#### core/src/hdc - hard disk controller
+
+- Emulates an XT-IDE rev 2 controller: an 8-bit ATA task file operated in PIO
+  mode, with no DMA and no interrupt line.
+- GLaBIOS implements INT 13h for floppies only and rejects drive numbers above
+  3, and it never writes the hard disk count at 40:75 or the INT 41h parameter
+  table pointer. Hard disk support in the guest therefore comes entirely from
+  an option ROM: GLaBIOS's POST scans from C800:0000 on 2KB boundaries for a
+  ROM starting with `55 AA` whose bytes sum to zero, and far calls offset 3 to
+  let it install its own INT 13h.
+- The ROM in use is the XTIDE Universal BIOS, in
+  `core/src/hdc/XTIDE_Universal_BIOS_XT_r631.rom`. It is compiled into the
+  library the same way the system BIOS is - see the ROM data generation section
+  below - because reading it from a file at run time would not work on targets
+  like the Raspberry Pi Pico, which have no file system. The module maps it at
+  0xC8000 and the platform sizes the memory region from the ROM itself.
+- The ROM's stock configuration is a rev 2 controller at port base 0x300, which
+  POST reports as `Master at 300h`. Rev 2 crosses address lines A0 and A3, so a
+  physical port offset maps to an ATA register offset with bits 0 and 3
+  swapped - the BIOS polls status at physical 0x30E, not 0x307.
 
 ### sdl - SDL runtime
 
 - The `sdl` directory contains an SDL3-based runtime for the emulator.
 - It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
   wrapper (`yax86_sdl.{wasm,js}`).
+- It takes an optional floppy image path, defaulting to `floppy_a.img`. The
+  hard disk controller's option ROM is loaded from `hdd_rom.bin`, copied to the
+  build directory from `resources/XTIDE/ide_xtl.bin` and preloaded into the
+  Emscripten filesystem alongside the boot floppy.
 
 ## Code Style
 

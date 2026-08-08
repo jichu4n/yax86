@@ -1,0 +1,4 @@
+{
+  "public": ["../util/common.h", "../util/snprintf.h", "../util/log.h", "public.h"],
+  "private": ["hdc_option_rom_data.h", "hdc_option_rom_data.c", "hdc.c"]
+}
