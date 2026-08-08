@@ -115,6 +115,87 @@ TEST_F(KeyboardTest, BufferOverflow) {
   ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), kKeyboardBufferSize);
 }
 
+TEST_F(KeyboardTest, KeysPressedDuringResetAreDropped) {
+  // The BIOS resets the keyboard by holding its clock line low. A keyboard
+  // held in reset is not scanning, so a key pressed now never becomes a scan
+  // code - and must not resurface once the reset ends, which is where the
+  // BIOS's stuck key test would see it and report a stuck key.
+  KeyboardHandleControl(&keyboard_, false, false);
+  for (int i = 0; i < kKeyboardResetThresholdMs; ++i) {
+    KeyboardTickMs(&keyboard_);
+  }
+  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);  // the 0xAA self test
+
+  KeyboardHandleKeyPress(&keyboard_, 0x1C);
+  EXPECT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+
+  // Coming out of reset, the self test code is the only thing sent.
+  KeyboardHandleControl(&keyboard_, false, true);
+  KeyboardHandleControl(&keyboard_, true, true);
+  KeyboardHandleControl(&keyboard_, false, true);
+  KeyboardTickMs(&keyboard_);
+  ASSERT_EQ(g_sent_scancodes.size(), 1);
+  EXPECT_EQ(g_sent_scancodes[0], 0xAA);
+
+  // And nothing follows it once that is acknowledged.
+  KeyboardHandleControl(&keyboard_, true, true);
+  KeyboardHandleControl(&keyboard_, false, true);
+  KeyboardTickMs(&keyboard_);
+  EXPECT_EQ(g_sent_scancodes.size(), 1);
+}
+
+TEST_F(KeyboardTest, KeysPressedAfterAResetAreKept) {
+  // Only the reset itself swallows keys. Once the keyboard is running again,
+  // typing works normally - getting this wrong silently eats every keystroke
+  // for the rest of the session, since a machine resets its keyboard at boot.
+  KeyboardHandleControl(&keyboard_, false, false);
+  for (int i = 0; i < kKeyboardResetThresholdMs; ++i) {
+    KeyboardTickMs(&keyboard_);
+  }
+  KeyboardHandleControl(&keyboard_, false, true);
+  KeyboardHandleControl(&keyboard_, true, true);
+  KeyboardHandleControl(&keyboard_, false, true);
+  KeyboardTickMs(&keyboard_);  // sends the 0xAA self test code
+  KeyboardHandleControl(&keyboard_, true, true);
+  KeyboardHandleControl(&keyboard_, false, true);
+
+  KeyboardHandleKeyPress(&keyboard_, 0x1E);
+  KeyboardTickMs(&keyboard_);
+  ASSERT_EQ(g_sent_scancodes.size(), 2);
+  EXPECT_EQ(g_sent_scancodes[1], 0x1E);
+}
+
+TEST_F(KeyboardTest, KeysPressedDuringAShortClockLowAreKept) {
+  // Holding the clock line low briefly only stops the keyboard talking. It is
+  // not a reset, so the keyboard keeps scanning and buffers what it sees.
+  KeyboardHandleControl(&keyboard_, false, false);
+  for (int i = 0; i < kKeyboardResetThresholdMs - 1; ++i) {
+    KeyboardTickMs(&keyboard_);
+  }
+
+  KeyboardHandleKeyPress(&keyboard_, 0x1E);
+  EXPECT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+
+  KeyboardHandleControl(&keyboard_, false, true);
+  KeyboardTickMs(&keyboard_);
+  ASSERT_EQ(g_sent_scancodes.size(), 1);
+  EXPECT_EQ(g_sent_scancodes[0], 0x1E);
+}
+
+TEST_F(KeyboardTest, KeysPressedWhileMerelyInhibitedAreKept) {
+  // Being inhibited is not the same as being reset. The BIOS inhibits the
+  // keyboard for most of POST with the clock line still enabled, and a key
+  // pressed then is held until the keyboard is enabled again rather than lost.
+  KeyboardHandleControl(&keyboard_, true, true);
+  KeyboardHandleKeyPress(&keyboard_, 0x1E);
+  EXPECT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+
+  KeyboardHandleControl(&keyboard_, false, true);
+  KeyboardTickMs(&keyboard_);
+  ASSERT_EQ(g_sent_scancodes.size(), 1);
+  EXPECT_EQ(g_sent_scancodes[0], 0x1E);
+}
+
 TEST_F(KeyboardTest, InhibitedState) {
   // Buffer a key press.
   KeyboardHandleKeyPress(&keyboard_, 0x20);

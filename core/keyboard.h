@@ -674,6 +674,15 @@ typedef struct StaticVectorHeader {
 //    The BIOS's IRQ handler sends an ack by briefly pulsing the enable_clear
 //    line from false to true to false. This pulse tells the keyboard that it
 //    can now send the next scancode.
+//
+// Key presses that arrive while the keyboard is held in reset - that is, while
+// the clock line is low - are dropped rather than buffered, because a keyboard
+// being reset is not scanning its matrix. This matters more than it sounds: the
+// BIOS follows the reset by clearing the interface and then checking that
+// nothing arrives over the next few hundred milliseconds, and reports anything
+// that does as a stuck key. A keystroke buffered across the reset would land
+// squarely in that window. Being inhibited (enable_clear set) is a different
+// state, and keys pressed then are buffered as usual.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -863,6 +872,18 @@ void KeyboardHandleControl(
 }
 
 void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+  // A keyboard running its self test is not scanning its matrix, so a key
+  // pressed now never becomes a scan code. Queueing it would let it resurface
+  // once the reset ends, which lands it in the middle of the BIOS's stuck key
+  // test - the BIOS clears the interface, re-enables the keyboard, and reports
+  // anything arriving over the next few hundred milliseconds as a stuck key.
+  //
+  // Only a reset drops keys. Holding the clock low briefly just stops the
+  // keyboard talking, and it keeps scanning and buffering through that.
+  if (!keyboard->clock_low &&
+      keyboard->clock_low_ms == kKeyboardResetTriggered) {
+    return;
+  }
   KeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
@@ -897,7 +918,6 @@ void KeyboardTickMs(KeyboardState* keyboard) {
   // Normal operation.
   KeyboardSendNextScancode(keyboard);
 }
-
 
 
 // ==============================================================================

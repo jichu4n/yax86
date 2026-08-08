@@ -36,6 +36,15 @@
 //    The BIOS's IRQ handler sends an ack by briefly pulsing the enable_clear
 //    line from false to true to false. This pulse tells the keyboard that it
 //    can now send the next scancode.
+//
+// Key presses that arrive while the keyboard is held in reset - that is, while
+// the clock line is low - are dropped rather than buffered, because a keyboard
+// being reset is not scanning its matrix. This matters more than it sounds: the
+// BIOS follows the reset by clearing the interface and then checking that
+// nothing arrives over the next few hundred milliseconds, and reports anything
+// that does as a stuck key. A keystroke buffered across the reset would land
+// squarely in that window. Being inhibited (enable_clear set) is a different
+// state, and keys pressed then are buffered as usual.
 
 #include <stdbool.h>
 #include <stdint.h>
