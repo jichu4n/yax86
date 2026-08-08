@@ -11242,11 +11242,33 @@ typedef struct HDCDriveGeometry {
 // Geometry of the 10MB fixed disk the IBM PC/XT shipped with. Era-accurate,
 // comfortably under the 32MB per-partition ceiling of MS-DOS 3.3, and small
 // enough for a host to keep an image of one in memory.
-static const HDCDriveGeometry kHDCGeometry10MB = {
-    .num_cylinders = 306,
-    .num_heads = 4,
-    .num_sectors_per_track = 17,
+enum {
+  kHDCGeometry10MBNumCylinders = 306,
+  kHDCGeometry10MBNumHeads = 4,
+  kHDCGeometry10MBNumSectorsPerTrack = 17,
+  // Size in bytes of an image of such a disk, so that a host can size a buffer
+  // for one at compile time.
+  kHDCGeometry10MBImageSize =
+      kHDCGeometry10MBNumCylinders * kHDCGeometry10MBNumHeads *
+      kHDCGeometry10MBNumSectorsPerTrack * kHDCSectorSize,
 };
+static const HDCDriveGeometry kHDCGeometry10MB = {
+    .num_cylinders = kHDCGeometry10MBNumCylinders,
+    .num_heads = kHDCGeometry10MBNumHeads,
+    .num_sectors_per_track = kHDCGeometry10MBNumSectorsPerTrack,
+};
+
+// What the data register is currently moving.
+typedef enum HDCTransfer {
+  // Nothing; a read returns zero and a write is discarded.
+  kHDCTransferNone = 0,
+  // The Identify Device block, out of the sector buffer.
+  kHDCTransferIdentify,
+  // Sectors from the drive's image to the guest.
+  kHDCTransferRead,
+  // Sectors from the guest to the drive's image.
+  kHDCTransferWrite,
+} HDCTransfer;
 
 // State of a single drive.
 typedef struct HDCDriveState {
@@ -11271,6 +11293,16 @@ typedef struct HDCConfig {
 
   // Logger, or NULL to disable logging.
   Logger* logger;
+
+  // Callbacks to read and write a byte of a drive's image, where offset is a
+  // byte offset from the start of the image. The controller range checks every
+  // address against the drive's geometry before starting a transfer, so these
+  // are only ever called with an offset that lies within the drive.
+  //
+  // A drive with no callbacks reads back as zeroes and discards writes.
+  uint8_t (*read_image_byte)(void* context, uint8_t drive, uint32_t offset);
+  void (*write_image_byte)(
+      void* context, uint8_t drive, uint32_t offset, uint8_t value);
 } HDCConfig;
 
 // State of the HDC.
@@ -11291,11 +11323,25 @@ typedef struct HDCState {
   uint8_t drive_head;
   uint8_t status;
 
-  // Buffer for a block being handed to the guest through the data register.
+  // Buffer holding the Identify Device block. Sector data is streamed straight
+  // through the image callbacks rather than staged here.
   uint8_t sector_buffer[kHDCSectorSize];
-  // Index of the next byte to be read out of sector_buffer. Only meaningful
-  // while kHDCStatusDataRequest is set.
-  uint16_t buffer_index;
+
+  // What the data register is currently moving, if anything.
+  HDCTransfer transfer;
+  // Index of the next byte within the sector being transferred. Only
+  // meaningful while kHDCStatusDataRequest is set.
+  uint16_t transfer_byte_index;
+  // Byte offset into the image of the sector being transferred.
+  uint32_t transfer_offset;
+  // Drive the transfer is against, which is latched when the command starts so
+  // that it cannot change underneath a transfer in progress.
+  uint8_t transfer_drive;
+  // Sectors still to transfer, including the one in progress.
+  uint16_t transfer_sectors_remaining;
+  // High byte of the word currently being written, latched by the card until
+  // the guest writes the low byte. See HDCWriteDataRegister().
+  uint8_t transfer_pending_high_byte;
 } HDCState;
 
 // Initializes the HDC to its power-on state.
@@ -12253,7 +12299,8 @@ static void HDCFinishCommand(HDCState* hdc) {
 static void HDCFailCommand(HDCState* hdc, uint8_t error) {
   hdc->error = error;
   hdc->status = kHDCStatusIdle | kHDCStatusError;
-  hdc->buffer_index = 0;
+  hdc->transfer = kHDCTransferNone;
+  hdc->transfer_byte_index = 0;
 }
 
 // Total number of sectors on a drive.
@@ -12387,16 +12434,69 @@ static void HDCBuildIdentifyBlock(HDCState* hdc, const HDCDriveState* drive) {
       (uint16_t)(num_sectors >> 16));
 }
 
-// Starts handing the sector buffer to the guest through the data register.
-static void HDCStartBufferTransfer(HDCState* hdc) {
-  hdc->buffer_index = 0;
+// Opens a transfer through the data register.
+static void HDCStartTransfer(
+    HDCState* hdc, HDCTransfer transfer, uint32_t offset,
+    uint16_t num_sectors) {
+  hdc->transfer = transfer;
+  hdc->transfer_byte_index = 0;
+  hdc->transfer_offset = offset;
+  hdc->transfer_drive = (hdc->drive_head & kHDCDriveHeadDriveSelect) ? 1 : 0;
+  hdc->transfer_sectors_remaining = num_sectors;
   hdc->error = 0;
   hdc->status = kHDCStatusIdle | kHDCStatusDataRequest;
 }
 
+// Advances past the byte just transferred, moving on to the next sector or
+// ending the transfer as needed.
+static void HDCAdvanceTransfer(HDCState* hdc) {
+  ++hdc->transfer_byte_index;
+  if (hdc->transfer_byte_index < kHDCSectorSize) {
+    return;
+  }
+  hdc->transfer_byte_index = 0;
+
+  if (hdc->transfer == kHDCTransferIdentify) {
+    // A single block, with no sector count behind it.
+    hdc->transfer = kHDCTransferNone;
+    hdc->status = kHDCStatusIdle;
+    return;
+  }
+
+  hdc->transfer_offset += kHDCSectorSize;
+  --hdc->transfer_sectors_remaining;
+  // The guest reads the sector count register back to see how much of the
+  // transfer got through, so it counts down as sectors complete.
+  hdc->sector_count = (uint8_t)hdc->transfer_sectors_remaining;
+  if (hdc->transfer_sectors_remaining == 0) {
+    hdc->transfer = kHDCTransferNone;
+    hdc->status = kHDCStatusIdle;
+  }
+}
+
 static void HDCHandleIdentifyDevice(HDCState* hdc, HDCDriveState* drive) {
   HDCBuildIdentifyBlock(hdc, drive);
-  HDCStartBufferTransfer(hdc);
+  HDCStartTransfer(hdc, kHDCTransferIdentify, 0, 1);
+}
+
+// Sets up a read or write of one or more sectors starting at the address in
+// the task file. A sector count of zero means 256 sectors, which is how ATA
+// encodes the largest transfer a single command can make.
+static void HDCHandleReadWriteSectors(
+    HDCState* hdc, HDCDriveState* drive, HDCTransfer transfer) {
+  uint32_t sector_number = 0;
+  if (!HDCComputeSectorNumber(hdc, drive, &sector_number)) {
+    HDCFailCommand(hdc, kHDCErrorIDNotFound);
+    return;
+  }
+  const uint16_t num_sectors =
+      hdc->sector_count == 0 ? 256 : (uint16_t)hdc->sector_count;
+  // The whole run has to fit on the drive, not just its first sector.
+  if (sector_number + num_sectors > HDCDriveNumSectors(drive)) {
+    HDCFailCommand(hdc, kHDCErrorIDNotFound);
+    return;
+  }
+  HDCStartTransfer(hdc, transfer, sector_number * kHDCSectorSize, num_sectors);
 }
 
 static void HDCHandleInitializeDeviceParameters(
@@ -12463,6 +12563,16 @@ static void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
       HDCHandleReadVerifySectors(hdc, drive);
       break;
 
+    case kHDCCommandReadSectors:
+    case kHDCCommandReadSectorsNoRetry:
+      HDCHandleReadWriteSectors(hdc, drive, kHDCTransferRead);
+      break;
+
+    case kHDCCommandWriteSectors:
+    case kHDCCommandWriteSectorsNoRetry:
+      HDCHandleReadWriteSectors(hdc, drive, kHDCTransferWrite);
+      break;
+
     case kHDCCommandInitializeDeviceParameters:
       HDCHandleInitializeDeviceParameters(hdc, drive);
       break;
@@ -12478,26 +12588,80 @@ static void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
   }
 }
 
-// Hands the guest the next byte of the sector buffer.
+// Hands the guest the next byte of the transfer in progress.
+//
+// The drive's data port is 16 bits wide and the card is on an 8-bit bus, so
+// the card splits each word across two ports. The guest reads the halves in
+// order, so a single stream of bytes serves both ports and there is nothing to
+// latch.
 static uint8_t HDCReadDataRegister(HDCState* hdc) {
   if (!(hdc->status & kHDCStatusDataRequest)) {
     YAX86_HDC_LOG(kLogLevelWarn, "data register read with no transfer active");
     return 0;
   }
-  const uint8_t value = hdc->sector_buffer[hdc->buffer_index];
-  ++hdc->buffer_index;
-  if (hdc->buffer_index >= kHDCSectorSize) {
-    hdc->buffer_index = 0;
-    hdc->status = kHDCStatusIdle;
+
+  uint8_t value = 0;
+  switch (hdc->transfer) {
+    case kHDCTransferIdentify:
+      value = hdc->sector_buffer[hdc->transfer_byte_index];
+      break;
+    case kHDCTransferRead:
+      if (hdc->config->read_image_byte) {
+        value = hdc->config->read_image_byte(
+            hdc->config->context, hdc->transfer_drive,
+            hdc->transfer_offset + hdc->transfer_byte_index);
+      }
+      break;
+    default:
+      YAX86_HDC_LOG(kLogLevelWarn, "data register read during a write");
+      return 0;
   }
+
+  HDCAdvanceTransfer(hdc);
   return value;
+}
+
+// Writes one byte of the drive's image.
+static void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
+  if (hdc->config->write_image_byte) {
+    hdc->config->write_image_byte(
+        hdc->config->context, hdc->transfer_drive,
+        hdc->transfer_offset + hdc->transfer_byte_index, value);
+  }
+  HDCAdvanceTransfer(hdc);
+}
+
+// Takes the next byte of a write from the guest.
+//
+// Writes are not the mirror image of reads. A read of the low byte port is
+// what runs the bus cycle, so the drive hands over the low byte and the card
+// latches the high one for the guest to collect afterwards - low byte first.
+// A write is the other way round: the card cannot start the cycle until it has
+// the whole word, so the guest writes the high byte to the latch first and the
+// write of the low byte is what commits the pair. Streaming bytes in the order
+// they arrive would put every word on the disk back to front.
+static void HDCWriteDataRegister(
+    HDCState* hdc, bool is_high_byte, uint8_t value) {
+  if (!(hdc->status & kHDCStatusDataRequest) ||
+      hdc->transfer != kHDCTransferWrite) {
+    YAX86_HDC_LOG(kLogLevelWarn, "data register written with no write active");
+    return;
+  }
+
+  if (is_high_byte) {
+    hdc->transfer_pending_high_byte = value;
+    return;
+  }
+
+  // A word never straddles a sector boundary, so the two halves always land in
+  // the same sector.
+  HDCWriteImageByte(hdc, value);
+  HDCWriteImageByte(hdc, hdc->transfer_pending_high_byte);
 }
 
 uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
-    // The card latches the high byte of each word, but the guest reads the two
-    // halves in order, so a single stream of bytes serves both ports.
     case kHDCRegisterData:
     case kHDCRegisterDataHigh:
       return HDCReadDataRegister(hdc);
@@ -12526,8 +12690,10 @@ void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
     case kHDCRegisterData:
+      HDCWriteDataRegister(hdc, /*is_high_byte=*/false, value);
+      break;
     case kHDCRegisterDataHigh:
-      // Writing to a drive is not supported yet.
+      HDCWriteDataRegister(hdc, /*is_high_byte=*/true, value);
       break;
     case kHDCRegisterError:
       hdc->features = value;

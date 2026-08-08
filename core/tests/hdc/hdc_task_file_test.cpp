@@ -310,8 +310,9 @@ TEST_F(HDCTaskFileTest, ReadVerifyAcceptsLogicalBlockAddresses) {
 
 TEST_F(HDCTaskFileTest, UnsupportedCommandsAbort) {
   SelectDrive(0);
-  // Write Sectors is not implemented yet, and 0xFF is not a command at all.
-  for (uint8_t opcode : {(uint8_t)kHDCCommandWriteSectors, (uint8_t)0xFF}) {
+  // Read Multiple, which this controller does not implement, and 0xFF, which
+  // is not a command at all.
+  for (uint8_t opcode : {(uint8_t)0xC4, (uint8_t)0xFF}) {
     const uint8_t status = RunCommand(opcode);
     EXPECT_TRUE(status & kHDCStatusError) << "opcode " << (int)opcode;
     EXPECT_TRUE(Read(kHDCRegisterError) & kHDCErrorAborted)

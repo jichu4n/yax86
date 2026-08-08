@@ -61,16 +61,31 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - Commands complete synchronously inside the port write that issues them, so
   there is no HDCTick and no seek or rotational timing. The controller is
   polled PIO, so nothing in the guest can observe the difference.
+- The drive's data port is 16 bits wide and the card is on an 8-bit bus, so
+  each word crosses the bus as two byte accesses - and reads and writes use
+  opposite orders. A read of the low byte port runs the bus cycle, so the low
+  byte comes first and the card latches the high byte for the guest to collect
+  from the second port. A write cannot start until the card has the whole
+  word, so the guest writes the high byte to the latch first and the write of
+  the low byte commits the pair. Streaming bytes in the order they arrive is
+  therefore wrong for writes: it puts every word on the disk back to front, so
+  a partition table's 0xAA55 signature lands as 0x55AA and DOS reports
+  "Invalid drive specification".
+- The SDL runtime loads a hard disk image into memory and discards guest
+  writes, the same as the floppy. FDISK, FORMAT and booting from C: all work
+  within a session, but the disk starts out the same way on every run.
 
 ### sdl - SDL runtime
 
 - The `sdl` directory contains an SDL3-based runtime for the emulator.
 - It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
   wrapper (`yax86_sdl.{wasm,js}`).
-- It takes an optional floppy image path, defaulting to `floppy_a.img`. A hard
-  disk is attached by default, and `--no-hdd` leaves the machine without one.
-  The default matters because the Emscripten build has no command line, so a
-  hard disk gated behind a flag would be unreachable in the browser.
+- It takes an optional floppy image path, defaulting to `floppy_a.img`. A 10MB
+  hard disk is attached by default - blank unless `--hdd <image>` names an
+  image, so it can be partitioned and formatted from inside DOS - and
+  `--no-hdd` leaves the machine without one. The default matters because the
+  Emscripten build has no command line, so a hard disk gated behind a flag
+  would be unreachable in the browser.
 - `src/audio.c` turns the frequency the core reports for the PC speaker into a
   square wave. The core hands over a frequency rather than a stream of samples,
   so nothing here has to reconcile emulated time with the audio clock - the
