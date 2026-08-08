@@ -454,6 +454,15 @@ static void MDACallbackWriteVRAMByte(
 }
 
 // ============================================================================
+// Callbacks for HDC module
+// ============================================================================
+
+static uint8_t HDCCallbackReadOptionROMByte(
+    YAX86_UNUSED MemoryMapEntry* entry, uint32_t address) {
+  return HDCReadOptionROMByte(address);
+}
+
+// ============================================================================
 // Callbacks for BIOS module
 // ============================================================================
 
@@ -608,6 +617,23 @@ static void PlatformInitFDC(PlatformState* platform) {
   RegisterPortMapEntry(platform, &fdc_entry);
 }
 
+static void PlatformInitHDC(PlatformState* platform) {
+  platform->hdc_config.context = platform;
+  platform->hdc_config.logger = &platform->logger;
+  HDCInit(&platform->hdc, &platform->hdc_config);
+
+  const uint32_t option_rom_size = HDCGetOptionROMSize();
+  MemoryMapEntry option_rom_entry = {
+      .context = &platform->hdc,
+      .entry_type = kMemoryMapEntryHDCOptionROM,
+      .start = kHDCOptionROMStartAddress,
+      .end = kHDCOptionROMStartAddress + option_rom_size - 1,
+      .read_byte = HDCCallbackReadOptionROMByte,
+      .write_byte = NULL,  // Option ROM is read-only.
+  };
+  RegisterMemoryMapEntry(platform, &option_rom_entry);
+}
+
 static void PlatformInitDMA(PlatformState* platform) {
   platform->dma_config.context = platform;
   platform->dma_config.logger = &platform->logger;
@@ -684,6 +710,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   PlatformInitPPI(platform);
   PlatformInitKeyboard(platform);
   PlatformInitFDC(platform);
+  PlatformInitHDC(platform);
   PlatformInitDMA(platform);
   PlatformInitMDA(platform);
 
