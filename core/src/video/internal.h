@@ -21,6 +21,9 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
 YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
+// Whether blinking content is currently visible.
+YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video);
+
 // Whether the text mode cursor is enabled in the 6845 registers.
 YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
 

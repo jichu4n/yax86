@@ -247,6 +247,14 @@ enum {
 // Register bits
 // ============================================================================
 
+// Bits in the mode control register - I/O port 3B8.
+enum {
+  // Video signal enabled. When clear, the display is blank.
+  kVideoControlVideoEnable = 1 << 3,
+  // Attribute bit 7 means blinking rather than intense background.
+  kVideoControlEnableBlink = 1 << 5,
+};
+
 // Bits in the status register - I/O port 3BA.
 enum {
   // Display is disabled, i.e. a horizontal or vertical retrace is in progress,
@@ -290,6 +298,11 @@ enum {
   // Number of scan lines at the start of a frame that are displayed. The
   // remainder of the frame is the vertical retrace.
   kMDADisplayedScanLines = 350,
+
+  // Number of frames between blink phase changes. At roughly 50Hz this gives a
+  // blink rate of about 3.1Hz, close to what the 6845 produces when it is
+  // configured to blink at a sixteenth of the field rate.
+  kVideoFramesPerBlinkPhase = 8,
 };
 
 enum {
@@ -360,7 +373,7 @@ typedef struct VideoState {
   uint16_t scan_line;
   // CPU cycles elapsed within the current scan line.
   uint32_t scan_line_cycles;
-  // Number of frames since initialization.
+  // Number of frames since initialization. Drives blinking.
   uint32_t frames;
 } VideoState;
 
@@ -378,7 +391,7 @@ uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
-// retrace bits in the status register.
+// retrace bits in the status register and the blink phase.
 void VideoTick(VideoState* video, uint16_t cycles);
 
 // Render the current display. Invokes the write_pixel callback to do the actual

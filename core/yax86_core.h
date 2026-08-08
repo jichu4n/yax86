@@ -18855,6 +18855,14 @@ enum {
 // Register bits
 // ============================================================================
 
+// Bits in the mode control register - I/O port 3B8.
+enum {
+  // Video signal enabled. When clear, the display is blank.
+  kVideoControlVideoEnable = 1 << 3,
+  // Attribute bit 7 means blinking rather than intense background.
+  kVideoControlEnableBlink = 1 << 5,
+};
+
 // Bits in the status register - I/O port 3BA.
 enum {
   // Display is disabled, i.e. a horizontal or vertical retrace is in progress,
@@ -18898,6 +18906,11 @@ enum {
   // Number of scan lines at the start of a frame that are displayed. The
   // remainder of the frame is the vertical retrace.
   kMDADisplayedScanLines = 350,
+
+  // Number of frames between blink phase changes. At roughly 50Hz this gives a
+  // blink rate of about 3.1Hz, close to what the 6845 produces when it is
+  // configured to blink at a sixteenth of the field rate.
+  kVideoFramesPerBlinkPhase = 8,
 };
 
 enum {
@@ -18968,7 +18981,7 @@ typedef struct VideoState {
   uint16_t scan_line;
   // CPU cycles elapsed within the current scan line.
   uint32_t scan_line_cycles;
-  // Number of frames since initialization.
+  // Number of frames since initialization. Drives blinking.
   uint32_t frames;
 } VideoState;
 
@@ -18986,7 +18999,7 @@ uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
-// retrace bits in the status register.
+// retrace bits in the status register and the blink phase.
 void VideoTick(VideoState* video, uint16_t cycles);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
@@ -19056,6 +19069,9 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
 // installed.
 YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
+
+// Whether blinking content is currently visible.
+YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video);
 
 // Whether the text mode cursor is enabled in the 6845 registers.
 YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
@@ -19931,7 +19947,6 @@ typedef struct MDACellColors {
 //   - Underline: background = 000, foreground = 001
 //
 // Other combinations are undefined, but we will treat them as normal.
-// TODO: Support blinking.
 static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   const VideoConfig* config = video->config;
   MDACellColors colors = {
@@ -19971,6 +19986,15 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   } else {
     // Other combinations are treated as normal.
     colors.foreground = intense_aware_foreground;
+  }
+
+  // Blinking characters alternate between the character and blank. The blink
+  // attribute only applies if blinking is enabled in the mode control register.
+  if ((attr_value & kVideoAttributeBlink) &&
+      (video->control_register & kVideoControlEnableBlink) &&
+      !VideoIsBlinkOn(video)) {
+    colors.foreground = colors.background;
+    colors.underline = false;
   }
 
   return colors;
@@ -20016,10 +20040,11 @@ static void MDAWriteChar(
 static void MDADrawCursor(VideoState* video, uint16_t start_address) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
   // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
-  // the other three; it does not animate the two blink-rate modes
-  // separately, since DOS's own repeated INT 10h cursor toggling already
-  // produces the visible blink in practice.
-  if (!VideoIsCursorEnabled(video)) {
+  // the other three; it does not model the two different blink rates
+  // separately. The actual toggling comes from VideoIsBlinkOn, which flips
+  // every 8 frames (see VideoTick), so the cursor is skipped entirely during
+  // the off half of each blink cycle.
+  if (!VideoIsCursorEnabled(video) || !VideoIsBlinkOn(video)) {
     return;
   }
   // The cursor address (R14/R15) and start address (R12/R13) are both
@@ -20208,6 +20233,10 @@ YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
+YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerBlinkPhase) % 2 == 0;
+}
+
 // ============================================================================
 // Retrace timing
 // ============================================================================
@@ -20302,6 +20331,18 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 
 void VideoRender(VideoState* video) {
   if (!video->config || !video->config->write_pixel) {
+    return;
+  }
+
+  if (!(video->control_register & kVideoControlVideoEnable)) {
+    // The video signal is disabled, so the display is blank. The BIOS leaves it
+    // this way while it reprograms the 6845.
+    for (uint16_t y = 0; y < kMDAModeMetadata.height; ++y) {
+      for (uint16_t x = 0; x < kMDAModeMetadata.width; ++x) {
+        Position pixel_pos = {.x = x, .y = y};
+        VideoWritePixel(video, pixel_pos, video->config->background);
+      }
+    }
     return;
   }
 

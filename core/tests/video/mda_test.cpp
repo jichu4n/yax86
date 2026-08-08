@@ -36,8 +36,11 @@ static void MockWriteVRAMByte(
 // Mock frame buffer. Rendering writes into it the same way a real display
 // would, so a test can simply ask what color a pixel ended up.
 static RGB mock_frame_buffer[kFrameBufferHeight][kFrameBufferWidth];
+// Number of write_pixel calls since the frame buffer was last cleared.
+static int mock_pixel_write_count;
 
 static void MockWritePixel(VideoState* video, Position position, RGB rgb) {
+  ++mock_pixel_write_count;
   if (position.x < kFrameBufferWidth && position.y < kFrameBufferHeight) {
     mock_frame_buffer[position.y][position.x] = rgb;
   }
@@ -79,6 +82,7 @@ class MDATest : public ::testing::Test {
         mock_frame_buffer[y][x] = kNoPixel;
       }
     }
+    mock_pixel_write_count = 0;
   }
 
   // Render a frame into a freshly cleared frame buffer.
@@ -121,6 +125,15 @@ class MDATest : public ::testing::Test {
     uint8_t selected_register = video_.selected_register;
     WriteRegister(kCRTCRegisterCursorStart, 0x20);
     video_.selected_register = selected_register;
+  }
+
+  // Advance the beam by whole frames.
+  void AdvanceFrames(int frames) {
+    for (int frame = 0; frame < frames; ++frame) {
+      for (uint16_t i = 0; i < kMDAScanLinesPerFrame; ++i) {
+        VideoTick(&video_, kMDACyclesPerScanLine);
+      }
+    }
   }
 
   VideoConfig config_ = {0};
@@ -254,6 +267,38 @@ TEST_F(MDATest, RenderCharacterFallback) {
   EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
 }
 
+TEST_F(MDATest, RenderBlinkingCharacter) {
+  // Blink is enabled in the default mode control register.
+  WriteChar(0, 'A', 0x87);
+  Render();
+  int visible_pixels = CountPixelsInFirstCell(config_.foreground);
+  EXPECT_GT(visible_pixels, 0);
+
+  // Advance to the opposite blink phase - the character disappears.
+  AdvanceFrames(8);
+  Render();
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+
+  // And comes back in the phase after that.
+  AdvanceFrames(8);
+  Render();
+  EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
+}
+
+TEST_F(MDATest, BlinkIsIgnoredWhenDisabledInControlRegister) {
+  VideoWritePort(
+      &video_, kMDAPortControl,
+      video_.control_register & ~kVideoControlEnableBlink);
+  WriteChar(0, 'A', 0x87);
+  Render();
+  int visible_pixels = CountPixelsInFirstCell(config_.foreground);
+
+  AdvanceFrames(8);
+  Render();
+  EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
+}
+
 TEST_F(MDATest, RenderCursor) {
   // The default cursor occupies scan lines 11 to 12 of the cell it is on.
   WriteRegister(kCRTCRegisterCursorStart, 0x0B);
@@ -296,6 +341,19 @@ TEST_F(MDATest, StartAddressScrollsTheDisplay) {
   WriteRegister(kCRTCRegisterStartAddressL, 80 & 0xFF);
   Render();
   EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
+}
+
+TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
+  WriteChar(0, 'A', 0x07);
+  VideoWritePort(
+      &video_, kMDAPortControl,
+      video_.control_register & ~kVideoControlVideoEnable);
+  Render();
+
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+  // The whole frame buffer is blanked, not just the character cells.
+  EXPECT_EQ(mock_pixel_write_count, 720 * 350);
 }
 
 // ============================================================================
