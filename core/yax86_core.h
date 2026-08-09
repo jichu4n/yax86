@@ -19060,6 +19060,16 @@ YAX86_PRIVATE void VideoWritePixel(
 // Whether the text mode cursor is enabled in the 6845 registers.
 YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
 
+// The first scan line of the character cell covered by the text mode cursor,
+// from the 6845 cursor start register. May be out of range for the current
+// character height.
+YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
+
+// The last scan line of the character cell covered by the text mode cursor,
+// from the 6845 cursor end register. May be out of range for the current
+// character height.
+YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
+
 // The address of the first displayed character, in character units, from the
 // 6845 start address registers.
 YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
@@ -20029,12 +20039,11 @@ static void MDADrawCursor(VideoState* video, uint16_t start_address) {
   }
 
   // R10/R11 select the first and last scan line of the cell to highlight
-  // (e.g. 11-12 of 0-13 for the default underline cursor), masked to the 5
-  // scan-line-select bits the 6845 defines. An out-of-range start leaves
-  // nothing valid to draw; an out-of-range end is clamped to the last scan
-  // line instead of discarding the whole cursor.
-  uint8_t cursor_start = video->registers[kCRTCRegisterCursorStart] & 0x1F;
-  uint8_t cursor_end = video->registers[kCRTCRegisterCursorEnd] & 0x1F;
+  // (e.g. 11-12 of 0-13 for the default underline cursor). An out-of-range
+  // start leaves nothing valid to draw; an out-of-range end is clamped to the
+  // last scan line instead of discarding the whole cursor.
+  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
   if (cursor_start >= metadata->char_height) {
     return;
   }
@@ -20105,6 +20114,8 @@ enum {
   kCRTCCursorDisabled = 0x20,
   // Mask of bits 6-5 of the cursor start register.
   kCRTCCursorModeMask = 0x60,
+  // Mask of the scan line select bits in the cursor start and end registers.
+  kCRTCCursorScanLineMask = 0x1F,
 
   // The 6845 latches only the low five bits of the register index.
   kCRTCRegisterIndexMask = 0x1F,
@@ -20187,6 +20198,14 @@ YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
 YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
   return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
          kCRTCCursorDisabled;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
 // ============================================================================

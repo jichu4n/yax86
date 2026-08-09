@@ -145,12 +145,11 @@ static void MDADrawCursor(VideoState* video, uint16_t start_address) {
   }
 
   // R10/R11 select the first and last scan line of the cell to highlight
-  // (e.g. 11-12 of 0-13 for the default underline cursor), masked to the 5
-  // scan-line-select bits the 6845 defines. An out-of-range start leaves
-  // nothing valid to draw; an out-of-range end is clamped to the last scan
-  // line instead of discarding the whole cursor.
-  uint8_t cursor_start = video->registers[kCRTCRegisterCursorStart] & 0x1F;
-  uint8_t cursor_end = video->registers[kCRTCRegisterCursorEnd] & 0x1F;
+  // (e.g. 11-12 of 0-13 for the default underline cursor). An out-of-range
+  // start leaves nothing valid to draw; an out-of-range end is clamped to the
+  // last scan line instead of discarding the whole cursor.
+  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
   if (cursor_start >= metadata->char_height) {
     return;
   }

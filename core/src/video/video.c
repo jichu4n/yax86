@@ -17,6 +17,8 @@ enum {
   kCRTCCursorDisabled = 0x20,
   // Mask of bits 6-5 of the cursor start register.
   kCRTCCursorModeMask = 0x60,
+  // Mask of the scan line select bits in the cursor start and end registers.
+  kCRTCCursorScanLineMask = 0x1F,
 
   // The 6845 latches only the low five bits of the register index.
   kCRTCRegisterIndexMask = 0x1F,
@@ -99,6 +101,14 @@ YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
 YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
   return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
          kCRTCCursorDisabled;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
 // ============================================================================
