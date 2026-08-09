@@ -158,13 +158,21 @@ void MainTick(void) {
 
 int main(int argc, char* argv[]) {
   const char* floppy_path = kDefaultFloppyImagePath;
-  bool attach_hard_disk = false;
+  // The machine has a hard disk unless asked otherwise. Under Emscripten there
+  // is no command line at all, so anything gated behind a flag would be
+  // unreachable in the browser.
+  bool attach_hard_disk = true;
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--hdd") == 0) {
       attach_hard_disk = true;
+    } else if (strcmp(argv[i], "--no-hdd") == 0) {
+      attach_hard_disk = false;
     } else if (argv[i][0] == '-') {
       fprintf(stderr, "Unknown option '%s'\n", argv[i]);
-      fprintf(stderr, "Usage: %s [floppy image] [--hdd]\n", argv[0]);
+      fprintf(
+          stderr,
+          "Usage: %s [floppy image] [--hdd] [--no-hdd]\n",
+          argv[0]);
       return 1;
     } else {
       floppy_path = argv[i];
