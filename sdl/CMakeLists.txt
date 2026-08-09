@@ -30,6 +30,7 @@ add_executable(yax86_sdl
     src/floppy.c
     src/display.c
     src/input.c
+    src/audio.c
 )
 add_dependencies(yax86_sdl yax86_sdl_boot_floppy)
 

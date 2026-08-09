@@ -64,6 +64,22 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   hard disk controller's option ROM is loaded from `hdd_rom.bin`, copied to the
   build directory from `resources/XTIDE/ide_xtl.bin` and preloaded into the
   Emscripten filesystem alongside the boot floppy.
+- `src/audio.c` turns the frequency the core reports for the PC speaker into a
+  square wave. The core hands over a frequency rather than a stream of samples,
+  so nothing here has to reconcile emulated time with the audio clock - the
+  synthesizer just holds a tone until told otherwise.
+    - The amplitude is ramped over a millisecond whenever the tone starts or
+      stops. Cutting a square wave off mid-cycle at full amplitude is louder
+      than the click a real speaker makes, so the ramp is closer to the
+      hardware than no ramp, not further from it.
+    - Browsers refuse to start audio until the user has interacted with the
+      page, so `AudioResume()` is called again on the first input event. The
+      POST beep happens before any interaction is possible and so is never
+      heard in the browser; beeps after that are.
+    - To check the audio without listening to it, run the native build under
+      SDL's disk audio driver, which writes raw samples to a file:
+      `SDL_AUDIO_DRIVER=disk SDL_AUDIO_DISK_OUTPUT_FILE=out.raw`. SDL may upmix
+      the mono stream, in which case the file is interleaved stereo.
 
 ## Code Style
 

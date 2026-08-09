@@ -8,6 +8,7 @@
 
 #include "core/platform.h"
 #include "core/video.h"
+#include "audio.h"
 #include "floppy.h"
 #include "display.h"
 #include "input.h"
@@ -93,6 +94,11 @@ static void MainWritePixel(
   DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
 }
 
+static void MainSetPCSpeakerFrequency(
+    YAX86_UNUSED PlatformState* platform, uint32_t frequency_hz) {
+  AudioSetFrequency(frequency_hz);
+}
+
 void MainTick(void) {
   SDL_Event event;
 
@@ -104,6 +110,10 @@ void MainTick(void) {
       emscripten_cancel_main_loop();
 #endif
     } else {
+      // Browsers refuse to start audio until the user has interacted with the
+      // page, so a beep during POST would be dropped and the device would stay
+      // suspended. Any input is the gesture that lets it start.
+      AudioResume();
       InputHandleEvent(&event, &g_platform);
     }
   }
@@ -151,6 +161,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  // A machine with no sound card still boots, so audio failing is not fatal.
+  const bool audio_available = AudioInit();
+
   // Initialize Memory
   memset(g_memory, 0, INTERNAL_RAM_SIZE);
 
@@ -169,9 +182,13 @@ int main(int argc, char* argv[]) {
       640 * 1024;  // Use max allowed conventional memory
   config.read_physical_memory_byte = MainReadMemory;
   config.write_physical_memory_byte = MainWriteMemory;
+  if (audio_available) {
+    config.set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
+  }
 
   if (!PlatformInit(&g_platform, &config)) {
     fprintf(stderr, "Failed to init platform\n");
+    AudioQuit();
     DisplayQuit();
     return 1;
   }
@@ -210,6 +227,7 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
+  AudioQuit();
   DisplayQuit();
   return 0;
 }
