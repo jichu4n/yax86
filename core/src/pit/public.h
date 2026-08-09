@@ -82,7 +82,14 @@ typedef struct PITConfig {
   // Callback to raise IRQ 0.
   void (*raise_irq_0)(void* context);
 
-  // Callback to set PC speaker frequency in Hz.
+  // Callback to set PC speaker frequency in Hz, or 0 when channel 2 is not
+  // producing a tone.
+  //
+  // This reports current state, not a stream of events. Programming a channel
+  // takes several port writes, so an intermediate 0 can be reported
+  // microseconds before the new frequency - a host that keeps only the latest
+  // value hears one continuous tone, while a host that queues every value
+  // hears a gap.
   void (*set_pc_speaker_frequency)(void* context, uint32_t frequency_hz);
 } PITConfig;
 
