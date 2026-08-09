@@ -332,6 +332,14 @@ static void PPICallbackSetKeyboardControl(
       &platform->keyboard, keyboard_enable_clear, keyboard_clock_low);
 }
 
+static void PPICallbackSetPCSpeakerFrequency(
+    void* context, uint32_t frequency_hz) {
+  PlatformState* platform = (PlatformState*)context;
+  if (platform->config->set_pc_speaker_frequency) {
+    platform->config->set_pc_speaker_frequency(platform, frequency_hz);
+  }
+}
+
 // ============================================================================
 // Callbacks for Keyboard module
 // ============================================================================
@@ -576,7 +584,8 @@ static void PlatformInitPPI(PlatformState* platform) {
   platform->ppi_config.memory_size = kPPIMemorySize256KB;
   platform->ppi_config.display_mode = kPPIDisplayMDA;
   platform->ppi_config.fpu_installed = false;
-  platform->ppi_config.set_pc_speaker_frequency = NULL;  // TODO
+  platform->ppi_config.set_pc_speaker_frequency =
+      PPICallbackSetPCSpeakerFrequency;
   platform->ppi_config.set_keyboard_control = PPICallbackSetKeyboardControl;
   PPIInit(&platform->ppi, &platform->ppi_config);
   PortMapEntry ppi_entry = {
