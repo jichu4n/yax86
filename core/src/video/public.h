@@ -299,10 +299,15 @@ enum {
   // remainder of the frame is the vertical retrace.
   kMDADisplayedScanLines = 350,
 
-  // Number of frames between blink phase changes. At roughly 50Hz this gives a
-  // blink rate of about 3.1Hz, close to what the 6845 produces when it is
-  // configured to blink at a sixteenth of the field rate.
-  kVideoFramesPerBlinkPhase = 8,
+  // Number of frames between cursor blink phase changes. At roughly 50Hz this
+  // gives a blink rate of about 3.1Hz, close to what the 6845 produces when it
+  // is configured to blink at a sixteenth of the field rate.
+  kVideoFramesPerCursorBlinkPhase = 8,
+  // Number of frames between character blink phase changes. Characters blink
+  // half as fast as the cursor: the 6845 generates the cursor blink itself,
+  // while the blink attribute is decoded by the adapter from a separate
+  // divider running at a thirty-secondth of the field rate.
+  kVideoFramesPerTextBlinkPhase = 16,
 };
 
 enum {

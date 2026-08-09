@@ -82,7 +82,7 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   // attribute only applies if blinking is enabled in the mode control register.
   if ((attr_value & kVideoAttributeBlink) &&
       (video->control_register & kVideoControlEnableBlink) &&
-      !VideoIsBlinkOn(video)) {
+      !VideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
     colors.underline = false;
   }
@@ -130,11 +130,11 @@ static void MDAWriteChar(
 static void MDADrawCursor(VideoState* video, uint16_t start_address) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
   // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
-  // the other three; it does not model the two different blink rates
-  // separately. The actual toggling comes from VideoIsBlinkOn, which flips
-  // every 8 frames (see VideoTick), so the cursor is skipped entirely during
-  // the off half of each blink cycle.
-  if (!VideoIsCursorEnabled(video) || !VideoIsBlinkOn(video)) {
+  // the other three; it does not model the 1/16 and 1/32 field rate modes
+  // separately. The actual toggling comes from VideoIsCursorBlinkOn, which
+  // flips every 8 frames (see VideoTick), so the cursor is skipped entirely
+  // during the off half of each blink cycle.
+  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
     return;
   }
   // The cursor address (R14/R15) and start address (R12/R13) are both

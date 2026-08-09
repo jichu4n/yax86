@@ -275,15 +275,55 @@ TEST_F(MDATest, RenderBlinkingCharacter) {
   EXPECT_GT(visible_pixels, 0);
 
   // Advance to the opposite blink phase - the character disappears.
-  AdvanceFrames(8);
+  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
   Render();
   EXPECT_EQ(
       CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
 
   // And comes back in the phase after that.
-  AdvanceFrames(8);
+  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
   Render();
   EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
+}
+
+// The 6845 generates the cursor blink itself, while the character blink
+// attribute is decoded by the adapter from a separate divider running at half
+// the rate. The cursor therefore toggles twice for every one time a blinking
+// character does.
+TEST_F(MDATest, CharactersBlinkAtHalfTheCursorRate) {
+  // Put a full-height cursor on the first cell and a blinking character on the
+  // second, so the two can be counted independently.
+  WriteRegister(kCRTCRegisterCursorStart, 0x00);
+  WriteRegister(kCRTCRegisterCursorEnd, kCharHeight - 1);
+  WriteRegister(kCRTCRegisterCursorH, 0);
+  WriteRegister(kCRTCRegisterCursorL, 0);
+  WriteChar(1, 'A', 0x87);
+
+  auto cursor_pixels = [&] {
+    return CountPixels(0, 0, kCharWidth, kCharHeight, config_.foreground);
+  };
+  auto char_pixels = [&] {
+    return CountPixels(
+        kCharWidth, 0, kCharWidth, kCharHeight, config_.foreground);
+  };
+
+  Render();
+  EXPECT_EQ(cursor_pixels(), kCharWidth * kCharHeight);
+  const int visible_pixels = char_pixels();
+  EXPECT_GT(visible_pixels, 0);
+
+  // After one cursor phase the cursor has gone, but the character has not: it
+  // is only halfway through its own phase.
+  AdvanceFrames(kVideoFramesPerCursorBlinkPhase);
+  Render();
+  EXPECT_EQ(cursor_pixels(), 0);
+  EXPECT_EQ(char_pixels(), visible_pixels);
+
+  // A second cursor phase brings the cursor back and blanks the character.
+  AdvanceFrames(kVideoFramesPerCursorBlinkPhase);
+  Render();
+  EXPECT_EQ(cursor_pixels(), kCharWidth * kCharHeight);
+  EXPECT_EQ(char_pixels(), 0);
 }
 
 TEST_F(MDATest, BlinkIsIgnoredWhenDisabledInControlRegister) {
@@ -294,7 +334,7 @@ TEST_F(MDATest, BlinkIsIgnoredWhenDisabledInControlRegister) {
   Render();
   int visible_pixels = CountPixelsInFirstCell(config_.foreground);
 
-  AdvanceFrames(8);
+  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
   Render();
   EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
 }

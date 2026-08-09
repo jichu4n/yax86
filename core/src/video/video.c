@@ -111,8 +111,12 @@ YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
-YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video) {
-  return (video->frames / kVideoFramesPerBlinkPhase) % 2 == 0;
+YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerCursorBlinkPhase) % 2 == 0;
+}
+
+YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
 // ============================================================================

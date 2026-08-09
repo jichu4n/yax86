@@ -836,10 +836,15 @@ enum {
   // remainder of the frame is the vertical retrace.
   kMDADisplayedScanLines = 350,
 
-  // Number of frames between blink phase changes. At roughly 50Hz this gives a
-  // blink rate of about 3.1Hz, close to what the 6845 produces when it is
-  // configured to blink at a sixteenth of the field rate.
-  kVideoFramesPerBlinkPhase = 8,
+  // Number of frames between cursor blink phase changes. At roughly 50Hz this
+  // gives a blink rate of about 3.1Hz, close to what the 6845 produces when it
+  // is configured to blink at a sixteenth of the field rate.
+  kVideoFramesPerCursorBlinkPhase = 8,
+  // Number of frames between character blink phase changes. Characters blink
+  // half as fast as the cursor: the 6845 generates the cursor blink itself,
+  // while the blink attribute is decoded by the adapter from a separate
+  // divider running at a thirty-secondth of the field rate.
+  kVideoFramesPerTextBlinkPhase = 16,
 };
 
 enum {
@@ -999,8 +1004,13 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
 YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
-// Whether blinking content is currently visible.
-YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video);
+// Whether the text mode cursor is currently in the visible half of its blink
+// cycle.
+YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
+
+// Whether characters carrying the blink attribute are currently visible. This
+// runs at half the cursor's rate, so the two drift in and out of phase.
+YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video);
 
 // Whether the text mode cursor is enabled in the 6845 registers.
 YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
@@ -1921,7 +1931,7 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   // attribute only applies if blinking is enabled in the mode control register.
   if ((attr_value & kVideoAttributeBlink) &&
       (video->control_register & kVideoControlEnableBlink) &&
-      !VideoIsBlinkOn(video)) {
+      !VideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
     colors.underline = false;
   }
@@ -1969,11 +1979,11 @@ static void MDAWriteChar(
 static void MDADrawCursor(VideoState* video, uint16_t start_address) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
   // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
-  // the other three; it does not model the two different blink rates
-  // separately. The actual toggling comes from VideoIsBlinkOn, which flips
-  // every 8 frames (see VideoTick), so the cursor is skipped entirely during
-  // the off half of each blink cycle.
-  if (!VideoIsCursorEnabled(video) || !VideoIsBlinkOn(video)) {
+  // the other three; it does not model the 1/16 and 1/32 field rate modes
+  // separately. The actual toggling comes from VideoIsCursorBlinkOn, which
+  // flips every 8 frames (see VideoTick), so the cursor is skipped entirely
+  // during the off half of each blink cycle.
+  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
     return;
   }
   // The cursor address (R14/R15) and start address (R12/R13) are both
@@ -2162,8 +2172,12 @@ YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
-YAX86_PRIVATE bool VideoIsBlinkOn(const VideoState* video) {
-  return (video->frames / kVideoFramesPerBlinkPhase) % 2 == 0;
+YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerCursorBlinkPhase) % 2 == 0;
+}
+
+YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
 // ============================================================================
