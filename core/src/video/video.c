@@ -81,6 +81,17 @@ void VideoInit(VideoState* video, VideoConfig* config) {
 // Retrace timing
 // ============================================================================
 
+// Advances a software model of the CRT beam position by the given number of
+// CPU cycles. This is what status port reads (below) derive retrace timing
+// from.
+//
+// The beam advances one scan line every kMDACyclesPerScanLine cycles, but
+// callers report cycles in whatever amount the CPU just consumed, which
+// rarely divides evenly. scan_line_cycles banks the remainder as credit
+// toward the next scan line; the loop pays it off a scan line at a time,
+// looping rather than branching once since a single call can be worth more
+// than one scan line. scan_line wraps at kMDAScanLinesPerFrame, incrementing
+// frames, which VideoIsBlinkOn() uses to derive the blink phase.
 void VideoTick(VideoState* video, uint16_t cycles) {
   video->scan_line_cycles += cycles;
   while (video->scan_line_cycles >= kMDACyclesPerScanLine) {
