@@ -141,17 +141,23 @@ TEST_F(MDATest, PortReadWrite) {
   VideoWritePort(&video_, kMDAPortControl, 0xAB);
   EXPECT_EQ(video_.control_register, 0xAB);
   EXPECT_EQ(VideoReadPort(&video_, kMDAPortControl), 0xAB);
+}
 
-  // Status register.
+TEST_F(MDATest, StatusPortIsReadOnly) {
+  uint8_t status = VideoReadPort(&video_, kMDAPortStatus);
   VideoWritePort(&video_, kMDAPortStatus, 0xCD);
-  EXPECT_EQ(video_.status_register, 0xCD);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortStatus), 0xCD);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortStatus), status);
 }
 
 TEST_F(MDATest, PrinterPortsAreNotDecoded) {
   EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterData), 0xFF);
   EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterStatus), 0xFF);
   EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterControl), 0xFF);
+}
+
+TEST_F(MDATest, RegisterIndexIsMaskedToFiveBits) {
+  VideoWritePort(&video_, kMDAPortRegisterIndex, 0xE1);
+  EXPECT_EQ(video_.selected_register, 0x01);
 }
 
 TEST_F(MDATest, VRAMAccess) {
@@ -233,6 +239,101 @@ TEST_F(MDATest, RenderCharacterFallback) {
   EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
 }
 
+// ============================================================================
+// Retrace timing
+// ============================================================================
+
+TEST_F(MDATest, StatusStartsInActiveDisplay) {
+  uint8_t status = VideoReadPort(&video_, kMDAPortStatus);
+  EXPECT_EQ(status & kVideoStatusDisplayDisabled, 0);
+  EXPECT_EQ(status & kVideoStatusVerticalRetrace, 0);
+  // No light pen is emulated, so its switch always reads as off.
+  EXPECT_NE(status & kVideoStatusLightPenSwitchOff, 0);
+  EXPECT_EQ(status & kVideoStatusLightPenTrigger, 0);
+}
+
+TEST_F(MDATest, HorizontalRetraceWithinAScanLine) {
+  // Partway through the active part of a scan line the display is still on.
+  VideoTick(&video_, kMDADisplayCyclesPerScanLine - 1);
+  EXPECT_EQ(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusDisplayDisabled, 0);
+
+  // Past the end of it, the display is disabled but there is no vertical
+  // retrace yet.
+  VideoTick(&video_, 1);
+  EXPECT_NE(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusDisplayDisabled, 0);
+  EXPECT_EQ(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
+
+  // The next scan line starts with the display back on.
+  VideoTick(&video_, kMDACyclesPerScanLine - kMDADisplayCyclesPerScanLine);
+  EXPECT_EQ(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusDisplayDisabled, 0);
+  EXPECT_EQ(video_.scan_line, 1);
+}
+
+TEST_F(MDATest, VerticalRetraceAtTheEndOfAFrame) {
+  // Run to the last displayed scan line.
+  for (uint16_t i = 0; i < kMDADisplayedScanLines - 1; ++i) {
+    VideoTick(&video_, kMDACyclesPerScanLine);
+  }
+  EXPECT_EQ(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
+
+  // One scan line later the vertical retrace begins, and stays set for the
+  // rest of the frame.
+  VideoTick(&video_, kMDACyclesPerScanLine);
+  EXPECT_NE(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
+  EXPECT_EQ(video_.frames, 0u);
+
+  for (uint16_t i = 0; i < kMDAScanLinesPerFrame - kMDADisplayedScanLines - 1;
+       ++i) {
+    VideoTick(&video_, kMDACyclesPerScanLine);
+  }
+  EXPECT_NE(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
+
+  // And clears at the start of the next frame.
+  VideoTick(&video_, kMDACyclesPerScanLine);
+  EXPECT_EQ(
+      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
+  EXPECT_EQ(video_.scan_line, 0);
+  EXPECT_EQ(video_.frames, 1u);
+}
+
+TEST_F(MDATest, TickAccumulatesPartialScanLines) {
+  // A cycle count that does not divide the scan line period still advances the
+  // beam at the right average rate.
+  const uint16_t kCyclesPerTick = 17;
+  uint32_t total_cycles = 0;
+  for (int i = 0; i < 100; ++i) {
+    VideoTick(&video_, kCyclesPerTick);
+    total_cycles += kCyclesPerTick;
+  }
+  EXPECT_EQ(video_.scan_line, total_cycles / kMDACyclesPerScanLine);
+  EXPECT_EQ(video_.scan_line_cycles, total_cycles % kMDACyclesPerScanLine);
+}
+
+TEST_F(MDATest, StatusHighBitsStayClear) {
+  // Bit 7 in particular: the BIOS probes it on the MDA status port to detect a
+  // Hercules adapter, which this is not.
+  for (uint16_t i = 0; i < kMDAScanLinesPerFrame; ++i) {
+    EXPECT_EQ(VideoReadPort(&video_, kMDAPortStatus) & 0xF0, 0);
+    VideoTick(&video_, kMDACyclesPerScanLine);
+  }
+}
+
+TEST_F(MDATest, UnselectedRegisterReadsAsUnmapped) {
+  // The 6845 has 18 registers, and the index masks to five bits, so indices 18
+  // to 31 select nothing.
+  VideoWritePort(&video_, kMDAPortRegisterIndex, kNumCRTCRegisters);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0xFF);
+  VideoWritePort(&video_, kMDAPortRegisterData, 0x55);
+  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0xFF);
+}
+
 TEST_F(MDATest, RenderIsSafeWithoutCallbacks) {
   // A host that has not installed its callbacks yet must not crash the
   // renderer. The platform initializes the video module before the host has a
@@ -241,6 +342,7 @@ TEST_F(MDATest, RenderIsSafeWithoutCallbacks) {
   VideoState bare_video = {0};
   VideoInit(&bare_video, &bare_config);
   VideoRender(&bare_video);
+  VideoTick(&bare_video, 1000);
   EXPECT_EQ(VideoReadVRAM(&bare_video, 0), 0xFF);
 }
 

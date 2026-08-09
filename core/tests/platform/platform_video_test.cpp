@@ -43,4 +43,12 @@ TEST_F(PlatformVideoTest, VideoPortsAreRoutedThroughTheMap) {
   EXPECT_EQ(ReadPortByte(&platform_, kMDAPortRegisterData), 0x23);
 }
 
+TEST_F(PlatformVideoTest, TicksAdvanceTheBeam) {
+  uint32_t start_ticks = platform_.ticks;
+  while (platform_.ticks - start_ticks < kMDACyclesPerScanLine * 4) {
+    PlatformTick(&platform_);
+  }
+  EXPECT_GT(platform_.video.scan_line, 0);
+}
+
 }  // namespace

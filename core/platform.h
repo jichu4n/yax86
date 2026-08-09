@@ -1960,6 +1960,11 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
     KeyboardTickMs(&platform->keyboard);
   }
 
+  // The video adapter keeps its own cycle remainder, since it advances the CRT
+  // beam scan line by scan line rather than in a fixed period like the devices
+  // above.
+  VideoTick(&platform->video, cycles);
+
   // A watchpoint may have fired from the CPU or from a DMA transfer.
   if (platform->stop_pending) {
     platform->stop_pending = false;
