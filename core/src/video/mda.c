@@ -1,119 +1,28 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "fonts.h"
+#include "internal.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-// Default MDA state.
-static const MDAState kDefaultMDAState = {
-    .config = NULL,
-    .registers =
-        {
-            0x61,
-            0x50,
-            0x52,
-            0x0F,
-            0x19,
-            0x06,
-            0x19,
-            0x19,
-            0x02,
-            0x0D,
-            0x0B,
-            0x0C,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-        },
-    .selected_register = 0,
-    // high resolution mode, video enable, blink enable
-    .control_port = 0x29,
-    .status_port = 0x00,
-};
-
-static inline uint8_t ReadVRAMByte(MDAState* mda, uint32_t address) {
-  if (mda->config && mda->config->read_vram_byte &&
-      address < kMDAModeMetadata.vram_size) {
-    return mda->config->read_vram_byte(mda, address);
-  }
-  return 0xFF;
-}
-
-static inline void WriteVRAMByte(
-    MDAState* mda, uint32_t address, uint8_t value) {
-  if (mda->config && mda->config->write_vram_byte &&
-      address < kMDAModeMetadata.vram_size) {
-    mda->config->write_vram_byte(mda, address, value);
-  }
-}
-
-// Initialize MDA state with the provided configuration.
-void MDAInit(MDAState* mda, MDAConfig* config) {
-  *mda = kDefaultMDAState;
-  mda->config = config;
-
-  for (uint32_t i = 0; i < kMDAModeMetadata.vram_size; i += 2) {
-    WriteVRAMByte(mda, i, ' ');
-    WriteVRAMByte(mda, i + 1, 0x07 /* default attr */);
-  }
-}
-
-uint8_t MDAReadVRAM(MDAState* mda, uint32_t address) {
-  return ReadVRAMByte(mda, address);
-}
-
-void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value) {
-  WriteVRAMByte(mda, address, value);
-}
-
-uint8_t MDAReadPort(MDAState* mda, uint16_t port) {
-  switch (port) {
-    case kMDAPortRegisterIndex:
-      return mda->selected_register;
-    case kMDAPortRegisterData:
-      if (mda->selected_register < kMDANumRegisters) {
-        return mda->registers[mda->selected_register];
-      }
-      return 0xFF;
-    case kMDAPortControl:
-      return mda->control_port;
-    case kMDAPortStatus:
-      return mda->status_port;
-    default:
-      return 0xFF;
-  }
-}
-
-void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value) {
-  switch (port) {
-    case kMDAPortRegisterIndex:
-      mda->selected_register = value;
-      break;
-    case kMDAPortRegisterData:
-      if (mda->selected_register < kMDANumRegisters) {
-        mda->registers[mda->selected_register] = value;
-      }
-      break;
-    case kMDAPortControl:
-      mda->control_port = value;
-      break;
-    case kMDAPortStatus:
-      mda->status_port = value;
-      break;
-    default:
-      break;
-  }
-}
-
 enum {
-  // Position of underline in MDA text mode.
+  // Position of the underline within an MDA character cell.
   kMDAUnderlinePosition = 12,
+  // Attribute values are only meaningful in these three-bit fields, so the
+  // documented combinations are compared against them directly.
+  kMDAAttributeNormal = 0x07,
+  kMDAAttributeInverse = 0x00,
+  kMDAAttributeUnderline = 0x01,
 };
 
-// Write a character to display in MDA text mode. For the attribute byte, we
-// only support the officially documented combinations of values.
+// Colors to draw a character cell with.
+typedef struct MDACellColors {
+  const RGB* foreground;
+  const RGB* background;
+  bool underline;
+} MDACellColors;
+
+// Decode an MDA attribute byte. We only support the officially documented
+// combinations of values.
 //
 // Attribute byte structure:
 //   - Bit 7: blink (0 = normal, 1 = blink)
@@ -129,48 +38,60 @@ enum {
 //
 // Other combinations are undefined, but we will treat them as normal.
 // TODO: Support blinking.
-static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
-  uint32_t char_address =
-      (char_pos.row * kMDAModeMetadata.columns + char_pos.col) *
-      2;  // Each character takes 2 bytes (char + attr).
-  uint8_t char_value = ReadVRAMByte(mda, char_address);
-  uint8_t attr_value = ReadVRAMByte(mda, char_address + 1);
-  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
+  const VideoConfig* config = video->config;
+  MDACellColors colors = {
+      .foreground = &config->foreground,
+      .background = &config->background,
+      .underline = false,
+  };
 
-  const RGB* foreground;
-  const RGB* background;
-  bool underline = false;
+  bool intense = (attr_value & kVideoAttributeIntenseForeground) != 0;
+  const RGB* intense_aware_foreground =
+      intense ? &config->intense_foreground : &config->foreground;
+  uint8_t background_attr = (attr_value & kVideoAttributeBackgroundMask) >>
+                            kVideoAttributeBackgroundShift;
+  uint8_t foreground_attr = attr_value & kVideoAttributeForegroundMask;
 
-  bool intense = ((attr_value >> 3) & 0x01) != 0;
-  uint8_t background_attr = (attr_value >> 4) & 0x07;
-  uint8_t foreground_attr = attr_value & 0x07;
-  if (background_attr == 0x00 && foreground_attr == 0x07) {
+  if (background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeNormal) {
     // Normal video mode.
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
-  } else if (background_attr == 0x07 && foreground_attr == 0x00) {
+    colors.foreground = intense_aware_foreground;
+  } else if (
+      background_attr == kMDAAttributeNormal &&
+      foreground_attr == kMDAAttributeInverse) {
     // Inverse video mode.
-    foreground = &mda->config->background;
-    background = &mda->config->foreground;
-  } else if (background_attr == 0x00 && foreground_attr == 0x00) {
+    colors.foreground = &config->background;
+    colors.background = &config->foreground;
+  } else if (
+      background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeInverse) {
     // Invisible mode.
-    foreground = &mda->config->background;
-    background = &mda->config->background;
-  } else if (background_attr == 0x00 && foreground_attr == 0x01) {
+    colors.foreground = &config->background;
+  } else if (
+      background_attr == kMDAAttributeInverse &&
+      foreground_attr == kMDAAttributeUnderline) {
     // Underline mode.
-    underline = true;
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
+    colors.underline = true;
+    colors.foreground = intense_aware_foreground;
   } else {
     // Other combinations are treated as normal.
-    foreground =
-        intense ? &mda->config->intense_foreground : &mda->config->foreground;
-    background = &mda->config->background;
+    colors.foreground = intense_aware_foreground;
   }
 
+  return colors;
+}
+
+// Write a character to display in MDA text mode. char_address is the address of
+// the character's first byte in VRAM.
+static void MDAWriteChar(
+    VideoState* video, TextPosition char_pos, uint32_t char_address) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  uint8_t char_value = VideoReadVRAMByte(video, char_address);
+  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
+  MDACellColors colors = MDADecodeAttribute(video, attr_value);
+
   Position origin_pixel_pos = {
       .x = char_pos.col * metadata->char_width,
       .y = char_pos.row * metadata->char_height,
@@ -178,7 +99,7 @@ static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
   for (uint8_t y = 0; y < metadata->char_height; ++y) {
     uint16_t row_bitmap;
     // If underline, set entire underline row to foreground color.
-    if (y == kMDAUnderlinePosition && underline) {
+    if (y == kMDAUnderlinePosition && colors.underline) {
       row_bitmap = 0xFFFF;
     } else {
       row_bitmap = char_bitmap[y];
@@ -190,19 +111,22 @@ static void MDAWriteChar(MDAState* mda, TextPosition char_pos) {
       };
       bool is_foreground =
           (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
-      const RGB* pixel_rgb = is_foreground ? foreground : background;
-      mda->config->write_pixel(mda, pixel_pos, *pixel_rgb);
+      const RGB* pixel_rgb =
+          is_foreground ? colors.foreground : colors.background;
+      VideoWritePixel(video, pixel_pos, *pixel_rgb);
     }
   }
 }
 
-// Render the current display. Invokes the write_pixel callback to do the actual
-// pixel rendering.
-void MDARender(MDAState* mda) {
-  for (uint8_t row = 0; row < kMDAModeMetadata.rows; ++row) {
-    for (uint8_t col = 0; col < kMDAModeMetadata.columns; ++col) {
+// Render the current display in MDA text mode.
+YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
+  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  for (uint8_t row = 0; row < metadata->rows; ++row) {
+    for (uint8_t col = 0; col < metadata->columns; ++col) {
       TextPosition char_pos = {.col = col, .row = row};
-      MDAWriteChar(mda, char_pos);
+      // Each character takes 2 bytes (char + attr).
+      uint32_t char_address = ((uint32_t)row * metadata->columns + col) * 2;
+      MDAWriteChar(video, char_pos, char_address);
     }
   }
 }

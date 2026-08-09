@@ -56,7 +56,7 @@ typedef struct TextPosition {
 // Video modes.
 typedef enum VideoMode {
   // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
-  kMDAText07 = 0x07,
+  kVideoModeMDAText80x25 = 0x07,
 
   // Number of video modes supported.
   kNumVideoModes = 8,
@@ -150,10 +150,50 @@ typedef struct VideoModeMetadata {
 // 3          | + Black/White Video
 // ========================================
 
-// The MDA contains a Motorola 6845 CRT controller. I/O port 3B4 is used to
-// select a register, and port I/O port 3B5 is used to read or write the data
-// for that register. Below are the registers and their default values for the
-// IBM Monochrome Display.
+// MDA I/O ports.
+enum {
+  kMDAPortRegisterIndex = 0x3B4,
+  kMDAPortRegisterData = 0x3B5,
+  kMDAPortControl = 0x3B8,
+  kMDAPortStatus = 0x3BA,
+  kMDAPortPrinterData = 0x3BC,
+  kMDAPortPrinterStatus = 0x3BD,
+  kMDAPortPrinterControl = 0x3BE,
+
+  // Start of the MDA I/O port range.
+  kMDAPortStart = 0x3B0,
+  // Inclusive end of the MDA I/O port range.
+  kMDAPortEnd = 0x3BF,
+};
+
+enum {
+  // MDA VRAM size.
+  kMDAVRAMSize = 4 * 1024,  // 4K
+};
+
+// MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
+static const VideoModeMetadata kMDAModeMetadata = {
+    .mode = kVideoModeMDAText80x25,
+    .type = kVideoModeText,
+    .vram_address = 0xB0000,
+    .vram_size = kMDAVRAMSize,
+    .width = 720,
+    .height = 350,
+    .num_pages = 1,
+    .columns = 80,
+    .rows = 25,
+    .char_width = 9,
+    .char_height = 14,
+};
+
+// ============================================================================
+// Motorola 6845 CRT controller
+// ============================================================================
+
+// The MDA is built around a Motorola 6845 CRT controller. I/O port 3B4 selects
+// a register, and port 3B5 is used to read or write the data for that register.
+// Below are the registers and their default values for the IBM Monochrome
+// Display.
 // =============================================================================
 // Register | Register File              | Program Unit     | IBM Monochrome
 // Number   |                            |                  | Display
@@ -178,71 +218,65 @@ typedef struct VideoModeMetadata {
 // R17      | Reserved                   | --------         | --
 // =============================================================================
 
-// MDA registers
+// 6845 CRT controller registers.
 enum {
-  kMDARegisterHorizontalTotal = 0,
-  kMDARegisterHorizontalDisplayed,
-  kMDARegisterHorizontalSyncPosition,
-  kMDARegisterHorizontalSyncWidth,
-  kMDARegisterVerticalTotal,
-  kMDARegisterVerticalTotalAdjust,
-  kMDARegisterVerticalDisplayed,
-  kMDARegisterVerticalSyncPosition,
-  kMDARegisterInterlaceMode,
-  kMDARegisterMaximumScanLine,
-  kMDARegisterCursorStart,
-  kMDARegisterCursorEnd,
-  kMDARegisterStartAddressH,
-  kMDARegisterStartAddressL,
-  kMDARegisterCursorH,
-  kMDARegisterCursorL,
-  kMDARegisterReserved16,
-  kMDARegisterReserved17,
+  kCRTCRegisterHorizontalTotal = 0,
+  kCRTCRegisterHorizontalDisplayed,
+  kCRTCRegisterHorizontalSyncPosition,
+  kCRTCRegisterHorizontalSyncWidth,
+  kCRTCRegisterVerticalTotal,
+  kCRTCRegisterVerticalTotalAdjust,
+  kCRTCRegisterVerticalDisplayed,
+  kCRTCRegisterVerticalSyncPosition,
+  kCRTCRegisterInterlaceMode,
+  kCRTCRegisterMaximumScanLine,
+  kCRTCRegisterCursorStart,
+  kCRTCRegisterCursorEnd,
+  kCRTCRegisterStartAddressH,
+  kCRTCRegisterStartAddressL,
+  kCRTCRegisterCursorH,
+  kCRTCRegisterCursorL,
+  kCRTCRegisterReserved16,
+  kCRTCRegisterReserved17,
 
-  // Total number of MDA registers.
-  kMDANumRegisters,
+  // Total number of 6845 CRT controller registers.
+  kNumCRTCRegisters,
 };
 
-// MDA I/O ports.
+// ============================================================================
+// Register bits
+// ============================================================================
+
+// Bits in a text mode attribute byte.
 enum {
-  kMDAPortRegisterIndex = 0x3B4,
-  kMDAPortRegisterData = 0x3B5,
-  kMDAPortControl = 0x3B8,
-  kMDAPortStatus = 0x3BA,
-  kMDAPortPrinterData = 0x3BC,
-  kMDAPortPrinterStatus = 0x3BD,
-  kMDAPortPrinterControl = 0x3BE,
+  // Foreground color.
+  kVideoAttributeForegroundMask = 0x07,
+  // Intense foreground.
+  kVideoAttributeIntenseForeground = 1 << 3,
+  // Background color.
+  kVideoAttributeBackgroundMask = 0x70,
+  // Number of bits to shift right to get the background color.
+  kVideoAttributeBackgroundShift = 4,
+  // Blinking foreground, or intense background if blinking is disabled in the
+  // mode control register.
+  kVideoAttributeBlink = 1 << 7,
 };
 
 enum {
-  // MDA memory map entry type.
-  kMemoryMapEntryMDAVRAM = 0x10,
-  // MDA VRAM size.
-  kMDAVRAMSize = 4 * 1024,  // 4K
-
-  // MDA port map entry type.
-  kPortMapEntryMDA = 0x10,
+  // Video memory map entry type.
+  kMemoryMapEntryVRAM = 0x10,
+  // Video port map entry type.
+  kPortMapEntryVideo = 0x10,
 };
 
-// MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
-static const VideoModeMetadata kMDAModeMetadata = {
-    .mode = kMDAText07,
-    .type = kVideoModeText,
-    .vram_address = 0xB0000,
-    .vram_size = kMDAVRAMSize,
-    .width = 720,
-    .height = 350,
-    .num_pages = 1,
-    .columns = 80,
-    .rows = 25,
-    .char_width = 9,
-    .char_height = 14,
-};
+// ============================================================================
+// Video state
+// ============================================================================
 
-struct MDAState;
+struct VideoState;
 
-// Caller-provided configuration for MDA text mode rendering.
-typedef struct MDAConfig {
+// Caller-provided configuration for video rendering.
+typedef struct VideoConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -257,18 +291,18 @@ typedef struct MDAConfig {
   RGB background;
 
   // Callback to read a byte from the emulated video RAM.
-  uint8_t (*read_vram_byte)(struct MDAState* mda, uint32_t address);
+  uint8_t (*read_vram_byte)(struct VideoState* video, uint32_t address);
   // Callback to write a byte to the emulated video RAM.
   void (*write_vram_byte)(
-      struct MDAState* mda, uint32_t address, uint8_t value);
+      struct VideoState* video, uint32_t address, uint8_t value);
 
   // Callback to write an RGB pixel value to the real display, invoked from
-  // MDARender().
-  void (*write_pixel)(struct MDAState* mda, Position position, RGB rgb);
-} MDAConfig;
+  // VideoRender().
+  void (*write_pixel)(struct VideoState* video, Position position, RGB rgb);
+} VideoConfig;
 
-// Default MDA config.
-static const MDAConfig kDefaultMDAConfig = {
+// Default video config.
+static const VideoConfig kDefaultVideoConfig = {
     .context = NULL,
 
     .foreground = {.r = 0xAA, .g = 0xAA, .b = 0xAA},
@@ -280,36 +314,36 @@ static const MDAConfig kDefaultMDAConfig = {
     .write_pixel = NULL,
 };
 
-// MDA state.
-typedef struct MDAState {
+// Video state.
+typedef struct VideoState {
   // Caller-provided runtime configuration.
-  MDAConfig* config;
+  VideoConfig* config;
 
   // Motorola 6845 CRT controller registers.
-  uint8_t registers[kMDANumRegisters];
+  uint8_t registers[kNumCRTCRegisters];
   // Currently selected 6845 CRT controller register index (I/O port 3B4).
   uint8_t selected_register;
-  // Control port value (I/O port 3B8).
-  uint8_t control_port;
-  // Status port value (I/O port 3BA).
-  uint8_t status_port;
-} MDAState;
+  // Mode control register value (I/O port 3B8).
+  uint8_t control_register;
+  // Status register value (I/O port 3BA).
+  uint8_t status_register;
+} VideoState;
 
-// Initialize MDA state with the provided configuration.
-void MDAInit(MDAState* mda, MDAConfig* config);
+// Initialize video state with the provided configuration.
+void VideoInit(VideoState* video, VideoConfig* config);
 
-// Read a byte from an MDA I/O port.
-uint8_t MDAReadPort(MDAState* mda, uint16_t port);
-// Write a byte to an MDA I/O port.
-void MDAWritePort(MDAState* mda, uint16_t port, uint8_t value);
+// Read a byte from a video I/O port.
+uint8_t VideoReadPort(VideoState* video, uint16_t port);
+// Write a byte to a video I/O port.
+void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
 
-// Read a byte from MDA VRAM.
-uint8_t MDAReadVRAM(MDAState* mda, uint32_t address);
-// Write a byte to MDA VRAM.
-void MDAWriteVRAM(MDAState* mda, uint32_t address, uint8_t value);
+// Read a byte from video RAM.
+uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
+// Write a byte to video RAM.
+void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.
-void MDARender(MDAState* mda);
+void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H

@@ -439,26 +439,26 @@ static void DMACallbackWritePortByte(
 }
 
 // ============================================================================
-// Callbacks for MDA module
+// Callbacks for Video module
 // ============================================================================
 
-static uint8_t MDACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return MDAReadPort((MDAState*)entry->context, port);
+static uint8_t VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return VideoReadPort((VideoState*)entry->context, port);
 }
 
-static void MDACallbackWritePortByte(
+static void VideoCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  MDAWritePort((MDAState*)entry->context, port, value);
+  VideoWritePort((VideoState*)entry->context, port, value);
 }
 
-static uint8_t MDACallbackReadVRAMByte(
+static uint8_t VideoCallbackReadVRAMByte(
     MemoryMapEntry* entry, uint32_t address) {
-  return MDAReadVRAM((MDAState*)entry->context, address);
+  return VideoReadVRAM((VideoState*)entry->context, address);
 }
 
-static void MDACallbackWriteVRAMByte(
+static void VideoCallbackWriteVRAMByte(
     MemoryMapEntry* entry, uint32_t address, uint8_t value) {
-  MDAWriteVRAM((MDAState*)entry->context, address, value);
+  VideoWriteVRAM((VideoState*)entry->context, address, value);
 }
 
 // ============================================================================
@@ -672,29 +672,29 @@ static void PlatformInitDMA(PlatformState* platform) {
   RegisterPortMapEntry(platform, &dma_page_entry);
 }
 
-static void PlatformInitMDA(PlatformState* platform) {
-  platform->mda_config = kDefaultMDAConfig;
-  platform->mda_config.context = platform;
-  platform->mda_config.logger = &platform->logger;
-  MDAInit(&platform->mda, &platform->mda_config);
+static void PlatformInitVideo(PlatformState* platform) {
+  platform->video_config = kDefaultVideoConfig;
+  platform->video_config.context = platform;
+  platform->video_config.logger = &platform->logger;
+  VideoInit(&platform->video, &platform->video_config);
 
   MemoryMapEntry vram_entry = {
-      .context = &platform->mda,
-      .entry_type = kMemoryMapEntryMDAVRAM,
+      .context = &platform->video,
+      .entry_type = kMemoryMapEntryVRAM,
       .start = kMDAModeMetadata.vram_address,
       .end = kMDAModeMetadata.vram_address + kMDAModeMetadata.vram_size - 1,
-      .read_byte = MDACallbackReadVRAMByte,
-      .write_byte = MDACallbackWriteVRAMByte,
+      .read_byte = VideoCallbackReadVRAMByte,
+      .write_byte = VideoCallbackWriteVRAMByte,
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
 
   PortMapEntry port_entry = {
-      .context = &platform->mda,
-      .entry_type = kPortMapEntryMDA,
-      .start = 0x3B0,
-      .end = 0x3BF,
-      .read_byte = MDACallbackReadPortByte,
-      .write_byte = MDACallbackWritePortByte,
+      .context = &platform->video,
+      .entry_type = kPortMapEntryVideo,
+      .start = kMDAPortStart,
+      .end = kMDAPortEnd,
+      .read_byte = VideoCallbackReadPortByte,
+      .write_byte = VideoCallbackWritePortByte,
   };
   RegisterPortMapEntry(platform, &port_entry);
 }
@@ -721,7 +721,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   PlatformInitFDC(platform);
   PlatformInitHDC(platform);
   PlatformInitDMA(platform);
-  PlatformInitMDA(platform);
+  PlatformInitVideo(platform);
 
   platform->ticks = 0;
 
