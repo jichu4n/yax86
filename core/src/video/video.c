@@ -111,6 +111,14 @@ YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
+YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerCursorBlinkPhase) % 2 == 0;
+}
+
+YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
+  return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
+}
+
 // ============================================================================
 // Retrace timing
 // ============================================================================
@@ -205,6 +213,18 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 
 void VideoRender(VideoState* video) {
   if (!video->config || !video->config->write_pixel) {
+    return;
+  }
+
+  if (!(video->control_register & kVideoControlVideoEnable)) {
+    // The video signal is disabled, so the display is blank. The BIOS leaves it
+    // this way while it reprograms the 6845.
+    for (uint16_t y = 0; y < kMDAModeMetadata.height; ++y) {
+      for (uint16_t x = 0; x < kMDAModeMetadata.width; ++x) {
+        Position pixel_pos = {.x = x, .y = y};
+        VideoWritePixel(video, pixel_pos, video->config->background);
+      }
+    }
     return;
   }
 
