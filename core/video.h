@@ -986,6 +986,27 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
 YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
+// Whether the text mode cursor is enabled in the 6845 registers.
+YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
+
+// The first scan line of the character cell covered by the text mode cursor,
+// from the 6845 cursor start register. May be out of range for the current
+// character height.
+YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
+
+// The last scan line of the character cell covered by the text mode cursor,
+// from the 6845 cursor end register. May be out of range for the current
+// character height.
+YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
+
+// The address of the first displayed character, in character units, from the
+// 6845 start address registers.
+YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
+
+// The address of the text mode cursor, in character units, from the 6845 cursor
+// address registers.
+YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
+
 // Render the current display in MDA text mode.
 YAX86_PRIVATE void MDARenderScreen(VideoState* video);
 
@@ -1920,17 +1941,77 @@ static void MDAWriteChar(
   }
 }
 
+// Draw the text mode cursor over the character cell it occupies.
+static void MDADrawCursor(VideoState* video, uint16_t start_address) {
+  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
+  // the other three; it does not animate the two blink-rate modes
+  // separately, since DOS's own repeated INT 10h cursor toggling already
+  // produces the visible blink in practice.
+  if (!VideoIsCursorEnabled(video)) {
+    return;
+  }
+  // The cursor address (R14/R15) and start address (R12/R13) are both
+  // character-unit VRAM addresses, so subtracting them gives the cursor's
+  // position relative to the top-left of whatever is currently scrolled into
+  // view. Both are independently wrapping 16-bit values, so the difference
+  // is masked into the 2048-character VRAM space (4KB VRAM / 2 bytes per
+  // character) rather than allowed to underflow or run past it.
+  uint16_t cursor_offset = (VideoGetCursorAddress(video) - start_address) &
+                           (metadata->vram_size / 2 - 1);
+  uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
+  // The 80x25 grid only covers 2000 of VRAM's 2048 addressable characters;
+  // if the cursor lands outside the visible grid it is legitimately
+  // off-screen, so nothing is drawn.
+  if (cursor_offset >= num_cells) {
+    return;
+  }
+
+  // R10/R11 select the first and last scan line of the cell to highlight
+  // (e.g. 11-12 of 0-13 for the default underline cursor). An out-of-range
+  // start leaves nothing valid to draw; an out-of-range end is clamped to the
+  // last scan line instead of discarding the whole cursor.
+  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
+  if (cursor_start >= metadata->char_height) {
+    return;
+  }
+  if (cursor_end >= metadata->char_height) {
+    cursor_end = metadata->char_height - 1;
+  }
+
+  // Recover the (col, row) the linear cursor_offset represents, and scale up
+  // to the pixel origin of that cell.
+  uint16_t origin_x =
+      (cursor_offset % metadata->columns) * metadata->char_width;
+  uint16_t origin_y =
+      (cursor_offset / metadata->columns) * metadata->char_height;
+  // Paint a full-width band across the selected scan lines in the plain
+  // foreground color - the cursor ignores the character's own attribute
+  // byte.
+  for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
+    for (uint8_t x = 0; x < metadata->char_width; ++x) {
+      Position pixel_pos = {.x = origin_x + x, .y = origin_y + y};
+      VideoWritePixel(video, pixel_pos, video->config->foreground);
+    }
+  }
+}
+
 // Render the current display in MDA text mode.
 YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  uint16_t start_address = VideoGetStartAddress(video);
   for (uint8_t row = 0; row < metadata->rows; ++row) {
     for (uint8_t col = 0; col < metadata->columns; ++col) {
       TextPosition char_pos = {.col = col, .row = row};
       // Each character takes 2 bytes (char + attr).
-      uint32_t char_address = ((uint32_t)row * metadata->columns + col) * 2;
+      uint32_t char_address =
+          ((uint32_t)start_address + row * metadata->columns + col) * 2;
+      char_address &= metadata->vram_size - 1;
       MDAWriteChar(video, char_pos, char_address);
     }
   }
+  MDADrawCursor(video, start_address);
 }
 
 
@@ -1957,6 +2038,13 @@ static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
 enum {
   // High resolution mode, video enable, blink enable.
   kMDADefaultControlRegister = 0x29,
+
+  // Value of bits 6-5 of the cursor start register that disables the cursor.
+  kCRTCCursorDisabled = 0x20,
+  // Mask of bits 6-5 of the cursor start register.
+  kCRTCCursorModeMask = 0x60,
+  // Mask of the scan line select bits in the cursor start and end registers.
+  kCRTCCursorScanLineMask = 0x1F,
 
   // The 6845 latches only the low five bits of the register index.
   kCRTCRegisterIndexMask = 0x1F,
@@ -2020,6 +2108,33 @@ void VideoInit(VideoState* video, VideoConfig* config) {
     VideoWriteVRAMByte(video, i, ' ');
     VideoWriteVRAMByte(video, i + 1, 0x07 /* default attr */);
   }
+}
+
+// ============================================================================
+// 6845 CRT controller
+// ============================================================================
+
+YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
+  return (uint16_t)(video->registers[kCRTCRegisterStartAddressH] << 8) |
+         video->registers[kCRTCRegisterStartAddressL];
+}
+
+YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
+  return (uint16_t)(video->registers[kCRTCRegisterCursorH] << 8) |
+         video->registers[kCRTCRegisterCursorL];
+}
+
+YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
+  return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
+         kCRTCCursorDisabled;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
 // ============================================================================

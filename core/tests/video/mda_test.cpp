@@ -67,6 +67,9 @@ class MDATest : public ::testing::Test {
     config_.write_pixel = MockWritePixel;
 
     VideoInit(&video_, &config_);
+    // The cursor sits over the first character cell by default, which is the
+    // cell most of these tests inspect.
+    DisableCursor();
   }
 
   void ClearFrameBuffer() {
@@ -106,6 +109,18 @@ class MDATest : public ::testing::Test {
   void WriteChar(uint32_t cell, uint8_t character, uint8_t attribute) {
     mock_vram[cell * 2] = character;
     mock_vram[cell * 2 + 1] = attribute;
+  }
+
+  // Set a 6845 register through the I/O ports.
+  void WriteRegister(uint8_t index, uint8_t value) {
+    VideoWritePort(&video_, kMDAPortRegisterIndex, index);
+    VideoWritePort(&video_, kMDAPortRegisterData, value);
+  }
+
+  void DisableCursor() {
+    uint8_t selected_register = video_.selected_register;
+    WriteRegister(kCRTCRegisterCursorStart, 0x20);
+    video_.selected_register = selected_register;
   }
 
   VideoConfig config_ = {0};
@@ -236,6 +251,50 @@ TEST_F(MDATest, RenderCharacterFallback) {
   WriteChar(0, 'A', 0x02);
   Render();
 
+  EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
+}
+
+TEST_F(MDATest, RenderCursor) {
+  // The default cursor occupies scan lines 11 to 12 of the cell it is on.
+  WriteRegister(kCRTCRegisterCursorStart, 0x0B);
+  WriteRegister(kCRTCRegisterCursorEnd, 0x0C);
+  // Put the cursor on the second cell of the second row.
+  uint16_t cursor_cell = 80 + 1;
+  WriteRegister(kCRTCRegisterCursorH, cursor_cell >> 8);
+  WriteRegister(kCRTCRegisterCursorL, cursor_cell & 0xFF);
+  Render();
+
+  int cursor_x = kCharWidth;
+  int cursor_y = kCharHeight;
+  EXPECT_EQ(
+      CountPixels(cursor_x, cursor_y + 11, kCharWidth, 2, config_.foreground),
+      kCharWidth * 2);
+  // The scan lines above the cursor are untouched by it.
+  EXPECT_EQ(
+      CountPixels(cursor_x, cursor_y, kCharWidth, 11, config_.background),
+      kCharWidth * 11);
+}
+
+TEST_F(MDATest, CursorCanBeDisabled) {
+  WriteRegister(kCRTCRegisterCursorEnd, 0x0C);
+  WriteRegister(kCRTCRegisterCursorStart, 0x20);
+  Render();
+
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+}
+
+TEST_F(MDATest, StartAddressScrollsTheDisplay) {
+  // Put a character on the second row of VRAM, then scroll the display up by
+  // one row so that it appears in the top left corner.
+  WriteChar(80, 'A', 0x07);
+  Render();
+  EXPECT_EQ(
+      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+
+  WriteRegister(kCRTCRegisterStartAddressH, 80 >> 8);
+  WriteRegister(kCRTCRegisterStartAddressL, 80 & 0xFF);
+  Render();
   EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
 }
 

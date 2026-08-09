@@ -21,6 +21,27 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
 YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
+// Whether the text mode cursor is enabled in the 6845 registers.
+YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
+
+// The first scan line of the character cell covered by the text mode cursor,
+// from the 6845 cursor start register. May be out of range for the current
+// character height.
+YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
+
+// The last scan line of the character cell covered by the text mode cursor,
+// from the 6845 cursor end register. May be out of range for the current
+// character height.
+YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
+
+// The address of the first displayed character, in character units, from the
+// 6845 start address registers.
+YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
+
+// The address of the text mode cursor, in character units, from the 6845 cursor
+// address registers.
+YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
+
 // Render the current display in MDA text mode.
 YAX86_PRIVATE void MDARenderScreen(VideoState* video);
 

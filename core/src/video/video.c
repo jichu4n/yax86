@@ -13,6 +13,13 @@ enum {
   // High resolution mode, video enable, blink enable.
   kMDADefaultControlRegister = 0x29,
 
+  // Value of bits 6-5 of the cursor start register that disables the cursor.
+  kCRTCCursorDisabled = 0x20,
+  // Mask of bits 6-5 of the cursor start register.
+  kCRTCCursorModeMask = 0x60,
+  // Mask of the scan line select bits in the cursor start and end registers.
+  kCRTCCursorScanLineMask = 0x1F,
+
   // The 6845 latches only the low five bits of the register index.
   kCRTCRegisterIndexMask = 0x1F,
 
@@ -75,6 +82,33 @@ void VideoInit(VideoState* video, VideoConfig* config) {
     VideoWriteVRAMByte(video, i, ' ');
     VideoWriteVRAMByte(video, i + 1, 0x07 /* default attr */);
   }
+}
+
+// ============================================================================
+// 6845 CRT controller
+// ============================================================================
+
+YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
+  return (uint16_t)(video->registers[kCRTCRegisterStartAddressH] << 8) |
+         video->registers[kCRTCRegisterStartAddressL];
+}
+
+YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
+  return (uint16_t)(video->registers[kCRTCRegisterCursorH] << 8) |
+         video->registers[kCRTCRegisterCursorL];
+}
+
+YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
+  return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
+         kCRTCCursorDisabled;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
+}
+
+YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
+  return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
 // ============================================================================
