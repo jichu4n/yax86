@@ -20005,16 +20005,34 @@ static void MDAWriteChar(
 // Draw the text mode cursor over the character cell it occupies.
 static void MDADrawCursor(VideoState* video, uint16_t start_address) {
   const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
+  // the other three; it does not animate the two blink-rate modes
+  // separately, since DOS's own repeated INT 10h cursor toggling already
+  // produces the visible blink in practice.
   if (!VideoIsCursorEnabled(video)) {
     return;
   }
+  // The cursor address (R14/R15) and start address (R12/R13) are both
+  // character-unit VRAM addresses, so subtracting them gives the cursor's
+  // position relative to the top-left of whatever is currently scrolled into
+  // view. Both are independently wrapping 16-bit values, so the difference
+  // is masked into the 2048-character VRAM space (4KB VRAM / 2 bytes per
+  // character) rather than allowed to underflow or run past it.
   uint16_t cursor_offset = (VideoGetCursorAddress(video) - start_address) &
                            (metadata->vram_size / 2 - 1);
   uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
+  // The 80x25 grid only covers 2000 of VRAM's 2048 addressable characters;
+  // if the cursor lands outside the visible grid it is legitimately
+  // off-screen, so nothing is drawn.
   if (cursor_offset >= num_cells) {
     return;
   }
 
+  // R10/R11 select the first and last scan line of the cell to highlight
+  // (e.g. 11-12 of 0-13 for the default underline cursor), masked to the 5
+  // scan-line-select bits the 6845 defines. An out-of-range start leaves
+  // nothing valid to draw; an out-of-range end is clamped to the last scan
+  // line instead of discarding the whole cursor.
   uint8_t cursor_start = video->registers[kCRTCRegisterCursorStart] & 0x1F;
   uint8_t cursor_end = video->registers[kCRTCRegisterCursorEnd] & 0x1F;
   if (cursor_start >= metadata->char_height) {
@@ -20024,10 +20042,15 @@ static void MDADrawCursor(VideoState* video, uint16_t start_address) {
     cursor_end = metadata->char_height - 1;
   }
 
+  // Recover the (col, row) the linear cursor_offset represents, and scale up
+  // to the pixel origin of that cell.
   uint16_t origin_x =
       (cursor_offset % metadata->columns) * metadata->char_width;
   uint16_t origin_y =
       (cursor_offset / metadata->columns) * metadata->char_height;
+  // Paint a full-width band across the selected scan lines in the plain
+  // foreground color - the cursor ignores the character's own attribute
+  // byte.
   for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
     for (uint8_t x = 0; x < metadata->char_width; ++x) {
       Position pixel_pos = {.x = origin_x + x, .y = origin_y + y};
