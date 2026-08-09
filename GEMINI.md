@@ -67,8 +67,10 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - The `sdl` directory contains an SDL3-based runtime for the emulator.
 - It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
   wrapper (`yax86_sdl.{wasm,js}`).
-- It takes an optional floppy image path, defaulting to `floppy_a.img`, and an
-  optional `--hdd` flag that attaches a hard disk.
+- It takes an optional floppy image path, defaulting to `floppy_a.img`. A hard
+  disk is attached by default, and `--no-hdd` leaves the machine without one.
+  The default matters because the Emscripten build has no command line, so a
+  hard disk gated behind a flag would be unreachable in the browser.
 - `src/audio.c` turns the frequency the core reports for the PC speaker into a
   square wave. The core hands over a frequency rather than a stream of samples,
   so nothing here has to reconcile emulated time with the audio clock - the

@@ -12222,9 +12222,9 @@ enum {
   kHDCIdentifyFieldValidityCurrentGeometry = 1 << 0,
   // PIO data transfer cycle timing mode, in the high byte.
   kHDCIdentifyPIOTimingMode2 = 2 << 8,
-  // Sectors transferred per Read Multiple. Multiple mode is not supported, so
-  // every transfer moves a single sector.
-  kHDCIdentifyMaxSectorsPerTransfer = 1,
+  // Sectors moved per Read Multiple or Write Multiple. Zero is how ATA says
+  // multiple mode is not supported, which matches Set Multiple Mode aborting.
+  kHDCIdentifyMaxSectorsPerTransfer = 0,
   // A dual ported buffer with look-ahead, which is what an ATA drive of this
   // era reports.
   kHDCIdentifyBufferTypeDualPorted = 3,
@@ -12429,9 +12429,10 @@ static void HDCHandleReadVerifySectors(HDCState* hdc, HDCDriveState* drive) {
 static void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
   HDCDriveState* drive = HDCSelectedDrive(hdc);
   if (!drive->present) {
-    // Nothing drives the bus, so the guest sees a drive that never becomes
-    // ready and gives up.
-    hdc->status = 0;
+    // An absent drive never answers, so the command simply goes unheard. The
+    // status register is shared by both drives, and HDCReadPort already
+    // reports an absent one as never ready, so writing to it here would do
+    // nothing except strand the other drive at a status of zero.
     return;
   }
 

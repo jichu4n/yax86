@@ -126,6 +126,18 @@ TEST_F(HDCTaskFileTest, EmptyDriveSlotNeverBecomesReady) {
   EXPECT_EQ(Read(kHDCRegisterStatus), 0);
 }
 
+TEST_F(HDCTaskFileTest, CommandsToAnEmptySlotLeaveTheOtherDriveAlone) {
+  // The status register is shared by both drives, so a command aimed at the
+  // absent slave must not disturb the master. A guest that polls for ready
+  // before issuing a command would otherwise wait forever.
+  SelectDrive(1);
+  RunCommand(kHDCCommandIdentifyDevice);
+
+  SelectDrive(0);
+  EXPECT_TRUE(Read(kHDCRegisterStatus) & kHDCStatusReady);
+  EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusError);
+}
+
 TEST_F(HDCTaskFileTest, IdentifyDeviceReportsGeometry) {
   SelectDrive(0);
   const uint8_t status = RunCommand(kHDCCommandIdentifyDevice);
@@ -158,6 +170,21 @@ TEST_F(HDCTaskFileTest, IdentifyDeviceReportsGeometry) {
   EXPECT_EQ(
       (uint32_t)WordAt(block, 57) | ((uint32_t)WordAt(block, 58) << 16),
       num_sectors);
+}
+
+TEST_F(HDCTaskFileTest, IdentifyDeviceDoesNotAdvertiseMultipleMode) {
+  SelectDrive(0);
+  RunCommand(kHDCCommandIdentifyDevice);
+  const std::vector<uint8_t> block = DrainBuffer();
+
+  // Zero is how ATA says Read Multiple and Write Multiple are unavailable.
+  // Anything else would contradict Set Multiple Mode aborting.
+  EXPECT_EQ(WordAt(block, 47) & 0xFF, 0);
+
+  enum { kSetMultipleMode = 0xC6 };
+  const uint8_t status = RunCommand(kSetMultipleMode);
+  EXPECT_TRUE(status & kHDCStatusError);
+  EXPECT_TRUE(Read(kHDCRegisterError) & kHDCErrorAborted);
 }
 
 TEST_F(HDCTaskFileTest, IdentifyDeviceStringsAreByteSwapped) {
