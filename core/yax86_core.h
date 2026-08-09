@@ -16018,7 +16018,10 @@ typedef struct PlatformConfig {
   // 1, driving the cone directly, so turning the speaker off parks that line
   // at a constant level and the cone audibly settles. Neither that click nor
   // the digitized audio some software produces by toggling bit 1 directly can
-  // be represented here. Nothing GLaBIOS or MS-DOS does needs them.
+  // be represented here.
+  //
+  // However, we're choosing this approach so that basic PC speaker audio will
+  // work without requiring PIT to be perfectly cycle accurate.
   void (*set_pc_speaker_frequency)(
       struct PlatformState* platform, uint32_t frequency_hz);
 } PlatformConfig;
