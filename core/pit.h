@@ -619,7 +619,14 @@ typedef struct PITConfig {
   // Callback to raise IRQ 0.
   void (*raise_irq_0)(void* context);
 
-  // Callback to set PC speaker frequency in Hz.
+  // Callback to set PC speaker frequency in Hz, or 0 when channel 2 is not
+  // producing a tone.
+  //
+  // This reports current state, not a stream of events. Programming a channel
+  // takes several port writes, so an intermediate 0 can be reported
+  // microseconds before the new frequency - a host that keeps only the latest
+  // value hears one continuous tone, while a host that queues every value
+  // hears a gap.
   void (*set_pc_speaker_frequency)(void* context, uint32_t frequency_hz);
 } PITConfig;
 
@@ -691,6 +698,8 @@ enum {
   // Fallback reload value when 0 is written to the counter. The hardware
   // treats a reload value of 0 as 0x10000.
   kPITFallbackReloadValue = 0x10000,
+  // The channel wired to the PC speaker.
+  kPITSpeakerChannel = 2,
 };
 
 // Specifies the behavior of a timer channel in a specific mode (0-5).
@@ -822,6 +831,37 @@ void PITInit(PITState* pit, PITConfig* config) {
   }
 }
 
+// Whether a channel in this mode drives its output at the reload frequency.
+// Only modes 2 and 3 oscillate; the others produce a single edge, which a
+// frequency has no way to express.
+static inline bool PITModeOscillates(uint8_t mode) {
+  return mode == 2 || mode == 3;
+}
+
+// Reports channel 2's tone frequency to the host, or 0 if it is not producing
+// one. Modes other than 2 and 3 are silent, as is a channel that has been
+// reprogrammed but not yet given a count - the hardware does not start
+// counting until the count is written.
+//
+// The frequency describes only how often the output oscillates. Mode 2's
+// narrow output pulse sounds thinner than mode 3's square wave, which a
+// frequency cannot express.
+static inline void PITNotifySpeakerFrequency(
+    PITState* pit, const PITChannelState* channel, int channel_index,
+    bool has_count) {
+  if (channel_index != kPITSpeakerChannel || !pit->config ||
+      !pit->config->set_pc_speaker_frequency) {
+    return;
+  }
+  uint32_t frequency = 0;
+  if (has_count && PITModeOscillates(channel->mode)) {
+    frequency =
+        kPITTickFrequencyHz / (channel->reload_value ? channel->reload_value
+                                                     : kPITFallbackReloadValue);
+  }
+  pit->config->set_pc_speaker_frequency(pit->config->context, frequency);
+}
+
 // Helper function to load the counter and handle side effects.
 static inline void PITChannelLoadCounter(
     PITState* pit, PITChannelState* channel, int channel_index) {
@@ -829,14 +869,7 @@ static inline void PITChannelLoadCounter(
   // This will wrap to 0 when assigned to the 16-bit counter.
   channel->counter = channel->reload_value;
 
-  // If this is channel 2, notify the platform of the new PC speaker frequency.
-  if (channel_index == 2 && pit->config &&
-      pit->config->set_pc_speaker_frequency) {
-    uint32_t frequency =
-        kPITTickFrequencyHz / (channel->reload_value ? channel->reload_value
-                                                     : kPITFallbackReloadValue);
-    pit->config->set_pc_speaker_frequency(pit->config->context, frequency);
-  }
+  PITNotifySpeakerFrequency(pit, channel, channel_index, true);
 }
 
 // Helper function to handle a write to a channel's data port.
@@ -908,6 +941,10 @@ void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
         PITChannelSetOutputState(
             pit, channel, channel_index,
             kPITModeMetadata[channel->mode]->initial_output_state);
+        // A reprogrammed channel is silent until its count arrives, so a tone
+        // playing on channel 2 stops here and resumes on the next counter
+        // load.
+        PITNotifySpeakerFrequency(pit, channel, channel_index, false);
       }
       break;
     }
