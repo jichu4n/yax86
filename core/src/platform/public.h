@@ -313,6 +313,23 @@ typedef struct PlatformConfig {
   // to the real-life 8088.
   void (*write_physical_memory_byte)(
       struct PlatformState* platform, uint32_t address, uint8_t value);
+
+  // Callback invoked when the PC speaker's output changes. frequency_hz is the
+  // square wave frequency the speaker should emit, or 0 to turn it off. May be
+  // NULL, in which case the speaker is silent.
+  //
+  // The speaker sounds when PIT channel 2 is producing a tone and both PPI
+  // port B bits 0 and 1 are set. This reports current state rather than a
+  // stream of events - see PITConfig.set_pc_speaker_frequency.
+  //
+  // A frequency deliberately cannot express everything the hardware does. On a
+  // real PC the speaker line is the AND of channel 2's output and port B bit
+  // 1, driving the cone directly, so turning the speaker off parks that line
+  // at a constant level and the cone audibly settles. Neither that click nor
+  // the digitized audio some software produces by toggling bit 1 directly can
+  // be represented here. Nothing GLaBIOS or MS-DOS does needs them.
+  void (*set_pc_speaker_frequency)(
+      struct PlatformState* platform, uint32_t frequency_hz);
 } PlatformConfig;
 
 STATIC_VECTOR_TYPE(MemoryMap, MemoryMapEntry, kMaxMemoryMapEntries)
