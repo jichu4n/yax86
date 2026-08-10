@@ -88,6 +88,7 @@ TEST_F(HDCTaskFileTest, PortOffsetToRegisterMatchesTheCardWiring) {
   EXPECT_EQ(HDCPortOffsetToRegister(0xA), kHDCRegisterSectorNumber);
   EXPECT_EQ(HDCPortOffsetToRegister(0x4), kHDCRegisterCylinderLow);
   EXPECT_EQ(HDCPortOffsetToRegister(0xC), kHDCRegisterCylinderHigh);
+  EXPECT_EQ(HDCPortOffsetToRegister(0x7), kHDCRegisterDeviceControl);
 
   // Swapping two address lines is its own inverse.
   for (uint8_t offset = 0; offset < kHDCNumPorts; ++offset) {
@@ -169,6 +170,53 @@ TEST_F(HDCTaskFileTest, IdentifyDeviceReportsGeometry) {
       num_sectors);
   EXPECT_EQ(
       (uint32_t)WordAt(block, 57) | ((uint32_t)WordAt(block, 58) << 16),
+      num_sectors);
+}
+
+TEST_F(HDCTaskFileTest, IdentifyDeviceReportsAGeometryThatIsFullyAddressable) {
+  SelectDrive(0);
+  const uint32_t num_sectors = (uint32_t)kTestGeometry.num_cylinders *
+                               kTestGeometry.num_heads *
+                               kTestGeometry.num_sectors_per_track;
+
+  // Ask for a geometry with a different shape to the physical one. The
+  // reported cylinder count has to follow it, or the drive would be
+  // advertising sectors it does not have.
+  Write(kHDCRegisterSectorCount, 5);
+  Write(kHDCRegisterDriveHead, 3);  // 4 heads
+  ASSERT_FALSE(
+      RunCommand(kHDCCommandInitializeDeviceParameters) & kHDCStatusError);
+
+  RunCommand(kHDCCommandIdentifyDevice);
+  const std::vector<uint8_t> block = DrainBuffer();
+
+  const uint16_t cylinders = WordAt(block, 54);
+  const uint16_t heads = WordAt(block, 55);
+  const uint16_t sectors = WordAt(block, 56);
+  EXPECT_EQ(heads, 4);
+  EXPECT_EQ(sectors, 5);
+  EXPECT_EQ(cylinders, num_sectors / (4 * 5));
+
+  // ATA defines current capacity as the product of the three, and the drive
+  // cannot claim more sectors than it has.
+  const uint32_t current_capacity =
+      (uint32_t)WordAt(block, 57) | ((uint32_t)WordAt(block, 58) << 16);
+  EXPECT_EQ(current_capacity, (uint32_t)cylinders * heads * sectors);
+  EXPECT_LE(current_capacity, num_sectors);
+
+  // The last sector of the reported geometry really is readable, which is the
+  // property all of the above exists to guarantee.
+  Write(kHDCRegisterSectorCount, 1);
+  Write(kHDCRegisterCylinderLow, (uint8_t)((cylinders - 1) & 0xFF));
+  Write(kHDCRegisterCylinderHigh, (uint8_t)((cylinders - 1) >> 8));
+  Write(kHDCRegisterDriveHead, (uint8_t)(heads - 1));
+  Write(kHDCRegisterSectorNumber, (uint8_t)sectors);
+  EXPECT_FALSE(RunCommand(kHDCCommandReadVerifySectors) & kHDCStatusError);
+
+  // Total user addressable sectors stays the physical capacity, since that is
+  // what LBA reaches regardless of the geometry the guest chose.
+  EXPECT_EQ(
+      (uint32_t)WordAt(block, 60) | ((uint32_t)WordAt(block, 61) << 16),
       num_sectors);
 }
 
@@ -387,10 +435,60 @@ TEST_F(HDCTaskFileTest, DetachedDriveStopsResponding) {
   EXPECT_EQ(Read(kHDCRegisterStatus), 0);
 }
 
+TEST_F(HDCTaskFileTest, AlternateStatusReadsTheSameAsStatus) {
+  SelectDrive(0);
+  EXPECT_EQ(Read(kHDCRegisterDeviceControl), Read(kHDCRegisterStatus));
+
+  // A failed command shows up in both, and reading either leaves the transfer
+  // state alone - the point of the alternate register.
+  Write(kHDCRegisterSectorCount, 1);
+  Write(kHDCRegisterSectorNumber, 0);  // sector zero does not exist
+  RunCommand(kHDCCommandReadVerifySectors);
+  EXPECT_TRUE(Read(kHDCRegisterDeviceControl) & kHDCStatusError);
+  EXPECT_EQ(Read(kHDCRegisterDeviceControl), Read(kHDCRegisterStatus));
+
+  // An empty slot leaves it undriven, just as it does the status register.
+  SelectDrive(1);
+  EXPECT_EQ(Read(kHDCRegisterDeviceControl), 0);
+}
+
+TEST_F(HDCTaskFileTest, SoftwareResetAbandonsATransferInProgress) {
+  SelectDrive(0);
+  ASSERT_TRUE(RunCommand(kHDCCommandIdentifyDevice) & kHDCStatusDataRequest);
+  Read(kHDCRegisterData);
+
+  Write(kHDCRegisterDeviceControl, kHDCDeviceControlSoftwareReset);
+
+  // The drive is back to idle with nothing left to hand over, rather than
+  // still holding out half a block the guest has stopped collecting.
+  const uint8_t status = Read(kHDCRegisterStatus);
+  EXPECT_FALSE(status & kHDCStatusDataRequest);
+  EXPECT_TRUE(status & kHDCStatusReady);
+  EXPECT_FALSE(status & kHDCStatusError);
+  EXPECT_EQ(Read(kHDCRegisterError), 0);
+
+  // And it takes commands again, starting a fresh block from its first word.
+  ASSERT_TRUE(RunCommand(kHDCCommandIdentifyDevice) & kHDCStatusDataRequest);
+  const uint8_t low_byte = Read(kHDCRegisterData);
+  const uint8_t high_byte = Read(kHDCRegisterDataHigh);
+  EXPECT_EQ((uint16_t)(low_byte | (high_byte << 8)), 1 << 6);
+}
+
+TEST_F(HDCTaskFileTest, DisablingInterruptsIsAcceptedAndIgnored) {
+  SelectDrive(0);
+  ASSERT_TRUE(RunCommand(kHDCCommandIdentifyDevice) & kHDCStatusDataRequest);
+
+  // The card has no interrupt line, but a guest still writes this bit, and it
+  // must not be mistaken for a reset.
+  Write(kHDCRegisterDeviceControl, kHDCDeviceControlNoInterrupt);
+  EXPECT_TRUE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
+}
+
 TEST_F(HDCTaskFileTest, UnmappedPortOffsetsReadAsOpenBus) {
   SelectDrive(0);
-  // Offsets that no register decodes to.
-  for (uint8_t offset : {0x3, 0x5, 0x7, 0x9, 0xB, 0xD, 0xF}) {
+  // Offsets that no register decodes to. Offset 0x7 is not among them: it
+  // reaches the device control register, which is ATA register 0xE.
+  for (uint8_t offset : {0x3, 0x5, 0x9, 0xB, 0xD, 0xF}) {
     EXPECT_EQ(HDCReadPort(&hdc_, kHDCPortBase + offset), kHDCOpenBusValue)
         << "offset " << (int)offset;
   }

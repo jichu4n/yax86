@@ -168,6 +168,25 @@ static void HDCBuildIdentifyBlock(HDCState* hdc, const HDCDriveState* drive) {
 
   const uint32_t num_sectors = HDCDriveNumSectors(drive);
 
+  // Cylinder count in the geometry the guest asked for, which is however many
+  // whole cylinders of that shape fit on the drive. Reporting the physical
+  // count instead would describe a drive larger than this one whenever the
+  // guest picks a different head or sector count, and addresses in the part
+  // that does not exist would come back as ID not found. Deriving it means
+  // every address the reported geometry allows is one the drive really has:
+  // the largest is num_translated_cylinders * heads * sectors - 1, which is at
+  // most num_sectors - 1 by construction.
+  const uint32_t num_sectors_per_cylinder =
+      (uint32_t)drive->num_translated_heads *
+      (uint32_t)drive->num_translated_sectors_per_track;
+  const uint16_t num_translated_cylinders =
+      (uint16_t)(num_sectors / num_sectors_per_cylinder);
+  // Capacity in that same geometry, which ATA defines as the product of the
+  // three current geometry words. It is at most the physical capacity, and
+  // less when the head and sector counts leave a partial cylinder over.
+  const uint32_t num_translated_sectors =
+      (uint32_t)num_translated_cylinders * num_sectors_per_cylinder;
+
   HDCWriteIdentifyWord(
       hdc, kHDCIdentifyWordGeneralConfiguration,
       kHDCIdentifyGeneralConfigurationFixedDisk);
@@ -207,16 +226,18 @@ static void HDCBuildIdentifyBlock(HDCState* hdc, const HDCDriveState* drive) {
       hdc, kHDCIdentifyWordFieldValidity,
       kHDCIdentifyFieldValidityCurrentGeometry);
   HDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentNumCylinders, drive->geometry.num_cylinders);
+      hdc, kHDCIdentifyWordCurrentNumCylinders, num_translated_cylinders);
   HDCWriteIdentifyWord(
       hdc, kHDCIdentifyWordCurrentNumHeads, drive->num_translated_heads);
   HDCWriteIdentifyWord(
       hdc, kHDCIdentifyWordCurrentNumSectorsPerTrack,
       drive->num_translated_sectors_per_track);
   HDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentCapacity, (uint16_t)(num_sectors & 0xFFFF));
+      hdc, kHDCIdentifyWordCurrentCapacity,
+      (uint16_t)(num_translated_sectors & 0xFFFF));
   HDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentCapacity + 1, (uint16_t)(num_sectors >> 16));
+      hdc, kHDCIdentifyWordCurrentCapacity + 1,
+      (uint16_t)(num_translated_sectors >> 16));
   HDCWriteIdentifyWord(
       hdc, kHDCIdentifyWordNumUserAddressableSectors,
       (uint16_t)(num_sectors & 0xFFFF));
@@ -485,6 +506,32 @@ static void HDCWriteDataRegister(
   HDCWriteImageByte(hdc, hdc->data_high_latch);
 }
 
+// What the status and alternate status registers read back as. An empty drive
+// slot leaves the bus undriven, which the guest reads as a drive that is never
+// ready.
+static uint8_t HDCReadStatusRegister(HDCState* hdc) {
+  return HDCSelectedDrive(hdc)->present ? hdc->status : 0;
+}
+
+// Handles a write to the device control register.
+static void HDCWriteDeviceControlRegister(HDCState* hdc, uint8_t value) {
+  // A software reset abandons whatever the drive was doing, which is the point
+  // of it: it is how a guest recovers a transfer it cannot finish. Only the
+  // assertion matters, not the release - the reset completes inside this port
+  // write like every other command here, so there is no window in which the
+  // guest could catch the drive busy. The device signature and diagnostic code
+  // a reset leaves in the task file are not modelled, since nothing reads
+  // them without an ATAPI device to tell apart.
+  if (value & kHDCDeviceControlSoftwareReset) {
+    hdc->transfer = kHDCTransferNone;
+    hdc->transfer_byte_index = 0;
+    hdc->transfer_sectors_remaining = 0;
+    hdc->data_high_latch = 0;
+    hdc->error = 0;
+    hdc->status = kHDCStatusIdle;
+  }
+}
+
 uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
@@ -505,9 +552,8 @@ uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
     case kHDCRegisterDriveHead:
       return hdc->drive_head;
     case kHDCRegisterStatus:
-      // An empty drive slot leaves the bus undriven, which the guest reads as
-      // a drive that is never ready.
-      return HDCSelectedDrive(hdc)->present ? hdc->status : 0;
+    case kHDCRegisterDeviceControl:
+      return HDCReadStatusRegister(hdc);
     default:
       return kHDCOpenBusValue;
   }
@@ -542,6 +588,9 @@ void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
       break;
     case kHDCRegisterStatus:
       HDCExecuteCommand(hdc, value);
+      break;
+    case kHDCRegisterDeviceControl:
+      HDCWriteDeviceControlRegister(hdc, value);
       break;
     default:
       break;
