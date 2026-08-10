@@ -62,15 +62,17 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   there is no HDCTick and no seek or rotational timing. The controller is
   polled PIO, so nothing in the guest can observe the difference.
 - The drive's data port is 16 bits wide and the card is on an 8-bit bus, so
-  each word crosses the bus as two byte accesses - and reads and writes use
-  opposite orders. A read of the low byte port runs the bus cycle, so the low
-  byte comes first and the card latches the high byte for the guest to collect
-  from the second port. A write cannot start until the card has the whole
-  word, so the guest writes the high byte to the latch first and the write of
-  the low byte commits the pair. Streaming bytes in the order they arrive is
-  therefore wrong for writes: it puts every word on the disk back to front, so
-  a partition table's 0xAA55 signature lands as 0x55AA and DOS reports
-  "Invalid drive specification".
+  each word crosses the bus as two byte accesses against two ports, and only
+  the low byte port runs a bus cycle. A read of it moves a whole word: the low
+  byte goes to the guest and the card latches the high byte, which the high
+  byte port hands back without touching the drive. A write is the other way
+  round, because the card cannot start a cycle until it has the whole word -
+  the guest loads the latch through the high byte port first, and writing the
+  low byte commits the pair. So the two directions use opposite byte orders,
+  and a byte stream shared by both ports models neither. Streaming got writes
+  backwards, which put every word on the disk back to front: a partition
+  table's 0xAA55 signature landed as 0x55AA and DOS reported "Invalid drive
+  specification".
 - The SDL runtime loads a hard disk image into memory and discards guest
   writes, the same as the floppy. FDISK, FORMAT and booting from C: all work
   within a session, but the disk starts out the same way on every run.

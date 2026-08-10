@@ -203,12 +203,17 @@ TEST_F(HDCTaskFileTest, DataRequestClearsWhenTheBlockIsDrained) {
   SelectDrive(0);
   RunCommand(kHDCCommandIdentifyDevice);
 
-  for (int i = 0; i < kHDCSectorSize - 1; ++i) {
+  // A read of the low byte port takes a whole word off the card, so a block is
+  // a sector's worth of words rather than of reads.
+  const int num_words = kHDCSectorSize / 2;
+  for (int i = 0; i < num_words - 1; ++i) {
     Read(kHDCRegisterData);
+    Read(kHDCRegisterDataHigh);
     ASSERT_TRUE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest)
-        << "cleared early after " << (i + 1) << " bytes";
+        << "cleared early after " << (i + 1) << " words";
   }
   Read(kHDCRegisterData);
+  Read(kHDCRegisterDataHigh);
   EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
 }
 
@@ -250,6 +255,7 @@ TEST_F(HDCTaskFileTest, RecalibrateAndSeekSucceedAcrossTheirStepRates) {
 
 TEST_F(HDCTaskFileTest, ReadVerifyAcceptsAnAddressableSector) {
   SelectDrive(0);
+  Write(kHDCRegisterSectorCount, 1);
   Write(kHDCRegisterCylinderLow, 9);
   Write(kHDCRegisterCylinderHigh, 0);
   Write(kHDCRegisterDriveHead, 1);  // head 1
@@ -276,6 +282,8 @@ TEST_F(HDCTaskFileTest, ReadVerifyRejectsAddressesOffTheDrive) {
   };
 
   for (const Address& address : kBadAddresses) {
+    // A single sector, so only the address can be what fails.
+    Write(kHDCRegisterSectorCount, 1);
     Write(kHDCRegisterCylinderLow, address.cylinder_low);
     Write(kHDCRegisterCylinderHigh, 0);
     Write(kHDCRegisterDriveHead, address.head);
@@ -287,8 +295,59 @@ TEST_F(HDCTaskFileTest, ReadVerifyRejectsAddressesOffTheDrive) {
   }
 }
 
+TEST_F(HDCTaskFileTest, ReadVerifyRejectsARunThatLeavesTheDrive) {
+  SelectDrive(0);
+  const uint32_t num_sectors = (uint32_t)kTestGeometry.num_cylinders *
+                               kTestGeometry.num_heads *
+                               kTestGeometry.num_sectors_per_track;
+
+  // Start on the last sector of the drive and ask to verify two. The first
+  // sector exists, so only a check that covers the whole run catches this.
+  Write(kHDCRegisterSectorCount, 2);
+  Write(kHDCRegisterSectorNumber, (uint8_t)((num_sectors - 1) & 0xFF));
+  Write(kHDCRegisterCylinderLow, (uint8_t)(((num_sectors - 1) >> 8) & 0xFF));
+  Write(kHDCRegisterCylinderHigh, 0);
+  Write(kHDCRegisterDriveHead, kHDCDriveHeadLBA);
+
+  EXPECT_TRUE(RunCommand(kHDCCommandReadVerifySectors) & kHDCStatusError);
+  EXPECT_TRUE(Read(kHDCRegisterError) & kHDCErrorIDNotFound);
+
+  // The same run one sector earlier ends exactly at the end of the drive.
+  Write(kHDCRegisterSectorCount, 2);
+  Write(kHDCRegisterSectorNumber, (uint8_t)((num_sectors - 2) & 0xFF));
+  Write(kHDCRegisterCylinderLow, (uint8_t)(((num_sectors - 2) >> 8) & 0xFF));
+  EXPECT_FALSE(RunCommand(kHDCCommandReadVerifySectors) & kHDCStatusError);
+}
+
+TEST_F(HDCTaskFileTest, ReadingTheHighByteLatchDoesNotAdvanceTheTransfer) {
+  SelectDrive(0);
+  RunCommand(kHDCCommandIdentifyDevice);
+
+  // The low byte port runs the bus cycle and fetches a whole word; the high
+  // byte port just hands back what the card latched. Reading the latch over
+  // and over must therefore keep returning the same byte rather than eating
+  // the transfer.
+  const uint8_t low_byte = Read(kHDCRegisterData);
+  const uint8_t high_byte = Read(kHDCRegisterDataHigh);
+  EXPECT_EQ(Read(kHDCRegisterDataHigh), high_byte);
+  EXPECT_EQ(Read(kHDCRegisterDataHigh), high_byte);
+
+  // Word 0 of the Identify block is the general configuration word, whose
+  // bit 6 marks a fixed disk, so the two halves the guest just collected have
+  // to be that word, in order.
+  EXPECT_EQ((uint16_t)(low_byte | (high_byte << 8)), 1 << 6);
+
+  // The next low byte read is still word 1, undisturbed by the extra latch
+  // reads. Word 1 is the cylinder count.
+  const uint8_t next_low = Read(kHDCRegisterData);
+  const uint8_t next_high = Read(kHDCRegisterDataHigh);
+  EXPECT_EQ(
+      (uint16_t)(next_low | (next_high << 8)), kTestGeometry.num_cylinders);
+}
+
 TEST_F(HDCTaskFileTest, ReadVerifyAcceptsLogicalBlockAddresses) {
   SelectDrive(0);
+  Write(kHDCRegisterSectorCount, 1);
   const uint32_t last_sector = (uint32_t)kTestGeometry.num_cylinders *
                                    kTestGeometry.num_heads *
                                    kTestGeometry.num_sectors_per_track -

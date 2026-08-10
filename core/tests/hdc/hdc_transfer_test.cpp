@@ -159,12 +159,17 @@ TEST_F(HDCTransferTest, DataRequestStaysAssertedAcrossASectorBoundary) {
   SetLbaAddress(0, 2);
   RunCommand(kHDCCommandReadSectors);
 
-  for (int i = 0; i < 2 * kHDCSectorSize - 1; ++i) {
+  // A read of the low byte port takes a whole word off the card, so two
+  // sectors are a sector's worth of words apiece rather than of reads.
+  const int num_words = 2 * kHDCSectorSize / 2;
+  for (int i = 0; i < num_words - 1; ++i) {
     Read(kHDCRegisterData);
+    Read(kHDCRegisterDataHigh);
     ASSERT_TRUE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest)
-        << "cleared early after " << (i + 1) << " bytes";
+        << "cleared early after " << (i + 1) << " words";
   }
   Read(kHDCRegisterData);
+  Read(kHDCRegisterDataHigh);
   EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
 }
 

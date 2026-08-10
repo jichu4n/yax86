@@ -255,9 +255,11 @@ typedef struct HDCState {
   uint8_t transfer_drive;
   // Sectors still to transfer, including the one in progress.
   uint16_t transfer_sectors_remaining;
-  // High byte of the word currently being written, latched by the card until
-  // the guest writes the low byte. See HDCWriteDataRegister().
-  uint8_t transfer_pending_high_byte;
+  // The card's latch for the high byte of a word, which serves both
+  // directions: a read of the low byte port fills it, and a write of the high
+  // byte port loads it for the following write of the low byte to commit. See
+  // HDCReadDataRegister() and HDCWriteDataRegister().
+  uint8_t data_high_latch;
 } HDCState;
 
 // Initializes the HDC to its power-on state.
