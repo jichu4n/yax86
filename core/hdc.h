@@ -1934,9 +1934,6 @@ static void HDCHandleIdentifyDevice(HDCState* hdc, HDCDriveState* drive) {
   HDCStartTransfer(hdc, kHDCTransferIdentify, 0, 1);
 }
 
-// Sets up a read or write of one or more sectors starting at the address in
-// the task file. A sector count of zero means 256 sectors, which is how ATA
-// encodes the largest transfer a single command can make.
 // Works out the run of sectors a command addresses, and returns whether all of
 // it lies on the drive. The whole run has to fit, not just its first sector: a
 // byte callback has no way to refuse an address, so a command that would walk
@@ -1953,6 +1950,9 @@ static bool HDCComputeSectorRange(
   return *sector_number + *num_sectors <= HDCDriveNumSectors(drive);
 }
 
+// Sets up a read or write of one or more sectors starting at the address in
+// the task file. A sector count of zero means 256 sectors, which is how ATA
+// encodes the largest transfer a single command can make.
 static void HDCHandleReadWriteSectors(
     HDCState* hdc, HDCDriveState* drive, HDCTransfer transfer) {
   uint32_t sector_number = 0;
