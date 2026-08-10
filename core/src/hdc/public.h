@@ -79,6 +79,11 @@ typedef enum HDCRegister {
   // drive's data port is 16 bits wide and the card is on an 8-bit bus, so the
   // card latches the high byte here.
   kHDCRegisterDataHigh = 0x8,
+  // Alternate status on read, device control on write. The alternate status
+  // register reads exactly like the status register; a guest polls it when it
+  // wants the status without the side effects a status read has on a drive
+  // that raises interrupts.
+  kHDCRegisterDeviceControl = 0xE,
 } HDCRegister;
 
 // Bits of the status register.
@@ -107,6 +112,15 @@ enum {
   kHDCErrorIDNotFound = 1 << 4,
   kHDCErrorUncorrectable = 1 << 6,
   kHDCErrorBadBlock = 1 << 7,
+};
+
+// Bits of the device control register.
+enum {
+  // Stops the drive raising interrupts. This controller has no interrupt line
+  // in the first place, so it is accepted and ignored.
+  kHDCDeviceControlNoInterrupt = 1 << 1,
+  // Software reset, which the guest asserts and then releases.
+  kHDCDeviceControlSoftwareReset = 1 << 2,
 };
 
 // Bits of the drive/head register.

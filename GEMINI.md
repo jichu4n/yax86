@@ -73,6 +73,19 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   backwards, which put every word on the disk back to front: a partition
   table's 0xAA55 signature landed as 0x55AA and DOS reported "Invalid drive
   specification".
+- Identify Device reports the cylinder count of the geometry the guest asked
+  for with Initialize Device Parameters, worked out from the capacity rather
+  than copied from the physical geometry. That keeps everything the drive
+  advertises addressable: reporting the physical count alongside a different
+  head or sector count would describe a larger drive than this one, and
+  addresses in the part that does not exist would come back as ID not found.
+- The device control register is at ATA register 0xE, which the address line
+  swap puts at physical port 0x307. Reads of it are the alternate status
+  register and return exactly what status returns; a write with the software
+  reset bit set abandons any transfer in progress and returns the drive to
+  idle. The option ROM uses neither - it polls status at 0x30E - but an
+  unanswered alternate status reads as 0xFF, which decodes as a drive that is
+  permanently busy.
 - The SDL runtime loads a hard disk image into memory and discards guest
   writes, the same as the floppy. FDISK, FORMAT and booting from C: all work
   within a session, but the disk starts out the same way on every run.
