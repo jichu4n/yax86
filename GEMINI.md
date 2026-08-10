@@ -215,7 +215,15 @@ behavior in the emulator tends to show up as a difference from the hardware
 under one of them and not the others.
 
 To debug the WASM version of the emulator, use Chrome DevTools MCP server to
-open `http://localhost:3000/yax86_sdl.html`.
+open `http://localhost:3000/yax86_sdl.html`. A stale service worker from an
+earlier session can serve cached, mismatched `.wasm`/`.js`/`.data` and produce
+symptoms that look like a real regression (e.g. a blank canvas or a boot
+failure) when the code is fine; unregistering service workers and clearing
+caches for the origin rules this out before chasing a code-side cause. Kill the
+web server process and the Chrome DevTools MCP instance (and the headless
+Chrome it spawns) once done with them rather than leaving them running in the
+background - Chrome DevTools MCP's headless Chrome instance in particular uses
+a lot of CPU and RAM even when idle.
 
 ## Additional Notes
 
