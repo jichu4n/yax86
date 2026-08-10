@@ -162,16 +162,21 @@ int main(int argc, char* argv[]) {
   // is no command line at all, so anything gated behind a flag would be
   // unreachable in the browser.
   bool attach_hard_disk = true;
+  // NULL means a blank disk, which is what the default gives.
+  const char* hard_disk_path = NULL;
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--hdd") == 0) {
       attach_hard_disk = true;
+      // An image path may follow, but --hdd on its own is a blank disk.
+      if (i + 1 < argc && argv[i + 1][0] != '-') {
+        hard_disk_path = argv[++i];
+      }
     } else if (strcmp(argv[i], "--no-hdd") == 0) {
       attach_hard_disk = false;
     } else if (argv[i][0] == '-') {
       fprintf(stderr, "Unknown option '%s'\n", argv[i]);
       fprintf(
-          stderr,
-          "Usage: %s [floppy image] [--hdd] [--no-hdd]\n",
+          stderr, "Usage: %s [floppy image] [--hdd [image]] [--no-hdd]\n",
           argv[0]);
       return 1;
     } else {
@@ -234,14 +239,18 @@ int main(int argc, char* argv[]) {
   }
 
   if (attach_hard_disk) {
-    HardDiskAttach(&g_platform);
-    YAX86_LOG(
-        &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
-        "attached a %u MB hard disk",
-        (unsigned)((uint32_t)kHDCGeometry10MB.num_cylinders *
-                   kHDCGeometry10MB.num_heads *
-                   kHDCGeometry10MB.num_sectors_per_track * kHDCSectorSize /
-                   (1024 * 1024)));
+    if (HardDiskAttach(&g_platform, hard_disk_path)) {
+      YAX86_LOG(
+          &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
+          "attached a %u MB hard disk (%s)",
+          (unsigned)(kHDCGeometry10MBImageSize / (1024 * 1024)),
+          hard_disk_path ? hard_disk_path : "blank");
+    } else {
+      YAX86_LOG(
+          &g_platform.logger, &kLogModuleApp, kLogLevelError,
+          "no hard disk attached - could not mount %s",
+          hard_disk_path ? hard_disk_path : "blank disk");
+    }
   }
 
   // Hook up video callback

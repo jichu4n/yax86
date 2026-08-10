@@ -158,11 +158,33 @@ typedef struct HDCDriveGeometry {
 // Geometry of the 10MB fixed disk the IBM PC/XT shipped with. Era-accurate,
 // comfortably under the 32MB per-partition ceiling of MS-DOS 3.3, and small
 // enough for a host to keep an image of one in memory.
-static const HDCDriveGeometry kHDCGeometry10MB = {
-    .num_cylinders = 306,
-    .num_heads = 4,
-    .num_sectors_per_track = 17,
+enum {
+  kHDCGeometry10MBNumCylinders = 306,
+  kHDCGeometry10MBNumHeads = 4,
+  kHDCGeometry10MBNumSectorsPerTrack = 17,
+  // Size in bytes of an image of such a disk, so that a host can size a buffer
+  // for one at compile time.
+  kHDCGeometry10MBImageSize =
+      kHDCGeometry10MBNumCylinders * kHDCGeometry10MBNumHeads *
+      kHDCGeometry10MBNumSectorsPerTrack * kHDCSectorSize,
 };
+static const HDCDriveGeometry kHDCGeometry10MB = {
+    .num_cylinders = kHDCGeometry10MBNumCylinders,
+    .num_heads = kHDCGeometry10MBNumHeads,
+    .num_sectors_per_track = kHDCGeometry10MBNumSectorsPerTrack,
+};
+
+// What the data register is currently moving.
+typedef enum HDCTransfer {
+  // Nothing; a read returns zero and a write is discarded.
+  kHDCTransferNone = 0,
+  // The Identify Device block, out of the sector buffer.
+  kHDCTransferIdentify,
+  // Sectors from the drive's image to the guest.
+  kHDCTransferRead,
+  // Sectors from the guest to the drive's image.
+  kHDCTransferWrite,
+} HDCTransfer;
 
 // State of a single drive.
 typedef struct HDCDriveState {
@@ -187,6 +209,16 @@ typedef struct HDCConfig {
 
   // Logger, or NULL to disable logging.
   Logger* logger;
+
+  // Callbacks to read and write a byte of a drive's image, where offset is a
+  // byte offset from the start of the image. The controller range checks every
+  // address against the drive's geometry before starting a transfer, so these
+  // are only ever called with an offset that lies within the drive.
+  //
+  // A drive with no callbacks reads back as zeroes and discards writes.
+  uint8_t (*read_image_byte)(void* context, uint8_t drive, uint32_t offset);
+  void (*write_image_byte)(
+      void* context, uint8_t drive, uint32_t offset, uint8_t value);
 } HDCConfig;
 
 // State of the HDC.
@@ -207,11 +239,27 @@ typedef struct HDCState {
   uint8_t drive_head;
   uint8_t status;
 
-  // Buffer for a block being handed to the guest through the data register.
+  // Buffer holding the Identify Device block. Sector data is streamed straight
+  // through the image callbacks rather than staged here.
   uint8_t sector_buffer[kHDCSectorSize];
-  // Index of the next byte to be read out of sector_buffer. Only meaningful
-  // while kHDCStatusDataRequest is set.
-  uint16_t buffer_index;
+
+  // What the data register is currently moving, if anything.
+  HDCTransfer transfer;
+  // Index of the next byte within the sector being transferred. Only
+  // meaningful while kHDCStatusDataRequest is set.
+  uint16_t transfer_byte_index;
+  // Byte offset into the image of the sector being transferred.
+  uint32_t transfer_offset;
+  // Drive the transfer is against, which is latched when the command starts so
+  // that it cannot change underneath a transfer in progress.
+  uint8_t transfer_drive;
+  // Sectors still to transfer, including the one in progress.
+  uint16_t transfer_sectors_remaining;
+  // The card's latch for the high byte of a word, which serves both
+  // directions: a read of the low byte port fills it, and a write of the high
+  // byte port loads it for the following write of the low byte to commit. See
+  // HDCReadDataRegister() and HDCWriteDataRegister().
+  uint8_t data_high_latch;
 } HDCState;
 
 // Initializes the HDC to its power-on state.
