@@ -28,6 +28,7 @@ add_custom_target(yax86_sdl_boot_floppy DEPENDS ${BOOT_FLOPPY})
 add_executable(yax86_sdl
     src/main.c
     src/floppy.c
+    src/harddisk.c
     src/display.c
     src/input.c
     src/audio.c

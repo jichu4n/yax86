@@ -470,6 +470,15 @@ static uint8_t HDCCallbackReadOptionROMByte(
   return HDCReadOptionROMByte(address);
 }
 
+static uint8_t HDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+  return HDCReadPort((HDCState*)entry->context, port);
+}
+
+static void HDCCallbackWritePortByte(
+    PortMapEntry* entry, uint16_t port, uint8_t value) {
+  HDCWritePort((HDCState*)entry->context, port, value);
+}
+
 // ============================================================================
 // Callbacks for BIOS module
 // ============================================================================
@@ -641,6 +650,16 @@ static void PlatformInitHDC(PlatformState* platform) {
       .write_byte = NULL,  // Option ROM is read-only.
   };
   RegisterMemoryMapEntry(platform, &option_rom_entry);
+
+  PortMapEntry port_entry = {
+      .context = &platform->hdc,
+      .entry_type = (PortMapEntryType)kPortMapEntryHDC,
+      .start = kHDCPortBase,
+      .end = kHDCPortBase + kHDCNumPorts - 1,
+      .read_byte = HDCCallbackReadPortByte,
+      .write_byte = HDCCallbackWritePortByte,
+  };
+  RegisterPortMapEntry(platform, &port_entry);
 }
 
 static void PlatformInitDMA(PlatformState* platform) {
