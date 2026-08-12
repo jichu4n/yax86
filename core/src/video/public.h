@@ -238,11 +238,17 @@ enum {
 // ========================================
 
 // Color Select Register (I/O port 3D9) - write only
-//
-// The layout of this register only matters to graphics modes, which are not
-// yet emulated; text modes take their colors from the attribute byte alone.
-// The register is still fully readable and writable so that software can set
-// it up ahead of a mode switch.
+// ========================================
+// Bit Number | Function
+//------------|-------------------------
+// 0-2        | Background / border RGB. In 640x200 graphics, this is the
+//            | foreground color instead.
+// 3          | + Intensity of the above
+// 4          | + Intensity of the 320x200 graphics palette
+// 5          | 320x200 graphics palette (0 = green/red/brown,
+//            | 1 = cyan/magenta/white)
+// 6,7        | Not Used
+// ========================================
 
 // CRT Status Register (I/O port 3DA) - read only
 // ========================================
@@ -275,6 +281,12 @@ enum {
   kCGAVRAMAddress = 0xB8000,
   // CGA VRAM size.
   kCGAVRAMSize = 16 * 1024,  // 16K
+  // Byte offset of the odd scan lines in CGA graphics modes. Graphics VRAM is
+  // interleaved - even scan lines live in the first half and odd scan lines in
+  // the second.
+  kCGAGraphicsOddScanLineOffset = 0x2000,
+  // Number of bytes per scan line in CGA graphics modes.
+  kCGAGraphicsBytesPerScanLine = 80,
   // Number of colors in the CGA palette.
   kNumCGAColors = 16,
 };
@@ -357,6 +369,18 @@ enum {
   kVideoControlHighResolutionGraphics = 1 << 4,
   // Attribute bit 7 means blinking rather than intense background.
   kVideoControlEnableBlink = 1 << 5,
+};
+
+// Bits in the CGA color select register - I/O port 3D9.
+enum {
+  // Background / border color, or the foreground color in 640x200 graphics.
+  kCGAColorSelectColorMask = 0x07,
+  // Intensity of the background / border color.
+  kCGAColorSelectIntensity = 1 << 3,
+  // Intensity of the 320x200 graphics palette.
+  kCGAColorSelectPaletteIntensity = 1 << 4,
+  // 320x200 graphics palette selection.
+  kCGAColorSelectPalette = 1 << 5,
 };
 
 // Bits in the status register - I/O port 3BA on MDA, 3DA on CGA.
