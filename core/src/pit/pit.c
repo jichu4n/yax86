@@ -20,6 +20,18 @@ typedef struct PITModeMetadata {
   // Callback to handle a tick for this mode.
   void (*handle_tick)(
       PITState* pit, PITChannelState* channel, int channel_index);
+  // How much the counter moves per tick. Modes 0 and 2 count down by one;
+  // mode 3 counts down by two so that its output is a square wave.
+  uint16_t counter_step;
+  // How many ticks the counter can be advanced by arithmetic before the next
+  // tick could change the channel's output, and how many ticks until that
+  // happens. Both may be NULL for a mode that never changes its output.
+  //
+  // skip_ticks returns how many ticks may be applied to the counter with no
+  // observable effect other than the counter's own value; ticks_until_event
+  // returns a lower bound on the ticks until the output could change.
+  uint32_t (*skip_ticks)(const PITChannelState* channel);
+  uint32_t (*ticks_until_event)(const PITChannelState* channel);
 } PITModeMetadata;
 
 // Metadata for unsupported modes (1, 4, 5).
@@ -61,10 +73,25 @@ static void PITMode0HandleTick(
   }
 }
 
+// A counter above 1 cannot reach terminal count on the next tick, so every
+// tick down to 1 is uneventful. A counter already at 0 has finished and never
+// changes again, which the caller detects as no event rather than a skip.
+static uint32_t PITMode0SkipTicks(const PITChannelState* channel) {
+  return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 0;
+}
+
+static uint32_t PITMode0TicksUntilEvent(const PITChannelState* channel) {
+  // A one-shot that has already fired is not counting towards anything.
+  return channel->counter == 0 ? kPITNoEvent : (uint32_t)channel->counter;
+}
+
 // Metadata for Mode 0: Interrupt on Terminal Count.
 static const PITModeMetadata kPITMode0Metadata = {
     .initial_output_state = false,
     .handle_tick = PITMode0HandleTick,
+    .counter_step = 1,
+    .skip_ticks = PITMode0SkipTicks,
+    .ticks_until_event = PITMode0TicksUntilEvent,
 };
 
 // Tick handler for Mode 2: Rate Generator.
@@ -88,10 +115,25 @@ static void PITMode2HandleTick(
   }
 }
 
+// Mode 2 acts when the counter reaches 1 and again when it reaches 0, so every
+// tick down to 2 is uneventful.
+static uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
+  return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
+}
+
+static uint32_t PITMode2TicksUntilEvent(const PITChannelState* channel) {
+  // A counter of 0 wraps to 0xFFFF on the next tick without changing the
+  // output, but reporting 1 only costs a wasted wakeup.
+  return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
+}
+
 // Metadata for Mode 2: Rate Generator.
 static const PITModeMetadata kPITMode2Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode2HandleTick,
+    .counter_step = 1,
+    .skip_ticks = PITMode2SkipTicks,
+    .ticks_until_event = PITMode2TicksUntilEvent,
 };
 
 // Tick handler for Mode 3: Square Wave Generator.
@@ -114,10 +156,28 @@ static void PITMode3HandleTick(
   }
 }
 
+// Mode 3 steps by two, so terminal count is reached at 0 from an even counter
+// and at 0xFFFF from an odd one. Either way a counter of 4 or more has at
+// least one uneventful step left, and stopping at 2 or 3 leaves the next step
+// to the tick handler.
+static uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
+  return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
+}
+
+static uint32_t PITMode3TicksUntilEvent(const PITChannelState* channel) {
+  // Even counters reach 0 after counter/2 steps, odd ones reach 0xFFFF after
+  // (counter+1)/2; the rounding covers both.
+  const uint32_t ticks = ((uint32_t)channel->counter + 1) / 2;
+  return ticks > 0 ? ticks : 1;
+}
+
 // Metadata for Mode 3: Square Wave Generator.
 static const PITModeMetadata kPITMode3Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode3HandleTick,
+    .counter_step = 2,
+    .skip_ticks = PITMode3SkipTicks,
+    .ticks_until_event = PITMode3TicksUntilEvent,
 };
 
 // Array of mode metadata indexed by mode number.
@@ -345,4 +405,77 @@ void PITTick(PITState* pit) {
       mode_metadata->handle_tick(pit, channel, i);
     }
   }
+}
+
+// Advances a single channel by num_ticks.
+//
+// The result is identical to running the channel's tick handler num_ticks
+// times. Stretches of the count where no tick can change the output are
+// applied to the counter arithmetically; every tick that could change it still
+// goes through the handler, so there is only one description of what a tick
+// does.
+static void PITAdvanceChannel(
+    PITState* pit, PITChannelState* channel, int channel_index,
+    uint32_t num_ticks) {
+  if (channel->mode >= kPITNumModes) {
+    // Invalid mode - ignore.
+    return;
+  }
+  const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+  if (!mode_metadata->handle_tick) {
+    // A mode that does nothing on a tick cannot be moved on by one.
+    return;
+  }
+
+  while (num_ticks > 0) {
+    if (mode_metadata->skip_ticks) {
+      uint32_t skip = mode_metadata->skip_ticks(channel);
+      if (skip > num_ticks) {
+        skip = num_ticks;
+      }
+      if (skip > 0) {
+        channel->counter -= (uint16_t)(skip * mode_metadata->counter_step);
+        num_ticks -= skip;
+        continue;
+      }
+    }
+    // The next tick could change the output, so run it properly. A mode that
+    // has stopped counting reports no event and no skip, which would spin here
+    // for the rest of num_ticks, so stop once nothing further can happen.
+    if (mode_metadata->ticks_until_event &&
+        mode_metadata->ticks_until_event(channel) == kPITNoEvent) {
+      return;
+    }
+    mode_metadata->handle_tick(pit, channel, channel_index);
+    --num_ticks;
+  }
+}
+
+void PITAdvance(PITState* pit, uint32_t num_ticks) {
+  if (num_ticks == 0) {
+    return;
+  }
+  PITChannelState* channel = &pit->channels[0];
+  for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
+    PITAdvanceChannel(pit, channel, i, num_ticks);
+  }
+}
+
+uint32_t PITTicksUntilNextEvent(const PITState* pit) {
+  uint32_t earliest = kPITNoEvent;
+  const PITChannelState* channel = &pit->channels[0];
+  for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
+    if (channel->mode >= kPITNumModes) {
+      continue;
+    }
+    const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+    if (!mode_metadata->ticks_until_event) {
+      continue;
+    }
+    const uint32_t ticks = mode_metadata->ticks_until_event(channel);
+    if (ticks < earliest) {
+      earliest = ticks;
+    }
+  }
+  return earliest;
 }

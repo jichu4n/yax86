@@ -457,9 +457,27 @@ typedef struct PlatformState {
   uint32_t ticks;
 
   // Cycles counted towards each device's next tick but not yet used by it.
-  uint16_t pit_cycles;
-  uint16_t fdc_cycles;
-  uint16_t keyboard_cycles;
+  uint32_t pit_cycles;
+  uint32_t fdc_cycles;
+  uint32_t keyboard_cycles;
+
+  // Devices are driven from deadlines rather than clocked on every
+  // instruction. The PIT alone would otherwise want ticking about 2.5 times
+  // per instruction, three channels at a time, almost always to decrement a
+  // counter nothing is watching.
+  //
+  // Instead each device is brought up to date only when it has something to
+  // do, and the instruction path does one comparison against the earliest
+  // deadline of any of them. Anything that reads a device's state has to bring
+  // that device up to date first, which is what the PlatformSync* functions
+  // do.
+
+  // Value of ticks when the devices were last brought up to date.
+  uint32_t last_sync_ticks;
+  // Value of ticks at which the earliest device deadline falls due. Compared
+  // as a signed difference against ticks so that it stays correct when the
+  // 32-bit cycle counter wraps.
+  uint32_t next_event_ticks;
 
   // Execution breakpoints.
   PlatformBreakpoint breakpoints[kMaxBreakpoints];
@@ -508,6 +526,16 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
 PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
+
+// Bring every device up to date with the cycles that have run so far.
+//
+// Devices are driven from deadlines rather than clocked on every instruction,
+// so between deadlines their state lags the CPU. Everything inside the
+// platform that reads device state does this for itself, so a caller only
+// needs it before inspecting a device directly - most usefully before
+// VideoRender(), so that the frame reflects where the CRT beam has actually
+// reached.
+void PlatformSync(PlatformState* platform);
 
 // Add an execution breakpoint at cs:ip. Returns the breakpoint index, or
 // kInvalidWatchIndex if all kMaxBreakpoints slots are in use.

@@ -131,6 +131,10 @@ void MainTick(void) {
   }
 
   // 3. Render
+  // Bring the CRT beam up to the current cycle before drawing from it. The
+  // platform advances devices only when they have something to do, so without
+  // this the blink phase would lag by however long the frame took.
+  PlatformSync(&g_platform);
   VideoRender(&g_platform.video);  // Update virtual buffer
   DisplayRender();                 // Update screen
 }
