@@ -2,6 +2,11 @@
 
 #include <SDL3/SDL.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <stdio.h>
+#endif
+
 static SDL_Window* g_window = NULL;
 static SDL_Renderer* g_renderer = NULL;
 static SDL_Texture* g_texture = NULL;
@@ -28,9 +33,20 @@ bool DisplayInit(int width, int height) {
 
   // The CGA's 200 line modes are line doubled, as they are on real hardware,
   // so that the window is not half the height of the MDA's.
-  int scale_y = g_height <= kLineDoubledHeight ? 4 : 2;
+  int original_scale_y = g_height <= kLineDoubledHeight ? 4 : 2;
+  int target_width = (g_width * 3) / 2;
+  int target_height = (g_height * original_scale_y * 3) / 4;
+
+#ifdef __EMSCRIPTEN__
+  char script[256];
+  snprintf(script, sizeof(script),
+           "var c = document.getElementById('canvas'); if(c) { c.style.width='%dpx'; c.style.height='%dpx'; c.width=%d; c.height=%d; }",
+           target_width, target_height, target_width, target_height);
+  emscripten_run_script(script);
+#endif
+
   if (!SDL_CreateWindowAndRenderer(
-          "yax86", g_width * 2, g_height * scale_y, 0, &g_window,
+          "yax86", target_width, target_height, 0, &g_window,
           &g_renderer)) {
     SDL_Log("SDL_CreateWindowAndRenderer failed: %s", SDL_GetError());
     return false;
