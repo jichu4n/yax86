@@ -114,8 +114,8 @@ uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
     if (entry->read_data) {
       return entry->read_data[address - entry->start];
     }
-    if (entry->read_fn) {
-      return entry->read_fn(entry, address - entry->start);
+    if (entry->read_byte_fn) {
+      return entry->read_byte_fn(entry, address - entry->start);
     }
   }
   // Logged at debug rather than warning level: scanning unmapped memory is
@@ -144,8 +144,8 @@ void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
       entry->write_data[address - entry->start] = value;
       return;
     }
-    if (entry->write_fn) {
-      entry->write_fn(entry, address - entry->start, value);
+    if (entry->write_byte_fn) {
+      entry->write_byte_fn(entry, address - entry->start, value);
       return;
     }
   }
@@ -695,8 +695,8 @@ static void PlatformInitVideo(PlatformState* platform) {
       .entry_type = kMemoryMapEntryVRAM,
       .start = adapter->vram_address,
       .end = adapter->vram_address + adapter->vram_size - 1,
-      .read_fn = VideoCallbackReadVRAMByte,
-      .write_fn = VideoCallbackWriteVRAMByte,
+      .read_byte_fn = VideoCallbackReadVRAMByte,
+      .write_byte_fn = VideoCallbackWriteVRAMByte,
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
 

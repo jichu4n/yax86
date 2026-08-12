@@ -717,9 +717,18 @@ typedef struct MemoryMapEntry {
   // platform. A region whose accesses do something other than load or store a
   // value must leave the corresponding pointer NULL and supply a callback
   // instead. The two are independent: a region may serve reads directly while
-  // routing writes through write_fn, which is what an adapter that has to
-  // notice writes - to track which parts of a framebuffer are dirty, say -
+  // routing writes through write_byte_fn, which is what an adapter that has
+  // to notice writes - to track which parts of a framebuffer are dirty, say -
   // would want.
+  //
+  // read_data and write_data are separate pointers, rather than one pointer
+  // plus a read/write/both flag, so that a read-only region can point at a
+  // genuinely const array - the BIOS and option ROM images are compiled in as
+  // const uint8_t[] - instead of casting away const to fit a single
+  // non-const field. That keeps "this region cannot be written" a property
+  // the compiler checks at the assignment into write_data, rather than a
+  // runtime flag that a bug could get past; on a target where ROM is XIP
+  // flash, writing through it faults rather than silently doing nothing.
   const uint8_t* read_data;
   // Direct pointer for writes. NULL for a read-only region such as a ROM,
   // whose writes are discarded.
@@ -727,10 +736,11 @@ typedef struct MemoryMapEntry {
 
   // Callback to read a byte from the memory map entry, where address is
   // relative to the start of the entry. Ignored if read_data is set.
-  uint8_t (*read_fn)(struct MemoryMapEntry* entry, uint32_t relative_address);
+  uint8_t (*read_byte_fn)(
+      struct MemoryMapEntry* entry, uint32_t relative_address);
   // Callback to write a byte to memory, where address is relative to the start
   // address. Ignored if write_data is set.
-  void (*write_fn)(
+  void (*write_byte_fn)(
       struct MemoryMapEntry* entry, uint32_t relative_address, uint8_t value);
 } MemoryMapEntry;
 
@@ -751,27 +761,27 @@ MemoryMapEntry* GetMemoryMapEntryByType(
     struct PlatformState* platform, MemoryMapEntryType entry_type);
 
 // Read a byte from a logical memory address, either directly from the
-// corresponding memory map entry's read_data buffer or via its read_fn
+// corresponding memory map entry's read_data buffer or via its read_byte_fn
 // callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
 uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
 // Read a word from a logical memory address, either directly from the
-// corresponding memory map entry's read_data buffer or via its read_fn
+// corresponding memory map entry's read_data buffer or via its read_byte_fn
 // callback.
 uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
 // Write a byte to a logical memory address, either directly to the
-// corresponding memory map entry's write_data buffer or via its write_fn
-// callback.
+// corresponding memory map entry's write_data buffer or via its
+// write_byte_fn callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
 void WriteMemoryByte(
     struct PlatformState* platform, uint32_t address, uint8_t value);
 // Write a word to a logical memory address, either directly to the
-// corresponding memory map entry's write_data buffer or via its write_fn
-// callback.
+// corresponding memory map entry's write_data buffer or via its
+// write_byte_fn callback.
 void WriteMemoryWord(
     struct PlatformState* platform, uint32_t address, uint16_t value);
 
@@ -1294,8 +1304,8 @@ uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
     if (entry->read_data) {
       return entry->read_data[address - entry->start];
     }
-    if (entry->read_fn) {
-      return entry->read_fn(entry, address - entry->start);
+    if (entry->read_byte_fn) {
+      return entry->read_byte_fn(entry, address - entry->start);
     }
   }
   // Logged at debug rather than warning level: scanning unmapped memory is
@@ -1324,8 +1334,8 @@ void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
       entry->write_data[address - entry->start] = value;
       return;
     }
-    if (entry->write_fn) {
-      entry->write_fn(entry, address - entry->start, value);
+    if (entry->write_byte_fn) {
+      entry->write_byte_fn(entry, address - entry->start, value);
       return;
     }
   }
@@ -1875,8 +1885,8 @@ static void PlatformInitVideo(PlatformState* platform) {
       .entry_type = kMemoryMapEntryVRAM,
       .start = adapter->vram_address,
       .end = adapter->vram_address + adapter->vram_size - 1,
-      .read_fn = VideoCallbackReadVRAMByte,
-      .write_fn = VideoCallbackWriteVRAMByte,
+      .read_byte_fn = VideoCallbackReadVRAMByte,
+      .write_byte_fn = VideoCallbackWriteVRAMByte,
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
 
