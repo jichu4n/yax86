@@ -107,15 +107,23 @@ uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
     PlatformCheckMemoryWatchpoints(platform, address, false);
   }
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
-  if (!entry || !entry->read_byte) {
-    // Logged at debug rather than warning level: scanning unmapped memory is
-    // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
-    // for option ROMs, for instance.
-    YAX86_PLATFORM_LOG(
-        kLogLevelDebug, "read from unmapped address %05X", address);
-    return 0xFF;
+  if (entry) {
+    // Plain storage, which is what every region except video memory is. Going
+    // straight to the buffer saves an indirect call on the hottest path in the
+    // emulator: every byte of every instruction is fetched through here.
+    if (entry->read_data) {
+      return entry->read_data[address - entry->start];
+    }
+    if (entry->read_byte) {
+      return entry->read_byte(entry, address - entry->start);
+    }
   }
-  return entry->read_byte(entry, address - entry->start);
+  // Logged at debug rather than warning level: scanning unmapped memory is
+  // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
+  // for option ROMs, for instance.
+  YAX86_PLATFORM_LOG(
+      kLogLevelDebug, "read from unmapped address %05X", address);
+  return 0xFF;
 }
 
 // Read a word from a logical memory address.
@@ -131,13 +139,20 @@ void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
     PlatformCheckMemoryWatchpoints(platform, address, true);
   }
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
-  if (!entry || !entry->write_byte) {
-    YAX86_PLATFORM_LOG(
-        kLogLevelDebug, "write of %02X to unmapped address %05X", value,
-        address);
-    return;
+  if (entry) {
+    if (entry->write_data) {
+      entry->write_data[address - entry->start] = value;
+      return;
+    }
+    if (entry->write_byte) {
+      entry->write_byte(entry, address - entry->start, value);
+      return;
+    }
   }
-  entry->write_byte(entry, address - entry->start, value);
+  // Either unmapped, or a read-only region such as a ROM. Both discard the
+  // write, and both are logged, as they were before there was a direct path.
+  YAX86_PLATFORM_LOG(
+      kLogLevelDebug, "write of %02X to unmapped address %05X", value, address);
 }
 
 // Write a word to a logical memory address.
@@ -255,25 +270,6 @@ static void CPUCallbackWritePortByte(
 }
 
 static const CPUConfig kEmptyCPUConfig = {0};
-
-// ============================================================================
-// Callbacks for physical memory
-// ============================================================================
-static uint8_t ReadPhysicalMemoryByte(MemoryMapEntry* entry, uint32_t address) {
-  PlatformState* platform = (PlatformState*)entry->context;
-  if (platform->config && platform->config->read_physical_memory_byte) {
-    return platform->config->read_physical_memory_byte(platform, address);
-  }
-  return 0xFF;
-}
-
-static void WritePhysicalMemoryByte(
-    MemoryMapEntry* entry, uint32_t address, uint8_t value) {
-  PlatformState* platform = (PlatformState*)entry->context;
-  if (platform->config && platform->config->write_physical_memory_byte) {
-    platform->config->write_physical_memory_byte(platform, address, value);
-  }
-}
 
 // ============================================================================
 // Callbacks for 8259 PIC module
@@ -465,11 +461,6 @@ static void VideoCallbackWriteVRAMByte(
 // Callbacks for HDC module
 // ============================================================================
 
-static uint8_t HDCCallbackReadOptionROMByte(
-    YAX86_UNUSED MemoryMapEntry* entry, uint32_t address) {
-  return HDCReadOptionROMByte(address);
-}
-
 static uint8_t HDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return HDCReadPort((HDCState*)entry->context, port);
 }
@@ -477,15 +468,6 @@ static uint8_t HDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
 static void HDCCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   HDCWritePort((HDCState*)entry->context, port, value);
-}
-
-// ============================================================================
-// Callbacks for BIOS module
-// ============================================================================
-
-static uint8_t BIOSCallbackReadROMByte(
-    YAX86_UNUSED MemoryMapEntry* entry, uint32_t address) {
-  return BIOSReadROMByte(address);
 }
 
 // ============================================================================
@@ -499,8 +481,9 @@ static void PlatformInitBIOS(PlatformState* platform) {
       .entry_type = kMemoryMapEntryBIOSROM,
       .start = kBIOSROMStartAddress,
       .end = kBIOSROMStartAddress + bios_size - 1,
-      .read_byte = BIOSCallbackReadROMByte,
-      .write_byte = NULL,  // BIOS ROM is read-only.
+      // The ROM image is a constant array in the library, so it is read
+      // directly. write_data is left NULL because the BIOS ROM is read-only.
+      .read_data = BIOSGetROMData(),
   };
   RegisterMemoryMapEntry(platform, &bios_rom);
 }
@@ -548,8 +531,9 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
       .entry_type = kMemoryMapEntryConventional,
       .start = 0x0000,
       .end = platform->config->physical_memory_size - 1,
-      .read_byte = ReadPhysicalMemoryByte,
-      .write_byte = WritePhysicalMemoryByte};
+      // Conventional memory is the caller's buffer, accessed directly.
+      .read_data = platform->config->physical_memory,
+      .write_data = platform->config->physical_memory};
   MemoryMapAppend(&platform->memory_map, &conventional_memory);
 }
 
@@ -650,8 +634,9 @@ static void PlatformInitHDC(PlatformState* platform) {
       .entry_type = kMemoryMapEntryHDCOptionROM,
       .start = kHDCOptionROMStartAddress,
       .end = kHDCOptionROMStartAddress + option_rom_size - 1,
-      .read_byte = HDCCallbackReadOptionROMByte,
-      .write_byte = NULL,  // Option ROM is read-only.
+      // As with the BIOS ROM, a constant array read directly. write_data is
+      // left NULL because the option ROM is read-only.
+      .read_data = HDCGetOptionROMData(),
   };
   RegisterMemoryMapEntry(platform, &option_rom_entry);
 
@@ -732,6 +717,12 @@ static void PlatformInitVideo(PlatformState* platform) {
 bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   if (config->physical_memory_size < kMinPhysicalMemorySize ||
       config->physical_memory_size > kMaxPhysicalMemorySize) {
+    return false;
+  }
+  // A machine with no memory would run until its first instruction fetch came
+  // back as open bus, so this is rejected here rather than left to fail
+  // obscurely later.
+  if (config->physical_memory == NULL) {
     return false;
   }
 

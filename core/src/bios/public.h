@@ -16,7 +16,12 @@ enum {
 // Get size of BIOS ROM data.
 uint32_t BIOSGetROMSize(void);
 
-// Read a byte from the BIOS ROM.
+// Get a pointer to the BIOS ROM image, BIOSGetROMSize() bytes of it. The image
+// is a constant array compiled into the library, so the platform maps it
+// directly rather than reading it a byte at a time through a callback.
+const uint8_t* BIOSGetROMData(void);
+
+// Read a byte from the BIOS ROM. Out of range offsets read as 0xFF.
 uint8_t BIOSReadROMByte(uint32_t offset);
 
 #endif  // YAX86_BIOS_PUBLIC_H

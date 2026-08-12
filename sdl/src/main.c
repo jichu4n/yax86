@@ -65,35 +65,21 @@ static uint64_t MainGetTick(YAX86_UNUSED void* context) {
 // running it keeps the emulated machine at roughly the speed of the real one.
 #define CYCLES_PER_FRAME (kCPUCyclesPerSecond / 60)
 
-static uint8_t MainReadMemory(
-    YAX86_UNUSED PlatformState* platform, uint32_t address) {
-  if (address < INTERNAL_RAM_SIZE) {
-    return g_memory[address];
-  }
-  return 0xFF;
-}
-
-static void MainWriteMemory(
-    YAX86_UNUSED PlatformState* platform, uint32_t address, uint8_t value) {
-  if (address < INTERNAL_RAM_SIZE) {
-    g_memory[address] = value;
-  }
-}
-
 // The video adapter installed in the emulated machine, and its metadata.
 static VideoAdapter g_video_adapter = kVideoAdapterCGA;
 static const VideoAdapterMetadata* g_video_adapter_metadata = NULL;
 
+// Video memory lives in the same array as the rest of the address space, above
+// conventional memory. The platform reads and writes conventional memory
+// directly, but video memory still goes through the adapter, so these stay.
 static uint8_t MainReadVRAM(
     YAX86_UNUSED struct VideoState* video, uint32_t address) {
-  return MainReadMemory(
-      &g_platform, g_video_adapter_metadata->vram_address + address);
+  return g_memory[g_video_adapter_metadata->vram_address + address];
 }
 
 static void MainWriteVRAM(
     YAX86_UNUSED struct VideoState* video, uint32_t address, uint8_t value) {
-  MainWriteMemory(
-      &g_platform, g_video_adapter_metadata->vram_address + address, value);
+  g_memory[g_video_adapter_metadata->vram_address + address] = value;
 }
 
 static void MainWritePixel(
@@ -223,8 +209,7 @@ int main(int argc, char* argv[]) {
   config.logger_config = &g_logger_config;
   config.physical_memory_size =
       640 * 1024;  // Use max allowed conventional memory
-  config.read_physical_memory_byte = MainReadMemory;
-  config.write_physical_memory_byte = MainWriteMemory;
+  config.physical_memory = g_memory;
   if (audio_available) {
     config.set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
   }

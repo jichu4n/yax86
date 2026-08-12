@@ -18,13 +18,17 @@ class PCSpeakerTest : public ::testing::Test {
  protected:
   PlatformState platform_;
   PlatformConfig platform_config_ = {0};
+  // Never accessed - these tests drive the PIT and the PPI through I/O ports
+  // only - but the platform needs memory in order to initialize.
+  uint8_t ram_[64 * 1024] = {0};
 
   void SetUp() override {
     // Reset the captured frequency before each test.
     g_last_speaker_frequency = 0;
 
     // Initialize platform config.
-    platform_config_.physical_memory_size = 64 * 1024;
+    platform_config_.physical_memory_size = sizeof(ram_);
+    platform_config_.physical_memory = ram_;
 
     // Initialize the platform.
     ASSERT_TRUE(PlatformInit(&platform_, &platform_config_));
