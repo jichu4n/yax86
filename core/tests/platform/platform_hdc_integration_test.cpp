@@ -6,28 +6,18 @@ namespace {
 class PlatformHDCIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.physical_memory_size = 64 * 1024;  // 64KB RAM
+    config_.physical_memory_size = sizeof(ram_);  // 64KB RAM
     config_.context = this;
-    config_.read_physical_memory_byte = [](PlatformState* p,
-                                           uint32_t addr) -> uint8_t {
-      PlatformHDCIntegrationTest* test =
-          static_cast<PlatformHDCIntegrationTest*>(p->config->context);
-      if (addr < sizeof(test->ram_)) return test->ram_[addr];
-      return 0xFF;
-    };
-    config_.write_physical_memory_byte = [](PlatformState* p, uint32_t addr,
-                                            uint8_t val) {
-      PlatformHDCIntegrationTest* test =
-          static_cast<PlatformHDCIntegrationTest*>(p->config->context);
-      if (addr < sizeof(test->ram_)) test->ram_[addr] = val;
-    };
+    config_.physical_memory = ram_;
+    config_.vram = vram_;
 
     ASSERT_TRUE(PlatformInit(&platform_, &config_));
   }
 
   PlatformConfig config_ = {0};
   PlatformState platform_;
-  uint8_t ram_[64 * 1024];
+  uint8_t ram_[64 * 1024] = {0};
+  uint8_t vram_[kCGAVRAMSize] = {0};
 };
 
 TEST_F(PlatformHDCIntegrationTest, OptionROMIsVisibleWhereTheBIOSScans) {
@@ -41,16 +31,16 @@ TEST_F(PlatformHDCIntegrationTest, OptionROMIsVisibleWhereTheBIOSScans) {
 
   // Every byte of the ROM is reachable through the memory map, and matches
   // what the module reports directly.
+  const uint8_t* rom = HDCGetOptionROMData();
   for (uint32_t offset = 0; offset < HDCGetOptionROMSize(); offset += 256) {
     ASSERT_EQ(
         ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + offset),
-        HDCReadOptionROMByte(offset))
+        rom[offset])
         << "at offset " << offset;
   }
   const uint32_t last = HDCGetOptionROMSize() - 1;
   EXPECT_EQ(
-      ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + last),
-      HDCReadOptionROMByte(last));
+      ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + last), rom[last]);
 }
 
 TEST_F(PlatformHDCIntegrationTest, OptionROMIsMappedAsItsOwnRegion) {

@@ -647,11 +647,16 @@ typedef struct VideoConfig {
   // CGA - the 16 color RGBI palette.
   RGB cga_palette[kNumCGAColors];
 
-  // Callback to read a byte from the emulated video RAM.
-  uint8_t (*read_vram_byte)(struct VideoState* video, uint32_t address);
-  // Callback to write a byte to the emulated video RAM.
-  void (*write_vram_byte)(
-      struct VideoState* video, uint32_t address, uint8_t value);
+  // The emulated video RAM, at least the adapter's vram_size bytes of it.
+  // Required - the adapter reads and writes it directly.
+  //
+  // The renderer is by far the heaviest reader of video RAM: it walks the
+  // whole framebuffer on every VideoRender(), so a callback per byte would
+  // cost an indirect call for each one. Writes still go through
+  // VideoWriteVRAM(), which is where the adapter gets to notice them.
+  //
+  // The caller owns the buffer and it must outlive the video state.
+  uint8_t* vram;
 
   // Callback to write an RGB pixel value to the real display, invoked from
   // VideoRender().
@@ -688,8 +693,7 @@ static const VideoConfig kDefaultVideoConfig = {
             {.r = 0xFF, .g = 0xFF, .b = 0xFF},  // 15 white
         },
 
-    .read_vram_byte = NULL,
-    .write_vram_byte = NULL,
+    .vram = NULL,
     .write_pixel = NULL,
 };
 

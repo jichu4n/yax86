@@ -630,9 +630,4 @@ void HDCInit(HDCState* hdc, HDCConfig* config) {
 
 uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
 
-uint8_t HDCReadOptionROMByte(uint32_t offset) {
-  if (offset >= kHDCOptionROMDataSize) {
-    return kHDCOpenBusValue;
-  }
-  return kHDCOptionROMData[offset];
-}
+const uint8_t* HDCGetOptionROMData(void) { return kHDCOptionROMData; }

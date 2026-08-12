@@ -8,9 +8,6 @@ uint32_t BIOSGetROMSize(void) {
   return kBIOSROMDataSize;
 }
 
-uint8_t BIOSReadROMByte(uint32_t offset) {
-  if (offset >= kBIOSROMDataSize) {
-    return 0xFF;
-  }
-  return kBIOSROMData[offset];
+const uint8_t* BIOSGetROMData(void) {
+  return kBIOSROMData;
 }

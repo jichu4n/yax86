@@ -67,12 +67,42 @@ typedef struct MemoryMapEntry {
   uint32_t start;
   // Inclusive end address of the memory region.
   uint32_t end;
+
+  // Direct pointer to the bytes backing this region, covering [start, end].
+  //
+  // Most regions are plain storage - RAM, and ROM images the caller already
+  // holds in an array - and reading them through a callback costs an indirect
+  // call per byte for no benefit. When these are set, accesses go straight to
+  // the buffer and the callbacks below are not consulted.
+  //
+  // The buffer must remain valid, and must not move, for the lifetime of the
+  // platform. A region whose accesses do something other than load or store a
+  // value must leave the corresponding pointer NULL and supply a callback
+  // instead. The two are independent: a region may serve reads directly while
+  // routing writes through write_byte_fn, which is what an adapter that has
+  // to notice writes - to track which parts of a framebuffer are dirty, say -
+  // would want.
+  //
+  // read_data and write_data are separate pointers, rather than one pointer
+  // plus a read/write/both flag, so that a read-only region can point at a
+  // genuinely const array - the BIOS and option ROM images are compiled in as
+  // const uint8_t[] - instead of casting away const to fit a single
+  // non-const field. That keeps "this region cannot be written" a property
+  // the compiler checks at the assignment into write_data, rather than a
+  // runtime flag that a bug could get past; on a target where ROM is XIP
+  // flash, writing through it faults rather than silently doing nothing.
+  const uint8_t* read_data;
+  // Direct pointer for writes. NULL for a read-only region such as a ROM,
+  // whose writes are discarded.
+  uint8_t* write_data;
+
   // Callback to read a byte from the memory map entry, where address is
-  // relative to the start of the entry.
-  uint8_t (*read_byte)(struct MemoryMapEntry* entry, uint32_t relative_address);
+  // relative to the start of the entry. Ignored if read_data is set.
+  uint8_t (*read_byte_fn)(
+      struct MemoryMapEntry* entry, uint32_t relative_address);
   // Callback to write a byte to memory, where address is relative to the start
-  // address.
-  void (*write_byte)(
+  // address. Ignored if write_data is set.
+  void (*write_byte_fn)(
       struct MemoryMapEntry* entry, uint32_t relative_address, uint8_t value);
 } MemoryMapEntry;
 
@@ -92,26 +122,28 @@ MemoryMapEntry* GetMemoryMapEntryForAddress(
 MemoryMapEntry* GetMemoryMapEntryByType(
     struct PlatformState* platform, MemoryMapEntryType entry_type);
 
-// Read a byte from a logical memory address by invoking the corresponding
-// memory map entry's read_byte callback.
+// Read a byte from a logical memory address, either directly from the
+// corresponding memory map entry's read_data buffer or via its read_byte_fn
+// callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
-// rather than causing a page fault. This callback interface mirrors that
-// behavior.
+// rather than causing a page fault. This interface mirrors that behavior.
 uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
-// Read a word from a logical memory address by invoking the corresponding
-// memory map entry's read_byte callback.
+// Read a word from a logical memory address, either directly from the
+// corresponding memory map entry's read_data buffer or via its read_byte_fn
+// callback.
 uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
-// Write a byte to a logical memory address by invoking the corresponding
-// memory map entry's write_byte callback.
+// Write a byte to a logical memory address, either directly to the
+// corresponding memory map entry's write_data buffer or via its
+// write_byte_fn callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
-// rather than causing a page fault. This callback interface mirrors that
-// behavior.
+// rather than causing a page fault. This interface mirrors that behavior.
 void WriteMemoryByte(
     struct PlatformState* platform, uint32_t address, uint8_t value);
-// Write a word to a logical memory address by invoking the corresponding
-// memory map entry's write_byte callback.
+// Write a word to a logical memory address, either directly to the
+// corresponding memory map entry's write_data buffer or via its
+// write_byte_fn callback.
 void WriteMemoryWord(
     struct PlatformState* platform, uint32_t address, uint16_t value);
 
@@ -299,27 +331,28 @@ typedef struct PlatformConfig {
   // branches on when it programs the adapter.
   VideoAdapter video_adapter;
 
-  // Callback to read a byte from physical memory.
+  // The machine's conventional memory, physical_memory_size bytes of it.
+  // Required - PlatformInit() fails without it.
   //
-  // On the 8086, accessing an invalid memory address will yield garbage data
-  // rather than causing a page fault. This callback interface mirrors that
-  // behavior.
+  // The caller owns the buffer and it must outlive the platform. Conventional
+  // memory is plain storage, so the platform reads and writes it directly
+  // rather than through a callback; regions that need a callback register one
+  // themselves via MemoryMapEntry.
   //
-  // For simplicity, we use a single 8-bit interface for memory access, similar
-  // to the real-life 8088.
-  uint8_t (*read_physical_memory_byte)(
-      struct PlatformState* platform, uint32_t address);
+  // Addresses above physical_memory_size are not backed by this buffer and are
+  // not an error: on the 8086 an access outside installed memory yields
+  // garbage rather than faulting, and unmapped reads here return 0xFF.
+  uint8_t* physical_memory;
 
-  // Callback to write a byte to physical memory.
+  // The video adapter's memory, at least vram_size bytes for the adapter named
+  // by video_adapter. Required - PlatformInit() fails without it.
   //
-  // On the 8086, accessing an invalid memory address will yield garbage data
-  // rather than causing a page fault. This callback interface mirrors that
-  // behavior.
+  // Separate from physical_memory because video memory sits above conventional
+  // memory in the address space, at 0xB0000 or 0xB8000. A host whose memory
+  // buffer spans the whole megabyte can point this into it.
   //
-  // For simplicity, we use a single 8-bit interface for memory access, similar
-  // to the real-life 8088.
-  void (*write_physical_memory_byte)(
-      struct PlatformState* platform, uint32_t address, uint8_t value);
+  // The caller owns the buffer and it must outlive the platform.
+  uint8_t* vram;
 
   // Callback invoked when the PC speaker's output changes. frequency_hz is the
   // square wave frequency the speaker should emit, or 0 to turn it off. May be
@@ -457,6 +490,8 @@ typedef struct PlatformState {
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
+//   - No physical memory buffer was provided.
+//   - No video memory buffer was provided.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the

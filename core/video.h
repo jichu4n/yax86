@@ -1184,11 +1184,16 @@ typedef struct VideoConfig {
   // CGA - the 16 color RGBI palette.
   RGB cga_palette[kNumCGAColors];
 
-  // Callback to read a byte from the emulated video RAM.
-  uint8_t (*read_vram_byte)(struct VideoState* video, uint32_t address);
-  // Callback to write a byte to the emulated video RAM.
-  void (*write_vram_byte)(
-      struct VideoState* video, uint32_t address, uint8_t value);
+  // The emulated video RAM, at least the adapter's vram_size bytes of it.
+  // Required - the adapter reads and writes it directly.
+  //
+  // The renderer is by far the heaviest reader of video RAM: it walks the
+  // whole framebuffer on every VideoRender(), so a callback per byte would
+  // cost an indirect call for each one. Writes still go through
+  // VideoWriteVRAM(), which is where the adapter gets to notice them.
+  //
+  // The caller owns the buffer and it must outlive the video state.
+  uint8_t* vram;
 
   // Callback to write an RGB pixel value to the real display, invoked from
   // VideoRender().
@@ -1225,8 +1230,7 @@ static const VideoConfig kDefaultVideoConfig = {
             {.r = 0xFF, .g = 0xFF, .b = 0xFF},  // 15 white
         },
 
-    .read_vram_byte = NULL,
-    .write_vram_byte = NULL,
+    .vram = NULL,
     .write_pixel = NULL,
 };
 
@@ -2752,7 +2756,7 @@ const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
 // ============================================================================
 
 YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
-  if (!video->config || !video->config->read_vram_byte) {
+  if (!video->config || !video->config->vram) {
     return kVideoUnmappedPortValue;
   }
   // VRAM is aliased throughout the adapter's window, so an address past the end
@@ -2764,16 +2768,19 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   // compile to a hardware divide in the middle of the render loop - and the
   // Cortex-M0+ this targets has no divide instruction at all.
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  return video->config->read_vram_byte(video, address & (vram_size - 1));
+  return video->config->vram[address & (vram_size - 1)];
 }
 
 YAX86_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value) {
-  if (!video->config || !video->config->write_vram_byte) {
+  if (!video->config || !video->config->vram) {
     return;
   }
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  video->config->write_vram_byte(video, address & (vram_size - 1), value);
+  // Writes stay funnelled through here, rather than going straight to the
+  // buffer the way reads do, so that the adapter has a single place to notice
+  // them - which is what tracking dirty regions of the framebuffer would need.
+  video->config->vram[address & (vram_size - 1)] = value;
 }
 
 YAX86_PRIVATE void VideoWritePixel(

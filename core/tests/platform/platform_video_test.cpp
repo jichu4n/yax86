@@ -8,17 +8,17 @@ namespace {
 class PlatformVideoTest : public ::testing::Test {
  protected:
   void Init(VideoAdapter adapter) {
-    config_.physical_memory_size = 64 * 1024;
+    config_.physical_memory_size = sizeof(ram_);
+    config_.physical_memory = ram_;
+    config_.vram = vram_;
     config_.video_adapter = adapter;
-    config_.read_physical_memory_byte =
-        [](PlatformState*, uint32_t) -> uint8_t { return 0xFF; };
-    config_.write_physical_memory_byte = [](PlatformState*, uint32_t, uint8_t) {
-    };
     ASSERT_TRUE(PlatformInit(&platform_, &config_));
   }
 
   PlatformConfig config_ = {0};
   PlatformState platform_ = {0};
+  uint8_t ram_[64 * 1024] = {0};
+  uint8_t vram_[kCGAVRAMSize] = {0};
 };
 
 TEST_F(PlatformVideoTest, DefaultsToMDA) {
