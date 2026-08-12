@@ -22,7 +22,16 @@ jobs:
       - uses: libsdl-org/setup-sdl@main
         with:
           version: 3-latest
-      - uses: mymindstorm/setup-emsdk@v14
+      - name: Cache 8088 CPU hardware tests
+        uses: actions/cache@v4
+        with:
+          path: .cache/8088-tests
+          key: 8088-tests-${{ hashFiles('tools/download-cpu-hardware-tests.sh', 'tools/cpu-hardware-tests-opcodes.txt') }}
+          restore-keys: |
+            8088-tests-
+      - uses: emscripten-core/setup-emsdk@v14
+        with:
+          actions-cache-folder: 'emsdk-cache'
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
           cmake -B ${{github.workspace}}/build-native \
