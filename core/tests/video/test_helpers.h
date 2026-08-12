@@ -24,20 +24,6 @@ namespace video_test {
 // Mock VRAM, sized for the larger of the two adapters.
 inline uint8_t mock_vram[kCGAVRAMSize];
 
-inline uint8_t MockReadVRAMByte(VideoState* video, uint32_t address) {
-  if (address < sizeof(mock_vram)) {
-    return mock_vram[address];
-  }
-  return 0xFF;
-}
-
-inline void MockWriteVRAMByte(
-    VideoState* video, uint32_t address, uint8_t value) {
-  if (address < sizeof(mock_vram)) {
-    mock_vram[address] = value;
-  }
-}
-
 // Mock frame buffer, sized for the larger of the two adapters. Rendering writes
 // into it the same way a real display would, so a test can simply ask what
 // color a pixel ended up.
@@ -68,8 +54,7 @@ class VideoTestBase : public ::testing::Test {
 
     config_ = kDefaultVideoConfig;
     config_.adapter = adapter;
-    config_.read_vram_byte = MockReadVRAMByte;
-    config_.write_vram_byte = MockWriteVRAMByte;
+    config_.vram = mock_vram;
     config_.write_pixel = MockWritePixel;
 
     VideoInit(&video_, &config_);

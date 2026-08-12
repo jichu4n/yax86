@@ -40,7 +40,7 @@ const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
 // ============================================================================
 
 YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
-  if (!video->config || !video->config->read_vram_byte) {
+  if (!video->config || !video->config->vram) {
     return kVideoUnmappedPortValue;
   }
   // VRAM is aliased throughout the adapter's window, so an address past the end
@@ -52,16 +52,19 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   // compile to a hardware divide in the middle of the render loop - and the
   // Cortex-M0+ this targets has no divide instruction at all.
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  return video->config->read_vram_byte(video, address & (vram_size - 1));
+  return video->config->vram[address & (vram_size - 1)];
 }
 
 YAX86_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value) {
-  if (!video->config || !video->config->write_vram_byte) {
+  if (!video->config || !video->config->vram) {
     return;
   }
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  video->config->write_vram_byte(video, address & (vram_size - 1), value);
+  // Writes stay funnelled through here, rather than going straight to the
+  // buffer the way reads do, so that the adapter has a single place to notice
+  // them - which is what tracking dirty regions of the framebuffer would need.
+  video->config->vram[address & (vram_size - 1)] = value;
 }
 
 YAX86_PRIVATE void VideoWritePixel(

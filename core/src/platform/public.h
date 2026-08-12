@@ -344,6 +344,16 @@ typedef struct PlatformConfig {
   // garbage rather than faulting, and unmapped reads here return 0xFF.
   uint8_t* physical_memory;
 
+  // The video adapter's memory, at least vram_size bytes for the adapter named
+  // by video_adapter. Required - PlatformInit() fails without it.
+  //
+  // Separate from physical_memory because video memory sits above conventional
+  // memory in the address space, at 0xB0000 or 0xB8000. A host whose memory
+  // buffer spans the whole megabyte can point this into it.
+  //
+  // The caller owns the buffer and it must outlive the platform.
+  uint8_t* vram;
+
   // Callback invoked when the PC speaker's output changes. frequency_hz is the
   // square wave frequency the speaker should emit, or 0 to turn it off. May be
   // NULL, in which case the speaker is silent.
@@ -481,6 +491,7 @@ typedef struct PlatformState {
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
 //   - No physical memory buffer was provided.
+//   - No video memory buffer was provided.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the

@@ -10,6 +10,7 @@ class PlatformVideoTest : public ::testing::Test {
   void Init(VideoAdapter adapter) {
     config_.physical_memory_size = sizeof(ram_);
     config_.physical_memory = ram_;
+    config_.vram = vram_;
     config_.video_adapter = adapter;
     ASSERT_TRUE(PlatformInit(&platform_, &config_));
   }
@@ -17,6 +18,7 @@ class PlatformVideoTest : public ::testing::Test {
   PlatformConfig config_ = {0};
   PlatformState platform_ = {0};
   uint8_t ram_[64 * 1024] = {0};
+  uint8_t vram_[kCGAVRAMSize] = {0};
 };
 
 TEST_F(PlatformVideoTest, DefaultsToMDA) {

@@ -69,19 +69,6 @@ static uint64_t MainGetTick(YAX86_UNUSED void* context) {
 static VideoAdapter g_video_adapter = kVideoAdapterCGA;
 static const VideoAdapterMetadata* g_video_adapter_metadata = NULL;
 
-// Video memory lives in the same array as the rest of the address space, above
-// conventional memory. The platform reads and writes conventional memory
-// directly, but video memory still goes through the adapter, so these stay.
-static uint8_t MainReadVRAM(
-    YAX86_UNUSED struct VideoState* video, uint32_t address) {
-  return g_memory[g_video_adapter_metadata->vram_address + address];
-}
-
-static void MainWriteVRAM(
-    YAX86_UNUSED struct VideoState* video, uint32_t address, uint8_t value) {
-  g_memory[g_video_adapter_metadata->vram_address + address] = value;
-}
-
 static void MainWritePixel(
     YAX86_UNUSED struct VideoState* video, Position position, RGB rgb) {
   DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
@@ -210,6 +197,8 @@ int main(int argc, char* argv[]) {
   config.physical_memory_size =
       640 * 1024;  // Use max allowed conventional memory
   config.physical_memory = g_memory;
+  // Video memory is a window into the same array, above conventional memory.
+  config.vram = g_memory + g_video_adapter_metadata->vram_address;
   if (audio_available) {
     config.set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
   }
@@ -254,11 +243,8 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // Hook up video callback
-  // PlatformInit initializes sub-modules. We override the video config
-  // callbacks.
-  g_platform.video_config.read_vram_byte = MainReadVRAM;
-  g_platform.video_config.write_vram_byte = MainWriteVRAM;
+  // PlatformInit initializes sub-modules, including video. Video memory comes
+  // from the config, but the display is ours, so hook up the pixel sink here.
   g_platform.video_config.write_pixel = MainWritePixel;
 
 #ifdef __EMSCRIPTEN__

@@ -447,11 +447,6 @@ static void VideoCallbackWritePortByte(
   VideoWritePort((VideoState*)entry->context, port, value);
 }
 
-static uint8_t VideoCallbackReadVRAMByte(
-    MemoryMapEntry* entry, uint32_t address) {
-  return VideoReadVRAM((VideoState*)entry->context, address);
-}
-
 static void VideoCallbackWriteVRAMByte(
     MemoryMapEntry* entry, uint32_t address, uint8_t value) {
   VideoWriteVRAM((VideoState*)entry->context, address, value);
@@ -685,6 +680,7 @@ static void PlatformInitVideo(PlatformState* platform) {
   platform->video_config.context = platform;
   platform->video_config.logger = &platform->logger;
   platform->video_config.adapter = platform->config->video_adapter;
+  platform->video_config.vram = platform->config->vram;
   VideoInit(&platform->video, &platform->video_config);
 
   const VideoAdapterMetadata* adapter =
@@ -695,7 +691,10 @@ static void PlatformInitVideo(PlatformState* platform) {
       .entry_type = kMemoryMapEntryVRAM,
       .start = adapter->vram_address,
       .end = adapter->vram_address + adapter->vram_size - 1,
-      .read_byte_fn = VideoCallbackReadVRAMByte,
+      // Reads go straight to the buffer: nothing observes them, and the guest
+      // reads back what it wrote. Writes keep a callback so the adapter can
+      // see them - see VideoWriteVRAMByte.
+      .read_data = platform->config->vram,
       .write_byte_fn = VideoCallbackWriteVRAMByte,
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
@@ -736,6 +735,14 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "no physical_memory buffer was provided");
+    return false;
+  }
+  // The video adapter reads and writes this directly, so an absent buffer
+  // would leave the screen permanently blank with nothing to say why.
+  if (config->vram == NULL) {
+    YAX86_LOG(
+        &platform->logger, &kLogModulePlatform, kLogLevelError,
+        "no vram buffer was provided");
     return false;
   }
 

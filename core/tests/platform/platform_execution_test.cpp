@@ -37,6 +37,7 @@ class PlatformExecutionTest : public ::testing::Test {
     config_.physical_memory_size = sizeof(ram_);
     config_.context = this;
     config_.physical_memory = ram_;
+    config_.vram = vram_;
 
     ASSERT_TRUE(PlatformInit(&platform_, &config_));
 
@@ -74,6 +75,7 @@ class PlatformExecutionTest : public ::testing::Test {
   PlatformConfig config_ = {0};
   PlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
+  uint8_t vram_[kCGAVRAMSize] = {0};
 };
 
 TEST_F(PlatformExecutionTest, TickReportsRunning) {

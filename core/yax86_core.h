@@ -16885,6 +16885,16 @@ typedef struct PlatformConfig {
   // garbage rather than faulting, and unmapped reads here return 0xFF.
   uint8_t* physical_memory;
 
+  // The video adapter's memory, at least vram_size bytes for the adapter named
+  // by video_adapter. Required - PlatformInit() fails without it.
+  //
+  // Separate from physical_memory because video memory sits above conventional
+  // memory in the address space, at 0xB0000 or 0xB8000. A host whose memory
+  // buffer spans the whole megabyte can point this into it.
+  //
+  // The caller owns the buffer and it must outlive the platform.
+  uint8_t* vram;
+
   // Callback invoked when the PC speaker's output changes. frequency_hz is the
   // square wave frequency the speaker should emit, or 0 to turn it off. May be
   // NULL, in which case the speaker is silent.
@@ -17022,6 +17032,7 @@ typedef struct PlatformState {
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
 //   - No physical memory buffer was provided.
+//   - No video memory buffer was provided.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the
@@ -17540,11 +17551,6 @@ static void VideoCallbackWritePortByte(
   VideoWritePort((VideoState*)entry->context, port, value);
 }
 
-static uint8_t VideoCallbackReadVRAMByte(
-    MemoryMapEntry* entry, uint32_t address) {
-  return VideoReadVRAM((VideoState*)entry->context, address);
-}
-
 static void VideoCallbackWriteVRAMByte(
     MemoryMapEntry* entry, uint32_t address, uint8_t value) {
   VideoWriteVRAM((VideoState*)entry->context, address, value);
@@ -17778,6 +17784,7 @@ static void PlatformInitVideo(PlatformState* platform) {
   platform->video_config.context = platform;
   platform->video_config.logger = &platform->logger;
   platform->video_config.adapter = platform->config->video_adapter;
+  platform->video_config.vram = platform->config->vram;
   VideoInit(&platform->video, &platform->video_config);
 
   const VideoAdapterMetadata* adapter =
@@ -17788,7 +17795,10 @@ static void PlatformInitVideo(PlatformState* platform) {
       .entry_type = kMemoryMapEntryVRAM,
       .start = adapter->vram_address,
       .end = adapter->vram_address + adapter->vram_size - 1,
-      .read_byte_fn = VideoCallbackReadVRAMByte,
+      // Reads go straight to the buffer: nothing observes them, and the guest
+      // reads back what it wrote. Writes keep a callback so the adapter can
+      // see them - see VideoWriteVRAMByte.
+      .read_data = platform->config->vram,
       .write_byte_fn = VideoCallbackWriteVRAMByte,
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
@@ -17829,6 +17839,14 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "no physical_memory buffer was provided");
+    return false;
+  }
+  // The video adapter reads and writes this directly, so an absent buffer
+  // would leave the screen permanently blank with nothing to say why.
+  if (config->vram == NULL) {
+    YAX86_LOG(
+        &platform->logger, &kLogModulePlatform, kLogLevelError,
+        "no vram buffer was provided");
     return false;
   }
 
@@ -20163,11 +20181,16 @@ typedef struct VideoConfig {
   // CGA - the 16 color RGBI palette.
   RGB cga_palette[kNumCGAColors];
 
-  // Callback to read a byte from the emulated video RAM.
-  uint8_t (*read_vram_byte)(struct VideoState* video, uint32_t address);
-  // Callback to write a byte to the emulated video RAM.
-  void (*write_vram_byte)(
-      struct VideoState* video, uint32_t address, uint8_t value);
+  // The emulated video RAM, at least the adapter's vram_size bytes of it.
+  // Required - the adapter reads and writes it directly.
+  //
+  // The renderer is by far the heaviest reader of video RAM: it walks the
+  // whole framebuffer on every VideoRender(), so a callback per byte would
+  // cost an indirect call for each one. Writes still go through
+  // VideoWriteVRAM(), which is where the adapter gets to notice them.
+  //
+  // The caller owns the buffer and it must outlive the video state.
+  uint8_t* vram;
 
   // Callback to write an RGB pixel value to the real display, invoked from
   // VideoRender().
@@ -20204,8 +20227,7 @@ static const VideoConfig kDefaultVideoConfig = {
             {.r = 0xFF, .g = 0xFF, .b = 0xFF},  // 15 white
         },
 
-    .read_vram_byte = NULL,
-    .write_vram_byte = NULL,
+    .vram = NULL,
     .write_pixel = NULL,
 };
 
@@ -21731,7 +21753,7 @@ const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
 // ============================================================================
 
 YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
-  if (!video->config || !video->config->read_vram_byte) {
+  if (!video->config || !video->config->vram) {
     return kVideoUnmappedPortValue;
   }
   // VRAM is aliased throughout the adapter's window, so an address past the end
@@ -21743,16 +21765,19 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   // compile to a hardware divide in the middle of the render loop - and the
   // Cortex-M0+ this targets has no divide instruction at all.
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  return video->config->read_vram_byte(video, address & (vram_size - 1));
+  return video->config->vram[address & (vram_size - 1)];
 }
 
 YAX86_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value) {
-  if (!video->config || !video->config->write_vram_byte) {
+  if (!video->config || !video->config->vram) {
     return;
   }
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  video->config->write_vram_byte(video, address & (vram_size - 1), value);
+  // Writes stay funnelled through here, rather than going straight to the
+  // buffer the way reads do, so that the adapter has a single place to notice
+  // them - which is what tracking dirty regions of the framebuffer would need.
+  video->config->vram[address & (vram_size - 1)] = value;
 }
 
 YAX86_PRIVATE void VideoWritePixel(
