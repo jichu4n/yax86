@@ -37,9 +37,6 @@ uint32_t BIOSGetROMSize(void);
 // directly rather than reading it a byte at a time through a callback.
 const uint8_t* BIOSGetROMData(void);
 
-// Read a byte from the BIOS ROM. Out of range offsets read as 0xFF.
-uint8_t BIOSReadROMByte(uint32_t offset);
-
 #endif  // YAX86_BIOS_PUBLIC_H
 
 
@@ -625,13 +622,6 @@ uint32_t BIOSGetROMSize(void) {
 
 const uint8_t* BIOSGetROMData(void) {
   return kBIOSROMData;
-}
-
-uint8_t BIOSReadROMByte(uint32_t offset) {
-  if (offset >= kBIOSROMDataSize) {
-    return 0xFF;
-  }
-  return kBIOSROMData[offset];
 }
 
 
@@ -11380,10 +11370,6 @@ uint32_t HDCGetOptionROMSize(void);
 // maps it directly rather than reading it a byte at a time through a callback.
 const uint8_t* HDCGetOptionROMData(void);
 
-// Reads a byte from the option ROM, where offset is relative to
-// kHDCOptionROMStartAddress.
-uint8_t HDCReadOptionROMByte(uint32_t offset);
-
 // Handles reads from the HDC's I/O ports.
 uint8_t HDCReadPort(HDCState* hdc, uint16_t port);
 
@@ -12870,13 +12856,6 @@ void HDCInit(HDCState* hdc, HDCConfig* config) {
 uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
 
 const uint8_t* HDCGetOptionROMData(void) { return kHDCOptionROMData; }
-
-uint8_t HDCReadOptionROMByte(uint32_t offset) {
-  if (offset >= kHDCOptionROMDataSize) {
-    return kHDCOpenBusValue;
-  }
-  return kHDCOptionROMData[offset];
-}
 
 
 // ==============================================================================
@@ -16641,7 +16620,7 @@ typedef struct MemoryMapEntry {
   // platform. A region whose accesses do something other than load or store a
   // value must leave the corresponding pointer NULL and supply a callback
   // instead. The two are independent: a region may serve reads directly while
-  // routing writes through write_byte, which is what an adapter that has to
+  // routing writes through write_fn, which is what an adapter that has to
   // notice writes - to track which parts of a framebuffer are dirty, say -
   // would want.
   const uint8_t* read_data;
@@ -16651,10 +16630,10 @@ typedef struct MemoryMapEntry {
 
   // Callback to read a byte from the memory map entry, where address is
   // relative to the start of the entry. Ignored if read_data is set.
-  uint8_t (*read_byte)(struct MemoryMapEntry* entry, uint32_t relative_address);
+  uint8_t (*read_fn)(struct MemoryMapEntry* entry, uint32_t relative_address);
   // Callback to write a byte to memory, where address is relative to the start
   // address. Ignored if write_data is set.
-  void (*write_byte)(
+  void (*write_fn)(
       struct MemoryMapEntry* entry, uint32_t relative_address, uint8_t value);
 } MemoryMapEntry;
 
@@ -16674,26 +16653,28 @@ MemoryMapEntry* GetMemoryMapEntryForAddress(
 MemoryMapEntry* GetMemoryMapEntryByType(
     struct PlatformState* platform, MemoryMapEntryType entry_type);
 
-// Read a byte from a logical memory address by invoking the corresponding
-// memory map entry's read_byte callback.
+// Read a byte from a logical memory address, either directly from the
+// corresponding memory map entry's read_data buffer or via its read_fn
+// callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
-// rather than causing a page fault. This callback interface mirrors that
-// behavior.
+// rather than causing a page fault. This interface mirrors that behavior.
 uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
-// Read a word from a logical memory address by invoking the corresponding
-// memory map entry's read_byte callback.
+// Read a word from a logical memory address, either directly from the
+// corresponding memory map entry's read_data buffer or via its read_fn
+// callback.
 uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
-// Write a byte to a logical memory address by invoking the corresponding
-// memory map entry's write_byte callback.
+// Write a byte to a logical memory address, either directly to the
+// corresponding memory map entry's write_data buffer or via its write_fn
+// callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
-// rather than causing a page fault. This callback interface mirrors that
-// behavior.
+// rather than causing a page fault. This interface mirrors that behavior.
 void WriteMemoryByte(
     struct PlatformState* platform, uint32_t address, uint8_t value);
-// Write a word to a logical memory address by invoking the corresponding
-// memory map entry's write_byte callback.
+// Write a word to a logical memory address, either directly to the
+// corresponding memory map entry's write_data buffer or via its write_fn
+// callback.
 void WriteMemoryWord(
     struct PlatformState* platform, uint32_t address, uint16_t value);
 
@@ -17216,8 +17197,8 @@ uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
     if (entry->read_data) {
       return entry->read_data[address - entry->start];
     }
-    if (entry->read_byte) {
-      return entry->read_byte(entry, address - entry->start);
+    if (entry->read_fn) {
+      return entry->read_fn(entry, address - entry->start);
     }
   }
   // Logged at debug rather than warning level: scanning unmapped memory is
@@ -17246,8 +17227,8 @@ void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
       entry->write_data[address - entry->start] = value;
       return;
     }
-    if (entry->write_byte) {
-      entry->write_byte(entry, address - entry->start, value);
+    if (entry->write_fn) {
+      entry->write_fn(entry, address - entry->start, value);
       return;
     }
   }
@@ -17797,8 +17778,8 @@ static void PlatformInitVideo(PlatformState* platform) {
       .entry_type = kMemoryMapEntryVRAM,
       .start = adapter->vram_address,
       .end = adapter->vram_address + adapter->vram_size - 1,
-      .read_byte = VideoCallbackReadVRAMByte,
-      .write_byte = VideoCallbackWriteVRAMByte,
+      .read_fn = VideoCallbackReadVRAMByte,
+      .write_fn = VideoCallbackWriteVRAMByte,
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
 
@@ -17817,19 +17798,29 @@ static void PlatformInitVideo(PlatformState* platform) {
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
 bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
+  platform->config = config;
+  // Initialized first, ahead of validation, so that a rejected config can
+  // still be logged.
+  LoggerInit(&platform->logger, config->logger_config);
+
   if (config->physical_memory_size < kMinPhysicalMemorySize ||
       config->physical_memory_size > kMaxPhysicalMemorySize) {
+    YAX86_LOG(
+        &platform->logger, &kLogModulePlatform, kLogLevelError,
+        "physical_memory_size %u is not between %u and %u bytes",
+        (unsigned)config->physical_memory_size,
+        (unsigned)kMinPhysicalMemorySize, (unsigned)kMaxPhysicalMemorySize);
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
   if (config->physical_memory == NULL) {
+    YAX86_LOG(
+        &platform->logger, &kLogModulePlatform, kLogLevelError,
+        "no physical_memory buffer was provided");
     return false;
   }
-
-  platform->config = config;
-  LoggerInit(&platform->logger, config->logger_config);
 
   PlatformInitCPU(platform);
   PlatformInitMemoryMap(platform);

@@ -21,7 +21,4 @@ uint32_t BIOSGetROMSize(void);
 // directly rather than reading it a byte at a time through a callback.
 const uint8_t* BIOSGetROMData(void);
 
-// Read a byte from the BIOS ROM. Out of range offsets read as 0xFF.
-uint8_t BIOSReadROMByte(uint32_t offset);
-
 #endif  // YAX86_BIOS_PUBLIC_H

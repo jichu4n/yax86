@@ -287,10 +287,6 @@ uint32_t HDCGetOptionROMSize(void);
 // maps it directly rather than reading it a byte at a time through a callback.
 const uint8_t* HDCGetOptionROMData(void);
 
-// Reads a byte from the option ROM, where offset is relative to
-// kHDCOptionROMStartAddress.
-uint8_t HDCReadOptionROMByte(uint32_t offset);
-
 // Handles reads from the HDC's I/O ports.
 uint8_t HDCReadPort(HDCState* hdc, uint16_t port);
 

@@ -29,16 +29,16 @@ TEST_F(PlatformHDCIntegrationTest, OptionROMIsVisibleWhereTheBIOSScans) {
 
   // Every byte of the ROM is reachable through the memory map, and matches
   // what the module reports directly.
+  const uint8_t* rom = HDCGetOptionROMData();
   for (uint32_t offset = 0; offset < HDCGetOptionROMSize(); offset += 256) {
     ASSERT_EQ(
         ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + offset),
-        HDCReadOptionROMByte(offset))
+        rom[offset])
         << "at offset " << offset;
   }
   const uint32_t last = HDCGetOptionROMSize() - 1;
   EXPECT_EQ(
-      ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + last),
-      HDCReadOptionROMByte(last));
+      ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + last), rom[last]);
 }
 
 TEST_F(PlatformHDCIntegrationTest, OptionROMIsMappedAsItsOwnRegion) {
