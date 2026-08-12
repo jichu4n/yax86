@@ -7,12 +7,13 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-// Read a byte from the emulated video RAM, or 0xFF if the address is out of
-// range or no callback is installed.
+// Read a byte from the emulated video RAM, or 0xFF if no callback is installed.
+// VRAM is aliased throughout the adapter's window, so an address past the end
+// wraps around.
 YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
 
-// Write a byte to the emulated video RAM, ignored if the address is out of
-// range or no callback is installed.
+// Write a byte to the emulated video RAM, ignored if no callback is installed.
+// The address wraps in the same way as for reads.
 YAX86_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value);
 
@@ -52,5 +53,8 @@ YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
 
 // Render the current display in MDA text mode.
 YAX86_PRIVATE void MDARenderScreen(VideoState* video);
+
+// Render the current display on the CGA.
+YAX86_PRIVATE void CGARenderScreen(VideoState* video);
 
 #endif  // YAX86_VIDEO_INTERNAL_H

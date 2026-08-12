@@ -1,4 +1,5 @@
-// Tests that the platform wires up the video module correctly.
+// Tests that the platform wires up whichever video adapter it is configured
+// with.
 #include "gtest/gtest.h"
 #include "platform.h"
 
@@ -6,8 +7,9 @@ namespace {
 
 class PlatformVideoTest : public ::testing::Test {
  protected:
-  void SetUp() override {
+  void Init(VideoAdapter adapter) {
     config_.physical_memory_size = 64 * 1024;
+    config_.video_adapter = adapter;
     config_.read_physical_memory_byte =
         [](PlatformState*, uint32_t) -> uint8_t { return 0xFF; };
     config_.write_physical_memory_byte = [](PlatformState*, uint32_t, uint8_t) {
@@ -19,16 +21,17 @@ class PlatformVideoTest : public ::testing::Test {
   PlatformState platform_ = {0};
 };
 
-TEST_F(PlatformVideoTest, RegistersVideo) {
+TEST_F(PlatformVideoTest, DefaultsToMDA) {
+  Init(static_cast<VideoAdapter>(0));
+  EXPECT_EQ(platform_.video.adapter, kVideoAdapterMDA);
   EXPECT_EQ(platform_.ppi_config.display_mode, kPPIDisplayMDA);
 
   MemoryMapEntry* vram =
       GetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);
   ASSERT_NE(vram, nullptr);
-  EXPECT_EQ(vram->start, kMDAModeMetadata.vram_address);
+  EXPECT_EQ(vram->start, static_cast<uint32_t>(kMDAVRAMAddress));
   EXPECT_EQ(
-      vram->end,
-      kMDAModeMetadata.vram_address + kMDAModeMetadata.vram_size - 1);
+      vram->end, static_cast<uint32_t>(kMDAVRAMAddress + kMDAVRAMSize - 1));
 
   PortMapEntry* ports = GetPortMapEntryByType(&platform_, kPortMapEntryVideo);
   ASSERT_NE(ports, nullptr);
@@ -36,16 +39,43 @@ TEST_F(PlatformVideoTest, RegistersVideo) {
   EXPECT_EQ(ports->end, kMDAPortEnd);
 }
 
+TEST_F(PlatformVideoTest, RegistersCGA) {
+  Init(kVideoAdapterCGA);
+  EXPECT_EQ(platform_.video.adapter, kVideoAdapterCGA);
+  // The BIOS branches on the DIP switches to decide which adapter to program,
+  // so they have to agree with what the platform registered.
+  EXPECT_EQ(platform_.ppi_config.display_mode, kPPIDisplayCGA80x25);
+
+  MemoryMapEntry* vram =
+      GetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);
+  ASSERT_NE(vram, nullptr);
+  EXPECT_EQ(vram->start, static_cast<uint32_t>(kCGAVRAMAddress));
+  EXPECT_EQ(
+      vram->end, static_cast<uint32_t>(kCGAVRAMAddress + kCGAVRAMSize - 1));
+
+  PortMapEntry* ports = GetPortMapEntryByType(&platform_, kPortMapEntryVideo);
+  ASSERT_NE(ports, nullptr);
+  EXPECT_EQ(ports->start, kCGAPortStart);
+  EXPECT_EQ(ports->end, kCGAPortEnd);
+}
+
 TEST_F(PlatformVideoTest, VideoPortsAreRoutedThroughTheMap) {
-  WritePortByte(&platform_, kMDAPortRegisterIndex, kCRTCRegisterCursorL);
+  Init(kVideoAdapterCGA);
+  // The 6845 index register is reachable at the CGA's port addresses, and the
+  // MDA's are not mapped at all.
+  WritePortByte(&platform_, kCGAPortRegisterIndex, kCRTCRegisterCursorL);
   EXPECT_EQ(platform_.video.selected_register, kCRTCRegisterCursorL);
-  WritePortByte(&platform_, kMDAPortRegisterData, 0x23);
-  EXPECT_EQ(ReadPortByte(&platform_, kMDAPortRegisterData), 0x23);
+  WritePortByte(&platform_, kCGAPortRegisterData, 0x23);
+  EXPECT_EQ(ReadPortByte(&platform_, kCGAPortRegisterData), 0x23);
+  EXPECT_EQ(GetPortMapEntryForPort(&platform_, kMDAPortRegisterIndex), nullptr);
 }
 
 TEST_F(PlatformVideoTest, TicksAdvanceTheBeam) {
+  Init(kVideoAdapterCGA);
+  const VideoAdapterMetadata* adapter =
+      VideoGetAdapterMetadata(&platform_.video);
   uint32_t start_ticks = platform_.ticks;
-  while (platform_.ticks - start_ticks < kMDACyclesPerScanLine * 4) {
+  while (platform_.ticks - start_ticks < adapter->cycles_per_scan_line * 4) {
     PlatformTick(&platform_);
   }
   EXPECT_GT(platform_.video.scan_line, 0);

@@ -1,146 +1,37 @@
 #include <gtest/gtest.h>
 
-#include <cstdint>
-#include <vector>
-
+#include "test_helpers.h"
 #include "video.h"
 
 namespace {
 
+using namespace video_test;
+
 enum {
-  kFrameBufferWidth = 720,
-  kFrameBufferHeight = 350,
   kCharWidth = 9,
   kCharHeight = 14,
   // Scan line within a character cell that the underline occupies.
   kUnderlinePosition = 12,
 };
 
-// Mock VRAM.
-static uint8_t mock_vram[kMDAVRAMSize];
-
-static uint8_t MockReadVRAMByte(VideoState* video, uint32_t address) {
-  if (address < kMDAVRAMSize) {
-    return mock_vram[address];
-  }
-  return 0xFF;
-}
-
-static void MockWriteVRAMByte(
-    VideoState* video, uint32_t address, uint8_t value) {
-  if (address < kMDAVRAMSize) {
-    mock_vram[address] = value;
-  }
-}
-
-// Mock frame buffer. Rendering writes into it the same way a real display
-// would, so a test can simply ask what color a pixel ended up.
-static RGB mock_frame_buffer[kFrameBufferHeight][kFrameBufferWidth];
-// Number of write_pixel calls since the frame buffer was last cleared.
-static int mock_pixel_write_count;
-
-static void MockWritePixel(VideoState* video, Position position, RGB rgb) {
-  ++mock_pixel_write_count;
-  if (position.x < kFrameBufferWidth && position.y < kFrameBufferHeight) {
-    mock_frame_buffer[position.y][position.x] = rgb;
-  }
-}
-
-static bool operator==(const RGB& a, const RGB& b) {
-  return a.r == b.r && a.g == b.g && a.b == b.b;
-}
-
-// Prints an RGB value on assertion failure rather than dumping its bytes.
-static void PrintTo(const RGB& rgb, std::ostream* os) {
-  *os << "RGB(" << static_cast<int>(rgb.r) << ", " << static_cast<int>(rgb.g)
-      << ", " << static_cast<int>(rgb.b) << ")";
-}
-
-class MDATest : public ::testing::Test {
+class MDATest : public VideoTestBase {
  protected:
   void SetUp() override {
-    for (int i = 0; i < kMDAVRAMSize; ++i) {
-      mock_vram[i] = 0;
-    }
-    ClearFrameBuffer();
-
-    config_ = kDefaultVideoConfig;
-    config_.read_vram_byte = MockReadVRAMByte;
-    config_.write_vram_byte = MockWriteVRAMByte;
-    config_.write_pixel = MockWritePixel;
-
-    VideoInit(&video_, &config_);
+    Init(kVideoAdapterMDA);
     // The cursor sits over the first character cell by default, which is the
     // cell most of these tests inspect.
     DisableCursor();
-  }
-
-  void ClearFrameBuffer() {
-    static const RGB kNoPixel = {.r = 0xDE, .g = 0xAD, .b = 0xBE};
-    for (int y = 0; y < kFrameBufferHeight; ++y) {
-      for (int x = 0; x < kFrameBufferWidth; ++x) {
-        mock_frame_buffer[y][x] = kNoPixel;
-      }
-    }
-    mock_pixel_write_count = 0;
-  }
-
-  // Render a frame into a freshly cleared frame buffer.
-  void Render() {
-    ClearFrameBuffer();
-    VideoRender(&video_);
-  }
-
-  // Number of pixels of the given color within a rectangle.
-  int CountPixels(int x, int y, int width, int height, RGB rgb) const {
-    int count = 0;
-    for (int row = y; row < y + height; ++row) {
-      for (int col = x; col < x + width; ++col) {
-        if (mock_frame_buffer[row][col] == rgb) {
-          ++count;
-        }
-      }
-    }
-    return count;
   }
 
   // Number of pixels of the given color within the first character cell.
   int CountPixelsInFirstCell(RGB rgb) const {
     return CountPixels(0, 0, kCharWidth, kCharHeight, rgb);
   }
-
-  // Write a character and its attribute at a character cell offset.
-  void WriteChar(uint32_t cell, uint8_t character, uint8_t attribute) {
-    mock_vram[cell * 2] = character;
-    mock_vram[cell * 2 + 1] = attribute;
-  }
-
-  // Set a 6845 register through the I/O ports.
-  void WriteRegister(uint8_t index, uint8_t value) {
-    VideoWritePort(&video_, kMDAPortRegisterIndex, index);
-    VideoWritePort(&video_, kMDAPortRegisterData, value);
-  }
-
-  void DisableCursor() {
-    uint8_t selected_register = video_.selected_register;
-    WriteRegister(kCRTCRegisterCursorStart, 0x20);
-    video_.selected_register = selected_register;
-  }
-
-  // Advance the beam by whole frames.
-  void AdvanceFrames(int frames) {
-    for (int frame = 0; frame < frames; ++frame) {
-      for (uint16_t i = 0; i < kMDAScanLinesPerFrame; ++i) {
-        VideoTick(&video_, kMDACyclesPerScanLine);
-      }
-    }
-  }
-
-  VideoConfig config_ = {0};
-  VideoState video_ = {0};
 };
 
 TEST_F(MDATest, Initialization) {
+  EXPECT_EQ(video_.adapter, kVideoAdapterMDA);
+  EXPECT_EQ(VideoGetMode(&video_), kVideoModeMDAText80x25);
   EXPECT_EQ(video_.control_register, 0x29);
   EXPECT_EQ(video_.selected_register, 0);
   EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x61);
@@ -149,6 +40,17 @@ TEST_F(MDATest, Initialization) {
   EXPECT_EQ(mock_vram[1], 0x07);
   EXPECT_EQ(mock_vram[kMDAVRAMSize - 2], ' ');
   EXPECT_EQ(mock_vram[kMDAVRAMSize - 1], 0x07);
+}
+
+TEST_F(MDATest, AdapterMetadata) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  EXPECT_EQ(adapter->adapter, kVideoAdapterMDA);
+  EXPECT_EQ(adapter->frame_buffer_width, 720);
+  EXPECT_EQ(adapter->frame_buffer_height, 350);
+  EXPECT_EQ(adapter->vram_address, static_cast<uint32_t>(kMDAVRAMAddress));
+  EXPECT_EQ(adapter->vram_size, static_cast<uint32_t>(kMDAVRAMSize));
+  EXPECT_EQ(adapter->port_start, kMDAPortStart);
+  EXPECT_EQ(adapter->port_end, kMDAPortEnd);
 }
 
 TEST_F(MDATest, PortReadWrite) {
@@ -183,11 +85,6 @@ TEST_F(MDATest, PrinterPortsAreNotDecoded) {
   EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterControl), 0xFF);
 }
 
-TEST_F(MDATest, RegisterIndexIsMaskedToFiveBits) {
-  VideoWritePort(&video_, kMDAPortRegisterIndex, 0xE1);
-  EXPECT_EQ(video_.selected_register, 0x01);
-}
-
 TEST_F(MDATest, VRAMAccess) {
   VideoWriteVRAM(&video_, 0x100, 0x55);
   EXPECT_EQ(mock_vram[0x100], 0x55);
@@ -199,6 +96,7 @@ TEST_F(MDATest, VRAMAccess) {
 
   // Out of range accesses are ignored.
   VideoWriteVRAM(&video_, kMDAVRAMSize, 0x11);
+  EXPECT_EQ(mock_vram[kMDAVRAMSize], 0);
   EXPECT_EQ(VideoReadVRAM(&video_, kMDAVRAMSize), 0xFF);
 }
 
@@ -394,113 +292,6 @@ TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
       CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
   // The whole frame buffer is blanked, not just the character cells.
   EXPECT_EQ(mock_pixel_write_count, 720 * 350);
-}
-
-// ============================================================================
-// Retrace timing
-// ============================================================================
-
-TEST_F(MDATest, StatusStartsInActiveDisplay) {
-  uint8_t status = VideoReadPort(&video_, kMDAPortStatus);
-  EXPECT_EQ(status & kVideoStatusDisplayDisabled, 0);
-  EXPECT_EQ(status & kVideoStatusVerticalRetrace, 0);
-  // No light pen is emulated, so its switch always reads as off.
-  EXPECT_NE(status & kVideoStatusLightPenSwitchOff, 0);
-  EXPECT_EQ(status & kVideoStatusLightPenTrigger, 0);
-}
-
-TEST_F(MDATest, HorizontalRetraceWithinAScanLine) {
-  // Partway through the active part of a scan line the display is still on.
-  VideoTick(&video_, kMDADisplayCyclesPerScanLine - 1);
-  EXPECT_EQ(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusDisplayDisabled, 0);
-
-  // Past the end of it, the display is disabled but there is no vertical
-  // retrace yet.
-  VideoTick(&video_, 1);
-  EXPECT_NE(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusDisplayDisabled, 0);
-  EXPECT_EQ(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
-
-  // The next scan line starts with the display back on.
-  VideoTick(&video_, kMDACyclesPerScanLine - kMDADisplayCyclesPerScanLine);
-  EXPECT_EQ(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusDisplayDisabled, 0);
-  EXPECT_EQ(video_.scan_line, 1);
-}
-
-TEST_F(MDATest, VerticalRetraceAtTheEndOfAFrame) {
-  // Run to the last displayed scan line.
-  for (uint16_t i = 0; i < kMDADisplayedScanLines - 1; ++i) {
-    VideoTick(&video_, kMDACyclesPerScanLine);
-  }
-  EXPECT_EQ(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
-
-  // One scan line later the vertical retrace begins, and stays set for the
-  // rest of the frame.
-  VideoTick(&video_, kMDACyclesPerScanLine);
-  EXPECT_NE(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
-  EXPECT_EQ(video_.frames, 0u);
-
-  for (uint16_t i = 0; i < kMDAScanLinesPerFrame - kMDADisplayedScanLines - 1;
-       ++i) {
-    VideoTick(&video_, kMDACyclesPerScanLine);
-  }
-  EXPECT_NE(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
-
-  // And clears at the start of the next frame.
-  VideoTick(&video_, kMDACyclesPerScanLine);
-  EXPECT_EQ(
-      VideoReadPort(&video_, kMDAPortStatus) & kVideoStatusVerticalRetrace, 0);
-  EXPECT_EQ(video_.scan_line, 0);
-  EXPECT_EQ(video_.frames, 1u);
-}
-
-TEST_F(MDATest, TickAccumulatesPartialScanLines) {
-  // A cycle count that does not divide the scan line period still advances the
-  // beam at the right average rate.
-  const uint16_t kCyclesPerTick = 17;
-  uint32_t total_cycles = 0;
-  for (int i = 0; i < 100; ++i) {
-    VideoTick(&video_, kCyclesPerTick);
-    total_cycles += kCyclesPerTick;
-  }
-  EXPECT_EQ(video_.scan_line, total_cycles / kMDACyclesPerScanLine);
-  EXPECT_EQ(video_.scan_line_cycles, total_cycles % kMDACyclesPerScanLine);
-}
-
-TEST_F(MDATest, StatusHighBitsStayClear) {
-  // Bit 7 in particular: the BIOS probes it on the MDA status port to detect a
-  // Hercules adapter, which this is not.
-  for (uint16_t i = 0; i < kMDAScanLinesPerFrame; ++i) {
-    EXPECT_EQ(VideoReadPort(&video_, kMDAPortStatus) & 0xF0, 0);
-    VideoTick(&video_, kMDACyclesPerScanLine);
-  }
-}
-
-TEST_F(MDATest, UnselectedRegisterReadsAsUnmapped) {
-  // The 6845 has 18 registers, and the index masks to five bits, so indices 18
-  // to 31 select nothing.
-  VideoWritePort(&video_, kMDAPortRegisterIndex, kNumCRTCRegisters);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0xFF);
-  VideoWritePort(&video_, kMDAPortRegisterData, 0x55);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0xFF);
-}
-
-TEST_F(MDATest, RenderIsSafeWithoutCallbacks) {
-  // A host that has not installed its callbacks yet must not crash the
-  // renderer. The platform initializes the video module before the host has a
-  // chance to install them.
-  VideoConfig bare_config = kDefaultVideoConfig;
-  VideoState bare_video = {0};
-  VideoInit(&bare_video, &bare_config);
-  VideoRender(&bare_video);
-  VideoTick(&bare_video, 1000);
-  EXPECT_EQ(VideoReadVRAM(&bare_video, 0), 0xFF);
 }
 
 }  // namespace

@@ -2,8 +2,6 @@
 
 #include <SDL3/SDL.h>
 
-#include "core/video.h"
-
 static SDL_Window* g_window = NULL;
 static SDL_Renderer* g_renderer = NULL;
 static SDL_Texture* g_texture = NULL;
@@ -14,23 +12,33 @@ static uint32_t* g_pixel_buffer = NULL;
 static int g_width = 0;
 static int g_height = 0;
 
-bool DisplayInit(void) {
-  g_width = kMDAModeMetadata.width;
-  g_height = kMDAModeMetadata.height;
+enum {
+  // Frame buffers no taller than this are line doubled in the window.
+  kLineDoubledHeight = 200,
+};
+
+bool DisplayInit(int width, int height) {
+  g_width = width;
+  g_height = height;
 
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     SDL_Log("SDL_Init(SDL_INIT_VIDEO) failed: %s", SDL_GetError());
     return false;
   }
 
-  if (!SDL_CreateWindowAndRenderer("yax86", g_width * 2, g_height * 2, 0,
-                                   &g_window, &g_renderer)) {
+  // The CGA's 200 line modes are line doubled, as they are on real hardware,
+  // so that the window is not half the height of the MDA's.
+  int scale_y = g_height <= kLineDoubledHeight ? 4 : 2;
+  if (!SDL_CreateWindowAndRenderer(
+          "yax86", g_width * 2, g_height * scale_y, 0, &g_window,
+          &g_renderer)) {
     SDL_Log("SDL_CreateWindowAndRenderer failed: %s", SDL_GetError());
     return false;
   }
 
-  g_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
-                                SDL_TEXTUREACCESS_STREAMING, g_width, g_height);
+  g_texture = SDL_CreateTexture(
+      g_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+      g_width, g_height);
   if (!g_texture) {
     SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
     return false;
@@ -41,7 +49,7 @@ bool DisplayInit(void) {
     SDL_Log("Malloc failed for pixel buffer");
     return false;
   }
-  
+
   // Clear buffer to black
   SDL_memset(g_pixel_buffer, 0, g_width * g_height * sizeof(uint32_t));
 
@@ -73,8 +81,8 @@ void DisplayRender(void) {
     return;
   }
 
-  SDL_UpdateTexture(g_texture, NULL, g_pixel_buffer,
-                    g_width * sizeof(uint32_t));
+  SDL_UpdateTexture(
+      g_texture, NULL, g_pixel_buffer, g_width * sizeof(uint32_t));
   SDL_RenderClear(g_renderer);
   SDL_RenderTexture(g_renderer, g_texture, NULL, NULL);
   SDL_RenderPresent(g_renderer);

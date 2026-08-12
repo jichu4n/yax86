@@ -101,6 +101,11 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   `--no-hdd` leaves the machine without one. The default matters because the
   Emscripten build has no command line, so a hard disk gated behind a flag
   would be unreachable in the browser.
+- An optional `--cga` or `--mda` flag selects the video adapter, defaulting to
+  CGA. The adapter is fixed for the life of the machine: it is chosen through
+  `PlatformConfig.video_adapter` before `PlatformInit()`, which decides both
+  what the platform registers and what the PPI's DIP switches report, and the
+  BIOS branches on those switches to decide which adapter to program.
 - `src/audio.c` turns the frequency the core reports for the PC speaker into a
   square wave. The core hands over a frequency rather than a stream of samples,
   so nothing here has to reconcile emulated time with the audio clock - the

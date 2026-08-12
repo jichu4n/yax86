@@ -94,7 +94,8 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 // the character's first byte in VRAM.
 static void MDAWriteChar(
     VideoState* video, TextPosition char_pos, uint32_t char_address) {
-  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  const VideoModeMetadata* metadata =
+      &kVideoModeMetadata[kVideoModeMDAText80x25];
   uint8_t char_value = VideoReadVRAMByte(video, char_address);
   uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
   const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
@@ -128,7 +129,8 @@ static void MDAWriteChar(
 
 // Draw the text mode cursor over the character cell it occupies.
 static void MDADrawCursor(VideoState* video, uint16_t start_address) {
-  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  const VideoModeMetadata* metadata =
+      &kVideoModeMetadata[kVideoModeMDAText80x25];
   // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
   // the other three; it does not model the 1/16 and 1/32 field rate modes
   // separately. The actual toggling comes from VideoIsCursorBlinkOn, which
@@ -185,7 +187,8 @@ static void MDADrawCursor(VideoState* video, uint16_t start_address) {
 
 // Render the current display in MDA text mode.
 YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
-  const VideoModeMetadata* metadata = &kMDAModeMetadata;
+  const VideoModeMetadata* metadata =
+      &kVideoModeMetadata[kVideoModeMDAText80x25];
   uint16_t start_address = VideoGetStartAddress(video);
   for (uint8_t row = 0; row < metadata->rows; ++row) {
     for (uint8_t col = 0; col < metadata->columns; ++col) {
