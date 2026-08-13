@@ -746,7 +746,11 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
-void VideoTick(VideoState* video, uint16_t cycles);
+//
+// The cost does not depend on how many cycles are passed, so a caller that
+// advances the beam only when something is about to look at it may pass a
+// whole frame's worth at once.
+void VideoTick(VideoState* video, uint32_t cycles);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.

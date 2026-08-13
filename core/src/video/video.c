@@ -206,16 +206,27 @@ YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-void VideoTick(VideoState* video, uint16_t cycles) {
+void VideoTick(VideoState* video, uint32_t cycles) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-  video->scan_line_cycles += cycles;
-  while (video->scan_line_cycles >= adapter->cycles_per_scan_line) {
-    video->scan_line_cycles -= adapter->cycles_per_scan_line;
-    if (++video->scan_line >= adapter->scan_lines_per_frame) {
-      video->scan_line = 0;
-      ++video->frames;
-    }
+  if (adapter->cycles_per_scan_line == 0 ||
+      adapter->scan_lines_per_frame == 0) {
+    // No adapter geometry to advance through.
+    return;
   }
+
+  // Computed rather than stepped, because the platform advances the beam in
+  // arrears - only when something actually looks at it - so cycles here can be
+  // a whole frame's worth rather than a single instruction's.
+  const uint32_t total = video->scan_line_cycles + cycles;
+  video->scan_line_cycles = total % adapter->cycles_per_scan_line;
+
+  const uint32_t elapsed_scan_lines = total / adapter->cycles_per_scan_line;
+  if (elapsed_scan_lines == 0) {
+    return;
+  }
+  const uint32_t scan_line = (uint32_t)video->scan_line + elapsed_scan_lines;
+  video->frames += scan_line / adapter->scan_lines_per_frame;
+  video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 }
 
 // The value the status port reads back, computed from where the CRT beam

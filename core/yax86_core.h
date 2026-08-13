@@ -15523,6 +15523,30 @@ void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
 // invoked at a frequency of 1.193182 MHz for accurate timing.
 void PITTick(PITState* pit);
 
+enum {
+  // Returned by PITTicksUntilNextEvent() when no channel is counting towards
+  // anything, so there is nothing to schedule.
+  kPITNoEvent = 0x7FFFFFFF,
+};
+
+// Advances the PIT by num_ticks of its input clock. Equivalent to calling
+// PITTick() num_ticks times, but does not take time proportional to num_ticks.
+//
+// A counter spends nearly all of its life counting down through values that
+// change nothing observable, so those stretches are skipped arithmetically and
+// only the ticks that can change a channel's output are simulated one at a
+// time.
+void PITAdvance(PITState* pit, uint32_t num_ticks);
+
+// Returns the number of input clock ticks until the earliest tick that could
+// change any channel's output state, or kPITNoEvent if no channel is counting
+// towards one.
+//
+// This is a lower bound rather than an exact answer. A caller that advances the
+// PIT by this much and finds nothing happened has only done unnecessary work,
+// whereas one that waited longer would miss an edge.
+uint32_t PITTicksUntilNextEvent(const PITState* pit);
+
 #endif  // YAX86_PIT_PUBLIC_H
 
 
@@ -15560,6 +15584,18 @@ typedef struct PITModeMetadata {
   // Callback to handle a tick for this mode.
   void (*handle_tick)(
       PITState* pit, PITChannelState* channel, int channel_index);
+  // How much the counter moves per tick. Modes 0 and 2 count down by one;
+  // mode 3 counts down by two so that its output is a square wave.
+  uint16_t counter_step;
+  // How many ticks the counter can be advanced by arithmetic before the next
+  // tick could change the channel's output, and how many ticks until that
+  // happens. Both may be NULL for a mode that never changes its output.
+  //
+  // skip_ticks returns how many ticks may be applied to the counter with no
+  // observable effect other than the counter's own value; ticks_until_event
+  // returns a lower bound on the ticks until the output could change.
+  uint32_t (*skip_ticks)(const PITChannelState* channel);
+  uint32_t (*ticks_until_event)(const PITChannelState* channel);
 } PITModeMetadata;
 
 // Metadata for unsupported modes (1, 4, 5).
@@ -15601,10 +15637,25 @@ static void PITMode0HandleTick(
   }
 }
 
+// A counter above 1 cannot reach terminal count on the next tick, so every
+// tick down to 1 is uneventful. A counter already at 0 has finished and never
+// changes again, which the caller detects as no event rather than a skip.
+static uint32_t PITMode0SkipTicks(const PITChannelState* channel) {
+  return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 0;
+}
+
+static uint32_t PITMode0TicksUntilEvent(const PITChannelState* channel) {
+  // A one-shot that has already fired is not counting towards anything.
+  return channel->counter == 0 ? kPITNoEvent : (uint32_t)channel->counter;
+}
+
 // Metadata for Mode 0: Interrupt on Terminal Count.
 static const PITModeMetadata kPITMode0Metadata = {
     .initial_output_state = false,
     .handle_tick = PITMode0HandleTick,
+    .counter_step = 1,
+    .skip_ticks = PITMode0SkipTicks,
+    .ticks_until_event = PITMode0TicksUntilEvent,
 };
 
 // Tick handler for Mode 2: Rate Generator.
@@ -15628,10 +15679,25 @@ static void PITMode2HandleTick(
   }
 }
 
+// Mode 2 acts when the counter reaches 1 and again when it reaches 0, so every
+// tick down to 2 is uneventful.
+static uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
+  return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
+}
+
+static uint32_t PITMode2TicksUntilEvent(const PITChannelState* channel) {
+  // A counter of 0 wraps to 0xFFFF on the next tick without changing the
+  // output, but reporting 1 only costs a wasted wakeup.
+  return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
+}
+
 // Metadata for Mode 2: Rate Generator.
 static const PITModeMetadata kPITMode2Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode2HandleTick,
+    .counter_step = 1,
+    .skip_ticks = PITMode2SkipTicks,
+    .ticks_until_event = PITMode2TicksUntilEvent,
 };
 
 // Tick handler for Mode 3: Square Wave Generator.
@@ -15654,10 +15720,28 @@ static void PITMode3HandleTick(
   }
 }
 
+// Mode 3 steps by two, so terminal count is reached at 0 from an even counter
+// and at 0xFFFF from an odd one. Either way a counter of 4 or more has at
+// least one uneventful step left, and stopping at 2 or 3 leaves the next step
+// to the tick handler.
+static uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
+  return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
+}
+
+static uint32_t PITMode3TicksUntilEvent(const PITChannelState* channel) {
+  // Even counters reach 0 after counter/2 steps, odd ones reach 0xFFFF after
+  // (counter+1)/2; the rounding covers both.
+  const uint32_t ticks = ((uint32_t)channel->counter + 1) / 2;
+  return ticks > 0 ? ticks : 1;
+}
+
 // Metadata for Mode 3: Square Wave Generator.
 static const PITModeMetadata kPITMode3Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode3HandleTick,
+    .counter_step = 2,
+    .skip_ticks = PITMode3SkipTicks,
+    .ticks_until_event = PITMode3TicksUntilEvent,
 };
 
 // Array of mode metadata indexed by mode number.
@@ -15885,6 +15969,79 @@ void PITTick(PITState* pit) {
       mode_metadata->handle_tick(pit, channel, i);
     }
   }
+}
+
+// Advances a single channel by num_ticks.
+//
+// The result is identical to running the channel's tick handler num_ticks
+// times. Stretches of the count where no tick can change the output are
+// applied to the counter arithmetically; every tick that could change it still
+// goes through the handler, so there is only one description of what a tick
+// does.
+static void PITAdvanceChannel(
+    PITState* pit, PITChannelState* channel, int channel_index,
+    uint32_t num_ticks) {
+  if (channel->mode >= kPITNumModes) {
+    // Invalid mode - ignore.
+    return;
+  }
+  const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+  if (!mode_metadata->handle_tick) {
+    // A mode that does nothing on a tick cannot be moved on by one.
+    return;
+  }
+
+  while (num_ticks > 0) {
+    if (mode_metadata->skip_ticks) {
+      uint32_t skip = mode_metadata->skip_ticks(channel);
+      if (skip > num_ticks) {
+        skip = num_ticks;
+      }
+      if (skip > 0) {
+        channel->counter -= (uint16_t)(skip * mode_metadata->counter_step);
+        num_ticks -= skip;
+        continue;
+      }
+    }
+    // The next tick could change the output, so run it properly. A mode that
+    // has stopped counting reports no event and no skip, which would spin here
+    // for the rest of num_ticks, so stop once nothing further can happen.
+    if (mode_metadata->ticks_until_event &&
+        mode_metadata->ticks_until_event(channel) == kPITNoEvent) {
+      return;
+    }
+    mode_metadata->handle_tick(pit, channel, channel_index);
+    --num_ticks;
+  }
+}
+
+void PITAdvance(PITState* pit, uint32_t num_ticks) {
+  if (num_ticks == 0) {
+    return;
+  }
+  PITChannelState* channel = &pit->channels[0];
+  for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
+    PITAdvanceChannel(pit, channel, i, num_ticks);
+  }
+}
+
+uint32_t PITTicksUntilNextEvent(const PITState* pit) {
+  uint32_t earliest = kPITNoEvent;
+  const PITChannelState* channel = &pit->channels[0];
+  for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
+    if (channel->mode >= kPITNumModes) {
+      continue;
+    }
+    const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+    if (!mode_metadata->ticks_until_event) {
+      continue;
+    }
+    const uint32_t ticks = mode_metadata->ticks_until_event(channel);
+    if (ticks < earliest) {
+      earliest = ticks;
+    }
+  }
+  return earliest;
 }
 
 
@@ -16998,9 +17155,27 @@ typedef struct PlatformState {
   uint32_t ticks;
 
   // Cycles counted towards each device's next tick but not yet used by it.
-  uint16_t pit_cycles;
-  uint16_t fdc_cycles;
-  uint16_t keyboard_cycles;
+  uint32_t pit_cycles;
+  uint32_t fdc_cycles;
+  uint32_t keyboard_cycles;
+
+  // Devices are driven from deadlines rather than clocked on every
+  // instruction. The PIT alone would otherwise want ticking about 2.5 times
+  // per instruction, three channels at a time, almost always to decrement a
+  // counter nothing is watching.
+  //
+  // Instead each device is brought up to date only when it has something to
+  // do, and the instruction path does one comparison against the earliest
+  // deadline of any of them. Anything that reads a device's state has to bring
+  // that device up to date first, which is what the PlatformSync* functions
+  // do.
+
+  // Value of ticks when the devices were last brought up to date.
+  uint32_t last_sync_ticks;
+  // Value of ticks at which the earliest device deadline falls due. Compared
+  // as a signed difference against ticks so that it stays correct when the
+  // 32-bit cycle counter wraps.
+  uint32_t next_event_ticks;
 
   // Execution breakpoints.
   PlatformBreakpoint breakpoints[kMaxBreakpoints];
@@ -17049,6 +17224,16 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
 PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
+
+// Bring every device up to date with the cycles that have run so far.
+//
+// Devices are driven from deadlines rather than clocked on every instruction,
+// so between deadlines their state lags the CPU. Everything inside the
+// platform that reads device state does this for itself, so a caller only
+// needs it before inspecting a device directly - most usefully before
+// VideoRender(), so that the frame reflects where the CRT beam has actually
+// reached.
+void PlatformSync(PlatformState* platform);
 
 // Add an execution breakpoint at cs:ip. Returns the breakpoint index, or
 // kInvalidWatchIndex if all kMaxBreakpoints slots are in use.
@@ -17113,6 +17298,9 @@ const PlatformStopInfo* PlatformGetStopInfo(const PlatformState* platform);
 
 #define YAX86_PLATFORM_LOG(level, ...) \
   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
+
+// How long until the next device needs attention, in CPU cycles from now.
+static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform);
 
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
@@ -17398,12 +17586,21 @@ static void PICCallbackPlatformRaiseIRQ0(void* context) {
 // ============================================================================
 
 static uint8_t PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return PITReadPort((PITState*)entry->context, port);
+  // A guest timing loop reads the counter expecting it to have moved, so the
+  // PIT has to be caught up before it is read.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return PITReadPort(&platform->pit, port);
 }
 
 static void PITCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  PITWritePort((PITState*)entry->context, port, value);
+  // Syncing first applies the cycles that ran under the old configuration;
+  // syncing again afterwards reschedules against the new one.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  PITWritePort(&platform->pit, port, value);
+  PlatformSync(platform);
 }
 
 static void PITCallbackSetPCSpeakerFrequency(
@@ -17417,12 +17614,19 @@ static void PITCallbackSetPCSpeakerFrequency(
 // ============================================================================
 
 static uint8_t PPICallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return PPIReadPort((PPIState*)entry->context, port);
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return PPIReadPort(&platform->ppi, port);
 }
 
 static void PPICallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  PPIWritePort((PPIState*)entry->context, port, value);
+  // Port B gates the speaker against PIT channel 2, so what the guest hears
+  // depends on the channel's output state being current.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  PPIWritePort(&platform->ppi, port, value);
+  PlatformSync(platform);
 }
 
 static void PPICallbackSetKeyboardControl(
@@ -17473,12 +17677,19 @@ static void FDCCallbackRequestDMA(void* context) {
 }
 
 static uint8_t FDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return FDCReadPort((FDCState*)entry->context, port);
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return FDCReadPort(&platform->fdc, port);
 }
 
 static void FDCCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  FDCWritePort((FDCState*)entry->context, port, value);
+  // A write can start a command, which is what puts the controller into the
+  // execution phase the scheduler watches for.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  FDCWritePort(&platform->fdc, port, value);
+  PlatformSync(platform);
 }
 
 // ============================================================================
@@ -17543,12 +17754,19 @@ static void DMACallbackWritePortByte(
 // ============================================================================
 
 static uint8_t VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return VideoReadPort((VideoState*)entry->context, port);
+  // The status port reports where the CRT beam is, which is only meaningful
+  // once the beam has been advanced to now. Guests poll this to wait for
+  // retrace.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return VideoReadPort(&platform->video, port);
 }
 
 static void VideoCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  VideoWritePort((VideoState*)entry->context, port, value);
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  VideoWritePort(&platform->video, port, value);
 }
 
 static void VideoCallbackWriteVRAMByte(
@@ -17664,7 +17882,7 @@ static void PlatformInitPIT(PlatformState* platform) {
       .end = 0x43,
       .read_byte = PITCallbackReadPortByte,
       .write_byte = PITCallbackWritePortByte,
-      .context = &platform->pit,
+      .context = platform,
   };
   RegisterPortMapEntry(platform, &pit_entry);
 }
@@ -17690,7 +17908,7 @@ static void PlatformInitPPI(PlatformState* platform) {
       .end = 0x63,
       .read_byte = PPICallbackReadPortByte,
       .write_byte = PPICallbackWritePortByte,
-      .context = &platform->ppi,
+      .context = platform,
   };
   RegisterPortMapEntry(platform, &ppi_entry);
 }
@@ -17717,7 +17935,7 @@ static void PlatformInitFDC(PlatformState* platform) {
       .end = 0x3F7,
       .read_byte = FDCCallbackReadPortByte,
       .write_byte = FDCCallbackWritePortByte,
-      .context = &platform->fdc,
+      .context = platform,
   };
   RegisterPortMapEntry(platform, &fdc_entry);
 }
@@ -17804,7 +18022,7 @@ static void PlatformInitVideo(PlatformState* platform) {
   RegisterMemoryMapEntry(platform, &vram_entry);
 
   PortMapEntry port_entry = {
-      .context = &platform->video,
+      .context = platform,
       .entry_type = kPortMapEntryVideo,
       .start = adapter->port_start,
       .end = adapter->port_end,
@@ -17863,6 +18081,13 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   PlatformInitVideo(platform);
 
   platform->ticks = 0;
+  platform->pit_cycles = 0;
+  platform->fdc_cycles = 0;
+  platform->keyboard_cycles = 0;
+  platform->last_sync_ticks = 0;
+  // Schedule the first deadline from the devices' power-on state, so that the
+  // first instruction is not treated as already overdue.
+  platform->next_event_ticks = PlatformCyclesUntilNextEvent(platform);
 
   PlatformClearBreakpoints(platform);
   PlatformClearMemoryWatchpoints(platform);
@@ -17880,6 +18105,110 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
   }
   PICRaiseIRQ(&platform->pic, irq);
   return true;
+}
+
+// ============================================================================
+// Device scheduling
+// ============================================================================
+//
+// Devices are not clocked on every instruction. Each is brought up to date
+// only when it next has something to do, and the instruction path compares
+// against the earliest of those deadlines.
+//
+// The consequence is that device state is generally stale. Anything that reads
+// it - a port handler, or the host asking what the CRT beam is doing - has to
+// bring the device up to date first, which is what PlatformSync() is
+// for. Getting this wrong shows up as a guest timing loop reading a counter
+// that never moves, so port handlers that touch a device call it.
+
+enum {
+  // Never let a deadline sit further out than this, so that a machine in which
+  // nothing is scheduled still comes back regularly. It also bounds how many
+  // cycles can accumulate between syncs, which keeps the arithmetic below
+  // inside 32 bits.
+  kMaxEventInterval = kCyclesPerMillisecond,
+};
+
+// Whether the earliest device deadline has come due. Compared as a signed
+// difference so that a deadline stays in the future across the point where the
+// 32-bit cycle counter wraps.
+static inline bool PlatformIsEventDue(const PlatformState* platform) {
+  return (int32_t)(platform->ticks - platform->next_event_ticks) >= 0;
+}
+
+// Work out when the next device needs attention, in cycles from now.
+static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform) {
+  uint32_t cycles = kMaxEventInterval;
+
+  // The PIT's next output change, converted from its own 1.19MHz clock and
+  // offset by the cycles already credited towards its next tick.
+  const uint32_t pit_ticks = PITTicksUntilNextEvent(&platform->pit);
+  if (pit_ticks != kPITNoEvent) {
+    const uint32_t pit_cycles =
+        pit_ticks * kCyclesPerPITTick - platform->pit_cycles;
+    if (pit_cycles < cycles) {
+      cycles = pit_cycles;
+    }
+  }
+
+  // The floppy controller only advances a command that is executing; when no
+  // command is in flight there is nothing for a tick to do.
+  if (platform->fdc.phase == kFDCPhaseExecution) {
+    const uint32_t fdc_cycles = kCyclesPerFDCTick - platform->fdc_cycles;
+    if (fdc_cycles < cycles) {
+      cycles = fdc_cycles;
+    }
+  }
+
+  // Never return 0, which would leave the deadline permanently due.
+  return cycles > 0 ? cycles : 1;
+}
+
+// Bring every device up to date with the cycles that have run since the last
+// sync, and schedule the next deadline.
+void PlatformSync(PlatformState* platform) {
+  const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
+  platform->last_sync_ticks = platform->ticks;
+
+  if (elapsed > 0) {
+    platform->pit_cycles += elapsed;
+    const uint32_t pit_ticks = platform->pit_cycles / kCyclesPerPITTick;
+    if (pit_ticks > 0) {
+      platform->pit_cycles -= pit_ticks * kCyclesPerPITTick;
+      PITAdvance(&platform->pit, pit_ticks);
+    }
+
+    platform->fdc_cycles += elapsed;
+    const uint32_t fdc_ticks = platform->fdc_cycles / kCyclesPerFDCTick;
+    if (fdc_ticks > 0) {
+      platform->fdc_cycles -= fdc_ticks * kCyclesPerFDCTick;
+      // FDCTick() does nothing unless a command is executing, so an idle
+      // controller does not need catching up at all - which matters because
+      // an idle stretch is not bounded by an FDC deadline.
+      if (platform->fdc.phase == kFDCPhaseExecution) {
+        for (uint32_t i = 0; i < fdc_ticks; ++i) {
+          FDCTick(&platform->fdc);
+        }
+      }
+    }
+
+    platform->keyboard_cycles += elapsed;
+    const uint32_t keyboard_ticks =
+        platform->keyboard_cycles / kCyclesPerMillisecond;
+    if (keyboard_ticks > 0) {
+      platform->keyboard_cycles -= keyboard_ticks * kCyclesPerMillisecond;
+      for (uint32_t i = 0; i < keyboard_ticks; ++i) {
+        KeyboardTickMs(&platform->keyboard);
+      }
+    }
+
+    // Advancing the beam costs the same whether it moved by one cycle or a
+    // whole frame, so the video adapter needs no deadline of its own.
+    VideoTick(&platform->video, elapsed);
+  }
+
+  platform->next_event_ticks =
+      platform->ticks + PlatformCyclesUntilNextEvent(platform);
 }
 
 // Stop if there is an enabled breakpoint on the instruction about to execute.
@@ -17916,33 +18245,14 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   CPUTickResult cpu_result = CPUTick(&platform->cpu);
 
   // The instruction took as long as it took, and every device is clocked from
-  // that. Each keeps its own remainder, so a device whose period does not
-  // divide the instruction's length still runs at its own rate on average
-  // rather than drifting.
+  // that - but in arrears. Rather than offering each device its share of the
+  // cycles on every instruction, this only checks whether the earliest device
+  // deadline has come due, which is one comparison in the common case.
   const uint16_t cycles = platform->cpu.cycles_this_tick;
   platform->ticks += cycles;
-
-  platform->pit_cycles += cycles;
-  while (platform->pit_cycles >= kCyclesPerPITTick) {
-    platform->pit_cycles -= kCyclesPerPITTick;
-    PITTick(&platform->pit);
+  if (PlatformIsEventDue(platform)) {
+    PlatformSync(platform);
   }
-
-  platform->fdc_cycles += cycles;
-  while (platform->fdc_cycles >= kCyclesPerFDCTick) {
-    platform->fdc_cycles -= kCyclesPerFDCTick;
-    FDCTick(&platform->fdc);
-  }
-
-  platform->keyboard_cycles += cycles;
-  while (platform->keyboard_cycles >= kCyclesPerMillisecond) {
-    platform->keyboard_cycles -= kCyclesPerMillisecond;
-    KeyboardTickMs(&platform->keyboard);
-  }
-
-  // The video adapter keeps its own cycle remainder, because the MDA and the
-  // CGA scan at different rates.
-  VideoTick(&platform->video, cycles);
 
   // A watchpoint may have fired from the CPU or from a DMA transfer.
   if (platform->stop_pending) {
@@ -20280,7 +20590,11 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
-void VideoTick(VideoState* video, uint16_t cycles);
+//
+// The cost does not depend on how many cycles are passed, so a caller that
+// advances the beam only when something is about to look at it may pass a
+// whole frame's worth at once.
+void VideoTick(VideoState* video, uint32_t cycles);
 
 // Render the current display. Invokes the write_pixel callback to do the actual
 // pixel rendering.
@@ -21919,16 +22233,27 @@ YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-void VideoTick(VideoState* video, uint16_t cycles) {
+void VideoTick(VideoState* video, uint32_t cycles) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-  video->scan_line_cycles += cycles;
-  while (video->scan_line_cycles >= adapter->cycles_per_scan_line) {
-    video->scan_line_cycles -= adapter->cycles_per_scan_line;
-    if (++video->scan_line >= adapter->scan_lines_per_frame) {
-      video->scan_line = 0;
-      ++video->frames;
-    }
+  if (adapter->cycles_per_scan_line == 0 ||
+      adapter->scan_lines_per_frame == 0) {
+    // No adapter geometry to advance through.
+    return;
   }
+
+  // Computed rather than stepped, because the platform advances the beam in
+  // arrears - only when something actually looks at it - so cycles here can be
+  // a whole frame's worth rather than a single instruction's.
+  const uint32_t total = video->scan_line_cycles + cycles;
+  video->scan_line_cycles = total % adapter->cycles_per_scan_line;
+
+  const uint32_t elapsed_scan_lines = total / adapter->cycles_per_scan_line;
+  if (elapsed_scan_lines == 0) {
+    return;
+  }
+  const uint32_t scan_line = (uint32_t)video->scan_line + elapsed_scan_lines;
+  video->frames += scan_line / adapter->scan_lines_per_frame;
+  video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 }
 
 // The value the status port reads back, computed from where the CRT beam

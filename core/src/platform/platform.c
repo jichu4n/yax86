@@ -10,6 +10,9 @@
 #define YAX86_PLATFORM_LOG(level, ...) \
   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
+// How long until the next device needs attention, in CPU cycles from now.
+static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform);
+
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
 //   - There already exists a memory map entry with the same type.
@@ -294,12 +297,21 @@ static void PICCallbackPlatformRaiseIRQ0(void* context) {
 // ============================================================================
 
 static uint8_t PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return PITReadPort((PITState*)entry->context, port);
+  // A guest timing loop reads the counter expecting it to have moved, so the
+  // PIT has to be caught up before it is read.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return PITReadPort(&platform->pit, port);
 }
 
 static void PITCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  PITWritePort((PITState*)entry->context, port, value);
+  // Syncing first applies the cycles that ran under the old configuration;
+  // syncing again afterwards reschedules against the new one.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  PITWritePort(&platform->pit, port, value);
+  PlatformSync(platform);
 }
 
 static void PITCallbackSetPCSpeakerFrequency(
@@ -313,12 +325,19 @@ static void PITCallbackSetPCSpeakerFrequency(
 // ============================================================================
 
 static uint8_t PPICallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return PPIReadPort((PPIState*)entry->context, port);
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return PPIReadPort(&platform->ppi, port);
 }
 
 static void PPICallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  PPIWritePort((PPIState*)entry->context, port, value);
+  // Port B gates the speaker against PIT channel 2, so what the guest hears
+  // depends on the channel's output state being current.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  PPIWritePort(&platform->ppi, port, value);
+  PlatformSync(platform);
 }
 
 static void PPICallbackSetKeyboardControl(
@@ -369,12 +388,19 @@ static void FDCCallbackRequestDMA(void* context) {
 }
 
 static uint8_t FDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return FDCReadPort((FDCState*)entry->context, port);
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return FDCReadPort(&platform->fdc, port);
 }
 
 static void FDCCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  FDCWritePort((FDCState*)entry->context, port, value);
+  // A write can start a command, which is what puts the controller into the
+  // execution phase the scheduler watches for.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  FDCWritePort(&platform->fdc, port, value);
+  PlatformSync(platform);
 }
 
 // ============================================================================
@@ -439,12 +465,19 @@ static void DMACallbackWritePortByte(
 // ============================================================================
 
 static uint8_t VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return VideoReadPort((VideoState*)entry->context, port);
+  // The status port reports where the CRT beam is, which is only meaningful
+  // once the beam has been advanced to now. Guests poll this to wait for
+  // retrace.
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  return VideoReadPort(&platform->video, port);
 }
 
 static void VideoCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
-  VideoWritePort((VideoState*)entry->context, port, value);
+  PlatformState* platform = (PlatformState*)entry->context;
+  PlatformSync(platform);
+  VideoWritePort(&platform->video, port, value);
 }
 
 static void VideoCallbackWriteVRAMByte(
@@ -560,7 +593,7 @@ static void PlatformInitPIT(PlatformState* platform) {
       .end = 0x43,
       .read_byte = PITCallbackReadPortByte,
       .write_byte = PITCallbackWritePortByte,
-      .context = &platform->pit,
+      .context = platform,
   };
   RegisterPortMapEntry(platform, &pit_entry);
 }
@@ -586,7 +619,7 @@ static void PlatformInitPPI(PlatformState* platform) {
       .end = 0x63,
       .read_byte = PPICallbackReadPortByte,
       .write_byte = PPICallbackWritePortByte,
-      .context = &platform->ppi,
+      .context = platform,
   };
   RegisterPortMapEntry(platform, &ppi_entry);
 }
@@ -613,7 +646,7 @@ static void PlatformInitFDC(PlatformState* platform) {
       .end = 0x3F7,
       .read_byte = FDCCallbackReadPortByte,
       .write_byte = FDCCallbackWritePortByte,
-      .context = &platform->fdc,
+      .context = platform,
   };
   RegisterPortMapEntry(platform, &fdc_entry);
 }
@@ -700,7 +733,7 @@ static void PlatformInitVideo(PlatformState* platform) {
   RegisterMemoryMapEntry(platform, &vram_entry);
 
   PortMapEntry port_entry = {
-      .context = &platform->video,
+      .context = platform,
       .entry_type = kPortMapEntryVideo,
       .start = adapter->port_start,
       .end = adapter->port_end,
@@ -759,6 +792,13 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   PlatformInitVideo(platform);
 
   platform->ticks = 0;
+  platform->pit_cycles = 0;
+  platform->fdc_cycles = 0;
+  platform->keyboard_cycles = 0;
+  platform->last_sync_ticks = 0;
+  // Schedule the first deadline from the devices' power-on state, so that the
+  // first instruction is not treated as already overdue.
+  platform->next_event_ticks = PlatformCyclesUntilNextEvent(platform);
 
   PlatformClearBreakpoints(platform);
   PlatformClearMemoryWatchpoints(platform);
@@ -776,6 +816,110 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
   }
   PICRaiseIRQ(&platform->pic, irq);
   return true;
+}
+
+// ============================================================================
+// Device scheduling
+// ============================================================================
+//
+// Devices are not clocked on every instruction. Each is brought up to date
+// only when it next has something to do, and the instruction path compares
+// against the earliest of those deadlines.
+//
+// The consequence is that device state is generally stale. Anything that reads
+// it - a port handler, or the host asking what the CRT beam is doing - has to
+// bring the device up to date first, which is what PlatformSync() is
+// for. Getting this wrong shows up as a guest timing loop reading a counter
+// that never moves, so port handlers that touch a device call it.
+
+enum {
+  // Never let a deadline sit further out than this, so that a machine in which
+  // nothing is scheduled still comes back regularly. It also bounds how many
+  // cycles can accumulate between syncs, which keeps the arithmetic below
+  // inside 32 bits.
+  kMaxEventInterval = kCyclesPerMillisecond,
+};
+
+// Whether the earliest device deadline has come due. Compared as a signed
+// difference so that a deadline stays in the future across the point where the
+// 32-bit cycle counter wraps.
+static inline bool PlatformIsEventDue(const PlatformState* platform) {
+  return (int32_t)(platform->ticks - platform->next_event_ticks) >= 0;
+}
+
+// Work out when the next device needs attention, in cycles from now.
+static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform) {
+  uint32_t cycles = kMaxEventInterval;
+
+  // The PIT's next output change, converted from its own 1.19MHz clock and
+  // offset by the cycles already credited towards its next tick.
+  const uint32_t pit_ticks = PITTicksUntilNextEvent(&platform->pit);
+  if (pit_ticks != kPITNoEvent) {
+    const uint32_t pit_cycles =
+        pit_ticks * kCyclesPerPITTick - platform->pit_cycles;
+    if (pit_cycles < cycles) {
+      cycles = pit_cycles;
+    }
+  }
+
+  // The floppy controller only advances a command that is executing; when no
+  // command is in flight there is nothing for a tick to do.
+  if (platform->fdc.phase == kFDCPhaseExecution) {
+    const uint32_t fdc_cycles = kCyclesPerFDCTick - platform->fdc_cycles;
+    if (fdc_cycles < cycles) {
+      cycles = fdc_cycles;
+    }
+  }
+
+  // Never return 0, which would leave the deadline permanently due.
+  return cycles > 0 ? cycles : 1;
+}
+
+// Bring every device up to date with the cycles that have run since the last
+// sync, and schedule the next deadline.
+void PlatformSync(PlatformState* platform) {
+  const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
+  platform->last_sync_ticks = platform->ticks;
+
+  if (elapsed > 0) {
+    platform->pit_cycles += elapsed;
+    const uint32_t pit_ticks = platform->pit_cycles / kCyclesPerPITTick;
+    if (pit_ticks > 0) {
+      platform->pit_cycles -= pit_ticks * kCyclesPerPITTick;
+      PITAdvance(&platform->pit, pit_ticks);
+    }
+
+    platform->fdc_cycles += elapsed;
+    const uint32_t fdc_ticks = platform->fdc_cycles / kCyclesPerFDCTick;
+    if (fdc_ticks > 0) {
+      platform->fdc_cycles -= fdc_ticks * kCyclesPerFDCTick;
+      // FDCTick() does nothing unless a command is executing, so an idle
+      // controller does not need catching up at all - which matters because
+      // an idle stretch is not bounded by an FDC deadline.
+      if (platform->fdc.phase == kFDCPhaseExecution) {
+        for (uint32_t i = 0; i < fdc_ticks; ++i) {
+          FDCTick(&platform->fdc);
+        }
+      }
+    }
+
+    platform->keyboard_cycles += elapsed;
+    const uint32_t keyboard_ticks =
+        platform->keyboard_cycles / kCyclesPerMillisecond;
+    if (keyboard_ticks > 0) {
+      platform->keyboard_cycles -= keyboard_ticks * kCyclesPerMillisecond;
+      for (uint32_t i = 0; i < keyboard_ticks; ++i) {
+        KeyboardTickMs(&platform->keyboard);
+      }
+    }
+
+    // Advancing the beam costs the same whether it moved by one cycle or a
+    // whole frame, so the video adapter needs no deadline of its own.
+    VideoTick(&platform->video, elapsed);
+  }
+
+  platform->next_event_ticks =
+      platform->ticks + PlatformCyclesUntilNextEvent(platform);
 }
 
 // Stop if there is an enabled breakpoint on the instruction about to execute.
@@ -812,33 +956,14 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   CPUTickResult cpu_result = CPUTick(&platform->cpu);
 
   // The instruction took as long as it took, and every device is clocked from
-  // that. Each keeps its own remainder, so a device whose period does not
-  // divide the instruction's length still runs at its own rate on average
-  // rather than drifting.
+  // that - but in arrears. Rather than offering each device its share of the
+  // cycles on every instruction, this only checks whether the earliest device
+  // deadline has come due, which is one comparison in the common case.
   const uint16_t cycles = platform->cpu.cycles_this_tick;
   platform->ticks += cycles;
-
-  platform->pit_cycles += cycles;
-  while (platform->pit_cycles >= kCyclesPerPITTick) {
-    platform->pit_cycles -= kCyclesPerPITTick;
-    PITTick(&platform->pit);
+  if (PlatformIsEventDue(platform)) {
+    PlatformSync(platform);
   }
-
-  platform->fdc_cycles += cycles;
-  while (platform->fdc_cycles >= kCyclesPerFDCTick) {
-    platform->fdc_cycles -= kCyclesPerFDCTick;
-    FDCTick(&platform->fdc);
-  }
-
-  platform->keyboard_cycles += cycles;
-  while (platform->keyboard_cycles >= kCyclesPerMillisecond) {
-    platform->keyboard_cycles -= kCyclesPerMillisecond;
-    KeyboardTickMs(&platform->keyboard);
-  }
-
-  // The video adapter keeps its own cycle remainder, because the MDA and the
-  // CGA scan at different rates.
-  VideoTick(&platform->video, cycles);
 
   // A watchpoint may have fired from the CPU or from a DMA transfer.
   if (platform->stop_pending) {
