@@ -23,14 +23,15 @@ jobs:
         with:
           version: 3-latest
       - name: Cache 8088 CPU hardware tests
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache/8088-tests
           key: 8088-tests-${{ hashFiles('tools/download-cpu-hardware-tests.sh', 'tools/cpu-hardware-tests-opcodes.txt') }}
           restore-keys: |
             8088-tests-
-      - uses: emscripten-core/setup-emsdk@v14
+      - uses: emscripten-core/setup-emsdk@v15
         with:
+          version: 6.0.6
           actions-cache-folder: 'emsdk-cache'
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
