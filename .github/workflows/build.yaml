@@ -1,5 +1,7 @@
 name: build
 on: [push, pull_request]
+env:
+  EM_VERSION: 6.0.6
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,10 +31,15 @@ jobs:
           key: 8088-tests-${{ hashFiles('tools/download-cpu-hardware-tests.sh', 'tools/cpu-hardware-tests-opcodes.txt') }}
           restore-keys: |
             8088-tests-
+      - name: Cache Emscripten
+        uses: actions/cache@v6
+        with:
+          path: emsdk-cache
+          key: ${{ env.EM_VERSION }}-${{ runner.os }}
       - uses: emscripten-core/setup-emsdk@v15
         with:
-          version: 6.0.6
-          actions-cache-folder: 'emsdk-cache'
+          version: ${{ env.EM_VERSION }}
+          actions-cache-folder: emsdk-cache
       - run: ${{ matrix.compiler.cc }} --version
       - run: |
           cmake -B ${{github.workspace}}/build-native \
