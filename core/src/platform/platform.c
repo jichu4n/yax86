@@ -10,11 +10,6 @@
 #define YAX86_PLATFORM_LOG(level, ...) \
   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
-// Brings every device up to date with the cycles that have run since the last
-// sync. Devices are driven from deadlines rather than clocked per instruction,
-// so their state is stale between events and anything that reads it has to
-// call this first. Defined further down, next to the rest of the scheduler.
-static void PlatformSyncDevices(PlatformState* platform);
 // How long until the next device needs attention, in CPU cycles from now.
 static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform);
 
@@ -305,7 +300,7 @@ static uint8_t PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // A guest timing loop reads the counter expecting it to have moved, so the
   // PIT has to be caught up before it is read.
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   return PITReadPort(&platform->pit, port);
 }
 
@@ -314,9 +309,9 @@ static void PITCallbackWritePortByte(
   // Syncing first applies the cycles that ran under the old configuration;
   // syncing again afterwards reschedules against the new one.
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   PITWritePort(&platform->pit, port, value);
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
 }
 
 static void PITCallbackSetPCSpeakerFrequency(
@@ -331,7 +326,7 @@ static void PITCallbackSetPCSpeakerFrequency(
 
 static uint8_t PPICallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   return PPIReadPort(&platform->ppi, port);
 }
 
@@ -340,9 +335,9 @@ static void PPICallbackWritePortByte(
   // Port B gates the speaker against PIT channel 2, so what the guest hears
   // depends on the channel's output state being current.
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   PPIWritePort(&platform->ppi, port, value);
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
 }
 
 static void PPICallbackSetKeyboardControl(
@@ -394,7 +389,7 @@ static void FDCCallbackRequestDMA(void* context) {
 
 static uint8_t FDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   return FDCReadPort(&platform->fdc, port);
 }
 
@@ -403,9 +398,9 @@ static void FDCCallbackWritePortByte(
   // A write can start a command, which is what puts the controller into the
   // execution phase the scheduler watches for.
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   FDCWritePort(&platform->fdc, port, value);
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
 }
 
 // ============================================================================
@@ -474,14 +469,14 @@ static uint8_t VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // once the beam has been advanced to now. Guests poll this to wait for
   // retrace.
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   return VideoReadPort(&platform->video, port);
 }
 
 static void VideoCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PlatformState* platform = (PlatformState*)entry->context;
-  PlatformSyncDevices(platform);
+  PlatformSync(platform);
   VideoWritePort(&platform->video, port, value);
 }
 
@@ -833,7 +828,7 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
 //
 // The consequence is that device state is generally stale. Anything that reads
 // it - a port handler, or the host asking what the CRT beam is doing - has to
-// bring the device up to date first, which is what PlatformSyncDevices() is
+// bring the device up to date first, which is what PlatformSync() is
 // for. Getting this wrong shows up as a guest timing loop reading a counter
 // that never moves, so port handlers that touch a device call it.
 
@@ -882,7 +877,7 @@ static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform) {
 
 // Bring every device up to date with the cycles that have run since the last
 // sync, and schedule the next deadline.
-static void PlatformSyncDevices(PlatformState* platform) {
+void PlatformSync(PlatformState* platform) {
   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
   platform->last_sync_ticks = platform->ticks;
 
@@ -927,8 +922,6 @@ static void PlatformSyncDevices(PlatformState* platform) {
       platform->ticks + PlatformCyclesUntilNextEvent(platform);
 }
 
-void PlatformSync(PlatformState* platform) { PlatformSyncDevices(platform); }
-
 // Stop if there is an enabled breakpoint on the instruction about to execute.
 // Only called when has_enabled_breakpoints is set. Returns true if execution
 // should stop.
@@ -969,7 +962,7 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   const uint16_t cycles = platform->cpu.cycles_this_tick;
   platform->ticks += cycles;
   if (PlatformIsEventDue(platform)) {
-    PlatformSyncDevices(platform);
+    PlatformSync(platform);
   }
 
   // A watchpoint may have fired from the CPU or from a DMA transfer.
