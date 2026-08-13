@@ -29,7 +29,17 @@ enum {
 
   // Value returned for reads that decode to nothing.
   kVideoUnmappedPortValue = 0xFF,
+
+  kVideoTextColumns40 = 40,
+  kVideoTextColumns80 = 80,
+  kVideoText40ColumnScale = 2,
+  kVideoText80ColumnScale = 1,
 };
+
+static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address);
+static void VideoInvalidateCursor(VideoState* video);
+static void VideoInvalidateBlinkingText(VideoState* video);
+static void VideoInvalidateAll(VideoState* video);
 
 const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
@@ -61,10 +71,15 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
     return;
   }
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  // Writes stay funnelled through here, rather than going straight to the
-  // buffer the way reads do, so that the adapter has a single place to notice
-  // them - which is what tracking dirty regions of the framebuffer would need.
-  video->config->vram[address & (vram_size - 1)] = value;
+  address &= vram_size - 1;
+  if (video->config->vram[address] == value) {
+    return;
+  }
+  video->config->vram[address] = value;
+  if (video->dirty.full_redraw) {
+    return;
+  }
+  VideoInvalidateVRAMAddress(video, address);
 }
 
 YAX86_PRIVATE void VideoWritePixel(
@@ -109,6 +124,7 @@ void VideoInit(VideoState* video, VideoConfig* config) {
     video->registers[i] = default_registers[i];
   }
   video->control_register = adapter->default_control_register;
+  VideoInvalidateAll(video);
 
   for (uint32_t i = 0; i < adapter->vram_size; i += 2) {
     VideoWriteVRAMByte(video, i, ' ');
@@ -190,6 +206,158 @@ YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
   return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
+YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+    const VideoState* video, const VideoModeMetadata* metadata,
+    uint16_t start_address, uint16_t* cursor_offset) {
+  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
+    return false;
+  }
+  *cursor_offset = (VideoGetCursorAddress(video) - start_address) &
+                   (metadata->vram_size / 2 - 1);
+  return *cursor_offset < (uint16_t)metadata->columns * metadata->rows;
+}
+
+// ============================================================================
+// Dirty regions
+// ============================================================================
+
+static void VideoDirtyRangeAdd(
+    VideoDirtyRange* range, uint8_t first_column, uint8_t end_column) {
+  if (range->end_column == 0) {
+    range->first_column = first_column;
+    range->end_column = end_column;
+    return;
+  }
+  if (first_column < range->first_column) {
+    range->first_column = first_column;
+  }
+  if (end_column > range->end_column) {
+    range->end_column = end_column;
+  }
+}
+
+YAX86_PRIVATE void VideoInvalidateRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  if (first_column >= end_column || end_column > kVideoDirtyColumns ||
+      first_y >= end_y || first_y >= adapter->frame_buffer_height) {
+    return;
+  }
+  if (end_y > adapter->frame_buffer_height) {
+    end_y = adapter->frame_buffer_height;
+  }
+
+  uint8_t first_group = first_y / kVideoDirtyScanLinesPerGroup;
+  uint8_t end_group = (uint8_t)((end_y - 1) / kVideoDirtyScanLinesPerGroup);
+  for (uint8_t group = first_group; group <= end_group; ++group) {
+    VideoDirtyRangeAdd(&video->dirty.ranges[group], first_column, end_column);
+  }
+  video->dirty.any_dirty = true;
+}
+
+static void VideoInvalidateAll(VideoState* video) {
+  video->dirty.any_dirty = true;
+  video->dirty.full_redraw = true;
+}
+
+static void VideoInvalidateTextCell(
+    VideoState* video, const VideoModeMetadata* metadata,
+    uint16_t cell_offset) {
+  if (cell_offset >= (uint16_t)metadata->columns * metadata->rows) {
+    return;
+  }
+  uint8_t row;
+  uint8_t col;
+  uint8_t column_scale;
+  if (metadata->columns == kVideoTextColumns40) {
+    row = (uint8_t)(cell_offset / kVideoTextColumns40);
+    col = (uint8_t)(cell_offset % kVideoTextColumns40);
+    column_scale = kVideoText40ColumnScale;
+  } else {
+    row = (uint8_t)(cell_offset / kVideoTextColumns80);
+    col = (uint8_t)(cell_offset % kVideoTextColumns80);
+    column_scale = kVideoText80ColumnScale;
+  }
+  VideoInvalidateRegion(
+      video, col * column_scale, (col + 1) * column_scale,
+      (uint16_t)row * metadata->char_height,
+      (uint16_t)(row + 1) * metadata->char_height);
+}
+
+static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  if (metadata->type == kVideoModeText) {
+    uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
+    uint16_t character_address = (uint16_t)(address / 2);
+    uint16_t cell_offset =
+        (character_address - VideoGetStartAddress(video)) & character_mask;
+    VideoInvalidateTextCell(video, metadata, cell_offset);
+    return;
+  }
+
+  // Each half of CGA graphics VRAM holds either the even or odd scan lines.
+  uint32_t half_mask = kCGAGraphicsOddScanLineOffset - 1;
+  uint32_t start = (uint32_t)VideoGetStartAddress(video) * 2 & half_mask;
+  uint32_t offset = ((address & half_mask) - start) & half_mask;
+  uint32_t visible_bytes =
+      (metadata->height / 2) * kCGAGraphicsBytesPerScanLine;
+  if (offset >= visible_bytes) {
+    return;
+  }
+  uint16_t row_in_half = (uint16_t)(offset / kCGAGraphicsBytesPerScanLine);
+  uint8_t byte_column = offset % kCGAGraphicsBytesPerScanLine;
+  uint16_t y =
+      row_in_half * 2 + (address >= kCGAGraphicsOddScanLineOffset ? 1 : 0);
+  VideoInvalidateRegion(video, byte_column, byte_column + 1, y, y + 1);
+}
+
+static void VideoInvalidateCursor(VideoState* video) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  if (metadata->type != kVideoModeText) {
+    return;
+  }
+  uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
+  uint16_t cursor_offset =
+      (VideoGetCursorAddress(video) - VideoGetStartAddress(video)) &
+      character_mask;
+  VideoInvalidateTextCell(video, metadata, cursor_offset);
+}
+
+static void VideoInvalidateBlinkingText(VideoState* video) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  if (metadata->type != kVideoModeText ||
+      !(video->control_register & kVideoControlEnableBlink)) {
+    return;
+  }
+
+  uint16_t start_address = VideoGetStartAddress(video);
+  uint8_t column_scale = metadata->columns == kVideoTextColumns40
+                             ? kVideoText40ColumnScale
+                             : kVideoText80ColumnScale;
+  for (uint8_t row = 0; row < metadata->rows; ++row) {
+    uint8_t first_column = kVideoDirtyColumns;
+    uint8_t end_column = 0;
+    for (uint8_t col = 0; col < metadata->columns; ++col) {
+      uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
+      uint32_t attr_address = ((uint32_t)start_address + cell_offset) * 2 + 1;
+      if (VideoReadVRAMByte(video, attr_address) & kVideoAttributeBlink) {
+        uint8_t dirty_column = col * column_scale;
+        if (dirty_column < first_column) {
+          first_column = dirty_column;
+        }
+        end_column = (col + 1) * column_scale;
+      }
+    }
+    if (end_column != 0) {
+      VideoInvalidateRegion(
+          video, first_column, end_column,
+          (uint16_t)row * metadata->char_height,
+          (uint16_t)(row + 1) * metadata->char_height);
+    }
+  }
+}
+
 // ============================================================================
 // Retrace timing
 // ============================================================================
@@ -214,6 +382,9 @@ void VideoTick(VideoState* video, uint32_t cycles) {
     return;
   }
 
+  bool cursor_was_on = VideoIsCursorBlinkOn(video);
+  bool text_was_on = VideoIsTextBlinkOn(video);
+
   // Computed rather than stepped, because the platform advances the beam in
   // arrears - only when something actually looks at it - so cycles here can be
   // a whole frame's worth rather than a single instruction's.
@@ -227,6 +398,14 @@ void VideoTick(VideoState* video, uint32_t cycles) {
   const uint32_t scan_line = (uint32_t)video->scan_line + elapsed_scan_lines;
   video->frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
+
+  if (cursor_was_on != VideoIsCursorBlinkOn(video) &&
+      VideoIsCursorEnabled(video)) {
+    VideoInvalidateCursor(video);
+  }
+  if (text_was_on != VideoIsTextBlinkOn(video)) {
+    VideoInvalidateBlinkingText(video);
+  }
 }
 
 // The value the status port reads back, computed from where the CRT beam
@@ -336,14 +515,39 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
       break;
     case kVideoPortRegisterData:
       if (video->selected_register < kNumCRTCRegisters) {
-        video->registers[video->selected_register] = value;
+        uint8_t* selected = &video->registers[video->selected_register];
+        if (*selected == value) {
+          break;
+        }
+        if (video->selected_register == kCRTCRegisterCursorH ||
+            video->selected_register == kCRTCRegisterCursorL) {
+          VideoInvalidateCursor(video);
+          *selected = value;
+          VideoInvalidateCursor(video);
+        } else {
+          *selected = value;
+          if (video->selected_register == kCRTCRegisterStartAddressH ||
+              video->selected_register == kCRTCRegisterStartAddressL) {
+            VideoInvalidateAll(video);
+          } else if (
+              video->selected_register == kCRTCRegisterCursorStart ||
+              video->selected_register == kCRTCRegisterCursorEnd) {
+            VideoInvalidateCursor(video);
+          }
+        }
       }
       break;
     case kVideoPortControl:
-      video->control_register = value;
+      if (video->control_register != value) {
+        video->control_register = value;
+        VideoInvalidateAll(video);
+      }
       break;
     case kVideoPortColorSelect:
-      video->color_select_register = value;
+      if (video->color_select_register != value) {
+        video->color_select_register = value;
+        VideoInvalidateAll(video);
+      }
       break;
     default:
       // The status port is read only.
@@ -355,30 +559,87 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 // Rendering
 // ============================================================================
 
-void VideoRender(VideoState* video) {
-  if (!video->config || !video->config->write_pixel) {
-    return;
+static void VideoRenderBlankRegion(VideoState* video, VideoRegion region) {
+  RGB blank = video->adapter == kVideoAdapterCGA ? video->config->cga_palette[0]
+                                                 : video->config->background;
+  uint16_t end_x = region.origin.x + region.width;
+  uint16_t end_y = region.origin.y + region.height;
+  for (uint16_t y = region.origin.y; y < end_y; ++y) {
+    for (uint16_t x = region.origin.x; x < end_x; ++x) {
+      Position position = {.x = x, .y = y};
+      VideoWritePixel(video, position, blank);
+    }
+  }
+}
+
+static void VideoRenderDirtyRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
+  // Every mode divides the frame buffer into kVideoDirtyColumns equal columns,
+  // so a dirty column is 9 pixels wide on the MDA and 8 on the CGA.
+  uint16_t column_width =
+      VideoGetAdapterMetadata(video)->frame_buffer_width / kVideoDirtyColumns;
+  VideoRegion region = {
+      .origin = {.x = first_column * column_width, .y = first_y},
+      .width = (end_column - first_column) * column_width,
+      .height = end_y - first_y,
+  };
+  if (video->config->begin_render_region) {
+    video->config->begin_render_region(video, region);
   }
 
   if (!(video->control_register & kVideoControlVideoEnable)) {
-    // The video signal is disabled, so the display is blank. The BIOS leaves it
-    // this way while it reprograms the 6845.
-    const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-    RGB blank = video->adapter == kVideoAdapterCGA
-                    ? video->config->cga_palette[0]
-                    : video->config->background;
-    for (uint16_t y = 0; y < adapter->frame_buffer_height; ++y) {
-      for (uint16_t x = 0; x < adapter->frame_buffer_width; ++x) {
-        Position pixel_pos = {.x = x, .y = y};
-        VideoWritePixel(video, pixel_pos, blank);
-      }
-    }
+    VideoRenderBlankRegion(video, region);
+  } else if (video->adapter == kVideoAdapterCGA) {
+    CGARenderRegion(video, first_column, end_column, first_y, end_y);
+  } else {
+    MDARenderRegion(video, first_column, end_column, first_y, end_y);
+  }
+
+  if (video->config->end_render_region) {
+    video->config->end_render_region(video);
+  }
+}
+
+void VideoRender(VideoState* video) {
+  if (!video->config || !video->config->write_pixel ||
+      !video->dirty.any_dirty) {
     return;
   }
 
-  if (video->adapter == kVideoAdapterCGA) {
-    CGARenderScreen(video);
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  if (video->dirty.full_redraw) {
+    VideoRenderDirtyRegion(
+        video, 0, kVideoDirtyColumns, 0, adapter->frame_buffer_height);
   } else {
-    MDARenderScreen(video);
+    uint8_t group_count = (uint8_t)((adapter->frame_buffer_height +
+                                     kVideoDirtyScanLinesPerGroup - 1) /
+                                    kVideoDirtyScanLinesPerGroup);
+    for (uint8_t group = 0; group < group_count;) {
+      VideoDirtyRange range = video->dirty.ranges[group];
+      if (range.end_column == 0) {
+        ++group;
+        continue;
+      }
+
+      uint8_t end_group = group + 1;
+      while (end_group < group_count &&
+             video->dirty.ranges[end_group].first_column ==
+                 range.first_column &&
+             video->dirty.ranges[end_group].end_column == range.end_column) {
+        ++end_group;
+      }
+      uint16_t first_y = group * kVideoDirtyScanLinesPerGroup;
+      uint16_t end_y = end_group * kVideoDirtyScanLinesPerGroup;
+      if (end_y > adapter->frame_buffer_height) {
+        end_y = adapter->frame_buffer_height;
+      }
+      VideoRenderDirtyRegion(
+          video, range.first_column, range.end_column, first_y, end_y);
+      group = end_group;
+    }
   }
+
+  static const VideoDirtyState kEmptyDirtyState = {0};
+  video->dirty = kEmptyDirtyState;
 }

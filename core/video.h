@@ -581,6 +581,13 @@ typedef struct Position {
   uint16_t y;
 } Position;
 
+// A rectangular portion of the host frame buffer, in pixels.
+typedef struct VideoRegion {
+  Position origin;
+  uint16_t width;
+  uint16_t height;
+} VideoRegion;
+
 // Text mode character position. We use a different structure to avoid confusion
 // with Position, which is used for pixel coordinates.
 typedef struct TextPosition {
@@ -1157,6 +1164,39 @@ enum {
   kPortMapEntryVideo = 0x10,
 };
 
+enum {
+  // Every supported mode divides horizontally into 80 natural rendering
+  // units: text columns on the MDA and 80-column CGA, half-character cells in
+  // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
+  kVideoDirtyColumns = 80,
+  // Neighboring physical scan lines share one dirty horizontal range. This
+  // keeps the state small while bounding vertical overdraw to four lines.
+  kVideoDirtyScanLinesPerGroup = 4,
+  // MDA has the tallest frame buffer at 350 lines.
+  kVideoMaxFrameBufferHeight = 350,
+  kVideoDirtyGroupCount =
+      (kVideoMaxFrameBufferHeight + kVideoDirtyScanLinesPerGroup - 1) /
+      kVideoDirtyScanLinesPerGroup,
+};
+
+// Half-open horizontal dirty range [first_column, end_column). Both fields are
+// zero when the range is empty.
+typedef struct VideoDirtyRange {
+  uint8_t first_column;
+  uint8_t end_column;
+} VideoDirtyRange;
+
+typedef struct VideoDirtyState {
+  VideoDirtyRange ranges[kVideoDirtyGroupCount];
+  // At least one range is dirty. Avoids scanning the ranges on an unchanged
+  // frame.
+  bool any_dirty;
+  // The next render must replace the complete frame buffer. Used when a change
+  // cannot be represented as local VRAM damage, such as a mode or palette
+  // change.
+  bool full_redraw;
+} VideoDirtyState;
+
 // ============================================================================
 // Video state
 // ============================================================================
@@ -1187,10 +1227,9 @@ typedef struct VideoConfig {
   // The emulated video RAM, at least the adapter's vram_size bytes of it.
   // Required - the adapter reads and writes it directly.
   //
-  // The renderer is by far the heaviest reader of video RAM: it walks the
-  // whole framebuffer on every VideoRender(), so a callback per byte would
-  // cost an indirect call for each one. Writes still go through
-  // VideoWriteVRAM(), which is where the adapter gets to notice them.
+  // Rendering is the heaviest reader of video RAM, so a callback per byte
+  // would cost an indirect call in its inner loops. Writes still go through
+  // VideoWriteVRAM(), which marks the corresponding display region dirty.
   //
   // The caller owns the buffer and it must outlive the video state.
   uint8_t* vram;
@@ -1198,6 +1237,11 @@ typedef struct VideoConfig {
   // Callback to write an RGB pixel value to the real display, invoked from
   // VideoRender().
   void (*write_pixel)(struct VideoState* video, Position position, RGB rgb);
+  // Optional callbacks surrounding each dirty rectangular region emitted by
+  // VideoRender(). A retained display can use them to set a transfer window
+  // before the row-major pixel stream begins.
+  void (*begin_render_region)(struct VideoState* video, VideoRegion region);
+  void (*end_render_region)(struct VideoState* video);
 } VideoConfig;
 
 // Default video config.
@@ -1232,6 +1276,8 @@ static const VideoConfig kDefaultVideoConfig = {
 
     .vram = NULL,
     .write_pixel = NULL,
+    .begin_render_region = NULL,
+    .end_render_region = NULL,
 };
 
 // Video state.
@@ -1257,6 +1303,9 @@ typedef struct VideoState {
   uint32_t scan_line_cycles;
   // Number of frames since initialization. Drives blinking.
   uint32_t frames;
+
+  // Portions of the retained host display that no longer match video state.
+  VideoDirtyState dirty;
 } VideoState;
 
 // Initialize video state with the provided configuration.
@@ -1289,8 +1338,9 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 // whole frame's worth at once.
 void VideoTick(VideoState* video, uint32_t cycles);
 
-// Render the current display. Invokes the write_pixel callback to do the actual
-// pixel rendering.
+// Bring dirty portions of the retained host display up to date. Each region is
+// bracketed by the optional region callbacks and its pixels are passed to
+// write_pixel in row-major order. Does nothing when the display is unchanged.
 void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H
@@ -1358,6 +1408,12 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
 YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
+// Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
+// natural columns; vertical coordinates are physical frame-buffer scan lines.
+YAX86_PRIVATE void VideoInvalidateRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y);
+
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.
 YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
@@ -1387,11 +1443,25 @@ YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
 // address registers.
 YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
 
-// Render the current display in MDA text mode.
-YAX86_PRIVATE void MDARenderScreen(VideoState* video);
+// Whether the text mode cursor is currently drawn, and if so where. The offset
+// is relative to start_address in character cells, and is only written when
+// this returns true. The cursor is not drawn when it is disabled, when its
+// blink phase is off, or when it addresses a cell outside the display.
+YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+    const VideoState* video, const VideoModeMetadata* metadata,
+    uint16_t start_address, uint16_t* cursor_offset);
 
-// Render the current display on the CGA.
-YAX86_PRIVATE void CGARenderScreen(VideoState* video);
+// Render a dirty region of the current MDA text display. Pixels are emitted in
+// row-major order.
+YAX86_PRIVATE void MDARenderRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y);
+
+// Render a dirty region of the current CGA display. Pixels are emitted in
+// row-major order.
+YAX86_PRIVATE void CGARenderRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y);
 
 #endif  // YAX86_VIDEO_INTERNAL_H
 
@@ -2211,38 +2281,23 @@ YAX86_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
+  kMDACharHeight = 14,
   // Position of the underline within an MDA character cell.
   kMDAUnderlinePosition = 12,
-  // Attribute values are only meaningful in these three-bit fields, so the
-  // documented combinations are compared against them directly.
+  // Documented three-bit foreground and background combinations.
   kMDAAttributeNormal = 0x07,
   kMDAAttributeInverse = 0x00,
   kMDAAttributeUnderline = 0x01,
 };
 
-// Colors to draw a character cell with.
 typedef struct MDACellColors {
   const RGB* foreground;
   const RGB* background;
   bool underline;
 } MDACellColors;
 
-// Decode an MDA attribute byte. We only support the officially documented
-// combinations of values.
-//
-// Attribute byte structure:
-//   - Bit 7: blink (0 = normal, 1 = blink)
-//   - Bits 6-4: background
-//   - Bit 3: intense foreground (0 = normal, 1 = intense)
-//   - Bits 2-0: foreground
-//
-// Valid MDA character background and foreground attribute combinations:
-//   - Normal: background = 000, foreground = 111
-//   - Inverse video: background = 111, foreground = 000
-//   - Invisible: background = 000, foreground = 000
-//   - Underline: background = 000, foreground = 001
-//
-// Other combinations are undefined, but we will treat them as normal.
+// Decode the documented normal, inverse, invisible, underline, intensity and
+// blink combinations. Undefined combinations are rendered as normal text.
 static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   const VideoConfig* config = video->config;
   MDACellColors colors = {
@@ -2260,153 +2315,80 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 
   if (background_attr == kMDAAttributeInverse &&
       foreground_attr == kMDAAttributeNormal) {
-    // Normal video mode.
     colors.foreground = intense_aware_foreground;
   } else if (
       background_attr == kMDAAttributeNormal &&
       foreground_attr == kMDAAttributeInverse) {
-    // Inverse video mode.
     colors.foreground = &config->background;
     colors.background = &config->foreground;
   } else if (
       background_attr == kMDAAttributeInverse &&
       foreground_attr == kMDAAttributeInverse) {
-    // Invisible mode.
     colors.foreground = &config->background;
   } else if (
       background_attr == kMDAAttributeInverse &&
       foreground_attr == kMDAAttributeUnderline) {
-    // Underline mode.
     colors.underline = true;
     colors.foreground = intense_aware_foreground;
   } else {
-    // Other combinations are treated as normal.
     colors.foreground = intense_aware_foreground;
   }
 
-  // Blinking characters alternate between the character and blank. The blink
-  // attribute only applies if blinking is enabled in the mode control register.
   if ((attr_value & kVideoAttributeBlink) &&
       (video->control_register & kVideoControlEnableBlink) &&
       !VideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
     colors.underline = false;
   }
-
   return colors;
 }
 
-// Write a character to display in MDA text mode. char_address is the address of
-// the character's first byte in VRAM.
-static void MDAWriteChar(
-    VideoState* video, TextPosition char_pos, uint32_t char_address) {
-  const VideoModeMetadata* metadata =
-      &kVideoModeMetadata[kVideoModeMDAText80x25];
-  uint8_t char_value = VideoReadVRAMByte(video, char_address);
-  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
-  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
-  MDACellColors colors = MDADecodeAttribute(video, attr_value);
-
-  Position origin_pixel_pos = {
-      .x = char_pos.col * metadata->char_width,
-      .y = char_pos.row * metadata->char_height,
-  };
-  for (uint8_t y = 0; y < metadata->char_height; ++y) {
-    uint16_t row_bitmap;
-    // If underline, set entire underline row to foreground color.
-    if (y == kMDAUnderlinePosition && colors.underline) {
-      row_bitmap = 0xFFFF;
-    } else {
-      row_bitmap = char_bitmap[y];
-    }
-    for (uint8_t x = 0; x < metadata->char_width; ++x) {
-      Position pixel_pos = {
-          .x = origin_pixel_pos.x + x,
-          .y = origin_pixel_pos.y + y,
-      };
-      bool is_foreground =
-          (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
-      const RGB* pixel_rgb =
-          is_foreground ? colors.foreground : colors.background;
-      VideoWritePixel(video, pixel_pos, *pixel_rgb);
-    }
-  }
-}
-
-// Draw the text mode cursor over the character cell it occupies.
-static void MDADrawCursor(VideoState* video, uint16_t start_address) {
-  const VideoModeMetadata* metadata =
-      &kVideoModeMetadata[kVideoModeMDAText80x25];
-  // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
-  // the other three; it does not model the 1/16 and 1/32 field rate modes
-  // separately. The actual toggling comes from VideoIsCursorBlinkOn, which
-  // flips every 8 frames (see VideoTick), so the cursor is skipped entirely
-  // during the off half of each blink cycle.
-  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
-    return;
-  }
-  // The cursor address (R14/R15) and start address (R12/R13) are both
-  // character-unit VRAM addresses, so subtracting them gives the cursor's
-  // position relative to the top-left of whatever is currently scrolled into
-  // view. Both are independently wrapping 16-bit values, so the difference
-  // is masked into the 2048-character VRAM space (4KB VRAM / 2 bytes per
-  // character) rather than allowed to underflow or run past it.
-  uint16_t cursor_offset = (VideoGetCursorAddress(video) - start_address) &
-                           (metadata->vram_size / 2 - 1);
-  uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
-  // The 80x25 grid only covers 2000 of VRAM's 2048 addressable characters;
-  // if the cursor lands outside the visible grid it is legitimately
-  // off-screen, so nothing is drawn.
-  if (cursor_offset >= num_cells) {
-    return;
-  }
-
-  // R10/R11 select the first and last scan line of the cell to highlight
-  // (e.g. 11-12 of 0-13 for the default underline cursor). An out-of-range
-  // start leaves nothing valid to draw; an out-of-range end is clamped to the
-  // last scan line instead of discarding the whole cursor.
-  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
-  if (cursor_start >= metadata->char_height) {
-    return;
-  }
-  if (cursor_end >= metadata->char_height) {
-    cursor_end = metadata->char_height - 1;
-  }
-
-  // Recover the (col, row) the linear cursor_offset represents, and scale up
-  // to the pixel origin of that cell.
-  uint16_t origin_x =
-      (cursor_offset % metadata->columns) * metadata->char_width;
-  uint16_t origin_y =
-      (cursor_offset / metadata->columns) * metadata->char_height;
-  // Paint a full-width band across the selected scan lines in the plain
-  // foreground color - the cursor ignores the character's own attribute
-  // byte.
-  for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
-    for (uint8_t x = 0; x < metadata->char_width; ++x) {
-      Position pixel_pos = {.x = origin_x + x, .y = origin_y + y};
-      VideoWritePixel(video, pixel_pos, video->config->foreground);
-    }
-  }
-}
-
-// Render the current display in MDA text mode.
-YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
+// Render a rectangular slice directly from text VRAM. Iterating scan lines
+// first makes write_pixel a row-major stream suitable for an SPI window.
+YAX86_PRIVATE void MDARenderRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata =
       &kVideoModeMetadata[kVideoModeMDAText80x25];
   uint16_t start_address = VideoGetStartAddress(video);
-  for (uint8_t row = 0; row < metadata->rows; ++row) {
-    for (uint8_t col = 0; col < metadata->columns; ++col) {
-      TextPosition char_pos = {.col = col, .row = row};
-      // Each character takes 2 bytes (char + attr).
-      uint32_t char_address =
-          ((uint32_t)start_address + row * metadata->columns + col) * 2;
+  uint16_t cursor_offset = 0;
+  bool cursor_visible = VideoGetVisibleCursorOffset(
+      video, metadata, start_address, &cursor_offset);
+  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
+
+  for (uint16_t y = first_y; y < end_y; ++y) {
+    uint8_t row = (uint8_t)(y / kMDACharHeight);
+    uint8_t char_scan_line = (uint8_t)(y % kMDACharHeight);
+    for (uint8_t col = first_column; col < end_column; ++col) {
+      uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
+      uint32_t char_address = ((uint32_t)start_address + cell_offset) * 2;
       char_address &= metadata->vram_size - 1;
-      MDAWriteChar(video, char_pos, char_address);
+      uint8_t char_value = VideoReadVRAMByte(video, char_address);
+      uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+      MDACellColors colors = MDADecodeAttribute(video, attr_value);
+
+      uint16_t row_bitmap =
+          char_scan_line == kMDAUnderlinePosition && colors.underline
+              ? 0xFFFF
+              : kFontMDA9x14Bitmap[char_value][char_scan_line];
+      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
+                              char_scan_line >= cursor_start &&
+                              char_scan_line <= cursor_end;
+      for (uint8_t x = 0; x < metadata->char_width; ++x) {
+        bool is_foreground =
+            (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+        const RGB* rgb = cursor_scan_line ? &video->config->foreground
+                                          : (is_foreground ? colors.foreground
+                                                           : colors.background);
+        Position position = {
+            .x = (uint16_t)col * metadata->char_width + x,
+            .y = y,
+        };
+        VideoWritePixel(video, position, *rgb);
+      }
     }
   }
-  MDADrawCursor(video, start_address);
 }
 
 
@@ -2426,12 +2408,20 @@ YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
+  kCGACharHeight = 8,
+  kCGA40ColumnCount = 40,
+  kCGA40ColumnScale = 2,
+  kCGA320x200HorizontalScale = 2,
   // Number of pixels per byte in 320x200 graphics mode.
   kCGAPixelsPerByte320x200 = 4,
   // Number of bits per pixel in 320x200 graphics mode.
   kCGABitsPerPixel320x200 = 2,
   // Mask of a single pixel in 320x200 graphics mode.
   kCGAPixelMask320x200 = 0x03,
+  // Number of frame buffer pixels per byte in 320x200 graphics mode, after
+  // each pixel is doubled horizontally.
+  kCGAFrameBufferPixelsPerByte320x200 =
+      kCGAPixelsPerByte320x200 * kCGA320x200HorizontalScale,
   // Number of pixels per byte in 640x200 graphics mode.
   kCGAPixelsPerByte640x200 = 8,
   // Mask of a graphics mode address within the half of VRAM holding either the
@@ -2439,163 +2429,24 @@ enum {
   kCGAGraphicsScanLineAddressMask = kCGAGraphicsOddScanLineOffset - 1,
 };
 
-// Look up a color in the configured CGA palette.
+// The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
+// comes from the color select register instead. The palette-select bit chooses
+// the first two, unless black-and-white mode selects the third.
+static const uint8_t kCGAGraphicsPalettes[3][3] = {
+    // Palette 0: green, red, brown.
+    {2, 4, 6},
+    // Palette 1: cyan, magenta, light gray.
+    {3, 5, 7},
+    // Black and white: cyan, red, light gray.
+    {3, 4, 7},
+};
+
 static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
   return video->config->cga_palette[color & (kNumCGAColors - 1)];
 }
 
-// Write a pixel, expanding it horizontally to fill the frame buffer when the
-// mode's horizontal resolution is lower than the frame buffer's. The CGA scans
-// the same number of dots across the screen in every mode, so a 320 pixel wide
-// mode is drawn with each pixel twice as wide.
-static void CGAWritePixels(
-    VideoState* video, uint16_t x, uint16_t y, uint8_t scale, RGB rgb) {
-  for (uint8_t i = 0; i < scale; ++i) {
-    Position pixel_pos = {.x = x + i, .y = y};
-    VideoWritePixel(video, pixel_pos, rgb);
-  }
-}
-
-// ============================================================================
-// Text modes 0x00 - 0x03
-// ============================================================================
-
-// Write a character to display in a CGA text mode. char_address is the address
-// of the character's first byte in VRAM, and scale is the horizontal pixel
-// scaling factor for the mode.
-static void CGAWriteChar(
-    VideoState* video, const VideoModeMetadata* metadata, TextPosition char_pos,
-    uint32_t char_address, uint8_t scale) {
-  uint8_t char_value = VideoReadVRAMByte(video, char_address);
-  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
-  const uint8_t* char_bitmap = kFontCGA8x8Bitmap[char_value];
-
-  uint8_t foreground_color = attr_value & (kVideoAttributeForegroundMask |
-                                           kVideoAttributeIntenseForeground);
-  uint8_t background_color = (attr_value & kVideoAttributeBackgroundMask) >>
-                             kVideoAttributeBackgroundShift;
-  bool blink_enabled =
-      (video->control_register & kVideoControlEnableBlink) != 0;
-  if (blink_enabled) {
-    // Attribute bit 7 means blinking, so only eight background colors are
-    // available.
-    if ((attr_value & kVideoAttributeBlink) && !VideoIsTextBlinkOn(video)) {
-      foreground_color = background_color;
-    }
-  } else {
-    // Attribute bit 7 is the background intensity instead, giving all sixteen
-    // background colors.
-    if (attr_value & kVideoAttributeBlink) {
-      background_color |= kNumCGAColors / 2;
-    }
-  }
-
-  RGB foreground = CGAGetColor(video, foreground_color);
-  RGB background = CGAGetColor(video, background_color);
-  Position origin_pixel_pos = {
-      .x = char_pos.col * metadata->char_width * scale,
-      .y = char_pos.row * metadata->char_height,
-  };
-  for (uint8_t y = 0; y < metadata->char_height; ++y) {
-    uint8_t row_bitmap = char_bitmap[y];
-    for (uint8_t x = 0; x < metadata->char_width; ++x) {
-      bool is_foreground =
-          (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
-      CGAWritePixels(
-          video, origin_pixel_pos.x + x * scale, origin_pixel_pos.y + y, scale,
-          is_foreground ? foreground : background);
-    }
-  }
-}
-
-// Draw the text mode cursor over the character cell it occupies.
-static void CGADrawCursor(
-    VideoState* video, const VideoModeMetadata* metadata,
-    uint16_t start_address, uint8_t scale) {
-  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
-    return;
-  }
-  uint16_t cursor_offset = (VideoGetCursorAddress(video) - start_address) &
-                           (metadata->vram_size / 2 - 1);
-  uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
-  if (cursor_offset >= num_cells) {
-    return;
-  }
-
-  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
-  if (cursor_start >= metadata->char_height) {
-    return;
-  }
-  if (cursor_end >= metadata->char_height) {
-    cursor_end = metadata->char_height - 1;
-  }
-
-  // The cursor is drawn in the foreground color of the cell it occupies.
-  uint32_t char_address = ((uint32_t)start_address + cursor_offset) * 2;
-  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
-  RGB foreground = CGAGetColor(
-      video, attr_value & (kVideoAttributeForegroundMask |
-                           kVideoAttributeIntenseForeground));
-
-  uint16_t origin_x =
-      (cursor_offset % metadata->columns) * metadata->char_width * scale;
-  uint16_t origin_y =
-      (cursor_offset / metadata->columns) * metadata->char_height;
-  for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
-    for (uint8_t x = 0; x < metadata->char_width; ++x) {
-      CGAWritePixels(
-          video, origin_x + x * scale, origin_y + y, scale, foreground);
-    }
-  }
-}
-
-// Render the current display in a CGA text mode.
-static void CGARenderText(
-    VideoState* video, const VideoModeMetadata* metadata) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-  uint8_t scale = (uint8_t)(adapter->frame_buffer_width / metadata->width);
-  uint16_t start_address = VideoGetStartAddress(video);
-
-  for (uint8_t row = 0; row < metadata->rows; ++row) {
-    for (uint8_t col = 0; col < metadata->columns; ++col) {
-      TextPosition char_pos = {.col = col, .row = row};
-      // Each character takes 2 bytes (char + attr).
-      uint32_t char_address =
-          ((uint32_t)start_address + row * metadata->columns + col) * 2;
-      CGAWriteChar(video, metadata, char_pos, char_address, scale);
-    }
-  }
-  CGADrawCursor(video, metadata, start_address, scale);
-}
-
-// ============================================================================
-// Graphics modes 0x04 - 0x06
-// ============================================================================
-
-// The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
-// comes from the color select register instead. The palette is chosen by the
-// palette bit of the color select register, except that the black and white bit
-// of the mode control register overrides both.
-static const uint8_t kCGAGraphicsPalettes[3][3] = {
-    // Palette 0: green, red, brown
-    {2, 4, 6},
-    // Palette 1: cyan, magenta, light gray
-    {3, 5, 7},
-    // Black and white: cyan, red, light gray
-    {3, 4, 7},
-};
-
-// Address of the first byte of a graphics mode scan line. Graphics VRAM is
-// interleaved: even scan lines live in the first half of VRAM and odd scan
-// lines in the second.
-//
-// The 6845 counts in character units, and a graphics mode fetches two bytes per
-// unit, so the start address it holds is doubled to get a byte address. It also
-// only addresses one half of VRAM - the scan line's parity picks the half - so
-// it wraps within that half rather than across the whole of VRAM. The BIOS
-// zeroes the start address on a mode set, so this only matters to software that
-// page flips or scrolls by writing it directly.
+// Address of the first byte of a graphics mode scan line. Even and odd scan
+// lines occupy separate halves of CGA VRAM.
 static inline uint32_t CGAGetScanLineAddress(
     const VideoState* video, uint16_t y) {
   uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
@@ -2604,13 +2455,70 @@ static inline uint32_t CGAGetScanLineAddress(
   return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
 }
 
-// Render the current display in 320x200 graphics mode.
-static void CGARenderGraphics320x200(
-    VideoState* video, const VideoModeMetadata* metadata) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-  uint8_t scale = (uint8_t)(adapter->frame_buffer_width / metadata->width);
+static void CGARenderTextRegion(
+    VideoState* video, const VideoModeMetadata* metadata, uint8_t first_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
+  uint8_t scale =
+      metadata->columns == kCGA40ColumnCount ? kCGA40ColumnScale : 1;
+  uint8_t first_char = scale == kCGA40ColumnScale
+                           ? first_column / kCGA40ColumnScale
+                           : first_column;
+  uint8_t end_char =
+      scale == kCGA40ColumnScale ? end_column / kCGA40ColumnScale : end_column;
+  uint16_t start_address = VideoGetStartAddress(video);
+  uint16_t cursor_offset = 0;
+  bool cursor_visible = VideoGetVisibleCursorOffset(
+      video, metadata, start_address, &cursor_offset);
+  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
 
-  // Resolve the four palette entries once up front.
+  for (uint16_t y = first_y; y < end_y; ++y) {
+    uint8_t row = (uint8_t)(y / kCGACharHeight);
+    uint8_t char_scan_line = (uint8_t)(y % kCGACharHeight);
+    for (uint8_t col = first_char; col < end_char; ++col) {
+      uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
+      uint32_t char_address = ((uint32_t)start_address + cell_offset) * 2;
+      uint8_t char_value = VideoReadVRAMByte(video, char_address);
+      uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+
+      uint8_t foreground_color =
+          attr_value &
+          (kVideoAttributeForegroundMask | kVideoAttributeIntenseForeground);
+      // The cursor uses the cell's foreground even when that cell's blinking
+      // character is currently hidden.
+      RGB cursor_foreground = CGAGetColor(video, foreground_color);
+      uint8_t background_color = (attr_value & kVideoAttributeBackgroundMask) >>
+                                 kVideoAttributeBackgroundShift;
+      if (video->control_register & kVideoControlEnableBlink) {
+        if ((attr_value & kVideoAttributeBlink) && !VideoIsTextBlinkOn(video)) {
+          foreground_color = background_color;
+        }
+      } else if (attr_value & kVideoAttributeBlink) {
+        background_color |= kNumCGAColors / 2;
+      }
+
+      RGB foreground = CGAGetColor(video, foreground_color);
+      RGB background = CGAGetColor(video, background_color);
+      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
+                              char_scan_line >= cursor_start &&
+                              char_scan_line <= cursor_end;
+      uint8_t row_bitmap = kFontCGA8x8Bitmap[char_value][char_scan_line];
+      for (uint8_t x = 0; x < metadata->char_width; ++x) {
+        bool is_foreground =
+            (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+        RGB rgb = cursor_scan_line ? cursor_foreground
+                                   : (is_foreground ? foreground : background);
+        uint16_t pixel_x = ((uint16_t)col * metadata->char_width + x) * scale;
+        for (uint8_t i = 0; i < scale; ++i) {
+          Position position = {.x = pixel_x + i, .y = y};
+          VideoWritePixel(video, position, rgb);
+        }
+      }
+    }
+  }
+}
+
+static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
     palette_colors = kCGAGraphicsPalettes[2];
@@ -2623,87 +2531,92 @@ static void CGARenderGraphics320x200(
       (video->color_select_register & kCGAColorSelectPaletteIntensity)
           ? kNumCGAColors / 2
           : 0;
-  RGB palette[4];
   palette[0] = CGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
   for (uint8_t i = 0; i < 3; ++i) {
     palette[i + 1] = CGAGetColor(video, palette_colors[i] | intensity);
   }
+}
 
-  // Each VRAM byte holds several pixels, so the loop runs over bytes and
-  // unpacks each one, rather than re-reading the same byte once per pixel.
-  uint16_t bytes_per_scan_line = metadata->width / kCGAPixelsPerByte320x200;
-  for (uint16_t y = 0; y < metadata->height; ++y) {
+static void CGARenderGraphics320x200Region(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
+  RGB palette[4];
+  CGAResolve320x200Palette(video, palette);
+
+  for (uint16_t y = first_y; y < end_y; ++y) {
     uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
-    for (uint16_t byte_index = 0; byte_index < bytes_per_scan_line;
-         ++byte_index) {
+    for (uint8_t byte_column = first_column; byte_column < end_column;
+         ++byte_column) {
       uint8_t byte_value =
-          VideoReadVRAMByte(video, scan_line_address + byte_index);
-      uint16_t first_x = byte_index * kCGAPixelsPerByte320x200;
+          VideoReadVRAMByte(video, scan_line_address + byte_column);
+      uint16_t first_x = byte_column * kCGAFrameBufferPixelsPerByte320x200;
       for (uint8_t i = 0; i < kCGAPixelsPerByte320x200; ++i) {
-        // The leftmost pixel is in the most significant bits.
         uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 - i) *
                                   kCGABitsPerPixel320x200);
         uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
-        CGAWritePixels(video, (first_x + i) * scale, y, scale, palette[color]);
+        for (uint8_t scale_x = 0; scale_x < kCGA320x200HorizontalScale;
+             ++scale_x) {
+          Position position = {
+              .x = first_x + i * kCGA320x200HorizontalScale + scale_x,
+              .y = y,
+          };
+          VideoWritePixel(video, position, palette[color]);
+        }
       }
     }
   }
 }
 
-// Render the current display in 640x200 graphics mode.
-static void CGARenderGraphics640x200(
-    VideoState* video, const VideoModeMetadata* metadata) {
-  // The foreground color comes from the color select register, and the
-  // background is always black.
+static void CGARenderGraphics640x200Region(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
   RGB foreground = CGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
   RGB background = CGAGetColor(video, 0);
 
-  // As in 320x200 mode, each VRAM byte is fetched once and unpacked into the
-  // eight pixels it holds.
-  uint16_t bytes_per_scan_line = metadata->width / kCGAPixelsPerByte640x200;
-  for (uint16_t y = 0; y < metadata->height; ++y) {
+  for (uint16_t y = first_y; y < end_y; ++y) {
     uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
-    for (uint16_t byte_index = 0; byte_index < bytes_per_scan_line;
-         ++byte_index) {
+    for (uint8_t byte_column = first_column; byte_column < end_column;
+         ++byte_column) {
       uint8_t byte_value =
-          VideoReadVRAMByte(video, scan_line_address + byte_index);
-      uint16_t first_x = byte_index * kCGAPixelsPerByte640x200;
+          VideoReadVRAMByte(video, scan_line_address + byte_column);
+      uint16_t first_x = byte_column * kCGAPixelsPerByte640x200;
       for (uint8_t i = 0; i < kCGAPixelsPerByte640x200; ++i) {
-        // The leftmost pixel is in the most significant bit.
         uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 - i);
         bool is_foreground = (byte_value >> shift) & 1;
-        Position pixel_pos = {.x = first_x + i, .y = y};
+        Position position = {.x = first_x + i, .y = y};
         VideoWritePixel(
-            video, pixel_pos, is_foreground ? foreground : background);
+            video, position, is_foreground ? foreground : background);
       }
     }
   }
 }
 
-// Render the current display on the CGA.
-YAX86_PRIVATE void CGARenderScreen(VideoState* video) {
+YAX86_PRIVATE void CGARenderRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   switch (metadata->mode) {
     case kVideoModeCGAText40x25Mono:
     case kVideoModeCGAText40x25Color:
     case kVideoModeCGAText80x25Mono:
     case kVideoModeCGAText80x25Color:
-      CGARenderText(video, metadata);
+      CGARenderTextRegion(
+          video, metadata, first_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics320x200:
     case kVideoModeCGAGraphics320x200Alt:
-      CGARenderGraphics320x200(video, metadata);
+      CGARenderGraphics320x200Region(
+          video, first_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics640x200:
-      CGARenderGraphics640x200(video, metadata);
+      CGARenderGraphics640x200Region(
+          video, first_column, end_column, first_y, end_y);
       break;
     default:
-      // Not reachable - VideoGetMode() only ever returns a CGA mode on the CGA.
-      // The branch exists so that the switch covers the enum.
       break;
   }
 }
@@ -2749,7 +2662,17 @@ enum {
 
   // Value returned for reads that decode to nothing.
   kVideoUnmappedPortValue = 0xFF,
+
+  kVideoTextColumns40 = 40,
+  kVideoTextColumns80 = 80,
+  kVideoText40ColumnScale = 2,
+  kVideoText80ColumnScale = 1,
 };
+
+static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address);
+static void VideoInvalidateCursor(VideoState* video);
+static void VideoInvalidateBlinkingText(VideoState* video);
+static void VideoInvalidateAll(VideoState* video);
 
 const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
@@ -2781,10 +2704,15 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
     return;
   }
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  // Writes stay funnelled through here, rather than going straight to the
-  // buffer the way reads do, so that the adapter has a single place to notice
-  // them - which is what tracking dirty regions of the framebuffer would need.
-  video->config->vram[address & (vram_size - 1)] = value;
+  address &= vram_size - 1;
+  if (video->config->vram[address] == value) {
+    return;
+  }
+  video->config->vram[address] = value;
+  if (video->dirty.full_redraw) {
+    return;
+  }
+  VideoInvalidateVRAMAddress(video, address);
 }
 
 YAX86_PRIVATE void VideoWritePixel(
@@ -2829,6 +2757,7 @@ void VideoInit(VideoState* video, VideoConfig* config) {
     video->registers[i] = default_registers[i];
   }
   video->control_register = adapter->default_control_register;
+  VideoInvalidateAll(video);
 
   for (uint32_t i = 0; i < adapter->vram_size; i += 2) {
     VideoWriteVRAMByte(video, i, ' ');
@@ -2910,6 +2839,158 @@ YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
   return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
+YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+    const VideoState* video, const VideoModeMetadata* metadata,
+    uint16_t start_address, uint16_t* cursor_offset) {
+  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
+    return false;
+  }
+  *cursor_offset = (VideoGetCursorAddress(video) - start_address) &
+                   (metadata->vram_size / 2 - 1);
+  return *cursor_offset < (uint16_t)metadata->columns * metadata->rows;
+}
+
+// ============================================================================
+// Dirty regions
+// ============================================================================
+
+static void VideoDirtyRangeAdd(
+    VideoDirtyRange* range, uint8_t first_column, uint8_t end_column) {
+  if (range->end_column == 0) {
+    range->first_column = first_column;
+    range->end_column = end_column;
+    return;
+  }
+  if (first_column < range->first_column) {
+    range->first_column = first_column;
+  }
+  if (end_column > range->end_column) {
+    range->end_column = end_column;
+  }
+}
+
+YAX86_PRIVATE void VideoInvalidateRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  if (first_column >= end_column || end_column > kVideoDirtyColumns ||
+      first_y >= end_y || first_y >= adapter->frame_buffer_height) {
+    return;
+  }
+  if (end_y > adapter->frame_buffer_height) {
+    end_y = adapter->frame_buffer_height;
+  }
+
+  uint8_t first_group = first_y / kVideoDirtyScanLinesPerGroup;
+  uint8_t end_group = (uint8_t)((end_y - 1) / kVideoDirtyScanLinesPerGroup);
+  for (uint8_t group = first_group; group <= end_group; ++group) {
+    VideoDirtyRangeAdd(&video->dirty.ranges[group], first_column, end_column);
+  }
+  video->dirty.any_dirty = true;
+}
+
+static void VideoInvalidateAll(VideoState* video) {
+  video->dirty.any_dirty = true;
+  video->dirty.full_redraw = true;
+}
+
+static void VideoInvalidateTextCell(
+    VideoState* video, const VideoModeMetadata* metadata,
+    uint16_t cell_offset) {
+  if (cell_offset >= (uint16_t)metadata->columns * metadata->rows) {
+    return;
+  }
+  uint8_t row;
+  uint8_t col;
+  uint8_t column_scale;
+  if (metadata->columns == kVideoTextColumns40) {
+    row = (uint8_t)(cell_offset / kVideoTextColumns40);
+    col = (uint8_t)(cell_offset % kVideoTextColumns40);
+    column_scale = kVideoText40ColumnScale;
+  } else {
+    row = (uint8_t)(cell_offset / kVideoTextColumns80);
+    col = (uint8_t)(cell_offset % kVideoTextColumns80);
+    column_scale = kVideoText80ColumnScale;
+  }
+  VideoInvalidateRegion(
+      video, col * column_scale, (col + 1) * column_scale,
+      (uint16_t)row * metadata->char_height,
+      (uint16_t)(row + 1) * metadata->char_height);
+}
+
+static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  if (metadata->type == kVideoModeText) {
+    uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
+    uint16_t character_address = (uint16_t)(address / 2);
+    uint16_t cell_offset =
+        (character_address - VideoGetStartAddress(video)) & character_mask;
+    VideoInvalidateTextCell(video, metadata, cell_offset);
+    return;
+  }
+
+  // Each half of CGA graphics VRAM holds either the even or odd scan lines.
+  uint32_t half_mask = kCGAGraphicsOddScanLineOffset - 1;
+  uint32_t start = (uint32_t)VideoGetStartAddress(video) * 2 & half_mask;
+  uint32_t offset = ((address & half_mask) - start) & half_mask;
+  uint32_t visible_bytes =
+      (metadata->height / 2) * kCGAGraphicsBytesPerScanLine;
+  if (offset >= visible_bytes) {
+    return;
+  }
+  uint16_t row_in_half = (uint16_t)(offset / kCGAGraphicsBytesPerScanLine);
+  uint8_t byte_column = offset % kCGAGraphicsBytesPerScanLine;
+  uint16_t y =
+      row_in_half * 2 + (address >= kCGAGraphicsOddScanLineOffset ? 1 : 0);
+  VideoInvalidateRegion(video, byte_column, byte_column + 1, y, y + 1);
+}
+
+static void VideoInvalidateCursor(VideoState* video) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  if (metadata->type != kVideoModeText) {
+    return;
+  }
+  uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
+  uint16_t cursor_offset =
+      (VideoGetCursorAddress(video) - VideoGetStartAddress(video)) &
+      character_mask;
+  VideoInvalidateTextCell(video, metadata, cursor_offset);
+}
+
+static void VideoInvalidateBlinkingText(VideoState* video) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  if (metadata->type != kVideoModeText ||
+      !(video->control_register & kVideoControlEnableBlink)) {
+    return;
+  }
+
+  uint16_t start_address = VideoGetStartAddress(video);
+  uint8_t column_scale = metadata->columns == kVideoTextColumns40
+                             ? kVideoText40ColumnScale
+                             : kVideoText80ColumnScale;
+  for (uint8_t row = 0; row < metadata->rows; ++row) {
+    uint8_t first_column = kVideoDirtyColumns;
+    uint8_t end_column = 0;
+    for (uint8_t col = 0; col < metadata->columns; ++col) {
+      uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
+      uint32_t attr_address = ((uint32_t)start_address + cell_offset) * 2 + 1;
+      if (VideoReadVRAMByte(video, attr_address) & kVideoAttributeBlink) {
+        uint8_t dirty_column = col * column_scale;
+        if (dirty_column < first_column) {
+          first_column = dirty_column;
+        }
+        end_column = (col + 1) * column_scale;
+      }
+    }
+    if (end_column != 0) {
+      VideoInvalidateRegion(
+          video, first_column, end_column,
+          (uint16_t)row * metadata->char_height,
+          (uint16_t)(row + 1) * metadata->char_height);
+    }
+  }
+}
+
 // ============================================================================
 // Retrace timing
 // ============================================================================
@@ -2934,6 +3015,9 @@ void VideoTick(VideoState* video, uint32_t cycles) {
     return;
   }
 
+  bool cursor_was_on = VideoIsCursorBlinkOn(video);
+  bool text_was_on = VideoIsTextBlinkOn(video);
+
   // Computed rather than stepped, because the platform advances the beam in
   // arrears - only when something actually looks at it - so cycles here can be
   // a whole frame's worth rather than a single instruction's.
@@ -2947,6 +3031,14 @@ void VideoTick(VideoState* video, uint32_t cycles) {
   const uint32_t scan_line = (uint32_t)video->scan_line + elapsed_scan_lines;
   video->frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
+
+  if (cursor_was_on != VideoIsCursorBlinkOn(video) &&
+      VideoIsCursorEnabled(video)) {
+    VideoInvalidateCursor(video);
+  }
+  if (text_was_on != VideoIsTextBlinkOn(video)) {
+    VideoInvalidateBlinkingText(video);
+  }
 }
 
 // The value the status port reads back, computed from where the CRT beam
@@ -3056,14 +3148,39 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
       break;
     case kVideoPortRegisterData:
       if (video->selected_register < kNumCRTCRegisters) {
-        video->registers[video->selected_register] = value;
+        uint8_t* selected = &video->registers[video->selected_register];
+        if (*selected == value) {
+          break;
+        }
+        if (video->selected_register == kCRTCRegisterCursorH ||
+            video->selected_register == kCRTCRegisterCursorL) {
+          VideoInvalidateCursor(video);
+          *selected = value;
+          VideoInvalidateCursor(video);
+        } else {
+          *selected = value;
+          if (video->selected_register == kCRTCRegisterStartAddressH ||
+              video->selected_register == kCRTCRegisterStartAddressL) {
+            VideoInvalidateAll(video);
+          } else if (
+              video->selected_register == kCRTCRegisterCursorStart ||
+              video->selected_register == kCRTCRegisterCursorEnd) {
+            VideoInvalidateCursor(video);
+          }
+        }
       }
       break;
     case kVideoPortControl:
-      video->control_register = value;
+      if (video->control_register != value) {
+        video->control_register = value;
+        VideoInvalidateAll(video);
+      }
       break;
     case kVideoPortColorSelect:
-      video->color_select_register = value;
+      if (video->color_select_register != value) {
+        video->color_select_register = value;
+        VideoInvalidateAll(video);
+      }
       break;
     default:
       // The status port is read only.
@@ -3075,32 +3192,89 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 // Rendering
 // ============================================================================
 
-void VideoRender(VideoState* video) {
-  if (!video->config || !video->config->write_pixel) {
-    return;
+static void VideoRenderBlankRegion(VideoState* video, VideoRegion region) {
+  RGB blank = video->adapter == kVideoAdapterCGA ? video->config->cga_palette[0]
+                                                 : video->config->background;
+  uint16_t end_x = region.origin.x + region.width;
+  uint16_t end_y = region.origin.y + region.height;
+  for (uint16_t y = region.origin.y; y < end_y; ++y) {
+    for (uint16_t x = region.origin.x; x < end_x; ++x) {
+      Position position = {.x = x, .y = y};
+      VideoWritePixel(video, position, blank);
+    }
+  }
+}
+
+static void VideoRenderDirtyRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
+  // Every mode divides the frame buffer into kVideoDirtyColumns equal columns,
+  // so a dirty column is 9 pixels wide on the MDA and 8 on the CGA.
+  uint16_t column_width =
+      VideoGetAdapterMetadata(video)->frame_buffer_width / kVideoDirtyColumns;
+  VideoRegion region = {
+      .origin = {.x = first_column * column_width, .y = first_y},
+      .width = (end_column - first_column) * column_width,
+      .height = end_y - first_y,
+  };
+  if (video->config->begin_render_region) {
+    video->config->begin_render_region(video, region);
   }
 
   if (!(video->control_register & kVideoControlVideoEnable)) {
-    // The video signal is disabled, so the display is blank. The BIOS leaves it
-    // this way while it reprograms the 6845.
-    const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-    RGB blank = video->adapter == kVideoAdapterCGA
-                    ? video->config->cga_palette[0]
-                    : video->config->background;
-    for (uint16_t y = 0; y < adapter->frame_buffer_height; ++y) {
-      for (uint16_t x = 0; x < adapter->frame_buffer_width; ++x) {
-        Position pixel_pos = {.x = x, .y = y};
-        VideoWritePixel(video, pixel_pos, blank);
-      }
-    }
+    VideoRenderBlankRegion(video, region);
+  } else if (video->adapter == kVideoAdapterCGA) {
+    CGARenderRegion(video, first_column, end_column, first_y, end_y);
+  } else {
+    MDARenderRegion(video, first_column, end_column, first_y, end_y);
+  }
+
+  if (video->config->end_render_region) {
+    video->config->end_render_region(video);
+  }
+}
+
+void VideoRender(VideoState* video) {
+  if (!video->config || !video->config->write_pixel ||
+      !video->dirty.any_dirty) {
     return;
   }
 
-  if (video->adapter == kVideoAdapterCGA) {
-    CGARenderScreen(video);
+  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  if (video->dirty.full_redraw) {
+    VideoRenderDirtyRegion(
+        video, 0, kVideoDirtyColumns, 0, adapter->frame_buffer_height);
   } else {
-    MDARenderScreen(video);
+    uint8_t group_count = (uint8_t)((adapter->frame_buffer_height +
+                                     kVideoDirtyScanLinesPerGroup - 1) /
+                                    kVideoDirtyScanLinesPerGroup);
+    for (uint8_t group = 0; group < group_count;) {
+      VideoDirtyRange range = video->dirty.ranges[group];
+      if (range.end_column == 0) {
+        ++group;
+        continue;
+      }
+
+      uint8_t end_group = group + 1;
+      while (end_group < group_count &&
+             video->dirty.ranges[end_group].first_column ==
+                 range.first_column &&
+             video->dirty.ranges[end_group].end_column == range.end_column) {
+        ++end_group;
+      }
+      uint16_t first_y = group * kVideoDirtyScanLinesPerGroup;
+      uint16_t end_y = end_group * kVideoDirtyScanLinesPerGroup;
+      if (end_y > adapter->frame_buffer_height) {
+        end_y = adapter->frame_buffer_height;
+      }
+      VideoRenderDirtyRegion(
+          video, range.first_column, range.end_column, first_y, end_y);
+      group = end_group;
+    }
   }
+
+  static const VideoDirtyState kEmptyDirtyState = {0};
+  video->dirty = kEmptyDirtyState;
 }
 
 

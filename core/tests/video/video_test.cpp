@@ -9,6 +9,16 @@ namespace {
 
 using namespace video_test;
 
+TEST(VideoDirtyStateTest, RangeStorageIsZeroInitializedAndCompact) {
+  VideoDirtyState dirty = {0};
+  EXPECT_EQ(
+      sizeof(dirty.ranges), static_cast<size_t>(kVideoDirtyGroupCount * 2));
+  EXPECT_EQ(sizeof(dirty), sizeof(dirty.ranges) + 2);
+  for (const VideoDirtyRange& range : dirty.ranges) {
+    EXPECT_EQ(range.first_column, range.end_column);
+  }
+}
+
 class VideoTimingTest : public VideoTestBase,
                         public ::testing::WithParamInterface<VideoAdapter> {
  protected:

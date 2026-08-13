@@ -22,6 +22,12 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
 YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
+// Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
+// natural columns; vertical coordinates are physical frame-buffer scan lines.
+YAX86_PRIVATE void VideoInvalidateRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y);
+
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.
 YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
@@ -51,10 +57,24 @@ YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
 // address registers.
 YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
 
-// Render the current display in MDA text mode.
-YAX86_PRIVATE void MDARenderScreen(VideoState* video);
+// Whether the text mode cursor is currently drawn, and if so where. The offset
+// is relative to start_address in character cells, and is only written when
+// this returns true. The cursor is not drawn when it is disabled, when its
+// blink phase is off, or when it addresses a cell outside the display.
+YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+    const VideoState* video, const VideoModeMetadata* metadata,
+    uint16_t start_address, uint16_t* cursor_offset);
 
-// Render the current display on the CGA.
-YAX86_PRIVATE void CGARenderScreen(VideoState* video);
+// Render a dirty region of the current MDA text display. Pixels are emitted in
+// row-major order.
+YAX86_PRIVATE void MDARenderRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y);
+
+// Render a dirty region of the current CGA display. Pixels are emitted in
+// row-major order.
+YAX86_PRIVATE void CGARenderRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y);
 
 #endif  // YAX86_VIDEO_INTERNAL_H

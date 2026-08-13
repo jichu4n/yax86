@@ -112,6 +112,23 @@ TEST_F(MDATest, RenderCharacterNormal) {
   EXPECT_EQ(foreground_pixels + background_pixels, kCharWidth * kCharHeight);
 }
 
+TEST_F(MDATest, CharacterWriteRendersTheCoveringFourLineGroups) {
+  Render();
+
+  const uint8_t kCol = 2;
+  const uint8_t kRow = 1;
+  WriteChar(kRow * 80 + kCol, 'A', 0x07);
+  Render();
+
+  ASSERT_EQ(mock_region_count, 1);
+  EXPECT_EQ(mock_regions[0].origin.x, kCol * kCharWidth);
+  // A 14-line cell beginning at line 14 covers groups 12-15 through 24-27.
+  EXPECT_EQ(mock_regions[0].origin.y, 12);
+  EXPECT_EQ(mock_regions[0].width, kCharWidth);
+  EXPECT_EQ(mock_regions[0].height, 16);
+  EXPECT_EQ(mock_pixel_write_count, kCharWidth * 16);
+}
+
 TEST_F(MDATest, RenderCharacterInverse) {
   // A space with the inverse attribute is a solid block: a space has no bits
   // set in the font, so every pixel takes the cell's background color, which

@@ -5,38 +5,23 @@
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
+  kMDACharHeight = 14,
   // Position of the underline within an MDA character cell.
   kMDAUnderlinePosition = 12,
-  // Attribute values are only meaningful in these three-bit fields, so the
-  // documented combinations are compared against them directly.
+  // Documented three-bit foreground and background combinations.
   kMDAAttributeNormal = 0x07,
   kMDAAttributeInverse = 0x00,
   kMDAAttributeUnderline = 0x01,
 };
 
-// Colors to draw a character cell with.
 typedef struct MDACellColors {
   const RGB* foreground;
   const RGB* background;
   bool underline;
 } MDACellColors;
 
-// Decode an MDA attribute byte. We only support the officially documented
-// combinations of values.
-//
-// Attribute byte structure:
-//   - Bit 7: blink (0 = normal, 1 = blink)
-//   - Bits 6-4: background
-//   - Bit 3: intense foreground (0 = normal, 1 = intense)
-//   - Bits 2-0: foreground
-//
-// Valid MDA character background and foreground attribute combinations:
-//   - Normal: background = 000, foreground = 111
-//   - Inverse video: background = 111, foreground = 000
-//   - Invisible: background = 000, foreground = 000
-//   - Underline: background = 000, foreground = 001
-//
-// Other combinations are undefined, but we will treat them as normal.
+// Decode the documented normal, inverse, invisible, underline, intensity and
+// blink combinations. Undefined combinations are rendered as normal text.
 static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   const VideoConfig* config = video->config;
   MDACellColors colors = {
@@ -54,151 +39,78 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 
   if (background_attr == kMDAAttributeInverse &&
       foreground_attr == kMDAAttributeNormal) {
-    // Normal video mode.
     colors.foreground = intense_aware_foreground;
   } else if (
       background_attr == kMDAAttributeNormal &&
       foreground_attr == kMDAAttributeInverse) {
-    // Inverse video mode.
     colors.foreground = &config->background;
     colors.background = &config->foreground;
   } else if (
       background_attr == kMDAAttributeInverse &&
       foreground_attr == kMDAAttributeInverse) {
-    // Invisible mode.
     colors.foreground = &config->background;
   } else if (
       background_attr == kMDAAttributeInverse &&
       foreground_attr == kMDAAttributeUnderline) {
-    // Underline mode.
     colors.underline = true;
     colors.foreground = intense_aware_foreground;
   } else {
-    // Other combinations are treated as normal.
     colors.foreground = intense_aware_foreground;
   }
 
-  // Blinking characters alternate between the character and blank. The blink
-  // attribute only applies if blinking is enabled in the mode control register.
   if ((attr_value & kVideoAttributeBlink) &&
       (video->control_register & kVideoControlEnableBlink) &&
       !VideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
     colors.underline = false;
   }
-
   return colors;
 }
 
-// Write a character to display in MDA text mode. char_address is the address of
-// the character's first byte in VRAM.
-static void MDAWriteChar(
-    VideoState* video, TextPosition char_pos, uint32_t char_address) {
-  const VideoModeMetadata* metadata =
-      &kVideoModeMetadata[kVideoModeMDAText80x25];
-  uint8_t char_value = VideoReadVRAMByte(video, char_address);
-  uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
-  const uint16_t* char_bitmap = kFontMDA9x14Bitmap[char_value];
-  MDACellColors colors = MDADecodeAttribute(video, attr_value);
-
-  Position origin_pixel_pos = {
-      .x = char_pos.col * metadata->char_width,
-      .y = char_pos.row * metadata->char_height,
-  };
-  for (uint8_t y = 0; y < metadata->char_height; ++y) {
-    uint16_t row_bitmap;
-    // If underline, set entire underline row to foreground color.
-    if (y == kMDAUnderlinePosition && colors.underline) {
-      row_bitmap = 0xFFFF;
-    } else {
-      row_bitmap = char_bitmap[y];
-    }
-    for (uint8_t x = 0; x < metadata->char_width; ++x) {
-      Position pixel_pos = {
-          .x = origin_pixel_pos.x + x,
-          .y = origin_pixel_pos.y + y,
-      };
-      bool is_foreground =
-          (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
-      const RGB* pixel_rgb =
-          is_foreground ? colors.foreground : colors.background;
-      VideoWritePixel(video, pixel_pos, *pixel_rgb);
-    }
-  }
-}
-
-// Draw the text mode cursor over the character cell it occupies.
-static void MDADrawCursor(VideoState* video, uint16_t start_address) {
-  const VideoModeMetadata* metadata =
-      &kVideoModeMetadata[kVideoModeMDAText80x25];
-  // VideoIsCursorEnabled only distinguishes the 6845's "off" cursor mode from
-  // the other three; it does not model the 1/16 and 1/32 field rate modes
-  // separately. The actual toggling comes from VideoIsCursorBlinkOn, which
-  // flips every 8 frames (see VideoTick), so the cursor is skipped entirely
-  // during the off half of each blink cycle.
-  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
-    return;
-  }
-  // The cursor address (R14/R15) and start address (R12/R13) are both
-  // character-unit VRAM addresses, so subtracting them gives the cursor's
-  // position relative to the top-left of whatever is currently scrolled into
-  // view. Both are independently wrapping 16-bit values, so the difference
-  // is masked into the 2048-character VRAM space (4KB VRAM / 2 bytes per
-  // character) rather than allowed to underflow or run past it.
-  uint16_t cursor_offset = (VideoGetCursorAddress(video) - start_address) &
-                           (metadata->vram_size / 2 - 1);
-  uint16_t num_cells = (uint16_t)metadata->columns * metadata->rows;
-  // The 80x25 grid only covers 2000 of VRAM's 2048 addressable characters;
-  // if the cursor lands outside the visible grid it is legitimately
-  // off-screen, so nothing is drawn.
-  if (cursor_offset >= num_cells) {
-    return;
-  }
-
-  // R10/R11 select the first and last scan line of the cell to highlight
-  // (e.g. 11-12 of 0-13 for the default underline cursor). An out-of-range
-  // start leaves nothing valid to draw; an out-of-range end is clamped to the
-  // last scan line instead of discarding the whole cursor.
-  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
-  if (cursor_start >= metadata->char_height) {
-    return;
-  }
-  if (cursor_end >= metadata->char_height) {
-    cursor_end = metadata->char_height - 1;
-  }
-
-  // Recover the (col, row) the linear cursor_offset represents, and scale up
-  // to the pixel origin of that cell.
-  uint16_t origin_x =
-      (cursor_offset % metadata->columns) * metadata->char_width;
-  uint16_t origin_y =
-      (cursor_offset / metadata->columns) * metadata->char_height;
-  // Paint a full-width band across the selected scan lines in the plain
-  // foreground color - the cursor ignores the character's own attribute
-  // byte.
-  for (uint8_t y = cursor_start; y <= cursor_end; ++y) {
-    for (uint8_t x = 0; x < metadata->char_width; ++x) {
-      Position pixel_pos = {.x = origin_x + x, .y = origin_y + y};
-      VideoWritePixel(video, pixel_pos, video->config->foreground);
-    }
-  }
-}
-
-// Render the current display in MDA text mode.
-YAX86_PRIVATE void MDARenderScreen(VideoState* video) {
+// Render a rectangular slice directly from text VRAM. Iterating scan lines
+// first makes write_pixel a row-major stream suitable for an SPI window.
+YAX86_PRIVATE void MDARenderRegion(
+    VideoState* video, uint8_t first_column, uint8_t end_column,
+    uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata =
       &kVideoModeMetadata[kVideoModeMDAText80x25];
   uint16_t start_address = VideoGetStartAddress(video);
-  for (uint8_t row = 0; row < metadata->rows; ++row) {
-    for (uint8_t col = 0; col < metadata->columns; ++col) {
-      TextPosition char_pos = {.col = col, .row = row};
-      // Each character takes 2 bytes (char + attr).
-      uint32_t char_address =
-          ((uint32_t)start_address + row * metadata->columns + col) * 2;
+  uint16_t cursor_offset = 0;
+  bool cursor_visible = VideoGetVisibleCursorOffset(
+      video, metadata, start_address, &cursor_offset);
+  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
+
+  for (uint16_t y = first_y; y < end_y; ++y) {
+    uint8_t row = (uint8_t)(y / kMDACharHeight);
+    uint8_t char_scan_line = (uint8_t)(y % kMDACharHeight);
+    for (uint8_t col = first_column; col < end_column; ++col) {
+      uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
+      uint32_t char_address = ((uint32_t)start_address + cell_offset) * 2;
       char_address &= metadata->vram_size - 1;
-      MDAWriteChar(video, char_pos, char_address);
+      uint8_t char_value = VideoReadVRAMByte(video, char_address);
+      uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+      MDACellColors colors = MDADecodeAttribute(video, attr_value);
+
+      uint16_t row_bitmap =
+          char_scan_line == kMDAUnderlinePosition && colors.underline
+              ? 0xFFFF
+              : kFontMDA9x14Bitmap[char_value][char_scan_line];
+      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
+                              char_scan_line >= cursor_start &&
+                              char_scan_line <= cursor_end;
+      for (uint8_t x = 0; x < metadata->char_width; ++x) {
+        bool is_foreground =
+            (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+        const RGB* rgb = cursor_scan_line ? &video->config->foreground
+                                          : (is_foreground ? colors.foreground
+                                                           : colors.background);
+        Position position = {
+            .x = (uint16_t)col * metadata->char_width + x,
+            .y = y,
+        };
+        VideoWritePixel(video, position, *rgb);
+      }
     }
   }
-  MDADrawCursor(video, start_address);
 }

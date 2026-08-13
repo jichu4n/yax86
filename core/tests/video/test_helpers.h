@@ -32,8 +32,11 @@ enum {
   kMaxFrameBufferHeight = 350,
 };
 inline RGB mock_frame_buffer[kMaxFrameBufferHeight][kMaxFrameBufferWidth];
-// Number of write_pixel calls since the frame buffer was last cleared.
+// Render activity since the last call to Render().
 inline int mock_pixel_write_count;
+inline VideoRegion mock_regions[kVideoDirtyGroupCount];
+inline int mock_region_count;
+inline int mock_region_end_count;
 
 inline void MockWritePixel(VideoState* video, Position position, RGB rgb) {
   ++mock_pixel_write_count;
@@ -41,6 +44,15 @@ inline void MockWritePixel(VideoState* video, Position position, RGB rgb) {
     mock_frame_buffer[position.y][position.x] = rgb;
   }
 }
+
+inline void MockBeginRenderRegion(VideoState* video, VideoRegion region) {
+  if (mock_region_count < kVideoDirtyGroupCount) {
+    mock_regions[mock_region_count] = region;
+  }
+  ++mock_region_count;
+}
+
+inline void MockEndRenderRegion(VideoState* video) { ++mock_region_end_count; }
 
 // Base fixture for the video tests. Subclasses call Init() with the adapter
 // they exercise.
@@ -56,6 +68,8 @@ class VideoTestBase : public ::testing::Test {
     config_.adapter = adapter;
     config_.vram = mock_vram;
     config_.write_pixel = MockWritePixel;
+    config_.begin_render_region = MockBeginRenderRegion;
+    config_.end_render_region = MockEndRenderRegion;
 
     VideoInit(&video_, &config_);
   }
@@ -68,11 +82,19 @@ class VideoTestBase : public ::testing::Test {
       }
     }
     mock_pixel_write_count = 0;
+    mock_region_count = 0;
+    mock_region_end_count = 0;
   }
 
-  // Render a frame into a freshly cleared frame buffer.
+  void ResetRenderStats() {
+    mock_pixel_write_count = 0;
+    mock_region_count = 0;
+    mock_region_end_count = 0;
+  }
+
+  // Render into the retained frame buffer, resetting only activity counters.
   void Render() {
-    ClearFrameBuffer();
+    ResetRenderStats();
     VideoRender(&video_);
   }
 
@@ -93,8 +115,8 @@ class VideoTestBase : public ::testing::Test {
 
   // Write a character and its attribute at a character cell offset.
   void WriteChar(uint32_t cell, uint8_t character, uint8_t attribute) {
-    mock_vram[cell * 2] = character;
-    mock_vram[cell * 2 + 1] = attribute;
+    VideoWriteVRAM(&video_, cell * 2, character);
+    VideoWriteVRAM(&video_, cell * 2 + 1, attribute);
   }
 
   // Set a 6845 register through the I/O ports.
