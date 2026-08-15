@@ -69,9 +69,10 @@ static uint64_t MainGetTick(YAX86_UNUSED void* context) {
 static VideoAdapter g_video_adapter = kVideoAdapterCGA;
 static const VideoAdapterMetadata* g_video_adapter_metadata = NULL;
 
-static void MainWritePixel(
-    YAX86_UNUSED struct VideoState* video, Position position, RGB rgb) {
-  DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
+static void MainWritePixels(
+    YAX86_UNUSED struct VideoState* video, Position origin, const RGB* pixels,
+    uint8_t count) {
+  DisplayPutPixels(origin.x, origin.y, pixels, count);
 }
 
 static void MainBeginRenderRegion(
@@ -259,7 +260,7 @@ int main(int argc, char* argv[]) {
 
   // PlatformInit initializes sub-modules, including video. Video memory comes
   // from the config, but the display is ours, so hook up the pixel sink here.
-  g_platform.video_config.write_pixel = MainWritePixel;
+  g_platform.video_config.write_pixels = MainWritePixels;
   g_platform.video_config.begin_render_region = MainBeginRenderRegion;
   g_platform.video_config.end_render_region = MainEndRenderRegion;
 

@@ -650,6 +650,9 @@ enum {
   kVideoDirtyRowCount = kVideoDirtyGraphicsRowCount > kVideoMaxTextRows
                             ? kVideoDirtyGraphicsRowCount
                             : kVideoMaxTextRows,
+  // Pixels are transferred to the host in small horizontal spans. This removes
+  // most callback overhead without requiring a frame or scan-line buffer.
+  kVideoPixelBatchSize = 32,
 };
 
 // Half-open horizontal dirty range [start_column, end_column). Both fields are
@@ -719,9 +722,13 @@ typedef struct VideoConfig {
   // The caller owns the buffer and it must outlive the video state.
   uint8_t* vram;
 
-  // Callback to write an RGB pixel value to the real display, invoked from
-  // VideoRender().
-  void (*write_pixel)(struct VideoState* video, Position position, RGB rgb);
+  // Callback to write a horizontal span of RGB pixels to the real display,
+  // invoked from VideoRender(). The pixels begin at origin, remain on one scan
+  // line, and are valid only for the duration of the synchronous callback.
+  // count is between 1 and kVideoPixelBatchSize, inclusive.
+  void (*write_pixels)(
+      struct VideoState* video, Position origin, const RGB* pixels,
+      uint8_t count);
   // Optional callbacks surrounding each dirty rectangular region emitted by
   // VideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
@@ -760,7 +767,7 @@ static const VideoConfig kDefaultVideoConfig = {
         },
 
     .vram = NULL,
-    .write_pixel = NULL,
+    .write_pixels = NULL,
     .begin_render_region = NULL,
     .end_render_region = NULL,
 };
@@ -831,7 +838,8 @@ void VideoTick(VideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
-// write_pixel in row-major order. Does nothing when the display is unchanged.
+// write_pixels in row-major horizontal spans. Does nothing when the display is
+// unchanged.
 void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H

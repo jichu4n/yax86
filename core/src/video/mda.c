@@ -75,10 +75,10 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 }
 
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
-// first makes write_pixel a row-major stream suitable for an SPI window.
+// first makes write_pixels a row-major stream suitable for an SPI window.
 YAX86_PRIVATE void MDARenderRegion(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly
   // rather than derived from the mode control register.
   const VideoModeMetadata* metadata =
@@ -97,6 +97,7 @@ YAX86_PRIVATE void MDARenderRegion(
   // which is what a display addressed by transfer window expects. The cost is
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
+    VideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
     uint8_t row = (uint8_t)(y / kMDACharHeight);
     uint8_t char_scan_line = (uint8_t)(y % kMDACharHeight);
     for (uint8_t col = start_column; col < end_column; ++col) {
@@ -128,11 +129,7 @@ YAX86_PRIVATE void MDARenderRegion(
         const RGB* rgb = cursor_scan_line ? &video->config->foreground
                                           : (is_foreground ? colors.foreground
                                                            : colors.background);
-        Position position = {
-            .x = (uint16_t)col * metadata->char_width + x,
-            .y = y,
-        };
-        VideoWritePixel(video, position, *rgb);
+        VideoPixelRunPush(run, *rgb);
       }
     }
   }

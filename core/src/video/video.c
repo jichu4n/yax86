@@ -85,15 +85,6 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
   VideoInvalidateVRAMAddress(video, address);
 }
 
-YAX86_PRIVATE void VideoWritePixel(
-    VideoState* video, Position position, RGB rgb) {
-  if (!video->config || !video->config->write_pixel) {
-    return;
-  }
-  ++video->num_pixels_emitted_for_region;
-  video->config->write_pixel(video, position, rgb);
-}
-
 uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return kVideoUnmappedPortValue;
@@ -593,15 +584,16 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 // Rendering
 // ============================================================================
 
-static void VideoRenderBlankRegion(VideoState* video, VideoRegion region) {
+static void VideoRenderBlankRegion(
+    VideoState* video, VideoPixelRun* run, VideoRegion region) {
   RGB blank = video->adapter == kVideoAdapterCGA ? video->config->cga_palette[0]
                                                  : video->config->background;
   uint16_t end_x = region.origin.x + region.width;
   uint16_t end_y = region.origin.y + region.height;
   for (uint16_t y = region.origin.y; y < end_y; ++y) {
+    VideoPixelRunBegin(run, region.origin.x, y);
     for (uint16_t x = region.origin.x; x < end_x; ++x) {
-      Position position = {.x = x, .y = y};
-      VideoWritePixel(video, position, blank);
+      VideoPixelRunPush(run, blank);
     }
   }
 }
@@ -623,13 +615,22 @@ static void VideoRenderDirtyRegion(
   }
 
   video->num_pixels_emitted_for_region = 0;
+  // Only these two members need a value on the way in: origin is set whenever
+  // a span starts, and a pixel is stored before the count that exposes it to
+  // the flush. Initializing the whole struct would clear the 96-byte batch on
+  // every region, which a graphics frame can split into fifty of them.
+  VideoPixelRun run;
+  run.video = video;
+  run.count = 0;
+
   if (!(video->control_register & kVideoControlVideoEnable)) {
-    VideoRenderBlankRegion(video, region);
+    VideoRenderBlankRegion(video, &run, region);
   } else if (video->adapter == kVideoAdapterCGA) {
-    CGARenderRegion(video, start_column, end_column, first_y, end_y);
+    CGARenderRegion(video, &run, start_column, end_column, first_y, end_y);
   } else {
-    MDARenderRegion(video, start_column, end_column, first_y, end_y);
+    MDARenderRegion(video, &run, start_column, end_column, first_y, end_y);
   }
+  VideoPixelRunFlush(&run);
 
   // A retained display addressed by transfer window advances its own write
   // pointer once per pixel, so it is the pixel count that positions them, not
@@ -652,7 +653,7 @@ static void VideoRenderDirtyRegion(
 }
 
 void VideoRender(VideoState* video) {
-  if (!video->config || !video->config->write_pixel ||
+  if (!video->config || !video->config->write_pixels ||
       video->dirty_state.status == kVideoClean) {
     return;
   }
