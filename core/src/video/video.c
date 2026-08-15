@@ -3,6 +3,9 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
+#define YAX86_VIDEO_LOG(level, ...) \
+  YAX86_LOG(video->config->logger, &kLogModuleVideo, level, __VA_ARGS__)
+
 // Power-on 6845 register values for the IBM Monochrome Display.
 static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
     0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
@@ -87,6 +90,7 @@ YAX86_PRIVATE void VideoWritePixel(
   if (!video->config || !video->config->write_pixel) {
     return;
   }
+  ++video->region_pixels;
   video->config->write_pixel(video, position, rgb);
 }
 
@@ -614,12 +618,28 @@ static void VideoRenderDirtyRegion(
     video->config->begin_render_region(video, region);
   }
 
+  video->region_pixels = 0;
   if (!(video->control_register & kVideoControlVideoEnable)) {
     VideoRenderBlankRegion(video, region);
   } else if (video->adapter == kVideoAdapterCGA) {
     CGARenderRegion(video, first_column, end_column, first_y, end_y);
   } else {
     MDARenderRegion(video, first_column, end_column, first_y, end_y);
+  }
+
+  // A retained display addressed by transfer window advances its own write
+  // pointer once per pixel, so it is the pixel count that positions them, not
+  // the coordinates passed alongside. Emitting a different number than the
+  // region declared leaves that pointer mid-window and displaces every pixel
+  // after it, including those of later regions - so report the region that
+  // caused it rather than let the corruption surface somewhere else.
+  uint32_t declared_pixels = (uint32_t)region.width * region.height;
+  if (video->region_pixels != declared_pixels) {
+    YAX86_VIDEO_LOG(
+        kLogLevelError,
+        "render region %ux%u at (%u,%u) emitted %u pixels, expected %u",
+        region.width, region.height, region.origin.x, region.origin.y,
+        video->region_pixels, declared_pixels);
   }
 
   if (video->config->end_render_region) {

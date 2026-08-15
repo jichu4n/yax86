@@ -780,6 +780,12 @@ typedef struct VideoState {
 
   // Portions of the retained host display that no longer match video state.
   VideoDirtyState dirty;
+
+  // Pixels emitted so far for the region currently being rendered. A windowed
+  // display places pixels by count rather than by coordinate, so a region that
+  // emits a different number of pixels than it declared would corrupt it; this
+  // is what the check at the end of each region compares.
+  uint32_t region_pixels;
 } VideoState;
 
 // Initialize video state with the provided configuration.

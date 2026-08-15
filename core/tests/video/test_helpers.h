@@ -37,9 +37,29 @@ inline int mock_pixel_write_count;
 inline VideoRegion mock_regions[kVideoDirtyRowCount];
 inline int mock_region_count;
 inline int mock_region_end_count;
+// The region currently open, and the pixels written into it so far. A real
+// windowed display positions pixels by counting them, so a region that does
+// not emit exactly the pixels it declared corrupts everything drawn after it.
+inline VideoRegion mock_open_region;
+inline int mock_open_region_pixels;
+// Regions whose pixel count did not match the area they declared. Checked in
+// the fixture's teardown, so every test enforces the invariant.
+inline int mock_region_area_mismatches;
+// Pixels written outside the region open at the time. A host that streams into
+// a transfer window cannot see these - it places pixels by counting them - but
+// one that addresses by coordinate, as the SDL runtime does, draws them in the
+// wrong place.
+inline int mock_pixels_outside_region;
 
 inline void MockWritePixel(VideoState* video, Position position, RGB rgb) {
   ++mock_pixel_write_count;
+  ++mock_open_region_pixels;
+  if (position.x < mock_open_region.origin.x ||
+      position.x >= mock_open_region.origin.x + mock_open_region.width ||
+      position.y < mock_open_region.origin.y ||
+      position.y >= mock_open_region.origin.y + mock_open_region.height) {
+    ++mock_pixels_outside_region;
+  }
   if (position.x < kMaxFrameBufferWidth && position.y < kMaxFrameBufferHeight) {
     mock_frame_buffer[position.y][position.x] = rgb;
   }
@@ -50,9 +70,29 @@ inline void MockBeginRenderRegion(VideoState* video, VideoRegion region) {
     mock_regions[mock_region_count] = region;
   }
   ++mock_region_count;
+  mock_open_region = region;
+  mock_open_region_pixels = 0;
 }
 
-inline void MockEndRenderRegion(VideoState* video) { ++mock_region_end_count; }
+inline void MockEndRenderRegion(VideoState* video) {
+  ++mock_region_end_count;
+  const int declared_pixels =
+      static_cast<int>(mock_open_region.width) * mock_open_region.height;
+  if (mock_open_region_pixels != declared_pixels) {
+    ++mock_region_area_mismatches;
+  }
+}
+
+// Error-level log messages emitted since the last Init().
+inline int mock_log_error_count;
+
+inline void MockWriteLogLine(
+    void* context, const LogModule* module, LogLevel level, uint64_t tick,
+    const char* message, size_t length) {
+  if (level == kLogLevelError) {
+    ++mock_log_error_count;
+  }
+}
 
 // Base fixture for the video tests. Subclasses call Init() with the adapter
 // they exercise.
@@ -63,15 +103,39 @@ class VideoTestBase : public ::testing::Test {
       mock_vram[i] = 0;
     }
     ClearFrameBuffer();
+    mock_region_area_mismatches = 0;
+    mock_pixels_outside_region = 0;
+    mock_log_error_count = 0;
+
+    logger_config_ = LoggerConfig{};
+    logger_config_.write_line = MockWriteLogLine;
+    logger_config_.enabled_modules = LogModuleMask(&kLogModuleVideo);
+    logger_config_.min_level = kLogLevelError;
+    LoggerInit(&logger_, &logger_config_);
 
     config_ = kDefaultVideoConfig;
     config_.adapter = adapter;
     config_.vram = mock_vram;
+    config_.logger = &logger_;
     config_.write_pixel = MockWritePixel;
     config_.begin_render_region = MockBeginRenderRegion;
     config_.end_render_region = MockEndRenderRegion;
 
     VideoInit(&video_, &config_);
+  }
+
+  // Every rendered region must emit exactly the pixels it declared, or a
+  // windowed host display would be corrupted from that region onward. A test
+  // that deliberately provokes a mismatch consumes it by resetting the
+  // counters before returning.
+  void TearDown() override {
+    EXPECT_EQ(mock_region_area_mismatches, 0)
+        << "a rendered region emitted a different number of pixels than the "
+           "region it declared to the host";
+    EXPECT_EQ(mock_pixels_outside_region, 0)
+        << "a rendered region wrote pixels outside the region it declared to "
+           "the host";
+    EXPECT_EQ(mock_log_error_count, 0);
   }
 
   void ClearFrameBuffer() {
@@ -151,6 +215,8 @@ class VideoTestBase : public ::testing::Test {
     }
   }
 
+  LoggerConfig logger_config_ = {};
+  Logger logger_ = {};
   VideoConfig config_ = {0};
   VideoState video_ = {0};
 };
