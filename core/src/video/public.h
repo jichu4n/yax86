@@ -632,14 +632,24 @@ enum {
   // units: text columns on the MDA and 80-column CGA, half-character cells in
   // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
   kVideoDirtyColumns = 80,
-  // Neighboring physical scan lines share one dirty horizontal range. This
-  // keeps the state small while bounding vertical overdraw to four lines.
+  // Vertically, one horizontal range is tracked per dirty row. A text mode's
+  // dirty row is one character row, which covers exactly the scan lines a
+  // changed cell occupies. Graphics modes have no character rows, so
+  // neighboring scan lines share a range instead.
   kVideoDirtyScanLinesPerGroup = 4,
-  // MDA has the tallest frame buffer at 350 lines.
-  kVideoMaxFrameBufferHeight = 350,
-  kVideoDirtyGroupCount =
-      (kVideoMaxFrameBufferHeight + kVideoDirtyScanLinesPerGroup - 1) /
+  // The tallest graphics mode is 200 lines.
+  kVideoMaxGraphicsHeight = 200,
+  // The most character rows in any text mode.
+  kVideoMaxTextRows = 25,
+  // Dirty rows needed to cover the tallest graphics mode.
+  kVideoDirtyGraphicsRowCount =
+      (kVideoMaxGraphicsHeight + kVideoDirtyScanLinesPerGroup - 1) /
       kVideoDirtyScanLinesPerGroup,
+  // The tracker is statically sized for whichever mode needs the most rows.
+  // Graphics modes do, at 50 against a text mode's 25.
+  kVideoDirtyRowCount = kVideoDirtyGraphicsRowCount > kVideoMaxTextRows
+                            ? kVideoDirtyGraphicsRowCount
+                            : kVideoMaxTextRows,
 };
 
 // Half-open horizontal dirty range [first_column, end_column). Both fields are
@@ -650,7 +660,8 @@ typedef struct VideoDirtyRange {
 } VideoDirtyRange;
 
 typedef struct VideoDirtyState {
-  VideoDirtyRange ranges[kVideoDirtyGroupCount];
+  // One horizontal range per dirty row, indexed by dirty row.
+  VideoDirtyRange ranges[kVideoDirtyRowCount];
   // At least one range is dirty. Avoids scanning the ranges on an unchanged
   // frame.
   bool any_dirty;

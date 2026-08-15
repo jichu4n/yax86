@@ -23,10 +23,12 @@ YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
 // Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
-// natural columns; vertical coordinates are physical frame-buffer scan lines.
-YAX86_PRIVATE void VideoInvalidateRegion(
+// natural columns; vertical coordinates are dirty rows - a character row in
+// text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
+// modes.
+YAX86_PRIVATE void VideoInvalidateRows(
     VideoState* video, uint8_t first_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y);
+    uint8_t first_row, uint8_t end_row);
 
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.

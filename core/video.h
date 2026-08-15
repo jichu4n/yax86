@@ -1169,14 +1169,24 @@ enum {
   // units: text columns on the MDA and 80-column CGA, half-character cells in
   // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
   kVideoDirtyColumns = 80,
-  // Neighboring physical scan lines share one dirty horizontal range. This
-  // keeps the state small while bounding vertical overdraw to four lines.
+  // Vertically, one horizontal range is tracked per dirty row. A text mode's
+  // dirty row is one character row, which covers exactly the scan lines a
+  // changed cell occupies. Graphics modes have no character rows, so
+  // neighboring scan lines share a range instead.
   kVideoDirtyScanLinesPerGroup = 4,
-  // MDA has the tallest frame buffer at 350 lines.
-  kVideoMaxFrameBufferHeight = 350,
-  kVideoDirtyGroupCount =
-      (kVideoMaxFrameBufferHeight + kVideoDirtyScanLinesPerGroup - 1) /
+  // The tallest graphics mode is 200 lines.
+  kVideoMaxGraphicsHeight = 200,
+  // The most character rows in any text mode.
+  kVideoMaxTextRows = 25,
+  // Dirty rows needed to cover the tallest graphics mode.
+  kVideoDirtyGraphicsRowCount =
+      (kVideoMaxGraphicsHeight + kVideoDirtyScanLinesPerGroup - 1) /
       kVideoDirtyScanLinesPerGroup,
+  // The tracker is statically sized for whichever mode needs the most rows.
+  // Graphics modes do, at 50 against a text mode's 25.
+  kVideoDirtyRowCount = kVideoDirtyGraphicsRowCount > kVideoMaxTextRows
+                            ? kVideoDirtyGraphicsRowCount
+                            : kVideoMaxTextRows,
 };
 
 // Half-open horizontal dirty range [first_column, end_column). Both fields are
@@ -1187,7 +1197,8 @@ typedef struct VideoDirtyRange {
 } VideoDirtyRange;
 
 typedef struct VideoDirtyState {
-  VideoDirtyRange ranges[kVideoDirtyGroupCount];
+  // One horizontal range per dirty row, indexed by dirty row.
+  VideoDirtyRange ranges[kVideoDirtyRowCount];
   // At least one range is dirty. Avoids scanning the ranges on an unchanged
   // frame.
   bool any_dirty;
@@ -1409,10 +1420,12 @@ YAX86_PRIVATE void VideoWritePixel(
     VideoState* video, Position position, RGB rgb);
 
 // Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
-// natural columns; vertical coordinates are physical frame-buffer scan lines.
-YAX86_PRIVATE void VideoInvalidateRegion(
+// natural columns; vertical coordinates are dirty rows - a character row in
+// text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
+// modes.
+YAX86_PRIVATE void VideoInvalidateRows(
     VideoState* video, uint8_t first_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y);
+    uint8_t first_row, uint8_t end_row);
 
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.
@@ -2869,22 +2882,45 @@ static void VideoDirtyRangeAdd(
   }
 }
 
-YAX86_PRIVATE void VideoInvalidateRegion(
+// The vertical unit of dirty tracking for the current mode.
+typedef struct VideoDirtyGeometry {
+  // Number of dirty rows covering the display.
+  uint8_t row_count;
+  // Physical scan lines per dirty row.
+  uint8_t scan_lines_per_row;
+} VideoDirtyGeometry;
+
+static VideoDirtyGeometry VideoGetDirtyGeometry(const VideoState* video) {
+  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  VideoDirtyGeometry geometry;
+  if (metadata->type == kVideoModeText) {
+    geometry.row_count = metadata->rows;
+    geometry.scan_lines_per_row = metadata->char_height;
+  } else {
+    geometry.row_count =
+        (uint8_t)((metadata->height + kVideoDirtyScanLinesPerGroup - 1) /
+                  kVideoDirtyScanLinesPerGroup);
+    geometry.scan_lines_per_row = kVideoDirtyScanLinesPerGroup;
+  }
+  if (geometry.row_count > kVideoDirtyRowCount) {
+    geometry.row_count = kVideoDirtyRowCount;
+  }
+  return geometry;
+}
+
+YAX86_PRIVATE void VideoInvalidateRows(
     VideoState* video, uint8_t first_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+    uint8_t first_row, uint8_t end_row) {
   if (first_column >= end_column || end_column > kVideoDirtyColumns ||
-      first_y >= end_y || first_y >= adapter->frame_buffer_height) {
+      first_row >= end_row || first_row >= kVideoDirtyRowCount) {
     return;
   }
-  if (end_y > adapter->frame_buffer_height) {
-    end_y = adapter->frame_buffer_height;
+  if (end_row > kVideoDirtyRowCount) {
+    end_row = kVideoDirtyRowCount;
   }
 
-  uint8_t first_group = first_y / kVideoDirtyScanLinesPerGroup;
-  uint8_t end_group = (uint8_t)((end_y - 1) / kVideoDirtyScanLinesPerGroup);
-  for (uint8_t group = first_group; group <= end_group; ++group) {
-    VideoDirtyRangeAdd(&video->dirty.ranges[group], first_column, end_column);
+  for (uint8_t row = first_row; row < end_row; ++row) {
+    VideoDirtyRangeAdd(&video->dirty.ranges[row], first_column, end_column);
   }
   video->dirty.any_dirty = true;
 }
@@ -2912,10 +2948,11 @@ static void VideoInvalidateTextCell(
     col = (uint8_t)(cell_offset % kVideoTextColumns80);
     column_scale = kVideoText80ColumnScale;
   }
-  VideoInvalidateRegion(
-      video, col * column_scale, (col + 1) * column_scale,
-      (uint16_t)row * metadata->char_height,
-      (uint16_t)(row + 1) * metadata->char_height);
+  // The character row is the dirty row, so a changed cell marks exactly the
+  // scan lines it covers - no conversion to scan lines and back.
+  VideoInvalidateRows(
+      video, col * column_scale, (col + 1) * column_scale, row,
+      (uint8_t)(row + 1));
 }
 
 static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
@@ -2942,7 +2979,11 @@ static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
   uint8_t byte_column = offset % kCGAGraphicsBytesPerScanLine;
   uint16_t y =
       row_in_half * 2 + (address >= kCGAGraphicsOddScanLineOffset ? 1 : 0);
-  VideoInvalidateRegion(video, byte_column, byte_column + 1, y, y + 1);
+  // Graphics modes have no character rows, so neighboring scan lines share a
+  // dirty row.
+  uint8_t dirty_row = (uint8_t)(y / kVideoDirtyScanLinesPerGroup);
+  VideoInvalidateRows(
+      video, byte_column, byte_column + 1, dirty_row, (uint8_t)(dirty_row + 1));
 }
 
 static void VideoInvalidateCursor(VideoState* video) {
@@ -2983,10 +3024,8 @@ static void VideoInvalidateBlinkingText(VideoState* video) {
       }
     }
     if (end_column != 0) {
-      VideoInvalidateRegion(
-          video, first_column, end_column,
-          (uint16_t)row * metadata->char_height,
-          (uint16_t)(row + 1) * metadata->char_height);
+      VideoInvalidateRows(
+          video, first_column, end_column, row, (uint8_t)(row + 1));
     }
   }
 }
@@ -3245,31 +3284,28 @@ void VideoRender(VideoState* video) {
     VideoRenderDirtyRegion(
         video, 0, kVideoDirtyColumns, 0, adapter->frame_buffer_height);
   } else {
-    uint8_t group_count = (uint8_t)((adapter->frame_buffer_height +
-                                     kVideoDirtyScanLinesPerGroup - 1) /
-                                    kVideoDirtyScanLinesPerGroup);
-    for (uint8_t group = 0; group < group_count;) {
-      VideoDirtyRange range = video->dirty.ranges[group];
+    VideoDirtyGeometry geometry = VideoGetDirtyGeometry(video);
+    for (uint8_t row = 0; row < geometry.row_count;) {
+      VideoDirtyRange range = video->dirty.ranges[row];
       if (range.end_column == 0) {
-        ++group;
+        ++row;
         continue;
       }
 
-      uint8_t end_group = group + 1;
-      while (end_group < group_count &&
-             video->dirty.ranges[end_group].first_column ==
-                 range.first_column &&
-             video->dirty.ranges[end_group].end_column == range.end_column) {
-        ++end_group;
+      uint8_t end_row = row + 1;
+      while (end_row < geometry.row_count &&
+             video->dirty.ranges[end_row].first_column == range.first_column &&
+             video->dirty.ranges[end_row].end_column == range.end_column) {
+        ++end_row;
       }
-      uint16_t first_y = group * kVideoDirtyScanLinesPerGroup;
-      uint16_t end_y = end_group * kVideoDirtyScanLinesPerGroup;
+      uint16_t first_y = (uint16_t)row * geometry.scan_lines_per_row;
+      uint16_t end_y = (uint16_t)end_row * geometry.scan_lines_per_row;
       if (end_y > adapter->frame_buffer_height) {
         end_y = adapter->frame_buffer_height;
       }
       VideoRenderDirtyRegion(
           video, range.first_column, range.end_column, first_y, end_y);
-      group = end_group;
+      row = end_row;
     }
   }
 

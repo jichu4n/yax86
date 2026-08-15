@@ -34,7 +34,7 @@ enum {
 inline RGB mock_frame_buffer[kMaxFrameBufferHeight][kMaxFrameBufferWidth];
 // Render activity since the last call to Render().
 inline int mock_pixel_write_count;
-inline VideoRegion mock_regions[kVideoDirtyGroupCount];
+inline VideoRegion mock_regions[kVideoDirtyRowCount];
 inline int mock_region_count;
 inline int mock_region_end_count;
 
@@ -46,7 +46,7 @@ inline void MockWritePixel(VideoState* video, Position position, RGB rgb) {
 }
 
 inline void MockBeginRenderRegion(VideoState* video, VideoRegion region) {
-  if (mock_region_count < kVideoDirtyGroupCount) {
+  if (mock_region_count < kVideoDirtyRowCount) {
     mock_regions[mock_region_count] = region;
   }
   ++mock_region_count;

@@ -209,7 +209,7 @@ TEST_F(CGATest, RenderText40x25IsPixelDoubled) {
   EXPECT_EQ(mock_pixel_write_count, kCharWidth * 2 * kCharHeight);
 }
 
-TEST_F(CGATest, TextWriteRendersOnlyFourLineGroupsCoveringTheCell) {
+TEST_F(CGATest, TextWriteRendersOnlyTheCellsCharacterRow) {
   SetControl(kControlMode3);
   Render();
 
