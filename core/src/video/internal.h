@@ -27,7 +27,7 @@ YAX86_PRIVATE void VideoWritePixel(
 // text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
 // modes.
 YAX86_PRIVATE void VideoInvalidateRows(
-    VideoState* video, uint8_t first_column, uint8_t end_column,
+    VideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row);
 
 // Whether the text mode cursor is currently in the visible half of its blink
@@ -70,13 +70,13 @@ YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
 // Render a dirty region of the current MDA text display. Pixels are emitted in
 // row-major order.
 YAX86_PRIVATE void MDARenderRegion(
-    VideoState* video, uint8_t first_column, uint8_t end_column,
+    VideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y);
 
 // Render a dirty region of the current CGA display. Pixels are emitted in
 // row-major order.
 YAX86_PRIVATE void CGARenderRegion(
-    VideoState* video, uint8_t first_column, uint8_t end_column,
+    VideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y);
 
 #endif  // YAX86_VIDEO_INTERNAL_H

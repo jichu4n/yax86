@@ -79,7 +79,7 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
     return;
   }
   video->config->vram[address] = value;
-  if (video->dirty.full_redraw) {
+  if (video->dirty_state.status == kVideoFullRedraw) {
     return;
   }
   VideoInvalidateVRAMAddress(video, address);
@@ -90,7 +90,7 @@ YAX86_PRIVATE void VideoWritePixel(
   if (!video->config || !video->config->write_pixel) {
     return;
   }
-  ++video->region_pixels;
+  ++video->num_pixels_emitted_for_region;
   video->config->write_pixel(video, position, rgb);
 }
 
@@ -226,14 +226,14 @@ YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
 // ============================================================================
 
 static void VideoDirtyRangeAdd(
-    VideoDirtyRange* range, uint8_t first_column, uint8_t end_column) {
+    VideoDirtyRange* range, uint8_t start_column, uint8_t end_column) {
   if (range->end_column == 0) {
-    range->first_column = first_column;
+    range->start_column = start_column;
     range->end_column = end_column;
     return;
   }
-  if (first_column < range->first_column) {
-    range->first_column = first_column;
+  if (start_column < range->start_column) {
+    range->start_column = start_column;
   }
   if (end_column > range->end_column) {
     range->end_column = end_column;
@@ -243,7 +243,7 @@ static void VideoDirtyRangeAdd(
 // The vertical unit of dirty tracking for the current mode.
 typedef struct VideoDirtyGeometry {
   // Number of dirty rows covering the display.
-  uint8_t row_count;
+  uint8_t rows;
   // Physical scan lines per dirty row.
   uint8_t scan_lines_per_row;
 } VideoDirtyGeometry;
@@ -252,24 +252,24 @@ static VideoDirtyGeometry VideoGetDirtyGeometry(const VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   VideoDirtyGeometry geometry;
   if (metadata->type == kVideoModeText) {
-    geometry.row_count = metadata->rows;
+    geometry.rows = metadata->rows;
     geometry.scan_lines_per_row = metadata->char_height;
   } else {
-    geometry.row_count =
+    geometry.rows =
         (uint8_t)((metadata->height + kVideoDirtyScanLinesPerGroup - 1) /
                   kVideoDirtyScanLinesPerGroup);
     geometry.scan_lines_per_row = kVideoDirtyScanLinesPerGroup;
   }
-  if (geometry.row_count > kVideoDirtyRowCount) {
-    geometry.row_count = kVideoDirtyRowCount;
+  if (geometry.rows > kVideoDirtyRowCount) {
+    geometry.rows = kVideoDirtyRowCount;
   }
   return geometry;
 }
 
 YAX86_PRIVATE void VideoInvalidateRows(
-    VideoState* video, uint8_t first_column, uint8_t end_column,
+    VideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
-  if (first_column >= end_column || end_column > kVideoDirtyColumns ||
+  if (start_column >= end_column || end_column > kVideoDirtyColumns ||
       first_row >= end_row || first_row >= kVideoDirtyRowCount) {
     return;
   }
@@ -278,14 +278,18 @@ YAX86_PRIVATE void VideoInvalidateRows(
   }
 
   for (uint8_t row = first_row; row < end_row; ++row) {
-    VideoDirtyRangeAdd(&video->dirty.ranges[row], first_column, end_column);
+    VideoDirtyRangeAdd(
+        &video->dirty_state.ranges[row], start_column, end_column);
   }
-  video->dirty.any_dirty = true;
+  // A pending full redraw already covers these rows, and downgrading it would
+  // drop the rest of the frame.
+  if (video->dirty_state.status == kVideoClean) {
+    video->dirty_state.status = kVideoDirty;
+  }
 }
 
 static void VideoInvalidateAll(VideoState* video) {
-  video->dirty.any_dirty = true;
-  video->dirty.full_redraw = true;
+  video->dirty_state.status = kVideoFullRedraw;
 }
 
 static void VideoInvalidateTextCell(
@@ -368,22 +372,22 @@ static void VideoInvalidateBlinkingText(VideoState* video) {
                              ? kVideoText40ColumnScale
                              : kVideoText80ColumnScale;
   for (uint8_t row = 0; row < metadata->rows; ++row) {
-    uint8_t first_column = kVideoDirtyColumns;
+    uint8_t start_column = kVideoDirtyColumns;
     uint8_t end_column = 0;
     for (uint8_t col = 0; col < metadata->columns; ++col) {
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
       uint32_t attr_address = ((uint32_t)start_address + cell_offset) * 2 + 1;
       if (VideoReadVRAMByte(video, attr_address) & kVideoAttributeBlink) {
         uint8_t dirty_column = col * column_scale;
-        if (dirty_column < first_column) {
-          first_column = dirty_column;
+        if (dirty_column < start_column) {
+          start_column = dirty_column;
         }
         end_column = (col + 1) * column_scale;
       }
     }
     if (end_column != 0) {
       VideoInvalidateRows(
-          video, first_column, end_column, row, (uint8_t)(row + 1));
+          video, start_column, end_column, row, (uint8_t)(row + 1));
     }
   }
 }
@@ -603,28 +607,28 @@ static void VideoRenderBlankRegion(VideoState* video, VideoRegion region) {
 }
 
 static void VideoRenderDirtyRegion(
-    VideoState* video, uint8_t first_column, uint8_t end_column,
+    VideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
   // Every mode divides the frame buffer into kVideoDirtyColumns equal columns,
   // so a dirty column is 9 pixels wide on the MDA and 8 on the CGA.
   uint16_t column_width =
       VideoGetAdapterMetadata(video)->frame_buffer_width / kVideoDirtyColumns;
   VideoRegion region = {
-      .origin = {.x = first_column * column_width, .y = first_y},
-      .width = (end_column - first_column) * column_width,
+      .origin = {.x = start_column * column_width, .y = first_y},
+      .width = (end_column - start_column) * column_width,
       .height = end_y - first_y,
   };
   if (video->config->begin_render_region) {
     video->config->begin_render_region(video, region);
   }
 
-  video->region_pixels = 0;
+  video->num_pixels_emitted_for_region = 0;
   if (!(video->control_register & kVideoControlVideoEnable)) {
     VideoRenderBlankRegion(video, region);
   } else if (video->adapter == kVideoAdapterCGA) {
-    CGARenderRegion(video, first_column, end_column, first_y, end_y);
+    CGARenderRegion(video, start_column, end_column, first_y, end_y);
   } else {
-    MDARenderRegion(video, first_column, end_column, first_y, end_y);
+    MDARenderRegion(video, start_column, end_column, first_y, end_y);
   }
 
   // A retained display addressed by transfer window advances its own write
@@ -634,12 +638,12 @@ static void VideoRenderDirtyRegion(
   // after it, including those of later regions - so report the region that
   // caused it rather than let the corruption surface somewhere else.
   uint32_t declared_pixels = (uint32_t)region.width * region.height;
-  if (video->region_pixels != declared_pixels) {
+  if (video->num_pixels_emitted_for_region != declared_pixels) {
     YAX86_VIDEO_LOG(
         kLogLevelError,
         "render region %ux%u at (%u,%u) emitted %u pixels, expected %u",
         region.width, region.height, region.origin.x, region.origin.y,
-        video->region_pixels, declared_pixels);
+        video->num_pixels_emitted_for_region, declared_pixels);
   }
 
   if (video->config->end_render_region) {
@@ -649,27 +653,29 @@ static void VideoRenderDirtyRegion(
 
 void VideoRender(VideoState* video) {
   if (!video->config || !video->config->write_pixel ||
-      !video->dirty.any_dirty) {
+      video->dirty_state.status == kVideoClean) {
     return;
   }
 
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
-  if (video->dirty.full_redraw) {
+  if (video->dirty_state.status == kVideoFullRedraw) {
     VideoRenderDirtyRegion(
         video, 0, kVideoDirtyColumns, 0, adapter->frame_buffer_height);
   } else {
     VideoDirtyGeometry geometry = VideoGetDirtyGeometry(video);
-    for (uint8_t row = 0; row < geometry.row_count;) {
-      VideoDirtyRange range = video->dirty.ranges[row];
+    for (uint8_t row = 0; row < geometry.rows;) {
+      VideoDirtyRange range = video->dirty_state.ranges[row];
       if (range.end_column == 0) {
         ++row;
         continue;
       }
 
       uint8_t end_row = row + 1;
-      while (end_row < geometry.row_count &&
-             video->dirty.ranges[end_row].first_column == range.first_column &&
-             video->dirty.ranges[end_row].end_column == range.end_column) {
+      while (end_row < geometry.rows &&
+             video->dirty_state.ranges[end_row].start_column ==
+                 range.start_column &&
+             video->dirty_state.ranges[end_row].end_column ==
+                 range.end_column) {
         ++end_row;
       }
       uint16_t first_y = (uint16_t)row * geometry.scan_lines_per_row;
@@ -678,11 +684,11 @@ void VideoRender(VideoState* video) {
         end_y = adapter->frame_buffer_height;
       }
       VideoRenderDirtyRegion(
-          video, range.first_column, range.end_column, first_y, end_y);
+          video, range.start_column, range.end_column, first_y, end_y);
       row = end_row;
     }
   }
 
   static const VideoDirtyState kEmptyDirtyState = {0};
-  video->dirty = kEmptyDirtyState;
+  video->dirty_state = kEmptyDirtyState;
 }

@@ -244,9 +244,9 @@ TEST_F(CGATest, DirtyRangeSplittingA40ColumnCellIsReported) {
   SetControl(kControlMode0);
   Render();
 
-  video_.dirty.ranges[1].first_column = 5;
-  video_.dirty.ranges[1].end_column = 8;
-  video_.dirty.any_dirty = true;
+  video_.dirty_state.ranges[1].start_column = 5;
+  video_.dirty_state.ranges[1].end_column = 8;
+  video_.dirty_state.status = kVideoDirty;
   Render();
 
   ASSERT_EQ(mock_region_count, 1);

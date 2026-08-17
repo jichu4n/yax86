@@ -652,23 +652,34 @@ enum {
                             : kVideoMaxTextRows,
 };
 
-// Half-open horizontal dirty range [first_column, end_column). Both fields are
+// Half-open horizontal dirty range [start_column, end_column). Both fields are
 // zero when the range is empty.
 typedef struct VideoDirtyRange {
-  uint8_t first_column;
+  uint8_t start_column;
   uint8_t end_column;
 } VideoDirtyRange;
 
-typedef struct VideoDirtyState {
-  // One horizontal range per dirty row, indexed by dirty row.
-  VideoDirtyRange ranges[kVideoDirtyRowCount];
-  // At least one range is dirty. Avoids scanning the ranges on an unchanged
-  // frame.
-  bool any_dirty;
+// What the next render has to do. The three states are mutually exclusive, so
+// they are one value rather than a pair of flags that could disagree.
+typedef enum VideoDirtyStatus {
+  // The host display already matches video state, so a render does nothing.
+  // This is the zero value, which makes clearing the tracker a zero
+  // initialization.
+  kVideoClean = 0,
+  // Some rows carry a dirty range, and only those need to be redrawn.
+  kVideoDirty,
   // The next render must replace the complete frame buffer. Used when a change
   // cannot be represented as local VRAM damage, such as a mode or palette
   // change.
-  bool full_redraw;
+  kVideoFullRedraw,
+} VideoDirtyStatus;
+
+typedef struct VideoDirtyState {
+  // One horizontal range per dirty row, indexed by dirty row. Only meaningful
+  // when status is kVideoDirty.
+  VideoDirtyRange ranges[kVideoDirtyRowCount];
+  // What the next render has to do.
+  VideoDirtyStatus status;
 } VideoDirtyState;
 
 // ============================================================================
@@ -779,13 +790,13 @@ typedef struct VideoState {
   uint32_t frames;
 
   // Portions of the retained host display that no longer match video state.
-  VideoDirtyState dirty;
+  VideoDirtyState dirty_state;
 
   // Pixels emitted so far for the region currently being rendered. A windowed
   // display places pixels by count rather than by coordinate, so a region that
   // emits a different number of pixels than it declared would corrupt it; this
   // is what the check at the end of each region compares.
-  uint32_t region_pixels;
+  uint32_t num_pixels_emitted_for_region;
 } VideoState;
 
 // Initialize video state with the provided configuration.
