@@ -6828,36 +6828,38 @@ static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
   return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
 }
 
-// Returns the number of displacement bytes based on the ModR/M byte.
-static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
-  switch (mod) {
-    case 0:
-      // Special case: 16-bit displacement
-      return rm == 6 ? 2 : 0;
-    case 1:
-    case 2:
-      // 8 or 16-bit displacement
-      return mod;
-    default:
-      // No displacement
-      return 0;
-  }
-}
+// Number of displacement bytes carried by each combination of the ModR/M MOD
+// and RM fields, indexed by (mod << 3) | rm. MOD 0 carries none except RM 6,
+// which is the direct address form; MOD 1 and MOD 2 carry their own count; MOD
+// 3 is register direct and addresses no memory at all.
+//
+// The whole input is five bits, so the chain of comparisons this replaces is a
+// single load. Measured on x86-64 that is a small loss - the comparisons are
+// predicted and the load is not free - so this is here for a host with no
+// branch predictor, which is where a table is unambiguously cheaper.
+static const uint8_t kDisplacementSizes[32] = {
+    0, 0, 0, 0, 0, 0, 2, 0,  // MOD 0
+    1, 1, 1, 1, 1, 1, 1, 1,  // MOD 1
+    2, 2, 2, 2, 2, 2, 2, 2,  // MOD 2
+    0, 0, 0, 0, 0, 0, 0, 0,  // MOD 3
+};
 
 // Returns the number of immediate bytes in an instruction.
 static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
-  switch (metadata->opcode) {
-    // TEST r/m8, imm8
-    case 0xF6:
-    // TEST r/m16, imm16
-    case 0xF7:
-      // REG 0 and REG 1 are both TEST, which carries an immediate; the other
-      // REG values do not. The 8086/8088 does not decode bit 0 of the REG
-      // field here, which is what makes REG 1 an alias of REG 0.
-      return reg <= 1 ? metadata->opcode - 0xF5 : 0;
-    default:
-      return metadata->immediate_size;
+  // Group 3 is the only place where the REG field decides whether there is an
+  // immediate at all: it packs eight instructions into one opcode and only TEST
+  // carries one. REG 1 is an alias of REG 0 because the 8086/8088 does not
+  // decode bit 0 of the REG field here. Row 0 is the byte form (0xF6) and row 1
+  // the word form (0xF7), which is bit 0 of the opcode.
+  if ((metadata->opcode | 1) == 0xF7) {
+    static const uint8_t kGroup3ImmediateSizes[2][8] = {
+        {1, 1, 0, 0, 0, 0, 0, 0},
+        {2, 2, 0, 0, 0, 0, 0, 0},
+    };
+    return kGroup3ImmediateSizes[metadata->opcode & 1][reg];
   }
+  // Every other opcode carries what the opcode table says, whatever REG holds.
+  return metadata->immediate_size;
 }
 
 CPUFetchNextInstructionStatus CPUFetchNextInstruction(
@@ -6890,8 +6892,9 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
     instruction.mod_rm.rm = mod_rm_byte & 0x07;          // Bits 0-2
 
     // Displacement
-    instruction.displacement_size =
-        GetDisplacementSize(instruction.mod_rm.mod, instruction.mod_rm.rm);
+    const uint8_t addressing_mode =
+        (uint8_t)((instruction.mod_rm.mod << 3) | instruction.mod_rm.rm);
+    instruction.displacement_size = kDisplacementSizes[addressing_mode];
     for (int i = 0; i < instruction.displacement_size; ++i) {
       instruction.displacement[i] = ReadNextInstructionByte(cpu, &ip);
     }
