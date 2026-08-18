@@ -187,6 +187,9 @@ TEST_F(CGATest, RenderText80x25) {
   EXPECT_EQ(foreground_pixels + background_pixels, kCharWidth * kCharHeight);
   // The whole frame buffer is covered.
   EXPECT_EQ(mock_pixel_write_count, kFrameBufferWidth * kFrameBufferHeight);
+  EXPECT_EQ(
+      mock_pixel_span_count,
+      (kFrameBufferWidth / kVideoPixelBatchSize) * kFrameBufferHeight);
 }
 
 TEST_F(CGATest, RenderText40x25IsPixelDoubled) {
@@ -477,6 +480,7 @@ TEST_F(CGATest, GraphicsWriteRendersItsFourLineGroup) {
   EXPECT_EQ(mock_regions[0].width, 8);
   EXPECT_EQ(mock_regions[0].height, 4);
   EXPECT_EQ(mock_pixel_write_count, 8 * 4);
+  EXPECT_EQ(mock_pixel_span_count, 4);
   EXPECT_EQ(Pixel(7 * 8, 5), Color(kColorWhite));
 }
 

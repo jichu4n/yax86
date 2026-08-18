@@ -129,12 +129,23 @@ void DisplayRender(void) {
   g_frame_updated = false;
 }
 
-void DisplayPutPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+void DisplayPutPixels(int x, int y, const RGB* pixels, uint8_t count) {
   if (x < 0 || x >= g_width || y < 0 || y >= g_height) {
     return;
   }
-  // ARGB8888: A=255, R, G, B
-  uint32_t color =
-      (0xFF << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
-  g_pixel_buffer[y * g_width + x] = color;
+  // Clip a span that runs past the right edge rather than dropping it whole.
+  // The core never emits one - the frame buffer is sized from the adapter and
+  // every renderer stops exactly at its width - but losing up to a batch of
+  // otherwise valid pixels would leave a gap that the region upload then
+  // presents as stale content.
+  if (x + count > g_width) {
+    count = (uint8_t)(g_width - x);
+  }
+  uint32_t* destination = &g_pixel_buffer[y * g_width + x];
+  for (uint8_t i = 0; i < count; ++i) {
+    RGB rgb = pixels[i];
+    // ARGB8888: A=255, R, G, B
+    destination[i] = (0xFF << 24) | ((uint32_t)rgb.r << 16) |
+                     ((uint32_t)rgb.g << 8) | (uint32_t)rgb.b;
+  }
 }

@@ -53,8 +53,9 @@ static inline uint32_t CGAGetScanLineAddress(
 }
 
 static void CGARenderTextRegion(
-    VideoState* video, const VideoModeMetadata* metadata, uint8_t start_column,
-    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, const VideoModeMetadata* metadata,
+    uint8_t start_column, uint8_t end_column, uint16_t first_y,
+    uint16_t end_y) {
   // A 40-column cell is drawn twice as wide, so it spans two dirty columns
   // and the range converts back to character cells by halving. Invalidation
   // always scales a character column by the same factor, so the range is
@@ -80,6 +81,9 @@ static void CGARenderTextRegion(
   // which is what a display addressed by transfer window expects. The cost is
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
+    // A 40-column cell is twice as wide but there are half as many, so a row
+    // starts at the same pixel either way.
+    VideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
     uint8_t row = (uint8_t)(y / kCGACharHeight);
     uint8_t char_scan_line = (uint8_t)(y % kCGACharHeight);
     for (uint8_t col = first_char; col < end_char; ++col) {
@@ -122,10 +126,8 @@ static void CGARenderTextRegion(
                                    : (is_foreground ? foreground : background);
         // In 40-column mode each glyph pixel is emitted twice, which is how
         // the adapter fills the same 640 dot line with half the characters.
-        uint16_t pixel_x = ((uint16_t)col * metadata->char_width + x) * scale;
         for (uint8_t i = 0; i < scale; ++i) {
-          Position position = {.x = pixel_x + i, .y = y};
-          VideoWritePixel(video, position, rgb);
+          VideoPixelRunPush(run, rgb);
         }
       }
     }
@@ -154,29 +156,26 @@ static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
 }
 
 static void CGARenderGraphics320x200Region(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB palette[4];
   CGAResolve320x200Palette(video, palette);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
+    VideoPixelRunBegin(
+        run, (uint16_t)start_column * kCGAFrameBufferPixelsPerByte320x200, y);
     uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
           VideoReadVRAMByte(video, scan_line_address + byte_column);
-      uint16_t first_x = byte_column * kCGAFrameBufferPixelsPerByte320x200;
       for (uint8_t i = 0; i < kCGAPixelsPerByte320x200; ++i) {
         uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 - i) *
                                   kCGABitsPerPixel320x200);
         uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
         for (uint8_t scale_x = 0; scale_x < kCGA320x200HorizontalScale;
              ++scale_x) {
-          Position position = {
-              .x = first_x + i * kCGA320x200HorizontalScale + scale_x,
-              .y = y,
-          };
-          VideoWritePixel(video, position, palette[color]);
+          VideoPixelRunPush(run, palette[color]);
         }
       }
     }
@@ -184,34 +183,33 @@ static void CGARenderGraphics320x200Region(
 }
 
 static void CGARenderGraphics640x200Region(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB foreground = CGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
   RGB background = CGAGetColor(video, 0);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
+    VideoPixelRunBegin(
+        run, (uint16_t)start_column * kCGAPixelsPerByte640x200, y);
     uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
           VideoReadVRAMByte(video, scan_line_address + byte_column);
-      uint16_t first_x = byte_column * kCGAPixelsPerByte640x200;
       for (uint8_t i = 0; i < kCGAPixelsPerByte640x200; ++i) {
         uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 - i);
         bool is_foreground = (byte_value >> shift) & 1;
-        Position position = {.x = first_x + i, .y = y};
-        VideoWritePixel(
-            video, position, is_foreground ? foreground : background);
+        VideoPixelRunPush(run, is_foreground ? foreground : background);
       }
     }
   }
 }
 
 YAX86_PRIVATE void CGARenderRegion(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   switch (metadata->mode) {
     case kVideoModeCGAText40x25Mono:
@@ -219,16 +217,16 @@ YAX86_PRIVATE void CGARenderRegion(
     case kVideoModeCGAText80x25Mono:
     case kVideoModeCGAText80x25Color:
       CGARenderTextRegion(
-          video, metadata, start_column, end_column, first_y, end_y);
+          video, run, metadata, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics320x200:
     case kVideoModeCGAGraphics320x200Alt:
       CGARenderGraphics320x200Region(
-          video, start_column, end_column, first_y, end_y);
+          video, run, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics640x200:
       CGARenderGraphics640x200Region(
-          video, start_column, end_column, first_y, end_y);
+          video, run, start_column, end_column, first_y, end_y);
       break;
     default:
       break;

@@ -34,6 +34,7 @@ enum {
 inline RGB mock_frame_buffer[kMaxFrameBufferHeight][kMaxFrameBufferWidth];
 // Render activity since the last call to Render().
 inline int mock_pixel_write_count;
+inline int mock_pixel_span_count;
 inline VideoRegion mock_regions[kVideoDirtyRowCount];
 inline int mock_region_count;
 inline int mock_region_end_count;
@@ -51,17 +52,27 @@ inline int mock_region_area_mismatches;
 // wrong place.
 inline int mock_pixels_outside_region;
 
-inline void MockWritePixel(VideoState* video, Position position, RGB rgb) {
-  ++mock_pixel_write_count;
-  ++mock_open_region_pixels;
-  if (position.x < mock_open_region.origin.x ||
-      position.x >= mock_open_region.origin.x + mock_open_region.width ||
-      position.y < mock_open_region.origin.y ||
-      position.y >= mock_open_region.origin.y + mock_open_region.height) {
-    ++mock_pixels_outside_region;
+inline void MockWritePixels(
+    VideoState* video, Position origin, const RGB* pixels, uint8_t count) {
+  EXPECT_GT(count, 0);
+  EXPECT_LE(count, kVideoPixelBatchSize);
+  EXPECT_LE(origin.x + count, kMaxFrameBufferWidth);
+  ++mock_pixel_span_count;
+  mock_pixel_write_count += count;
+  mock_open_region_pixels += count;
+  // A span stays on one scan line, so only its ends need testing against the
+  // open region.
+  if (origin.x < mock_open_region.origin.x ||
+      origin.x + count > mock_open_region.origin.x + mock_open_region.width ||
+      origin.y < mock_open_region.origin.y ||
+      origin.y >= mock_open_region.origin.y + mock_open_region.height) {
+    mock_pixels_outside_region += count;
   }
-  if (position.x < kMaxFrameBufferWidth && position.y < kMaxFrameBufferHeight) {
-    mock_frame_buffer[position.y][position.x] = rgb;
+  for (uint8_t i = 0; i < count; ++i) {
+    uint16_t x = origin.x + i;
+    if (x < kMaxFrameBufferWidth && origin.y < kMaxFrameBufferHeight) {
+      mock_frame_buffer[origin.y][x] = pixels[i];
+    }
   }
 }
 
@@ -117,7 +128,7 @@ class VideoTestBase : public ::testing::Test {
     config_.adapter = adapter;
     config_.vram = mock_vram;
     config_.logger = &logger_;
-    config_.write_pixel = MockWritePixel;
+    config_.write_pixels = MockWritePixels;
     config_.begin_render_region = MockBeginRenderRegion;
     config_.end_render_region = MockEndRenderRegion;
 
@@ -146,12 +157,14 @@ class VideoTestBase : public ::testing::Test {
       }
     }
     mock_pixel_write_count = 0;
+    mock_pixel_span_count = 0;
     mock_region_count = 0;
     mock_region_end_count = 0;
   }
 
   void ResetRenderStats() {
     mock_pixel_write_count = 0;
+    mock_pixel_span_count = 0;
     mock_region_count = 0;
     mock_region_end_count = 0;
   }

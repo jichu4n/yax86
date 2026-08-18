@@ -310,6 +310,9 @@ TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
       CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
   // The whole frame buffer is blanked, not just the character cells.
   EXPECT_EQ(mock_pixel_write_count, 720 * 350);
+  EXPECT_EQ(
+      mock_pixel_span_count,
+      ((720 + kVideoPixelBatchSize - 1) / kVideoPixelBatchSize) * 350);
 }
 
 }  // namespace

@@ -20494,6 +20494,9 @@ enum {
   kVideoDirtyRowCount = kVideoDirtyGraphicsRowCount > kVideoMaxTextRows
                             ? kVideoDirtyGraphicsRowCount
                             : kVideoMaxTextRows,
+  // Pixels are transferred to the host in small horizontal spans. This removes
+  // most callback overhead without requiring a frame or scan-line buffer.
+  kVideoPixelBatchSize = 32,
 };
 
 // Half-open horizontal dirty range [start_column, end_column). Both fields are
@@ -20563,9 +20566,13 @@ typedef struct VideoConfig {
   // The caller owns the buffer and it must outlive the video state.
   uint8_t* vram;
 
-  // Callback to write an RGB pixel value to the real display, invoked from
-  // VideoRender().
-  void (*write_pixel)(struct VideoState* video, Position position, RGB rgb);
+  // Callback to write a horizontal span of RGB pixels to the real display,
+  // invoked from VideoRender(). The pixels begin at origin, remain on one scan
+  // line, and are valid only for the duration of the synchronous callback.
+  // count is between 1 and kVideoPixelBatchSize, inclusive.
+  void (*write_pixels)(
+      struct VideoState* video, Position origin, const RGB* pixels,
+      uint8_t count);
   // Optional callbacks surrounding each dirty rectangular region emitted by
   // VideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
@@ -20604,7 +20611,7 @@ static const VideoConfig kDefaultVideoConfig = {
         },
 
     .vram = NULL,
-    .write_pixel = NULL,
+    .write_pixels = NULL,
     .begin_render_region = NULL,
     .end_render_region = NULL,
 };
@@ -20675,7 +20682,8 @@ void VideoTick(VideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
-// write_pixel in row-major order. Does nothing when the display is unchanged.
+// write_pixels in row-major horizontal spans. Does nothing when the display is
+// unchanged.
 void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H
@@ -20738,10 +20746,52 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
 YAX86_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value);
 
-// Write an RGB pixel value to the real display, ignored if no callback is
-// installed.
-YAX86_PRIVATE void VideoWritePixel(
-    VideoState* video, Position position, RGB rgb);
+// A horizontal run of pixels on its way to the host, buffered so that the
+// callback is crossed once per batch rather than once per pixel.
+//
+// Every renderer walks a region's rows left to right, so a run is opened at
+// the start of a row and pixels are pushed in order. That makes the position
+// of each pixel implicit - it is wherever the run has got to - so nothing
+// here compares coordinates, and a renderer has no way to name a position at
+// all, let alone the wrong one.
+typedef struct VideoPixelRun {
+  VideoState* video;
+  // Where the pixels currently buffered begin. Advances past each batch.
+  Position origin;
+  RGB pixels[kVideoPixelBatchSize];
+  uint8_t count;
+} VideoPixelRun;
+
+// Hand over what has been buffered and continue the run after it.
+static inline void VideoPixelRunFlush(VideoPixelRun* run) {
+  if (run->count == 0) {
+    return;
+  }
+  // Batching lets the region's pixel count be accumulated once per batch
+  // rather than once per pixel.
+  run->video->num_pixels_emitted_for_region += run->count;
+  run->video->config->write_pixels(
+      run->video, run->origin, run->pixels, run->count);
+  run->origin.x += run->count;
+  run->count = 0;
+}
+
+// Open a run at the leftmost pixel of a row. Any partial batch is handed over
+// first, so one call both ends the previous row and begins the next.
+static inline void VideoPixelRunBegin(
+    VideoPixelRun* run, uint16_t x, uint16_t y) {
+  VideoPixelRunFlush(run);
+  run->origin.x = x;
+  run->origin.y = y;
+}
+
+static inline void VideoPixelRunPush(VideoPixelRun* run, RGB rgb) {
+  run->pixels[run->count] = rgb;
+  ++run->count;
+  if (run->count == kVideoPixelBatchSize) {
+    VideoPixelRunFlush(run);
+  }
+}
 
 // Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
 // natural columns; vertical coordinates are dirty rows - a character row in
@@ -20791,14 +20841,14 @@ YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
 // Render a dirty region of the current MDA text display. Pixels are emitted in
 // row-major order.
 YAX86_PRIVATE void MDARenderRegion(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y);
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
 // Render a dirty region of the current CGA display. Pixels are emitted in
 // row-major order.
 YAX86_PRIVATE void CGARenderRegion(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y);
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
 #endif  // YAX86_VIDEO_INTERNAL_H
 
@@ -21688,10 +21738,10 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 }
 
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
-// first makes write_pixel a row-major stream suitable for an SPI window.
+// first makes write_pixels a row-major stream suitable for an SPI window.
 YAX86_PRIVATE void MDARenderRegion(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly
   // rather than derived from the mode control register.
   const VideoModeMetadata* metadata =
@@ -21710,6 +21760,7 @@ YAX86_PRIVATE void MDARenderRegion(
   // which is what a display addressed by transfer window expects. The cost is
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
+    VideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
     uint8_t row = (uint8_t)(y / kMDACharHeight);
     uint8_t char_scan_line = (uint8_t)(y % kMDACharHeight);
     for (uint8_t col = start_column; col < end_column; ++col) {
@@ -21741,11 +21792,7 @@ YAX86_PRIVATE void MDARenderRegion(
         const RGB* rgb = cursor_scan_line ? &video->config->foreground
                                           : (is_foreground ? colors.foreground
                                                            : colors.background);
-        Position position = {
-            .x = (uint16_t)col * metadata->char_width + x,
-            .y = y,
-        };
-        VideoWritePixel(video, position, *rgb);
+        VideoPixelRunPush(run, *rgb);
       }
     }
   }
@@ -21816,8 +21863,9 @@ static inline uint32_t CGAGetScanLineAddress(
 }
 
 static void CGARenderTextRegion(
-    VideoState* video, const VideoModeMetadata* metadata, uint8_t start_column,
-    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, const VideoModeMetadata* metadata,
+    uint8_t start_column, uint8_t end_column, uint16_t first_y,
+    uint16_t end_y) {
   // A 40-column cell is drawn twice as wide, so it spans two dirty columns
   // and the range converts back to character cells by halving. Invalidation
   // always scales a character column by the same factor, so the range is
@@ -21843,6 +21891,9 @@ static void CGARenderTextRegion(
   // which is what a display addressed by transfer window expects. The cost is
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
+    // A 40-column cell is twice as wide but there are half as many, so a row
+    // starts at the same pixel either way.
+    VideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
     uint8_t row = (uint8_t)(y / kCGACharHeight);
     uint8_t char_scan_line = (uint8_t)(y % kCGACharHeight);
     for (uint8_t col = first_char; col < end_char; ++col) {
@@ -21885,10 +21936,8 @@ static void CGARenderTextRegion(
                                    : (is_foreground ? foreground : background);
         // In 40-column mode each glyph pixel is emitted twice, which is how
         // the adapter fills the same 640 dot line with half the characters.
-        uint16_t pixel_x = ((uint16_t)col * metadata->char_width + x) * scale;
         for (uint8_t i = 0; i < scale; ++i) {
-          Position position = {.x = pixel_x + i, .y = y};
-          VideoWritePixel(video, position, rgb);
+          VideoPixelRunPush(run, rgb);
         }
       }
     }
@@ -21917,29 +21966,26 @@ static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
 }
 
 static void CGARenderGraphics320x200Region(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB palette[4];
   CGAResolve320x200Palette(video, palette);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
+    VideoPixelRunBegin(
+        run, (uint16_t)start_column * kCGAFrameBufferPixelsPerByte320x200, y);
     uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
           VideoReadVRAMByte(video, scan_line_address + byte_column);
-      uint16_t first_x = byte_column * kCGAFrameBufferPixelsPerByte320x200;
       for (uint8_t i = 0; i < kCGAPixelsPerByte320x200; ++i) {
         uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 - i) *
                                   kCGABitsPerPixel320x200);
         uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
         for (uint8_t scale_x = 0; scale_x < kCGA320x200HorizontalScale;
              ++scale_x) {
-          Position position = {
-              .x = first_x + i * kCGA320x200HorizontalScale + scale_x,
-              .y = y,
-          };
-          VideoWritePixel(video, position, palette[color]);
+          VideoPixelRunPush(run, palette[color]);
         }
       }
     }
@@ -21947,34 +21993,33 @@ static void CGARenderGraphics320x200Region(
 }
 
 static void CGARenderGraphics640x200Region(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB foreground = CGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
   RGB background = CGAGetColor(video, 0);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
+    VideoPixelRunBegin(
+        run, (uint16_t)start_column * kCGAPixelsPerByte640x200, y);
     uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
           VideoReadVRAMByte(video, scan_line_address + byte_column);
-      uint16_t first_x = byte_column * kCGAPixelsPerByte640x200;
       for (uint8_t i = 0; i < kCGAPixelsPerByte640x200; ++i) {
         uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 - i);
         bool is_foreground = (byte_value >> shift) & 1;
-        Position position = {.x = first_x + i, .y = y};
-        VideoWritePixel(
-            video, position, is_foreground ? foreground : background);
+        VideoPixelRunPush(run, is_foreground ? foreground : background);
       }
     }
   }
 }
 
 YAX86_PRIVATE void CGARenderRegion(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
-    uint16_t first_y, uint16_t end_y) {
+    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   switch (metadata->mode) {
     case kVideoModeCGAText40x25Mono:
@@ -21982,16 +22027,16 @@ YAX86_PRIVATE void CGARenderRegion(
     case kVideoModeCGAText80x25Mono:
     case kVideoModeCGAText80x25Color:
       CGARenderTextRegion(
-          video, metadata, start_column, end_column, first_y, end_y);
+          video, run, metadata, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics320x200:
     case kVideoModeCGAGraphics320x200Alt:
       CGARenderGraphics320x200Region(
-          video, start_column, end_column, first_y, end_y);
+          video, run, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics640x200:
       CGARenderGraphics640x200Region(
-          video, start_column, end_column, first_y, end_y);
+          video, run, start_column, end_column, first_y, end_y);
       break;
     default:
       break;
@@ -22093,15 +22138,6 @@ YAX86_PRIVATE void VideoWriteVRAMByte(
     return;
   }
   VideoInvalidateVRAMAddress(video, address);
-}
-
-YAX86_PRIVATE void VideoWritePixel(
-    VideoState* video, Position position, RGB rgb) {
-  if (!video->config || !video->config->write_pixel) {
-    return;
-  }
-  ++video->num_pixels_emitted_for_region;
-  video->config->write_pixel(video, position, rgb);
 }
 
 uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
@@ -22603,15 +22639,16 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 // Rendering
 // ============================================================================
 
-static void VideoRenderBlankRegion(VideoState* video, VideoRegion region) {
+static void VideoRenderBlankRegion(
+    VideoState* video, VideoPixelRun* run, VideoRegion region) {
   RGB blank = video->adapter == kVideoAdapterCGA ? video->config->cga_palette[0]
                                                  : video->config->background;
   uint16_t end_x = region.origin.x + region.width;
   uint16_t end_y = region.origin.y + region.height;
   for (uint16_t y = region.origin.y; y < end_y; ++y) {
+    VideoPixelRunBegin(run, region.origin.x, y);
     for (uint16_t x = region.origin.x; x < end_x; ++x) {
-      Position position = {.x = x, .y = y};
-      VideoWritePixel(video, position, blank);
+      VideoPixelRunPush(run, blank);
     }
   }
 }
@@ -22633,13 +22670,22 @@ static void VideoRenderDirtyRegion(
   }
 
   video->num_pixels_emitted_for_region = 0;
+  // Only these two members need a value on the way in: origin is set whenever
+  // a span starts, and a pixel is stored before the count that exposes it to
+  // the flush. Initializing the whole struct would clear the 96-byte batch on
+  // every region, which a graphics frame can split into fifty of them.
+  VideoPixelRun run;
+  run.video = video;
+  run.count = 0;
+
   if (!(video->control_register & kVideoControlVideoEnable)) {
-    VideoRenderBlankRegion(video, region);
+    VideoRenderBlankRegion(video, &run, region);
   } else if (video->adapter == kVideoAdapterCGA) {
-    CGARenderRegion(video, start_column, end_column, first_y, end_y);
+    CGARenderRegion(video, &run, start_column, end_column, first_y, end_y);
   } else {
-    MDARenderRegion(video, start_column, end_column, first_y, end_y);
+    MDARenderRegion(video, &run, start_column, end_column, first_y, end_y);
   }
+  VideoPixelRunFlush(&run);
 
   // A retained display addressed by transfer window advances its own write
   // pointer once per pixel, so it is the pixel count that positions them, not
@@ -22662,7 +22708,7 @@ static void VideoRenderDirtyRegion(
 }
 
 void VideoRender(VideoState* video) {
-  if (!video->config || !video->config->write_pixel ||
+  if (!video->config || !video->config->write_pixels ||
       video->dirty_state.status == kVideoClean) {
     return;
   }

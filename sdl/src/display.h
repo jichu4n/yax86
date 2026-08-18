@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "core/video.h"
+
 // Initialize the display subsystem with a frame buffer of the given size in
 // pixels.
 bool DisplayInit(int width, int height);
@@ -19,8 +21,7 @@ void DisplayEndRegion(void);
 // Render the current frame to the screen.
 void DisplayRender(void);
 
-// Write a pixel to the display buffer.
-// This is intended to be called by the core's video callback.
-void DisplayPutPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
+// Write a horizontal RGB pixel span to the retained display buffer.
+void DisplayPutPixels(int x, int y, const RGB* pixels, uint8_t count);
 
 #endif  // YAX86_SDL_DISPLAY_H
