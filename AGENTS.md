@@ -170,6 +170,14 @@ To build the emulator from the project root directory:
 ./tools/build.sh
 ```
 
+Builds default to `Release`. CMake applies no optimization flags at all when no
+build type is named, so the default is set explicitly in the top level
+`CMakeLists.txt` rather than left to CMake - an unoptimized emulator is around
+four times slower, which is most of the browser build's CPU usage at an idle DOS
+prompt. Pass `-DCMAKE_BUILD_TYPE` to choose another type; it is left alone when
+set. Note that `-Wall -Wextra -Wpedantic -Werror` is attached to
+`CMAKE_C_FLAGS_DEBUG`, so warnings are errors only in a `Debug` build.
+
 To run tests:
 ```
 ./tools/run-tests.sh
