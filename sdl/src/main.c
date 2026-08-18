@@ -6,9 +6,9 @@
 #include <emscripten.h>
 #endif
 
+#include "audio.h"
 #include "core/platform.h"
 #include "core/video.h"
-#include "audio.h"
 #include "display.h"
 #include "floppy.h"
 #include "harddisk.h"
@@ -72,6 +72,16 @@ static const VideoAdapterMetadata* g_video_adapter_metadata = NULL;
 static void MainWritePixel(
     YAX86_UNUSED struct VideoState* video, Position position, RGB rgb) {
   DisplayPutPixel(position.x, position.y, rgb.r, rgb.g, rgb.b);
+}
+
+static void MainBeginRenderRegion(
+    YAX86_UNUSED struct VideoState* video, VideoRegion region) {
+  DisplayBeginRegion(
+      region.origin.x, region.origin.y, region.width, region.height);
+}
+
+static void MainEndRenderRegion(YAX86_UNUSED struct VideoState* video) {
+  DisplayEndRegion();
 }
 
 static void MainSetPCSpeakerFrequency(
@@ -250,6 +260,8 @@ int main(int argc, char* argv[]) {
   // PlatformInit initializes sub-modules, including video. Video memory comes
   // from the config, but the display is ours, so hook up the pixel sink here.
   g_platform.video_config.write_pixel = MainWritePixel;
+  g_platform.video_config.begin_render_region = MainBeginRenderRegion;
+  g_platform.video_config.end_render_region = MainEndRenderRegion;
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(MainTick, 0, 1);

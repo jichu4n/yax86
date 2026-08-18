@@ -64,7 +64,7 @@ class CGATest : public VideoTestBase {
   void WriteGraphicsByte(int y, int x_byte, uint8_t value) {
     uint32_t address = (y % 2 ? kCGAGraphicsOddScanLineOffset : 0) +
                        (y / 2) * kCGAGraphicsBytesPerScanLine + x_byte;
-    mock_vram[address] = value;
+    VideoWriteVRAM(&video_, address, value);
   }
 };
 
@@ -206,7 +206,66 @@ TEST_F(CGATest, RenderText40x25IsPixelDoubled) {
   WriteChar(1, 0xDB, kColorRed);
   Render();
   EXPECT_EQ(Pixel(kCharWidth * 2, 0), Color(kColorRed));
-  EXPECT_EQ(mock_pixel_write_count, kFrameBufferWidth * kFrameBufferHeight);
+  EXPECT_EQ(mock_pixel_write_count, kCharWidth * 2 * kCharHeight);
+}
+
+TEST_F(CGATest, TextWriteRendersOnlyTheCellsCharacterRow) {
+  SetControl(kControlMode3);
+  Render();
+
+  const uint8_t kCol = 3;
+  const uint8_t kRow = 2;
+  WriteChar(kRow * 80 + kCol, 'A', kColorWhite);
+  Render();
+
+  ASSERT_EQ(mock_region_count, 1);
+  EXPECT_EQ(mock_region_end_count, 1);
+  EXPECT_EQ(mock_regions[0].origin.x, kCol * kCharWidth);
+  EXPECT_EQ(mock_regions[0].origin.y, kRow * kCharHeight);
+  EXPECT_EQ(mock_regions[0].width, kCharWidth);
+  EXPECT_EQ(mock_regions[0].height, kCharHeight);
+  EXPECT_EQ(mock_pixel_write_count, kCharWidth * kCharHeight);
+
+  // The retained display needs no work when neither VRAM nor registers change.
+  Render();
+  EXPECT_EQ(mock_region_count, 0);
+  EXPECT_EQ(mock_pixel_write_count, 0);
+}
+
+TEST_F(CGATest, DirtyRangeSplittingA40ColumnCellIsReported) {
+  // In 40-column text a character cell spans two dirty columns, so the
+  // renderer can only draw whole pairs. A range starting or ending mid-cell
+  // would emit pixels the region it declared does not cover - which on a
+  // display addressed by transfer window displaces every pixel after it.
+  //
+  // Every invalidation path scales a character column by two, so no caller
+  // produces such a range today. This reaches around them to confirm that if
+  // one ever does, it is reported rather than silently corrupting the display.
+  SetControl(kControlMode0);
+  Render();
+
+  video_.dirty_state.ranges[1].start_column = 5;
+  video_.dirty_state.ranges[1].end_column = 8;
+  video_.dirty_state.status = kVideoDirty;
+  Render();
+
+  ASSERT_EQ(mock_region_count, 1);
+  // Three dirty columns of eight pixels are declared to the host, starting at
+  // pixel 40.
+  EXPECT_EQ(mock_regions[0].origin.x, 5 * kCharWidth);
+  EXPECT_EQ(mock_regions[0].width, 3 * kCharWidth);
+  // Truncating both ends to whole cells renders cells 2 and 3 instead, which
+  // is 32 pixels wide and starts at pixel 32 - both more pixels than the
+  // region declared and some of them outside it.
+  EXPECT_EQ(mock_pixel_write_count, 4 * kCharWidth * kCharHeight);
+  EXPECT_EQ(mock_region_area_mismatches, 1);
+  EXPECT_GT(mock_pixels_outside_region, 0);
+  EXPECT_EQ(mock_log_error_count, 1);
+
+  // Consume the deliberate mismatch so the fixture's teardown check passes.
+  mock_region_area_mismatches = 0;
+  mock_pixels_outside_region = 0;
+  mock_log_error_count = 0;
 }
 
 TEST_F(CGATest, BlinkingAttributeLimitsBackgroundColors) {
@@ -258,6 +317,24 @@ TEST_F(CGATest, RenderCursor) {
   EXPECT_EQ(
       CountPixels(cursor_x, 0, kCharWidth, 6, Color(kColorBlack)),
       kCharWidth * 6);
+}
+
+TEST_F(CGATest, CursorKeepsItsColorWhenBlinkingCharacterIsHidden) {
+  SetControl(kControlMode3);
+  WriteRegister(kCRTCRegisterCursorStart, 0x06);
+  WriteRegister(kCRTCRegisterCursorEnd, 0x07);
+  WriteRegister(kCRTCRegisterCursorH, 0);
+  WriteRegister(kCRTCRegisterCursorL, 0);
+  WriteChar(0, ' ', 0x80 | (kColorBlue << 4) | kColorWhite);
+  Render();
+
+  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
+  Render();
+
+  EXPECT_EQ(
+      CountPixels(0, 6, kCharWidth, 2, Color(kColorWhite)), kCharWidth * 2);
+  EXPECT_EQ(
+      CountPixels(0, 0, kCharWidth, 6, Color(kColorBlue)), kCharWidth * 6);
 }
 
 TEST_F(CGATest, StartAddressSelectsThePage) {
@@ -384,6 +461,39 @@ TEST_F(CGATest, RenderGraphics640x200) {
   EXPECT_EQ(Pixel(7, 0), Color(kColorBlack));
   // No pixel doubling in this mode.
   EXPECT_EQ(mock_pixel_write_count, kFrameBufferWidth * kFrameBufferHeight);
+}
+
+TEST_F(CGATest, GraphicsWriteRendersItsFourLineGroup) {
+  SetControl(kControlMode6);
+  SetColorSelect(kColorWhite);
+  Render();
+
+  WriteGraphicsByte(5, 7, 0x80);
+  Render();
+
+  ASSERT_EQ(mock_region_count, 1);
+  EXPECT_EQ(mock_regions[0].origin.x, 7 * 8);
+  EXPECT_EQ(mock_regions[0].origin.y, 4);
+  EXPECT_EQ(mock_regions[0].width, 8);
+  EXPECT_EQ(mock_regions[0].height, 4);
+  EXPECT_EQ(mock_pixel_write_count, 8 * 4);
+  EXPECT_EQ(Pixel(7 * 8, 5), Color(kColorWhite));
+}
+
+TEST_F(CGATest, GraphicsWritesShareTheRangeOfTheirFourLineGroup) {
+  SetControl(kControlMode6);
+  SetColorSelect(kColorWhite);
+  Render();
+
+  WriteGraphicsByte(4, 2, 0x80);
+  WriteGraphicsByte(7, 6, 0x01);
+  Render();
+
+  ASSERT_EQ(mock_region_count, 1);
+  EXPECT_EQ(mock_regions[0].origin.x, 2 * 8);
+  EXPECT_EQ(mock_regions[0].origin.y, 4);
+  EXPECT_EQ(mock_regions[0].width, 5 * 8);
+  EXPECT_EQ(mock_regions[0].height, 4);
 }
 
 TEST_F(CGATest, Graphics640x200ForegroundColor) {

@@ -11,6 +11,11 @@ bool DisplayInit(int width, int height);
 // Clean up the display subsystem.
 void DisplayQuit(void);
 
+// Begin and end a rectangular update to the retained display buffer. Pixels
+// between these calls are written in row-major order.
+void DisplayBeginRegion(int x, int y, int width, int height);
+void DisplayEndRegion(void);
+
 // Render the current frame to the screen.
 void DisplayRender(void);
 

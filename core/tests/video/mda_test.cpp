@@ -112,6 +112,24 @@ TEST_F(MDATest, RenderCharacterNormal) {
   EXPECT_EQ(foreground_pixels + background_pixels, kCharWidth * kCharHeight);
 }
 
+TEST_F(MDATest, CharacterWriteRendersOnlyItsOwnCharacterRow) {
+  Render();
+
+  const uint8_t kCol = 2;
+  const uint8_t kRow = 1;
+  WriteChar(kRow * 80 + kCol, 'A', 0x07);
+  Render();
+
+  // The dirty row is the character row, so a 14-line cell marks exactly its
+  // own 14 lines rather than the scan line groups overlapping them.
+  ASSERT_EQ(mock_region_count, 1);
+  EXPECT_EQ(mock_regions[0].origin.x, kCol * kCharWidth);
+  EXPECT_EQ(mock_regions[0].origin.y, kRow * kCharHeight);
+  EXPECT_EQ(mock_regions[0].width, kCharWidth);
+  EXPECT_EQ(mock_regions[0].height, kCharHeight);
+  EXPECT_EQ(mock_pixel_write_count, kCharWidth * kCharHeight);
+}
+
 TEST_F(MDATest, RenderCharacterInverse) {
   // A space with the inverse attribute is a solid block: a space has no bits
   // set in the font, so every pixel takes the cell's background color, which

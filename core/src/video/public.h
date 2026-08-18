@@ -44,6 +44,13 @@ typedef struct Position {
   uint16_t y;
 } Position;
 
+// A rectangular portion of the host frame buffer, in pixels.
+typedef struct VideoRegion {
+  Position origin;
+  uint16_t width;
+  uint16_t height;
+} VideoRegion;
+
 // Text mode character position. We use a different structure to avoid confusion
 // with Position, which is used for pixel coordinates.
 typedef struct TextPosition {
@@ -620,6 +627,61 @@ enum {
   kPortMapEntryVideo = 0x10,
 };
 
+enum {
+  // Every supported mode divides horizontally into 80 natural rendering
+  // units: text columns on the MDA and 80-column CGA, half-character cells in
+  // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
+  kVideoDirtyColumns = 80,
+  // Vertically, one horizontal range is tracked per dirty row. A text mode's
+  // dirty row is one character row, which covers exactly the scan lines a
+  // changed cell occupies. Graphics modes have no character rows, so
+  // neighboring scan lines share a range instead.
+  kVideoDirtyScanLinesPerGroup = 4,
+  // The tallest graphics mode is 200 lines.
+  kVideoMaxGraphicsHeight = 200,
+  // The most character rows in any text mode.
+  kVideoMaxTextRows = 25,
+  // Dirty rows needed to cover the tallest graphics mode.
+  kVideoDirtyGraphicsRowCount =
+      (kVideoMaxGraphicsHeight + kVideoDirtyScanLinesPerGroup - 1) /
+      kVideoDirtyScanLinesPerGroup,
+  // The tracker is statically sized for whichever mode needs the most rows.
+  // Graphics modes do, at 50 against a text mode's 25.
+  kVideoDirtyRowCount = kVideoDirtyGraphicsRowCount > kVideoMaxTextRows
+                            ? kVideoDirtyGraphicsRowCount
+                            : kVideoMaxTextRows,
+};
+
+// Half-open horizontal dirty range [start_column, end_column). Both fields are
+// zero when the range is empty.
+typedef struct VideoDirtyRange {
+  uint8_t start_column;
+  uint8_t end_column;
+} VideoDirtyRange;
+
+// What the next render has to do. The three states are mutually exclusive, so
+// they are one value rather than a pair of flags that could disagree.
+typedef enum VideoDirtyStatus {
+  // The host display already matches video state, so a render does nothing.
+  // This is the zero value, which makes clearing the tracker a zero
+  // initialization.
+  kVideoClean = 0,
+  // Some rows carry a dirty range, and only those need to be redrawn.
+  kVideoDirty,
+  // The next render must replace the complete frame buffer. Used when a change
+  // cannot be represented as local VRAM damage, such as a mode or palette
+  // change.
+  kVideoFullRedraw,
+} VideoDirtyStatus;
+
+typedef struct VideoDirtyState {
+  // One horizontal range per dirty row, indexed by dirty row. Only meaningful
+  // when status is kVideoDirty.
+  VideoDirtyRange ranges[kVideoDirtyRowCount];
+  // What the next render has to do.
+  VideoDirtyStatus status;
+} VideoDirtyState;
+
 // ============================================================================
 // Video state
 // ============================================================================
@@ -650,10 +712,9 @@ typedef struct VideoConfig {
   // The emulated video RAM, at least the adapter's vram_size bytes of it.
   // Required - the adapter reads and writes it directly.
   //
-  // The renderer is by far the heaviest reader of video RAM: it walks the
-  // whole framebuffer on every VideoRender(), so a callback per byte would
-  // cost an indirect call for each one. Writes still go through
-  // VideoWriteVRAM(), which is where the adapter gets to notice them.
+  // Rendering is the heaviest reader of video RAM, so a callback per byte
+  // would cost an indirect call in its inner loops. Writes still go through
+  // VideoWriteVRAM(), which marks the corresponding display region dirty.
   //
   // The caller owns the buffer and it must outlive the video state.
   uint8_t* vram;
@@ -661,6 +722,11 @@ typedef struct VideoConfig {
   // Callback to write an RGB pixel value to the real display, invoked from
   // VideoRender().
   void (*write_pixel)(struct VideoState* video, Position position, RGB rgb);
+  // Optional callbacks surrounding each dirty rectangular region emitted by
+  // VideoRender(). A retained display can use them to set a transfer window
+  // before the row-major pixel stream begins.
+  void (*begin_render_region)(struct VideoState* video, VideoRegion region);
+  void (*end_render_region)(struct VideoState* video);
 } VideoConfig;
 
 // Default video config.
@@ -695,6 +761,8 @@ static const VideoConfig kDefaultVideoConfig = {
 
     .vram = NULL,
     .write_pixel = NULL,
+    .begin_render_region = NULL,
+    .end_render_region = NULL,
 };
 
 // Video state.
@@ -720,6 +788,15 @@ typedef struct VideoState {
   uint32_t scan_line_cycles;
   // Number of frames since initialization. Drives blinking.
   uint32_t frames;
+
+  // Portions of the retained host display that no longer match video state.
+  VideoDirtyState dirty_state;
+
+  // Pixels emitted so far for the region currently being rendered. A windowed
+  // display places pixels by count rather than by coordinate, so a region that
+  // emits a different number of pixels than it declared would corrupt it; this
+  // is what the check at the end of each region compares.
+  uint32_t num_pixels_emitted_for_region;
 } VideoState;
 
 // Initialize video state with the provided configuration.
@@ -752,8 +829,9 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 // whole frame's worth at once.
 void VideoTick(VideoState* video, uint32_t cycles);
 
-// Render the current display. Invokes the write_pixel callback to do the actual
-// pixel rendering.
+// Bring dirty portions of the retained host display up to date. Each region is
+// bracketed by the optional region callbacks and its pixels are passed to
+// write_pixel in row-major order. Does nothing when the display is unchanged.
 void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H

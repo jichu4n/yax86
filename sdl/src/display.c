@@ -16,6 +16,9 @@ static SDL_Texture* g_texture = NULL;
 static uint32_t* g_pixel_buffer = NULL;
 static int g_width = 0;
 static int g_height = 0;
+static SDL_Rect g_update_rect = {0};
+static bool g_region_open = false;
+static bool g_frame_updated = false;
 
 enum {
   // Frame buffers no taller than this are line doubled in the window.
@@ -25,6 +28,8 @@ enum {
 bool DisplayInit(int width, int height) {
   g_width = width;
   g_height = height;
+  g_region_open = false;
+  g_frame_updated = false;
 
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     SDL_Log("SDL_Init(SDL_INIT_VIDEO) failed: %s", SDL_GetError());
@@ -39,15 +44,16 @@ bool DisplayInit(int width, int height) {
 
 #ifdef __EMSCRIPTEN__
   char script[256];
-  snprintf(script, sizeof(script),
-           "var c = document.getElementById('canvas'); if(c) { c.style.width='%dpx'; c.style.height='%dpx'; c.width=%d; c.height=%d; }",
-           target_width, target_height, target_width, target_height);
+  snprintf(
+      script, sizeof(script),
+      "var c = document.getElementById('canvas'); if(c) { "
+      "c.style.width='%dpx'; c.style.height='%dpx'; c.width=%d; c.height=%d; }",
+      target_width, target_height, target_width, target_height);
   emscripten_run_script(script);
 #endif
 
   if (!SDL_CreateWindowAndRenderer(
-          "yax86", target_width, target_height, 0, &g_window,
-          &g_renderer)) {
+          "yax86", target_width, target_height, 0, &g_window, &g_renderer)) {
     SDL_Log("SDL_CreateWindowAndRenderer failed: %s", SDL_GetError());
     return false;
   }
@@ -92,16 +98,35 @@ void DisplayQuit(void) {
   SDL_Quit();
 }
 
+void DisplayBeginRegion(int x, int y, int width, int height) {
+  g_update_rect = (SDL_Rect){.x = x, .y = y, .w = width, .h = height};
+  g_region_open = true;
+}
+
+void DisplayEndRegion(void) {
+  if (!g_region_open || !g_texture || !g_pixel_buffer) {
+    return;
+  }
+  const uint32_t* pixels =
+      &g_pixel_buffer[g_update_rect.y * g_width + g_update_rect.x];
+  if (!SDL_UpdateTexture(
+          g_texture, &g_update_rect, pixels, g_width * sizeof(uint32_t))) {
+    SDL_Log("SDL_UpdateTexture failed: %s", SDL_GetError());
+  } else {
+    g_frame_updated = true;
+  }
+  g_region_open = false;
+}
+
 void DisplayRender(void) {
-  if (!g_renderer || !g_texture || !g_pixel_buffer) {
+  if (!g_renderer || !g_texture || !g_pixel_buffer || !g_frame_updated) {
     return;
   }
 
-  SDL_UpdateTexture(
-      g_texture, NULL, g_pixel_buffer, g_width * sizeof(uint32_t));
   SDL_RenderClear(g_renderer);
   SDL_RenderTexture(g_renderer, g_texture, NULL, NULL);
   SDL_RenderPresent(g_renderer);
+  g_frame_updated = false;
 }
 
 void DisplayPutPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
