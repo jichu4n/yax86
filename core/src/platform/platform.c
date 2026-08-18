@@ -11,7 +11,16 @@
   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
 // How long until the next device needs attention, in CPU cycles from now.
-static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform);
+static uint32_t PlatformCyclesUntilNextEvent(
+    const PlatformState* platform, uint32_t max_cycles);
+
+enum {
+  // Never let a deadline sit further out than this, so that a machine in which
+  // nothing is scheduled still comes back regularly. It also bounds how many
+  // cycles can accumulate between syncs, which keeps the arithmetic below
+  // inside 32 bits.
+  kMaxEventInterval = kCyclesPerMillisecond,
+};
 
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
@@ -531,6 +540,26 @@ static bool CPUCallbackAcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
   }
 }
 
+enum {
+  // The DOS idle interrupt. MS-DOS issues it from the loops in which it waits
+  // for input, to tell anything listening that the machine has nothing to do.
+  kDOSIdleInterrupt = 0x28,
+};
+
+// Notes the guest declaring itself idle. Nothing is serviced here - the guest's
+// own handler runs as usual - so this only ever reports the interrupt onwards.
+//
+// Only installed when the idle skip is enabled, so a machine without it pays
+// nothing per interrupt.
+static InterruptHandlerResult CPUCallbackHandleInterrupt(
+    CPUState* cpu, uint8_t interrupt_number) {
+  if (interrupt_number == kDOSIdleInterrupt) {
+    PlatformState* platform = (PlatformState*)cpu->config->context;
+    platform->is_guest_idle = true;
+  }
+  return kInterruptHandlerUnhandled;
+}
+
 static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
@@ -538,6 +567,9 @@ static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
   platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
+  if (platform->config->enable_dos_idle_skip) {
+    platform->cpu_config.handle_interrupt = CPUCallbackHandleInterrupt;
+  }
   platform->cpu_config.read_port = CPUCallbackReadPortByte;
   platform->cpu_config.write_port = CPUCallbackWritePortByte;
   CPUInit(&platform->cpu, &platform->cpu_config);
@@ -798,7 +830,8 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->last_sync_ticks = 0;
   // Schedule the first deadline from the devices' power-on state, so that the
   // first instruction is not treated as already overdue.
-  platform->next_event_ticks = PlatformCyclesUntilNextEvent(platform);
+  platform->next_event_ticks =
+      PlatformCyclesUntilNextEvent(platform, kMaxEventInterval);
 
   PlatformClearBreakpoints(platform);
   PlatformClearMemoryWatchpoints(platform);
@@ -832,14 +865,6 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
 // for. Getting this wrong shows up as a guest timing loop reading a counter
 // that never moves, so port handlers that touch a device call it.
 
-enum {
-  // Never let a deadline sit further out than this, so that a machine in which
-  // nothing is scheduled still comes back regularly. It also bounds how many
-  // cycles can accumulate between syncs, which keeps the arithmetic below
-  // inside 32 bits.
-  kMaxEventInterval = kCyclesPerMillisecond,
-};
-
 // Whether the earliest device deadline has come due. Compared as a signed
 // difference so that a deadline stays in the future across the point where the
 // 32-bit cycle counter wraps.
@@ -847,9 +872,14 @@ static inline bool PlatformIsEventDue(const PlatformState* platform) {
   return (int32_t)(platform->ticks - platform->next_event_ticks) >= 0;
 }
 
-// Work out when the next device needs attention, in cycles from now.
-static uint32_t PlatformCyclesUntilNextEvent(const PlatformState* platform) {
-  uint32_t cycles = kMaxEventInterval;
+// Work out when the next device needs attention, in cycles from now, up to
+// max_cycles. The instruction path passes kMaxEventInterval; the idle skip
+// passes what is left of the budget it was given, because there the answer is
+// how far the clock may be moved rather than how long until it is checked
+// again.
+static uint32_t PlatformCyclesUntilNextEvent(
+    const PlatformState* platform, uint32_t max_cycles) {
+  uint32_t cycles = max_cycles;
 
   // The PIT's next output change, converted from its own 1.19MHz clock and
   // offset by the cycles already credited towards its next tick.
@@ -919,7 +949,8 @@ void PlatformSync(PlatformState* platform) {
   }
 
   platform->next_event_ticks =
-      platform->ticks + PlatformCyclesUntilNextEvent(platform);
+      platform->ticks +
+      PlatformCyclesUntilNextEvent(platform, kMaxEventInterval);
 }
 
 // Stop if there is an enabled breakpoint on the instruction about to execute.
@@ -992,6 +1023,24 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
   return kPlatformRunning;
 }
 
+// Advance the clock over time the guest has said it has no use for, up to
+// max_cycles. Every device is brought up to date across the skipped interval
+// rather than having it taken away from them, so the guest's timer tick count
+// is the same either way - what is skipped is executing the loop it would have
+// spent the interval in.
+//
+// The bound matters as much as the skip: without it a machine idling at a DOS
+// prompt would be handed more emulated time per call than the caller asked for,
+// and would run its clock fast.
+static void PlatformSkipIdleTime(PlatformState* platform, uint32_t max_cycles) {
+  const uint32_t cycles = PlatformCyclesUntilNextEvent(platform, max_cycles);
+  if (cycles == 0) {
+    return;
+  }
+  platform->ticks += cycles;
+  PlatformSync(platform);
+}
+
 PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles) {
   // Instructions are only ever run whole, so the last one of a run generally
   // takes the total a little past the budget. Unsigned subtraction keeps this
@@ -1001,6 +1050,16 @@ PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles) {
     PlatformRunStatus status = PlatformTick(platform);
     if (status != kPlatformRunning) {
       return status;
+    }
+    // Skipping is done here rather than where the guest declared itself idle
+    // because only this loop knows how much of the budget is left, which is
+    // what bounds how far the clock may move.
+    if (platform->is_guest_idle) {
+      platform->is_guest_idle = false;
+      const uint32_t elapsed = platform->ticks - start;
+      if (elapsed < max_cycles) {
+        PlatformSkipIdleTime(platform, max_cycles - elapsed);
+      }
     }
   }
   return kPlatformRunning;

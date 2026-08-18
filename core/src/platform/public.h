@@ -373,6 +373,25 @@ typedef struct PlatformConfig {
   // work without requiring PIT to be perfectly cycle accurate.
   void (*set_pc_speaker_frequency)(
       struct PlatformState* platform, uint32_t frequency_hz);
+
+  // Whether to skip emulated time when the guest says it has nothing to do.
+  //
+  // MS-DOS waits for a keystroke by polling, not by halting, so an idle command
+  // prompt costs exactly as much to emulate as a running program - about
+  // 390,000 guest instructions a second, all of them the same loop. It does
+  // however issue INT 28h, the documented DOS idle interrupt, on each pass:
+  // measured at the MS-DOS 3.30 prompt, 783 times a second.
+  //
+  // With this on, that interrupt makes PlatformRun() advance the clock straight
+  // to whichever comes first, the next device deadline or the end of the budget
+  // it was given, instead of executing the loop until it gets there. The
+  // guest's own handler still runs; only the waiting is skipped.
+  //
+  // Time is advanced rather than discarded, so every device still sees every
+  // cycle and the guest's timer tick count is unchanged. What does change is
+  // that a program timing a loop from inside its own INT 28h handler would see
+  // time jump, which is why this is opt in.
+  bool enable_dos_idle_skip;
 } PlatformConfig;
 
 STATIC_VECTOR_TYPE(MemoryMap, MemoryMapEntry, kMaxMemoryMapEntries)
@@ -471,6 +490,11 @@ typedef struct PlatformState {
   // deadline of any of them. Anything that reads a device's state has to bring
   // that device up to date first, which is what the PlatformSync* functions
   // do.
+
+  // Set when the guest has said it has nothing to do, and cleared by
+  // PlatformRun() once it has skipped the idle time. Only ever set when
+  // PlatformConfig.enable_dos_idle_skip is on.
+  bool is_guest_idle;
 
   // Value of ticks when the devices were last brought up to date.
   uint32_t last_sync_ticks;
