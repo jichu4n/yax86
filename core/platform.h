@@ -1187,6 +1187,14 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
+//
+// max_cycles must be well under 2^31. Progress is measured as an unsigned
+// difference from the tick count this call started at, which is what keeps it
+// correct across the 32-bit cycle counter wrapping - every 15 minutes of
+// emulated time - but that also means a budget approaching 2^32 can never be
+// reached, because the difference wraps to zero first. A budget of a display
+// frame or so, which is what a host driving the machine in real time passes,
+// is nowhere near this.
 PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Bring every device up to date with the cycles that have run so far.
@@ -1269,10 +1277,26 @@ static uint32_t PlatformCyclesUntilNextEvent(
 
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
-  // nothing is scheduled still comes back regularly. It also bounds how many
-  // cycles can accumulate between syncs, which keeps the arithmetic below
-  // inside 32 bits.
+  // nothing is scheduled still comes back regularly.
+  //
+  // Note that this is not a bound on how many cycles accumulate between syncs.
+  // A deadline is only tested between instructions, and a REP string
+  // instruction retires as a single tick charging thousands of cycles, so a
+  // sync interval routinely runs past it - measured at 27,844 cycles, or
+  // 5.8ms, over a DOS boot. Anything relying on a bound has to impose its own;
+  // see kMaxIdleSkipCycles.
   kMaxEventInterval = kCyclesPerMillisecond,
+
+  // The furthest an idle skip may move the clock in one go.
+  //
+  // A skip is otherwise bounded only by the budget its caller passed to
+  // PlatformRun(), which nothing checks. Every device's catch-up arithmetic in
+  // PlatformSync() is 32-bit and accumulates into a counter holding a
+  // remainder, so a jump approaching 2^32 would overflow it, and the keyboard
+  // is caught up a millisecond per iteration, so it would also spend ~900,000
+  // of them in a single call. A tenth of a second is far more than any sane
+  // budget and far less than either limit.
+  kMaxIdleSkipCycles = kCPUCyclesPerSecond / 10,
 };
 
 // Register a memory map entry in the platform state. Returns true if the entry
@@ -2284,8 +2308,13 @@ PlatformRunStatus PlatformTick(PlatformState* platform) {
 //
 // The bound matters as much as the skip: without it a machine idling at a DOS
 // prompt would be handed more emulated time per call than the caller asked for,
-// and would run its clock fast.
+// and would run its clock fast. kMaxIdleSkipCycles bounds it a second time, in
+// case the caller's budget is itself large enough to overflow the catch-up
+// arithmetic.
 static void PlatformSkipIdleTime(PlatformState* platform, uint32_t max_cycles) {
+  if (max_cycles > kMaxIdleSkipCycles) {
+    max_cycles = kMaxIdleSkipCycles;
+  }
   const uint32_t cycles = PlatformCyclesUntilNextEvent(platform, max_cycles);
   if (cycles == 0) {
     return;

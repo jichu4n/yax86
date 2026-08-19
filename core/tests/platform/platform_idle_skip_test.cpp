@@ -51,7 +51,9 @@ struct IdleMachine {
 
   // Returns false if the platform could not be initialized, which the caller
   // asserts on - a constructor cannot.
-  bool Init(bool enable_idle_skip, uint8_t vector = kDOSIdleVector) {
+  bool Init(
+      bool enable_idle_skip, uint8_t vector = kDOSIdleVector,
+      bool program_timer = true) {
     config.physical_memory_size = sizeof(ram);
     config.physical_memory = ram;
     config.vram = vram;
@@ -86,8 +88,12 @@ struct IdleMachine {
     // Program the timer the way a BIOS does, at the full 65536 count that
     // gives 18.2Hz. A skip runs to the next device deadline, so how far it can
     // go depends on this - and an unprogrammed PIT has one due almost
-    // immediately, which is not the machine any of this is about.
-    SetTimer(0);
+    // immediately, which is not the machine any of this is about. Leaving it
+    // unprogrammed instead schedules nothing at all, which is the case where
+    // only the skip's own ceiling stops it.
+    if (program_timer) {
+      SetTimer(0);
+    }
     return true;
   }
 
@@ -230,6 +236,36 @@ TEST(PlatformIdleSkipTest, DevicesAreSyncedAcrossASkip) {
   machine.RunOneFrame();
 
   EXPECT_EQ(machine.platform.last_sync_ticks, machine.platform.ticks);
+}
+
+// A budget far larger than a display frame is delivered in bounded steps
+// rather than in one jump. Nothing in the tree passes one - the SDL runtime
+// passes a frame - but a skip is otherwise limited only by whatever the caller
+// asked for, and the catch-up arithmetic in PlatformSync() is 32-bit.
+//
+// The PIT is left unprogrammed so that no device deadline is scheduled, which
+// is the only case where the skip's own ceiling is what decides how far it
+// goes. With the ceiling the budget takes many skips and the guest reaches its
+// loop between each; without it, one skip swallows the lot.
+TEST(PlatformIdleSkipTest, LargeBudgetIsDeliveredInBoundedSteps) {
+  // A second of emulated time in one call, ten times the skip ceiling.
+  constexpr uint32_t kBudget = kCPUCyclesPerSecond;
+
+  IdleMachine machine;
+  ASSERT_TRUE(machine.Init(
+      /*enable_idle_skip=*/true, kDOSIdleVector, /*program_timer=*/false));
+  ASSERT_EQ(PITTicksUntilNextEvent(&machine.platform.pit), kPITNoEvent)
+      << "an unprogrammed PIT should schedule nothing";
+
+  const uint32_t start = machine.platform.ticks;
+  ASSERT_EQ(PlatformRun(&machine.platform, kBudget), kPlatformRunning);
+  const uint32_t elapsed = machine.platform.ticks - start;
+
+  // Delivered in full, and not overshot.
+  EXPECT_GE(elapsed, kBudget);
+  EXPECT_LT(elapsed - kBudget, kCyclesPerMillisecond);
+  // And delivered in several capped steps rather than one unbounded one.
+  EXPECT_GT(machine.LoopCount(), 5u);
 }
 
 }  // namespace

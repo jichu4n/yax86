@@ -549,6 +549,14 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
+//
+// max_cycles must be well under 2^31. Progress is measured as an unsigned
+// difference from the tick count this call started at, which is what keeps it
+// correct across the 32-bit cycle counter wrapping - every 15 minutes of
+// emulated time - but that also means a budget approaching 2^32 can never be
+// reached, because the difference wraps to zero first. A budget of a display
+// frame or so, which is what a host driving the machine in real time passes,
+// is nowhere near this.
 PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Bring every device up to date with the cycles that have run so far.
