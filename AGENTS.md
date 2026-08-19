@@ -34,6 +34,35 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   generated `*_rom_data.{c,h}` are committed, and CI runs `git diff
   --exit-code`, so regenerate and commit them when a ROM changes.
 
+#### core/src/platform - idle skipping
+
+- MS-DOS waits for a keystroke by polling rather than halting, so an idle
+  command prompt costs exactly as much to emulate as a running program. Measured
+  at the MS-DOS 3.30 prompt, the guest retires about 390,000 instructions a
+  second and never once halts, all of it the same loop through the `INT 21h`
+  dispatcher and the CON driver into `INT 16h`.
+- It does announce itself, though: DOS issues `INT 28h`, the documented DOS idle
+  interrupt, 783 times a second while it waits. `PlatformConfig`'s
+  `enable_dos_idle_skip` makes `PlatformRun()` treat that as a signal to advance
+  the clock to whichever comes first, the next device deadline or the end of the
+  budget it was given, instead of executing the loop until it gets there. The
+  guest's own handler still runs; only the waiting is skipped.
+- Time is advanced, not discarded: `PlatformSync()` runs across the skipped
+  interval, so every device sees every cycle and the guest's timer tick count is
+  unchanged. Bounding the skip by the caller's budget is what keeps that true -
+  without it the machine would be handed more emulated time than was asked for
+  and would run its clock fast.
+- It is opt in because it is not free of consequence: a program timing a loop
+  from inside its own `INT 28h` handler would see time jump. The SDL runtime
+  turns it on; the tests leave it off, so nothing else changes.
+- What the skip is worth is capped by the nearest device deadline, and after
+  POST the BIOS leaves PIT channel 2 programmed at a reload of 1356 even though
+  the speaker is gated off. Nothing observes that channel's output, but it still
+  asks for a wakeup every 678 PIT ticks, which is what every skip runs into.
+  Measured over 20 emulated seconds at the prompt, the skip is worth 1.47x as
+  things stand and 8.60x with that channel's deadline removed - so the
+  remaining win is in PIT event scheduling rather than here.
+
 #### core/src/hdc - hard disk controller
 
 - Emulates an XT-IDE rev 2 controller: an 8-bit ATA task file operated in PIO

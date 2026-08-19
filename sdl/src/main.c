@@ -218,6 +218,11 @@ int main(int argc, char* argv[]) {
     config.set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
   }
   config.video_adapter = g_video_adapter;
+  // An idle DOS prompt otherwise costs a full frame's worth of emulation to
+  // produce nothing, because DOS waits for a keystroke by polling rather than
+  // halting. This machine has a host to be a good citizen on - in the browser
+  // it is a background tab's share of a laptop - so it takes the skip.
+  config.enable_dos_idle_skip = true;
 
   if (!PlatformInit(&g_platform, &config)) {
     fprintf(stderr, "Failed to init platform\n");
