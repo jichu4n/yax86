@@ -1046,19 +1046,21 @@ PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles) {
   // takes the total a little past the budget. Unsigned subtraction keeps this
   // right across the counter wrapping.
   const uint32_t start = platform->ticks;
-  while (platform->ticks - start < max_cycles) {
+  uint32_t elapsed = 0;
+  while (elapsed < max_cycles) {
     PlatformRunStatus status = PlatformTick(platform);
     if (status != kPlatformRunning) {
       return status;
     }
+    elapsed = platform->ticks - start;
     // Skipping is done here rather than where the guest declared itself idle
     // because only this loop knows how much of the budget is left, which is
     // what bounds how far the clock may move.
     if (platform->is_guest_idle) {
       platform->is_guest_idle = false;
-      const uint32_t elapsed = platform->ticks - start;
       if (elapsed < max_cycles) {
         PlatformSkipIdleTime(platform, max_cycles - elapsed);
+        elapsed = platform->ticks - start;
       }
     }
   }
