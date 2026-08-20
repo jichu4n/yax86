@@ -202,6 +202,23 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - The `sdl` directory contains an SDL3-based runtime for the emulator.
 - It is compiled via Emscripten to produce a WebAssembly binary and JavaScript
   wrapper (`yax86_sdl.{wasm,js}`).
+- How much guest time a pass of the main loop runs comes from the wall clock,
+  not from how often the host calls it. Under Emscripten the loop is driven by
+  `requestAnimationFrame`, whose rate is the display's - and on a machine whose
+  compositor has no vsync to lock to, it can fire well above it. Measured on an
+  i7-3667U it ran at 120-200Hz, which with a fixed budget per callback ran the
+  emulated 8088 at twice speed and its clock with it. A gap longer than
+  `MAX_CATCH_UP_NS` is dropped rather than made up, so returning from a
+  backgrounded tab does not produce a burst of catch-up emulation.
+- The loop also declines to step more often than `MIN_STEP_NS`, a little under
+  a sixtieth of a second. The emulated display refreshes sixty times a second,
+  so stepping faster draws nothing new, and it is not free: with idle skipping
+  on, a pass costs roughly one trip round the guest's idle loop whatever budget
+  it was given, so an idle machine's cost tracks the callback rate rather than
+  emulated time. The threshold sits under 1/60 deliberately - at exactly 1/60 a
+  callback arriving a hair early would be deferred to the next one, halving the
+  rate instead of capping it. Events are pumped on every callback either way,
+  so input stays responsive.
 - It takes an optional floppy image path, defaulting to `floppy_a.img`. A 10MB
   hard disk is attached by default - blank unless `--hdd <image>` names an
   image, so it can be partitioned and formatted from inside DOS - and
