@@ -249,6 +249,15 @@ typedef struct CPUState {
   // clears this state.
   bool is_halted;
 
+  // Instructions retired since CPUInit(). A halted tick retires none.
+  //
+  // Counted here rather than left to the caller because CPUTick() already
+  // knows whether it ran an instruction, while a caller can only find out by
+  // sampling is_halted before every tick - which is what every benchmark
+  // harness did, at the cost of giving up batching. 64 bits because a machine
+  // left running overflows 32 of them in under an hour.
+  uint64_t instructions_retired;
+
   // Whether a stop has been requested during the current tick. See
   // CPURequestStop().
   bool stop_requested;

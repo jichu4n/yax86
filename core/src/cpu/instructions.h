@@ -40,7 +40,7 @@ extern InstructionResult ExecuteNoOp(const InstructionContext* ctx);
 // ============================================================================
 
 // Global opcode metadata lookup table.
-extern OpcodeMetadata opcode_table[256];
+extern const OpcodeMetadata opcode_table[256];
 
 // ============================================================================
 // Move instructions - instructions_mov.h

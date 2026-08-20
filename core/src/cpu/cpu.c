@@ -351,6 +351,7 @@ CPUTickResult CPUTick(CPUState* cpu) {
       return kCPUTickInvalid;
     }
     executed_instruction = true;
+    ++cpu->instructions_retired;
     cpu->cycles_this_tick = cpu->pending_cycles;
   }
 

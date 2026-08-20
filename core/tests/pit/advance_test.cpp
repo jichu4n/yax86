@@ -77,7 +77,8 @@ class AdvanceTest : public ::testing::Test {
                                 std::to_string(ticks) + " ticks";
     EXPECT_EQ(advanced.channels[0].counter, stepped.channels[0].counter)
         << context;
-    EXPECT_EQ(advanced.channels[0].output_state, stepped.channels[0].output_state)
+    EXPECT_EQ(
+        advanced.channels[0].output_state, stepped.channels[0].output_state)
         << context;
     // The tick numbers differ because an advance reports them all at once, so
     // only the number of edges is comparable.
@@ -140,11 +141,68 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
         PITTick(&pit);
         ASSERT_EQ(pit.channels[0].output_state, initial_output)
             << "mode " << static_cast<int>(mode) << ", reload " << reload
-            << " changed output at tick " << i << " but "
-            << predicted << " was predicted";
+            << " changed output at tick " << i << " but " << predicted
+            << " was predicted";
       }
     }
   }
+}
+
+// Deadlines exist so that the platform knows when it must next look at the
+// PIT. Only channel 0's output leaves the chip, so only channel 0 is worth
+// being woken for - and asking for wake-ups on behalf of the other two is not
+// free, because it truncates how far an idle machine may skip ahead.
+TEST_F(AdvanceTest, OnlyChannelZeroSchedulesADeadline) {
+  for (int channel = 1; channel < kPITNumChannels; ++channel) {
+    PITConfig config = {0};
+    PITState pit = {0};
+    InitPIT(&pit, &config);
+    // Mode 3 with a small count, which is what the BIOS leaves channel 2 in
+    // after the POST beep, and would otherwise ask to be woken constantly.
+    Program(&pit, channel, 3, 1356);
+
+    EXPECT_EQ(PITTicksUntilNextEvent(&pit), kPITNoEvent)
+        << "channel " << channel << " asked to be woken, but nothing outside "
+        << "the PIT can observe its output";
+  }
+}
+
+// The other half of the same invariant: channel 0 must still get one, or the
+// system timer would be late.
+TEST_F(AdvanceTest, ChannelZeroStillSchedulesADeadline) {
+  PITConfig config = {0};
+  PITState pit = {0};
+  InitPIT(&pit, &config);
+  Program(&pit, 0, 3, 1356);
+
+  const uint32_t ticks = PITTicksUntilNextEvent(&pit);
+  ASSERT_NE(ticks, kPITNoEvent);
+  EXPECT_LE(ticks, 1356u);
+}
+
+// A channel nobody waits for still has to keep correct time, because the
+// output state is read on demand - the PPI exposes channel 2's on port 0x62.
+// Skipping its deadline must not skip its bookkeeping.
+TEST_F(AdvanceTest, UnscheduledChannelsStillAdvance) {
+  PITConfig stepped_config = {0};
+  PITState stepped = {0};
+  InitPIT(&stepped, &stepped_config);
+  Program(&stepped, 2, 3, 1356);
+
+  PITConfig advanced_config = {0};
+  PITState advanced = {0};
+  InitPIT(&advanced, &advanced_config);
+  Program(&advanced, 2, 3, 1356);
+
+  constexpr uint32_t kTicks = 5000;
+  for (uint32_t i = 0; i < kTicks; ++i) {
+    PITTick(&stepped);
+  }
+  PITAdvance(&advanced, kTicks);
+
+  EXPECT_EQ(advanced.channels[2].counter, stepped.channels[2].counter);
+  EXPECT_EQ(
+      advanced.channels[2].output_state, stepped.channels[2].output_state);
 }
 
 }  // namespace

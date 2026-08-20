@@ -881,11 +881,23 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
 // for. Getting this wrong shows up as a guest timing loop reading a counter
 // that never moves, so port handlers that touch a device call it.
 
-// Whether the earliest device deadline has come due. Compared as a signed
-// difference so that a deadline stays in the future across the point where the
-// 32-bit cycle counter wraps.
+// Half the range of the tick counter. A deadline this far behind the current
+// tick or less has come due; anything further away is in the future with the
+// counter having wrapped in between. Too large for an enum, which is an int.
+//
+// Shifted rather than written out, and shifted from a uint32_t rather than an
+// int, because shifting a 1 into an int's sign bit is undefined.
+static const uint32_t kTickCounterHalfRange = (uint32_t)1 << 31;
+
+// Whether the earliest device deadline has come due. Compared as a difference
+// so that a deadline stays in the future across the point where the 32-bit
+// cycle counter wraps.
 static inline bool PlatformIsEventDue(const PlatformState* platform) {
-  return (int32_t)(platform->ticks - platform->next_event_ticks) >= 0;
+  // An unsigned comparison against half the range rather than a cast of the
+  // difference to int32_t, because converting an out-of-range unsigned value is
+  // only defined from C23 on and this is C99.
+  return (uint32_t)(platform->ticks - platform->next_event_ticks) <
+         kTickCounterHalfRange;
 }
 
 // Work out when the next device needs attention, in cycles from now, up to

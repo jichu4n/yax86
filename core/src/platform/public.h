@@ -540,8 +540,14 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 // IRQ was successfully raised, or false if the IRQ number is invalid.
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
-// Run a single cycle of the platform, including ticking all sub-modules. This
-// should be called at the CPU clock rate (4.77MHz for the 8088).
+// Execute one instruction, and bring any device whose deadline has come due up
+// to date with the cycles it took.
+//
+// Note that this is an instruction, not a cycle: a tick runs the instruction at
+// CS:IP to completion and charges the clock whatever that cost, so a REP string
+// instruction can retire as a single tick worth thousands of cycles. A halted
+// CPU retires no instruction but still advances the clock, so that whatever is
+// meant to wake it can.
 //
 // Returns kPlatformRunning if the machine should keep running.
 PlatformRunStatus PlatformTick(PlatformState* platform);
