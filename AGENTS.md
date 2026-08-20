@@ -262,6 +262,187 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
       `SDL_AUDIO_DRIVER=disk SDL_AUDIO_DISK_OUTPUT_FILE=out.raw`. SDL may upmix
       the mono stream, in which case the file is interleaved stereo.
 
+### pico/bench - Raspberry Pi Pico benchmark harness
+
+- `pico/bench` builds a firmware image that runs the core on an RP2040 and
+  reports how fast it went. The Pico is the platform the emulator is meant to
+  fit on, and it is not a small desktop: a Cortex-M0+ has no branch predictor,
+  no speculation and no cache except the 16KB XIP window that code executes
+  from flash through. A desktop ablation cannot close a question about it.
+- It is a consumer of the core, not part of it. Nothing under `core` knows the
+  harness exists and `pico/bench/src/main.c` uses only the public interface.
+- The build is a standalone CMake project rather than a subdirectory of the top
+  level one, because that build produces a native library, the tests and the
+  SDL runtime, none of which cross-compile, and the Pico SDK has to own the
+  toolchain from before `project()` onwards.
+
+#### The workload, and its invariant
+
+- There is one workload, `dos-boot`: power on the machine, let GLaBIOS POST,
+  boot MS-DOS 3.30 off the floppy image in `resources`, and stop when the `A>`
+  prompt appears. DOS asks for the date and then the time on the way, and the
+  harness answers both by watching the CGA text buffer and pressing Enter.
+- It is the whole machine - CPU, PIT, PIC, video, FDC - rather than a CPU loop,
+  which is the mix of guest code the emulator exists to run. What it executes
+  is whatever the BIOS and DOS do, so it is only comparable against another
+  yax86 build.
+- **It is deterministic: 27,724,061 emulated cycles and 2,324,726 retired
+  instructions, every run, at every optimization level.** Both numbers are
+  printed. If either moves, the change altered behaviour and the times either
+  side of it are not comparable - check that before believing a speedup.
+- The floppy is compiled into flash as a C array by
+  `core/tools/generate-rom-data-files.js`, the same generator the ROM images
+  use, because this target has no file system. It is generated into the build
+  directory rather than committed the way the ROMs' arrays are, since at 360KB
+  the image is a couple of megabytes of C source. Guest writes are discarded:
+  360KB of writable copy is several times the SRAM left over, and nothing on
+  the way to a command prompt writes to the disk.
+- `enable_dos_idle_skip` is deliberately left off. The run stops at the prompt,
+  which is where DOS starts idling, so the skip would have nothing to skip -
+  and leaving it off keeps the workload a measure of how fast guest
+  instructions execute rather than of how many are elided.
+
+#### Building and running
+
+- Needs `PICO_SDK_PATH` set and an `arm-none-eabi` toolchain. `build.sh`
+  configures and builds into `build-pico/<level>`, and prints what the image
+  costs in flash and SRAM:
+  ```sh
+  ./pico/bench/build.sh              # the default level, -O2
+  ./pico/bench/build.sh Os O2 O3     # all three, to compare
+  YAX86_PICO_SYS_CLK_KHZ=400000 ./pico/bench/build.sh O3
+  ```
+- `run.py` reboots the board into BOOTSEL with `picotool`, loads the image and
+  captures what it prints:
+  ```sh
+  ./pico/bench/run.py build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
+  ```
+  It exits non-zero if the run did not finish. `--no-flash` captures from a
+  board already running the image.
+- The serial port must be opened exactly once. The firmware waits for DTR
+  before printing anything and every open asserts it, so configuring the line
+  with a separate `stty` first starts the run and the header is gone before a
+  reader attaches. `run.py` sets termios on the descriptor it keeps, and finds
+  `/dev/ttyACM*` rather than hard-coding it, because the port re-enumerates
+  after a flash or a watchdog reset and can come back on a different node.
+- The optimization level is a CMake option applied through
+  `CMAKE_C_FLAGS_RELEASE` rather than to the emulator's target alone, so that
+  the SDK and the C library are compiled the same way. What is being measured
+  is how a whole image behaves in the XIP cache, and an emulator built one way
+  inside an SDK built another would not answer that.
+- `YAX86_CORE_ROOT` names the checkout whose `core` is compiled in, so two core
+  revisions can be measured against one harness:
+  ```sh
+  git worktree add /tmp/yax86-variant <branch>
+  YAX86_CORE_ROOT=/tmp/yax86-variant ./pico/bench/build.sh O3
+  ```
+  A build directory reused across two core roots keeps one object file per
+  root, since CMake names an object after the absolute path of its source.
+  `build.sh` spells the path out rather than searching, so its `core_text`
+  column always refers to the core just built.
+
+#### Baseline
+
+- Measured with GCC 16.1.0, SDK 2.3.0 and picotool 2.3.0, at the default 128K
+  of guest RAM, with the core running from flash:
+
+  | level | seconds | emulated MHz | flash | SRAM | core `.text` |
+  | ----- | ------- | ------------ | ----- | ---- | ------------ |
+  | `-Os` | 34.264 | 0.80 | 442,400 | 158,284 | 59,899 |
+  | `-O2` | 36.494 | 0.75 | 456,956 | 158,756 | 73,628 |
+  | `-O3` | **33.492** | **0.82** | 469,724 | 160,132 | 88,448 |
+
+  A real 8088 runs this in 5.812 seconds, so `-O3` at the stock clock is about
+  a sixth of one.
+- Reproducibility is excellent, which is what makes small differences worth
+  believing: three independent flash-and-run cycles of the same `-O3` image
+  gave 33.491892, 33.492932 and 33.490758 seconds - a spread of 2.2ms over 33.5
+  seconds, or 0.0065%. **A 1% difference is real.** Do not demand a large
+  margin before believing a result, and equally do not accept a "neutral"
+  result as a win. `-O2` losing 9% to both of its neighbours is a genuine
+  result of this kind, and the sort the XIP cache makes possible.
+- At 400MHz, `-O3` takes 13.647 seconds, or 2.03 emulated MHz. **Do not raise
+  the clock past 400MHz.** That is a standing instruction, not a technical
+  limit.
+- Flash is dominated by the 360KB floppy image; the code itself is under 110KB.
+  The `core_text` column is the whole core library section, which includes
+  about 32KB of constant data - the ROM images, the font tables and the opcode
+  table - that does not move with the optimization level.
+- `stack_peak` reports how deep the stack got, which is a number a real Pico
+  port needs. The unused stack is painted with `0x5A5A5A5A` from `main`'s own
+  frame and afterwards searched for how far the paint was overwritten, so it
+  costs nothing while the run is going. Interrupt frames count, making it the
+  true peak rather than the emulator's share. The measured peak is 672-860
+  bytes of a 4KB bank, depending on level - `-O3` inlines the instruction
+  handlers into deeper frames than the others.
+- Guest memory and the stack cannot collide, and not by a narrow margin. Guest
+  RAM sits at the bottom of the 256KB bank while the stack is in SCRATCH_Y,
+  growing down within its own 4KB. To reach a guest byte it would have to grow
+  through the whole of SCRATCH_Y, then all of SCRATCH_X, then the ~100KB of
+  unused heap. The heap grows the other way, up and away from guest RAM.
+
+#### Timing discipline
+
+- Host I/O on this target costs orders of magnitude more than the guest
+  instruction it would be reporting on - the same trap as leaving a browser
+  console open in front of the WASM build. So the UART is switched off entirely
+  and nothing is printed from inside a run: results accumulate in RAM and are
+  printed once the run has finished.
+- Everything printed is derived from integers, so no floating point formatting
+  is linked in. Emulated cycles per microsecond is emulated megahertz and
+  retired instructions per microsecond is MIPS, so neither needs a unit
+  conversion.
+- The one perturbation that cannot be removed is USB servicing, which the SDK
+  drives from a timer interrupt. It costs the same in every build, so it does
+  not affect any comparison this harness exists to make.
+- The run is driven a batch of emulated cycles at a time through
+  `PlatformRun()`, which is how an application drives it, rather than an
+  instruction at a time. The core counts retired instructions itself, so there
+  is nothing left for a caller to do per instruction. An invalid opcode does
+  not stop the run: the 8088 has no invalid opcode exception, so a real machine
+  would carry on.
+
+#### Overclocking
+
+- `YAX86_PICO_SYS_CLK_KHZ` raises the system clock, and the change happens
+  *after* USB is up rather than before. A clock the chip cannot take hangs it,
+  and a hang before USB enumerates leaves no way in except the BOOTSEL button -
+  which is no good on a board being flashed remotely.
+- A watchdog turns a hang into a reboot, and the reboot lands back in `main`
+  where a marker says not to try the same clock twice.
+  `watchdog_caused_reboot()` alone is not evidence of a hang: `picotool`
+  reboots the chip through the watchdog too, so it reads true after every
+  flash. The marker lives in `__uninitialized_ram`, so it survives a reset but
+  not a power cycle, and is only ever left set across the window where a hang
+  is possible.
+- `PICO_FLASH_SPI_CLKDIV` goes up with the clock, since the divider is against
+  `clk_sys` and overclocking without raising it overclocks the flash by the
+  same factor. It must be set with `add_compile_definitions()` **before**
+  `pico_sdk_init()`: it is compiled into the second stage bootloader, which is
+  a target of the SDK's own, so `target_compile_definitions` never reaches it.
+  Setting it on the firmware target does nothing at all and the image hangs at
+  a clock the flash could not keep up with - which looks exactly like an
+  unstable overclock.
+
+#### Profiling
+
+- `YAX86_PICO_PROFILE=1` builds in a sampling profiler: a timer interrupt at
+  50kHz records the interrupted PC into a histogram, dumped after the run as
+  addresses so that no symbol table has to be carried on the board.
+  `symbolize.py` turns the dump into function names.
+  ```sh
+  YAX86_PICO_PROFILE=1 ./pico/bench/build.sh O3
+  ./pico/bench/run.py build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
+  ./pico/bench/symbolize.py build-pico/O3/yax86_pico_bench.elf capture.txt
+  ```
+- It costs a little over a percent and the histogram costs 32KB of SRAM, so it
+  is off by default and a timing run never has it on. A profiling build says
+  where the time went, never how much of it there was.
+- SRAM is bucketed at 16 bytes and flash at 128. The coarse flash buckets are
+  not trustworthy below the top few entries: several small functions share a
+  bucket and only the first is named, so a bucket can be credited to a function
+  the workload never executes. Verify anything in the tail before acting on it.
+
 ## Code Style
 
 - Core emulator code is written in portable C99.
