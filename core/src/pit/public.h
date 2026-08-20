@@ -33,6 +33,11 @@ static const LogModule kLogModulePIT = {
 enum {
   // Number of PIT channels.
   kPITNumChannels = 3,
+
+  // Channel 0 drives IRQ 0. Channel 1 was DRAM refresh on a real machine and
+  // channel 2 the PC speaker; neither has an effect here beyond its recorded
+  // output state.
+  kPITChannelTimer = 0,
   // Total number of operating modes (0-5).
   // We only implement modes 0, 2, and 3.
   kPITNumModes = 6,

@@ -133,13 +133,28 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - It is opt in because it is not free of consequence: a program timing a loop
   from inside its own `INT 28h` handler would see time jump. The SDL runtime
   turns it on; the tests leave it off, so nothing else changes.
-- What the skip is worth is capped by the nearest device deadline, and after
-  POST the BIOS leaves PIT channel 2 programmed at a reload of 1356 even though
-  the speaker is gated off. Nothing observes that channel's output, but it still
-  asks for a wakeup every 678 PIT ticks, which is what every skip runs into.
-  Measured over 20 emulated seconds at the prompt, the skip is worth 1.47x as
-  things stand and 8.60x with that channel's deadline removed - so the
-  remaining win is in PIT event scheduling rather than here.
+- What the skip is worth is capped by the nearest device deadline, which is why
+  `PITTicksUntilNextEvent()` schedules one for channel 0 alone. After POST the
+  BIOS leaves channel 2 programmed at a reload of 1356 with the speaker gated
+  off, and asking to be woken every 678 ticks for an output nobody listens to
+  truncated every skip. Over 20 emulated seconds at the prompt the skip is
+  worth 1.4x with the other channels scheduled and 5.6x without.
+- Only channel 0's output leaves the PIT - `PITChannelSetOutputState()` raises
+  IRQ 0 from it. Channels 1 and 2 record a transition and nothing more, and
+  that record is recomputed whenever the PIT is advanced, which every path that
+  reads it does first. Give another channel's output an effect and the
+  scheduling has to change with it; there is a comment at both ends saying so.
+
+#### core/src/cpu - instruction counting
+
+- `CPUState.instructions_retired` counts instructions the CPU actually ran; a
+  halted tick advances the clock but retires nothing. It lives in the CPU
+  because `CPUTick()` already knows which it did, and a caller can only find
+  out by sampling `is_halted` before every tick - which is what the benchmark
+  harnesses did, giving up `PlatformRun()`'s batching for a number the core
+  already had. Measured with callgrind on the `compute` workload, counting in
+  `CPUTick()` costs 0.17%; the same counter driven from `PlatformTick()`,
+  where the flag has to be re-derived, cost 1.09%.
 
 #### core/src/hdc - hard disk controller
 

@@ -786,6 +786,15 @@ typedef struct CPUState {
   // clears this state.
   bool is_halted;
 
+  // Instructions retired since CPUInit(). A halted tick retires none.
+  //
+  // Counted here rather than left to the caller because CPUTick() already
+  // knows whether it ran an instruction, while a caller can only find out by
+  // sampling is_halted before every tick - which is what every benchmark
+  // harness did, at the cost of giving up batching. 64 bits because a machine
+  // left running overflows 32 of them in under an hour.
+  uint64_t instructions_retired;
+
   // Whether a stop has been requested during the current tick. See
   // CPURequestStop().
   bool stop_requested;
@@ -2120,7 +2129,7 @@ extern InstructionResult ExecuteNoOp(const InstructionContext* ctx);
 // ============================================================================
 
 // Global opcode metadata lookup table.
-extern OpcodeMetadata opcode_table[256];
+extern const OpcodeMetadata opcode_table[256];
 
 // ============================================================================
 // Move instructions - instructions_mov.h
@@ -5258,7 +5267,10 @@ ExecuteGroup5Instruction(const InstructionContext* ctx) {
 // ============================================================================
 
 // Global opcode metadata lookup table.
-YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
+//
+// Const because nothing writes it, which on a target that executes from flash
+// keeps 2KB of it out of RAM.
+YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // ADD r/m8, r8
     {.opcode = 0x00,
      .has_modrm = true,
@@ -7131,6 +7143,7 @@ CPUTickResult CPUTick(CPUState* cpu) {
       return kCPUTickInvalid;
     }
     executed_instruction = true;
+    ++cpu->instructions_retired;
     cpu->cycles_this_tick = cpu->pending_cycles;
   }
 

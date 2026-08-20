@@ -10,7 +10,10 @@
 // ============================================================================
 
 // Global opcode metadata lookup table.
-YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
+//
+// Const because nothing writes it, which on a target that executes from flash
+// keeps 2KB of it out of RAM.
+YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // ADD r/m8, r8
     {.opcode = 0x00,
      .has_modrm = true,

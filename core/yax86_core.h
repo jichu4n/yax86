@@ -1426,6 +1426,15 @@ typedef struct CPUState {
   // clears this state.
   bool is_halted;
 
+  // Instructions retired since CPUInit(). A halted tick retires none.
+  //
+  // Counted here rather than left to the caller because CPUTick() already
+  // knows whether it ran an instruction, while a caller can only find out by
+  // sampling is_halted before every tick - which is what every benchmark
+  // harness did, at the cost of giving up batching. 64 bits because a machine
+  // left running overflows 32 of them in under an hour.
+  uint64_t instructions_retired;
+
   // Whether a stop has been requested during the current tick. See
   // CPURequestStop().
   bool stop_requested;
@@ -2760,7 +2769,7 @@ extern InstructionResult ExecuteNoOp(const InstructionContext* ctx);
 // ============================================================================
 
 // Global opcode metadata lookup table.
-extern OpcodeMetadata opcode_table[256];
+extern const OpcodeMetadata opcode_table[256];
 
 // ============================================================================
 // Move instructions - instructions_mov.h
@@ -5898,7 +5907,10 @@ ExecuteGroup5Instruction(const InstructionContext* ctx) {
 // ============================================================================
 
 // Global opcode metadata lookup table.
-YAX86_PRIVATE OpcodeMetadata opcode_table[256] = {
+//
+// Const because nothing writes it, which on a target that executes from flash
+// keeps 2KB of it out of RAM.
+YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // ADD r/m8, r8
     {.opcode = 0x00,
      .has_modrm = true,
@@ -7771,6 +7783,7 @@ CPUTickResult CPUTick(CPUState* cpu) {
       return kCPUTickInvalid;
     }
     executed_instruction = true;
+    ++cpu->instructions_retired;
     cpu->cycles_this_tick = cpu->pending_cycles;
   }
 
@@ -15490,6 +15503,11 @@ static const LogModule kLogModulePIT = {
 enum {
   // Number of PIT channels.
   kPITNumChannels = 3,
+
+  // Channel 0 drives IRQ 0. Channel 1 was DRAM refresh on a real machine and
+  // channel 2 the PC speaker; neither has an effect here beyond its recorded
+  // output state.
+  kPITChannelTimer = 0,
   // Total number of operating modes (0-5).
   // We only implement modes 0, 2, and 3.
   kPITNumModes = 6,
@@ -15683,7 +15701,11 @@ static inline void PITChannelSetOutputState(
   channel->output_state = new_output_state;
 
   // On rising edge of channel 0 output state, raise IRQ 0.
-  if (channel_index == 0 && new_output_state && pit->config &&
+  //
+  // This is the only effect any channel's output has outside the PIT, which is
+  // why PITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
+  // another channel's output an effect here and that has to change with it.
+  if (channel_index == kPITChannelTimer && new_output_state && pit->config &&
       pit->config->raise_irq_0) {
     pit->config->raise_irq_0(pit->config->context);
   }
@@ -16098,6 +16120,18 @@ uint32_t PITTicksUntilNextEvent(const PITState* pit) {
   uint32_t earliest = kPITNoEvent;
   const PITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
+    // Only channel 0 is worth waking up for. Its output is the one thing that
+    // leaves the chip - PITChannelSetOutputState() raises IRQ 0 from it - while
+    // channels 1 and 2 do nothing on a transition but record it, and that
+    // record is recomputed from scratch whenever the PIT is advanced. Every
+    // path that reads it advances the PIT first, so there is no state to miss.
+    //
+    // This is not hypothetical tidiness: the BIOS leaves channel 2 programmed
+    // after the POST beep with the speaker gated off, asking to be woken every
+    // 678 ticks for an output nobody is listening to.
+    if (i != kPITChannelTimer) {
+      continue;
+    }
     if (channel->mode >= kPITNumModes) {
       continue;
     }
@@ -17307,8 +17341,14 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config);
 // IRQ was successfully raised, or false if the IRQ number is invalid.
 bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
-// Run a single cycle of the platform, including ticking all sub-modules. This
-// should be called at the CPU clock rate (4.77MHz for the 8088).
+// Execute one instruction, and bring any device whose deadline has come due up
+// to date with the cycles it took.
+//
+// Note that this is an instruction, not a cycle: a tick runs the instruction at
+// CS:IP to completion and charges the clock whatever that cost, so a REP string
+// instruction can retire as a single tick worth thousands of cycles. A halted
+// CPU retires no instruction but still advances the clock, so that whatever is
+// meant to wake it can.
 //
 // Returns kPlatformRunning if the machine should keep running.
 PlatformRunStatus PlatformTick(PlatformState* platform);
@@ -18271,11 +18311,23 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
 // for. Getting this wrong shows up as a guest timing loop reading a counter
 // that never moves, so port handlers that touch a device call it.
 
-// Whether the earliest device deadline has come due. Compared as a signed
-// difference so that a deadline stays in the future across the point where the
-// 32-bit cycle counter wraps.
+// Half the range of the tick counter. A deadline this far behind the current
+// tick or less has come due; anything further away is in the future with the
+// counter having wrapped in between. Too large for an enum, which is an int.
+//
+// Shifted rather than written out, and shifted from a uint32_t rather than an
+// int, because shifting a 1 into an int's sign bit is undefined.
+static const uint32_t kTickCounterHalfRange = (uint32_t)1 << 31;
+
+// Whether the earliest device deadline has come due. Compared as a difference
+// so that a deadline stays in the future across the point where the 32-bit
+// cycle counter wraps.
 static inline bool PlatformIsEventDue(const PlatformState* platform) {
-  return (int32_t)(platform->ticks - platform->next_event_ticks) >= 0;
+  // An unsigned comparison against half the range rather than a cast of the
+  // difference to int32_t, because converting an out-of-range unsigned value is
+  // only defined from C23 on and this is C99.
+  return (uint32_t)(platform->ticks - platform->next_event_ticks) <
+         kTickCounterHalfRange;
 }
 
 // Work out when the next device needs attention, in cycles from now, up to

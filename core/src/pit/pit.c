@@ -50,7 +50,11 @@ static inline void PITChannelSetOutputState(
   channel->output_state = new_output_state;
 
   // On rising edge of channel 0 output state, raise IRQ 0.
-  if (channel_index == 0 && new_output_state && pit->config &&
+  //
+  // This is the only effect any channel's output has outside the PIT, which is
+  // why PITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
+  // another channel's output an effect here and that has to change with it.
+  if (channel_index == kPITChannelTimer && new_output_state && pit->config &&
       pit->config->raise_irq_0) {
     pit->config->raise_irq_0(pit->config->context);
   }
@@ -465,6 +469,18 @@ uint32_t PITTicksUntilNextEvent(const PITState* pit) {
   uint32_t earliest = kPITNoEvent;
   const PITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
+    // Only channel 0 is worth waking up for. Its output is the one thing that
+    // leaves the chip - PITChannelSetOutputState() raises IRQ 0 from it - while
+    // channels 1 and 2 do nothing on a transition but record it, and that
+    // record is recomputed from scratch whenever the PIT is advanced. Every
+    // path that reads it advances the PIT first, so there is no state to miss.
+    //
+    // This is not hypothetical tidiness: the BIOS leaves channel 2 programmed
+    // after the POST beep with the speaker gated off, asking to be woken every
+    // 678 ticks for an output nobody is listening to.
+    if (i != kPITChannelTimer) {
+      continue;
+    }
     if (channel->mode >= kPITNumModes) {
       continue;
     }

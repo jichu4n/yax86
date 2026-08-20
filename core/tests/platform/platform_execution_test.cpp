@@ -324,6 +324,60 @@ TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
   EXPECT_EQ(RunInstructions(100), kPlatformHung);
 }
 
+// The platform counts retired instructions so that a caller does not have to
+// drive it one instruction at a time to find out - which is what a benchmark
+// harness would otherwise do, giving up PlatformRun()'s batching for a number
+// the platform already has.
+TEST_F(PlatformExecutionTest, CountsRetiredInstructions) {
+  Load({kOpNop, kOpNop, kOpNop, kOpNop});
+
+  EXPECT_EQ(platform_.cpu.instructions_retired, 0u);
+  ASSERT_EQ(RunInstructions(4), kPlatformRunning);
+  EXPECT_EQ(platform_.cpu.instructions_retired, 4u);
+}
+
+// A halted CPU retires nothing, however long the machine is left running. The
+// clock still advances, which is what lets an interrupt arrive and wake it.
+TEST_F(PlatformExecutionTest, HaltedTicksRetireNoInstructions) {
+  Load({kOpSti, kOpHlt});
+  ASSERT_EQ(RunInstructions(2), kPlatformRunning);
+  const uint64_t retired_at_halt = platform_.cpu.instructions_retired;
+  const uint32_t ticks_at_halt = platform_.ticks;
+
+  ASSERT_EQ(RunInstructions(100), kPlatformRunning);
+
+  EXPECT_EQ(platform_.cpu.instructions_retired, retired_at_halt);
+  EXPECT_GT(platform_.ticks, ticks_at_halt);
+}
+
+// PlatformRun() must agree with PlatformTick() about what an instruction is,
+// or the count would depend on how the caller chose to drive the machine.
+TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
+  Load({kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop});
+  ASSERT_EQ(RunInstructions(8), kPlatformRunning);
+  const uint64_t stepped = platform_.cpu.instructions_retired;
+
+  PlatformConfig batched_config = {0};
+  PlatformState batched = {};
+  static uint8_t batched_ram[64 * 1024] = {0};
+  static uint8_t batched_vram[kCGAVRAMSize] = {0};
+  batched_config.physical_memory_size = sizeof(batched_ram);
+  batched_config.physical_memory = batched_ram;
+  batched_config.vram = batched_vram;
+  ASSERT_TRUE(PlatformInit(&batched, &batched_config));
+  batched.cpu.registers[kCS] = 0;
+  batched.cpu.registers[kIP] = kProgramOffset;
+  batched.cpu.registers[kSS] = 0;
+  batched.cpu.registers[kSP] = 0xFFFE;
+  for (int i = 0; i < 8; ++i) {
+    batched_ram[kProgramOffset + i] = kOpNop;
+  }
+  // A NOP is three cycles, so this is comfortably eight of them and no more.
+  ASSERT_EQ(PlatformRun(&batched, 8 * 3), kPlatformRunning);
+
+  EXPECT_EQ(batched.cpu.instructions_retired, stepped);
+}
+
 }  // namespace
 
 // A software interrupt executing while an acknowledged hardware IRQ is waiting
