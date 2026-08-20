@@ -365,15 +365,8 @@ typedef struct ModRM {
 
 // An encoded instruction.
 //
-// Prefixes are resolved into fields as they are fetched rather than kept as
-// raw bytes. Every consumer wants to know what a prefix selected, not which
-// byte encoded it, and a field spares each of them a walk over the bytes.
-//
 // LOCK and its undocumented 0xF1 alias are consumed but not recorded, because
-// nothing acts on them: the bus is not shared on a PC/XT. This struct is
-// zero-initialized and copied on every instruction fetch, so a field that only
-// the decoder would ever write is not worth the bytes - a ninth flag bit costs
-// a whole one, and measurably.
+// nothing acts on them: the bus is not shared on a PC/XT.
 typedef struct Instruction {
   // The segment register selected by a segment override prefix, as a
   // RegisterIndex, or kNoSegmentOverride if the instruction carries none. A

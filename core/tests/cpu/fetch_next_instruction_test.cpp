@@ -172,6 +172,29 @@ TEST_F(FetchNextInstructionTest, FetchInstructionsWithPrefixes) {
   VerifyPrefixes(instructions[7], 2, kDS, 0);
 }
 
+// kMaxPrefixBytes prefixes must still decode, and one more must be rejected
+// rather than silently dropped or overrunning anything.
+TEST_F(FetchNextInstructionTest, FetchRejectsMoreThanMaxPrefixBytes) {
+  CPUTestHelper at_limit;
+  // ES: REP NOP - two prefixes, which is the most that is accepted.
+  at_limit.LoadCOM({kPrefixES, kPrefixREP, 0x90});
+  Instruction instruction;
+  ASSERT_EQ(
+      CPUFetchNextInstruction(&at_limit.cpu_, &instruction), kFetchSuccess);
+  EXPECT_EQ(instruction.prefix_size, kMaxPrefixBytes);
+  EXPECT_EQ(instruction.segment_override, kES);
+  EXPECT_EQ(instruction.repetition_prefix, kPrefixREP);
+  EXPECT_EQ(instruction.opcode, 0x90);
+  EXPECT_EQ(instruction.size, 3);
+
+  CPUTestHelper over_limit;
+  // ES: SS: REP NOP - one prefix too many.
+  over_limit.LoadCOM({kPrefixES, kPrefixSS, kPrefixREP, 0x90});
+  ASSERT_EQ(
+      CPUFetchNextInstruction(&over_limit.cpu_, &instruction),
+      kFetchPrefixTooLong);
+}
+
 // Test fetching a sequence of instructions with 0, 1, and 2 displacement bytes.
 TEST_F(FetchNextInstructionTest, FetchInstructionsWithDisplacement) {
   auto instructions = TestFetchInstructions(

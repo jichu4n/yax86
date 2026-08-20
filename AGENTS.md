@@ -80,22 +80,21 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
   |       | gcc    | clang  |
   | ----- | ------ | ------ |
-  | `-O1` | -5.19% | -7.13% |
-  | `-Os` | -5.78% | -6.32% |
-  | `-O2` | -6.76% | +0.76% |
-  | `-O3` | -0.93% | +0.76% |
+  | `-O1` | -5.20% | -7.65% |
+  | `-Os` | -5.87% | -7.01% |
+  | `-O2` | -6.31% | +0.01% |
+  | `-O3` | -1.24% | +0.03% |
 
   Below `gcc -O3` and `clang -O2`, neither compiler converts the scan and this
-  is worth 5-7%. At or above, both do, and what is left is whether the
-  hand-written form matches what they would have picked. `gcc -O3` derives the
-  same two compares, so writing them out costs nothing and the surrounding
-  changes make it a small win. `clang` does better than this on its own - a
-  64-bit bitmap and a `bt` for the four segment overrides - so pinning it to
-  two masked compares costs it 0.76%.
-- Do not tune the source to one compiler's codegen here. No single form wins on
-  both, the spread either way is under 1% where they optimize well, and the
-  reason to write the tests out is the 5-7% at the levels where neither does -
-  `Debug`, `-Os`, and whatever ends up targeting the Pico.
+  is worth 5-8%. At or above, both derive their own equivalent - `clang` picks
+  a 64-bit bitmap and a `bt` for the four segment overrides, which is arguably
+  better than the mask - and it comes out a wash.
+- Classify and record in one pass. Deciding whether a byte is a prefix and
+  deciding which group it belongs to are the same test, so `ApplyPrefixByte()`
+  does both and returns whether it consumed anything, rather than the loop
+  asking first and the recording asking again. Splitting them cost 0.7% on
+  `clang`, which was enough on its own to make this change a net regression
+  there at `-O2` and above.
 - Write the `0xF0-0xF3` test as a range check rather than a mask. Both are
   exact, but a range folds into one subtract and compare where the mask needs a
   separate `mov`, `and` and `cmp` - which is how `gcc -O3` writes it when left

@@ -1542,15 +1542,8 @@ typedef struct ModRM {
 
 // An encoded instruction.
 //
-// Prefixes are resolved into fields as they are fetched rather than kept as
-// raw bytes. Every consumer wants to know what a prefix selected, not which
-// byte encoded it, and a field spares each of them a walk over the bytes.
-//
 // LOCK and its undocumented 0xF1 alias are consumed but not recorded, because
-// nothing acts on them: the bus is not shared on a PC/XT. This struct is
-// zero-initialized and copied on every instruction fetch, so a field that only
-// the decoder would ever write is not worth the bytes - a ninth flag bit costs
-// a whole one, and measurably.
+// nothing acts on them: the bus is not shared on a PC/XT.
 typedef struct Instruction {
   // The segment register selected by a segment override prefix, as a
   // RegisterIndex, or kNoSegmentOverride if the instruction carries none. A
@@ -7466,28 +7459,32 @@ static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
   return byte >= kPrefixLOCK && byte <= kPrefixREP;
 }
 
-// Helper to check if a byte is a valid prefix
+// Record what a prefix byte selects, and report whether it was a prefix at
+// all. Deciding which group a byte belongs to is the same test as deciding
+// whether it is a prefix, so both happen here rather than the caller asking
+// first and this asking again.
 //
-// The cheaper of the two tests goes first. Most bytes reaching here are not
-// prefixes at all and so run both, which makes their combined cost the thing
-// worth minimizing.
-static inline bool IsPrefixByte(uint8_t byte) {
-  return IsLockOrRepetitionPrefix(byte) || IsSegmentOverridePrefix(byte);
-}
-
-// Record what a prefix byte selects. The segment field of an override prefix
-// is in the 8086's sreg encoding order, which is the order kES through kDS are
-// numbered in, so the segment register index is an offset from kES.
-static void ApplyPrefix(Instruction* instruction, uint8_t byte) {
+// The cheaper test goes first. A byte that is not a prefix runs both, and that
+// is the common case by far - every instruction ends the loop with one.
+static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
+  if (IsLockOrRepetitionPrefix(byte)) {
+    // LOCK and its 0xF1 alias are counted and advance IP, but nothing acts on
+    // them, so only a repetition prefix is worth recording.
+    if (byte & kRepetitionPrefixBit) {
+      instruction->repetition_prefix = byte;
+    }
+    return true;
+  }
   if (IsSegmentOverridePrefix(byte)) {
+    // The segment field is in the 8086's sreg encoding order, which is the
+    // order kES through kDS are numbered in, so the register index is an
+    // offset from kES.
     instruction->segment_override =
         (uint8_t)(kES + ((byte >> kSegmentOverridePrefixShift) &
                          kSegmentOverridePrefixSegmentMask));
-  } else if (byte & kRepetitionPrefixBit) {
-    instruction->repetition_prefix = byte;
+    return true;
   }
-  // LOCK and its 0xF1 alias fall through: they are counted in prefix_size and
-  // advance IP, but nothing acts on them.
+  return false;
 }
 
 // Helper to read the next instruction byte.
@@ -7549,12 +7546,10 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
 
   // Prefix
   current_byte = ReadNextInstructionByte(cpu, &ip);
-  while (IsPrefixByte(current_byte)) {
-    if (instruction->prefix_size >= kMaxPrefixBytes) {
+  while (ApplyPrefixByte(instruction, current_byte)) {
+    if (++instruction->prefix_size > kMaxPrefixBytes) {
       return kFetchPrefixTooLong;
     }
-    ++instruction->prefix_size;
-    ApplyPrefix(instruction, current_byte);
     current_byte = ReadNextInstructionByte(cpu, &ip);
   }
 
