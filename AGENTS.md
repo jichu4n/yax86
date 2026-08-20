@@ -34,6 +34,32 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   generated `*_rom_data.{c,h}` are committed, and CI runs `git diff
   --exit-code`, so regenerate and commit them when a ROM changes.
 
+#### core/src/cpu - instruction decoding
+
+- `CPUFetchNextInstruction()` decodes directly into the caller's `Instruction`
+  rather than filling a local and copying it out at the end. It runs for every
+  instruction the machine executes, and that copy cost more than the whole
+  decode: measured over a boot and idle run at the DOS prompt with `gcc -O3`,
+  removing it is worth 3.5% of host instructions, 8.4% of data references (97M
+  fewer reads and 97M fewer writes), and about 19% of wall clock time.
+- The wall clock win being so much larger than either count is the interesting
+  part, and it is not a cache effect - D1 misses are identical either way.
+  Writing a 12 byte struct to the stack and immediately reading it back creates
+  dependent store-to-load pairs that stall, and neither callgrind nor
+  cachegrind models that. Anything on this path that round trips through memory
+  is worth more than its instruction count suggests.
+- The cost of the copy is why `Instruction` is worth keeping small, and its
+  flag bitfields currently total exactly 8 bits. A ninth costs a whole byte and
+  takes the struct from 12 to 13.
+- Because the decode happens in place, a failed fetch leaves `dest_instruction`
+  holding however much had been decoded rather than untouched. Every caller
+  treats a failed fetch as fatal, so nothing reads it back.
+- `immediate_size` is a three bit field but `immediate[]` holds 4 bytes, and
+  `displacement_size` is a two bit field where `displacement[]` holds 2. No
+  opcode table entry exceeds the arrays, but nothing in the types says so, and
+  `gcc -O3` warns about the writes once it can no longer see the bound through
+  a pointer. The immediate loop bounds itself by the array for that reason.
+
 #### core/src/platform - idle skipping
 
 - MS-DOS waits for a keystroke by polling rather than halting, so an idle
