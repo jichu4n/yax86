@@ -89,13 +89,9 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
 }
 
 CPUFetchNextInstructionStatus CPUFetchNextInstruction(
-    CPUState* cpu, Instruction* dest_instruction) {
-  // Decoded in place rather than into a local that is copied out at the end.
-  // This runs for every instruction the machine executes, and the copy was
-  // costing more than everything the decode itself does - see the note on
-  // instruction decoding in AGENTS.md.
+    CPUState* cpu, Instruction* instruction) {
   const Instruction zero_instruction = {0};
-  *dest_instruction = zero_instruction;
+  *instruction = zero_instruction;
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
@@ -104,31 +100,31 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
   // Prefix
   current_byte = ReadNextInstructionByte(cpu, &ip);
   while (IsPrefixByte(current_byte)) {
-    if (dest_instruction->prefix_size >= kMaxPrefixBytes) {
+    if (instruction->prefix_size >= kMaxPrefixBytes) {
       return kFetchPrefixTooLong;
     }
-    dest_instruction->prefix[dest_instruction->prefix_size++] = current_byte;
+    instruction->prefix[instruction->prefix_size++] = current_byte;
     current_byte = ReadNextInstructionByte(cpu, &ip);
   }
 
   // Opcode
-  dest_instruction->opcode = current_byte;
-  const OpcodeMetadata* metadata = &opcode_table[dest_instruction->opcode];
+  instruction->opcode = current_byte;
+  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
   // ModR/M
   if (metadata->has_modrm) {
     uint8_t mod_rm_byte = ReadNextInstructionByte(cpu, &ip);
-    dest_instruction->has_mod_rm = true;
-    dest_instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
-    dest_instruction->mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
-    dest_instruction->mod_rm.rm = mod_rm_byte & 0x07;          // Bits 0-2
+    instruction->has_mod_rm = true;
+    instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
+    instruction->mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
+    instruction->mod_rm.rm = mod_rm_byte & 0x07;          // Bits 0-2
 
     // Displacement
-    const uint8_t displacement_size = GetDisplacementSize(
-        dest_instruction->mod_rm.mod, dest_instruction->mod_rm.rm);
-    dest_instruction->displacement_size = displacement_size;
+    const uint8_t displacement_size =
+        GetDisplacementSize(instruction->mod_rm.mod, instruction->mod_rm.rm);
+    instruction->displacement_size = displacement_size;
     for (uint8_t i = 0; i < displacement_size; ++i) {
-      dest_instruction->displacement[i] = ReadNextInstructionByte(cpu, &ip);
+      instruction->displacement[i] = ReadNextInstructionByte(cpu, &ip);
     }
   }
 
@@ -139,17 +135,16 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
   // of a far pointer - but nothing in the type says so, and a compiler that
   // cannot see it is right to warn about the writes below. Bounding it by the
   // array is what makes the invariant explicit.
-  uint8_t immediate_size =
-      GetImmediateSize(metadata, dest_instruction->mod_rm.reg);
+  uint8_t immediate_size = GetImmediateSize(metadata, instruction->mod_rm.reg);
   if (immediate_size > kMaxImmediateBytes) {
     immediate_size = kMaxImmediateBytes;
   }
-  dest_instruction->immediate_size = immediate_size;
+  instruction->immediate_size = immediate_size;
   for (uint8_t i = 0; i < immediate_size; ++i) {
-    dest_instruction->immediate[i] = ReadNextInstructionByte(cpu, &ip);
+    instruction->immediate[i] = ReadNextInstructionByte(cpu, &ip);
   }
 
-  dest_instruction->size = ip - original_ip;
+  instruction->size = ip - original_ip;
 
   return kFetchSuccess;
 }
