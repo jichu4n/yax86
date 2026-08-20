@@ -60,10 +60,31 @@ static uint64_t MainGetTick(YAX86_UNUSED void* context) {
   return g_platform.ticks;
 }
 
-// How much guest time to run per frame, in CPU cycles. A frame is a sixtieth
-// of a second, so this is what a 4.77MHz 8088 gets through in that time, and
-// running it keeps the emulated machine at roughly the speed of the real one.
-#define CYCLES_PER_FRAME (kCPUCyclesPerSecond / 60)
+enum {
+  // Nanoseconds in a second, for turning elapsed real time into guest cycles.
+  kNanosecondsPerSecond = 1000000000,
+
+  // The most guest time one pass may run, in nanoseconds. A gap longer than
+  // this - a backgrounded tab, a stall - is dropped rather than made up, so
+  // that coming back does not turn into a burst of catch-up emulation.
+  kMaxCatchUpNs = kNanosecondsPerSecond / 10,
+
+  // The least time that must have passed before there is anything worth doing.
+  //
+  // The emulated display refreshes sixty times a second, so stepping the
+  // machine faster than that draws nothing new - and it is not free. With idle
+  // skipping on, a pass costs about one trip round the guest's idle loop
+  // whether it was handed a sixtieth of a second of guest time or a
+  // two-hundredth, so an idle machine's cost tracks how often we are called
+  // rather than how much time we run. requestAnimationFrame is meant to be the
+  // display's rate, but on a machine whose compositor has no vsync to lock to
+  // it can fire three times as often.
+  //
+  // Slightly under a sixtieth of a second, so that a callback arriving a hair
+  // early is trimmed rather than deferred to the next one - deferring would
+  // halve the rate instead of capping it.
+  kMinStepNs = kNanosecondsPerSecond / 70,
+};
 
 // The video adapter installed in the emulated machine, and its metadata.
 static VideoAdapter g_video_adapter = kVideoAdapterCGA;
@@ -112,7 +133,28 @@ void MainTick(void) {
   if (!g_running) return;
 
   // 2. Run CPU Instructions
-  uint32_t remaining_ticks = CYCLES_PER_FRAME;
+  //
+  // How much guest time to run comes from the wall clock, not from how often
+  // the host calls us. Under Emscripten that is requestAnimationFrame, which
+  // runs at whatever the display does - sixty times a second on one machine
+  // and a hundred and forty on another - so a fixed budget per callback would
+  // run the machine at whatever multiple of real time the display happens to
+  // be, and the guest's clock along with it.
+  static uint64_t last_ns = 0;
+  const uint64_t now_ns = SDL_GetTicksNS();
+  // Called again before there is a step's worth of time to run. Events have
+  // been pumped, which is what keeps input responsive; there is nothing else
+  // to do until the clock catches up.
+  if (last_ns != 0 && now_ns - last_ns < kMinStepNs) {
+    return;
+  }
+  uint64_t elapsed_ns = last_ns == 0 ? 0 : now_ns - last_ns;
+  last_ns = now_ns;
+  if (elapsed_ns > kMaxCatchUpNs) {
+    elapsed_ns = kMaxCatchUpNs;
+  }
+  uint32_t remaining_ticks =
+      (uint32_t)(elapsed_ns * kCPUCyclesPerSecond / kNanosecondsPerSecond);
   while (!g_cpu_stopped && remaining_ticks > 0) {
     const uint32_t start_tick = g_platform.ticks;
     const PlatformRunStatus status = PlatformRun(&g_platform, remaining_ticks);
