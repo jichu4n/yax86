@@ -1523,6 +1523,13 @@ typedef enum {
   kPrefixREP = 0xF3,    // REP/REPE/REPZ
 } InstructionPrefix;
 
+enum {
+  // Value of Instruction.segment_override when an instruction carries no
+  // segment override prefix. Zero is kAX, which is never a segment register,
+  // so a zero-initialized Instruction correctly has no override.
+  kNoSegmentOverride = 0,
+};
+
 // The Mod R/M byte.
 typedef struct ModRM {
   // Mod field - bits 6 and 7
@@ -1534,9 +1541,25 @@ typedef struct ModRM {
 } ModRM;
 
 // An encoded instruction.
+//
+// Prefixes are resolved into fields as they are fetched rather than kept as
+// raw bytes. Every consumer wants to know what a prefix selected, not which
+// byte encoded it, and a field spares each of them a walk over the bytes.
+//
+// LOCK and its undocumented 0xF1 alias are consumed but not recorded, because
+// nothing acts on them: the bus is not shared on a PC/XT. This struct is
+// zero-initialized and copied on every instruction fetch, so a field that only
+// the decoder would ever write is not worth the bytes - a ninth flag bit costs
+// a whole one, and measurably.
 typedef struct Instruction {
-  // Prefix bytes.
-  uint8_t prefix[kMaxPrefixBytes];
+  // The segment register selected by a segment override prefix, as a
+  // RegisterIndex, or kNoSegmentOverride if the instruction carries none. A
+  // later override wins over an earlier one, as on hardware.
+  uint8_t segment_override;
+
+  // The repetition prefix present - kPrefixREP or kPrefixREPNZ - or 0 if the
+  // instruction carries neither. A later one wins over an earlier one.
+  uint8_t repetition_prefix;
 
   // The primary opcode byte.
   uint8_t opcode;
@@ -1555,7 +1578,7 @@ typedef struct Instruction {
 
   // Flags
 
-  // Whether prefix byte is part of this instruction.
+  // Number of prefix bytes preceding the opcode.
   uint8_t prefix_size : 2;
   // Flag indicating if a ModR/M byte is part of this instruction.
   bool has_mod_rm : 1;
@@ -2169,17 +2192,11 @@ YAX86_PRIVATE uint8_t GetEffectiveAddressCycles(const Instruction* instruction) 
                               : kEACyclesBaseOrIndex;
   }
 
-  for (uint8_t i = 0; i < instruction->prefix_size; ++i) {
-    switch (instruction->prefix[i]) {
-      case kPrefixES:
-      case kPrefixCS:
-      case kPrefixSS:
-      case kPrefixDS:
-        cycles += kEACyclesSegmentOverride;
-        break;
-      default:
-        break;
-    }
+  // Charged once for an instruction that carries a segment override, rather
+  // than per override prefix. Only one can take effect, and real code never
+  // emits more than one.
+  if (instruction->segment_override != kNoSegmentOverride) {
+    cycles += kEACyclesSegmentOverride;
   }
   return cycles;
 }
@@ -2480,24 +2497,9 @@ YAX86_PRIVATE RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
 // Apply segment override prefixes to a MemoryAddress.
 YAX86_PRIVATE void ApplySegmentOverride(
     const Instruction* instruction, MemoryAddress* address) {
-  for (int i = 0; i < instruction->prefix_size; ++i) {
-    switch (instruction->prefix[i]) {
-      case kPrefixES:
-        address->segment_register_index = kES;
-        break;
-      case kPrefixCS:
-        address->segment_register_index = kCS;
-        break;
-      case kPrefixSS:
-        address->segment_register_index = kSS;
-        break;
-      case kPrefixDS:
-        address->segment_register_index = kDS;
-        break;
-      default:
-        // Ignore other prefixes
-        break;
-    }
+  if (instruction->segment_override != kNoSegmentOverride) {
+    address->segment_register_index =
+        (RegisterIndex)instruction->segment_override;
   }
 }
 
@@ -4771,19 +4773,8 @@ YAX86_PRIVATE InstructionResult ExecuteOutDX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Get the repetition prefix of a string instruction, if any.
-static uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
-  uint8_t prefix = 0;
-  for (int i = 0; i < ctx->instruction->prefix_size; ++i) {
-    switch (ctx->instruction->prefix[i]) {
-      case kPrefixREP:
-      case kPrefixREPNZ:
-        prefix = ctx->instruction->prefix[i];
-        break;
-      default:
-        continue;
-    }
-  }
-  return prefix;
+static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+  return ctx->instruction->repetition_prefix;
 }
 
 // Get the source operand for string instructions. Typically DS:SI but can be
@@ -7444,18 +7435,59 @@ void CPUInit(CPUState* cpu, CPUConfig* config) {
 // Instruction decoding
 // ============================================================================
 
+// The two prefix groups are each a contiguous encoding family, so a masked
+// compare identifies a whole group and the bits the mask leaves free say which
+// member it is.
+enum {
+  // Segment overrides encode as 001ss110, where ss selects the segment.
+  kSegmentOverridePrefixMask = 0xE7,
+  kSegmentOverridePrefixValue = 0x26,
+  // Position of the ss field within a segment override prefix.
+  kSegmentOverridePrefixShift = 3,
+  kSegmentOverridePrefixSegmentMask = 0x03,
+
+  // Within the LOCK and repetition prefix group, bit 1 separates the
+  // repetition prefixes (REPNZ, REP) from LOCK and its undocumented 0xF1
+  // alias.
+  kRepetitionPrefixBit = 0x02,
+};
+
+// Whether a byte is a segment override prefix. The mask pins every bit but the
+// two that select the segment, so it matches those four bytes and nothing else.
+static inline bool IsSegmentOverridePrefix(uint8_t byte) {
+  return (byte & kSegmentOverridePrefixMask) == kSegmentOverridePrefixValue;
+}
+
+// Whether a byte is a LOCK or repetition prefix. These four are consecutive,
+// so this is a range check rather than a mask - which is both clearer and one
+// instruction cheaper, since a compiler folds it into a single subtract and
+// compare.
+static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
+  return byte >= kPrefixLOCK && byte <= kPrefixREP;
+}
+
 // Helper to check if a byte is a valid prefix
-static bool IsPrefixByte(uint8_t byte) {
-  static const uint8_t kPrefixBytes[] = {
-      kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
-      kPrefixLOCK, kPrefixREPNZ, kPrefixREP, kPrefixLOCKAlt,
-  };
-  for (uint8_t i = 0; i < sizeof(kPrefixBytes); ++i) {
-    if (byte == kPrefixBytes[i]) {
-      return true;
-    }
+//
+// The cheaper of the two tests goes first. Most bytes reaching here are not
+// prefixes at all and so run both, which makes their combined cost the thing
+// worth minimizing.
+static inline bool IsPrefixByte(uint8_t byte) {
+  return IsLockOrRepetitionPrefix(byte) || IsSegmentOverridePrefix(byte);
+}
+
+// Record what a prefix byte selects. The segment field of an override prefix
+// is in the 8086's sreg encoding order, which is the order kES through kDS are
+// numbered in, so the segment register index is an offset from kES.
+static void ApplyPrefix(Instruction* instruction, uint8_t byte) {
+  if (IsSegmentOverridePrefix(byte)) {
+    instruction->segment_override =
+        (uint8_t)(kES + ((byte >> kSegmentOverridePrefixShift) &
+                         kSegmentOverridePrefixSegmentMask));
+  } else if (byte & kRepetitionPrefixBit) {
+    instruction->repetition_prefix = byte;
   }
-  return false;
+  // LOCK and its 0xF1 alias fall through: they are counted in prefix_size and
+  // advance IP, but nothing acts on them.
 }
 
 // Helper to read the next instruction byte.
@@ -7521,7 +7553,8 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
     if (instruction->prefix_size >= kMaxPrefixBytes) {
       return kFetchPrefixTooLong;
     }
-    instruction->prefix[instruction->prefix_size++] = current_byte;
+    ++instruction->prefix_size;
+    ApplyPrefix(instruction, current_byte);
     current_byte = ReadNextInstructionByte(cpu, &ip);
   }
 

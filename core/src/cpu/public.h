@@ -346,6 +346,13 @@ typedef enum {
   kPrefixREP = 0xF3,    // REP/REPE/REPZ
 } InstructionPrefix;
 
+enum {
+  // Value of Instruction.segment_override when an instruction carries no
+  // segment override prefix. Zero is kAX, which is never a segment register,
+  // so a zero-initialized Instruction correctly has no override.
+  kNoSegmentOverride = 0,
+};
+
 // The Mod R/M byte.
 typedef struct ModRM {
   // Mod field - bits 6 and 7
@@ -357,9 +364,25 @@ typedef struct ModRM {
 } ModRM;
 
 // An encoded instruction.
+//
+// Prefixes are resolved into fields as they are fetched rather than kept as
+// raw bytes. Every consumer wants to know what a prefix selected, not which
+// byte encoded it, and a field spares each of them a walk over the bytes.
+//
+// LOCK and its undocumented 0xF1 alias are consumed but not recorded, because
+// nothing acts on them: the bus is not shared on a PC/XT. This struct is
+// zero-initialized and copied on every instruction fetch, so a field that only
+// the decoder would ever write is not worth the bytes - a ninth flag bit costs
+// a whole one, and measurably.
 typedef struct Instruction {
-  // Prefix bytes.
-  uint8_t prefix[kMaxPrefixBytes];
+  // The segment register selected by a segment override prefix, as a
+  // RegisterIndex, or kNoSegmentOverride if the instruction carries none. A
+  // later override wins over an earlier one, as on hardware.
+  uint8_t segment_override;
+
+  // The repetition prefix present - kPrefixREP or kPrefixREPNZ - or 0 if the
+  // instruction carries neither. A later one wins over an earlier one.
+  uint8_t repetition_prefix;
 
   // The primary opcode byte.
   uint8_t opcode;
@@ -378,7 +401,7 @@ typedef struct Instruction {
 
   // Flags
 
-  // Whether prefix byte is part of this instruction.
+  // Number of prefix bytes preceding the opcode.
   uint8_t prefix_size : 2;
   // Flag indicating if a ModR/M byte is part of this instruction.
   bool has_mod_rm : 1;

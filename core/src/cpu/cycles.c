@@ -143,17 +143,11 @@ YAX86_PRIVATE uint8_t GetEffectiveAddressCycles(const Instruction* instruction) 
                               : kEACyclesBaseOrIndex;
   }
 
-  for (uint8_t i = 0; i < instruction->prefix_size; ++i) {
-    switch (instruction->prefix[i]) {
-      case kPrefixES:
-      case kPrefixCS:
-      case kPrefixSS:
-      case kPrefixDS:
-        cycles += kEACyclesSegmentOverride;
-        break;
-      default:
-        break;
-    }
+  // Charged once for an instruction that carries a segment override, rather
+  // than per override prefix. Only one can take effect, and real code never
+  // emits more than one.
+  if (instruction->segment_override != kNoSegmentOverride) {
+    cycles += kEACyclesSegmentOverride;
   }
   return cycles;
 }

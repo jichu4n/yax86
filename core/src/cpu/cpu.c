@@ -26,18 +26,59 @@ void CPUInit(CPUState* cpu, CPUConfig* config) {
 // Instruction decoding
 // ============================================================================
 
+// The two prefix groups are each a contiguous encoding family, so a masked
+// compare identifies a whole group and the bits the mask leaves free say which
+// member it is.
+enum {
+  // Segment overrides encode as 001ss110, where ss selects the segment.
+  kSegmentOverridePrefixMask = 0xE7,
+  kSegmentOverridePrefixValue = 0x26,
+  // Position of the ss field within a segment override prefix.
+  kSegmentOverridePrefixShift = 3,
+  kSegmentOverridePrefixSegmentMask = 0x03,
+
+  // Within the LOCK and repetition prefix group, bit 1 separates the
+  // repetition prefixes (REPNZ, REP) from LOCK and its undocumented 0xF1
+  // alias.
+  kRepetitionPrefixBit = 0x02,
+};
+
+// Whether a byte is a segment override prefix. The mask pins every bit but the
+// two that select the segment, so it matches those four bytes and nothing else.
+static inline bool IsSegmentOverridePrefix(uint8_t byte) {
+  return (byte & kSegmentOverridePrefixMask) == kSegmentOverridePrefixValue;
+}
+
+// Whether a byte is a LOCK or repetition prefix. These four are consecutive,
+// so this is a range check rather than a mask - which is both clearer and one
+// instruction cheaper, since a compiler folds it into a single subtract and
+// compare.
+static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
+  return byte >= kPrefixLOCK && byte <= kPrefixREP;
+}
+
 // Helper to check if a byte is a valid prefix
-static bool IsPrefixByte(uint8_t byte) {
-  static const uint8_t kPrefixBytes[] = {
-      kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
-      kPrefixLOCK, kPrefixREPNZ, kPrefixREP, kPrefixLOCKAlt,
-  };
-  for (uint8_t i = 0; i < sizeof(kPrefixBytes); ++i) {
-    if (byte == kPrefixBytes[i]) {
-      return true;
-    }
+//
+// The cheaper of the two tests goes first. Most bytes reaching here are not
+// prefixes at all and so run both, which makes their combined cost the thing
+// worth minimizing.
+static inline bool IsPrefixByte(uint8_t byte) {
+  return IsLockOrRepetitionPrefix(byte) || IsSegmentOverridePrefix(byte);
+}
+
+// Record what a prefix byte selects. The segment field of an override prefix
+// is in the 8086's sreg encoding order, which is the order kES through kDS are
+// numbered in, so the segment register index is an offset from kES.
+static void ApplyPrefix(Instruction* instruction, uint8_t byte) {
+  if (IsSegmentOverridePrefix(byte)) {
+    instruction->segment_override =
+        (uint8_t)(kES + ((byte >> kSegmentOverridePrefixShift) &
+                         kSegmentOverridePrefixSegmentMask));
+  } else if (byte & kRepetitionPrefixBit) {
+    instruction->repetition_prefix = byte;
   }
-  return false;
+  // LOCK and its 0xF1 alias fall through: they are counted in prefix_size and
+  // advance IP, but nothing acts on them.
 }
 
 // Helper to read the next instruction byte.
@@ -103,7 +144,8 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
     if (instruction->prefix_size >= kMaxPrefixBytes) {
       return kFetchPrefixTooLong;
     }
-    instruction->prefix[instruction->prefix_size++] = current_byte;
+    ++instruction->prefix_size;
+    ApplyPrefix(instruction, current_byte);
     current_byte = ReadNextInstructionByte(cpu, &ip);
   }
 

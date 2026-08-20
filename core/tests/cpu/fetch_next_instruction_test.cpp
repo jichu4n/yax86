@@ -141,39 +141,35 @@ TEST_F(FetchNextInstructionTest, FetchInstructionsWithPrefixes) {
 
   ASSERT_EQ(instructions.size(), 8);
 
-  // Helper to verify prefixes regardless of order
-  auto VerifyPrefixes = [](const Instruction& inst,
-                           const vector<uint8_t>& expected_prefixes) {
-    ASSERT_EQ(inst.prefix_size, expected_prefixes.size());
-    for (uint8_t expected : expected_prefixes) {
-      bool found = false;
-      for (int i = 0; i < inst.prefix_size; ++i) {
-        if (inst.prefix[i] == expected) {
-          found = true;
-          break;
-        }
-      }
-      EXPECT_TRUE(found) << "Expected prefix " << hex << (int)expected
-                         << " not found.";
-    }
+  // Verify what the prefixes of an instruction resolved to. Prefixes are
+  // decoded into fields, so this checks what each one selected rather than
+  // which byte encoded it - and the fields are order independent, which the
+  // raw bytes were not. A LOCK prefix selects nothing and so shows up only in
+  // prefix_size, which is why every case checks the count too.
+  auto VerifyPrefixes = [](const Instruction& inst, uint8_t prefix_size,
+                           uint8_t segment_override,
+                           uint8_t repetition_prefix) {
+    EXPECT_EQ(inst.prefix_size, prefix_size);
+    EXPECT_EQ(inst.segment_override, segment_override);
+    EXPECT_EQ(inst.repetition_prefix, repetition_prefix);
   };
 
   // REP prefix
-  VerifyPrefixes(instructions[0], {0xf3});
+  VerifyPrefixes(instructions[0], 1, kNoSegmentOverride, kPrefixREP);
   // REPNE prefix
-  VerifyPrefixes(instructions[1], {0xf2});
-  // LOCK prefix
-  VerifyPrefixes(instructions[2], {0xf0});
+  VerifyPrefixes(instructions[1], 1, kNoSegmentOverride, kPrefixREPNZ);
+  // LOCK prefix - consumed and counted, but selects nothing
+  VerifyPrefixes(instructions[2], 1, kNoSegmentOverride, 0);
   // Multiple prefixes (LOCK + REP)
-  VerifyPrefixes(instructions[3], {0xf0, 0xf3});
+  VerifyPrefixes(instructions[3], 2, kNoSegmentOverride, kPrefixREP);
   // CS segment override prefix
-  VerifyPrefixes(instructions[4], {0x2e});
-  // CS segment override prefix with REP (ES + REP) -> The ASM comment says "rep es", so checking ES (0x26) + REP (0xf3)
-  VerifyPrefixes(instructions[5], {0x26, 0xf3});
-  // SS segment override prefix with REPNE (SS + REPNE)
-  VerifyPrefixes(instructions[6], {0x36, 0xf2});
-  // DS segment override prefix with LOCK (DS + LOCK)
-  VerifyPrefixes(instructions[7], {0x3e, 0xf0});
+  VerifyPrefixes(instructions[4], 1, kCS, 0);
+  // ES segment override prefix with REP
+  VerifyPrefixes(instructions[5], 2, kES, kPrefixREP);
+  // SS segment override prefix with REPNE
+  VerifyPrefixes(instructions[6], 2, kSS, kPrefixREPNZ);
+  // DS segment override prefix with LOCK
+  VerifyPrefixes(instructions[7], 2, kDS, 0);
 }
 
 // Test fetching a sequence of instructions with 0, 1, and 2 displacement bytes.

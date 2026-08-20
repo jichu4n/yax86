@@ -203,8 +203,12 @@ TEST_F(UndocumentedOpcodesTest, LockPrefixAliasIsConsumedAsAPrefix) {
   ASSERT_EQ(
       CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.size, 2);
+  // Counted as a prefix, with 0x90 decoded as the opcode behind it. 0xF1
+  // aliases LOCK, which selects nothing, so the count is what shows it was
+  // consumed rather than treated as an opcode in its own right.
   EXPECT_EQ(instruction.prefix_size, 1);
-  EXPECT_EQ(instruction.prefix[0], 0xF1);
+  EXPECT_EQ(instruction.segment_override, kNoSegmentOverride);
+  EXPECT_EQ(instruction.repetition_prefix, 0);
   EXPECT_EQ(instruction.opcode, 0x90);
 }
 

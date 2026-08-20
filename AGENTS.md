@@ -50,15 +50,58 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   is worth more than its instruction count suggests.
 - The cost of the copy is why `Instruction` is worth keeping small, and its
   flag bitfields currently total exactly 8 bits. A ninth costs a whole byte and
-  takes the struct from 12 to 13.
-- Because the decode happens in place, a failed fetch leaves `dest_instruction`
-  holding however much had been decoded rather than untouched. Every caller
-  treats a failed fetch as fatal, so nothing reads it back.
+  takes the struct from 12 to 13, which measured as ~1.8% more host
+  instructions over a boot-and-idle run.
+- Because the decode happens in place, a failed fetch leaves the caller's
+  `Instruction` holding however much had been decoded rather than untouched.
+  Every caller treats a failed fetch as fatal, so nothing reads it back.
 - `immediate_size` is a three bit field but `immediate[]` holds 4 bytes, and
   `displacement_size` is a two bit field where `displacement[]` holds 2. No
   opcode table entry exceeds the arrays, but nothing in the types says so, and
   `gcc -O3` warns about the writes once it can no longer see the bound through
   a pointer. The immediate loop bounds itself by the array for that reason.
+
+#### core/src/cpu - prefix decoding
+
+- Both prefix groups are contiguous encoding families, so each is identified by
+  one masked compare: segment overrides encode as `001ss110` and LOCK/REP as
+  `111100rr`. The bits each mask leaves free are the selector - `ss` is in the
+  8086's sreg order, which is the order `kES` through `kDS` are numbered in, so
+  the segment register index is an offset from `kES`.
+- Prefixes are decoded into fields on `Instruction` as they are fetched, rather
+  than kept as raw bytes for each consumer to walk. `segment_override` uses 0
+  (`kNoSegmentOverride`) for absent, which is `kAX` and never a segment, so a
+  zero-initialized `Instruction` is correct by construction. LOCK is consumed
+  but not recorded - nothing on a PC/XT acts on it.
+- The test used to be a linear scan over an eight-element array. How much
+  writing it out is worth depends entirely on whether the compiler would have
+  derived the same tests anyway, and the split is sharp - measured over a boot
+  and idle run at the DOS prompt, in host instructions retired:
+
+  |       | gcc    | clang  |
+  | ----- | ------ | ------ |
+  | `-O1` | -5.19% | -7.13% |
+  | `-Os` | -5.78% | -6.32% |
+  | `-O2` | -6.76% | +0.76% |
+  | `-O3` | -0.93% | +0.76% |
+
+  Below `gcc -O3` and `clang -O2`, neither compiler converts the scan and this
+  is worth 5-7%. At or above, both do, and what is left is whether the
+  hand-written form matches what they would have picked. `gcc -O3` derives the
+  same two compares, so writing them out costs nothing and the surrounding
+  changes make it a small win. `clang` does better than this on its own - a
+  64-bit bitmap and a `bt` for the four segment overrides - so pinning it to
+  two masked compares costs it 0.76%.
+- Do not tune the source to one compiler's codegen here. No single form wins on
+  both, the spread either way is under 1% where they optimize well, and the
+  reason to write the tests out is the 5-7% at the levels where neither does -
+  `Debug`, `-Os`, and whatever ends up targeting the Pico.
+- Write the `0xF0-0xF3` test as a range check rather than a mask. Both are
+  exact, but a range folds into one subtract and compare where the mask needs a
+  separate `mov`, `and` and `cmp` - which is how `gcc -O3` writes it when left
+  to itself. Put it before the segment override test: bytes reaching here are
+  usually not prefixes at all and so run both, making the combined cost what
+  matters.
 
 #### core/src/platform - idle skipping
 
