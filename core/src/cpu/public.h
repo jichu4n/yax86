@@ -403,6 +403,12 @@ typedef enum CPUFetchNextInstructionStatus {
 } CPUFetchNextInstructionStatus;
 
 // Fetch the next instruction from CS:IP.
+//
+// The instruction is decoded directly into dest_instruction, so on failure
+// dest_instruction holds however much had been decoded when the fetch failed.
+// Since this function is part of the core CPU execution loop, assembling and
+// copying a whole instruction struct would have a measurable impact on
+// performance.
 CPUFetchNextInstructionStatus CPUFetchNextInstruction(
     CPUState* cpu, Instruction* instruction);
 
