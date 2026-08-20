@@ -14,8 +14,11 @@ constexpr const char* kCOMFileLoadOffsetString = "100h";
 
 // Overload the << operator for Instruction to print its contents.
 ostream& operator<<(ostream& os, const Instruction& instruction) {
-  // Prefixes, as what they selected rather than as the bytes that encoded them.
-  if (instruction.prefix_size > 0) {
+  // Prefixes, as what they selected rather than as the bytes that encoded
+  // them. A LOCK prefix selects nothing and is not recorded, so it does not
+  // appear here - only the instruction's size shows it was there.
+  if (instruction.segment_override != kNoSegmentOverride ||
+      instruction.repetition_prefix) {
     os << "p[";
     const char* separator = "";
     if (instruction.segment_override != kNoSegmentOverride) {
@@ -26,11 +29,8 @@ ostream& operator<<(ostream& os, const Instruction& instruction) {
     if (instruction.repetition_prefix) {
       os << separator
          << (instruction.repetition_prefix == kPrefixREP ? "rep" : "repnz");
-      separator = ",";
     }
-    // A LOCK prefix is not recorded, so it shows only in the count.
-    os << separator << "n=" << static_cast<int>(instruction.prefix_size)
-       << "] ";
+    os << "] ";
   }
   // Opcode
   os << hex << setw(2) << setfill('0') << static_cast<int>(instruction.opcode);

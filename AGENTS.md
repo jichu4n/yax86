@@ -80,10 +80,10 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
   |       | gcc    | clang  |
   | ----- | ------ | ------ |
-  | `-O1` | -5.20% | -7.65% |
-  | `-Os` | -5.87% | -7.01% |
-  | `-O2` | -6.31% | +0.01% |
-  | `-O3` | -1.24% | +0.03% |
+  | `-O1` | -5.30% | -7.79% |
+  | `-Os` | -5.83% | -7.10% |
+  | `-O2` | -6.25% | -0.09% |
+  | `-O3` | -0.96% | -0.08% |
 
   Below `gcc -O3` and `clang -O2`, neither compiler converts the scan and this
   is worth 5-8%. At or above, both derive their own equivalent - `clang` picks
@@ -95,6 +95,16 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   asking first and the recording asking again. Splitting them cost 0.7% on
   `clang`, which was enough on its own to make this change a net regression
   there at `-O2` and above.
+- `kMaxPrefixBytes` is not a storage bound - nothing stores anything per
+  prefix, and the count is a local in the fetch loop rather than a field. It
+  exists because a run of prefix bytes would otherwise fetch forever: a real
+  8086 hangs there too, since a prefix is not an instruction boundary and so no
+  interrupt is ever recognized, but this has to hand control back to its
+  caller. `Instruction.size` is a `uint8_t` that `CPUTick()` adds to IP, so the
+  bound is derived from what that can still address - 247 prefixes plus the 8
+  bytes an instruction can otherwise carry comes to exactly 255. It was 2 while
+  prefixes were kept in a fixed array, which rejected legal encodings:
+  `LOCK ES: REP MOVSB` is three.
 - Write the `0xF0-0xF3` test as a range check rather than a mask. Both are
   exact, but a range folds into one subtract and compare where the mask needs a
   separate `mov`, `and` and `cmp` - which is how `gcc -O3` writes it when left

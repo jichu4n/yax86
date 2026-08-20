@@ -7,3 +7,9 @@
 .gemini/
 gha-creds-*.json
 
+# Test programs assembled by the CPU test helper. ctest runs the tests from
+# the build directory, but running a test binary by hand lands these in
+# whatever directory it was started from.
+/*.asm
+/*.com
+

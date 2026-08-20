@@ -66,8 +66,8 @@ static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
 // is the common case by far - every instruction ends the loop with one.
 static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
   if (IsLockOrRepetitionPrefix(byte)) {
-    // LOCK and its 0xF1 alias are counted and advance IP, but nothing acts on
-    // them, so only a repetition prefix is worth recording.
+    // LOCK and its 0xF1 alias advance IP, but nothing acts on them, so only a
+    // repetition prefix is worth recording.
     if (byte & kRepetitionPrefixBit) {
       instruction->repetition_prefix = byte;
     }
@@ -143,9 +143,15 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
   uint16_t ip = cpu->registers[kIP];
 
   // Prefix
+  //
+  // The count is local because nothing outside this loop wants it: what the
+  // prefixes selected is in the instruction, and the bytes they occupied are
+  // in its size. It exists only to stop a run of prefix bytes from fetching
+  // forever - see kMaxPrefixBytes.
+  uint8_t prefix_size = 0;
   current_byte = ReadNextInstructionByte(cpu, &ip);
   while (ApplyPrefixByte(instruction, current_byte)) {
-    if (++instruction->prefix_size > kMaxPrefixBytes) {
+    if (++prefix_size > kMaxPrefixBytes) {
       return kFetchPrefixTooLong;
     }
     current_byte = ReadNextInstructionByte(cpu, &ip);

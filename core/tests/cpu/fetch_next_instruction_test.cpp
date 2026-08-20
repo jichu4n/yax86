@@ -144,52 +144,74 @@ TEST_F(FetchNextInstructionTest, FetchInstructionsWithPrefixes) {
   // Verify what the prefixes of an instruction resolved to. Prefixes are
   // decoded into fields, so this checks what each one selected rather than
   // which byte encoded it - and the fields are order independent, which the
-  // raw bytes were not. A LOCK prefix selects nothing and so shows up only in
-  // prefix_size, which is why every case checks the count too.
-  auto VerifyPrefixes = [](const Instruction& inst, uint8_t prefix_size,
+  // raw bytes were not. A LOCK prefix selects nothing, so the encoded size is
+  // what shows it was consumed rather than mistaken for an opcode; every case
+  // checks it for that reason.
+  auto VerifyPrefixes = [](const Instruction& inst, uint8_t size,
                            uint8_t segment_override,
                            uint8_t repetition_prefix) {
-    EXPECT_EQ(inst.prefix_size, prefix_size);
+    EXPECT_EQ(inst.size, size);
     EXPECT_EQ(inst.segment_override, segment_override);
     EXPECT_EQ(inst.repetition_prefix, repetition_prefix);
   };
 
-  // REP prefix
-  VerifyPrefixes(instructions[0], 1, kNoSegmentOverride, kPrefixREP);
-  // REPNE prefix
-  VerifyPrefixes(instructions[1], 1, kNoSegmentOverride, kPrefixREPNZ);
-  // LOCK prefix - consumed and counted, but selects nothing
-  VerifyPrefixes(instructions[2], 1, kNoSegmentOverride, 0);
-  // Multiple prefixes (LOCK + REP)
-  VerifyPrefixes(instructions[3], 2, kNoSegmentOverride, kPrefixREP);
-  // CS segment override prefix
-  VerifyPrefixes(instructions[4], 1, kCS, 0);
-  // ES segment override prefix with REP
-  VerifyPrefixes(instructions[5], 2, kES, kPrefixREP);
-  // SS segment override prefix with REPNE
-  VerifyPrefixes(instructions[6], 2, kSS, kPrefixREPNZ);
-  // DS segment override prefix with LOCK
-  VerifyPrefixes(instructions[7], 2, kDS, 0);
+  // REP prefix - f3 a4
+  VerifyPrefixes(instructions[0], 2, kNoSegmentOverride, kPrefixREP);
+  // REPNE prefix - f2 a4
+  VerifyPrefixes(instructions[1], 2, kNoSegmentOverride, kPrefixREPNZ);
+  // LOCK prefix - f0 01 07 - consumed, but selects nothing
+  VerifyPrefixes(instructions[2], 3, kNoSegmentOverride, 0);
+  // Multiple prefixes (LOCK + REP) - f0 f3 8e 1f
+  VerifyPrefixes(instructions[3], 4, kNoSegmentOverride, kPrefixREP);
+  // CS segment override prefix - 2e 8b 07
+  VerifyPrefixes(instructions[4], 3, kCS, 0);
+  // ES segment override prefix with REP - 26 f3 8b 07
+  VerifyPrefixes(instructions[5], 4, kES, kPrefixREP);
+  // SS segment override prefix with REPNE - 36 f2 8b 07
+  VerifyPrefixes(instructions[6], 4, kSS, kPrefixREPNZ);
+  // DS segment override prefix with LOCK - 3e f0 8b 07
+  VerifyPrefixes(instructions[7], 4, kDS, 0);
 }
 
-// kMaxPrefixBytes prefixes must still decode, and one more must be rejected
-// rather than silently dropped or overrunning anything.
-TEST_F(FetchNextInstructionTest, FetchRejectsMoreThanMaxPrefixBytes) {
+// The 8086 accepts any number of prefixes, so more than the two a compiler
+// would emit must decode rather than being rejected. A later prefix of the
+// same kind wins, as on hardware.
+TEST_F(FetchNextInstructionTest, FetchAcceptsMoreThanTwoPrefixes) {
+  CPUTestHelper helper;
+  // LOCK ES: SS: REP MOVSB - four prefixes, two of them segment overrides.
+  helper.LoadCOM({kPrefixLOCK, kPrefixES, kPrefixSS, kPrefixREP, 0xA4, 0x90});
+  Instruction instruction;
+  ASSERT_EQ(CPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
+  EXPECT_EQ(instruction.opcode, 0xA4);
+  EXPECT_EQ(instruction.size, 5);
+  // SS came after ES, so it is the override that took effect.
+  EXPECT_EQ(instruction.segment_override, kSS);
+  EXPECT_EQ(instruction.repetition_prefix, kPrefixREP);
+}
+
+// A run of prefix bytes must not fetch forever. The bound is whatever still
+// leaves the whole encoding addressable by Instruction.size.
+TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
+  // Builds n segment override prefixes followed by a NOP. Sized up front
+  // rather than appended to, which keeps gcc from mis-analyzing the
+  // reallocation and warning about the write.
+  auto PrefixRun = [](size_t n) {
+    vector<uint8_t> code(n + 1, kPrefixES);
+    code.back() = 0x90;  // NOP
+    return code;
+  };
+
   CPUTestHelper at_limit;
-  // ES: REP NOP - two prefixes, which is the most that is accepted.
-  at_limit.LoadCOM({kPrefixES, kPrefixREP, 0x90});
+  at_limit.LoadCOM(PrefixRun(kMaxPrefixBytes));
   Instruction instruction;
   ASSERT_EQ(
       CPUFetchNextInstruction(&at_limit.cpu_, &instruction), kFetchSuccess);
-  EXPECT_EQ(instruction.prefix_size, kMaxPrefixBytes);
-  EXPECT_EQ(instruction.segment_override, kES);
-  EXPECT_EQ(instruction.repetition_prefix, kPrefixREP);
   EXPECT_EQ(instruction.opcode, 0x90);
-  EXPECT_EQ(instruction.size, 3);
+  EXPECT_EQ(instruction.segment_override, kES);
+  EXPECT_EQ(instruction.size, kMaxPrefixBytes + 1);
 
   CPUTestHelper over_limit;
-  // ES: SS: REP NOP - one prefix too many.
-  over_limit.LoadCOM({kPrefixES, kPrefixSS, kPrefixREP, 0x90});
+  over_limit.LoadCOM(PrefixRun(kMaxPrefixBytes + 1));
   ASSERT_EQ(
       CPUFetchNextInstruction(&over_limit.cpu_, &instruction),
       kFetchPrefixTooLong);
