@@ -10,19 +10,8 @@
 // ============================================================================
 
 // Get the repetition prefix of a string instruction, if any.
-static uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
-  uint8_t prefix = 0;
-  for (int i = 0; i < ctx->instruction->prefix_size; ++i) {
-    switch (ctx->instruction->prefix[i]) {
-      case kPrefixREP:
-      case kPrefixREPNZ:
-        prefix = ctx->instruction->prefix[i];
-        break;
-      default:
-        continue;
-    }
-  }
-  return prefix;
+static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+  return ctx->instruction->repetition_prefix;
 }
 
 // Get the source operand for string instructions. Typically DS:SI but can be

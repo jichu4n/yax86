@@ -276,24 +276,9 @@ YAX86_PRIVATE RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
 // Apply segment override prefixes to a MemoryAddress.
 YAX86_PRIVATE void ApplySegmentOverride(
     const Instruction* instruction, MemoryAddress* address) {
-  for (int i = 0; i < instruction->prefix_size; ++i) {
-    switch (instruction->prefix[i]) {
-      case kPrefixES:
-        address->segment_register_index = kES;
-        break;
-      case kPrefixCS:
-        address->segment_register_index = kCS;
-        break;
-      case kPrefixSS:
-        address->segment_register_index = kSS;
-        break;
-      case kPrefixDS:
-        address->segment_register_index = kDS;
-        break;
-      default:
-        // Ignore other prefixes
-        break;
-    }
+  if (instruction->segment_override != kNoSegmentOverride) {
+    address->segment_register_index =
+        (RegisterIndex)instruction->segment_override;
   }
 }
 

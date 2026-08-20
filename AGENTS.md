@@ -50,15 +50,67 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   is worth more than its instruction count suggests.
 - The cost of the copy is why `Instruction` is worth keeping small, and its
   flag bitfields currently total exactly 8 bits. A ninth costs a whole byte and
-  takes the struct from 12 to 13.
-- Because the decode happens in place, a failed fetch leaves `dest_instruction`
-  holding however much had been decoded rather than untouched. Every caller
-  treats a failed fetch as fatal, so nothing reads it back.
+  takes the struct from 12 to 13, which measured as ~1.8% more host
+  instructions over a boot-and-idle run.
+- Because the decode happens in place, a failed fetch leaves the caller's
+  `Instruction` holding however much had been decoded rather than untouched.
+  Every caller treats a failed fetch as fatal, so nothing reads it back.
 - `immediate_size` is a three bit field but `immediate[]` holds 4 bytes, and
   `displacement_size` is a two bit field where `displacement[]` holds 2. No
   opcode table entry exceeds the arrays, but nothing in the types says so, and
   `gcc -O3` warns about the writes once it can no longer see the bound through
   a pointer. The immediate loop bounds itself by the array for that reason.
+
+#### core/src/cpu - prefix decoding
+
+- Both prefix groups are contiguous encoding families, so each is identified by
+  one masked compare: segment overrides encode as `001ss110` and LOCK/REP as
+  `111100rr`. The bits each mask leaves free are the selector - `ss` is in the
+  8086's sreg order, which is the order `kES` through `kDS` are numbered in, so
+  the segment register index is an offset from `kES`.
+- Prefixes are decoded into fields on `Instruction` as they are fetched, rather
+  than kept as raw bytes for each consumer to walk. `segment_override` uses 0
+  (`kNoSegmentOverride`) for absent, which is `kAX` and never a segment, so a
+  zero-initialized `Instruction` is correct by construction. LOCK is consumed
+  but not recorded - nothing on a PC/XT acts on it.
+- The test used to be a linear scan over an eight-element array. How much
+  writing it out is worth depends entirely on whether the compiler would have
+  derived the same tests anyway, and the split is sharp - measured over a boot
+  and idle run at the DOS prompt, in host instructions retired:
+
+  |       | gcc    | clang  |
+  | ----- | ------ | ------ |
+  | `-O1` | -5.30% | -7.79% |
+  | `-Os` | -5.83% | -7.10% |
+  | `-O2` | -6.25% | -0.09% |
+  | `-O3` | -0.96% | -0.08% |
+
+  Below `gcc -O3` and `clang -O2`, neither compiler converts the scan and this
+  is worth 5-8%. At or above, both derive their own equivalent - `clang` picks
+  a 64-bit bitmap and a `bt` for the four segment overrides, which is arguably
+  better than the mask - and it comes out a wash.
+- Classify and record in one pass. Deciding whether a byte is a prefix and
+  deciding which group it belongs to are the same test, so `ApplyPrefixByte()`
+  does both and returns whether it consumed anything, rather than the loop
+  asking first and the recording asking again. Splitting them cost 0.7% on
+  `clang`, which was enough on its own to make this change a net regression
+  there at `-O2` and above.
+- `kMaxPrefixBytes` is not a storage bound - nothing stores anything per
+  prefix, and the count is a local in the fetch loop rather than a field. It
+  exists because a run of prefix bytes would otherwise fetch forever: a real
+  8086 hangs there too, since a prefix is not an instruction boundary and so no
+  interrupt is ever recognized, but this has to hand control back to its
+  caller. `Instruction.size` is a `uint8_t` that `CPUTick()` adds to IP, so the
+  bound is derived from what that can still address - 247 prefixes plus the 8
+  bytes an instruction can otherwise carry comes to exactly 255. It was 2 while
+  prefixes were kept in a fixed array, which rejected legal encodings:
+  `LOCK ES: REP MOVSB` is three.
+- Write the `0xF0-0xF3` test as a range check rather than a mask. Both are
+  exact, but a range folds into one subtract and compare where the mask needs a
+  separate `mov`, `and` and `cmp` - which is how `gcc -O3` writes it when left
+  to itself. Put it before the segment override test: bytes reaching here are
+  usually not prefixes at all and so run both, making the combined cost what
+  matters.
 
 #### core/src/platform - idle skipping
 
