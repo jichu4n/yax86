@@ -14,7 +14,7 @@
 // CPU state
 // ============================================================================
 
-void CPUInit(CPUState* cpu, CPUConfig* config) {
+YAX86_HOT void CPUInit(CPUState* cpu, CPUConfig* config) {
   // Zero out the CPU state
   const CPUState zero_cpu_state = {0};
   *cpu = zero_cpu_state;
@@ -133,8 +133,8 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
   }
 }
 
-CPUFetchNextInstructionStatus CPUFetchNextInstruction(
-    CPUState* cpu, Instruction* instruction) {
+YAX86_HOT CPUFetchNextInstructionStatus
+CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   const Instruction zero_instruction = {0};
   *instruction = zero_instruction;
 
@@ -203,8 +203,8 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
 // Execution
 // ============================================================================
 
-InstructionResult CPUExecuteInstruction(
-    CPUState* cpu, Instruction* instruction) {
+YAX86_HOT InstructionResult
+CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   // Run the on_before_execute_instruction callback if provided.
   if (cpu->config->on_before_execute_instruction) {
     cpu->config->on_before_execute_instruction(cpu, instruction);

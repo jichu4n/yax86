@@ -112,6 +112,74 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   usually not prefixes at all and so run both, making the combined cost what
   matters.
 
+#### core/src/util - hot path placement
+
+- `YAX86_HOT` marks a function as being on the per-instruction hot path. It is
+  empty by default, because on a machine with a normal cache hierarchy there is
+  nothing useful to say; a target whose fastest memory has to be chosen
+  explicitly defines it to whatever placement attribute it needs. The Pico
+  harness defines it to `__not_in_flash()`, which puts the function in SRAM
+  instead of executing it from QSPI flash through a 16KB XIP cache.
+- 78 functions carry it, chosen from an on-target profile rather than by
+  intuition. On the Pico it is worth **1.59x at 400MHz** (13.647s to 8.597s on
+  `dos-boot`) and **1.23x at 125MHz**. The win is larger when overclocked
+  because the flash SPI clock does not scale with the core, so an XIP miss
+  costs more core cycles the faster the core runs.
+- **The annotations live in `core/src`, not in a pass over the generated
+  bundle.** That is the whole point: a post-processing pass over
+  `core/yax86_core.h` is silently undone by the next bundle regeneration, which
+  costs the entire 1.59x with no error and no warning. Annotating the source
+  means regeneration carries the marks through by construction. If the
+  annotation count in the bundle ever drops, something is wrong with the
+  bundler, not with someone's memory:
+  ```sh
+  grep -c YAX86_HOT core/yax86_core.h    # 78 uses plus the macro block
+  ```
+- Annotating every function in the core instead was measured, and is not worth
+  it. Against the same baseline: 78 functions give 97.2% of the win for 15KB of
+  SRAM, where all 491 give 100% for 46.5KB. The extra 2.8% costs three times
+  the memory, and it forecloses the 192KB guest RAM option outright - 206,664
+  bytes of image plus 64KB more guest RAM does not fit in 256KB, where the
+  targeted build does.
+- `YAX86_HOT_DATA` is the same thing for data, and is separate because a
+  compiler will not put executable code and read-only data in one section - a
+  code section attribute on a `const` array is a hard compile error, not a
+  warning. The macro is kept so that whoever finds a candidate that pays
+  reaches for the right one rather than for `YAX86_HOT`, but nothing currently
+  uses it. The obvious candidate is the 256-entry opcode table - 2KB, read once
+  on every instruction fetch - and it does not pay: in SRAM it measured
+  neutral, 2.6ms over an 8.6 second run and inside the noise floor.
+- That result is not because the table is already cached, or not mainly, and
+  the difference matters for whatever gets considered next. Putting the whole
+  core back in flash so that the XIP cache is thrashed by 88KB of code - the
+  condition most favourable to the table - and moving the table alone is still
+  worth only 0.14%, 13.647s to 13.628s. Reading the RP2040's XIP hit and access
+  counters (`xip_ctrl_hw->ctr_hit` and `ctr_acc`) across that same run says why:
+
+  ```
+  xip_acc  1,299,140,378    559 flash accesses per emulated instruction
+  xip_hit  1,280,792,338    98.59% hit rate, so 7.9 misses per instruction
+  ```
+
+  The table is one eight-byte line per instruction, **0.18% of that traffic**,
+  so the most it could ever have been worth is about 1% even if every read of
+  it missed. Cache residency accounts for the rest of the gap - those few lines
+  are re-referenced every instruction, so they are about the last thing an LRU
+  cache gives up - but the ceiling was low before the cache did anything.
+- The lesson generalizes, and is the one to carry into the next change: on this
+  part, **what matters is how much flash traffic something generates, not how
+  hot it feels.** A structure read once per instruction is noise against 559
+  instruction fetches. That ratio is the whole reason moving code to SRAM is
+  worth 1.59x while moving a table read on every single instruction is worth
+  nothing measurable.
+- The marks help at `-O2` and `-O3` and **hurt at `-Os`**, which went from
+  34.264s to 37.877s, a 10.5% regression. The likely cause is bus contention:
+  an XIP cache hit reaches the core over a different bus path than an SRAM
+  access, so code in flash does not compete with the guest RAM array, while
+  code in SRAM does. At `-Os` the core's code is small enough to sit in the
+  16KB XIP cache and that trade is a loss. Placing hot code in a different SRAM
+  bank than guest RAM has not been tried and is the obvious next question.
+
 #### core/src/platform - idle skipping
 
 - MS-DOS waits for a keystroke by polling rather than halting, so an idle
@@ -341,6 +409,14 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   awk on macOS. Reading the headers is shorter, portable, and drops two
   toolchain dependencies. It reproduces `arm-none-eabi-size`'s text column
   exactly, which is what the `core_text` column has always been.
+- `src/yax86_hot.h` is force-included into every translation unit, and is where
+  this target defines `YAX86_HOT` - the mark the core puts on its
+  per-instruction hot path - to `__not_in_flash()`, placing those functions in
+  SRAM rather than executing them from flash through the XIP cache. It is
+  force-included rather than included from the core so that the core knows
+  nothing about this target, and it is inert against a core revision that does
+  not use the mark. See the hot path placement section under `core` for what it
+  is worth and why only some functions carry it.
 - The optimization level is a CMake option applied through
   `CMAKE_C_FLAGS_RELEASE` rather than to the emulator's target alone, so that
   the SDK and the C library are compiled the same way. What is being measured
@@ -360,16 +436,25 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 #### Baseline
 
 - Measured with GCC 16.1.0, SDK 2.3.0 and picotool 2.3.0, at the default 128K
-  of guest RAM, with the core running from flash:
+  of guest RAM and the stock 125MHz clock. "flash" is the core running entirely
+  from flash, which is what the harness measured before `YAX86_HOT` existed;
+  "SRAM" is with the hot path placed there:
 
-  | level | seconds | emulated MHz | flash | SRAM | core `.text` |
-  | ----- | ------- | ------------ | ----- | ---- | ------------ |
-  | `-Os` | 34.264 | 0.80 | 442,400 | 158,284 | 59,899 |
-  | `-O2` | 36.494 | 0.75 | 456,956 | 158,756 | 73,628 |
-  | `-O3` | **33.492** | **0.82** | 469,724 | 160,132 | 88,448 |
+  | level | flash | SRAM | image flash | image SRAM | core `.text` |
+  | ----- | ----- | ---- | ----------- | ---------- | ------------ |
+  | `-Os` | 34.264 | 37.877 | 443,776 | 164,396 | 59,887 |
+  | `-O2` | 36.494 | 31.493 | 458,044 | 167,780 | 73,576 |
+  | `-O3` | **33.492** | **27.321** | 470,492 | 175,172 | 88,384 |
 
   A real 8088 runs this in 5.812 seconds, so `-O3` at the stock clock is about
-  a sixth of one.
+  a fifth of one, and 8.597s at 400MHz.
+- The two columns do not rank the levels the same way, which is the whole
+  reason this harness exists. Running from flash, `-O2` was the slowest of the
+  three and `-Os` beat it by 6% - the XIP cache rewards a small image enough to
+  overturn the desktop ordering. With the hot path in SRAM the ordering becomes
+  the ordinary one, `-O3` fastest and `-Os` slowest by a wide margin, because
+  the cache is no longer what decides. See the hot path placement section under
+  `core` for why `-Os` gets *worse*.
 - Reproducibility is excellent, which is what makes small differences worth
   believing: three independent flash-and-run cycles of the same `-O3` image
   gave 33.491892, 33.492932 and 33.490758 seconds - a spread of 2.2ms over 33.5
@@ -377,9 +462,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 13.647 seconds, or 2.03 emulated MHz. **Do not raise
-  the clock past 400MHz.** That is a standing instruction, not a technical
-  limit.
+- At 400MHz, `-O3` takes 8.597 seconds, or 3.22 emulated MHz - against 13.647
+  seconds before the hot path moved to SRAM. **Do not raise the clock past
+  400MHz.** That is a standing instruction, not a technical limit.
 - Flash is dominated by the 360KB floppy image; the code itself is under 110KB.
   The `core_text` column is the whole core library section, which includes
   about 32KB of constant data - the ROM images, the font tables and the opcode
@@ -486,6 +571,19 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   `typedef enum Name { ... } Name;`.
 - Unused function parameters should be annotated with `YAX86_UNUSED` from the
   util/common.h header to avoid unused parameter warnings.
+- `YAX86_HOT` goes first in a definition, before the linkage macro and the
+  return type: `YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteSub(...)`, and
+  `YAX86_HOT static uint8_t ReadByte(...)`. Both orders compile, so the point
+  is only that there be one - and putting the mark first leaves the declaration
+  after it exactly as it reads without the mark.
+- `clang-format` will not fix a misplaced mark, and will disguise one. It
+  chooses where to break lines and never reorders tokens, so a mark added to
+  the start of a *continuation* line - which is where a wrapped signature's
+  declarator lives, below its return type - is already mid-declaration.
+  Reformatting then rejoins it as `YAX86_PRIVATE InstructionResult YAX86_HOT`,
+  which reads as though the mark belonged to the return type and was put there
+  on purpose. Add the mark to the line the declaration *starts* on and
+  reformatting keeps it first, however it decides to wrap.
 - When incrementing or decrementing a variable, prefer prefix syntax
   `++var` or `--var` instead of the suffix syntax `var++` or `var--`.
 - Comments should generally be added on the line before a variable, field or

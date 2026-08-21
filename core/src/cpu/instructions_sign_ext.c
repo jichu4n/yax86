@@ -18,7 +18,8 @@ YAX86_PRIVATE InstructionResult ExecuteCbw(const InstructionContext* ctx) {
 }
 
 // CWD
-YAX86_PRIVATE InstructionResult ExecuteCwd(const InstructionContext* ctx) {
+YAX86_HOT YAX86_PRIVATE InstructionResult
+ExecuteCwd(const InstructionContext* ctx) {
   ctx->cpu->registers[kDX] =
       (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
   return kInstructionExecuted;

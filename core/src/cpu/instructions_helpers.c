@@ -9,7 +9,7 @@
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
+YAX86_HOT YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];

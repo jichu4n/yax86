@@ -40,6 +40,28 @@ extern "C" {
 #define YAX86_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Marks a function as being on the per-instruction hot path.
+//
+// Empty by default, because on a machine with a normal cache hierarchy there is
+// nothing useful to say. A target whose fastest memory has to be chosen
+// explicitly can define it to whatever placement attribute it needs - on an
+// RP2040, code runs from QSPI flash through a 16KB cache, and putting the hot
+// path in SRAM instead takes that cache out of the picture.
+//
+// Define it before including this header, or on the command line.
+#ifndef YAX86_HOT
+#define YAX86_HOT
+#endif  // YAX86_HOT
+
+// The same, for data rather than code.
+//
+// Separate from YAX86_HOT because a compiler will not put executable code and
+// read-only data in one section, and because a target may well want to place
+// them differently even where it could.
+#ifndef YAX86_HOT_DATA
+#define YAX86_HOT_DATA
+#endif  // YAX86_HOT_DATA
+
 #endif  // YAX86_UTIL_COMMON_H
 
 
@@ -843,7 +865,8 @@ static uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
-static uint32_t PITMode2TicksUntilEvent(const PITChannelState* channel) {
+YAX86_HOT static uint32_t PITMode2TicksUntilEvent(
+    const PITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
@@ -882,7 +905,7 @@ static void PITMode3HandleTick(
 // and at 0xFFFF from an odd one. Either way a counter of 4 or more has at
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
-static uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
+YAX86_HOT static uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
@@ -1115,7 +1138,7 @@ uint8_t PITReadPort(PITState* pit, uint16_t port) {
   }
 }
 
-void PITTick(PITState* pit) {
+YAX86_HOT void PITTick(PITState* pit) {
   PITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     if (channel->mode >= kPITNumModes) {
@@ -1173,7 +1196,7 @@ static void PITAdvanceChannel(
   }
 }
 
-void PITAdvance(PITState* pit, uint32_t num_ticks) {
+YAX86_HOT void PITAdvance(PITState* pit, uint32_t num_ticks) {
   if (num_ticks == 0) {
     return;
   }

@@ -40,6 +40,28 @@ extern "C" {
 #define YAX86_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Marks a function as being on the per-instruction hot path.
+//
+// Empty by default, because on a machine with a normal cache hierarchy there is
+// nothing useful to say. A target whose fastest memory has to be chosen
+// explicitly can define it to whatever placement attribute it needs - on an
+// RP2040, code runs from QSPI flash through a 16KB cache, and putting the hot
+// path in SRAM instead takes that cache out of the picture.
+//
+// Define it before including this header, or on the command line.
+#ifndef YAX86_HOT
+#define YAX86_HOT
+#endif  // YAX86_HOT
+
+// The same, for data rather than code.
+//
+// Separate from YAX86_HOT because a compiler will not put executable code and
+// read-only data in one section, and because a target may well want to place
+// them differently even where it could.
+#ifndef YAX86_HOT_DATA
+#define YAX86_HOT_DATA
+#endif  // YAX86_HOT_DATA
+
 #endif  // YAX86_UTIL_COMMON_H
 
 
@@ -2879,7 +2901,7 @@ void VideoInit(VideoState* video, VideoConfig* config) {
 // Video mode
 // ============================================================================
 
-VideoMode VideoGetMode(const VideoState* video) {
+YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
   if (video->adapter == kVideoAdapterMDA) {
     // The MDA has only one mode.
     return kVideoModeMDAText80x25;
@@ -3147,7 +3169,7 @@ static void VideoInvalidateBlinkingText(VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-void VideoTick(VideoState* video, uint32_t cycles) {
+YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
       adapter->scan_lines_per_frame == 0) {

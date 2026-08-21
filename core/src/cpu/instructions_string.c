@@ -115,7 +115,8 @@ static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
 }
 
 // MOVS
-YAX86_PRIVATE InstructionResult ExecuteMovs(const InstructionContext* ctx) {
+YAX86_HOT YAX86_PRIVATE InstructionResult
+ExecuteMovs(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteMovsIteration);
 }
 
@@ -129,7 +130,8 @@ static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
 }
 
 // STOS
-YAX86_PRIVATE InstructionResult ExecuteStos(const InstructionContext* ctx) {
+YAX86_HOT YAX86_PRIVATE InstructionResult
+ExecuteStos(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteStosIteration);
 }
 
@@ -143,7 +145,8 @@ static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
 }
 
 // LODS
-YAX86_PRIVATE InstructionResult ExecuteLods(const InstructionContext* ctx) {
+YAX86_HOT YAX86_PRIVATE InstructionResult
+ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
 
@@ -170,7 +173,8 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-static InstructionResult ExecuteScasIteration(const InstructionContext* ctx) {
+YAX86_HOT static InstructionResult ExecuteScasIteration(
+    const InstructionContext* ctx) {
   Operand src = GetStringDestinationOperand(ctx);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   ExecuteCmp(ctx, &dest, &src.value);

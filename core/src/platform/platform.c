@@ -78,7 +78,7 @@ MemoryMapEntry* GetMemoryMapEntryForAddress(
 
 // Look up a memory region by type. Returns NULL if no region found with the
 // specified type.
-MemoryMapEntry* GetMemoryMapEntryByType(
+YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
     PlatformState* platform, uint8_t entry_type) {
   for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
     MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
@@ -130,7 +130,7 @@ static void PlatformCheckMemoryWatchpoints(
 }
 
 // Read a byte from a logical memory address.
-uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+YAX86_HOT uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
   if (platform->has_enabled_memory_watchpoints) {
     PlatformCheckMemoryWatchpoints(platform, address, false);
   }
@@ -162,7 +162,8 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 }
 
 // Write a byte to a logical memory address.
-void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
+YAX86_HOT void WriteMemoryByte(
+    PlatformState* platform, uint32_t address, uint8_t value) {
   if (platform->has_enabled_memory_watchpoints) {
     PlatformCheckMemoryWatchpoints(platform, address, true);
   }
@@ -224,7 +225,7 @@ PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
 }
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-PortMapEntry* GetPortMapEntryByType(
+YAX86_HOT PortMapEntry* GetPortMapEntryByType(
     PlatformState* platform, PortMapEntryType entry_type) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
@@ -237,7 +238,7 @@ PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
+YAX86_HOT uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
@@ -258,7 +259,8 @@ uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
 
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-void WritePortByte(PlatformState* platform, uint16_t port, uint8_t value) {
+YAX86_HOT void WritePortByte(
+    PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
     YAX86_PLATFORM_LOG(
@@ -307,7 +309,7 @@ static uint8_t PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PICReadPort((PICState*)entry->context, port);
 }
 
-static void PICCallbackWritePortByte(
+YAX86_HOT static void PICCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PICWritePort((PICState*)entry->context, port, value);
 }
@@ -321,7 +323,8 @@ static void PICCallbackPlatformRaiseIRQ0(void* context) {
 // Callbacks for 8253 PIT module
 // ============================================================================
 
-static uint8_t PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+YAX86_HOT static uint8_t PITCallbackReadPortByte(
+    PortMapEntry* entry, uint16_t port) {
   // A guest timing loop reads the counter expecting it to have moved, so the
   // PIT has to be caught up before it is read.
   PlatformState* platform = (PlatformState*)entry->context;
@@ -407,7 +410,7 @@ static void FDCCallbackRaiseIRQ6(void* context) {
   PlatformRaiseIRQ(platform, 6);
 }
 
-static void FDCCallbackRequestDMA(void* context) {
+YAX86_HOT static void FDCCallbackRequestDMA(void* context) {
   PlatformState* platform = (PlatformState*)context;
   DMATransferByte(&platform->dma, kPlatformDMAChannelFloppy);
 }
@@ -489,7 +492,8 @@ static void DMACallbackWritePortByte(
 // Callbacks for Video module
 // ============================================================================
 
-static uint8_t VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+YAX86_HOT static uint8_t VideoCallbackReadPortByte(
+    PortMapEntry* entry, uint16_t port) {
   // The status port reports where the CRT beam is, which is only meaningful
   // once the beam has been advanced to now. Guests poll this to wait for
   // retrace.
@@ -567,7 +571,7 @@ enum {
 //
 // Only installed when the idle skip is enabled, so a machine without it pays
 // nothing per interrupt.
-static InterruptHandlerResult CPUCallbackHandleInterrupt(
+YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == kDOSIdleInterrupt) {
     PlatformState* platform = (PlatformState*)cpu->config->context;
@@ -859,7 +863,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   return true;
 }
 
-bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
+YAX86_HOT bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
   if (irq >= 8) {
     return false;
   }
@@ -935,7 +939,7 @@ static uint32_t PlatformCyclesUntilNextEvent(
 
 // Bring every device up to date with the cycles that have run since the last
 // sync, and schedule the next deadline.
-void PlatformSync(PlatformState* platform) {
+YAX86_HOT void PlatformSync(PlatformState* platform) {
   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
   platform->last_sync_ticks = platform->ticks;
 
@@ -1074,7 +1078,8 @@ static void PlatformSkipIdleTime(PlatformState* platform, uint32_t max_cycles) {
   PlatformSync(platform);
 }
 
-PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles) {
+YAX86_HOT PlatformRunStatus
+PlatformRun(PlatformState* platform, uint32_t max_cycles) {
   // Instructions are only ever run whole, so the last one of a run generally
   // takes the total a little past the budget. Unsigned subtraction keeps this
   // right across the counter wrapping.

@@ -75,7 +75,7 @@ static InstructionResult ExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-static InstructionResult ExecuteGroup2Shr(
+YAX86_HOT static InstructionResult ExecuteGroup2Shr(
     const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {

@@ -125,7 +125,8 @@ static uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
-static uint32_t PITMode2TicksUntilEvent(const PITChannelState* channel) {
+YAX86_HOT static uint32_t PITMode2TicksUntilEvent(
+    const PITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
@@ -164,7 +165,7 @@ static void PITMode3HandleTick(
 // and at 0xFFFF from an odd one. Either way a counter of 4 or more has at
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
-static uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
+YAX86_HOT static uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
@@ -397,7 +398,7 @@ uint8_t PITReadPort(PITState* pit, uint16_t port) {
   }
 }
 
-void PITTick(PITState* pit) {
+YAX86_HOT void PITTick(PITState* pit) {
   PITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     if (channel->mode >= kPITNumModes) {
@@ -455,7 +456,7 @@ static void PITAdvanceChannel(
   }
 }
 
-void PITAdvance(PITState* pit, uint32_t num_ticks) {
+YAX86_HOT void PITAdvance(PITState* pit, uint32_t num_ticks) {
   if (num_ticks == 0) {
     return;
   }

@@ -10,7 +10,7 @@
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-static InstructionResult ExecuteRelativeJumpByte(
+YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -18,7 +18,7 @@ static InstructionResult ExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-static InstructionResult ExecuteRelativeJumpWord(
+YAX86_HOT static InstructionResult ExecuteRelativeJumpWord(
     const InstructionContext* ctx, const OperandValue* offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -97,7 +97,7 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
   // Masking off the high nibble handles both 0x70-0x7F and their undocumented
   // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
@@ -111,7 +111,7 @@ ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
 }
 
 // JL/JGNE and JNL/JGE
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
       CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF);
@@ -134,7 +134,8 @@ ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
 // ============================================================================
 
 // LOOP rel8
-YAX86_PRIVATE InstructionResult ExecuteLoop(const InstructionContext* ctx) {
+YAX86_HOT YAX86_PRIVATE InstructionResult
+ExecuteLoop(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
 }
 
@@ -166,7 +167,7 @@ static InstructionResult ExecuteNearCall(
 }
 
 // CALL rel16
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   return ExecuteNearCall(ctx, &offset);
@@ -200,7 +201,7 @@ static InstructionResult ExecuteNearReturnCommon(
 }
 
 // RET
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteNearReturn(const InstructionContext* ctx) {
   return ExecuteNearReturnCommon(ctx, 0);
 }
@@ -273,7 +274,8 @@ YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
 // INT n
 YAX86_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
-  CPURaiseInternalInterrupt(ctx->cpu, FromOperandValue(&interrupt_number_value));
+  CPURaiseInternalInterrupt(
+      ctx->cpu, FromOperandValue(&interrupt_number_value));
   return kInstructionExecuted;
 }
 
