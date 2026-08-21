@@ -312,19 +312,24 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   ./pico/bench/build.sh Os O2 O3     # all three, to compare
   YAX86_PICO_SYS_CLK_KHZ=400000 ./pico/bench/build.sh O3
   ```
-- `run.py` reboots the board into BOOTSEL with `picotool`, loads the image and
+- `run.js` reboots the board into BOOTSEL with `picotool`, loads the image and
   captures what it prints:
   ```sh
-  ./pico/bench/run.py build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
+  ./pico/bench/run.js build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
   ```
   It exits non-zero if the run did not finish. `--no-flash` captures from a
   board already running the image.
 - The serial port must be opened exactly once. The firmware waits for DTR
   before printing anything and every open asserts it, so configuring the line
   with a separate `stty` first starts the run and the header is gone before a
-  reader attaches. `run.py` sets termios on the descriptor it keeps, and finds
-  `/dev/ttyACM*` rather than hard-coding it, because the port re-enumerates
-  after a flash or a watchdog reset and can come back on a different node.
+  reader attaches. `run.js` wraps the descriptor it already holds in a
+  `tty.ReadStream` and calls `setRawMode()` on that, which configures the line
+  without opening the device a second time. It finds `/dev/ttyACM*` rather than
+  hard-coding it, because the port re-enumerates after a flash or a watchdog
+  reset and can come back on a different node.
+- The two drivers are Node, like the ROM and bundle generators under
+  `core/tools`, and use only the standard library - there is no `package.json`
+  anywhere in the repository and nothing here should need one.
 - The optimization level is a CMake option applied through
   `CMAKE_C_FLAGS_RELEASE` rather than to the emulator's target alone, so that
   the SDK and the C library are compiled the same way. What is being measured
@@ -429,12 +434,16 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - `YAX86_PICO_PROFILE=1` builds in a sampling profiler: a timer interrupt at
   50kHz records the interrupted PC into a histogram, dumped after the run as
   addresses so that no symbol table has to be carried on the board.
-  `symbolize.py` turns the dump into function names.
+  `symbolize.js` turns the dump into function names.
   ```sh
   YAX86_PICO_PROFILE=1 ./pico/bench/build.sh O3
-  ./pico/bench/run.py build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
-  ./pico/bench/symbolize.py build-pico/O3/yax86_pico_bench.elf capture.txt
+  ./pico/bench/run.js build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
+  ./pico/bench/symbolize.js build-pico/O3/yax86_pico_bench.elf capture.txt
   ```
+  Symbolize against the ELF that produced the capture, and not merely one built
+  from the same source at the same level. Addresses move between builds, so the
+  wrong ELF does not fail - it silently reports a plausible ranking of
+  functions the run never executed.
 - It costs a little over a percent and the histogram costs 32KB of SRAM, so it
   is off by default and a timing run never has it on. A profiling build says
   where the time went, never how much of it there was.
