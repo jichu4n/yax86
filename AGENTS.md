@@ -327,9 +327,20 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   without opening the device a second time. It finds `/dev/ttyACM*` rather than
   hard-coding it, because the port re-enumerates after a flash or a watchdog
   reset and can come back on a different node.
-- The two drivers are Node, like the ROM and bundle generators under
-  `core/tools`, and use only the standard library - there is no `package.json`
-  anywhere in the repository and nothing here should need one.
+- `build.sh` is bash, like the scripts under `tools`, because what it does is
+  run `cmake` in a loop. Everything it would otherwise have to parse is Node,
+  like the ROM and bundle generators under `core/tools`, and uses only the
+  standard library - there is no `package.json` anywhere in the repository and
+  nothing here should need one.
+- The summary table's figures come from `image-size.js`, which reads the ELF
+  program and section headers directly rather than parsing `readelf` and
+  `size`. That is not gratuitous: recovering those numbers from `readelf`
+  output means parsing hex in awk, and `strtonum()` is a GNU extension, so the
+  script that worked on the machine it was written on silently produces empty
+  columns under mawk - the default awk on Debian and Ubuntu - and under the BSD
+  awk on macOS. Reading the headers is shorter, portable, and drops two
+  toolchain dependencies. It reproduces `arm-none-eabi-size`'s text column
+  exactly, which is what the `core_text` column has always been.
 - The optimization level is a CMake option applied through
   `CMAKE_C_FLAGS_RELEASE` rather than to the emulator's target alone, so that
   the SDK and the C library are compiled the same way. What is being measured
