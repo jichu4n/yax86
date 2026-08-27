@@ -26,7 +26,7 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -36,7 +36,7 @@ ExecuteGroup1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

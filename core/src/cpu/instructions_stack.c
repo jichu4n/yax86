@@ -10,7 +10,7 @@
 // ============================================================================
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
@@ -20,7 +20,7 @@ ExecutePushRegister(const InstructionContext* ctx) {
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
@@ -31,7 +31,7 @@ ExecutePopRegister(const InstructionContext* ctx) {
 }
 
 // PUSH ES/CS/SS/DS
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
@@ -41,7 +41,7 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
 }
 
 // POP ES/CS/SS/DS
-YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecutePopSegmentRegister(const InstructionContext* ctx) {
   // The segment register field is only two bits wide, which is what makes
   // 0x0F decode as POP CS on the 8086/8088. Popping into CS is legal there -

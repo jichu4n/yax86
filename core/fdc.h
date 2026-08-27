@@ -40,6 +40,28 @@ extern "C" {
 #define YAX86_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Marks a function as being on the per-instruction hot path.
+//
+// Empty by default, because on a machine with a normal cache hierarchy there is
+// nothing useful to say. A target whose fastest memory has to be chosen
+// explicitly can define it to whatever placement attribute it needs - on an
+// RP2040, code runs from QSPI flash through a 16KB cache, and putting the hot
+// path in SRAM instead takes that cache out of the picture.
+//
+// Define it before including this header, or on the command line.
+#ifndef YAX86_HOT
+#define YAX86_HOT
+#endif  // YAX86_HOT
+
+// The same, for data rather than code.
+//
+// Separate from YAX86_HOT because a compiler will not put executable code and
+// read-only data in one section, and because a target may well want to place
+// them differently even where it could.
+#ifndef YAX86_HOT_DATA
+#define YAX86_HOT_DATA
+#endif  // YAX86_HOT_DATA
+
 #endif  // YAX86_UTIL_COMMON_H
 
 
@@ -1272,7 +1294,7 @@ static void FDCHandleWriteData(FDCState* fdc) {
 }
 
 // Handler for Read Data command.
-static void FDCHandleReadData(FDCState* fdc) {
+YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
