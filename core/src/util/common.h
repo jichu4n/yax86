@@ -24,6 +24,17 @@
 #define YAX86_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is

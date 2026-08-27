@@ -40,6 +40,17 @@ extern "C" {
 #define YAX86_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -2290,7 +2301,7 @@ static bool PlatformCheckBreakpoints(PlatformState* platform) {
   return false;
 }
 
-PlatformRunStatus PlatformTick(PlatformState* platform) {
+YAX86_HOT PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Stop before executing the instruction at a breakpoint. Nothing else in the
   // machine is ticked, because no time has passed yet.
   if (platform->has_enabled_breakpoints && !platform->cpu.is_halted) {
