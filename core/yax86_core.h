@@ -1377,6 +1377,28 @@ typedef struct CPUConfig {
   // to the real-life 8088.
   uint8_t (*read_memory_byte)(struct CPUState* cpu, uint32_t address);
 
+  // Callback handing the CPU a run of bytes it may read directly, for
+  // instruction fetch. Optional - when NULL, every instruction byte is read
+  // through read_memory_byte, which is what happens anyway wherever this
+  // declines.
+  //
+  // Given a linear address the CPU wants to fetch from, fills in
+  // CPUState.instruction_fetch_window with a range covering it, or sets its
+  // data to NULL to decline. A host must decline wherever a read has to be
+  // observed or computed rather than loaded: a device region, unmapped memory,
+  // or an address covered by anything the host has to be told about.
+  //
+  // The range should be the whole of whatever region the address falls in
+  // rather than the tail of it starting at the address, so that a jump
+  // backwards within the same region still lands inside it.
+  //
+  // The window is kept across instructions, so a host that changes what an
+  // address means - remapping memory, or turning on a watchpoint - has to call
+  // CPUInvalidateInstructionFetchWindow(). Writes through the same buffer need
+  // no such call, and self-modifying code keeps working, because the window is
+  // a pointer into the host's own storage rather than a copy of it.
+  void (*get_instruction_fetch_window)(struct CPUState* cpu, uint32_t address);
+
   // Callback to write a byte to memory.
   //
   // On the 8086, accessing an invalid memory address will yield garbage data
@@ -1436,6 +1458,17 @@ typedef struct CPUConfig {
   void (*write_port)(struct CPUState* cpu, uint16_t port, uint8_t value);
 } CPUConfig;
 
+// A run of bytes instruction fetch may read directly, covering the linear
+// addresses [start, end), with data pointing at the byte at start.
+//
+// A NULL data means there is no window and every byte takes the ordinary path
+// through CPUConfig.read_memory_byte.
+typedef struct CPUInstructionFetchWindow {
+  const uint8_t* data;
+  uint32_t start;
+  uint32_t end;
+} CPUInstructionFetchWindow;
+
 // State of the emulated CPU.
 typedef struct CPUState {
   // Pointer to caller-provided runtime configuration
@@ -1482,6 +1515,14 @@ typedef struct CPUState {
   // caller drives the rest of the machine from this, so that everything timed
   // against the CPU keeps the ratio real hardware has.
   uint16_t cycles_this_tick;
+
+  // The run of bytes instruction fetch is currently reading from, as handed
+  // over by CPUConfig.get_instruction_fetch_window.
+  //
+  // Kept across instructions rather than re-derived per instruction: execution
+  // is sequential and a window spans a whole memory region, so the next
+  // instruction is almost always inside the one already open.
+  CPUInstructionFetchWindow instruction_fetch_window;
 } CPUState;
 
 // Initialize CPU state.
@@ -1535,6 +1576,18 @@ void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // The request applies only to the tick during which it was made. CPUTick()
 // clears it on entry, so a request made outside a tick has no effect.
 static inline void CPURequestStop(CPUState* cpu) { cpu->stop_requested = true; }
+
+// Discards the window instruction fetch is reading from, so that the next
+// fetch asks CPUConfig.get_instruction_fetch_window again.
+//
+// A host must call this whenever it changes what an address means - remapping
+// memory, or enabling something that has to observe reads - because the window
+// is a direct pointer that would otherwise outlive the change. Writing through
+// the same buffer does not need it: the window is a pointer into the host's
+// storage, not a copy.
+static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
+  cpu->instruction_fetch_window.data = NULL;
+}
 
 // ============================================================================
 // Instructions
@@ -7613,12 +7666,120 @@ static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
 // time is already paid for by the instruction being executed - and the
 // published per-instruction figures the cycle table is built from assume the
 // queue is full.
-static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
+static uint8_t ReadNextInstructionByte(
+    CPUState* cpu, uint16_t* next_byte_offset) {
   const MemoryAddress address = {
       .segment_register_index = kCS,
-      .offset = (*ip)++,
+      .offset = (*next_byte_offset)++,
   };
   return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
+}
+
+enum {
+  // How many bytes a segment addresses. IP is 16 bits and wraps within the
+  // segment, so this is also where a fetch through a window has to stop.
+  kSegmentSize = 0x10000,
+};
+
+// Where one call to CPUFetchNextInstruction() has got to.
+//
+// Scratch for a single decode, and nothing more. What survives between
+// instructions is the window itself, in CPUState.instruction_fetch_window;
+// this is the cursor walking it, and it is thrown away when the instruction
+// has been decoded.
+//
+// It is a struct because CPUFetchNextInstructionByte() has to advance the
+// cursor and is called from five places in the decode, so the cursor has to be
+// passed by pointer. Kept as three loose locals it would have to be passed as
+// three out-parameters, and taking the address of each is what stops a
+// compiler keeping them in registers - which is the whole point of the
+// arrangement, since this is the hottest loop in the emulator.
+//
+// The two byte positions are the same position expressed twice, deliberately:
+//
+//   - next_byte_offset is where the cursor is in the segment, and is what
+//     yields the instruction's size and what the byte-at-a-time path needs. It
+//     is not the CPU's IP register, which has to keep naming the instruction
+//     being decoded until CPUTick() advances it by instruction.size - so a
+//     failed decode leaves IP alone, and the control flow instructions can add
+//     their displacement to the address of the instruction after this one.
+//   - next_byte is where the cursor is in the host's memory, and is cached
+//     rather than derived because deriving it costs a shift, an add, a
+//     subtract and an add per byte where advancing it costs an increment.
+//
+// bytes_remaining bounds the direct reads. Where the host hands out no window
+// it is zero, and every byte takes the ordinary path through read_memory_byte
+// - an indirect call per byte, two to six times per instruction, which is what
+// the window exists to avoid.
+typedef struct CPUInstructionFetchState {
+  // The offset within CS of the next byte to read.
+  uint16_t next_byte_offset;
+  // The next byte to read, and how many may be read directly from it. NULL and
+  // zero where there is no window.
+  const uint8_t* next_byte;
+  uint32_t bytes_remaining;
+} CPUInstructionFetchState;
+
+YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
+    CPUState* cpu, CPUInstructionFetchState* fetch_state) {
+  if (fetch_state->bytes_remaining > 0) {
+    --fetch_state->bytes_remaining;
+    ++fetch_state->next_byte_offset;
+    return *fetch_state->next_byte++;
+  }
+  return ReadNextInstructionByte(cpu, &fetch_state->next_byte_offset);
+}
+
+// Points a fetch at whatever can be read directly from CS:ip.
+YAX86_HOT static void CPUInitInstructionFetchState(
+    CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
+  fetch_state->next_byte_offset = ip;
+  fetch_state->next_byte = NULL;
+  fetch_state->bytes_remaining = 0;
+
+  // Note that there is deliberately no early out for a host that supplies no
+  // get_instruction_fetch_window, even though everything below is wasted on
+  // one. Such a host reads every byte through an indirect call already, so it
+  // would save a handful of arithmetic against several calls - and the test to
+  // skip it would be paid by the hosts that do supply one, which is every host
+  // that cares about the speed. Measured on x86-64, adding it grew
+  // CPUFetchNextInstruction by 11 bytes.
+  const MemoryAddress fetch_address = {
+      .segment_register_index = kCS,
+      .offset = ip,
+  };
+  const uint32_t raw_address = ToRawAddress(cpu, &fetch_address);
+
+  const CPUInstructionFetchWindow* const window =
+      &cpu->instruction_fetch_window;
+  if (window->data == NULL || raw_address < window->start ||
+      raw_address >= window->end) {
+    // Nothing open covers this address, so ask for a window that does. The
+    // host fills one in, or sets its data to NULL to decline.
+    if (cpu->config->get_instruction_fetch_window != NULL) {
+      cpu->config->get_instruction_fetch_window(cpu, raw_address);
+    } else {
+      cpu->instruction_fetch_window.data = NULL;
+    }
+  }
+  // Usually the window was already open and already covered the address, which
+  // costs a compare rather than a call: a window spans a whole memory region,
+  // so both straight-line execution and a jump backwards within that region
+  // land inside the one already open.
+  if (window->data != NULL && raw_address >= window->start &&
+      raw_address < window->end) {
+    fetch_state->next_byte = window->data + (raw_address - window->start);
+    fetch_state->bytes_remaining = window->end - raw_address;
+  }
+
+  // IP is 16 bits and wraps within the segment where the linear address does
+  // not, so the fetch has to stop where the wrap would be. Past that point the
+  // ordinary path recomputes the address from the wrapped IP and gets it
+  // right.
+  const uint32_t bytes_until_wrap = (uint32_t)kSegmentSize - (uint32_t)ip;
+  if (fetch_state->bytes_remaining > bytes_until_wrap) {
+    fetch_state->bytes_remaining = bytes_until_wrap;
+  }
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.
@@ -7660,7 +7821,8 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
-  uint16_t ip = cpu->registers[kIP];
+  CPUInstructionFetchState fetch_state;
+  CPUInitInstructionFetchState(cpu, original_ip, &fetch_state);
 
   // Prefix
   //
@@ -7669,12 +7831,12 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // in its size. It exists only to stop a run of prefix bytes from fetching
   // forever - see kMaxPrefixBytes.
   uint8_t prefix_size = 0;
-  current_byte = ReadNextInstructionByte(cpu, &ip);
+  current_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
   while (ApplyPrefixByte(instruction, current_byte)) {
     if (++prefix_size > kMaxPrefixBytes) {
       return kFetchPrefixTooLong;
     }
-    current_byte = ReadNextInstructionByte(cpu, &ip);
+    current_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
   }
 
   // Opcode
@@ -7683,7 +7845,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   // ModR/M
   if (metadata->has_modrm) {
-    uint8_t mod_rm_byte = ReadNextInstructionByte(cpu, &ip);
+    uint8_t mod_rm_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
     instruction->has_mod_rm = true;
     instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
     instruction->mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
@@ -7694,7 +7856,8 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
         GetDisplacementSize(instruction->mod_rm.mod, instruction->mod_rm.rm);
     instruction->displacement_size = displacement_size;
     for (uint8_t i = 0; i < displacement_size; ++i) {
-      instruction->displacement[i] = ReadNextInstructionByte(cpu, &ip);
+      instruction->displacement[i] =
+          CPUFetchNextInstructionByte(cpu, &fetch_state);
     }
   }
 
@@ -7711,10 +7874,10 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   }
   instruction->immediate_size = immediate_size;
   for (uint8_t i = 0; i < immediate_size; ++i) {
-    instruction->immediate[i] = ReadNextInstructionByte(cpu, &ip);
+    instruction->immediate[i] = CPUFetchNextInstructionByte(cpu, &fetch_state);
   }
 
-  instruction->size = ip - original_ip;
+  instruction->size = (uint8_t)(fetch_state.next_byte_offset - original_ip);
 
   return kFetchSuccess;
 }
@@ -17892,6 +18055,9 @@ bool RegisterMemoryMapEntry(
   }
   UpdateMemoryPageMapForEntry(
       platform, MemoryMapLength(&platform->memory_map) - 1);
+  // An open fetch window points into whichever region used to own those
+  // addresses, so it must not outlive a change to the map.
+  CPUInvalidateInstructionFetchWindow(&platform->cpu);
   return true;
 }
 
@@ -18436,11 +18602,44 @@ YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
   return kInterruptHandlerUnhandled;
 }
 
+// Hands the CPU a direct window for instruction fetch.
+//
+// Declines wherever a read has to be observed or computed rather than loaded:
+// a device region, unmapped memory, a page shared by two entries, or any
+// access at all while a memory watchpoint is enabled - a direct read cannot
+// fire one.
+static void CPUCallbackGetInstructionFetchWindow(
+    CPUState* cpu, uint32_t address) {
+  CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+  window->data = NULL;
+  PlatformState* platform = (PlatformState*)cpu->config->context;
+  if (platform->has_enabled_memory_watchpoints) {
+    return;
+  }
+  // Anything that is not a single entry's page - unmapped, or shared by more
+  // than one entry - has no window to hand out.
+  const uint8_t index = GetMemoryPageMapIndex(platform, address);
+  if (index >= kMaxMemoryMapEntries) {
+    return;
+  }
+  MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, index);
+  if (entry->read_data == NULL) {
+    return;
+  }
+  // The whole region, not the tail of it from this address, so that a jump
+  // backwards within the region still lands inside the window.
+  window->data = entry->read_data;
+  window->start = entry->start;
+  window->end = entry->end + 1;
+}
+
 static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
   platform->cpu_config.logger = &platform->logger;
   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
+  platform->cpu_config.get_instruction_fetch_window =
+      CPUCallbackGetInstructionFetchWindow;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
   platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
   if (platform->config->enable_dos_idle_skip) {
@@ -18984,6 +19183,10 @@ static void PlatformUpdateEnabledFlags(PlatformState* platform) {
       break;
     }
   }
+  // Instruction fetch reads through a direct window when one is open, which
+  // cannot fire a watchpoint. Turning watchpoints on stops the platform
+  // handing out new windows, and this discards whichever one is already open.
+  CPUInvalidateInstructionFetchWindow(&platform->cpu);
 }
 
 int8_t PlatformAddBreakpoint(
@@ -19034,7 +19237,7 @@ int8_t PlatformAddMemoryWatchpoint(
     watchpoint->end = end;
     watchpoint->on_read = on_read;
     watchpoint->on_write = on_write;
-    platform->has_enabled_memory_watchpoints = true;
+    PlatformUpdateEnabledFlags(platform);
     return (int8_t)i;
   }
   return kInvalidWatchIndex;
@@ -19054,7 +19257,7 @@ void PlatformClearMemoryWatchpoints(PlatformState* platform) {
   for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
     platform->memory_watchpoints[i].enabled = false;
   }
-  platform->has_enabled_memory_watchpoints = false;
+  PlatformUpdateEnabledFlags(platform);
 }
 
 void PlatformSetStepMode(PlatformState* platform, bool is_step_mode) {

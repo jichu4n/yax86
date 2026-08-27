@@ -93,12 +93,120 @@ static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
 // time is already paid for by the instruction being executed - and the
 // published per-instruction figures the cycle table is built from assume the
 // queue is full.
-static uint8_t ReadNextInstructionByte(CPUState* cpu, uint16_t* ip) {
+static uint8_t ReadNextInstructionByte(
+    CPUState* cpu, uint16_t* next_byte_offset) {
   const MemoryAddress address = {
       .segment_register_index = kCS,
-      .offset = (*ip)++,
+      .offset = (*next_byte_offset)++,
   };
   return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
+}
+
+enum {
+  // How many bytes a segment addresses. IP is 16 bits and wraps within the
+  // segment, so this is also where a fetch through a window has to stop.
+  kSegmentSize = 0x10000,
+};
+
+// Where one call to CPUFetchNextInstruction() has got to.
+//
+// Scratch for a single decode, and nothing more. What survives between
+// instructions is the window itself, in CPUState.instruction_fetch_window;
+// this is the cursor walking it, and it is thrown away when the instruction
+// has been decoded.
+//
+// It is a struct because CPUFetchNextInstructionByte() has to advance the
+// cursor and is called from five places in the decode, so the cursor has to be
+// passed by pointer. Kept as three loose locals it would have to be passed as
+// three out-parameters, and taking the address of each is what stops a
+// compiler keeping them in registers - which is the whole point of the
+// arrangement, since this is the hottest loop in the emulator.
+//
+// The two byte positions are the same position expressed twice, deliberately:
+//
+//   - next_byte_offset is where the cursor is in the segment, and is what
+//     yields the instruction's size and what the byte-at-a-time path needs. It
+//     is not the CPU's IP register, which has to keep naming the instruction
+//     being decoded until CPUTick() advances it by instruction.size - so a
+//     failed decode leaves IP alone, and the control flow instructions can add
+//     their displacement to the address of the instruction after this one.
+//   - next_byte is where the cursor is in the host's memory, and is cached
+//     rather than derived because deriving it costs a shift, an add, a
+//     subtract and an add per byte where advancing it costs an increment.
+//
+// bytes_remaining bounds the direct reads. Where the host hands out no window
+// it is zero, and every byte takes the ordinary path through read_memory_byte
+// - an indirect call per byte, two to six times per instruction, which is what
+// the window exists to avoid.
+typedef struct CPUInstructionFetchState {
+  // The offset within CS of the next byte to read.
+  uint16_t next_byte_offset;
+  // The next byte to read, and how many may be read directly from it. NULL and
+  // zero where there is no window.
+  const uint8_t* next_byte;
+  uint32_t bytes_remaining;
+} CPUInstructionFetchState;
+
+YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
+    CPUState* cpu, CPUInstructionFetchState* fetch_state) {
+  if (fetch_state->bytes_remaining > 0) {
+    --fetch_state->bytes_remaining;
+    ++fetch_state->next_byte_offset;
+    return *fetch_state->next_byte++;
+  }
+  return ReadNextInstructionByte(cpu, &fetch_state->next_byte_offset);
+}
+
+// Points a fetch at whatever can be read directly from CS:ip.
+YAX86_HOT static void CPUInitInstructionFetchState(
+    CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
+  fetch_state->next_byte_offset = ip;
+  fetch_state->next_byte = NULL;
+  fetch_state->bytes_remaining = 0;
+
+  // Note that there is deliberately no early out for a host that supplies no
+  // get_instruction_fetch_window, even though everything below is wasted on
+  // one. Such a host reads every byte through an indirect call already, so it
+  // would save a handful of arithmetic against several calls - and the test to
+  // skip it would be paid by the hosts that do supply one, which is every host
+  // that cares about the speed. Measured on x86-64, adding it grew
+  // CPUFetchNextInstruction by 11 bytes.
+  const MemoryAddress fetch_address = {
+      .segment_register_index = kCS,
+      .offset = ip,
+  };
+  const uint32_t raw_address = ToRawAddress(cpu, &fetch_address);
+
+  const CPUInstructionFetchWindow* const window =
+      &cpu->instruction_fetch_window;
+  if (window->data == NULL || raw_address < window->start ||
+      raw_address >= window->end) {
+    // Nothing open covers this address, so ask for a window that does. The
+    // host fills one in, or sets its data to NULL to decline.
+    if (cpu->config->get_instruction_fetch_window != NULL) {
+      cpu->config->get_instruction_fetch_window(cpu, raw_address);
+    } else {
+      cpu->instruction_fetch_window.data = NULL;
+    }
+  }
+  // Usually the window was already open and already covered the address, which
+  // costs a compare rather than a call: a window spans a whole memory region,
+  // so both straight-line execution and a jump backwards within that region
+  // land inside the one already open.
+  if (window->data != NULL && raw_address >= window->start &&
+      raw_address < window->end) {
+    fetch_state->next_byte = window->data + (raw_address - window->start);
+    fetch_state->bytes_remaining = window->end - raw_address;
+  }
+
+  // IP is 16 bits and wraps within the segment where the linear address does
+  // not, so the fetch has to stop where the wrap would be. Past that point the
+  // ordinary path recomputes the address from the wrapped IP and gets it
+  // right.
+  const uint32_t bytes_until_wrap = (uint32_t)kSegmentSize - (uint32_t)ip;
+  if (fetch_state->bytes_remaining > bytes_until_wrap) {
+    fetch_state->bytes_remaining = bytes_until_wrap;
+  }
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.
@@ -140,7 +248,8 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
-  uint16_t ip = cpu->registers[kIP];
+  CPUInstructionFetchState fetch_state;
+  CPUInitInstructionFetchState(cpu, original_ip, &fetch_state);
 
   // Prefix
   //
@@ -149,12 +258,12 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // in its size. It exists only to stop a run of prefix bytes from fetching
   // forever - see kMaxPrefixBytes.
   uint8_t prefix_size = 0;
-  current_byte = ReadNextInstructionByte(cpu, &ip);
+  current_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
   while (ApplyPrefixByte(instruction, current_byte)) {
     if (++prefix_size > kMaxPrefixBytes) {
       return kFetchPrefixTooLong;
     }
-    current_byte = ReadNextInstructionByte(cpu, &ip);
+    current_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
   }
 
   // Opcode
@@ -163,7 +272,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   // ModR/M
   if (metadata->has_modrm) {
-    uint8_t mod_rm_byte = ReadNextInstructionByte(cpu, &ip);
+    uint8_t mod_rm_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
     instruction->has_mod_rm = true;
     instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
     instruction->mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
@@ -174,7 +283,8 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
         GetDisplacementSize(instruction->mod_rm.mod, instruction->mod_rm.rm);
     instruction->displacement_size = displacement_size;
     for (uint8_t i = 0; i < displacement_size; ++i) {
-      instruction->displacement[i] = ReadNextInstructionByte(cpu, &ip);
+      instruction->displacement[i] =
+          CPUFetchNextInstructionByte(cpu, &fetch_state);
     }
   }
 
@@ -191,10 +301,10 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   }
   instruction->immediate_size = immediate_size;
   for (uint8_t i = 0; i < immediate_size; ++i) {
-    instruction->immediate[i] = ReadNextInstructionByte(cpu, &ip);
+    instruction->immediate[i] = CPUFetchNextInstructionByte(cpu, &fetch_state);
   }
 
-  instruction->size = ip - original_ip;
+  instruction->size = (uint8_t)(fetch_state.next_byte_offset - original_ip);
 
   return kFetchSuccess;
 }

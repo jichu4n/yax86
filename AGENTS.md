@@ -61,6 +61,52 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   `gcc -O3` warns about the writes once it can no longer see the bound through
   a pointer. The immediate loop bounds itself by the array for that reason.
 
+#### core/src/cpu - instruction fetch
+
+- Instruction bytes used to be read one at a time through
+  `CPUConfig.read_memory_byte`, which is an indirect call per byte, two to six
+  times per instruction, into a host that then resolved the address and indexed
+  an array. `CPUConfig.get_instruction_fetch_window` lets the host fill in
+  `CPUState.instruction_fetch_window` - a `data` pointer and the half-open
+  range `[start, end)` it covers - and the fetch reads from that. Worth **9.8%**
+  on `dos-boot`.
+- The host fills the window in directly rather than returning it, so the CPU
+  never has to decide what range a returned pointer stood for. A host hands
+  back the whole region the address falls in rather than the tail of it from
+  that address, which is what makes a jump backwards to before the point
+  fetching started stay inside the window - see
+  `WindowCoversTheRegionBeforeTheFetchAddress`. `data == NULL` is how a host
+  declines.
+- The window is kept across instructions in `CPUState.fetch_window`, not
+  re-derived per instruction. It is held as a range of addresses rather than a
+  cursor, so both straight-line execution and a jump backwards within the same
+  region land inside the one already open, and reopening is a compare rather
+  than a call. `CPUInstructionFetchState` is the per-decode cursor derived from it,
+  and holds neither a `CPUState` pointer nor a reference to the CPU's IP - IP
+  has to keep naming the instruction being decoded until `CPUTick()` advances
+  it by `instruction.size`, and a byte-by-byte write into `cpu->registers[]`
+  is a store the compiler cannot keep in a register.
+- Caching a *pointer* is safe where caching bytes would not be. The window
+  points into the host's own storage, so a write through the memory map is
+  visible to the next fetch with no invalidation, and self-modifying code keeps
+  working. What does need invalidating is a change to what an address *means*,
+  which is what `CPUInvalidateInstructionFetchWindow()` is for. The platform calls it from
+  two places: `RegisterMemoryMapEntry()`, and `PlatformUpdateEnabledFlags()`
+  whenever a memory watchpoint is added or removed.
+- The watchpoint case is the subtle one. A direct read cannot fire a
+  watchpoint, so the platform declines to hand out a window at all while any is
+  enabled - but declining does nothing about a window already open, which is
+  why every path that touches a watchpoint now goes through
+  `PlatformUpdateEnabledFlags()` rather than setting the flag itself.
+- The window stops at a segment wrap. IP is 16 bits and wraps within the
+  segment where the linear address does not, so `remaining` is clamped to
+  `0x10000 - ip` and the bytes past it go through the ordinary path, which
+  recomputes the address from the wrapped IP.
+- The 8088 hardware suite runs with a window supplied, which is the strongest
+  check the fetch has - every encoding length, prefix count and segment wrap
+  the part can produce, about three million times. The path taken when a host
+  supplies no window is what the mock configs in `cpu_test.cpp` exercise.
+
 #### core/src/cpu - prefix decoding
 
 - Both prefix groups are contiguous encoding families, so each is identified by
@@ -225,9 +271,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   annotation count in the bundle ever drops, something is wrong with the
   bundler, not with someone's memory:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 159
+  grep -c YAX86_HOT core/yax86_core.h    # 161
   ```
-  That is 82 annotations plus the macro block in `util/common.h`, whose seven
+  That is 84 annotations plus the macro block in `util/common.h`, whose seven
   lines all match on the substring, once per each of the 11 module bundles.
 - Annotating every function in the core instead was measured, and is not worth
   it. Against the same baseline: the targeted set gives 97.2% of the win for
@@ -560,8 +606,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 7.895 seconds, or 3.51 emulated MHz and 0.29 MIPS -
-  against 13.647 seconds before the hot path moved to SRAM. **Do not raise the clock past
+- At 400MHz, `-O3` takes 7.125 seconds, or 3.89 emulated MHz and 0.326 MIPS -
+  against 13.647 seconds before the hot path moved to SRAM. Note that the
+  harness truncates both to two decimals when it prints them. **Do not raise the clock past
   400MHz.** That is a standing instruction, not a technical limit.
 - Flash is dominated by the 360KB floppy image; the code itself is under 110KB.
   The `core_text` column is the whole core library section, which includes

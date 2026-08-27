@@ -250,6 +250,24 @@ void WriteMemoryByte(
   }
 }
 
+// Hands instruction fetch a direct window over the whole of memory.
+//
+// Supplied so that the suite exercises the fetch window rather than the
+// byte-at-a-time path. This is the strongest check either has: it runs every
+// encoding length, every prefix count and every segment wrap the 8088 can
+// produce, roughly three million times. The path taken when a host supplies no
+// window is what the mock configs in cpu_test.cpp use.
+void GetInstructionFetchWindow(CPUState* cpu, uint32_t address) {
+  CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+  if (address >= kMemorySize) {
+    window->data = NULL;
+    return;
+  }
+  window->data = g_memory;
+  window->start = 0;
+  window->end = kMemorySize;
+}
+
 // Reads the flag masks emitted by tools/download-cpu-hardware-tests.sh. Bits
 // clear in a mask are left undefined by the 8088 for that opcode, and are not
 // compared.
@@ -374,6 +392,7 @@ std::string RunMooTest(
   CPUConfig config = {0};
   config.read_memory_byte = ReadMemoryByte;
   config.write_memory_byte = WriteMemoryByte;
+  config.get_instruction_fetch_window = GetInstructionFetchWindow;
   CPUState cpu;
   CPUInit(&cpu, &config);
 
