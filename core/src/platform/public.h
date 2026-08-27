@@ -49,6 +49,23 @@ enum {
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,
 
+  // The memory map is indexed by page so that a lookup is a load rather than a
+  // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
+  // index - small enough to keep in the platform state, and coarse enough that
+  // every region the machine registers is page aligned.
+  kMemoryPageShift = 12,
+  kMemoryPageSize = 1 << kMemoryPageShift,
+  kMemoryAddressSpaceSize = 0x100000,
+  kNumMemoryPages = kMemoryAddressSpaceSize >> kMemoryPageShift,
+  // A page no entry covers.
+  kMemoryPageUnmapped = 0xFF,
+  // A page more than one entry has a share of, which has to be resolved by
+  // address. Nothing registers such a region today - every one of them is page
+  // aligned - but the index must not quietly answer the wrong entry if one
+  // ever does. Note that this is never the answer for an address above the
+  // address space: no entry may reach one, so it is unmapped instead.
+  kMemoryPageStraddled = 0xFE,
+
   // Maximum size of physical memory in bytes.
   kMaxPhysicalMemorySize = 640 * 1024,
   // Minimum size of physical memory in bytes.
@@ -108,6 +125,7 @@ typedef struct MemoryMapEntry {
 
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
+//   - The entry's memory region does not lie within the address space.
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
 //   - The number of memory map entries would exceed kMaxMemoryMapEntries.
@@ -467,6 +485,10 @@ typedef struct PlatformState {
 
   // Memory map.
   MemoryMap memory_map;
+  // Which memory map entry owns each page of the address space, or
+  // kMemoryPageUnmapped / kMemoryPageStraddled. Extended by each registration,
+  // which only happens while the machine is being set up.
+  uint8_t memory_page_map[kNumMemoryPages];
   // I/O port map.
   PortMap io_port_map;
 

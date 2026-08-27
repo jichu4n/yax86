@@ -112,6 +112,45 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   usually not prefixes at all and so run both, making the combined cost what
   matters.
 
+#### core/src/platform - the memory map
+
+- `GetMemoryMapEntryForAddress()` is the hottest lookup in the emulator - every
+  instruction byte and nearly every operand comes through it - and it used to
+  walk the map linearly. A walk is cheap where branches are predicted and the
+  region wanted is usually first. On a Cortex-M0+ it is neither: there is no
+  branch predictor, and code running from the BIOS ROM misses the first entry
+  every time. Indexing the map by page instead is worth **7.0%** on `dos-boot`.
+- `memory_page_map` holds one entry index per 4KB page of the 8086's 1MB, so
+  256 bytes of index answers a lookup with a shift, a load and a bounds
+  compare. 4KB is not tuned - it is the coarsest page that leaves every region
+  the machine registers aligned, and a finer one would only cost more memory.
+- Two index values are not entry indices. `kMemoryPageUnmapped` is a page no
+  entry covers, and answers `NULL` directly. `kMemoryPageStraddled` is a page
+  more than one entry has a share of, which the index cannot answer at all, so
+  the lookup falls back to the walk. Nothing registers a misaligned region
+  today, and that is exactly why the fallback needs its own test - see
+  `platform_memory_map_test.cpp`, which registers one deliberately.
+- `RegisterMemoryMapEntry()` extends the index rather than rebuilding it. Only
+  the pages the new entry touches can change, and entries may not overlap, so
+  nothing already in the index can have a share of one of them - which means a
+  registration never has to look at the rest of the map. Building the whole
+  index costs one pass over the address space between every entry, where
+  rebuilding it per registration cost a pass each. `UpdateMemoryPageMapForEntry()`
+  takes the entry's index rather than the entry, because the index is what goes
+  into the map - the entry is derivable from it, and not the other way round.
+- An entry reaching past the top of the address space is rejected, because the
+  index has a slot per page of that space and none above it. That rejection is
+  what makes the index the whole answer: an address above the space is unmapped
+  by definition, so `GetMemoryPageMapIndex()` says so directly rather than
+  sending the lookup off to walk the map for an entry that cannot be there.
+  Guest addresses never reach it in any case - `ToRawAddress()` masks every one
+  of them to the 8086's 20 bits - so this is about what a host may register,
+  not about what the CPU may ask for.
+- A region whose size is not a whole number of pages is handled by
+  construction rather than by arithmetic: its last page comes out straddled and
+  takes the fallback. That is the case for any option ROM whose size is not a
+  multiple of 4KB.
+
 #### core/src/cpu - the execute path
 
 - `CPUExecuteInstruction()` checks an instruction against the opcode table
@@ -186,9 +225,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   annotation count in the bundle ever drops, something is wrong with the
   bundler, not with someone's memory:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 158
+  grep -c YAX86_HOT core/yax86_core.h    # 159
   ```
-  That is 81 annotations plus the macro block in `util/common.h`, whose seven
+  That is 82 annotations plus the macro block in `util/common.h`, whose seven
   lines all match on the substring, once per each of the 11 module bundles.
 - Annotating every function in the core instead was measured, and is not worth
   it. Against the same baseline: the targeted set gives 97.2% of the win for
@@ -502,9 +541,11 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   | `-O3` | **33.492** | **26.858** | 471,676 | 176,292 | 88,497 |
 
   A real 8088 runs this in 5.812 seconds, so `-O3` at the stock clock is about
-  a fifth of one, and 8.440s at 400MHz. The flash column is historical - it is
-  what the harness measured before `YAX86_HOT` existed, and is not re-derived
-  as the core changes; the SRAM column is current.
+  a fifth of one. The flash column is historical - it is what the harness
+  measured before `YAX86_HOT` existed, and is not re-derived as the core
+  changes. The seconds in both columns are a snapshot and go out of date with
+  every optimization; what is durable is how the levels rank against each
+  other, which is the reason the table is here.
 - The two columns do not rank the levels the same way, which is the whole
   reason this harness exists. Running from flash, `-O2` was the slowest of the
   three and `-Os` beat it by 6% - the XIP cache rewards a small image enough to
@@ -519,7 +560,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 8.440 seconds, or 3.28 emulated MHz and 0.27 MIPS -
+- At 400MHz, `-O3` takes 7.895 seconds, or 3.51 emulated MHz and 0.29 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. **Do not raise the clock past
   400MHz.** That is a standing instruction, not a technical limit.
 - Flash is dominated by the 360KB floppy image; the code itself is under 110KB.
