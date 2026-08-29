@@ -34,6 +34,8 @@ extern OperandValue Pop(CPUState* cpu);
 
 // Dummy instruction for unsupported opcodes.
 extern InstructionResult ExecuteNoOp(const InstructionContext* ctx);
+// Handler for the opcode bytes that are prefixes rather than instructions.
+extern InstructionResult ExecuteInvalidOpcode(const InstructionContext* ctx);
 
 // ============================================================================
 // Opcode table - opcode_table.h

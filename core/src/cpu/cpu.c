@@ -211,7 +211,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
 YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
-ExecuteDecodedInstruction(
+CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the on_before_execute_instruction callback if provided.
   if (cpu->config->on_before_execute_instruction) {
@@ -240,16 +240,17 @@ ExecuteDecodedInstruction(
 // Checks an instruction against the opcode table before running it.
 //
 // For a caller that built the Instruction itself rather than decoding one -
-// CPUTick() goes straight to ExecuteDecodedInstruction(), because its own
+// CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
 // decode is what produced the encoding these checks would be re-examining.
 YAX86_HOT InstructionResult
 CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
-  if (!metadata->handler) {
-    return kInstructionInvalid;
-  }
 
-  // Check encoded instruction against expected instruction format.
+  // Check the encoded instruction against the expected format for its opcode.
+  // Nothing checks that the opcode has a handler, because every entry in the
+  // table has one: the eight bytes that are prefixes rather than instructions
+  // are handled by ExecuteInvalidOpcode(), which returns what a missing handler
+  // used to.
   if (instruction->has_mod_rm != metadata->has_modrm) {
     return kInstructionInvalid;
   }
@@ -259,7 +260,7 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
     return kInstructionInvalid;
   }
 
-  return ExecuteDecodedInstruction(cpu, instruction, metadata);
+  return CPUExecuteDecodedInstruction(cpu, instruction, metadata);
 }
 
 // Save state and vector to the handler for an interrupt.
@@ -363,12 +364,10 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
 
     // Step 2: Execute the instruction. The fetch above derived has_mod_rm and
     // immediate_size from this same table entry, so the checks
-    // CPUExecuteInstruction() makes cannot fail here. Whether the opcode has a
-    // handler at all is the one thing the fetch does not establish.
+    // CPUExecuteInstruction() makes cannot fail here.
     const OpcodeMetadata* const metadata = &opcode_table[instruction.opcode];
-    if (!metadata->handler ||
-        ExecuteDecodedInstruction(cpu, &instruction, metadata) !=
-            kInstructionExecuted) {
+    if (CPUExecuteDecodedInstruction(cpu, &instruction, metadata) !=
+        kInstructionExecuted) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
           instruction_cs, instruction_ip, instruction.opcode);

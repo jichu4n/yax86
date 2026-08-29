@@ -115,28 +115,41 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 #### core/src/cpu - the execute path
 
 - `CPUExecuteInstruction()` checks an instruction against the opcode table
-  before running it: that the opcode has a handler, and that `has_mod_rm` and
-  `immediate_size` are what the entry says they should be. `CPUTick()` skips
-  all but the first of those and calls `ExecuteDecodedInstruction()` directly,
-  because its own `CPUFetchNextInstruction()` *derived* `has_mod_rm` and
-  `immediate_size` from that same entry a few lines earlier. The checks
-  re-establish something that cannot have changed in between, and they are not
-  free - a table read, two compares and a recomputed immediate size on every
-  instruction the emulator runs. Whether the opcode has a handler at all is the
-  one thing the fetch does not establish, so that check stays.
+  before running it: that `has_mod_rm` and `immediate_size` are what the entry
+  says they should be. `CPUTick()` skips them and calls
+  `CPUExecuteDecodedInstruction()` directly, because its own
+  `CPUFetchNextInstruction()` *derived* both from that same entry a few lines
+  earlier. The checks re-establish something that cannot have changed in
+  between, and they are not free - a table read, two compares and a recomputed
+  immediate size on every instruction the emulator runs.
 - The public entry point keeps them, for a caller that built an `Instruction`
   by hand rather than decoding one. It is not on any hot path - nothing inside
   the core calls it - so the duplication costs nothing.
+- Neither path checks that the opcode has a handler, because every entry in the
+  table has one. The eight that used to be null are the prefix bytes - the four
+  segment overrides and `0xF0-0xF3` - and they are exactly the bytes
+  `ApplyPrefixByte()` consumes, so a successful fetch can never leave one in
+  `opcode` and the check was already dead on the tick path. They now point at
+  `ExecuteInvalidOpcode()`, which returns `kInstructionInvalid`: the same answer
+  the null check gave, for the hand-built instruction that is the only way to
+  reach one. What that buys is a table with no null in it, so dispatching
+  without looking first is safe by construction rather than by argument.
+  `EveryEntryHasAHandler` in `opcode_table_test.cpp` is what keeps it that way -
+  an entry added later with the field left out would otherwise be a call
+  through null rather than an invalid instruction.
 - One behavioural consequence: `on_before_execute_instruction` now fires after
   validation rather than before it, so it no longer runs for an instruction
-  that is about to be rejected as invalid. Only `core/tools/cpu_demo` uses the
-  callback.
-- `ExecuteDecodedInstruction()` is `YAX86_NOINLINE`. Inlined into `CPUTick()`
+  that is about to be rejected as an encoding mismatch - though it does now run
+  for a hand-built prefix opcode, which `ExecuteInvalidOpcode()` rejects from
+  inside the handler rather than before the callback. Only
+  `core/tools/cpu_demo` uses the callback, and it never builds an `Instruction`
+  by hand.
+- `CPUExecuteDecodedInstruction()` is `YAX86_NOINLINE`. Inlined into `CPUTick()`
   it measured 31% slower on a Cortex-M0+: the execute path wants registers, the
   core has few, and folding the two together makes both spill. The effect only
   exists once the hot path is in SRAM - running from flash, XIP misses dominate
   and hide it - which is why the mark and this change belong together.
-- Worth 1.25% at `-O3` and 4.47% at `-O2`, measured at 400MHz on `dos-boot`.
+- Worth 1.84% at `-O3` and 4.58% at `-O2`, measured at 400MHz on `dos-boot`.
   The gap is the `CPUTick()`/`PlatformTick()` marks, which are inert at `-O3`.
 
 #### core/src/util - hot path placement
@@ -173,10 +186,10 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   annotation count in the bundle ever drops, something is wrong with the
   bundler, not with someone's memory:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 125
+  grep -c YAX86_HOT core/yax86_core.h    # 158
   ```
-  That is 81 annotations plus the four-line macro block, which appears once per
-  module bundle and so is counted 11 times.
+  That is 81 annotations plus the macro block in `util/common.h`, whose seven
+  lines all match on the substring, once per each of the 11 module bundles.
 - Annotating every function in the core instead was measured, and is not worth
   it. Against the same baseline: the targeted set gives 97.2% of the win for
   15KB of SRAM, where all 491 give 100% for 46.5KB. The extra 2.8% costs three times
@@ -215,7 +228,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   worth 1.59x while moving a table read on every single instruction is worth
   nothing measurable.
 - The marks help at `-O2` and `-O3` and **hurt at `-Os`**, which went from
-  34.264s to 36.709s, a 7.1% regression. The likely cause is bus contention:
+  34.264s to 36.614s, a 6.9% regression. The likely cause is bus contention:
   an XIP cache hit reaches the core over a different bus path than an SRAM
   access, so code in flash does not compete with the guest RAM array, while
   code in SRAM does. At `-Os` the core's code is small enough to sit in the
@@ -484,12 +497,12 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
   | level | flash | SRAM | image flash | image SRAM | core `.text` |
   | ----- | ----- | ---- | ----------- | ---------- | ------------ |
-  | `-Os` | 34.264 | 36.709 | 443,784 | 165,084 | 59,911 |
-  | `-O2` | 36.494 | 30.061 | 458,044 | 168,612 | 73,609 |
-  | `-O3` | **33.492** | **26.900** | 471,660 | 176,340 | 88,477 |
+  | `-Os` | 34.264 | 36.614 | 443,752 | 165,052 | 59,895 |
+  | `-O2` | 36.494 | 30.015 | 458,044 | 168,612 | 73,625 |
+  | `-O3` | **33.492** | **26.858** | 471,676 | 176,292 | 88,497 |
 
   A real 8088 runs this in 5.812 seconds, so `-O3` at the stock clock is about
-  a fifth of one, and 8.490s at 400MHz. The flash column is historical - it is
+  a fifth of one, and 8.440s at 400MHz. The flash column is historical - it is
   what the harness measured before `YAX86_HOT` existed, and is not re-derived
   as the core changes; the SRAM column is current.
 - The two columns do not rank the levels the same way, which is the whole
@@ -506,7 +519,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 8.490 seconds, or 3.26 emulated MHz and 0.27 MIPS -
+- At 400MHz, `-O3` takes 8.440 seconds, or 3.28 emulated MHz and 0.27 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. **Do not raise the clock past
   400MHz.** That is a standing instruction, not a technical limit.
 - Flash is dominated by the 360KB floppy image; the code itself is under 110KB.
@@ -517,7 +530,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   port needs. The unused stack is painted with `0x5A5A5A5A` from `main`'s own
   frame and afterwards searched for how far the paint was overwritten, so it
   costs nothing while the run is going. Interrupt frames count, making it the
-  true peak rather than the emulator's share. The measured peak is 672-860
+  true peak rather than the emulator's share. The measured peak is 728-860
   bytes of a 4KB bank, depending on level - `-O3` inlines the instruction
   handlers into deeper frames than the others.
 - Guest memory and the stack cannot collide, and not by a narrow margin. Guest
