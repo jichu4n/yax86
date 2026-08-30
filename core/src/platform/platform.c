@@ -1001,7 +1001,7 @@ static bool PlatformCheckBreakpoints(PlatformState* platform) {
   return false;
 }
 
-PlatformRunStatus PlatformTick(PlatformState* platform) {
+YAX86_HOT PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Stop before executing the instruction at a breakpoint. Nothing else in the
   // machine is ticked, because no time has passed yet.
   if (platform->has_enabled_breakpoints && !platform->cpu.is_halted) {

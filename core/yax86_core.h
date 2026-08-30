@@ -680,6 +680,17 @@ extern "C" {
 #define YAX86_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -1701,6 +1712,17 @@ CPUTickResult CPUTick(CPUState* cpu);
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -2807,6 +2829,8 @@ extern OperandValue Pop(CPUState* cpu);
 
 // Dummy instruction for unsupported opcodes.
 extern InstructionResult ExecuteNoOp(const InstructionContext* ctx);
+// Handler for the opcode bytes that are prefixes rather than instructions.
+extern InstructionResult ExecuteInvalidOpcode(const InstructionContext* ctx);
 
 // ============================================================================
 // Opcode table - opcode_table.h
@@ -3349,6 +3373,17 @@ YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
 YAX86_PRIVATE InstructionResult
 ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
   return kInstructionExecuted;
+}
+
+// Handler for the eight opcode bytes that are prefixes rather than
+// instructions. The prefix decoder consumes those bytes before an opcode is
+// looked up, so a decoded instruction never names one and this is unreachable
+// from CPUTick(). It exists so that every entry in the opcode table is
+// callable, which is what lets the tick path dispatch without first checking
+// for a null handler.
+YAX86_PRIVATE InstructionResult
+ExecuteInvalidOpcode(YAX86_UNUSED const InstructionContext* ctx) {
+  return kInstructionInvalid;
 }
 
 
@@ -6197,7 +6232,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteBooleanAndImmediateToALOrAX},
     // ES prefix - 0x26
-    {.opcode = 0x26, .handler = 0},
+    {.opcode = 0x26, .handler = ExecuteInvalidOpcode},
     // DAA
     {.opcode = 0x27,
      .has_modrm = false,
@@ -6240,7 +6275,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteSubImmediateFromALOrAX},
     // CS prefix - 0x2E
-    {.opcode = 0x2E, .handler = 0},
+    {.opcode = 0x2E, .handler = ExecuteInvalidOpcode},
     // DAS
     {.opcode = 0x2F,
      .has_modrm = false,
@@ -6283,7 +6318,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteBooleanXorImmediateToALOrAX},
     // SS prefix - 0x36
-    {.opcode = 0x36, .handler = 0},
+    {.opcode = 0x36, .handler = ExecuteInvalidOpcode},
     // AAA
     {.opcode = 0x37,
      .has_modrm = false,
@@ -6327,7 +6362,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteCmpImmediateToALOrAX},
     // DS prefix - 0x3E
-    {.opcode = 0x3E, .handler = 0},
+    {.opcode = 0x3E, .handler = ExecuteInvalidOpcode},
     // AAS
     {.opcode = 0x3F,
      .has_modrm = false,
@@ -7392,13 +7427,13 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteOutDX},
     // 0xF0 - LOCK prefix
-    {.opcode = 0xF0, .handler = 0},
+    {.opcode = 0xF0, .handler = ExecuteInvalidOpcode},
     // LOCK prefix (alias of 0xF0) - consumed by the prefix decoder.
-    {.opcode = 0xF1, .handler = 0},
+    {.opcode = 0xF1, .handler = ExecuteInvalidOpcode},
     // 0xF2 - REPNE prefix
-    {.opcode = 0xF2, .handler = 0},
+    {.opcode = 0xF2, .handler = ExecuteInvalidOpcode},
     // 0xF3 - REP/REPE prefix
-    {.opcode = 0xF3, .handler = 0},
+    {.opcode = 0xF3, .handler = ExecuteInvalidOpcode},
     // HLT
     {.opcode = 0xF4,
      .has_modrm = false,
@@ -7688,26 +7723,19 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 // Execution
 // ============================================================================
 
-YAX86_HOT InstructionResult
-CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
+// Runs an instruction whose opcode table entry the caller already has, and
+// which the caller has already established the entry agrees with.
+//
+// Kept out of line. Inlined into CPUTick() this measured 31% slower on a
+// Cortex-M0+: the execute path wants registers, the core has few, and folding
+// the two together makes both spill. It only shows up once the hot path is in
+// SRAM - from flash the XIP cache dominates and hides it.
+YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
+CPUExecuteDecodedInstruction(
+    CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the on_before_execute_instruction callback if provided.
   if (cpu->config->on_before_execute_instruction) {
     cpu->config->on_before_execute_instruction(cpu, instruction);
-  }
-
-  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
-  if (!metadata->handler) {
-    return kInstructionInvalid;
-  }
-
-  // Check encoded instruction against expected instruction format.
-  if (instruction->has_mod_rm != metadata->has_modrm) {
-    return kInstructionInvalid;
-  }
-  if (instruction->immediate_size !=
-      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
-                           : metadata->immediate_size)) {
-    return kInstructionInvalid;
   }
 
   // Run the instruction handler.
@@ -7727,6 +7755,32 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   }
 
   return kInstructionExecuted;
+}
+
+// Checks an instruction against the opcode table before running it.
+//
+// For a caller that built the Instruction itself rather than decoding one -
+// CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
+// decode is what produced the encoding these checks would be re-examining.
+YAX86_HOT InstructionResult
+CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
+  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+
+  // Check the encoded instruction against the expected format for its opcode.
+  // Nothing checks that the opcode has a handler, because every entry in the
+  // table has one: the eight bytes that are prefixes rather than instructions
+  // are handled by ExecuteInvalidOpcode(), which returns what a missing handler
+  // used to.
+  if (instruction->has_mod_rm != metadata->has_modrm) {
+    return kInstructionInvalid;
+  }
+  if (instruction->immediate_size !=
+      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
+                           : metadata->immediate_size)) {
+    return kInstructionInvalid;
+  }
+
+  return CPUExecuteDecodedInstruction(cpu, instruction, metadata);
 }
 
 // Save state and vector to the handler for an interrupt.
@@ -7786,7 +7840,7 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   return false;
 }
 
-CPUTickResult CPUTick(CPUState* cpu) {
+YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
   // A stop request only applies to the tick during which it was made.
   cpu->stop_requested = false;
 
@@ -7828,8 +7882,12 @@ CPUTickResult CPUTick(CPUState* cpu) {
         cpu, kOpcodeBaseCycles[instruction.opcode] +
                  GetEffectiveAddressCycles(&instruction));
 
-    // Step 2: Execute the instruction.
-    if (CPUExecuteInstruction(cpu, &instruction) != kInstructionExecuted) {
+    // Step 2: Execute the instruction. The fetch above derived has_mod_rm and
+    // immediate_size from this same table entry, so the checks
+    // CPUExecuteInstruction() makes cannot fail here.
+    const OpcodeMetadata* const metadata = &opcode_table[instruction.opcode];
+    if (CPUExecuteDecodedInstruction(cpu, &instruction, metadata) !=
+        kInstructionExecuted) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
           instruction_cs, instruction_ip, instruction.opcode);
@@ -7922,6 +7980,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -8983,6 +9052,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -10763,6 +10843,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -13114,6 +13205,17 @@ extern "C" {
 #define YAX86_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -14056,6 +14158,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -15134,6 +15247,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -16387,6 +16511,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -18639,7 +18774,7 @@ static bool PlatformCheckBreakpoints(PlatformState* platform) {
   return false;
 }
 
-PlatformRunStatus PlatformTick(PlatformState* platform) {
+YAX86_HOT PlatformRunStatus PlatformTick(PlatformState* platform) {
   // Stop before executing the instruction at a breakpoint. Nothing else in the
   // machine is ticked, because no time has passed yet.
   if (platform->has_enabled_breakpoints && !platform->cpu.is_halted) {
@@ -18898,6 +19033,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -19815,6 +19961,17 @@ extern "C" {
 #define YAX86_UNUSED __attribute__((unused))
 #else
 #define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.

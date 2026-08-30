@@ -247,7 +247,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteBooleanAndImmediateToALOrAX},
     // ES prefix - 0x26
-    {.opcode = 0x26, .handler = 0},
+    {.opcode = 0x26, .handler = ExecuteInvalidOpcode},
     // DAA
     {.opcode = 0x27,
      .has_modrm = false,
@@ -290,7 +290,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteSubImmediateFromALOrAX},
     // CS prefix - 0x2E
-    {.opcode = 0x2E, .handler = 0},
+    {.opcode = 0x2E, .handler = ExecuteInvalidOpcode},
     // DAS
     {.opcode = 0x2F,
      .has_modrm = false,
@@ -333,7 +333,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteBooleanXorImmediateToALOrAX},
     // SS prefix - 0x36
-    {.opcode = 0x36, .handler = 0},
+    {.opcode = 0x36, .handler = ExecuteInvalidOpcode},
     // AAA
     {.opcode = 0x37,
      .has_modrm = false,
@@ -377,7 +377,7 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteCmpImmediateToALOrAX},
     // DS prefix - 0x3E
-    {.opcode = 0x3E, .handler = 0},
+    {.opcode = 0x3E, .handler = ExecuteInvalidOpcode},
     // AAS
     {.opcode = 0x3F,
      .has_modrm = false,
@@ -1442,13 +1442,13 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .width = kWord,
      .handler = ExecuteOutDX},
     // 0xF0 - LOCK prefix
-    {.opcode = 0xF0, .handler = 0},
+    {.opcode = 0xF0, .handler = ExecuteInvalidOpcode},
     // LOCK prefix (alias of 0xF0) - consumed by the prefix decoder.
-    {.opcode = 0xF1, .handler = 0},
+    {.opcode = 0xF1, .handler = ExecuteInvalidOpcode},
     // 0xF2 - REPNE prefix
-    {.opcode = 0xF2, .handler = 0},
+    {.opcode = 0xF2, .handler = ExecuteInvalidOpcode},
     // 0xF3 - REP/REPE prefix
-    {.opcode = 0xF3, .handler = 0},
+    {.opcode = 0xF3, .handler = ExecuteInvalidOpcode},
     // HLT
     {.opcode = 0xF4,
      .has_modrm = false,

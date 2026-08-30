@@ -17,7 +17,7 @@ TEST_F(OpcodeTableTest, MetadataIntegrity) {
     // Check opcode == index
     EXPECT_EQ(metadata.opcode, i) << "Opcode mismatch at index 0x" << hex << i;
 
-    if (metadata.handler == nullptr) {
+    if (metadata.handler == ExecuteInvalidOpcode) {
       continue;
     }
 
@@ -46,23 +46,34 @@ TEST_F(OpcodeTableTest, InstructionPrefixMetadataIntegrity) {
     const OpcodeMetadata& metadata = opcode_table[prefix];
     EXPECT_EQ(metadata.opcode, prefix)
         << "Opcode mismatch at index 0x" << hex << prefix;
-    EXPECT_EQ(metadata.handler, nullptr)
-        << "Handler should be null for prefix opcode 0x" << hex << prefix;
+    EXPECT_EQ(metadata.handler, ExecuteInvalidOpcode)
+        << "Prefix opcode 0x" << hex << prefix
+        << " should be handled by ExecuteInvalidOpcode";
   }
 }
 
 TEST_F(OpcodeTableTest, EveryOpcodeByteDecodes) {
   // The 8086/8088 has no invalid opcode exception - every one of the 256
-  // opcode bytes decodes to something. The only entries without a handler are
-  // the prefixes, which the prefix decoder consumes before an opcode is ever
-  // looked up.
+  // opcode bytes decodes to something. The only entries that do not name an
+  // instruction are the prefixes, which the prefix decoder consumes before an
+  // opcode is ever looked up.
   static const uint8_t kPrefixes[] = {0x26, 0x2E, 0x36, 0x3E,
                                       0xF0, 0xF1, 0xF2, 0xF3};
 
   for (int opcode = 0; opcode < 256; ++opcode) {
     const bool is_prefix =
         find(begin(kPrefixes), end(kPrefixes), opcode) != end(kPrefixes);
-    EXPECT_EQ(opcode_table[opcode].handler != nullptr, !is_prefix)
+    EXPECT_EQ(opcode_table[opcode].handler == ExecuteInvalidOpcode, is_prefix)
+        << "opcode 0x" << hex << opcode;
+  }
+}
+
+TEST_F(OpcodeTableTest, EveryEntryHasAHandler) {
+  // CPUTick() calls through the handler without checking it first, which is
+  // only safe because every entry in the table has one. A new entry that left
+  // the field out would be a null call rather than an invalid instruction.
+  for (int opcode = 0; opcode < 256; ++opcode) {
+    EXPECT_NE(opcode_table[opcode].handler, nullptr)
         << "opcode 0x" << hex << opcode;
   }
 }

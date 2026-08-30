@@ -80,3 +80,14 @@ YAX86_PRIVATE InstructionResult
 ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
   return kInstructionExecuted;
 }
+
+// Handler for the eight opcode bytes that are prefixes rather than
+// instructions. The prefix decoder consumes those bytes before an opcode is
+// looked up, so a decoded instruction never names one and this is unreachable
+// from CPUTick(). It exists so that every entry in the opcode table is
+// callable, which is what lets the tick path dispatch without first checking
+// for a null handler.
+YAX86_PRIVATE InstructionResult
+ExecuteInvalidOpcode(YAX86_UNUSED const InstructionContext* ctx) {
+  return kInstructionInvalid;
+}

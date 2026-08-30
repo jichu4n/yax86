@@ -203,26 +203,19 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 // Execution
 // ============================================================================
 
-YAX86_HOT InstructionResult
-CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
+// Runs an instruction whose opcode table entry the caller already has, and
+// which the caller has already established the entry agrees with.
+//
+// Kept out of line. Inlined into CPUTick() this measured 31% slower on a
+// Cortex-M0+: the execute path wants registers, the core has few, and folding
+// the two together makes both spill. It only shows up once the hot path is in
+// SRAM - from flash the XIP cache dominates and hides it.
+YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
+CPUExecuteDecodedInstruction(
+    CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the on_before_execute_instruction callback if provided.
   if (cpu->config->on_before_execute_instruction) {
     cpu->config->on_before_execute_instruction(cpu, instruction);
-  }
-
-  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
-  if (!metadata->handler) {
-    return kInstructionInvalid;
-  }
-
-  // Check encoded instruction against expected instruction format.
-  if (instruction->has_mod_rm != metadata->has_modrm) {
-    return kInstructionInvalid;
-  }
-  if (instruction->immediate_size !=
-      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
-                           : metadata->immediate_size)) {
-    return kInstructionInvalid;
   }
 
   // Run the instruction handler.
@@ -242,6 +235,32 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   }
 
   return kInstructionExecuted;
+}
+
+// Checks an instruction against the opcode table before running it.
+//
+// For a caller that built the Instruction itself rather than decoding one -
+// CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
+// decode is what produced the encoding these checks would be re-examining.
+YAX86_HOT InstructionResult
+CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
+  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+
+  // Check the encoded instruction against the expected format for its opcode.
+  // Nothing checks that the opcode has a handler, because every entry in the
+  // table has one: the eight bytes that are prefixes rather than instructions
+  // are handled by ExecuteInvalidOpcode(), which returns what a missing handler
+  // used to.
+  if (instruction->has_mod_rm != metadata->has_modrm) {
+    return kInstructionInvalid;
+  }
+  if (instruction->immediate_size !=
+      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
+                           : metadata->immediate_size)) {
+    return kInstructionInvalid;
+  }
+
+  return CPUExecuteDecodedInstruction(cpu, instruction, metadata);
 }
 
 // Save state and vector to the handler for an interrupt.
@@ -301,7 +320,7 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   return false;
 }
 
-CPUTickResult CPUTick(CPUState* cpu) {
+YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
   // A stop request only applies to the tick during which it was made.
   cpu->stop_requested = false;
 
@@ -343,8 +362,12 @@ CPUTickResult CPUTick(CPUState* cpu) {
         cpu, kOpcodeBaseCycles[instruction.opcode] +
                  GetEffectiveAddressCycles(&instruction));
 
-    // Step 2: Execute the instruction.
-    if (CPUExecuteInstruction(cpu, &instruction) != kInstructionExecuted) {
+    // Step 2: Execute the instruction. The fetch above derived has_mod_rm and
+    // immediate_size from this same table entry, so the checks
+    // CPUExecuteInstruction() makes cannot fail here.
+    const OpcodeMetadata* const metadata = &opcode_table[instruction.opcode];
+    if (CPUExecuteDecodedInstruction(cpu, &instruction, metadata) !=
+        kInstructionExecuted) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
           instruction_cs, instruction_ip, instruction.opcode);
