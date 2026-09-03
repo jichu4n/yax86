@@ -17193,6 +17193,23 @@ enum {
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,
 
+  // The memory map is indexed by page so that a lookup is a load rather than a
+  // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
+  // index - small enough to keep in the platform state, and coarse enough that
+  // every region the machine registers is page aligned.
+  kMemoryPageShift = 12,
+  kMemoryPageSize = 1 << kMemoryPageShift,
+  kMemoryAddressSpaceSize = 0x100000,
+  kNumMemoryPages = kMemoryAddressSpaceSize >> kMemoryPageShift,
+  // A page no entry covers.
+  kMemoryPageUnmapped = 0xFF,
+  // A page more than one entry has a share of, which has to be resolved by
+  // address. Nothing registers such a region today - every one of them is page
+  // aligned - but the index must not quietly answer the wrong entry if one
+  // ever does. Note that this is never the answer for an address above the
+  // address space: no entry may reach one, so it is unmapped instead.
+  kMemoryPageStraddled = 0xFE,
+
   // Maximum size of physical memory in bytes.
   kMaxPhysicalMemorySize = 640 * 1024,
   // Minimum size of physical memory in bytes.
@@ -17252,6 +17269,7 @@ typedef struct MemoryMapEntry {
 
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
+//   - The entry's memory region does not lie within the address space.
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
 //   - The number of memory map entries would exceed kMaxMemoryMapEntries.
@@ -17611,6 +17629,10 @@ typedef struct PlatformState {
 
   // Memory map.
   MemoryMap memory_map;
+  // Which memory map entry owns each page of the address space, or
+  // kMemoryPageUnmapped / kMemoryPageStraddled. Extended by each registration,
+  // which only happens while the machine is being set up.
+  uint8_t memory_page_map[kNumMemoryPages];
   // I/O port map.
   PortMap io_port_map;
 
@@ -17811,13 +17833,47 @@ enum {
   kMaxIdleSkipCycles = kCPUCyclesPerSecond / 10,
 };
 
+// Record a newly registered entry in the page index.
+//
+// Takes the entry's index rather than the entry itself because the index is
+// what goes into the map - the entry is derivable from it, and not the other
+// way round.
+//
+// Only the pages the entry itself touches can change. Entries may not overlap,
+// so nothing already in the index can have a share of one of them, and a
+// registration never has to look at the rest of the map. Building the whole
+// index therefore costs one pass over the address space between them, rather
+// than one pass per entry.
+static void UpdateMemoryPageMapForEntry(
+    PlatformState* platform, uint8_t entry_index) {
+  const MemoryMapEntry* entry =
+      MemoryMapGet(&platform->memory_map, entry_index);
+  for (uint32_t page = entry->start >> kMemoryPageShift,
+                last_page = entry->end >> kMemoryPageShift;
+       page <= last_page; ++page) {
+    const uint32_t page_start = page << kMemoryPageShift;
+    const uint32_t page_end = page_start + kMemoryPageSize - 1;
+    platform->memory_page_map[page] =
+        entry->start <= page_start && entry->end >= page_end
+            ? entry_index
+            : kMemoryPageStraddled;
+  }
+}
+
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
+//   - The entry's memory region does not lie within the address space.
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
 //   - The number of memory map entries would exceed kMaxMemoryMapEntries.
 bool RegisterMemoryMapEntry(
     PlatformState* platform, const MemoryMapEntry* entry) {
+  // The index has a slot per page of the address space and none above it, so
+  // an entry reaching past the top could not be recorded in it. Rejecting one
+  // here is what lets the lookup treat the index as the whole answer.
+  if (entry->end >= kMemoryAddressSpaceSize || entry->start > entry->end) {
+    return false;
+  }
   if (MemoryMapLength(&platform->memory_map) >= kMaxMemoryMapEntries) {
     return false;
   }
@@ -17831,15 +17887,42 @@ bool RegisterMemoryMapEntry(
       return false;
     }
   }
-  return MemoryMapAppend(&platform->memory_map, entry);
+  if (!MemoryMapAppend(&platform->memory_map, entry)) {
+    return false;
+  }
+  UpdateMemoryPageMapForEntry(
+      platform, MemoryMapLength(&platform->memory_map) - 1);
+  return true;
+}
+
+// What the page index has to say about an address: the entry covering the whole
+// of its page, kMemoryPageUnmapped where no entry covers it, or
+// kMemoryPageStraddled where more than one entry has a share of the page and
+// the caller has to walk the map. An address above the address space has no
+// page, and no entry may reach it, so it is unmapped by definition.
+//
+// Inline rather than a function of its own: the body is a compare, a shift and
+// a load, where a call on a core with no cheap way to do any of it is a push, a
+// branch, a pop and a return.
+static inline uint8_t GetMemoryPageMapIndex(
+    const PlatformState* platform, uint32_t address) {
+  return address < kMemoryAddressSpaceSize
+             ? platform->memory_page_map[address >> kMemoryPageShift]
+             : kMemoryPageUnmapped;
 }
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-MemoryMapEntry* GetMemoryMapEntryForAddress(
+YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
     PlatformState* platform, uint32_t address) {
-  // TODO: Use a more efficient data structure for lookups, such as a sorted
-  // array with binary search.
+  const uint8_t index = GetMemoryPageMapIndex(platform, address);
+  if (index < kMaxMemoryMapEntries) {
+    return MemoryMapGet(&platform->memory_map, index);
+  }
+  if (index == kMemoryPageUnmapped) {
+    return NULL;
+  }
+  // A page more than one entry has a share of, which the index cannot answer.
   for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
     MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
     if (address >= entry->start && address <= entry->end) {
@@ -18379,6 +18462,9 @@ static void PlatformInitCPU(PlatformState* platform) {
 
 static void PlatformInitMemoryMap(PlatformState* platform) {
   MemoryMapInit(&platform->memory_map);
+  for (uint32_t page = 0; page < kNumMemoryPages; ++page) {
+    platform->memory_page_map[page] = kMemoryPageUnmapped;
+  }
   MemoryMapEntry conventional_memory = {
       .context = platform,
       .entry_type = kMemoryMapEntryConventional,
@@ -18387,7 +18473,7 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
       // Conventional memory is the caller's buffer, accessed directly.
       .read_data = platform->config->physical_memory,
       .write_data = platform->config->physical_memory};
-  MemoryMapAppend(&platform->memory_map, &conventional_memory);
+  RegisterMemoryMapEntry(platform, &conventional_memory);
 }
 
 static void PlatformInitPIC(PlatformState* platform) {
