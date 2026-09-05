@@ -85,23 +85,6 @@ static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
   return false;
 }
 
-// Helper to read the next instruction byte.
-//
-// This goes straight to memory rather than through ReadMemoryOperandByte, so
-// that the fetch is not charged for time on the data bus. The 8088 fetches
-// ahead into a queue while the previous instruction executes, so most of that
-// time is already paid for by the instruction being executed - and the
-// published per-instruction figures the cycle table is built from assume the
-// queue is full.
-static uint8_t ReadNextInstructionByte(
-    CPUState* cpu, uint16_t* next_byte_offset) {
-  const MemoryAddress address = {
-      .segment_register_index = kCS,
-      .offset = (*next_byte_offset)++,
-  };
-  return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
-}
-
 enum {
   // How many bytes a segment addresses. IP is 16 bits and wraps within the
   // segment, so this is also where a fetch through a window has to stop.
@@ -147,6 +130,15 @@ typedef struct CPUInstructionFetchState {
   uint32_t bytes_remaining;
 } CPUInstructionFetchState;
 
+// Reads the next instruction byte, from the window where one is open and from
+// the memory map where one is not.
+//
+// Either way the read goes straight to memory rather than through
+// ReadMemoryOperandByte, so that the fetch is not charged for time on the data
+// bus. The 8088 fetches ahead into a queue while the previous instruction
+// executes, so most of that time is already paid for by the instruction being
+// executed - and the published per-instruction figures the cycle table is
+// built from assume the queue is full.
 YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
     CPUState* cpu, CPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
@@ -154,7 +146,11 @@ YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
     ++fetch_state->next_byte_offset;
     return *fetch_state->next_byte++;
   }
-  return ReadNextInstructionByte(cpu, &fetch_state->next_byte_offset);
+  const MemoryAddress address = {
+      .segment_register_index = kCS,
+      .offset = fetch_state->next_byte_offset++,
+  };
+  return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
