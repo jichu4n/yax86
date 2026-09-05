@@ -13,9 +13,9 @@
 // MOV r/m16, r16
 YAX86_PRIVATE InstructionResult
 ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  WriteOperand(ctx, &dest, FromOperand(&src));
+  WriteOperandAddress(ctx, &dest, FromOperand(&src));
   return kInstructionExecuted;
 }
 
@@ -32,9 +32,9 @@ ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 // MOV r/m16, sreg
 YAX86_PRIVATE InstructionResult
 ExecuteMoveSegmentRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   Operand src = ReadSegmentRegisterOperand(ctx);
-  WriteOperand(ctx, &dest, FromOperand(&src));
+  WriteOperandAddress(ctx, &dest, FromOperand(&src));
   return kInstructionExecuted;
 }
 
@@ -115,9 +115,9 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
 // MOV r/m16, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue src_value = ReadImmediate(ctx);
-  WriteOperand(ctx, &dest, FromOperandValue(&src_value));
+  WriteOperandAddress(ctx, &dest, FromOperandValue(&src_value));
   return kInstructionExecuted;
 }
 

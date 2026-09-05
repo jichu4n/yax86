@@ -95,9 +95,9 @@ extern MemoryAddress GetMemoryOperandAddress(
     CPUState* cpu, const Instruction* instruction);
 
 // Get a register or memory operand address based on the ModR/M byte and
-// displacement.
+// displacement, without reading the value currently there.
 extern OperandAddress GetRegisterOrMemoryOperandAddress(
-    CPUState* cpu, const Instruction* instruction, Width width);
+    const InstructionContext* ctx);
 
 // Read an 8-bit immediate value.
 extern OperandValue ReadImmediateOperandByte(const Instruction* instruction);
