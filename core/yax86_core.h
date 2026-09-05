@@ -7849,20 +7849,21 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
 
 YAX86_HOT CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
-  // The fields a decode can leave unwritten, and only those. opcode and size
-  // are assigned on every path that returns success, mod_rm is read only where
-  // has_mod_rm is set, and the displacement and immediate arrays are read no
-  // further than their size fields say.
+  // The fields a decode can leave unwritten, and only those. opcode, size and
+  // immediate_size are assigned on every path that returns success, mod_rm is
+  // read only where has_mod_rm is set, and the displacement and immediate
+  // arrays are read no further than their size fields say.
   //
-  // immediate_size is among them even though it is assigned unconditionally
-  // below, because it shares a byte with the other two bitfields: clearing all
-  // three is a single store, where clearing two of them is a read-modify-write
-  // to preserve the third.
+  // The two bitfields here share a byte with immediate_size and two bits of
+  // padding, so clearing them is a read-modify-write however few of them it
+  // names - naming immediate_size as well changes the mask and nothing else.
+  // Assigning has_mod_rm from metadata->has_modrm below, which carries the
+  // same value, is a second read-modify-write on that byte rather than a
+  // cheaper way to reach the same state: it measured 0.99% slower.
   instruction->segment_override = kNoSegmentOverride;
   instruction->repetition_prefix = 0;
   instruction->has_mod_rm = false;
   instruction->displacement_size = 0;
-  instruction->immediate_size = 0;
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];

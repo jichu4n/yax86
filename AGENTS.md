@@ -68,11 +68,19 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   suite catches a dropped clear as well, and emphatically - removing one fails
   thousands of encodings across most opcodes - but as a diffuse result rather
   than as a named one.
-- `immediate_size` is cleared even though it is assigned unconditionally, and
-  that is not redundancy. It shares a byte with `has_mod_rm` and
-  `displacement_size`, so clearing all three is a single store where clearing
-  two of them is a read-modify-write to preserve the third. Anything added to
-  that bitfield group has to be cleared with them for the same reason.
+- The byte holding `has_mod_rm`, `displacement_size` and `immediate_size` is
+  cleared with a read-modify-write rather than a store, because two of its bits
+  are padding the compiler has to preserve. Naming more or fewer of the three
+  changes the mask and nothing else - `movs r2, #63` against `movs r2, #7` -
+  which is why `immediate_size` is left out despite being free to include, and
+  why a fourth bitfield would cost nothing to clear with them.
+- Assigning `has_mod_rm` from `metadata->has_modrm`, which always carries the
+  same value, looks like it should replace both the clear and the `= true`
+  inside the ModR/M branch. It measured **0.99% slower**: the byte is
+  read-modify-written for the other bitfields regardless, so this adds a second
+  one on every instruction where the branch only pays on the roughly half that
+  carry a ModR/M byte. Writing all three bitfields once at the end of the
+  decode instead was also tried, and is 0.81% slower for 32 bytes *less* code.
 - The one field whose value is read before it is known to exist is the ModR/M
   `REG` field, which `GetImmediateSize()` needs whether or not the instruction
   carries a ModR/M byte - only `0xF6` and `0xF7` consult it, and both do carry
