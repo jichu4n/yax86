@@ -7849,21 +7849,15 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
 
 YAX86_HOT CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
-  // The fields a decode can leave unwritten, and only those. opcode, size and
-  // immediate_size are assigned on every path that returns success, mod_rm is
-  // read only where has_mod_rm is set, and the displacement and immediate
-  // arrays are read no further than their size fields say.
-  //
-  // The two bitfields here share a byte with immediate_size and two bits of
-  // padding, so clearing them is a read-modify-write however few of them it
-  // names - naming immediate_size as well changes the mask and nothing else.
-  // Assigning has_mod_rm from metadata->has_modrm below, which carries the
-  // same value, is a second read-modify-write on that byte rather than a
-  // cheaper way to reach the same state: it measured 0.99% slower.
+  // The prefix fields, which ApplyPrefixByte() writes only where a prefix is
+  // actually present. Every other field a decode could leave behind is settled
+  // where it becomes known rather than here: opcode, size and immediate_size
+  // are assigned on every path that returns success, has_mod_rm and
+  // displacement_size in both arms of the ModR/M branch below, mod_rm is read
+  // only where has_mod_rm is set, and the displacement and immediate arrays
+  // are read no further than their size fields say.
   instruction->segment_override = kNoSegmentOverride;
   instruction->repetition_prefix = 0;
-  instruction->has_mod_rm = false;
-  instruction->displacement_size = 0;
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
@@ -7911,6 +7905,15 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
       instruction->displacement[i] =
           CPUFetchNextInstructionByte(cpu, &fetch_state);
     }
+  } else {
+    // Cleared in the arm that skips them rather than before the decode starts.
+    // has_mod_rm and displacement_size share a byte with immediate_size and
+    // two bits of padding, so reaching either is a read-modify-write of the
+    // whole byte - but writing them together lets one serve for both, in
+    // whichever arm runs. Clearing them up front is a read-modify-write every
+    // instruction pays, on top of the one the ModR/M arm pays to set them.
+    instruction->has_mod_rm = false;
+    instruction->displacement_size = 0;
   }
 
   // Immediate operand
