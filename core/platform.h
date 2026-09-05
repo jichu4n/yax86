@@ -2563,7 +2563,7 @@ int8_t PlatformAddBreakpoint(
     breakpoint->enabled = true;
     breakpoint->cs = cs;
     breakpoint->ip = ip;
-    platform->has_enabled_breakpoints = true;
+    PlatformUpdateEnabledFlags(platform);
     return (int8_t)i;
   }
   return kInvalidWatchIndex;
@@ -2582,7 +2582,7 @@ void PlatformClearBreakpoints(PlatformState* platform) {
   for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
     platform->breakpoints[i].enabled = false;
   }
-  platform->has_enabled_breakpoints = false;
+  PlatformUpdateEnabledFlags(platform);
 }
 
 int8_t PlatformAddMemoryWatchpoint(

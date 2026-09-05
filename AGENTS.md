@@ -77,12 +77,13 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   fetching started stay inside the window - see
   `WindowCoversTheRegionBeforeTheFetchAddress`. `data == NULL` is how a host
   declines.
-- The window is kept across instructions in `CPUState.fetch_window`, not
-  re-derived per instruction. It is held as a range of addresses rather than a
-  cursor, so both straight-line execution and a jump backwards within the same
-  region land inside the one already open, and reopening is a compare rather
-  than a call. `CPUInstructionFetchState` is the per-decode cursor derived from it,
-  and holds neither a `CPUState` pointer nor a reference to the CPU's IP - IP
+- The window is kept across instructions in
+  `CPUState.instruction_fetch_window`, not re-derived per instruction. It is
+  held as a range of addresses rather than a cursor, so both straight-line
+  execution and a jump backwards within the same region land inside the one
+  already open, and reopening is a compare rather than a call.
+  `CPUInstructionFetchState` is the per-decode cursor derived from it, and
+  holds neither a `CPUState` pointer nor a reference to the CPU's IP - IP
   has to keep naming the instruction being decoded until `CPUTick()` advances
   it by `instruction.size`, and a byte-by-byte write into `cpu->registers[]`
   is a store the compiler cannot keep in a register.
@@ -90,9 +91,14 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   points into the host's own storage, so a write through the memory map is
   visible to the next fetch with no invalidation, and self-modifying code keeps
   working. What does need invalidating is a change to what an address *means*,
-  which is what `CPUInvalidateInstructionFetchWindow()` is for. The platform calls it from
-  two places: `RegisterMemoryMapEntry()`, and `PlatformUpdateEnabledFlags()`
-  whenever a memory watchpoint is added or removed.
+  which is what `CPUInvalidateInstructionFetchWindow()` is for. The platform
+  calls it from two places: `RegisterMemoryMapEntry()`, and unconditionally at
+  the end of `PlatformUpdateEnabledFlags()` - so a breakpoint change discards
+  the window too, which costs nothing and keeps the rule to state. Nothing
+  sets `has_enabled_breakpoints` or `has_enabled_memory_watchpoints` itself;
+  every path that changes a breakpoint or a watchpoint recomputes both through
+  that one function, so a flag and the window can never disagree with the
+  arrays they summarize.
 - The watchpoint case is the subtle one. A direct read cannot fire a
   watchpoint, so the platform declines to hand out a window at all while any is
   enabled - but declining does nothing about a window already open, which is
@@ -245,7 +251,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   explicitly defines it to whatever placement attribute it needs. The Pico
   harness defines it to `__not_in_flash()`, which puts the function in SRAM
   instead of executing it from QSPI flash through a 16KB XIP cache.
-- 81 functions carry it, chosen from an on-target profile rather than by
+- 84 functions carry it, chosen from an on-target profile rather than by
   intuition. On the Pico it is worth **1.59x at 400MHz** (13.647s to 8.597s on
   `dos-boot`) and **1.23x at 125MHz**. The win is larger when overclocked
   because the flash SPI clock does not scale with the core, so an XIP miss
@@ -608,8 +614,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   result of this kind, and the sort the XIP cache makes possible.
 - At 400MHz, `-O3` takes 7.125 seconds, or 3.89 emulated MHz and 0.326 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. Note that the
-  harness truncates both to two decimals when it prints them. **Do not raise the clock past
-  400MHz.** That is a standing instruction, not a technical limit.
+  harness truncates both to two decimals when it prints them. **Do not raise
+  the clock past 400MHz.** That is a standing instruction, not a technical
+  limit.
 - Flash is dominated by the 360KB floppy image; the code itself is under 110KB.
   The `core_text` column is the whole core library section, which includes
   about 32KB of constant data - the ROM images, the font tables and the opcode
