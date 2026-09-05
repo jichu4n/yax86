@@ -283,7 +283,7 @@ YAX86_PRIVATE void ApplySegmentOverride(
 }
 
 // Compute the memory address for an instruction.
-YAX86_PRIVATE MemoryAddress
+YAX86_HOT YAX86_PRIVATE MemoryAddress
 GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
   MemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
@@ -362,16 +362,28 @@ GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
 }
 
 // Get a register or memory operand address based on the ModR/M byte and
-// displacement.
-YAX86_PRIVATE OperandAddress GetRegisterOrMemoryOperandAddress(
-    CPUState* cpu, const Instruction* instruction, Width width) {
+// displacement, without reading the value currently there.
+//
+// An instruction that overwrites its destination completely - as opposed to a
+// read-modify-write - resolves the address with this and stores through
+// WriteOperandAddress(). Reading the destination on the way is not free: it
+// charges the bus cycles of a memory access the 8088 never performs.
+//
+// Always inlined. With more than one caller, -Os and -O2 emit it out of line,
+// which puts a call and its register shuffling on the hottest path in the
+// emulator - 3.6% at -O2.
+YAX86_ALWAYS_INLINE YAX86_PRIVATE OperandAddress
+GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
+  CPUState* cpu = ctx->cpu;
+  const Instruction* instruction = ctx->instruction;
   OperandAddress address;
   uint8_t mod = instruction->mod_rm.mod;
   uint8_t rm = instruction->mod_rm.rm;
   if (mod == 3) {
     // Register operand
     address.type = kOperandAddressTypeRegister;
-    address.value.register_address = kGetRegisterAddressFn[width](cpu, rm);
+    address.value.register_address =
+        kGetRegisterAddressFn[ctx->metadata->width](cpu, rm);
   } else {
     // Memory operand
     address.type = kOperandAddressTypeMemory;
@@ -412,10 +424,8 @@ ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
 // byte and displacement.
 YAX86_HOT YAX86_PRIVATE Operand
 ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
-  Width width = ctx->metadata->width;
   Operand operand;
-  operand.address =
-      GetRegisterOrMemoryOperandAddress(ctx->cpu, ctx->instruction, width);
+  operand.address = GetRegisterOrMemoryOperandAddress(ctx);
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
 }

@@ -73,9 +73,12 @@ YAX86_PRIVATE InstructionResult
 ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   // The 8086/8088 does not decode the REG field of 0x8F at all, so every value
   // pops. Only REG 0 is documented.
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  //
+  // The destination address is resolved before the pop, because SP and BP can
+  // both address it and the 8086 computes the effective address first.
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest, FromOperandValue(&value));
   return kInstructionExecuted;
 }
 

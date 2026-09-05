@@ -251,7 +251,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   explicitly defines it to whatever placement attribute it needs. The Pico
   harness defines it to `__not_in_flash()`, which puts the function in SRAM
   instead of executing it from QSPI flash through a 16KB XIP cache.
-- 84 functions carry it, chosen from an on-target profile rather than by
+- 85 functions carry it, chosen from an on-target profile rather than by
   intuition. On the Pico it is worth **1.59x at 400MHz** (13.647s to 8.597s on
   `dos-boot`) and **1.23x at 125MHz**. The win is larger when overclocked
   because the flash SPI clock does not scale with the core, so an XIP miss
@@ -277,9 +277,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   annotation count in the bundle ever drops, something is wrong with the
   bundler, not with someone's memory:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 161
+  grep -c YAX86_HOT core/yax86_core.h    # 162
   ```
-  That is 84 annotations plus the macro block in `util/common.h`, whose seven
+  That is 85 annotations plus the macro block in `util/common.h`, whose seven
   lines all match on the substring, once per each of the 11 module bundles.
 - Annotating every function in the core instead was measured, and is not worth
   it. Against the same baseline: the targeted set gives 97.2% of the win for
@@ -287,6 +287,26 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   the memory, and it forecloses the 192KB guest RAM option outright - 206,664
   bytes of image plus 64KB more guest RAM does not fit in 256KB, where the
   targeted build does.
+- `YAX86_ALWAYS_INLINE` is not about placement, but it lives with these
+  because it exists for the same reason: something the compiler was doing for
+  free stops being free and nothing in the source says so. The case it was
+  added for is a small helper with one hot caller, inlined into it at every
+  level - until a second caller appears, at which point `-Os` and `-O2` emit it
+  out of line for *both* and the hot path grows a call it never had. That
+  measured **3.6% at `-O2`**. Marking the helper `YAX86_HOT` instead recovers
+  nothing, which is the tell that the cost is the call itself rather than where
+  it landed. Like `YAX86_NOINLINE` it should only ever go in against a
+  measurement; forcing the compiler's hand speculatively has lost every time it
+  has been tried here.
+- Forcing one inlining decision moves others, and not always in your favour.
+  Pinning that helper inline made GCC stop inlining the larger
+  `GetMemoryOperandAddress()` into `ReadRegisterOrMemoryOperand()` at `-O3`,
+  putting the effective address computation in flash on the hottest path in the
+  emulator - 0.49%, of which marking it `YAX86_HOT` gives back 0.12%. The
+  residue is the price of the `-O2` win, and it is worth paying at that ratio;
+  what matters is that both halves get measured, because the second one is
+  somewhere the change was never made. Check `nm` after adding either macro
+  rather than assuming the effect was local.
 - `YAX86_HOT_DATA` is the same thing for data, and is separate because a
   compiler will not put executable code and read-only data in one section - a
   code section attribute on a `const` array is a hard compile error, not a
@@ -369,6 +389,34 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   already had. Measured with callgrind on the `compute` workload, counting in
   `CPUTick()` costs 0.17%; the same counter driven from `PlatformTick()`,
   where the flag has to be re-derived, cost 1.09%.
+
+#### core/src/cpu - what an instruction costs
+
+- The cycle model in `cycles.c` is a base cost per opcode, plus the effective
+  address calculation, plus four cycles for every byte the instruction moves
+  over the 8088's 8-bit data bus. The third term dominates, and it is charged
+  from the accesses that actually happen rather than from a table - so an
+  instruction that touches memory it has no reason to touch is billed for it.
+- Which is what four of them did. `MOV r/m,r`, `MOV r/m,sreg`, `MOV r/m,imm`
+  and `POP r/m` each began by *reading* the destination they were about to
+  overwrite completely, because `ReadRegisterOrMemoryOperand()` was the only
+  way to get at its address. `MOV [BX],AX` cost 23 cycles where the hardware
+  charges 15, and `MOV [BX],AL` cost 15 against 11 - a store priced as a
+  read-modify-write. Stores now resolve the address with
+  `GetRegisterOrMemoryOperandAddress()` and go straight to
+  `WriteOperandAddress()`, which is what the string instructions and
+  `MOV moffs,AL` already did.
+- **No architectural test can see this.** The registers and memory come out
+  identical either way, so the 8088 hardware suite passes on both - it compares
+  results, not bus traffic. `cycles_test.cpp` is what covers it: it runs one
+  instruction through `CPUTick()` and asserts `cycles_this_tick`, pinning a
+  store against the load and the read-modify-write of the same shape. Three of
+  its six tests fail without the fix.
+- It moved the `dos-boot` invariant, which is the other reason to know about
+  it: 22,554 fewer emulated cycles, and 3,289 *more* retired instructions. The
+  guest is not doing more work - cheaper stores mean its timer-polling loops
+  get more turns before the same number of PIT ticks elapse. Any change to
+  cycle costs does this, so a run either side of one is not comparable.
 
 #### core/src/hdc - hard disk controller
 
@@ -500,7 +548,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   which is the mix of guest code the emulator exists to run. What it executes
   is whatever the BIOS and DOS do, so it is only comparable against another
   yax86 build.
-- **It is deterministic: 27,724,061 emulated cycles and 2,324,726 retired
+- **It is deterministic: 27,701,507 emulated cycles and 2,328,015 retired
   instructions, every run, at every optimization level.** Both numbers are
   printed. If either moves, the change altered behaviour and the times either
   side of it are not comparable - check that before believing a speedup.
@@ -588,11 +636,11 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
   | level | flash | SRAM | image flash | image SRAM | core `.text` |
   | ----- | ----- | ---- | ----------- | ---------- | ------------ |
-  | `-Os` | 34.264 | 36.614 | 443,752 | 165,052 | 59,895 |
-  | `-O2` | 36.494 | 30.015 | 458,044 | 168,612 | 73,625 |
-  | `-O3` | **33.492** | **26.858** | 471,676 | 176,292 | 88,497 |
+  | `-Os` | 34.264 | 30.099 | 444,440 | 165,732 | 60,555 |
+  | `-O2` | 36.494 | 24.687 | 459,004 | 169,596 | 74,597 |
+  | `-O3` | **33.492** | **22.569** | 472,156 | 177,180 | 89,417 |
 
-  A real 8088 runs this in 5.812 seconds, so `-O3` at the stock clock is about
+  A real 8088 runs this in 5.807 seconds, so `-O3` at the stock clock is about
   a fifth of one. The flash column is historical - it is what the harness
   measured before `YAX86_HOT` existed, and is not re-derived as the core
   changes. The seconds in both columns are a snapshot and go out of date with
@@ -612,11 +660,10 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 7.125 seconds, or 3.89 emulated MHz and 0.326 MIPS -
+- At 400MHz, `-O3` takes 7.122 seconds, or 3.89 emulated MHz and 0.327 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. Note that the
-  harness truncates both to two decimals when it prints them. **Do not raise
-  the clock past 400MHz.** That is a standing instruction, not a technical
-  limit.
+  harness truncates both to two decimals when it prints them. **Do not raise the clock past 400MHz.** That is a standing instruction,
+  not a technical limit.
 - Flash is dominated by the 360KB floppy image; the code itself is under 110KB.
   The `core_text` column is the whole core library section, which includes
   about 32KB of constant data - the ROM images, the font tables and the opcode
@@ -727,7 +774,9 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   return type: `YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteSub(...)`, and
   `YAX86_HOT static uint8_t ReadByte(...)`. Both orders compile, so the point
   is only that there be one - and putting the mark first leaves the declaration
-  after it exactly as it reads without the mark.
+  after it exactly as it reads without the mark. The same goes for
+  `YAX86_NOINLINE` and `YAX86_ALWAYS_INLINE`, and only one of the three is ever
+  on a given function.
 - `clang-format` will not fix a misplaced mark, and will disguise one. It
   chooses where to break lines and never reorders tokens, so a mark added to
   the start of a *continuation* line - which is where a wrapped signature's

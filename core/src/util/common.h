@@ -35,6 +35,18 @@
 #define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is

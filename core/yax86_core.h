@@ -691,6 +691,18 @@ extern "C" {
 #define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -1778,6 +1790,18 @@ CPUTickResult CPUTick(CPUState* cpu);
 #define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -2114,9 +2138,9 @@ extern MemoryAddress GetMemoryOperandAddress(
     CPUState* cpu, const Instruction* instruction);
 
 // Get a register or memory operand address based on the ModR/M byte and
-// displacement.
+// displacement, without reading the value currently there.
 extern OperandAddress GetRegisterOrMemoryOperandAddress(
-    CPUState* cpu, const Instruction* instruction, Width width);
+    const InstructionContext* ctx);
 
 // Read an 8-bit immediate value.
 extern OperandValue ReadImmediateOperandByte(const Instruction* instruction);
@@ -2643,7 +2667,7 @@ YAX86_PRIVATE void ApplySegmentOverride(
 }
 
 // Compute the memory address for an instruction.
-YAX86_PRIVATE MemoryAddress
+YAX86_HOT YAX86_PRIVATE MemoryAddress
 GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
   MemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
@@ -2722,16 +2746,28 @@ GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
 }
 
 // Get a register or memory operand address based on the ModR/M byte and
-// displacement.
-YAX86_PRIVATE OperandAddress GetRegisterOrMemoryOperandAddress(
-    CPUState* cpu, const Instruction* instruction, Width width) {
+// displacement, without reading the value currently there.
+//
+// An instruction that overwrites its destination completely - as opposed to a
+// read-modify-write - resolves the address with this and stores through
+// WriteOperandAddress(). Reading the destination on the way is not free: it
+// charges the bus cycles of a memory access the 8088 never performs.
+//
+// Always inlined. With more than one caller, -Os and -O2 emit it out of line,
+// which puts a call and its register shuffling on the hottest path in the
+// emulator - 3.6% at -O2.
+YAX86_ALWAYS_INLINE YAX86_PRIVATE OperandAddress
+GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
+  CPUState* cpu = ctx->cpu;
+  const Instruction* instruction = ctx->instruction;
   OperandAddress address;
   uint8_t mod = instruction->mod_rm.mod;
   uint8_t rm = instruction->mod_rm.rm;
   if (mod == 3) {
     // Register operand
     address.type = kOperandAddressTypeRegister;
-    address.value.register_address = kGetRegisterAddressFn[width](cpu, rm);
+    address.value.register_address =
+        kGetRegisterAddressFn[ctx->metadata->width](cpu, rm);
   } else {
     // Memory operand
     address.type = kOperandAddressTypeMemory;
@@ -2772,10 +2808,8 @@ ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
 // byte and displacement.
 YAX86_HOT YAX86_PRIVATE Operand
 ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
-  Width width = ctx->metadata->width;
   Operand operand;
-  operand.address =
-      GetRegisterOrMemoryOperandAddress(ctx->cpu, ctx->instruction, width);
+  operand.address = GetRegisterOrMemoryOperandAddress(ctx);
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
 }
@@ -3464,9 +3498,9 @@ ExecuteInvalidOpcode(YAX86_UNUSED const InstructionContext* ctx) {
 // MOV r/m16, r16
 YAX86_PRIVATE InstructionResult
 ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  WriteOperand(ctx, &dest, FromOperand(&src));
+  WriteOperandAddress(ctx, &dest, FromOperand(&src));
   return kInstructionExecuted;
 }
 
@@ -3483,9 +3517,9 @@ ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 // MOV r/m16, sreg
 YAX86_PRIVATE InstructionResult
 ExecuteMoveSegmentRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   Operand src = ReadSegmentRegisterOperand(ctx);
-  WriteOperand(ctx, &dest, FromOperand(&src));
+  WriteOperandAddress(ctx, &dest, FromOperand(&src));
   return kInstructionExecuted;
 }
 
@@ -3566,9 +3600,9 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
 // MOV r/m16, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue src_value = ReadImmediate(ctx);
-  WriteOperand(ctx, &dest, FromOperandValue(&src_value));
+  WriteOperandAddress(ctx, &dest, FromOperandValue(&src_value));
   return kInstructionExecuted;
 }
 
@@ -4690,9 +4724,12 @@ YAX86_PRIVATE InstructionResult
 ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   // The 8086/8088 does not decode the REG field of 0x8F at all, so every value
   // pops. Only REG 0 is documented.
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  //
+  // The destination address is resolved before the pop, because SP and BP can
+  // both address it and the 8086 computes the effective address first.
+  OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest, FromOperandValue(&value));
   return kInstructionExecuted;
 }
 
@@ -8152,6 +8189,18 @@ extern "C" {
 #define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -9222,6 +9271,18 @@ extern "C" {
 #define YAX86_NOINLINE __attribute__((noinline))
 #else
 #define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -11013,6 +11074,18 @@ extern "C" {
 #define YAX86_NOINLINE __attribute__((noinline))
 #else
 #define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -13375,6 +13448,18 @@ extern "C" {
 #define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -14328,6 +14413,18 @@ extern "C" {
 #define YAX86_NOINLINE __attribute__((noinline))
 #else
 #define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -15417,6 +15514,18 @@ extern "C" {
 #define YAX86_NOINLINE __attribute__((noinline))
 #else
 #define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -16681,6 +16790,18 @@ extern "C" {
 #define YAX86_NOINLINE __attribute__((noinline))
 #else
 #define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -19331,6 +19452,18 @@ extern "C" {
 #define YAX86_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
+#endif  // defined(__GNUC__) || defined(__clang__)
+
 // Marks a function as being on the per-instruction hot path.
 //
 // Empty by default, because on a machine with a normal cache hierarchy there is
@@ -20257,6 +20390,18 @@ extern "C" {
 #define YAX86_NOINLINE __attribute__((noinline))
 #else
 #define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
