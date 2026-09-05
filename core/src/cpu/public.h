@@ -167,6 +167,28 @@ typedef struct CPUConfig {
   // to the real-life 8088.
   uint8_t (*read_memory_byte)(struct CPUState* cpu, uint32_t address);
 
+  // Callback handing the CPU a run of bytes it may read directly, for
+  // instruction fetch. Optional - when NULL, every instruction byte is read
+  // through read_memory_byte, which is what happens anyway wherever this
+  // declines.
+  //
+  // Given a linear address the CPU wants to fetch from, fills in
+  // CPUState.instruction_fetch_window with a range covering it, or sets its
+  // data to NULL to decline. A host must decline wherever a read has to be
+  // observed or computed rather than loaded: a device region, unmapped memory,
+  // or an address covered by anything the host has to be told about.
+  //
+  // The range should be the whole of whatever region the address falls in
+  // rather than the tail of it starting at the address, so that a jump
+  // backwards within the same region still lands inside it.
+  //
+  // The window is kept across instructions, so a host that changes what an
+  // address means - remapping memory, or turning on a watchpoint - has to call
+  // CPUInvalidateInstructionFetchWindow(). Writes through the same buffer need
+  // no such call, and self-modifying code keeps working, because the window is
+  // a pointer into the host's own storage rather than a copy of it.
+  void (*get_instruction_fetch_window)(struct CPUState* cpu, uint32_t address);
+
   // Callback to write a byte to memory.
   //
   // On the 8086, accessing an invalid memory address will yield garbage data
@@ -226,6 +248,17 @@ typedef struct CPUConfig {
   void (*write_port)(struct CPUState* cpu, uint16_t port, uint8_t value);
 } CPUConfig;
 
+// A run of bytes instruction fetch may read directly, covering the linear
+// addresses [start, end), with data pointing at the byte at start.
+//
+// A NULL data means there is no window and every byte takes the ordinary path
+// through CPUConfig.read_memory_byte.
+typedef struct CPUInstructionFetchWindow {
+  const uint8_t* data;
+  uint32_t start;
+  uint32_t end;
+} CPUInstructionFetchWindow;
+
 // State of the emulated CPU.
 typedef struct CPUState {
   // Pointer to caller-provided runtime configuration
@@ -272,6 +305,14 @@ typedef struct CPUState {
   // caller drives the rest of the machine from this, so that everything timed
   // against the CPU keeps the ratio real hardware has.
   uint16_t cycles_this_tick;
+
+  // The run of bytes instruction fetch is currently reading from, as handed
+  // over by CPUConfig.get_instruction_fetch_window.
+  //
+  // Kept across instructions rather than re-derived per instruction: execution
+  // is sequential and a window spans a whole memory region, so the next
+  // instruction is almost always inside the one already open.
+  CPUInstructionFetchWindow instruction_fetch_window;
 } CPUState;
 
 // Initialize CPU state.
@@ -325,6 +366,18 @@ void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // The request applies only to the tick during which it was made. CPUTick()
 // clears it on entry, so a request made outside a tick has no effect.
 static inline void CPURequestStop(CPUState* cpu) { cpu->stop_requested = true; }
+
+// Discards the window instruction fetch is reading from, so that the next
+// fetch asks CPUConfig.get_instruction_fetch_window again.
+//
+// A host must call this whenever it changes what an address means - remapping
+// memory, or enabling something that has to observe reads - because the window
+// is a direct pointer that would otherwise outlive the change. Writing through
+// the same buffer does not need it: the window is a pointer into the host's
+// storage, not a copy.
+static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
+  cpu->instruction_fetch_window.data = NULL;
+}
 
 // ============================================================================
 // Instructions

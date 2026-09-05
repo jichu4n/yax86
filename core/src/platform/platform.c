@@ -97,6 +97,9 @@ bool RegisterMemoryMapEntry(
   }
   UpdateMemoryPageMapForEntry(
       platform, MemoryMapLength(&platform->memory_map) - 1);
+  // An open fetch window points into whichever region used to own those
+  // addresses, so it must not outlive a change to the map.
+  CPUInvalidateInstructionFetchWindow(&platform->cpu);
   return true;
 }
 
@@ -641,11 +644,44 @@ YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
   return kInterruptHandlerUnhandled;
 }
 
+// Hands the CPU a direct window for instruction fetch.
+//
+// Declines wherever a read has to be observed or computed rather than loaded:
+// a device region, unmapped memory, a page shared by two entries, or any
+// access at all while a memory watchpoint is enabled - a direct read cannot
+// fire one.
+static void CPUCallbackGetInstructionFetchWindow(
+    CPUState* cpu, uint32_t address) {
+  CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+  window->data = NULL;
+  PlatformState* platform = (PlatformState*)cpu->config->context;
+  if (platform->has_enabled_memory_watchpoints) {
+    return;
+  }
+  // Anything that is not a single entry's page - unmapped, or shared by more
+  // than one entry - has no window to hand out.
+  const uint8_t index = GetMemoryPageMapIndex(platform, address);
+  if (index >= kMaxMemoryMapEntries) {
+    return;
+  }
+  MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, index);
+  if (entry->read_data == NULL) {
+    return;
+  }
+  // The whole region, not the tail of it from this address, so that a jump
+  // backwards within the region still lands inside the window.
+  window->data = entry->read_data;
+  window->start = entry->start;
+  window->end = entry->end + 1;
+}
+
 static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu_config = kEmptyCPUConfig;
   platform->cpu_config.context = platform;
   platform->cpu_config.logger = &platform->logger;
   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
+  platform->cpu_config.get_instruction_fetch_window =
+      CPUCallbackGetInstructionFetchWindow;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
   platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
   if (platform->config->enable_dos_idle_skip) {
@@ -1189,6 +1225,10 @@ static void PlatformUpdateEnabledFlags(PlatformState* platform) {
       break;
     }
   }
+  // Instruction fetch reads through a direct window when one is open, which
+  // cannot fire a watchpoint. Turning watchpoints on stops the platform
+  // handing out new windows, and this discards whichever one is already open.
+  CPUInvalidateInstructionFetchWindow(&platform->cpu);
 }
 
 int8_t PlatformAddBreakpoint(
@@ -1201,7 +1241,7 @@ int8_t PlatformAddBreakpoint(
     breakpoint->enabled = true;
     breakpoint->cs = cs;
     breakpoint->ip = ip;
-    platform->has_enabled_breakpoints = true;
+    PlatformUpdateEnabledFlags(platform);
     return (int8_t)i;
   }
   return kInvalidWatchIndex;
@@ -1220,7 +1260,7 @@ void PlatformClearBreakpoints(PlatformState* platform) {
   for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
     platform->breakpoints[i].enabled = false;
   }
-  platform->has_enabled_breakpoints = false;
+  PlatformUpdateEnabledFlags(platform);
 }
 
 int8_t PlatformAddMemoryWatchpoint(
@@ -1239,7 +1279,7 @@ int8_t PlatformAddMemoryWatchpoint(
     watchpoint->end = end;
     watchpoint->on_read = on_read;
     watchpoint->on_write = on_write;
-    platform->has_enabled_memory_watchpoints = true;
+    PlatformUpdateEnabledFlags(platform);
     return (int8_t)i;
   }
   return kInvalidWatchIndex;
@@ -1259,7 +1299,7 @@ void PlatformClearMemoryWatchpoints(PlatformState* platform) {
   for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
     platform->memory_watchpoints[i].enabled = false;
   }
-  platform->has_enabled_memory_watchpoints = false;
+  PlatformUpdateEnabledFlags(platform);
 }
 
 void PlatformSetStepMode(PlatformState* platform, bool is_step_mode) {
