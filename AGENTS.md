@@ -55,6 +55,32 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - Because the decode happens in place, a failed fetch leaves the caller's
   `Instruction` holding however much had been decoded rather than untouched.
   Every caller treats a failed fetch as fatal, so nothing reads it back.
+- A decode clears five fields rather than zeroing the struct, because those are
+  the only ones it can leave unwritten. `opcode` and `size` are assigned on
+  every path that returns success; `mod_rm` is read only where `has_mod_rm` is
+  set; and `displacement[]` and `immediate[]` are read no further than their
+  size fields say. Worth **4.43% at `-O3`**, 3.77% at `-O2` and 2.34% at `-Os`,
+  measured at 400MHz on `dos-boot`.
+- What makes that safe is that a reused destination keeps nothing of the
+  instruction before it, and reuse is the ordinary case rather than an unusual
+  one - `CPUTick()` holds a single `Instruction` for the life of the CPU.
+  `ADecodeKeepsNothingOfThePreviousInstruction` pins it directly. The hardware
+  suite catches a dropped clear as well, and emphatically - removing one fails
+  thousands of encodings across most opcodes - but as a diffuse result rather
+  than as a named one.
+- `immediate_size` is cleared even though it is assigned unconditionally, and
+  that is not redundancy. It shares a byte with `has_mod_rm` and
+  `displacement_size`, so clearing all three is a single store where clearing
+  two of them is a read-modify-write to preserve the third. Anything added to
+  that bitfield group has to be cleared with them for the same reason.
+- The one field whose value is read before it is known to exist is the ModR/M
+  `REG` field, which `GetImmediateSize()` needs whether or not the instruction
+  carries a ModR/M byte - only `0xF6` and `0xF7` consult it, and both do carry
+  one, so the value is never used, but it still has to be *defined*. The decode
+  keeps it in a local initialized to 0 rather than reading `mod_rm.reg` back.
+  That is also why the local is the cheaper of the two fixes available: a
+  ternary on `has_mod_rm` puts a branch on the hot path, and clearing `mod_rm`
+  puts back a store, where the local costs neither and removes a load.
 - `immediate_size` is a three bit field but `immediate[]` holds 4 bytes, and
   `displacement_size` is a two bit field where `displacement[]` holds 2. No
   opcode table entry exceeds the arrays, but nothing in the types says so, and
@@ -636,12 +662,12 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
   | level | flash | SRAM | image flash | image SRAM | core `.text` |
   | ----- | ----- | ---- | ----------- | ---------- | ------------ |
-  | `-Os` | 34.264 | 30.099 | 444,440 | 165,732 | 60,555 |
-  | `-O2` | 36.494 | 24.687 | 459,004 | 169,596 | 74,597 |
-  | `-O3` | **33.492** | **22.569** | 472,156 | 177,180 | 89,417 |
+  | `-Os` | 34.264 | 29.392 | 444,472 | 165,764 | 60,583 |
+  | `-O2` | 36.494 | 23.744 | 458,988 | 169,580 | 74,581 |
+  | `-O3` | **33.492** | **21.562** | 472,140 | 177,164 | 89,405 |
 
   A real 8088 runs this in 5.807 seconds, so `-O3` at the stock clock is about
-  a fifth of one. The flash column is historical - it is what the harness
+  a quarter of one. The flash column is historical - it is what the harness
   measured before `YAX86_HOT` existed, and is not re-derived as the core
   changes. The seconds in both columns are a snapshot and go out of date with
   every optimization; what is durable is how the levels rank against each
@@ -660,7 +686,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 7.122 seconds, or 3.89 emulated MHz and 0.327 MIPS -
+- At 400MHz, `-O3` takes 6.807 seconds, or 4.07 emulated MHz and 0.342 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. Note that the
   harness truncates both to two decimals when it prints them. **Do not raise the clock past 400MHz.** That is a standing instruction,
   not a technical limit.

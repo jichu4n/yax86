@@ -239,8 +239,20 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
 
 YAX86_HOT CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
-  const Instruction zero_instruction = {0};
-  *instruction = zero_instruction;
+  // The fields a decode can leave unwritten, and only those. opcode and size
+  // are assigned on every path that returns success, mod_rm is read only where
+  // has_mod_rm is set, and the displacement and immediate arrays are read no
+  // further than their size fields say.
+  //
+  // immediate_size is among them even though it is assigned unconditionally
+  // below, because it shares a byte with the other two bitfields: clearing all
+  // three is a single store, where clearing two of them is a read-modify-write
+  // to preserve the third.
+  instruction->segment_override = kNoSegmentOverride;
+  instruction->repetition_prefix = 0;
+  instruction->has_mod_rm = false;
+  instruction->displacement_size = 0;
+  instruction->immediate_size = 0;
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
@@ -267,12 +279,18 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
   // ModR/M
+  //
+  // The REG field is kept in a local as well, because the immediate size below
+  // is computed whether or not the instruction carries a ModR/M byte, and
+  // mod_rm holds nothing meaningful where it does not.
+  uint8_t mod_rm_reg = 0;
   if (metadata->has_modrm) {
     uint8_t mod_rm_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
+    mod_rm_reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
     instruction->has_mod_rm = true;
     instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
-    instruction->mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
-    instruction->mod_rm.rm = mod_rm_byte & 0x07;          // Bits 0-2
+    instruction->mod_rm.reg = mod_rm_reg;
+    instruction->mod_rm.rm = mod_rm_byte & 0x07;  // Bits 0-2
 
     // Displacement
     const uint8_t displacement_size =
@@ -291,7 +309,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // of a far pointer - but nothing in the type says so, and a compiler that
   // cannot see it is right to warn about the writes below. Bounding it by the
   // array is what makes the invariant explicit.
-  uint8_t immediate_size = GetImmediateSize(metadata, instruction->mod_rm.reg);
+  uint8_t immediate_size = GetImmediateSize(metadata, mod_rm_reg);
   if (immediate_size > kMaxImmediateBytes) {
     immediate_size = kMaxImmediateBytes;
   }
