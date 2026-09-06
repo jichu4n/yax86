@@ -334,19 +334,31 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   A queued figure is a reason to try a change, not a number to expect.
 - **Switch on the width, but not on the operand address type.** The two look
   like the same dispatch and are not. `Width width : 1` is a one-bit bitfield,
-  so the compiler knows the value is 0 or 1, proves the `default` arm
-  unreachable and emits nothing for it - which is what makes the explicit
-  invalid return free, and lets these read like `ToOperandValue()` and
+  so there is no representable value outside the enum: the compiler proves the
+  `default` arm unreachable and emits nothing for it, which is what makes the
+  explicit invalid return free and lets these read like `ToOperandValue()` and
   `FromOperandValue()` rather than as bare ternaries. `OperandAddress.type` is
-  a plain `OperandAddressType` field, so it is int-sized and may hold anything
-  as far as the compiler can tell; a `switch` on it emits a live third branch
-  where an `if`/`else` emits two. Writing both as switches measured **1.19%
-  slower at `-Os`** and was the worst of the four arrangements built at every
-  level. `ReadOperandValue()` and `WriteOperandAddress()` therefore branch on
-  the type and switch on the width, and there is a comment at both saying so.
-- Widening the type field or giving it a `kNumOperandAddressTypes`-bounded
-  bitfield would make the type switch free too, and has not been tried. Until
-  it is, do not "tidy" the `if` into a `switch` for symmetry.
+  a whole `OperandAddressType`, and while `arm-none-eabi` defaults to
+  `-fshort-enums` and so gives it one byte, 254 of that byte's 256 values are
+  outside the enum and C does not promise a variable holds only named ones. So
+  a `switch` on it emits a live third branch where an `if`/`else` emits two.
+  Writing both as switches measured **1.19% slower at `-Os`** and was the worst
+  of the four arrangements built at every level. `ReadOperandValue()` and
+  `WriteOperandAddress()` therefore branch on the type and switch on the width,
+  and there is a comment at both saying so.
+- **The distinction is bitfield width, not enum size** - do not restate it as
+  the type being "int-sized", which it is not here. Narrowing `type` to a
+  one-bit bitfield would make its switch free too, and has not been tried.
+  Until it is, do not "tidy" the `if` into a `switch` for symmetry.
+- The corollary is a trap for the queued `OpcodeMetadata` change, which widens
+  `has_modrm`, `immediate_size` and `width` to whole bytes. **Widening `width`
+  is what makes the width switch stop being free**, because a byte has 254
+  values the enum does not name. Measured on top of these switches it is worth
+  only 0.21% at `-O3` where on top of the ternaries it was worth 1.30%, and
+  the combination is *slower* than ternaries with the same widening. Widening
+  the other two while leaving `width : 1` is the best `-O3` arrangement of the
+  five built, at 6.4808s. Re-measure that change here rather than carrying its
+  recorded figure across - it was measured against the ternary form.
 - `-Os` loses 1.00% against the ternary form that preceded the switches, and
   the cause is inlining rather than the `default` arm - marking all six
   wrappers `YAX86_ALWAYS_INLINE` recovers it, at 0.26% and 0.06% off `-O3` and

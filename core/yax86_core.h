@@ -2844,11 +2844,14 @@ ReadImmediateOperand(const Instruction* instruction, Width width) {
 // Read a value from an operand address.
 YAX86_PRIVATE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
-  // Not a switch, unlike the width dispatch below it. OperandAddressType is a
-  // plain enum field rather than a bitfield, so the compiler cannot prove a
-  // switch's default arm unreachable and emits a third branch for it. Width is
-  // a one-bit bitfield, where the same default costs nothing. Writing both as
-  // switches measured 1.19% slower at -Os.
+  // Not a switch, unlike the width dispatch it calls into. OperandAddressType
+  // is a plain enum field rather than a bitfield, so most of the values it can
+  // hold are ones the enum does not name, and the compiler cannot prove a
+  // switch's default arm unreachable - it emits a live third branch for it.
+  // Width is a one-bit bitfield, which has no unnamed value to represent, so
+  // the same default costs nothing. Writing both as switches measured 1.19%
+  // slower at -Os. Widening OpcodeMetadata.width to a byte would put the width
+  // switches in this same position; see AGENTS.md before doing that.
   const Width width = ctx->metadata->width;
   if (address->type == kOperandAddressTypeRegister) {
     return ReadRegisterOperandValue(ctx->cpu, address, width);
