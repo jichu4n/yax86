@@ -732,6 +732,15 @@ enum {
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,
 
+  // How many decoded instructions the CPU is given room to keep. 256 entries
+  // is 6KB, which is what the machine spends to skip the decode on roughly two
+  // thirds of the instructions it runs.
+  //
+  // Not the fastest size measured: 512 is 0.11% faster, 1024 is 0.04% slower
+  // and 128 is 0.83% slower. 0.11% does not buy another 6KB on a 256KB part,
+  // where what that memory is otherwise for is guest RAM.
+  kDecodeCacheEntries = 256,
+
   // The memory map is indexed by page so that a lookup is a load rather than a
   // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
   // index - small enough to keep in the platform state, and coarse enough that
@@ -1126,6 +1135,10 @@ typedef struct PlatformState {
   CPUConfig cpu_config;
   // CPU state.
   CPUState cpu;
+  // Storage for the CPU's decode cache. Owned here rather than in CPUState
+  // because Instruction is declared after it, and because how much a host
+  // wants to spend on this is the host's decision.
+  CPUDecodeCacheEntry cpu_decode_cache[kDecodeCacheEntries];
 
   // PIC runtime configuration.
   PICConfig pic_config;
@@ -1350,6 +1363,8 @@ static uint32_t PlatformCyclesUntilNextEvent(
 
 // Hand the CPU conventional memory to index directly, or take it away again.
 static void PlatformUpdateDirectDataWindow(PlatformState* platform);
+// Hand the CPU storage for its decode cache, or take it away again.
+static void PlatformUpdateDecodeCache(PlatformState* platform);
 
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
@@ -1440,6 +1455,10 @@ bool RegisterMemoryMapEntry(
   // The data window is derived from whichever entry covers address 0, which
   // this may have just become.
   PlatformUpdateDirectDataWindow(platform);
+  // A cached decode is of whatever used to be at those addresses. The page
+  // generations say nothing about it: nothing was written, what the bytes mean
+  // changed.
+  CPUInvalidateDecodeCache(&platform->cpu);
   return true;
 }
 
@@ -1571,6 +1590,11 @@ YAX86_HOT void WriteMemoryByte(
   if (platform->has_enabled_memory_watchpoints) {
     PlatformCheckMemoryWatchpoints(platform, address, true);
   }
+  // Everything that writes guest memory without going through the CPU arrives
+  // here - DMA, and a host writing through the public API - and each of those
+  // can land on bytes the CPU has already decoded. DMA is the one that
+  // matters: DOS loads itself over the boot sector that way.
+  CPUNotifyMemoryWrite(&platform->cpu, address);
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     if (entry->write_data) {
@@ -2044,6 +2068,9 @@ static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu.registers[kSS] = 0x0000;
   platform->cpu.registers[kES] = 0x0000;
   platform->cpu.registers[kSP] = 0xFFFE;
+
+  // After CPUInit(), which zeroes the CPU and would otherwise discard this.
+  PlatformUpdateDecodeCache(platform);
 }
 
 static void PlatformInitMemoryMap(PlatformState* platform) {
@@ -2577,6 +2604,19 @@ static void PlatformUpdateDirectDataWindow(PlatformState* platform) {
   CPUSetDirectDataWindow(&platform->cpu, entry->write_data, entry->end + 1);
 }
 
+static void PlatformUpdateDecodeCache(PlatformState* platform) {
+  // A hit runs an instruction without reading its bytes, so it cannot fire a
+  // read watchpoint on the code it is running. While any watchpoint is enabled
+  // the CPU is given no cache and decodes every instruction, which puts every
+  // one of those bytes back through ReadMemoryByte(), where the check is.
+  if (platform->has_enabled_memory_watchpoints) {
+    CPUSetDecodeCache(&platform->cpu, NULL, 0);
+    return;
+  }
+  CPUSetDecodeCache(
+      &platform->cpu, platform->cpu_decode_cache, kDecodeCacheEntries);
+}
+
 // Recompute the cached hot path early-out flags.
 static void PlatformUpdateEnabledFlags(PlatformState* platform) {
   platform->has_enabled_breakpoints = false;
@@ -2598,6 +2638,7 @@ static void PlatformUpdateEnabledFlags(PlatformState* platform) {
   // handing out new windows, and this discards whichever one is already open.
   CPUInvalidateInstructionFetchWindow(&platform->cpu);
   PlatformUpdateDirectDataWindow(platform);
+  PlatformUpdateDecodeCache(platform);
 }
 
 int8_t PlatformAddBreakpoint(
