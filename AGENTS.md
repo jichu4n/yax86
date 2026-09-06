@@ -1004,7 +1004,7 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.1.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at `0ffecbc`:
+SRAM, at #69:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
