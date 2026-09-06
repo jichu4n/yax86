@@ -794,6 +794,22 @@ typedef struct CPUConfig {
   // the CPU takes no external interrupts.
   bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
 
+  // Optional flag saying whether acknowledge_interrupt could possibly have
+  // anything to report. The CPU reads it at every instruction boundary with
+  // interrupts enabled, which is nearly all of them, and skips the
+  // acknowledge cycle entirely while it reads false.
+  //
+  // This points into the interrupt controller's own state rather than being a
+  // value the host hands over, so there is nothing to keep in step and nothing
+  // to invalidate - a change the controller makes is visible to the next
+  // instruction.
+  //
+  // The host may make it conservative: true where nothing turns out to be
+  // takeable costs only a call that reports nothing. It may never be falsely
+  // false, because the CPU takes it as permission not to ask at all. A host
+  // that cannot promise that leaves it NULL and is asked every time.
+  const bool* interrupt_request_hint;
+
   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
   // through the Interrupt Vector Table.
   InterruptHandlerResult (*handle_interrupt)(
@@ -7536,8 +7552,15 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   // An external request on the INTR pin is only taken while interrupts are
   // enabled. Acknowledging it is what produces its vector - there is nothing to
   // latch beforehand, and the controller keeps requesting until acknowledged.
+  //
+  // The hint is read first where the host supplies one. It is a load against an
+  // indirect call into a controller that almost always reports nothing, and
+  // this runs at every instruction boundary. A host that supplies none is
+  // asked every time.
+  const bool* const request_hint = cpu->config->interrupt_request_hint;
   uint8_t intr_vector;
-  if (CPUGetFlag(cpu, kIF) && cpu->config->acknowledge_interrupt &&
+  if (CPUGetFlag(cpu, kIF) && (request_hint == NULL || *request_hint) &&
+      cpu->config->acknowledge_interrupt &&
       cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
     DispatchInterrupt(cpu, intr_vector);
     return true;

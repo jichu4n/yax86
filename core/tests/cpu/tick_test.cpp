@@ -362,6 +362,77 @@ TEST_F(TickTest, AssertedINTRWaitsForInterruptsToBeEnabled) {
   EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
 }
 
+// ============================================================================
+// The interrupt request hint
+// ============================================================================
+
+// The hint exists so that the CPU can skip the acknowledge cycle it would
+// otherwise run at every instruction boundary with interrupts enabled. What
+// makes that safe is that it is only ever read as permission not to ask.
+TEST_F(TickTest, HintReadingTrueTakesTheInterrupt) {
+  auto helper = WithCode({kOpSti, kOpNop, kOpNop, kOpNop});
+  SetVector(helper.get(), 0x08, 0x0060, 0x0100);
+  helper->memory_[0x700] = kOpNop;
+
+  bool hint = true;
+  helper->cpu_.config->interrupt_request_hint = &hint;
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
+  RaiseINTR(0x08);
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
+
+  EXPECT_EQ(g_controller.acknowledge_count, 1);
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+}
+
+// A hint reading false is taken at its word: the acknowledge cycle does not
+// run at all, so a controller that lets it read false while it is requesting
+// stalls its own interrupt indefinitely. That is the whole cost of the
+// contract, and it is why a host that cannot guarantee the flag rises with
+// every request supplies none.
+TEST_F(TickTest, HintReadingFalseSuppressesTheAcknowledgeCycle) {
+  auto helper = WithCode({kOpSti, kOpNop, kOpNop, kOpNop});
+  SetVector(helper.get(), 0x08, 0x0060, 0x0100);
+  helper->memory_[0x700] = kOpNop;
+
+  bool hint = false;
+  helper->cpu_.config->interrupt_request_hint = &hint;
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
+  RaiseINTR(0x08);
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
+
+  EXPECT_EQ(g_controller.acknowledge_count, 0);
+  EXPECT_TRUE(g_controller.requesting);
+  EXPECT_NE(helper->cpu_.registers[kCS], 0x0060);
+
+  // Nothing is lost by the wait - the request is still there to be taken once
+  // the hint reports it, exactly as a real controller keeps driving INTR.
+  hint = true;
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+  EXPECT_EQ(g_controller.acknowledge_count, 1);
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+}
+
+// A host that supplies no hint is asked at every boundary, as one always was.
+// The mock configs throughout these tests leave it NULL, so this states what
+// the rest of the file depends on.
+TEST_F(TickTest, NoHintAsksTheControllerEveryTime) {
+  auto helper = WithCode({kOpSti, kOpNop, kOpNop});
+  SetVector(helper.get(), 0x08, 0x0060, 0x0100);
+  helper->memory_[0x700] = kOpNop;
+
+  ASSERT_EQ(helper->cpu_.config->interrupt_request_hint, nullptr);
+
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // STI
+  RaiseINTR(0x08);
+  ASSERT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);  // NOP
+
+  EXPECT_EQ(g_controller.acknowledge_count, 1);
+  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+}
+
 TEST_F(TickTest, AssertedINTRWakesHaltedCPU) {
   auto helper = WithCode({kOpSti, kOpHlt});
   SetVector(helper.get(), 0x08, 0x0060, 0x0100);

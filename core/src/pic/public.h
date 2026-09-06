@@ -119,6 +119,22 @@ typedef struct PICState {
   // masked.
   uint8_t imr;
 
+  // Whether any requested interrupt is unmasked - that is, whether irr & ~imr
+  // is non-zero. Recomputed by PICUpdateUnmaskedRequest(), which is the sole
+  // writer, wherever irr or imr changes.
+  //
+  // This exists so that a CPU can tell in a load whether asking for an
+  // interrupt could produce one. It asks on every instruction it runs with
+  // interrupts enabled, which is nearly all of them, and the answer is almost
+  // always no.
+  //
+  // It is deliberately conservative rather than exact: it ignores priority and
+  // the in-service register, so it can be true where PICGetPendingInterrupt()
+  // would still decline. That costs only a call that reports nothing. What it
+  // may never be is falsely false, because a reader takes it as permission not
+  // to ask at all.
+  bool has_unmasked_request;
+
   // The register to read on the next read from the data port.
   PICReadRegister read_register;
 
