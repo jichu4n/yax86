@@ -1348,6 +1348,9 @@ const PlatformStopInfo* PlatformGetStopInfo(const PlatformState* platform);
 static uint32_t PlatformCyclesUntilNextEvent(
     const PlatformState* platform, uint32_t max_cycles);
 
+// Hand the CPU conventional memory to index directly, or take it away again.
+static void PlatformUpdateDirectDataWindow(PlatformState* platform);
+
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
   // nothing is scheduled still comes back regularly.
@@ -1434,6 +1437,9 @@ bool RegisterMemoryMapEntry(
   // An open fetch window points into whichever region used to own those
   // addresses, so it must not outlive a change to the map.
   CPUInvalidateInstructionFetchWindow(&platform->cpu);
+  // The data window is derived from whichever entry covers address 0, which
+  // this may have just become.
+  PlatformUpdateDirectDataWindow(platform);
   return true;
 }
 
@@ -2543,6 +2549,29 @@ PlatformRun(PlatformState* platform, uint32_t max_cycles) {
 // Breakpoints and watchpoints
 // ============================================================================
 
+static void PlatformUpdateDirectDataWindow(PlatformState* platform) {
+  CPUInvalidateDirectDataWindow(&platform->cpu);
+  // An access through the window is a load or a store, so it cannot fire a
+  // watchpoint. While any is enabled the CPU is given nothing and every access
+  // goes through ReadMemoryByte() and WriteMemoryByte(), where the check is.
+  if (platform->has_enabled_memory_watchpoints) {
+    return;
+  }
+  // The window is a prefix of the address space, so it is whichever region
+  // covers address 0 and only while that region is plain storage reached
+  // through one buffer in both directions. Conventional memory is that region;
+  // a read-only region, or one with a callback in either direction, is not,
+  // and is left to the memory map.
+  const MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, 0);
+  if (entry == NULL || entry->start != 0 || entry->read_data == NULL ||
+      entry->write_data != entry->read_data) {
+    return;
+  }
+  // A map entry's end is the last address in the region; a window's is one
+  // past it.
+  CPUSetDirectDataWindow(&platform->cpu, entry->write_data, entry->end + 1);
+}
+
 // Recompute the cached hot path early-out flags.
 static void PlatformUpdateEnabledFlags(PlatformState* platform) {
   platform->has_enabled_breakpoints = false;
@@ -2563,6 +2592,7 @@ static void PlatformUpdateEnabledFlags(PlatformState* platform) {
   // cannot fire a watchpoint. Turning watchpoints on stops the platform
   // handing out new windows, and this discards whichever one is already open.
   CPUInvalidateInstructionFetchWindow(&platform->cpu);
+  PlatformUpdateDirectDataWindow(platform);
 }
 
 int8_t PlatformAddBreakpoint(
