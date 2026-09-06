@@ -1887,19 +1887,6 @@ ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   return WordValue(word_value);
 }
 
-// The four functions above, and the read, write and immediate variants further
-// down, used to be selected through tables of function pointers indexed by
-// OperandAddressType and Width. Every operand of every instruction went through
-// one, and an indirect call is a pair of loads and a branch the compiler cannot
-// see through - on a Cortex-M0+, which has no branch predictor and no
-// speculation, it also cannot be overlapped with anything. Selecting with an
-// explicit test on a one-bit width instead lets the compiler inline both sides,
-// and each of these is a handful of instructions once inlined.
-//
-// Taking their addresses was not free either. A function whose address is
-// stored in a table has to exist out of line whether or not anything reaches it
-// that way, so the table kept eight copies alive that are now inlined away.
-
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
