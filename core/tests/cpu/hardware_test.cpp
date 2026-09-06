@@ -384,6 +384,10 @@ bool IsQuotientSignDivergence(
 // Runs one test, returning an empty string on success or a description of the
 // first mismatch. Mismatches that are a known divergence are counted in
 // *num_divergences and are not treated as failures.
+// Small, because it is zeroed on every one of three million tests and no test
+// can fill more than one entry of it.
+constexpr uint32_t kHardwareTestDecodeCacheEntries = 4;
+
 std::string RunMooTest(
     const MooTest& test, uint16_t flags_mask, unsigned divergences,
     int* num_divergences) {
@@ -393,6 +397,14 @@ std::string RunMooTest(
   config.read_memory_byte = ReadMemoryByte;
   config.write_memory_byte = WriteMemoryByte;
   config.get_instruction_fetch_window = GetInstructionFetchWindow;
+  // A decode cache, for the same reason the window below is supplied: a
+  // capability the host provides is unreachable here unless this suite
+  // provides it. Each test runs one instruction from a cold CPU, so nothing
+  // here can be a hit - what three million encodings check is the fill. The
+  // hit is covered by decode_cache_test.cpp and by the dos-boot invariant.
+  CPUDecodeCacheEntry decode_cache[kHardwareTestDecodeCacheEntries] = {};
+  config.decode_cache = decode_cache;
+  config.decode_cache_num_entries = kHardwareTestDecodeCacheEntries;
   CPUState cpu;
   CPUInit(&cpu, &config);
   // Hands the CPU the whole of memory to read and write by indexing, for the
