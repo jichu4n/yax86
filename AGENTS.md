@@ -303,12 +303,12 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
 #### core/src/cpu - operand dispatch
 
-- Which operand handler runs is decided by an explicit test on the width rather
-  than by indexing a table of function pointers. There used to be four -
+- Which operand handler runs is decided by a `switch` on the width rather than
+  by indexing a table of function pointers. There used to be four -
   `kReadOperandValueFn` and `kWriteOperandFn` indexed by `OperandAddressType`
   and `Width`, `kGetRegisterAddressFn` and `kReadImmediateValueFn` by `Width`
   alone - and every operand of every instruction went through at least one.
-  Worth **2.23% at `-O3`**, 1.47% at `-O2` and 0.34% at `-Os`, measured at
+  Worth **3.20% at `-O3`**, 1.89% at `-O2` and −0.66% at `-Os`, measured at
   400MHz on `dos-boot`.
 - An indirect call is two loads and a branch the compiler cannot see through,
   and on a Cortex-M0+ there is no predictor and no speculation to overlap it
@@ -332,9 +332,32 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   two invariants old with the direct data window already under it, which makes
   the memory handlers cheaper and the dispatch a larger share of what is left.
   A queued figure is a reason to try a change, not a number to expect.
-- The `-Os` result is the small one, and consistently so: at that level the
-  compiler declines to inline the branch arms anyway, so what is saved is the
-  indirect call and not the call.
+- **Switch on the width, but not on the operand address type.** The two look
+  like the same dispatch and are not. `Width width : 1` is a one-bit bitfield,
+  so the compiler knows the value is 0 or 1, proves the `default` arm
+  unreachable and emits nothing for it - which is what makes the explicit
+  invalid return free, and lets these read like `ToOperandValue()` and
+  `FromOperandValue()` rather than as bare ternaries. `OperandAddress.type` is
+  a plain `OperandAddressType` field, so it is int-sized and may hold anything
+  as far as the compiler can tell; a `switch` on it emits a live third branch
+  where an `if`/`else` emits two. Writing both as switches measured **1.19%
+  slower at `-Os`** and was the worst of the four arrangements built at every
+  level. `ReadOperandValue()` and `WriteOperandAddress()` therefore branch on
+  the type and switch on the width, and there is a comment at both saying so.
+- Widening the type field or giving it a `kNumOperandAddressTypes`-bounded
+  bitfield would make the type switch free too, and has not been tried. Until
+  it is, do not "tidy" the `if` into a `switch` for symmetry.
+- `-Os` loses 1.00% against the ternary form that preceded the switches, and
+  the cause is inlining rather than the `default` arm - marking all six
+  wrappers `YAX86_ALWAYS_INLINE` recovers it, at 0.26% and 0.06% off `-O3` and
+  `-O2`. The marks are not taken: `-O3` is what this target is measured at, and
+  `-Os` is already the slowest level here by a wide margin and the one
+  `YAX86_HOT` hurts.
+- `ReadImmediateOperand()` is the one wrapper the compiler still emits out of
+  line, and it lands in flash. `YAX86_HOT` moves it to SRAM and is worth 0.11%
+  at `-O3`, but costs 0.35% at `-O2` by moving other inlining decisions, so it
+  is left unmarked. Both halves were measured; see the hot path placement
+  section for why the second one has to be.
 
 #### core/src/util - hot path placement
 
@@ -753,7 +776,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 6.579 seconds, or 4.21 emulated MHz and 0.35 MIPS -
+- At 400MHz, `-O3` takes 6.514 seconds, or 4.25 emulated MHz and 0.36 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. Note that the
   harness truncates both to two decimals when it prints them. **Do not raise the clock past 400MHz.** That is a standing instruction,
   not a technical limit.
