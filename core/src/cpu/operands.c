@@ -469,12 +469,18 @@ YAX86_PRIVATE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
   // Not a switch, unlike the width dispatch it calls into. OperandAddressType
   // is a plain enum field rather than a bitfield, so most of the values it can
-  // hold are ones the enum does not name, and the compiler cannot prove a
-  // switch's default arm unreachable - it emits a live third branch for it.
-  // Width is a one-bit bitfield, which has no unnamed value to represent, so
-  // the same default costs nothing. Writing both as switches measured 1.19%
-  // slower at -Os. Widening OpcodeMetadata.width to a byte would put the width
-  // switches in this same position; see AGENTS.md before doing that.
+  // hold are ones the enum does not name and the compiler cannot prove a
+  // switch's default arm unreachable: the memory path, which is the common
+  // one, ends up paying an extra compare and branch for a case that cannot
+  // happen. Width is a one-bit bitfield, which has no unnamed value to
+  // represent, so there the default arm disappears from the output entirely.
+  // Switching this one too costs 1.06% at -O3.
+  //
+  // Narrowing type to a one-bit bitfield to make the switch free was measured
+  // and is worse still - GetRegisterOrMemoryOperandAddress() writes this field
+  // for every operand, and a write to a bitfield is a read-modify-write.
+  // Widening OpcodeMetadata.width to a byte would likewise put the width
+  // switches in this same position; see AGENTS.md before doing either.
   const Width width = ctx->metadata->width;
   if (address->type == kOperandAddressTypeRegister) {
     return ReadRegisterOperandValue(ctx->cpu, address, width);

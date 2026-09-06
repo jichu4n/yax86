@@ -342,14 +342,24 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   `-fshort-enums` and so gives it one byte, 254 of that byte's 256 values are
   outside the enum and C does not promise a variable holds only named ones. So
   a `switch` on it emits a live third branch where an `if`/`else` emits two.
-  Writing both as switches measured **1.19% slower at `-Os`** and was the worst
-  of the four arrangements built at every level. `ReadOperandValue()` and
-  `WriteOperandAddress()` therefore branch on the type and switch on the width,
-  and there is a comment at both saying so.
+  Concretely, on the *memory* path - the common one - the switch pays an extra
+  `cmp`/`bne` plus the constant load for the default, where the one-bit `Width`
+  switch compiles to a single `lsls`/`bmi` bit test with the default arm absent
+  from the output entirely. Switching the type as well costs **1.06% at `-O3`**,
+  0.70% at `-O2` and 0.19% at `-Os`, holding the width dispatch fixed.
+  `ReadOperandValue()` and `WriteOperandAddress()` therefore branch on the type
+  and switch on the width, and there is a comment at both saying so.
 - **The distinction is bitfield width, not enum size** - do not restate it as
-  the type being "int-sized", which it is not here. Narrowing `type` to a
-  one-bit bitfield would make its switch free too, and has not been tried.
-  Until it is, do not "tidy" the `if` into a `switch` for symmetry.
+  the type being "int-sized", which it is not here.
+- Narrowing `type` to `OperandAddressType type : 1` does make its switch free,
+  and still does not pay: **0.22% worse at `-O3`** and 0.10% at `-O2`, for a
+  larger core. The read is only half the story - `GetRegisterOrMemoryOperandAddress()`
+  *writes* `address.type` for every operand, and a write to a bitfield is a
+  read-modify-write, which is the same thing #66 found when it unpacked
+  `Instruction`. Cheapening a dispatch that runs once per operand does not pay
+  for a store that also runs once per operand. So do not "tidy" the `if` into a
+  `switch` for symmetry, and do not narrow the field to enable it either; both
+  were built and measured.
 - The corollary is a trap for the queued `OpcodeMetadata` change, which widens
   `has_modrm`, `immediate_size` and `width` to whole bytes. **Widening `width`
   is what makes the width switch stop being free**, because a byte has 254
