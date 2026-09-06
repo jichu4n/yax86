@@ -71,8 +71,7 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
-  OperandValue src_offset_value =
-      kReadImmediateValueFn[kWord](ctx->instruction);
+  OperandValue src_offset_value = ReadImmediateOperandWord(ctx->instruction);
   // The source is DS:offset by default, but can be overridden by a segment
   // override prefix.
   OperandAddress src_address = {
@@ -95,8 +94,7 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
-  OperandValue dest_offset_value =
-      kReadImmediateValueFn[kWord](ctx->instruction);
+  OperandValue dest_offset_value = ReadImmediateOperandWord(ctx->instruction);
   // The destination is DS:offset by default, but can be overridden by a segment
   // override prefix.
   OperandAddress dest_address = {

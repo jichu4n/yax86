@@ -2157,22 +2157,6 @@ extern OperandValue ReadImmediateOperandByte(const Instruction* instruction);
 // Read a 16-bit immediate value.
 extern OperandValue ReadImmediateOperandWord(const Instruction* instruction);
 
-// Table of GetRegisterAddress functions, indexed by Width.
-extern RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
-    CPUState* cpu, uint8_t reg_or_rm);
-
-// Table of Read* functions, indexed by OperandAddressType and Width.
-extern OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
-    CPUState* cpu, const OperandAddress* address);
-
-// Table of Write* functions, indexed by OperandAddressType and Width.
-extern void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
-    CPUState* cpu, const OperandAddress* address, OperandValue value);
-
-// Table of ReadImmediate* functions, indexed by Width.
-extern OperandValue (*const kReadImmediateValueFn[kNumWidths])(
-    const Instruction* instruction);
-
 // Read a value from an operand address.
 extern OperandValue ReadOperandValue(
     const InstructionContext* ctx, const OperandAddress* address);
@@ -2526,6 +2510,19 @@ ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
       (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value);
 }
 
+// Read a memory operand of the given width to an OperandValue.
+YAX86_PRIVATE OperandValue ReadMemoryOperandValue(
+    CPUState* cpu, const OperandAddress* address, Width width) {
+  switch (width) {
+    case kByte:
+      return ReadMemoryOperandByte(cpu, address);
+    case kWord:
+      return ReadMemoryOperandWord(cpu, address);
+  }
+  // Should never reach here, but return a default value to avoid warnings.
+  return ByteValue(0xFF);
+}
+
 // Read a byte from a register to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
@@ -2543,15 +2540,18 @@ ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   return WordValue(word_value);
 }
 
-// Table of Read* functions, indexed by OperandAddressType and Width.
-YAX86_PRIVATE
-OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
-    CPUState* cpu, const OperandAddress* address) = {
-    // kOperandTypeRegister
-    {ReadRegisterOperandByte, ReadRegisterOperandWord},
-    // kOperandTypeMemory
-    {ReadMemoryOperandByte, ReadMemoryOperandWord},
-};
+// Read a register operand of the given width to an OperandValue.
+YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
+    CPUState* cpu, const OperandAddress* address, Width width) {
+  switch (width) {
+    case kByte:
+      return ReadRegisterOperandByte(cpu, address);
+    case kWord:
+      return ReadRegisterOperandWord(cpu, address);
+  }
+  // Should never reach here, but return a default value to avoid warnings.
+  return ByteValue(0xFF);
+}
 
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
@@ -2584,6 +2584,21 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandWord(
       (value.value.word_value >> 8) & 0xFF);
 }
 
+// Write a memory operand of the given width.
+YAX86_PRIVATE void WriteMemoryOperand(
+    CPUState* cpu, const OperandAddress* address, OperandValue value,
+    Width width) {
+  switch (width) {
+    case kByte:
+      WriteMemoryOperandByte(cpu, address, value);
+      return;
+    case kWord:
+      WriteMemoryOperandWord(cpu, address, value);
+      return;
+  }
+  // Should never reach here. Writing nothing is the safe default.
+}
+
 // Write a byte to a register.
 YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
@@ -2603,15 +2618,20 @@ YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandWord(
   cpu->registers[register_address->register_index] = value.value.word_value;
 }
 
-// Table of Write* functions, indexed by OperandAddressType and Width.
-YAX86_PRIVATE void (*const kWriteOperandFn[kNumOperandAddressTypes]
-                                          [kNumWidths])(
-    CPUState* cpu, const OperandAddress* address, OperandValue value) = {
-    // kOperandTypeRegister
-    {WriteRegisterOperandByte, WriteRegisterOperandWord},
-    // kOperandTypeMemory
-    {WriteMemoryOperandByte, WriteMemoryOperandWord},
-};
+// Write a register operand of the given width.
+YAX86_PRIVATE void WriteRegisterOperand(
+    CPUState* cpu, const OperandAddress* address, OperandValue value,
+    Width width) {
+  switch (width) {
+    case kByte:
+      WriteRegisterOperandByte(cpu, address, value);
+      return;
+    case kWord:
+      WriteRegisterOperandWord(cpu, address, value);
+      return;
+  }
+  // Should never reach here. Writing nothing is the safe default.
+}
 
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
 YAX86_PRIVATE uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
@@ -2659,12 +2679,21 @@ GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   return address;
 }
 
-// Table of GetRegisterAddress functions, indexed by Width.
-YAX86_PRIVATE RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
-    CPUState* cpu, uint8_t reg_or_rm) = {
-  GetRegisterAddressByte,  // kByte
-  GetRegisterAddressWord   // kWord
-};
+// Get the register operand of the given width from the ModR/M byte's reg or
+// R/M field.
+YAX86_PRIVATE RegisterAddress
+GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
+  switch (width) {
+    case kByte:
+      return GetRegisterAddressByte(cpu, reg_or_rm);
+    case kWord:
+      return GetRegisterAddressWord(cpu, reg_or_rm);
+  }
+  // Should never reach here. AL is in range for both widths, so a caller that
+  // somehow got here names a real register rather than running off the array.
+  const RegisterAddress fallback = {.register_index = kAX, .byte_offset = 0};
+  return fallback;
+}
 
 // Apply segment override prefixes to a MemoryAddress.
 YAX86_PRIVATE void ApplySegmentOverride(
@@ -2776,7 +2805,7 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
     // Register operand
     address.type = kOperandAddressTypeRegister;
     address.value.register_address =
-        kGetRegisterAddressFn[ctx->metadata->width](cpu, rm);
+        GetRegisterAddress(cpu, rm, ctx->metadata->width);
   } else {
     // Memory operand
     address.type = kOperandAddressTypeMemory;
@@ -2799,18 +2828,41 @@ ReadImmediateOperandWord(const Instruction* instruction) {
       (((uint16_t)instruction->immediate[1]) << 8));
 }
 
-// Table of ReadImmediate* functions, indexed by Width.
-YAX86_PRIVATE OperandValue (*const kReadImmediateValueFn[kNumWidths])(
-    const Instruction* instruction) = {
-  ReadImmediateOperandByte,  // kByte
-  ReadImmediateOperandWord   // kWord
-};
+// Read an immediate value of the given width.
+YAX86_PRIVATE OperandValue
+ReadImmediateOperand(const Instruction* instruction, Width width) {
+  switch (width) {
+    case kByte:
+      return ReadImmediateOperandByte(instruction);
+    case kWord:
+      return ReadImmediateOperandWord(instruction);
+  }
+  // Should never reach here, but return a default value to avoid warnings.
+  return ByteValue(0xFF);
+}
 
 // Read a value from an operand address.
 YAX86_PRIVATE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
-  return kReadOperandValueFn[address->type][ctx->metadata->width](
-      ctx->cpu, address);
+  // Not a switch, unlike the width dispatch it calls into. OperandAddressType
+  // is a plain enum field rather than a bitfield, so most of the values it can
+  // hold are ones the enum does not name and the compiler cannot prove a
+  // switch's default arm unreachable: the memory path, which is the common
+  // one, ends up paying an extra compare and branch for a case that cannot
+  // happen. Width is a one-bit bitfield, which has no unnamed value to
+  // represent, so there the default arm disappears from the output entirely.
+  // Switching this one too costs 1.06% at -O3.
+  //
+  // Narrowing type to a one-bit bitfield to make the switch free was measured
+  // and is worse still - GetRegisterOrMemoryOperandAddress() writes this field
+  // for every operand, and a write to a bitfield is a read-modify-write.
+  // Widening OpcodeMetadata.width to a byte would likewise put the width
+  // switches in this same position; see AGENTS.md before doing either.
+  const Width width = ctx->metadata->width;
+  if (address->type == kOperandAddressTypeRegister) {
+    return ReadRegisterOperandValue(ctx->cpu, address, width);
+  }
+  return ReadMemoryOperandValue(ctx->cpu, address, width);
 }
 
 // Get a register or memory operand for an instruction based on the ModR/M
@@ -2832,7 +2884,7 @@ YAX86_HOT YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
           .type = kOperandAddressTypeRegister,
           .value = {
               .register_address =
-                  kGetRegisterAddressFn[width](ctx->cpu, register_index),
+                  GetRegisterAddress(ctx->cpu, register_index, width),
           }}};
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
@@ -2862,9 +2914,14 @@ ReadSegmentRegisterOperand(const InstructionContext* ctx) {
 YAX86_HOT YAX86_PRIVATE void WriteOperandAddress(
     const InstructionContext* ctx, const OperandAddress* address,
     uint32_t raw_value) {
-  Width width = ctx->metadata->width;
-  kWriteOperandFn[address->type][width](
-      ctx->cpu, address, ToOperandValue(width, raw_value));
+  const Width width = ctx->metadata->width;
+  const OperandValue value = ToOperandValue(width, raw_value);
+  // See ReadOperandValue() for why this one is not a switch.
+  if (address->type == kOperandAddressTypeRegister) {
+    WriteRegisterOperand(ctx->cpu, address, value, width);
+  } else {
+    WriteMemoryOperand(ctx->cpu, address, value, width);
+  }
 }
 
 // Write a value to a register or memory operand.
@@ -2875,8 +2932,7 @@ YAX86_PRIVATE void WriteOperand(
 
 // Read an immediate value from the instruction.
 YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
-  Width width = ctx->metadata->width;
-  return kReadImmediateValueFn[width](ctx->instruction);
+  return ReadImmediateOperand(ctx->instruction, ctx->metadata->width);
 }
 
 
@@ -3565,8 +3621,7 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
-  OperandValue src_offset_value =
-      kReadImmediateValueFn[kWord](ctx->instruction);
+  OperandValue src_offset_value = ReadImmediateOperandWord(ctx->instruction);
   // The source is DS:offset by default, but can be overridden by a segment
   // override prefix.
   OperandAddress src_address = {
@@ -3589,8 +3644,7 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
-  OperandValue dest_offset_value =
-      kReadImmediateValueFn[kWord](ctx->instruction);
+  OperandValue dest_offset_value = ReadImmediateOperandWord(ctx->instruction);
   // The destination is DS:offset by default, but can be overridden by a segment
   // override prefix.
   OperandAddress dest_address = {

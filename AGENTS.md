@@ -301,6 +301,86 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - Worth 1.84% at `-O3` and 4.58% at `-O2`, measured at 400MHz on `dos-boot`.
   The gap is the `CPUTick()`/`PlatformTick()` marks, which are inert at `-O3`.
 
+#### core/src/cpu - operand dispatch
+
+- Which operand handler runs is decided by a `switch` on the width rather than
+  by indexing a table of function pointers. There used to be four -
+  `kReadOperandValueFn` and `kWriteOperandFn` indexed by `OperandAddressType`
+  and `Width`, `kGetRegisterAddressFn` and `kReadImmediateValueFn` by `Width`
+  alone - and every operand of every instruction went through at least one.
+  Worth **3.20% at `-O3`**, 1.89% at `-O2` and −0.66% at `-Os`, measured at
+  400MHz on `dos-boot`.
+- An indirect call is two loads and a branch the compiler cannot see through,
+  and on a Cortex-M0+ there is no predictor and no speculation to overlap it
+  with. The functions behind it are a handful of instructions each, so the
+  dispatch cost more than the work.
+- **The larger half of the win is the second-order one.** A function whose
+  address is stored in a table has to exist out of line whether or not anything
+  reaches it that way, so the tables kept all eight leaf handlers alive as real
+  calls. With the tables gone, seven of the eight vanish from the image
+  entirely - only `ReadMemoryOperandWord()` is still emitted - and the core is
+  **1,208 bytes smaller at `-O3`**, against 48 bytes of table. This is the
+  second change in the campaign to win on both speed and size at once; see the
+  bitfield entry under instruction decoding for the first.
+- Deleting the tables outright was possible only because the one apparent
+  external caller was not really indexing. Two sites in `instructions_mov.c`
+  read a 16-bit offset with `kReadImmediateValueFn[kWord]` - a constant index,
+  which is a direct call to `ReadImmediateOperandWord()` written the long way.
+  Check for that before concluding a dispatch table has callers that need it.
+- The prototype this came from kept the tables and recorded 4.34%. Half of that
+  gap is the tables themselves, and the rest is that it was measured on a base
+  two invariants old with the direct data window already under it, which makes
+  the memory handlers cheaper and the dispatch a larger share of what is left.
+  A queued figure is a reason to try a change, not a number to expect.
+- **Switch on the width, but not on the operand address type.** The two look
+  like the same dispatch and are not. `Width width : 1` is a one-bit bitfield,
+  so there is no representable value outside the enum: the compiler proves the
+  `default` arm unreachable and emits nothing for it, which is what makes the
+  explicit invalid return free and lets these read like `ToOperandValue()` and
+  `FromOperandValue()` rather than as bare ternaries. `OperandAddress.type` is
+  a whole `OperandAddressType`, and while `arm-none-eabi` defaults to
+  `-fshort-enums` and so gives it one byte, 254 of that byte's 256 values are
+  outside the enum and C does not promise a variable holds only named ones. So
+  a `switch` on it emits a live third branch where an `if`/`else` emits two.
+  Concretely, on the *memory* path - the common one - the switch pays an extra
+  `cmp`/`bne` plus the constant load for the default, where the one-bit `Width`
+  switch compiles to a single `lsls`/`bmi` bit test with the default arm absent
+  from the output entirely. Switching the type as well costs **1.06% at `-O3`**,
+  0.70% at `-O2` and 0.19% at `-Os`, holding the width dispatch fixed.
+  `ReadOperandValue()` and `WriteOperandAddress()` therefore branch on the type
+  and switch on the width, and there is a comment at both saying so.
+- **The distinction is bitfield width, not enum size** - do not restate it as
+  the type being "int-sized", which it is not here.
+- Narrowing `type` to `OperandAddressType type : 1` does make its switch free,
+  and still does not pay: **0.22% worse at `-O3`** and 0.10% at `-O2`, for a
+  larger core. The read is only half the story - `GetRegisterOrMemoryOperandAddress()`
+  *writes* `address.type` for every operand, and a write to a bitfield is a
+  read-modify-write, which is the same thing #66 found when it unpacked
+  `Instruction`. Cheapening a dispatch that runs once per operand does not pay
+  for a store that also runs once per operand. So do not "tidy" the `if` into a
+  `switch` for symmetry, and do not narrow the field to enable it either; both
+  were built and measured.
+- The corollary is a trap for the queued `OpcodeMetadata` change, which widens
+  `has_modrm`, `immediate_size` and `width` to whole bytes. **Widening `width`
+  is what makes the width switch stop being free**, because a byte has 254
+  values the enum does not name. Measured on top of these switches it is worth
+  only 0.21% at `-O3` where on top of the ternaries it was worth 1.30%, and
+  the combination is *slower* than ternaries with the same widening. Widening
+  the other two while leaving `width : 1` is the best `-O3` arrangement of the
+  five built, at 6.4808s. Re-measure that change here rather than carrying its
+  recorded figure across - it was measured against the ternary form.
+- `-Os` loses 1.00% against the ternary form that preceded the switches, and
+  the cause is inlining rather than the `default` arm - marking all six
+  wrappers `YAX86_ALWAYS_INLINE` recovers it, at 0.26% and 0.06% off `-O3` and
+  `-O2`. The marks are not taken: `-O3` is what this target is measured at, and
+  `-Os` is already the slowest level here by a wide margin and the one
+  `YAX86_HOT` hurts.
+- `ReadImmediateOperand()` is the one wrapper the compiler still emits out of
+  line, and it lands in flash. `YAX86_HOT` moves it to SRAM and is worth 0.11%
+  at `-O3`, but costs 0.35% at `-O2` by moving other inlining decisions, so it
+  is left unmarked. Both halves were measured; see the hot path placement
+  section for why the second one has to be.
+
 #### core/src/util - hot path placement
 
 - `YAX86_HOT` marks a function as being on the per-instruction hot path. It is
@@ -718,7 +798,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 6.729 seconds, or 4.12 emulated MHz and 0.346 MIPS -
+- At 400MHz, `-O3` takes 6.514 seconds, or 4.25 emulated MHz and 0.36 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. Note that the
   harness truncates both to two decimals when it prints them. **Do not raise the clock past 400MHz.** That is a standing instruction,
   not a technical limit.
