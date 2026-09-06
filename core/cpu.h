@@ -878,6 +878,20 @@ typedef struct CPUDirectDataWindow {
   uint32_t end;
 } CPUDirectDataWindow;
 
+enum {
+  // Granularity at which a write to guest memory discards decoded
+  // instructions: 4KB pages over the 8086's 1MB, which is 256 counters. It is
+  // the coarsest page that still separates the code a program is running from
+  // the data it is writing, and a finer one would only cost more memory.
+  kCodePageShift = 12,
+  kCodePageSize = 1 << kCodePageShift,
+  kCodePageOffsetMask = kCodePageSize - 1,
+  kNumCodePages = 0x100000 >> kCodePageShift,
+};
+
+// Storage for one cached decode. Defined below, where Instruction is.
+struct CPUDecodeCacheEntry;
+
 // State of the emulated CPU.
 typedef struct CPUState {
   // Pointer to caller-provided runtime configuration
@@ -939,6 +953,27 @@ typedef struct CPUState {
   // is no locality for a per-access callback to exploit and the host sets it
   // once instead.
   CPUDirectDataWindow direct_data_window;
+
+  // How many times each 4KB page of the address space has been written, as a
+  // wrapping byte. A cached decode records the count its page stood at when it
+  // was taken and is discarded once the two disagree, which is what makes
+  // caching safe against code that writes over itself or is loaded over an
+  // earlier program.
+  //
+  // Maintained whether or not a decode cache exists. A write cannot cheaply
+  // tell whether anything is holding a decode of the page it lands on, and the
+  // test to find out would cost about what the counter does.
+  uint8_t code_page_generation[kNumCodePages];
+
+  // Decoded instructions, keyed by the linear address they start at, as handed
+  // over by CPUSetDecodeCache(). NULL where the host supplies none, in which
+  // case every instruction is decoded.
+  struct CPUDecodeCacheEntry* decode_cache;
+  // One less than the number of entries, so that an address becomes an index
+  // with a mask rather than a remainder. That is why the count has to be a
+  // power of two: a remainder by a runtime value is a division, which this
+  // target has no instruction for.
+  uint32_t decode_cache_index_mask;
 } CPUState;
 
 // Initialize CPU state.
@@ -1035,6 +1070,37 @@ static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.end = 0;
 }
 
+// Discards every cached decode.
+//
+// A host calls this when it changes what an address means rather than what is
+// stored at it - remapping memory is the case that matters. An ordinary write
+// needs no call: CPUNotifyMemoryWrite() covers those, and the CPU makes that
+// call for itself for every write it makes.
+void CPUInvalidateDecodeCache(CPUState* cpu);
+
+// Tells the CPU that the byte at a linear address has been written, so that
+// any decode taken from that page stops being used.
+//
+// The CPU calls this for every write it makes itself. What a host has to
+// report is a write it makes some other way - by DMA, or through the memory
+// map from outside a tick - because a decode cached from those bytes is
+// otherwise indistinguishable from a current one.
+//
+// The counter is a byte, so it comes back round every 256 writes to a page. At
+// that point a decode taken exactly 256 writes ago would look current again,
+// and the whole cache goes instead.
+//
+// The address is masked to the 8086's 20 bits rather than range checked. Every
+// address the CPU produces is already within them, but this is public, and an
+// address above the space aliasing onto a page costs a spurious invalidation
+// where indexing past the array would corrupt whatever follows it.
+static inline void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
+  const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
+  if (++cpu->code_page_generation[page] == 0) {
+    CPUInvalidateDecodeCache(cpu);
+  }
+}
+
 // ============================================================================
 // Instructions
 // ============================================================================
@@ -1108,9 +1174,10 @@ typedef struct ModRM {
 // undocumented 0xF1 alias are consumed but not recorded at all, because
 // nothing acts on them: the bus is not shared on a PC/XT.
 //
-// This struct is zero-initialized on every instruction fetch, so its size is
-// worth watching. Its flag bitfields total 6 bits; a ninth would cost a whole
-// byte and take it from 12 to 13, which is measurable.
+// No field here is a bitfield, for the reason given at ModRM above. That puts
+// the struct at 16 bytes, which is what a decode cache entry is sized around -
+// so the size is worth watching again, though for how many decodes fit in a
+// given amount of memory rather than for what a fetch costs.
 typedef struct Instruction {
   // The segment register selected by a segment override prefix, as a
   // RegisterIndex, or kNoSegmentOverride if the instruction carries none. A
@@ -1151,6 +1218,38 @@ typedef struct Instruction {
   // Total length of the original encoded instruction in bytes.
   uint8_t size;
 } Instruction;
+
+// One cached decode.
+//
+// A hit is used in place - the executor is handed a pointer to the instruction
+// inside the entry and nothing is copied. That is the whole of why caching
+// pays: copying the struct out costs about what decoding a two or three byte
+// instruction from an open fetch window costs, which is most of what a hit
+// would otherwise save. Nothing an instruction handler does writes through the
+// Instruction it was given, so lending out the entry is safe.
+typedef struct CPUDecodeCacheEntry {
+  // The decode itself.
+  Instruction instruction;
+  // The linear address the instruction starts at, which is the key.
+  uint32_t address;
+  // What CPUState.code_page_generation said for this instruction's page when
+  // the decode was taken. A hit requires it to still say the same.
+  uint8_t generation;
+  // Whether this entry holds a decode at all.
+  bool valid;
+} CPUDecodeCacheEntry;
+
+// Hands the CPU storage for its decode cache. Optional - a host that supplies
+// none has every instruction decoded, which is what happened before there was
+// a cache.
+//
+// num_entries must be a power of two, and the storage must outlive the CPU.
+// Anything else leaves the CPU with no cache.
+//
+// The entries need no initialization: CPUInit() zeroes the CPU, and an entry
+// is only ever read after its own fields say it holds something.
+void CPUSetDecodeCache(
+    CPUState* cpu, CPUDecodeCacheEntry* entries, uint32_t num_entries);
 
 // ============================================================================
 // Execution
@@ -1996,6 +2095,12 @@ YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
+  // Reported before the write rather than after, so that nothing between the
+  // two could read the page and cache a decode of what is about to change.
+  // Every write the CPU makes comes through here - operands, stack pushes and
+  // the interrupt vector alike - which is what lets a host report only the
+  // writes it makes some other way.
+  CPUNotifyMemoryWrite(cpu, address);
   if (address < cpu->direct_data_window.end) {
     cpu->direct_data_window.data[address] = value;
     return;
@@ -7441,6 +7546,92 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   return kFetchSuccess;
 }
 
+void CPUSetDecodeCache(
+    CPUState* cpu, CPUDecodeCacheEntry* entries, uint32_t num_entries) {
+  // A power of two is what makes an index a mask rather than a division, and
+  // the mask is the only form the count is kept in.
+  if (entries == NULL || num_entries == 0 ||
+      (num_entries & (num_entries - 1)) != 0) {
+    cpu->decode_cache = NULL;
+    cpu->decode_cache_index_mask = 0;
+    return;
+  }
+  cpu->decode_cache = entries;
+  cpu->decode_cache_index_mask = num_entries - 1;
+}
+
+void CPUInvalidateDecodeCache(CPUState* cpu) {
+  if (cpu->decode_cache == NULL) {
+    return;
+  }
+  for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
+    cpu->decode_cache[i].valid = false;
+  }
+}
+
+// Fetches the next instruction, from the decode cache where it is there.
+//
+// What comes back through instruction is a pointer to the instruction to run,
+// which on a hit is the cache entry itself and on a miss is scratch. Nothing
+// is ever copied: a miss decodes straight into the entry it is going to
+// occupy, so the decode writes the instruction exactly once whichever way the
+// lookup went.
+//
+// A caller must not hold the pointer across another fetch. CPUTick() runs the
+// instruction and is done with it, which is the only use.
+YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+    CPUState* cpu, Instruction* scratch, Instruction** instruction) {
+  CPUDecodeCacheEntry* const cache = cpu->decode_cache;
+  if (cache == NULL) {
+    *instruction = scratch;
+    return CPUFetchNextInstruction(cpu, scratch);
+  }
+
+  const uint16_t ip = cpu->registers[kIP];
+  const MemoryAddress start = {
+      .segment_register_index = kCS,
+      .offset = ip,
+  };
+  const uint32_t address = ToRawAddress(cpu, &start);
+  const uint8_t generation =
+      cpu->code_page_generation[address >> kCodePageShift];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
+
+  if (entry->valid && entry->address == address &&
+      entry->generation == generation) {
+    *instruction = &entry->instruction;
+    return kFetchSuccess;
+  }
+
+  // A decode that fails partway leaves the entry holding whatever it got to,
+  // so the entry stops claiming to hold anything before the decode starts
+  // rather than after it succeeds.
+  entry->valid = false;
+  const CPUFetchNextInstructionStatus status =
+      CPUFetchNextInstruction(cpu, &entry->instruction);
+  *instruction = &entry->instruction;
+  if (status != kFetchSuccess) {
+    return status;
+  }
+
+  // Kept only when the whole instruction came from the one page the generation
+  // above was read for, and only when it did not run off the end of the
+  // segment. Either way the bytes past the boundary are somewhere the key says
+  // nothing about, and both are rare enough not to be worth a second check on
+  // every hit. Staying inside the page is also what rules out an instruction
+  // wrapping the top of the address space, since the page it starts in is then
+  // the page it ends in.
+  const uint32_t size = entry->instruction.size;
+  if ((address & kCodePageOffsetMask) + size <= kCodePageSize &&
+      (uint32_t)ip + size <= kSegmentSize) {
+    entry->address = address;
+    entry->generation = generation;
+    entry->valid = true;
+  }
+  return kFetchSuccess;
+}
+
 // ============================================================================
 // Execution
 // ============================================================================
@@ -7591,35 +7782,39 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
     // Step 1: Fetch the next instruction, and increment IP.
-    Instruction instruction;
+    //
+    // The local is only where a decode lands when there is no cache to decode
+    // into. What runs is whatever the fetch points at.
+    Instruction scratch;
+    Instruction* instruction;
     uint16_t instruction_cs = cpu->registers[kCS];
     uint16_t instruction_ip = cpu->registers[kIP];
     CPUFetchNextInstructionStatus fetch_status =
-        CPUFetchNextInstruction(cpu, &instruction);
+        CPUFetchNextInstructionCached(cpu, &scratch, &instruction);
     if (fetch_status != kFetchSuccess) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
           instruction_cs, instruction_ip, (int)fetch_status);
       return kCPUTickInvalid;
     }
-    cpu->registers[kIP] += instruction.size;
+    cpu->registers[kIP] += instruction->size;
 
     // The cost of the instruction is its base cost plus the address it had to
     // compute, and then whatever it charges itself as it runs - its traffic on
     // the data bus, and any part of its cost that depends on its operands.
     CPUAddCycles(
-        cpu, kOpcodeBaseCycles[instruction.opcode] +
-                 GetEffectiveAddressCycles(&instruction));
+        cpu, kOpcodeBaseCycles[instruction->opcode] +
+                 GetEffectiveAddressCycles(instruction));
 
     // Step 2: Execute the instruction. The fetch above derived has_mod_rm and
     // immediate_size from this same table entry, so the checks
     // CPUExecuteInstruction() makes cannot fail here.
-    const OpcodeMetadata* const metadata = &opcode_table[instruction.opcode];
-    if (CPUExecuteDecodedInstruction(cpu, &instruction, metadata) !=
+    const OpcodeMetadata* const metadata = &opcode_table[instruction->opcode];
+    if (CPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
         kInstructionExecuted) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
-          instruction_cs, instruction_ip, instruction.opcode);
+          instruction_cs, instruction_ip, instruction->opcode);
       return kCPUTickInvalid;
     }
     executed_instruction = true;

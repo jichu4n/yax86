@@ -384,6 +384,10 @@ bool IsQuotientSignDivergence(
 // Runs one test, returning an empty string on success or a description of the
 // first mismatch. Mismatches that are a known divergence are counted in
 // *num_divergences and are not treated as failures.
+// Small, because it is zeroed on every one of the suite's three million tests
+// and no test can fill more than one entry of it.
+constexpr uint32_t kHardwareTestDecodeCacheEntries = 4;
+
 std::string RunMooTest(
     const MooTest& test, uint16_t flags_mask, unsigned divergences,
     int* num_divergences) {
@@ -402,6 +406,15 @@ std::string RunMooTest(
   // The path taken when a host supplies no window is what the mock configs in
   // cpu_test.cpp use.
   CPUSetDirectDataWindow(&cpu, g_memory, kMemorySize);
+  // And a decode cache, for the same reason. Each test runs one instruction
+  // from a cold CPU, so nothing here can ever be a hit - what these three
+  // million encodings check is the fill: that decoding into the entry produces
+  // the same instruction as decoding into a local did, and that the guards on
+  // what may be kept do not reject or admit the wrong encodings. The hit is
+  // covered by decode_cache_test.cpp, and by the dos-boot invariant on
+  // hardware, where most instructions are hits.
+  CPUDecodeCacheEntry decode_cache[kHardwareTestDecodeCacheEntries] = {};
+  CPUSetDecodeCache(&cpu, decode_cache, kHardwareTestDecodeCacheEntries);
 
   // The expected end state is the starting state with the recorded changes
   // applied, so that a register or byte the instruction should not have

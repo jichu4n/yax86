@@ -423,6 +423,92 @@ Alongside the table, state:
   the part can produce, about three million times. The path taken when a host
   supplies no window is what the mock configs in `cpu_test.cpp` exercise.
 
+### cpu — the decode cache
+
+- `CPUState.decode_cache` keeps decoded instructions, keyed by the linear
+  address they start at, so that an instruction the guest runs more than once
+  is decoded once. Most guest code is a loop, and decoding was a fifth of the
+  emulator's time: worth **12.86% at `-O3`** and 10.32% at `-O2`, the largest
+  single win in the campaign. `-O3` runs `dos-boot` in less time than a real
+  4.77MHz 8088 takes.
+- **A hit is used in place.** The executor is handed `&entry->instruction` and
+  nothing is copied. That is not a detail — copying the 16-byte struct out
+  costs about what decoding a two or three byte instruction from an open fetch
+  window costs, which is most of what the hit saves. Both were built: copying
+  measures **3.25% slower at `-O3`** and 1.43% at `-O2`, and an earlier attempt
+  that copied was recorded at +1.4% overall against this one's +12.86%. Lending
+  the entry out is safe because no instruction handler writes through the
+  `Instruction` it is given.
+- A miss decodes straight into the entry it is going to occupy, so a decode
+  writes the instruction exactly once whichever way the lookup went. The
+  `Instruction` local in `CPUTick()` is only where a decode lands for a host
+  that supplies no cache at all.
+- **The storage is the host's.** `Instruction` is declared after `CPUState` in
+  `public.h`, so the state can hold only a pointer — but the better reason is
+  that a compile-time array would put the size of `CPUState` behind a macro,
+  and a single-header library whose struct layout depends on a define is a
+  mismatch waiting to happen between `libyax86_core.a` and whatever includes
+  the header.
+- The count must be a power of two, because the index is a mask. A remainder by
+  a runtime value is a division, which this target has no instruction for.
+  `CPUSetDecodeCache()` takes no cache at all rather than half-honouring a count
+  it cannot index safely.
+- The platform spends **256 entries, 6KB**, which is not the fastest
+  arrangement measured. 512 is 0.11% faster for another 6KB, 1024 is 0.04%
+  slower, and 128 is 0.83% slower. 0.11% does not buy 6KB on this part: at 256
+  the image leaves room for the 192KB guest RAM option, which 512 would make
+  very tight.
+- **`code_page_generation` is the whole invalidation mechanism.** One wrapping
+  byte per 4KB page; an entry records what its page stood at and is discarded
+  once the two disagree. The CPU bumps it for every write it makes itself, in
+  `WriteRawMemoryByte()`, which is where operands, stack pushes and interrupt
+  vector writes all end up — so a host only has to report the writes it makes
+  some *other* way. The platform reports those from `WriteMemoryByte()`, which
+  is the path DMA takes. Without that call DOS loads itself over the boot
+  sector unseen, which the first prototype did: 13,247,281 instructions retired
+  instead of 2,328,015.
+- The counter coming back round is the case that has no honest local answer. At
+  256 writes to a page a decode taken exactly that long ago looks current
+  again, so the wrap discards the whole cache instead. It costs a 256-iteration
+  loop about 2,100 times over the run, which is nothing.
+- **What is not kept is as load-bearing as what is.** An instruction whose later
+  bytes are on the next page, or which ran off the end of the segment, is keyed
+  on a page that says nothing about those bytes, so it is not cached at all.
+  Staying inside the page is also what rules out an instruction wrapping the
+  top of the address space.
+- A decode that fails partway has already written the prefix fields into the
+  entry, so the entry stops claiming to hold anything *before* the decode
+  starts rather than after it succeeds. Otherwise it goes on offering the
+  address it used to hold alongside the wreckage of a different instruction —
+  and the address tag would not catch it, because the address is the field the
+  failed decode leaves alone.
+- **A hit runs an instruction without reading its bytes**, so it would hide a
+  read watchpoint on the code being run. The platform takes the cache away for
+  as long as any watchpoint is enabled, in `PlatformUpdateEnabledFlags()`,
+  exactly as it does the two direct windows. Handing it back needs no flush:
+  the generations were maintained throughout.
+- `RegisterMemoryMapEntry()` discards every decode rather than relying on the
+  generations, because nothing was *written* — what changed is which region
+  owns the address, which no counter can express.
+- **The 8088 hardware suite supplies a cache**, for the same reason it supplies
+  the two windows. Each of its tests runs one instruction from a cold CPU, so
+  nothing there can be a hit: what three million encodings check is the fill —
+  that decoding into an entry produces what decoding into a local did, and that
+  the guards on what may be kept admit and reject the right ones. The hit is
+  covered by `core/tests/cpu/decode_cache_test.cpp` and by the `dos-boot`
+  invariant, where most instructions are hits and any staleness moves it
+  loudly.
+- Those tests carry the weight, and it is worth knowing how much. Of eight
+  deliberate breakages, **six are caught by the two new files and by nothing
+  else** — the CPU failing to report its own writes, the platform failing to
+  report DMA's, no flush on a generation wrap, no watchpoint gating, no flush
+  on a registration, and an entry left valid after a failed decode. Only
+  dropping the address tag is caught broadly, by six platform tests as well.
+- `WriteRawMemoryByte()` is out of line in flash at both levels and now carries
+  the generation bump. `YAX86_HOT` on it is **0.71% worse at `-O3`** and 0.68%
+  better at `-O2`, so it is left unmarked: same shape as
+  `ReadImmediateOperand()`, and `-O3` is the level that decides.
+
 ### cpu — the direct data window
 
 - Operand, stack and interrupt-vector accesses read and write guest memory by
@@ -837,7 +923,7 @@ Alongside the table, state:
   explicitly defines it to whatever placement attribute it needs. The Pico
   harness defines it to `__not_in_flash()`, which puts the function in SRAM
   instead of executing it from QSPI flash through a 16KB XIP cache.
-- **85 functions carry it, chosen from an on-target profile rather than by
+- **86 functions carry it, chosen from an on-target profile rather than by
   intuition.** On the Pico it is worth **1.59x at 400MHz** and 1.23x at 125MHz.
   The win is larger when overclocked because the flash SPI clock does not scale
   with the core, so an XIP miss costs more core cycles the faster the core runs.
@@ -866,9 +952,9 @@ Alongside the table, state:
   through by construction. If the count in the bundle ever drops, something is
   wrong with the bundler:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 162
+  grep -c YAX86_HOT core/yax86_core.h    # 163
   ```
-  That is 85 annotations plus the macro block in `util/common.h`, whose seven
+  That is 86 annotations plus the macro block in `util/common.h`, whose seven
   lines all match on the substring, once per each of the 11 module bundles.
 - `YAX86_ALWAYS_INLINE` is not about placement, but exists for the same reason:
   something the compiler was doing for free stops being free and nothing in the
@@ -1066,17 +1152,18 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.1.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #71:
+SRAM, at #72:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **5.951044** | **4.655** | **0.391** | **97.6%** | 473,500 | 175,904 | 87,241 |
-| `-O2` | 6.546819 | 4.231 | 0.356 | 88.7% | 458,924 | 168,752 | 73,293 |
+| `-O3` | **5.273042** | **5.253** | **0.441** | **110.1%** | 473,964 | 182,392 | 88,121 |
+| `-O2` | 5.934064 | 4.668 | 0.392 | 97.9% | 459,628 | 175,416 | 74,073 |
 
-- A real 4.77MHz 8088 runs this in 5.807 seconds. **The seconds go out of date
-  with every optimization** — this table is a snapshot to sanity-check a fresh
-  measurement against, not a baseline to compare a branch to. Build the
-  baseline from its own commit, as above.
+- A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
+  configuration to emulate the part faster than the part ran. **The seconds go
+  out of date with every optimization** — this table is a snapshot to
+  sanity-check a fresh measurement against, not a baseline to compare a branch
+  to. Build the baseline from its own commit, as above.
 - `-Os` is not reported and nothing ships at it, though `build.sh` still
   accepts it. It is the slowest level here by a wide margin and the one
   `YAX86_HOT` hurts.

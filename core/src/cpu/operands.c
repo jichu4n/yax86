@@ -185,6 +185,12 @@ YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
+  // Reported before the write rather than after, so that nothing between the
+  // two could read the page and cache a decode of what is about to change.
+  // Every write the CPU makes comes through here - operands, stack pushes and
+  // the interrupt vector alike - which is what lets a host report only the
+  // writes it makes some other way.
+  CPUNotifyMemoryWrite(cpu, address);
   if (address < cpu->direct_data_window.end) {
     cpu->direct_data_window.data[address] = value;
     return;

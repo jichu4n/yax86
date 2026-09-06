@@ -324,6 +324,92 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   return kFetchSuccess;
 }
 
+void CPUSetDecodeCache(
+    CPUState* cpu, CPUDecodeCacheEntry* entries, uint32_t num_entries) {
+  // A power of two is what makes an index a mask rather than a division, and
+  // the mask is the only form the count is kept in.
+  if (entries == NULL || num_entries == 0 ||
+      (num_entries & (num_entries - 1)) != 0) {
+    cpu->decode_cache = NULL;
+    cpu->decode_cache_index_mask = 0;
+    return;
+  }
+  cpu->decode_cache = entries;
+  cpu->decode_cache_index_mask = num_entries - 1;
+}
+
+void CPUInvalidateDecodeCache(CPUState* cpu) {
+  if (cpu->decode_cache == NULL) {
+    return;
+  }
+  for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
+    cpu->decode_cache[i].valid = false;
+  }
+}
+
+// Fetches the next instruction, from the decode cache where it is there.
+//
+// What comes back through instruction is a pointer to the instruction to run,
+// which on a hit is the cache entry itself and on a miss is scratch. Nothing
+// is ever copied: a miss decodes straight into the entry it is going to
+// occupy, so the decode writes the instruction exactly once whichever way the
+// lookup went.
+//
+// A caller must not hold the pointer across another fetch. CPUTick() runs the
+// instruction and is done with it, which is the only use.
+YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+    CPUState* cpu, Instruction* scratch, Instruction** instruction) {
+  CPUDecodeCacheEntry* const cache = cpu->decode_cache;
+  if (cache == NULL) {
+    *instruction = scratch;
+    return CPUFetchNextInstruction(cpu, scratch);
+  }
+
+  const uint16_t ip = cpu->registers[kIP];
+  const MemoryAddress start = {
+      .segment_register_index = kCS,
+      .offset = ip,
+  };
+  const uint32_t address = ToRawAddress(cpu, &start);
+  const uint8_t generation =
+      cpu->code_page_generation[address >> kCodePageShift];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
+
+  if (entry->valid && entry->address == address &&
+      entry->generation == generation) {
+    *instruction = &entry->instruction;
+    return kFetchSuccess;
+  }
+
+  // A decode that fails partway leaves the entry holding whatever it got to,
+  // so the entry stops claiming to hold anything before the decode starts
+  // rather than after it succeeds.
+  entry->valid = false;
+  const CPUFetchNextInstructionStatus status =
+      CPUFetchNextInstruction(cpu, &entry->instruction);
+  *instruction = &entry->instruction;
+  if (status != kFetchSuccess) {
+    return status;
+  }
+
+  // Kept only when the whole instruction came from the one page the generation
+  // above was read for, and only when it did not run off the end of the
+  // segment. Either way the bytes past the boundary are somewhere the key says
+  // nothing about, and both are rare enough not to be worth a second check on
+  // every hit. Staying inside the page is also what rules out an instruction
+  // wrapping the top of the address space, since the page it starts in is then
+  // the page it ends in.
+  const uint32_t size = entry->instruction.size;
+  if ((address & kCodePageOffsetMask) + size <= kCodePageSize &&
+      (uint32_t)ip + size <= kSegmentSize) {
+    entry->address = address;
+    entry->generation = generation;
+    entry->valid = true;
+  }
+  return kFetchSuccess;
+}
+
 // ============================================================================
 // Execution
 // ============================================================================
@@ -474,35 +560,39 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
     // Step 1: Fetch the next instruction, and increment IP.
-    Instruction instruction;
+    //
+    // The local is only where a decode lands when there is no cache to decode
+    // into. What runs is whatever the fetch points at.
+    Instruction scratch;
+    Instruction* instruction;
     uint16_t instruction_cs = cpu->registers[kCS];
     uint16_t instruction_ip = cpu->registers[kIP];
     CPUFetchNextInstructionStatus fetch_status =
-        CPUFetchNextInstruction(cpu, &instruction);
+        CPUFetchNextInstructionCached(cpu, &scratch, &instruction);
     if (fetch_status != kFetchSuccess) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
           instruction_cs, instruction_ip, (int)fetch_status);
       return kCPUTickInvalid;
     }
-    cpu->registers[kIP] += instruction.size;
+    cpu->registers[kIP] += instruction->size;
 
     // The cost of the instruction is its base cost plus the address it had to
     // compute, and then whatever it charges itself as it runs - its traffic on
     // the data bus, and any part of its cost that depends on its operands.
     CPUAddCycles(
-        cpu, kOpcodeBaseCycles[instruction.opcode] +
-                 GetEffectiveAddressCycles(&instruction));
+        cpu, kOpcodeBaseCycles[instruction->opcode] +
+                 GetEffectiveAddressCycles(instruction));
 
     // Step 2: Execute the instruction. The fetch above derived has_mod_rm and
     // immediate_size from this same table entry, so the checks
     // CPUExecuteInstruction() makes cannot fail here.
-    const OpcodeMetadata* const metadata = &opcode_table[instruction.opcode];
-    if (CPUExecuteDecodedInstruction(cpu, &instruction, metadata) !=
+    const OpcodeMetadata* const metadata = &opcode_table[instruction->opcode];
+    if (CPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
         kInstructionExecuted) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
-          instruction_cs, instruction_ip, instruction.opcode);
+          instruction_cs, instruction_ip, instruction->opcode);
       return kCPUTickInvalid;
     }
     executed_instruction = true;
