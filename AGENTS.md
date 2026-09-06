@@ -107,9 +107,11 @@ rather than a larger number in the output. Fixing a divergence means bringing
 the expected count down, which the failure message says.
 
 CI downloads the data and runs the suite on every leg of the build matrix.
-Both compilers and both optimization levels are worth covering: undefined
+Both compilers and both build types — `Debug` for the warnings-as-errors flags
+it carries, `Release` for what actually ships — are worth covering: undefined
 behavior in the emulator tends to show up as a difference from the hardware
-under one of them and not the others.
+under one of them and not the others. `MinSizeRel` is not built, for the same
+reason `-Os` is not benchmarked: nothing ships at it.
 
 ### Debugging the WASM build
 
