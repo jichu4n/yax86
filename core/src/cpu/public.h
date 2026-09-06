@@ -259,8 +259,8 @@ typedef struct CPUInstructionFetchWindow {
   uint32_t end;
 } CPUInstructionFetchWindow;
 
-// Guest memory the CPU may read and write by indexing, covering linear
-// addresses [0, size).
+// Guest memory the CPU may read and write by indexing, covering the half-open
+// range of linear addresses [0, end), with data pointing at the byte at 0.
 //
 // This is not the same thing as the whole of guest RAM. It is the part of the
 // address space that is plain host storage reachable with a bounds check and
@@ -268,12 +268,16 @@ typedef struct CPUInstructionFetchWindow {
 // it behind a bus, or reached through a driver - hands over the part that is
 // and serves the rest through the callbacks.
 //
-// size is 0 exactly when data is NULL, which is what lets the hot path decide
-// with one unsigned compare instead of a compare and a null check.
+// There is no start to go with end because the window always begins at 0,
+// which is where guest RAM begins. That is what makes the bounds test a single
+// unsigned compare.
+//
+// end is 0 exactly when data is NULL, which is what lets that compare stand
+// alone rather than needing a null check beside it.
 // CPUSetDirectDataWindow() is what keeps the two in step.
 typedef struct CPUDirectDataWindow {
   uint8_t* data;
-  uint32_t size;
+  uint32_t end;
 } CPUDirectDataWindow;
 
 // State of the emulated CPU.
@@ -403,11 +407,11 @@ static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
   cpu->instruction_fetch_window.data = NULL;
 }
 
-// Hands the CPU guest memory it may read and write by indexing, covering
-// linear addresses [0, size). Optional - a host that supplies none has every
-// access go through CPUConfig.read_memory_byte and
-// CPUConfig.write_memory_byte, which is also what happens for every address
-// at or above size.
+// Hands the CPU guest memory it may read and write by indexing, covering the
+// half-open range of linear addresses [0, end). Optional - a host that
+// supplies none has every access go through CPUConfig.read_memory_byte and
+// CPUConfig.write_memory_byte, which is also what happens for every address at
+// or above end.
 //
 // The window must be plain storage whose reads and writes are the caller's
 // buffer and nothing else. A host must not hand over a region where a read has
@@ -421,16 +425,16 @@ static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
 static inline void CPUSetDirectDataWindow(
-    CPUState* cpu, uint8_t* data, uint32_t size) {
+    CPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
-  cpu->direct_data_window.size = data ? size : 0;
+  cpu->direct_data_window.end = data ? end : 0;
 }
 
 // Discards the direct data window, so that every access goes back through
 // CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
 static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
-  cpu->direct_data_window.size = 0;
+  cpu->direct_data_window.end = 0;
 }
 
 // ============================================================================

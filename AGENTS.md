@@ -439,20 +439,26 @@ Alongside the table, state:
   it; data accesses are scattered, so there is no locality for a per-access
   callback to exploit and the host calls `CPUSetDirectDataWindow()` once
   instead.
-- **`size` is how much guest memory is directly indexable, not how much guest
+- **`end` is how far guest memory is directly indexable, not how much guest
   memory there is.** The two coincide today because conventional memory is one
   host buffer, and they need not: a host whose memory is not all directly
   addressable — part of it behind a bus, or reached through a driver — hands
   over the part that is and serves the rest through the callbacks and the
   memory map, which already expresses a callback-backed region. Do not
   reintroduce the assumption that the window is all of RAM.
-- The window is a prefix of the address space starting at 0, so the hot path is
-  one unsigned compare. A `start`/`end` pair like the fetch window's would cost
-  a second one and buy nothing while guest RAM is based at zero.
-- `size` is 0 exactly when `data` is NULL, which is what lets that compare
-  stand alone rather than being a compare plus a null check.
+- `end` is exclusive, as the fetch window's is — the two are the same kind of
+  thing and are spelled the same way. A `MemoryMapEntry`'s `end` is the *last*
+  address in its region rather than one past it, which is why the platform
+  converts with a `+ 1` where it derives one from the other.
+- The window carries no `start` to go with `end`, because it always begins at
+  0, which is where guest RAM begins. That is what makes the bounds test a
+  single unsigned compare; a pair would cost a second one and buy nothing.
+- `end` is 0 exactly when `data` is NULL, which is what lets that compare stand
+  alone rather than being a compare plus a null check.
   `CPUSetDirectDataWindow()` is what keeps the two in step, so set the window
-  through it rather than assigning the fields.
+  through it rather than assigning the fields. An inclusive `end` could not
+  express an empty window at all — it would need to be below zero — so this is
+  load-bearing rather than a matter of taste.
 - The platform derives the window from whichever memory map entry covers
   address 0, and only while that entry is plain storage whose `read_data` and
   `write_data` are the same buffer. Video memory reads from a buffer but writes

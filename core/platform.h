@@ -2567,6 +2567,8 @@ static void PlatformUpdateDirectDataWindow(PlatformState* platform) {
       entry->write_data != entry->read_data) {
     return;
   }
+  // A map entry's end is the last address in the region; a window's is one
+  // past it.
   CPUSetDirectDataWindow(&platform->cpu, entry->write_data, entry->end + 1);
 }
 

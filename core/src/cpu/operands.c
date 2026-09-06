@@ -101,7 +101,7 @@ YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   // Guest RAM, where nearly every operand lands, is reached by indexing. The
   // call below ends up indexing an array too, having gone through a function
   // pointer, the host's context and a memory map lookup to arrive at it.
-  if (raw_address < cpu->direct_data_window.size) {
+  if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
   return cpu->config->read_memory_byte
@@ -185,7 +185,7 @@ YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
-  if (address < cpu->direct_data_window.size) {
+  if (address < cpu->direct_data_window.end) {
     cpu->direct_data_window.data[address] = value;
     return;
   }

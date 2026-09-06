@@ -77,7 +77,7 @@ class PlatformDirectDataWindowTest : public ::testing::Test {
 
 TEST_F(PlatformDirectDataWindowTest, OpensAWindowOverConventionalMemory) {
   EXPECT_EQ(platform_.cpu.direct_data_window.data, ram_);
-  EXPECT_EQ(platform_.cpu.direct_data_window.size, sizeof(ram_));
+  EXPECT_EQ(platform_.cpu.direct_data_window.end, sizeof(ram_));
 }
 
 TEST_F(PlatformDirectDataWindowTest, OperandReadsAndWritesGoThroughTheWindow) {
@@ -143,7 +143,7 @@ TEST_F(PlatformDirectDataWindowTest, WatchpointOnAnOperandWriteStillFires) {
           /*on_write=*/true),
       0);
   EXPECT_EQ(platform_.cpu.direct_data_window.data, nullptr);
-  EXPECT_EQ(platform_.cpu.direct_data_window.size, 0u);
+  EXPECT_EQ(platform_.cpu.direct_data_window.end, 0u);
 
   EXPECT_EQ(RunInstructions(3), kPlatformStopped);
   const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
@@ -181,7 +181,7 @@ TEST_F(PlatformDirectDataWindowTest, ClearingWatchpointsHandsTheWindowBack) {
 
   PlatformClearMemoryWatchpoints(&platform_);
   EXPECT_EQ(platform_.cpu.direct_data_window.data, ram_);
-  EXPECT_EQ(platform_.cpu.direct_data_window.size, sizeof(ram_));
+  EXPECT_EQ(platform_.cpu.direct_data_window.end, sizeof(ram_));
 }
 
 // Registering a region recomputes the window rather than discarding it, so a
@@ -198,7 +198,7 @@ TEST_F(
   ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &entry));
 
   EXPECT_EQ(platform_.cpu.direct_data_window.data, ram_);
-  EXPECT_EQ(platform_.cpu.direct_data_window.size, sizeof(ram_));
+  EXPECT_EQ(platform_.cpu.direct_data_window.end, sizeof(ram_));
 }
 
 }  // namespace

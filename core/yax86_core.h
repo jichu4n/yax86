@@ -1481,8 +1481,8 @@ typedef struct CPUInstructionFetchWindow {
   uint32_t end;
 } CPUInstructionFetchWindow;
 
-// Guest memory the CPU may read and write by indexing, covering linear
-// addresses [0, size).
+// Guest memory the CPU may read and write by indexing, covering the half-open
+// range of linear addresses [0, end), with data pointing at the byte at 0.
 //
 // This is not the same thing as the whole of guest RAM. It is the part of the
 // address space that is plain host storage reachable with a bounds check and
@@ -1490,12 +1490,16 @@ typedef struct CPUInstructionFetchWindow {
 // it behind a bus, or reached through a driver - hands over the part that is
 // and serves the rest through the callbacks.
 //
-// size is 0 exactly when data is NULL, which is what lets the hot path decide
-// with one unsigned compare instead of a compare and a null check.
+// There is no start to go with end because the window always begins at 0,
+// which is where guest RAM begins. That is what makes the bounds test a single
+// unsigned compare.
+//
+// end is 0 exactly when data is NULL, which is what lets that compare stand
+// alone rather than needing a null check beside it.
 // CPUSetDirectDataWindow() is what keeps the two in step.
 typedef struct CPUDirectDataWindow {
   uint8_t* data;
-  uint32_t size;
+  uint32_t end;
 } CPUDirectDataWindow;
 
 // State of the emulated CPU.
@@ -1625,11 +1629,11 @@ static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
   cpu->instruction_fetch_window.data = NULL;
 }
 
-// Hands the CPU guest memory it may read and write by indexing, covering
-// linear addresses [0, size). Optional - a host that supplies none has every
-// access go through CPUConfig.read_memory_byte and
-// CPUConfig.write_memory_byte, which is also what happens for every address
-// at or above size.
+// Hands the CPU guest memory it may read and write by indexing, covering the
+// half-open range of linear addresses [0, end). Optional - a host that
+// supplies none has every access go through CPUConfig.read_memory_byte and
+// CPUConfig.write_memory_byte, which is also what happens for every address at
+// or above end.
 //
 // The window must be plain storage whose reads and writes are the caller's
 // buffer and nothing else. A host must not hand over a region where a read has
@@ -1643,16 +1647,16 @@ static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
 static inline void CPUSetDirectDataWindow(
-    CPUState* cpu, uint8_t* data, uint32_t size) {
+    CPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
-  cpu->direct_data_window.size = data ? size : 0;
+  cpu->direct_data_window.end = data ? end : 0;
 }
 
 // Discards the direct data window, so that every access goes back through
 // CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
 static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
-  cpu->direct_data_window.size = 0;
+  cpu->direct_data_window.end = 0;
 }
 
 // ============================================================================
@@ -2532,7 +2536,7 @@ YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   // Guest RAM, where nearly every operand lands, is reached by indexing. The
   // call below ends up indexing an array too, having gone through a function
   // pointer, the host's context and a memory map lookup to arrive at it.
-  if (raw_address < cpu->direct_data_window.size) {
+  if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
   return cpu->config->read_memory_byte
@@ -2616,7 +2620,7 @@ YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
-  if (address < cpu->direct_data_window.size) {
+  if (address < cpu->direct_data_window.end) {
     cpu->direct_data_window.data[address] = value;
     return;
   }
@@ -19454,6 +19458,8 @@ static void PlatformUpdateDirectDataWindow(PlatformState* platform) {
       entry->write_data != entry->read_data) {
     return;
   }
+  // A map entry's end is the last address in the region; a window's is one
+  // past it.
   CPUSetDirectDataWindow(&platform->cpu, entry->write_data, entry->end + 1);
 }
 
