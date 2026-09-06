@@ -426,13 +426,19 @@ enum {
 };
 
 // The Mod R/M byte.
+// The fields are stored a byte each rather than packed back into the bit
+// positions they were decoded from. Every read of one would otherwise be a
+// load, a shift and a mask, and mod and rm are read on the hottest path in the
+// emulator - GetMemoryOperandAddress() takes them for every memory operand and
+// GetEffectiveAddressCycles() for every instruction - while reg selects the
+// handler for all five instruction groups.
 typedef struct ModRM {
-  // Mod field - bits 6 and 7
-  uint8_t mod : 2;
-  // REG field - bits 3 to 5
-  uint8_t reg : 3;
-  // R/M field - bits 0 to 2
-  uint8_t rm : 3;
+  // Mod field - bits 6 and 7 of the ModR/M byte.
+  uint8_t mod;
+  // REG field - bits 3 to 5 of the ModR/M byte.
+  uint8_t reg;
+  // R/M field - bits 0 to 2 of the ModR/M byte.
+  uint8_t rm;
 } ModRM;
 
 // An encoded instruction.
@@ -477,11 +483,14 @@ typedef struct Instruction {
   // Flags
 
   // Flag indicating if a ModR/M byte is part of this instruction.
-  bool has_mod_rm : 1;
-  // Number of displacement bytes present: 0, 1, or 2.
-  uint8_t displacement_size : 2;
-  // Number of immediate data bytes present: 0, 1, 2, or 4.
-  uint8_t immediate_size : 3;
+  bool has_mod_rm;
+  // Number of displacement bytes present: 0, 1, or 2. A whole byte can express
+  // more than displacement[] holds, so a consumer bounds itself by the array
+  // rather than trusting this - see the fetch, which clamps its own writes.
+  uint8_t displacement_size;
+  // Number of immediate data bytes present: 0, 1, 2, or 4. Same caveat as
+  // displacement_size.
+  uint8_t immediate_size;
 
   // Total length of the original encoded instruction in bytes.
   uint8_t size;
