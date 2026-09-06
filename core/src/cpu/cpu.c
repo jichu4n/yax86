@@ -295,12 +295,10 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
           CPUFetchNextInstructionByte(cpu, &fetch_state);
     }
   } else {
-    // Cleared in the arm that skips them rather than before the decode starts.
-    // has_mod_rm and displacement_size share a byte with immediate_size and
-    // two bits of padding, so reaching either is a read-modify-write of the
-    // whole byte - but writing them together lets one serve for both, in
-    // whichever arm runs. Clearing them up front is a read-modify-write every
-    // instruction pays, on top of the one the ModR/M arm pays to set them.
+    // Cleared in the arm that skips them rather than before the decode starts,
+    // so that a decode writes each of them exactly once whichever arm it
+    // takes. Clearing them up front costs the ModR/M arm a second write of
+    // both.
     instruction->has_mod_rm = false;
     instruction->displacement_size = 0;
   }
