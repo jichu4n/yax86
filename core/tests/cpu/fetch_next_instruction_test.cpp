@@ -217,6 +217,68 @@ TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
       kFetchPrefixTooLong);
 }
 
+// A decode writes the fields it needs rather than zeroing the struct, so a
+// destination reused across decodes must keep nothing of the instruction
+// before it. Reuse is the ordinary case rather than an unusual one: CPUTick()
+// holds a single Instruction for the life of the CPU.
+TEST_F(FetchNextInstructionTest, ADecodeKeepsNothingOfThePreviousInstruction) {
+  CPUTestHelper helper;
+  helper.LoadCOM({
+      // ES: MOV AX, [BX] - a segment override and a ModR/M byte.
+      kPrefixES,
+      0x8B,
+      0x07,
+      // NOP - neither.
+      0x90,
+      // REP MOVSW - a repetition prefix and no ModR/M byte.
+      kPrefixREP,
+      0xA5,
+      // MOV word [BX+SI+0x1234], 0x5678 - a ModR/M byte, a two byte
+      // displacement and a two byte immediate.
+      0xC7,
+      0x80,
+      0x34,
+      0x12,
+      0x78,
+      0x56,
+      // NOP - none of them.
+      0x90,
+  });
+
+  // One destination for every decode, as CPUTick() has.
+  Instruction instruction = {0};
+  auto Fetch = [&]() {
+    ASSERT_EQ(
+        CPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
+    helper.cpu_.registers[kIP] += instruction.size;
+  };
+
+  Fetch();
+  EXPECT_EQ(instruction.segment_override, kES);
+  EXPECT_EQ(instruction.has_mod_rm, true);
+
+  Fetch();
+  EXPECT_EQ(instruction.opcode, 0x90);
+  EXPECT_EQ(instruction.segment_override, kNoSegmentOverride);
+  EXPECT_EQ(instruction.has_mod_rm, false);
+
+  Fetch();
+  EXPECT_EQ(instruction.opcode, 0xA5);
+  EXPECT_EQ(instruction.repetition_prefix, kPrefixREP);
+
+  Fetch();
+  EXPECT_EQ(instruction.repetition_prefix, 0);
+  EXPECT_EQ(instruction.has_mod_rm, true);
+  EXPECT_EQ(instruction.displacement_size, 2);
+  EXPECT_EQ(instruction.immediate_size, 2);
+
+  Fetch();
+  EXPECT_EQ(instruction.opcode, 0x90);
+  EXPECT_EQ(instruction.has_mod_rm, false);
+  EXPECT_EQ(instruction.displacement_size, 0);
+  EXPECT_EQ(instruction.immediate_size, 0);
+}
+
 // Test fetching a sequence of instructions with 0, 1, and 2 displacement bytes.
 TEST_F(FetchNextInstructionTest, FetchInstructionsWithDisplacement) {
   auto instructions = TestFetchInstructions(

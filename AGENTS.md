@@ -55,6 +55,53 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - Because the decode happens in place, a failed fetch leaves the caller's
   `Instruction` holding however much had been decoded rather than untouched.
   Every caller treats a failed fetch as fatal, so nothing reads it back.
+- A decode settles the fields it could otherwise leave behind where each
+  becomes known, rather than zeroing the struct up front. `opcode`, `size` and
+  `immediate_size` are assigned on every path that returns success;
+  `has_mod_rm` and `displacement_size` in both arms of the ModR/M branch;
+  `mod_rm` is read only where `has_mod_rm` is set; and `displacement[]` and
+  `immediate[]` are read no further than their size fields say. Only the two
+  prefix fields are cleared before the decode starts. Worth **4.63% at `-O3`**,
+  3.96% at `-O2` and 2.36% at `-Os`, measured at 400MHz on `dos-boot`.
+- What makes that safe is that a reused destination keeps nothing of the
+  instruction before it, and reuse is the ordinary case rather than an unusual
+  one - `CPUTick()` holds a single `Instruction` for the life of the CPU.
+  `ADecodeKeepsNothingOfThePreviousInstruction` pins it directly. The hardware
+  suite catches a dropped clear as well, and emphatically - removing one fails
+  thousands of encodings across most opcodes - but as a diffuse result rather
+  than as a named one.
+- `has_mod_rm`, `displacement_size` and `immediate_size` share a byte with two
+  bits of padding the compiler has to preserve, so **every write to any of them
+  is a read-modify-write of the whole byte**, never a store. That one fact
+  decides everything about this part of the decode, and the arrangement to want
+  is the one that performs the fewest - not the one that writes the fewest
+  fields. Naming more or fewer bitfields in a single write costs nothing either
+  way: it changes the mask immediate and nothing else, `movs r2, #63` against
+  `movs r2, #7`.
+- Which is why the two are cleared in the ModR/M branch's `else` arm rather
+  than before the decode starts. GCC coalesces the pair into one
+  read-modify-write per arm - `ldrb`/`bics`/`strb` where the instruction has no
+  ModR/M byte, `ldrb`/`bics`/`orrs`/`strb` where it has - so a decode performs
+  exactly one either way. Clearing them up front is a second that every
+  instruction pays. Worth 0.21% at `-O3` and 0.19% at `-O2`, and neutral at
+  `-Os`.
+- Three rearrangements of the same byte were built and measured, and all three
+  lose. Assigning `has_mod_rm` from `metadata->has_modrm`, which always carries
+  the same value, and dropping both the clear and the `= true`: **0.99%
+  slower**, because it adds a read-modify-write on every instruction where the
+  branch only pays on the half that carry a ModR/M byte. Writing all three
+  bitfields once at the end of the decode: **0.81% slower**, for 32 bytes
+  *less* code. Clearing `immediate_size` alongside the other two, which it was
+  written to do at first: neutral, and dead, since it is assigned
+  unconditionally further down.
+- The one field whose value is read before it is known to exist is the ModR/M
+  `REG` field, which `GetImmediateSize()` needs whether or not the instruction
+  carries a ModR/M byte - only `0xF6` and `0xF7` consult it, and both do carry
+  one, so the value is never used, but it still has to be *defined*. The decode
+  keeps it in a local initialized to 0 rather than reading `mod_rm.reg` back.
+  That is also why the local is the cheaper of the two fixes available: a
+  ternary on `has_mod_rm` puts a branch on the hot path, and clearing `mod_rm`
+  puts back a store, where the local costs neither and removes a load.
 - `immediate_size` is a three bit field but `immediate[]` holds 4 bytes, and
   `displacement_size` is a two bit field where `displacement[]` holds 2. No
   opcode table entry exceeds the arrays, but nothing in the types says so, and
@@ -636,12 +683,12 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 
   | level | flash | SRAM | image flash | image SRAM | core `.text` |
   | ----- | ----- | ---- | ----------- | ---------- | ------------ |
-  | `-Os` | 34.264 | 30.099 | 444,440 | 165,732 | 60,555 |
-  | `-O2` | 36.494 | 24.687 | 459,004 | 169,596 | 74,597 |
-  | `-O3` | **33.492** | **22.569** | 472,156 | 177,180 | 89,417 |
+  | `-Os` | 34.264 | 29.387 | 444,472 | 165,764 | 60,587 |
+  | `-O2` | 36.494 | 23.698 | 458,988 | 169,580 | 74,577 |
+  | `-O3` | **33.492** | **21.515** | 472,140 | 177,164 | 89,401 |
 
   A real 8088 runs this in 5.807 seconds, so `-O3` at the stock clock is about
-  a fifth of one. The flash column is historical - it is what the harness
+  a quarter of one. The flash column is historical - it is what the harness
   measured before `YAX86_HOT` existed, and is not re-derived as the core
   changes. The seconds in both columns are a snapshot and go out of date with
   every optimization; what is durable is how the levels rank against each
@@ -660,7 +707,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 7.122 seconds, or 3.89 emulated MHz and 0.327 MIPS -
+- At 400MHz, `-O3` takes 6.793 seconds, or 4.08 emulated MHz and 0.343 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. Note that the
   harness truncates both to two decimals when it prints them. **Do not raise the clock past 400MHz.** That is a standing instruction,
   not a technical limit.

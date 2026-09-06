@@ -7849,8 +7849,15 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
 
 YAX86_HOT CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
-  const Instruction zero_instruction = {0};
-  *instruction = zero_instruction;
+  // The prefix fields, which ApplyPrefixByte() writes only where a prefix is
+  // actually present. Every other field a decode could leave behind is settled
+  // where it becomes known rather than here: opcode, size and immediate_size
+  // are assigned on every path that returns success, has_mod_rm and
+  // displacement_size in both arms of the ModR/M branch below, mod_rm is read
+  // only where has_mod_rm is set, and the displacement and immediate arrays
+  // are read no further than their size fields say.
+  instruction->segment_override = kNoSegmentOverride;
+  instruction->repetition_prefix = 0;
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
@@ -7877,12 +7884,17 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
   // ModR/M
+  //
+  // The REG field is kept in a local, because the immediate size below is
+  // computed whether or not the instruction carries a ModR/M byte.
+  uint8_t reg = 0;
   if (metadata->has_modrm) {
     uint8_t mod_rm_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
+    reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
     instruction->has_mod_rm = true;
     instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
-    instruction->mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
-    instruction->mod_rm.rm = mod_rm_byte & 0x07;          // Bits 0-2
+    instruction->mod_rm.reg = reg;
+    instruction->mod_rm.rm = mod_rm_byte & 0x07;  // Bits 0-2
 
     // Displacement
     const uint8_t displacement_size =
@@ -7892,6 +7904,15 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
       instruction->displacement[i] =
           CPUFetchNextInstructionByte(cpu, &fetch_state);
     }
+  } else {
+    // Cleared in the arm that skips them rather than before the decode starts.
+    // has_mod_rm and displacement_size share a byte with immediate_size and
+    // two bits of padding, so reaching either is a read-modify-write of the
+    // whole byte - but writing them together lets one serve for both, in
+    // whichever arm runs. Clearing them up front is a read-modify-write every
+    // instruction pays, on top of the one the ModR/M arm pays to set them.
+    instruction->has_mod_rm = false;
+    instruction->displacement_size = 0;
   }
 
   // Immediate operand
@@ -7901,7 +7922,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // of a far pointer - but nothing in the type says so, and a compiler that
   // cannot see it is right to warn about the writes below. Bounding it by the
   // array is what makes the invariant explicit.
-  uint8_t immediate_size = GetImmediateSize(metadata, instruction->mod_rm.reg);
+  uint8_t immediate_size = GetImmediateSize(metadata, reg);
   if (immediate_size > kMaxImmediateBytes) {
     immediate_size = kMaxImmediateBytes;
   }
