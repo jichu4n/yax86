@@ -7245,16 +7245,15 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   // ModR/M
   //
-  // The REG field is kept in a local as well, because the immediate size below
-  // is computed whether or not the instruction carries a ModR/M byte, and
-  // mod_rm holds nothing meaningful where it does not.
-  uint8_t mod_rm_reg = 0;
+  // The REG field is kept in a local, because the immediate size below is
+  // computed whether or not the instruction carries a ModR/M byte.
+  uint8_t reg = 0;
   if (metadata->has_modrm) {
     uint8_t mod_rm_byte = CPUFetchNextInstructionByte(cpu, &fetch_state);
-    mod_rm_reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
+    reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
     instruction->has_mod_rm = true;
     instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
-    instruction->mod_rm.reg = mod_rm_reg;
+    instruction->mod_rm.reg = reg;
     instruction->mod_rm.rm = mod_rm_byte & 0x07;  // Bits 0-2
 
     // Displacement
@@ -7283,7 +7282,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // of a far pointer - but nothing in the type says so, and a compiler that
   // cannot see it is right to warn about the writes below. Bounding it by the
   // array is what makes the invariant explicit.
-  uint8_t immediate_size = GetImmediateSize(metadata, mod_rm_reg);
+  uint8_t immediate_size = GetImmediateSize(metadata, reg);
   if (immediate_size > kMaxImmediateBytes) {
     immediate_size = kMaxImmediateBytes;
   }
