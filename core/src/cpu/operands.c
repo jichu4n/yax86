@@ -150,15 +150,18 @@ ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   return WordValue(word_value);
 }
 
-// Table of Read* functions, indexed by OperandAddressType and Width.
-YAX86_PRIVATE
-OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
-    CPUState* cpu, const OperandAddress* address) = {
-    // kOperandTypeRegister
-    {ReadRegisterOperandByte, ReadRegisterOperandWord},
-    // kOperandTypeMemory
-    {ReadMemoryOperandByte, ReadMemoryOperandWord},
-};
+// The four functions above, and the read, write and immediate variants further
+// down, used to be selected through tables of function pointers indexed by
+// OperandAddressType and Width. Every operand of every instruction went through
+// one, and an indirect call is a pair of loads and a branch the compiler cannot
+// see through - on a Cortex-M0+, which has no branch predictor and no
+// speculation, it also cannot be overlapped with anything. Selecting with an
+// explicit test on a one-bit width instead lets the compiler inline both sides,
+// and each of these is a handful of instructions once inlined.
+//
+// Taking their addresses was not free either. A function whose address is
+// stored in a table has to exist out of line whether or not anything reaches it
+// that way, so the table kept eight copies alive that are now inlined away.
 
 // Write a byte as uint8_t to memory.
 YAX86_PRIVATE void WriteRawMemoryByte(
@@ -210,16 +213,6 @@ YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandWord(
   cpu->registers[register_address->register_index] = value.value.word_value;
 }
 
-// Table of Write* functions, indexed by OperandAddressType and Width.
-YAX86_PRIVATE void (*const kWriteOperandFn[kNumOperandAddressTypes]
-                                          [kNumWidths])(
-    CPUState* cpu, const OperandAddress* address, OperandValue value) = {
-    // kOperandTypeRegister
-    {WriteRegisterOperandByte, WriteRegisterOperandWord},
-    // kOperandTypeMemory
-    {WriteMemoryOperandByte, WriteMemoryOperandWord},
-};
-
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
 YAX86_PRIVATE uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
   // Sign-extend the offset to 32 bits
@@ -265,13 +258,6 @@ GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
       .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
   return address;
 }
-
-// Table of GetRegisterAddress functions, indexed by Width.
-YAX86_PRIVATE RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
-    CPUState* cpu, uint8_t reg_or_rm) = {
-  GetRegisterAddressByte,  // kByte
-  GetRegisterAddressWord   // kWord
-};
 
 // Apply segment override prefixes to a MemoryAddress.
 YAX86_PRIVATE void ApplySegmentOverride(
@@ -382,8 +368,9 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
   if (mod == 3) {
     // Register operand
     address.type = kOperandAddressTypeRegister;
-    address.value.register_address =
-        kGetRegisterAddressFn[ctx->metadata->width](cpu, rm);
+    address.value.register_address = ctx->metadata->width == kByte
+                                         ? GetRegisterAddressByte(cpu, rm)
+                                         : GetRegisterAddressWord(cpu, rm);
   } else {
     // Memory operand
     address.type = kOperandAddressTypeMemory;
@@ -406,18 +393,16 @@ ReadImmediateOperandWord(const Instruction* instruction) {
       (((uint16_t)instruction->immediate[1]) << 8));
 }
 
-// Table of ReadImmediate* functions, indexed by Width.
-YAX86_PRIVATE OperandValue (*const kReadImmediateValueFn[kNumWidths])(
-    const Instruction* instruction) = {
-  ReadImmediateOperandByte,  // kByte
-  ReadImmediateOperandWord   // kWord
-};
-
 // Read a value from an operand address.
 YAX86_PRIVATE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
-  return kReadOperandValueFn[address->type][ctx->metadata->width](
-      ctx->cpu, address);
+  const Width width = ctx->metadata->width;
+  if (address->type == kOperandAddressTypeRegister) {
+    return width == kByte ? ReadRegisterOperandByte(ctx->cpu, address)
+                          : ReadRegisterOperandWord(ctx->cpu, address);
+  }
+  return width == kByte ? ReadMemoryOperandByte(ctx->cpu, address)
+                        : ReadMemoryOperandWord(ctx->cpu, address);
 }
 
 // Get a register or memory operand for an instruction based on the ModR/M
@@ -439,7 +424,9 @@ YAX86_HOT YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
           .type = kOperandAddressTypeRegister,
           .value = {
               .register_address =
-                  kGetRegisterAddressFn[width](ctx->cpu, register_index),
+                  (width == kByte
+                       ? GetRegisterAddressByte(ctx->cpu, register_index)
+                       : GetRegisterAddressWord(ctx->cpu, register_index)),
           }}};
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
@@ -469,9 +456,19 @@ ReadSegmentRegisterOperand(const InstructionContext* ctx) {
 YAX86_HOT YAX86_PRIVATE void WriteOperandAddress(
     const InstructionContext* ctx, const OperandAddress* address,
     uint32_t raw_value) {
-  Width width = ctx->metadata->width;
-  kWriteOperandFn[address->type][width](
-      ctx->cpu, address, ToOperandValue(width, raw_value));
+  const Width width = ctx->metadata->width;
+  const OperandValue value = ToOperandValue(width, raw_value);
+  if (address->type == kOperandAddressTypeRegister) {
+    if (width == kByte) {
+      WriteRegisterOperandByte(ctx->cpu, address, value);
+    } else {
+      WriteRegisterOperandWord(ctx->cpu, address, value);
+    }
+  } else if (width == kByte) {
+    WriteMemoryOperandByte(ctx->cpu, address, value);
+  } else {
+    WriteMemoryOperandWord(ctx->cpu, address, value);
+  }
 }
 
 // Write a value to a register or memory operand.
@@ -482,6 +479,7 @@ YAX86_PRIVATE void WriteOperand(
 
 // Read an immediate value from the instruction.
 YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
-  Width width = ctx->metadata->width;
-  return kReadImmediateValueFn[width](ctx->instruction);
+  return ctx->metadata->width == kByte
+             ? ReadImmediateOperandByte(ctx->instruction)
+             : ReadImmediateOperandWord(ctx->instruction);
 }

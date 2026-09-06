@@ -105,22 +105,6 @@ extern OperandValue ReadImmediateOperandByte(const Instruction* instruction);
 // Read a 16-bit immediate value.
 extern OperandValue ReadImmediateOperandWord(const Instruction* instruction);
 
-// Table of GetRegisterAddress functions, indexed by Width.
-extern RegisterAddress (*const kGetRegisterAddressFn[kNumWidths])(
-    CPUState* cpu, uint8_t reg_or_rm);
-
-// Table of Read* functions, indexed by OperandAddressType and Width.
-extern OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
-    CPUState* cpu, const OperandAddress* address);
-
-// Table of Write* functions, indexed by OperandAddressType and Width.
-extern void (*const kWriteOperandFn[kNumOperandAddressTypes][kNumWidths])(
-    CPUState* cpu, const OperandAddress* address, OperandValue value);
-
-// Table of ReadImmediate* functions, indexed by Width.
-extern OperandValue (*const kReadImmediateValueFn[kNumWidths])(
-    const Instruction* instruction);
-
 // Read a value from an operand address.
 extern OperandValue ReadOperandValue(
     const InstructionContext* ctx, const OperandAddress* address);

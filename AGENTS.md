@@ -301,6 +301,41 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
 - Worth 1.84% at `-O3` and 4.58% at `-O2`, measured at 400MHz on `dos-boot`.
   The gap is the `CPUTick()`/`PlatformTick()` marks, which are inert at `-O3`.
 
+#### core/src/cpu - operand dispatch
+
+- Which operand handler runs is decided by an explicit test on the width rather
+  than by indexing a table of function pointers. There used to be four -
+  `kReadOperandValueFn` and `kWriteOperandFn` indexed by `OperandAddressType`
+  and `Width`, `kGetRegisterAddressFn` and `kReadImmediateValueFn` by `Width`
+  alone - and every operand of every instruction went through at least one.
+  Worth **2.23% at `-O3`**, 1.47% at `-O2` and 0.34% at `-Os`, measured at
+  400MHz on `dos-boot`.
+- An indirect call is two loads and a branch the compiler cannot see through,
+  and on a Cortex-M0+ there is no predictor and no speculation to overlap it
+  with. The functions behind it are a handful of instructions each, so the
+  dispatch cost more than the work.
+- **The larger half of the win is the second-order one.** A function whose
+  address is stored in a table has to exist out of line whether or not anything
+  reaches it that way, so the tables kept all eight leaf handlers alive as real
+  calls. With the tables gone, seven of the eight vanish from the image
+  entirely - only `ReadMemoryOperandWord()` is still emitted - and the core is
+  **1,208 bytes smaller at `-O3`**, against 48 bytes of table. This is the
+  second change in the campaign to win on both speed and size at once; see the
+  bitfield entry under instruction decoding for the first.
+- Deleting the tables outright was possible only because the one apparent
+  external caller was not really indexing. Two sites in `instructions_mov.c`
+  read a 16-bit offset with `kReadImmediateValueFn[kWord]` - a constant index,
+  which is a direct call to `ReadImmediateOperandWord()` written the long way.
+  Check for that before concluding a dispatch table has callers that need it.
+- The prototype this came from kept the tables and recorded 4.34%. Half of that
+  gap is the tables themselves, and the rest is that it was measured on a base
+  two invariants old with the direct data window already under it, which makes
+  the memory handlers cheaper and the dispatch a larger share of what is left.
+  A queued figure is a reason to try a change, not a number to expect.
+- The `-Os` result is the small one, and consistently so: at that level the
+  compiler declines to inline the branch arms anyway, so what is saved is the
+  indirect call and not the call.
+
 #### core/src/util - hot path placement
 
 - `YAX86_HOT` marks a function as being on the per-instruction hot path. It is
@@ -718,7 +753,7 @@ the Raspberry Pi Pico, as well as the browser via SDL and Emscripten.
   margin before believing a result, and equally do not accept a "neutral"
   result as a win. `-O2` losing 9% to both of its neighbours is a genuine
   result of this kind, and the sort the XIP cache makes possible.
-- At 400MHz, `-O3` takes 6.729 seconds, or 4.12 emulated MHz and 0.346 MIPS -
+- At 400MHz, `-O3` takes 6.579 seconds, or 4.21 emulated MHz and 0.35 MIPS -
   against 13.647 seconds before the hot path moved to SRAM. Note that the
   harness truncates both to two decimals when it prints them. **Do not raise the clock past 400MHz.** That is a standing instruction,
   not a technical limit.
