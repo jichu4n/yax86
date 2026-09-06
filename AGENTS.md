@@ -421,6 +421,65 @@ Alongside the table, state:
   the part can produce, about three million times. The path taken when a host
   supplies no window is what the mock configs in `cpu_test.cpp` exercise.
 
+### cpu — the direct data window
+
+- Operand, stack and interrupt-vector accesses read and write guest memory by
+  indexing `CPUState.direct_data_window` rather than calling into the host.
+  What that replaces is two calls, one of them indirect, plus a memory map
+  lookup — `ReadRawMemoryByte()` tested a function pointer and called through
+  it, the platform's callback chased `config->context`, and `ReadMemoryByte()`
+  resolved the address through the page index to reach an array. Worth **3.28%
+  at `-O3`** and 5.78% at `-O2`, and the core is 552 and 712 bytes *smaller*.
+- It is the same trick as the instruction fetch window and covers everything
+  that window does not, because `ReadRawMemoryByte()` and
+  `WriteRawMemoryByte()` are also where stack pushes and pops, the IVT reads on
+  interrupt dispatch, and the fetch fallback all end up.
+- **The window is set, not asked for.** The fetch window is pulled through a
+  callback because fetch is sequential and one window answers a whole run of
+  it; data accesses are scattered, so there is no locality for a per-access
+  callback to exploit and the host calls `CPUSetDirectDataWindow()` once
+  instead.
+- **`size` is how much guest memory is directly indexable, not how much guest
+  memory there is.** The two coincide today because conventional memory is one
+  host buffer, and they need not: a host whose memory is not all directly
+  addressable — part of it behind a bus, or reached through a driver — hands
+  over the part that is and serves the rest through the callbacks and the
+  memory map, which already expresses a callback-backed region. Do not
+  reintroduce the assumption that the window is all of RAM.
+- The window is a prefix of the address space starting at 0, so the hot path is
+  one unsigned compare. A `start`/`end` pair like the fetch window's would cost
+  a second one and buy nothing while guest RAM is based at zero.
+- `size` is 0 exactly when `data` is NULL, which is what lets that compare
+  stand alone rather than being a compare plus a null check.
+  `CPUSetDirectDataWindow()` is what keeps the two in step, so set the window
+  through it rather than assigning the fields.
+- The platform derives the window from whichever memory map entry covers
+  address 0, and only while that entry is plain storage whose `read_data` and
+  `write_data` are the same buffer. Video memory reads from a buffer but writes
+  through `VideoCallbackWriteVRAMByte()`, so a region shaped like that is
+  correctly excluded rather than having its writes swallowed.
+- **The watchpoint case is what the gating is for.** An access through the
+  window is a load or a store, so it cannot fire a watchpoint. Every path that
+  touches one already goes through `PlatformUpdateEnabledFlags()`, which is
+  where the window is recomputed — enabling a watchpoint takes it away and
+  clearing them all hands it back. Three tests in
+  `platform_direct_data_window_test.cpp` fail if that call is dropped.
+- `RegisterMemoryMapEntry()` recomputes the window rather than discarding it,
+  since a new region usually has nothing to do with address 0. Writes through
+  the same buffer need no call at all: the window is a pointer into the host's
+  own storage, so a write the host makes itself, or one made by DMA, is visible
+  to the next access.
+- A word straddling the top of the window has its two halves take different
+  paths, because a word is read and written as two independently bounds-checked
+  bytes. `WordStraddlingTheTopOfTheWindow` pins it; it is one address in the
+  machine and nothing else would reach it.
+- **The 8088 hardware suite supplies a window**, for the same reason it
+  supplies a fetch window: anything gated on a host-supplied capability is
+  unreachable in the suite unless the suite supplies it, and this suite is the
+  strongest check the operand path has. Sabotaging the direct read fails it
+  within one opcode. The path taken when a host supplies no window is what
+  `CPUTestHelper` and the mock configs in `cpu_test.cpp` exercise.
+
 ### cpu — prefix decoding
 
 - Both prefix groups are contiguous encoding families, so each is identified by
@@ -945,12 +1004,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.1.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at master `05585ad`:
+SRAM, at `0ffecbc`:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **6.513592** | **4.253** | **0.357** | **89.2%** | 472,700 | 176,240 | 87,229 |
-| `-O2` | 7.213556 | 3.840 | 0.323 | 80.5% | 459,116 | 169,120 | 73,853 |
+| `-O3` | **6.306314** | **4.393** | **0.369** | **92.1%** | 473,180 | 175,832 | 86,677 |
+| `-O2` | 6.819639 | 4.062 | 0.341 | 85.2% | 458,812 | 168,696 | 73,141 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds. **The seconds go out of date
   with every optimization** — this table is a snapshot to sanity-check a fresh

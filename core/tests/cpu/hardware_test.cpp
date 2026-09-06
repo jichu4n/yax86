@@ -395,6 +395,13 @@ std::string RunMooTest(
   config.get_instruction_fetch_window = GetInstructionFetchWindow;
   CPUState cpu;
   CPUInit(&cpu, &config);
+  // Hands the CPU the whole of memory to read and write by indexing, for the
+  // same reason the fetch window above is supplied: anything gated on a
+  // host-supplied capability is unreachable in this suite unless the suite
+  // supplies it, and this suite is the strongest check the operand path has.
+  // The path taken when a host supplies no window is what the mock configs in
+  // cpu_test.cpp use.
+  CPUSetDirectDataWindow(&cpu, g_memory, kMemorySize);
 
   // The expected end state is the starting state with the recorded changes
   // applied, so that a register or byte the instruction should not have
