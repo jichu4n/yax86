@@ -644,6 +644,60 @@ Alongside the table, state:
   less work — its timer-polling loops get more turns before the same number of
   PIT ticks elapse, so retired instructions go *up* as emulated cycles go down.
 
+### cpu — the interrupt request hint
+
+- `CPUConfig.interrupt_request_hint` is an optional `const bool*` the CPU reads
+  at every instruction boundary with interrupts enabled, and skips the
+  acknowledge cycle entirely while it reads false. What that replaces is an
+  indirect call through `acknowledge_interrupt` into a callback that chases
+  `config->context` and then calls `PICGetPendingInterrupt()`, on nearly every
+  instruction, to be told there is nothing. Worth **5.97% at `-O3`** and 4.17%
+  at `-O2` — the largest single win in the campaign so far.
+- The flag it points at is `PICState.has_unmasked_request`, which is
+  `(irr & ~imr) != 0`. **It is deliberately conservative rather than exact**: it
+  ignores priority and the in-service register, so it is true in cases where
+  `PICGetPendingInterrupt()` still declines — a request held off by a
+  higher-priority interrupt already in service is the one that happens. That
+  costs a call that reports nothing, which is what the code did every time
+  before.
+- **What it may never be is falsely false**, because the CPU takes it as
+  permission not to ask at all. A hint stuck false strands the interrupt
+  silently and indefinitely, and nothing else in the machine would notice.
+  `HintReadingFalseSuppressesTheAcknowledgeCycle` in `tick_test.cpp` pins
+  exactly that, so the contract is stated as a test rather than only as a
+  comment.
+- `PICUpdateUnmaskedRequest()` is the **sole writer** of the flag, and all six
+  sites that change `irr` or `imr` call it — `PICInit()`, `PICRaiseIRQ()`,
+  `PICLowerIRQ()`, ICW1, OCW1, and the acknowledge in
+  `PICGetPendingInterrupt()`. Same discipline as
+  `PlatformUpdateEnabledFlags()`: the flag cannot disagree with the registers
+  it summarizes because no path changes one without recomputing the other.
+- **The hint is a pointer into the PIC's own state, not a value handed over.**
+  That is what makes it free of synchronization — a change the PIC makes is
+  visible to the next instruction with nothing to invalidate, the same property
+  the two memory windows have. A host that pushed a copy would need every PIC
+  mutation to also poke the CPU, which is the failure mode the sole-writer rule
+  exists to prevent, moved somewhere harder to see.
+- **Dropping a recompute after the acknowledge cannot produce wrong behaviour**
+  — the flag just stays conservatively true and the CPU goes back to asking
+  every instruction — so no architectural or platform test can catch it. It is
+  a pure performance regression, and
+  `core/tests/pic/interrupt_request_hint_test.cpp` is what covers it, in the
+  same way `cycles_test.cpp` covers store costs. Each of its cases compares the
+  flag against `irr & ~imr` rather than against a literal, so a case added
+  later cannot pin the wrong one.
+- The PIC's unit tests set the mask through an OCW1 port write rather than
+  assigning `imr`. Assigning it works and leaves the flag stale, which is
+  invisible in the registers — going through the port is both what a guest does
+  and what keeps the tests honest.
+- A slave's request reaches the CPU as the master's cascade line, and the CPU
+  only ever reads the master's flag, so the master's has to rise with it.
+  `PICRaiseIRQ()` on a slave already raises the cascade IRQ on the master,
+  which recomputes the master's flag by the same path as any other request.
+- A host that cannot promise the flag rises with every request leaves the
+  pointer NULL and is asked every time, exactly as before. The mock configs in
+  `cpu_test.cpp` and `CPUTestHelper` do, which is what exercises that path.
+
 ### cpu — instruction counting
 
 - `CPUState.instructions_retired` counts instructions the CPU actually ran; a
@@ -1012,12 +1066,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.1.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #69:
+SRAM, at #71:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **6.306314** | **4.393** | **0.369** | **92.1%** | 473,180 | 175,832 | 86,677 |
-| `-O2` | 6.819639 | 4.062 | 0.341 | 85.2% | 458,812 | 168,696 | 73,141 |
+| `-O3` | **5.951044** | **4.655** | **0.391** | **97.6%** | 473,500 | 175,904 | 87,241 |
+| `-O2` | 6.546819 | 4.231 | 0.356 | 88.7% | 458,924 | 168,752 | 73,293 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds. **The seconds go out of date
   with every optimization** — this table is a snapshot to sanity-check a fresh

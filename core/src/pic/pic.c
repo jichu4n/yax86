@@ -95,6 +95,13 @@ static inline uint8_t PICGetCascadeIRQ(PICState* pic) {
 // PIC initialization
 // ============================================================================
 
+// Recomputes PICState.has_unmasked_request. This is its sole writer, and every
+// path that changes irr or imr calls it, so the flag can never disagree with
+// the registers it summarizes.
+static inline void PICUpdateUnmaskedRequest(PICState* pic) {
+  pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
+}
+
 void PICInit(PICState* pic, PICConfig* config) {
   // Zero out the PIC state.
   static const PICState zero_pic_state = {0};
@@ -103,6 +110,7 @@ void PICInit(PICState* pic, PICConfig* config) {
 
   // All interrupts masked by default.
   pic->imr = 0xFF;
+  PICUpdateUnmaskedRequest(pic);
 }
 
 // ============================================================================
@@ -118,6 +126,7 @@ void PICRaiseIRQ(PICState* pic, uint8_t irq) {
       kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
+  PICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC, also raise the cascade IRQ on the master.
   if (PICIsSlave(pic) && pic->cascade_pic) {
@@ -130,6 +139,7 @@ void PICLowerIRQ(PICState* pic, uint8_t irq) {
     return;
   }
   pic->irr &= ~(1 << irq);
+  PICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC and no interrupts are pending, lower the cascade
   // IRQ on the master.
@@ -183,6 +193,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
         pic->isr = 0x00;
         // All interrupts masked by default.
         pic->imr = 0xFF;
+        PICUpdateUnmaskedRequest(pic);
 
         // The next write to the data port will be ICW2.
         pic->init_state = kPICExpectICW2;
@@ -257,6 +268,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
         default:
           // This is an OCW1, which sets the IMR.
           pic->imr = value;
+          PICUpdateUnmaskedRequest(pic);
           break;
       }
       break;
@@ -313,6 +325,7 @@ YAX86_HOT uint8_t PICGetPendingInterrupt(PICState* pic) {
   // This is a normal interrupt on this PIC (or it's a slave reporting up).
   pic->isr |= pending_irq_mask;
   pic->irr &= ~pending_irq_mask;
+  PICUpdateUnmaskedRequest(pic);
 
   return (pic->icw2 & kICW2_BASE) + pending_irq;
 }

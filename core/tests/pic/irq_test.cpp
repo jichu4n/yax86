@@ -26,7 +26,10 @@ class IRQTest : public ::testing::Test {
     PICWritePort(&master_, 0x21, kICW2_BASE_XT);
 
     ASSERT_EQ(master_.init_state, kPICReady);
-    master_.imr = 0x00;  // Unmask all interrupts for testing.
+    // Unmask all interrupts for testing. Written as an OCW1 rather than
+    // assigned, so that the mask goes through the path a guest uses and
+    // has_unmasked_request is recomputed with it.
+    PICWritePort(&master_, 0x21, 0x00);
   }
 
   void SetUpCascadedPICs() {
@@ -50,9 +53,9 @@ class IRQTest : public ::testing::Test {
     master_.cascade_pic = &slave_;
     slave_.cascade_pic = &master_;
 
-    // Unmask all interrupts for testing.
-    master_.imr = 0x00;
-    slave_.imr = 0x00;
+    // Unmask all interrupts for testing, through OCW1 as above.
+    PICWritePort(&master_, 0x21, 0x00);
+    PICWritePort(&slave_, 0xA1, 0x00);
   }
 
   PICConfig master_config_ = {0};
@@ -88,11 +91,13 @@ TEST_F(IRQTest, SinglePIC_Masking) {
   PICRaiseIRQ(&master_, 4);
 
   // Mask IRQ 4.
-  master_.imr = (1 << 4);
+  PICWritePort(&master_, 0x21, 1 << 4);
+  EXPECT_FALSE(master_.has_unmasked_request);
   EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Unmask IRQ 4.
-  master_.imr = 0;
+  PICWritePort(&master_, 0x21, 0x00);
+  EXPECT_TRUE(master_.has_unmasked_request);
   EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 4);
 }
 

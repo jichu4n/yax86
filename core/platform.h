@@ -2024,6 +2024,11 @@ static void PlatformInitCPU(PlatformState* platform) {
       CPUCallbackGetInstructionFetchWindow;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
   platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
+  // Points into the PIC's own state, so the CPU sees a change the moment the
+  // PIC makes one. PICInit() below runs after this, which is fine - the
+  // pointer is to storage that already exists, not to a value read now.
+  platform->cpu_config.interrupt_request_hint =
+      &platform->pic.has_unmasked_request;
   if (platform->config->enable_dos_idle_skip) {
     platform->cpu_config.handle_interrupt = CPUCallbackHandleInterrupt;
   }

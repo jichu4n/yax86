@@ -380,6 +380,31 @@ TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
 
 }  // namespace
 
+// The CPU skips its acknowledge cycle while the hint reads false, so the
+// platform has to point it at the PIC and the PIC has to keep it current. The
+// IRQ0 test below fails outright if this is wired to something stuck false;
+// this names the wiring so that dropping it is not a diffuse failure.
+TEST_F(PlatformExecutionTest, TheCPUsInterruptHintTracksThePIC) {
+  ASSERT_EQ(
+      platform_.cpu.config->interrupt_request_hint,
+      &platform_.pic.has_unmasked_request);
+
+  // Vector base 0x08, everything masked.
+  WritePortByte(&platform_, 0x20, 0x13);
+  WritePortByte(&platform_, 0x21, 0x08);
+  WritePortByte(&platform_, 0x21, 0x01);
+  WritePortByte(&platform_, 0x21, 0xFF);
+  EXPECT_FALSE(*platform_.cpu.config->interrupt_request_hint);
+
+  // A masked request is not one the CPU could take, so the hint stays false.
+  ASSERT_TRUE(PlatformRaiseIRQ(&platform_, 0));
+  EXPECT_FALSE(*platform_.cpu.config->interrupt_request_hint);
+
+  // Unmasking it makes the request takeable, with no IRQ raised in between.
+  WritePortByte(&platform_, 0x21, 0xFE);
+  EXPECT_TRUE(*platform_.cpu.config->interrupt_request_hint);
+}
+
 // A software interrupt executing while an acknowledged hardware IRQ is waiting
 // must not discard it. Sharing one pending-interrupt slot between the two used
 // to lose the IRQ, leaving the PIC with the interrupt permanently in service

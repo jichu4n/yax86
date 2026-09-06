@@ -212,6 +212,22 @@ typedef struct CPUConfig {
   // the CPU takes no external interrupts.
   bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
 
+  // Optional flag saying whether acknowledge_interrupt could possibly have
+  // anything to report. The CPU reads it at every instruction boundary with
+  // interrupts enabled, which is nearly all of them, and skips the
+  // acknowledge cycle entirely while it reads false.
+  //
+  // This points into the interrupt controller's own state rather than being a
+  // value the host hands over, so there is nothing to keep in step and nothing
+  // to invalidate - a change the controller makes is visible to the next
+  // instruction.
+  //
+  // The host may make it conservative: true where nothing turns out to be
+  // takeable costs only a call that reports nothing. It may never be falsely
+  // false, because the CPU takes it as permission not to ask at all. A host
+  // that cannot promise that leaves it NULL and is asked every time.
+  const bool* interrupt_request_hint;
+
   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
   // through the Interrupt Vector Table.
   InterruptHandlerResult (*handle_interrupt)(

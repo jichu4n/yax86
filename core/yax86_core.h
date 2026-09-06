@@ -1434,6 +1434,22 @@ typedef struct CPUConfig {
   // the CPU takes no external interrupts.
   bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
 
+  // Optional flag saying whether acknowledge_interrupt could possibly have
+  // anything to report. The CPU reads it at every instruction boundary with
+  // interrupts enabled, which is nearly all of them, and skips the
+  // acknowledge cycle entirely while it reads false.
+  //
+  // This points into the interrupt controller's own state rather than being a
+  // value the host hands over, so there is nothing to keep in step and nothing
+  // to invalidate - a change the controller makes is visible to the next
+  // instruction.
+  //
+  // The host may make it conservative: true where nothing turns out to be
+  // takeable costs only a call that reports nothing. It may never be falsely
+  // false, because the CPU takes it as permission not to ask at all. A host
+  // that cannot promise that leaves it NULL and is asked every time.
+  const bool* interrupt_request_hint;
+
   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
   // through the Interrupt Vector Table.
   InterruptHandlerResult (*handle_interrupt)(
@@ -8176,8 +8192,15 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   // An external request on the INTR pin is only taken while interrupts are
   // enabled. Acknowledging it is what produces its vector - there is nothing to
   // latch beforehand, and the controller keeps requesting until acknowledged.
+  //
+  // The hint is read first where the host supplies one. It is a load against an
+  // indirect call into a controller that almost always reports nothing, and
+  // this runs at every instruction boundary. A host that supplies none is
+  // asked every time.
+  const bool* const request_hint = cpu->config->interrupt_request_hint;
   uint8_t intr_vector;
-  if (CPUGetFlag(cpu, kIF) && cpu->config->acknowledge_interrupt &&
+  if (CPUGetFlag(cpu, kIF) && (request_hint == NULL || *request_hint) &&
+      cpu->config->acknowledge_interrupt &&
       cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
     DispatchInterrupt(cpu, intr_vector);
     return true;
@@ -15215,6 +15238,22 @@ typedef struct PICState {
   // masked.
   uint8_t imr;
 
+  // Whether any requested interrupt is unmasked - that is, whether irr & ~imr
+  // is non-zero. Recomputed by PICUpdateUnmaskedRequest(), which is the sole
+  // writer, wherever irr or imr changes.
+  //
+  // This exists so that a CPU can tell in a load whether asking for an
+  // interrupt could produce one. It asks on every instruction it runs with
+  // interrupts enabled, which is nearly all of them, and the answer is almost
+  // always no.
+  //
+  // It is deliberately conservative rather than exact: it ignores priority and
+  // the in-service register, so it can be true where PICGetPendingInterrupt()
+  // would still decline. That costs only a call that reports nothing. What it
+  // may never be is falsely false, because a reader takes it as permission not
+  // to ask at all.
+  bool has_unmasked_request;
+
   // The register to read on the next read from the data port.
   PICReadRegister read_register;
 
@@ -15377,6 +15416,13 @@ static inline uint8_t PICGetCascadeIRQ(PICState* pic) {
 // PIC initialization
 // ============================================================================
 
+// Recomputes PICState.has_unmasked_request. This is its sole writer, and every
+// path that changes irr or imr calls it, so the flag can never disagree with
+// the registers it summarizes.
+static inline void PICUpdateUnmaskedRequest(PICState* pic) {
+  pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
+}
+
 void PICInit(PICState* pic, PICConfig* config) {
   // Zero out the PIC state.
   static const PICState zero_pic_state = {0};
@@ -15385,6 +15431,7 @@ void PICInit(PICState* pic, PICConfig* config) {
 
   // All interrupts masked by default.
   pic->imr = 0xFF;
+  PICUpdateUnmaskedRequest(pic);
 }
 
 // ============================================================================
@@ -15400,6 +15447,7 @@ void PICRaiseIRQ(PICState* pic, uint8_t irq) {
       kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
+  PICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC, also raise the cascade IRQ on the master.
   if (PICIsSlave(pic) && pic->cascade_pic) {
@@ -15412,6 +15460,7 @@ void PICLowerIRQ(PICState* pic, uint8_t irq) {
     return;
   }
   pic->irr &= ~(1 << irq);
+  PICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC and no interrupts are pending, lower the cascade
   // IRQ on the master.
@@ -15465,6 +15514,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
         pic->isr = 0x00;
         // All interrupts masked by default.
         pic->imr = 0xFF;
+        PICUpdateUnmaskedRequest(pic);
 
         // The next write to the data port will be ICW2.
         pic->init_state = kPICExpectICW2;
@@ -15539,6 +15589,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
         default:
           // This is an OCW1, which sets the IMR.
           pic->imr = value;
+          PICUpdateUnmaskedRequest(pic);
           break;
       }
       break;
@@ -15595,6 +15646,7 @@ YAX86_HOT uint8_t PICGetPendingInterrupt(PICState* pic) {
   // This is a normal interrupt on this PIC (or it's a slave reporting up).
   pic->isr |= pending_irq_mask;
   pic->irr &= ~pending_irq_mask;
+  PICUpdateUnmaskedRequest(pic);
 
   return (pic->icw2 & kICW2_BASE) + pending_irq;
 }
@@ -18915,6 +18967,11 @@ static void PlatformInitCPU(PlatformState* platform) {
       CPUCallbackGetInstructionFetchWindow;
   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
   platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
+  // Points into the PIC's own state, so the CPU sees a change the moment the
+  // PIC makes one. PICInit() below runs after this, which is fine - the
+  // pointer is to storage that already exists, not to a value read now.
+  platform->cpu_config.interrupt_request_hint =
+      &platform->pic.has_unmasked_request;
   if (platform->config->enable_dos_idle_skip) {
     platform->cpu_config.handle_interrupt = CPUCallbackHandleInterrupt;
   }

@@ -435,8 +435,15 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   // An external request on the INTR pin is only taken while interrupts are
   // enabled. Acknowledging it is what produces its vector - there is nothing to
   // latch beforehand, and the controller keeps requesting until acknowledged.
+  //
+  // The hint is read first where the host supplies one. It is a load against an
+  // indirect call into a controller that almost always reports nothing, and
+  // this runs at every instruction boundary. A host that supplies none is
+  // asked every time.
+  const bool* const request_hint = cpu->config->interrupt_request_hint;
   uint8_t intr_vector;
-  if (CPUGetFlag(cpu, kIF) && cpu->config->acknowledge_interrupt &&
+  if (CPUGetFlag(cpu, kIF) && (request_hint == NULL || *request_hint) &&
+      cpu->config->acknowledge_interrupt &&
       cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
     DispatchInterrupt(cpu, intr_vector);
     return true;
