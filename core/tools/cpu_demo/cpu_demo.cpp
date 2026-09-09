@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
   // instruction.
   CPUTickResult status;
   do {
-    status = CPUTick(&cpu);
+    status = CPUTick(&cpu, 0);
   } while (status == kCPUTickExecuted);
   if (status == kCPUTickInvalid) {
     cerr << "Program execution failed at " << hex << cpu.registers[kCS] << ":"

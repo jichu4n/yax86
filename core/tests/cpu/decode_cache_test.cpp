@@ -75,7 +75,7 @@ class DecodeCacheTest : public ::testing::Test {
 
   void RunAt(uint16_t ip) {
     cpu_.registers[kIP] = ip;
-    ASSERT_EQ(CPUTick(&cpu_), kCPUTickExecuted);
+    ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
   }
 
   static uint8_t ReadMemoryByte(CPUState* cpu, uint32_t address) {
@@ -272,7 +272,7 @@ TEST_F(DecodeCacheTest, AFailedDecodeLeavesNothingBehindInItsEntry) {
   ASSERT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
 
   cpu_.registers[kIP] = too_many_prefixes;
-  ASSERT_EQ(CPUTick(&cpu_), kCPUTickInvalid);
+  ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickInvalid);
 
   RunAt(good);
   EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
@@ -349,8 +349,8 @@ TEST_F(DecodeCacheTest, ALoopRunsTheSameWayEveryTimeRound) {
   Write(kProgramAddress, {kOpIncBx, 0xEB, 0xFD});
   cpu_.registers[kIP] = kProgramAddress;
   for (int i = 0; i < 16; ++i) {
-    ASSERT_EQ(CPUTick(&cpu_), kCPUTickExecuted);
-    ASSERT_EQ(CPUTick(&cpu_), kCPUTickExecuted);
+    ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
+    ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
     ASSERT_EQ(cpu_.registers[kIP], kProgramAddress);
     ASSERT_EQ(cpu_.registers[kBX], i + 1);
   }
