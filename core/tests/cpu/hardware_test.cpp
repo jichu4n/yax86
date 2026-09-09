@@ -19,6 +19,7 @@
 #include <zlib.h>
 
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -414,6 +415,19 @@ std::string RunMooTest(
   // The path taken when a host supplies no window is what the mock configs in
   // cpu_test.cpp use.
   CPUSetDirectDataWindow(&cpu, g_memory, kMemorySize);
+  // The tick below is given a budget to run several instructions, for the
+  // same reason again. What that reaches is the test CPUTick() makes after
+  // every instruction to decide whether to carry on into the next one, which is
+  // therefore made against all three million encodings rather than against the
+  // handful a unit test can write down.
+  //
+  // It cannot reach the second instruction of a run, and that is by
+  // construction rather than by luck: a run carries on only into an
+  // instruction the decode cache already holds, and the cache here starts cold
+  // on every test. So the suite stays a single-instruction test - which is
+  // what its recorded final states describe - while still exercising the test
+  // that keeps it one. Runs of more than one instruction are covered by
+  // instructions_per_tick_test.cpp and by the dos-boot invariant on hardware.
 
   // The expected end state is the starting state with the recorded changes
   // applied, so that a register or byte the instruction should not have
@@ -447,7 +461,7 @@ std::string RunMooTest(
     }
   }
 
-  CPUTick(&cpu);
+  CPUTick(&cpu, UINT16_MAX);
 
   char message[512];
   for (int i = 0; i < kNumMooRegisters; ++i) {

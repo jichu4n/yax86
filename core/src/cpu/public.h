@@ -366,6 +366,9 @@ typedef struct CPUState {
   // Cycles the last call to CPUTick consumed, at the 4.77MHz CPU clock. The
   // caller drives the rest of the machine from this, so that everything timed
   // against the CPU keeps the ratio real hardware has.
+  //
+  // A tick that runs several instructions charges the whole run here, so this
+  // is what the run cost rather than what one instruction cost.
   uint16_t cycles_this_tick;
 
   // The run of bytes instruction fetch is currently reading from, as handed
@@ -682,8 +685,34 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
 InstructionResult CPUExecuteInstruction(
     CPUState* cpu, Instruction* instruction);
 
+enum {
+  // The most instructions one call to CPUTick() will run back to back.
+  //
+  // This is a bound on how coarse a tick can be, not on how long a run should
+  // be - what governs that is max_run_cycles, which is what keeps a device
+  // from being serviced late. This only caps the case where the next deadline
+  // is far away, and its cost is that PlatformRun() overshoots the budget it
+  // was given by up to one run.
+  //
+  // On dos-boot, raising it from 4 to 16 is worth 2.9% and 32 only 0.5% beyond
+  // that, while doubling the overshoot - so this is where the curve stops
+  // paying rather than where it flattens.
+  kMaxInstructionsPerTick = 16,
+};
+
 // Run a single instruction cycle, including fetching and executing the next
 // instruction at CS:IP, and handling interrupts.
-CPUTickResult CPUTick(CPUState* cpu);
+//
+// max_run_cycles is how long the tick may keep running before the host needs
+// control back, which for a host driving a machine is how far away the nearest
+// device deadline is. A tick runs several instructions back to back where it
+// can, and this is what stops it running past the point at which a device
+// should have been serviced - so the guest sees an interrupt exactly where it
+// would have without the batching.
+//
+// Zero runs exactly one instruction. That is what a host stepping the machine
+// passes, and what a host that has to see every instruction boundary itself
+// passes, and it is the behaviour this had before there were runs at all.
+CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 
 #endif  // YAX86_CPU_PUBLIC_H
