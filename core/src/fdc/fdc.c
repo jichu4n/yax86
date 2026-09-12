@@ -4,7 +4,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config->logger, &kLogModuleFDC, level, __VA_ARGS__)
+  YAX86_LOG(fdc->config.logger, &kLogModuleFDC, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -60,9 +60,8 @@ typedef struct FDCCommandMetadata {
 // Helper to raise an IRQ6 if the callback is set and interrupts are enabled in
 // DOR.
 static inline void FDCRaiseIRQ6(FDCState* fdc) {
-  if (fdc->config && fdc->config->raise_irq6 &&
-      (fdc->dor & kFDCDORInterruptEnable)) {
-    fdc->config->raise_irq6(fdc->config->context);
+  if (fdc->config.raise_irq6 && (fdc->dor & kFDCDORInterruptEnable)) {
+    fdc->config.raise_irq6(fdc->config.context);
   }
 }
 
@@ -217,8 +216,8 @@ static void FDCHandleWriteData(FDCState* fdc) {
     // For Write, we need to request the first byte immediately.
     fdc->transfer.dma_request_active = true;
     fdc->transfer.tc_received = false;
-    if (fdc->config && fdc->config->request_dma) {
-      fdc->config->request_dma(fdc->config->context);
+    if (fdc->config.request_dma) {
+      fdc->config.request_dma(fdc->config.context);
     }
     return;
   }
@@ -242,9 +241,9 @@ static void FDCHandleWriteData(FDCState* fdc) {
 
   // Data has arrived in data_register. Write it to image.
   uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
-  if (fdc->config && fdc->config->write_image_byte) {
-    fdc->config->write_image_byte(
-        fdc->config->context, drive_index, fdc->transfer.current_offset,
+  if (fdc->config.write_image_byte) {
+    fdc->config.write_image_byte(
+        fdc->config.context, drive_index, fdc->transfer.current_offset,
         fdc->transfer.data_register);
   }
 
@@ -306,8 +305,8 @@ static void FDCHandleWriteData(FDCState* fdc) {
 
   // Request next byte via DMA.
   fdc->transfer.dma_request_active = true;
-  if (fdc->config && fdc->config->request_dma) {
-    fdc->config->request_dma(fdc->config->context);
+  if (fdc->config.request_dma) {
+    fdc->config.request_dma(fdc->config.context);
   }
 }
 
@@ -382,9 +381,9 @@ YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
 
   // Read next byte.
   uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
-  if (fdc->config && fdc->config->read_image_byte) {
-    fdc->transfer.data_register = fdc->config->read_image_byte(
-        fdc->config->context, drive_index, fdc->transfer.current_offset);
+  if (fdc->config.read_image_byte) {
+    fdc->transfer.data_register = fdc->config.read_image_byte(
+        fdc->config.context, drive_index, fdc->transfer.current_offset);
   } else {
     fdc->transfer.data_register = 0;
   }
@@ -395,8 +394,8 @@ YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
 
   // Request DMA transfer.
   fdc->transfer.dma_request_active = true;
-  if (fdc->config && fdc->config->request_dma) {
-    fdc->config->request_dma(fdc->config->context);
+  if (fdc->config.request_dma) {
+    fdc->config.request_dma(fdc->config.context);
   }
 
   // Calculate sector size again for boundary check.
@@ -547,12 +546,10 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     {.opcode = kFDCCmdScanHighOrEqual, .num_param_bytes = 8, .handler = NULL},
 };
 
-void FDCInit(FDCState* fdc, FDCConfig* config) {
-  static const FDCState zero_fdc_state = {0};
-  *fdc = zero_fdc_state;
-
-  fdc->config = config;
-}
+// Nothing to do: an FDC powers on with every field at zero, and the caller has
+// already zeroed the state. Kept so that every module is brought up the same
+// way, and so that a non-zero default acquired later has somewhere to go.
+void FDCInit(YAX86_UNUSED FDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.

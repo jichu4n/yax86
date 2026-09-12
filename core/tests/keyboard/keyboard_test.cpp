@@ -24,16 +24,16 @@ class KeyboardTest : public ::testing::Test {
     g_irq1_count = 0;
 
     // Initialize the keyboard module with mock callbacks
-    config_ = {};
-    config_.context = nullptr;  // Context not used by these simple mocks
-    config_.send_scancode = MockSendScancode;
-    config_.raise_irq1 = MockRaiseIrq1;
-    KeyboardInit(&keyboard_, &config_);
+    keyboard_ = {};
+    keyboard_.config.context =
+        nullptr;  // Context not used by these simple mocks
+    keyboard_.config.send_scancode = MockSendScancode;
+    keyboard_.config.raise_irq1 = MockRaiseIrq1;
+    KeyboardInit(&keyboard_);
   }
 
   // Member variables for the module's state
   KeyboardState keyboard_ = {0};
-  KeyboardConfig config_ = {0};
 };
 
 TEST_F(KeyboardTest, Initialization) {

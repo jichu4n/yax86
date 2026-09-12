@@ -820,7 +820,7 @@ typedef struct HDCConfig {
 // State of the HDC.
 typedef struct HDCState {
   // Pointer to caller-provided runtime configuration.
-  HDCConfig* config;
+  HDCConfig config;
 
   // Attached drives.
   HDCDriveState drives[kHDCNumDrives];
@@ -859,7 +859,7 @@ typedef struct HDCState {
 } HDCState;
 
 // Initializes the HDC to its power-on state.
-void HDCInit(HDCState* hdc, HDCConfig* config);
+void HDCInit(HDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
 uint32_t HDCGetOptionROMSize(void);
@@ -1728,7 +1728,7 @@ const uint8_t kHDCOptionROMData[] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_HDC_LOG(level, ...) \
-  YAX86_LOG(hdc->config->logger, &kLogModuleHDC, level, __VA_ARGS__)
+  YAX86_LOG(hdc->config.logger, &kLogModuleHDC, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -2143,9 +2143,9 @@ static uint8_t HDCReadTransferByte(HDCState* hdc) {
     case kHDCTransferIdentify:
       return hdc->sector_buffer[hdc->transfer_byte_index];
     case kHDCTransferRead:
-      if (hdc->config->read_image_byte) {
-        return hdc->config->read_image_byte(
-            hdc->config->context, hdc->transfer_drive,
+      if (hdc->config.read_image_byte) {
+        return hdc->config.read_image_byte(
+            hdc->config.context, hdc->transfer_drive,
             hdc->transfer_offset + hdc->transfer_byte_index);
       }
       return 0;
@@ -2194,9 +2194,9 @@ static uint8_t HDCReadDataHighRegister(HDCState* hdc) {
 
 // Writes one byte of the drive's image.
 static void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
-  if (hdc->config->write_image_byte) {
-    hdc->config->write_image_byte(
-        hdc->config->context, hdc->transfer_drive,
+  if (hdc->config.write_image_byte) {
+    hdc->config.write_image_byte(
+        hdc->config.context, hdc->transfer_drive,
         hdc->transfer_offset + hdc->transfer_byte_index, value);
   }
   HDCAdvanceTransfer(hdc);
@@ -2344,13 +2344,7 @@ void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   hdc->drives[drive] = empty_drive_state;
 }
 
-void HDCInit(HDCState* hdc, HDCConfig* config) {
-  static const HDCState zero_hdc_state = {0};
-  *hdc = zero_hdc_state;
-
-  hdc->config = config;
-  hdc->status = kHDCStatusIdle;
-}
+void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
 uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
 

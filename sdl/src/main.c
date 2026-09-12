@@ -248,25 +248,29 @@ int main(int argc, char* argv[]) {
   g_logger_config.enabled_modules = 0xFFFFFFFF;
   g_logger_config.min_level = kLogLevelError;
 
-  // Initialize Platform
-  PlatformConfig config = {0};
-  config.logger_config = &g_logger_config;
-  config.physical_memory_size =
+  // Initialize Platform. The caller zeroes the state and fills in its config;
+  // nothing inside zeroes anything, because every module's state is a field of
+  // this one.
+  static const PlatformState kEmptyPlatform = {0};
+  g_platform = kEmptyPlatform;
+  PlatformConfig* config = &g_platform.config;
+  config->logger_config = &g_logger_config;
+  config->physical_memory_size =
       640 * 1024;  // Use max allowed conventional memory
-  config.physical_memory = g_memory;
+  config->physical_memory = g_memory;
   // Video memory is a window into the same array, above conventional memory.
-  config.vram = g_memory + g_video_adapter_metadata->vram_address;
+  config->vram = g_memory + g_video_adapter_metadata->vram_address;
   if (audio_available) {
-    config.set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
+    config->set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
   }
-  config.video_adapter = g_video_adapter;
+  config->video_adapter = g_video_adapter;
   // An idle DOS prompt otherwise costs a full frame's worth of emulation to
   // produce nothing, because DOS waits for a keystroke by polling rather than
   // halting. This machine has a host to be a good citizen on - in the browser
   // it is a background tab's share of a laptop - so it takes the skip.
-  config.enable_dos_idle_skip = true;
+  config->enable_dos_idle_skip = true;
 
-  if (!PlatformInit(&g_platform, &config)) {
+  if (!PlatformInit(&g_platform)) {
     fprintf(stderr, "Failed to init platform\n");
     AudioQuit();
     DisplayQuit();
@@ -276,7 +280,7 @@ int main(int argc, char* argv[]) {
   YAX86_LOG(
       &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
       "yax86 started with %u KB of conventional memory",
-      config.physical_memory_size / 1024);
+      config->physical_memory_size / 1024);
 
   // Mount the boot floppy. Without one the BIOS still runs, so a failure here
   // is reported but not fatal.
@@ -307,9 +311,9 @@ int main(int argc, char* argv[]) {
 
   // PlatformInit initializes sub-modules, including video. Video memory comes
   // from the config, but the display is ours, so hook up the pixel sink here.
-  g_platform.video_config.write_pixels = MainWritePixels;
-  g_platform.video_config.begin_render_region = MainBeginRenderRegion;
-  g_platform.video_config.end_render_region = MainEndRenderRegion;
+  g_platform.video.config.write_pixels = MainWritePixels;
+  g_platform.video.config.begin_render_region = MainBeginRenderRegion;
+  g_platform.video.config.end_render_region = MainEndRenderRegion;
 
 #ifdef __EMSCRIPTEN__
   emscripten_set_main_loop(MainTick, 0, 1);

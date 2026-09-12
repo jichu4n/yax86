@@ -236,7 +236,7 @@ struct FDCCommandMetadata;
 // State of the Floppy Disk Controller.
 typedef struct FDCState {
   // Pointer to the FDC configuration.
-  FDCConfig* config;
+  FDCConfig config;
 
   // Value of the Digital Output Register (DOR) from the last write to port
   // 0x3F2.
@@ -284,7 +284,7 @@ typedef struct FDCState {
 } FDCState;
 
 // Initializes the FDC to its power-on state.
-void FDCInit(FDCState* fdc, FDCConfig* config);
+void FDCInit(FDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
 uint8_t FDCReadPort(FDCState* fdc, uint16_t port);

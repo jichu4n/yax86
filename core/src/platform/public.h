@@ -442,8 +442,9 @@ enum {
 };
 
 typedef struct PlatformState {
-  // Pointer to caller-provided runtime configuration.
-  PlatformConfig* config;
+  // Caller-provided runtime configuration. Filled in before PlatformInit(),
+  // which is where it is checked, and read-only afterwards.
+  PlatformConfig config;
 
   // Logger shared by the platform and every module it owns.
   Logger logger;
@@ -454,42 +455,28 @@ typedef struct PlatformState {
   // CPUConfig.decode_cache.
   CPUDecodeCacheEntry cpu_decode_cache[kDecodeCacheEntries];
 
-  // PIC runtime configuration.
-  PICConfig pic_config;
   // PIC state.
   PICState pic;
 
-  // PIT runtime configuration.
-  PITConfig pit_config;
   // PIT state.
   PITState pit;
 
-  // PPI runtime configuration.
-  PPIConfig ppi_config;
   // PPI state.
   PPIState ppi;
 
-  // Keyboard runtime configuration.
-  KeyboardConfig keyboard_config;
   // Keyboard state.
   KeyboardState keyboard;
 
   // DMA controller runtime configuration.
-  DMAConfig dma_config;
   // DMA controller state.
   DMAState dma;
 
   // FDC state.
-  FDCConfig fdc_config;
   FDCState fdc;
 
-  // HDC runtime configuration.
-  HDCConfig hdc_config;
   // HDC state.
   HDCState hdc;
 
-  // Video runtime configuration.
-  VideoConfig video_config;
   // Video state.
   VideoState video;
 
@@ -569,12 +556,16 @@ typedef struct PlatformState {
   bool skip_breakpoint_check;
 } PlatformState;
 
-// Initialize the platform state with the provided configuration. Returns true
-// if the platform state was successfully initialized, or false if:
+// Initialize the platform state. Returns true if the platform state was
+// successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
 //   - No physical memory buffer was provided.
 //   - No video memory buffer was provided.
-bool PlatformInit(PlatformState* platform, PlatformConfig* config);
+// The caller zero-initializes the PlatformState and fills in the fields of its
+// config first. Nothing here zeroes anything: every module's state is a field
+// of this one, so the caller's single zeroing covers all of them, and each
+// module's init sets only what wants a non-zero value.
+bool PlatformInit(PlatformState* platform);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.

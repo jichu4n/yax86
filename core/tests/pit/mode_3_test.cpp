@@ -16,17 +16,15 @@ static void MockSetSpeakerFrequency(void* context, uint32_t frequency_hz) {
 class Mode3Test : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.context = nullptr;
-    config_.raise_irq_0 = MockRaiseIRQ0;
-    config_.set_pc_speaker_frequency = MockSetSpeakerFrequency;
-    PITInit(&pit_, &config_);
+    pit_.config.context = nullptr;
+    pit_.config.raise_irq_0 = MockRaiseIRQ0;
+    pit_.config.set_pc_speaker_frequency = MockSetSpeakerFrequency;
+    PITInit(&pit_);
 
     // Reset mock trackers
     irq_0_call_count = 0;
     speaker_frequency_hz = 0;
   }
-
-  PITConfig config_ = {0};
   PITState pit_ = {0};
 };
 

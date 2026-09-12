@@ -767,7 +767,7 @@ STATIC_VECTOR_TYPE(KeyboardBuffer, uint8_t, kKeyboardBufferSize)
 // State of the Keyboard.
 typedef struct KeyboardState {
   // Pointer to the keyboard configuration.
-  KeyboardConfig* config;
+  KeyboardConfig config;
 
   // State of PPI Port B bit 7, or PBKB in GLaBIOS.
   // - false = enable keyboard
@@ -796,7 +796,7 @@ typedef struct KeyboardState {
 } KeyboardState;
 
 // Initializes the keyboard to its power-on state.
-void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config);
+void KeyboardInit(KeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
 void KeyboardHandleControl(
@@ -835,11 +835,7 @@ enum {
   kKeyboardSelfTestOK = 0xAA,
 };
 
-void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config) {
-  static const KeyboardState zero_keyboard_state = {0};
-  *keyboard = zero_keyboard_state;
-  keyboard->config = config;
-
+void KeyboardInit(KeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
@@ -853,11 +849,11 @@ void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config) {
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
 static inline void KeyboardSendScancode(
     KeyboardState* keyboard, uint8_t scancode) {
-  if (keyboard->config && keyboard->config->send_scancode) {
-    keyboard->config->send_scancode(keyboard->config->context, scancode);
+  if (keyboard->config.send_scancode) {
+    keyboard->config.send_scancode(keyboard->config.context, scancode);
   }
-  if (keyboard->config && keyboard->config->raise_irq1) {
-    keyboard->config->raise_irq1(keyboard->config->context);
+  if (keyboard->config.raise_irq1) {
+    keyboard->config.raise_irq1(keyboard->config.context);
   }
   keyboard->waiting_for_ack = true;
 }

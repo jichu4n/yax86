@@ -6,16 +6,15 @@ namespace {
 class PlatformHDCIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.physical_memory_size = sizeof(ram_);  // 64KB RAM
-    config_.context = this;
-    config_.physical_memory = ram_;
-    config_.vram = vram_;
+    platform_.config.physical_memory_size = sizeof(ram_);  // 64KB RAM
+    platform_.config.context = this;
+    platform_.config.physical_memory = ram_;
+    platform_.config.vram = vram_;
 
-    ASSERT_TRUE(PlatformInit(&platform_, &config_));
+    ASSERT_TRUE(PlatformInit(&platform_));
   }
 
-  PlatformConfig config_ = {0};
-  PlatformState platform_;
+  PlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };

@@ -9475,7 +9475,7 @@ typedef enum DMARegisterByte {
 // State for the entire 8237 DMA controller.
 typedef struct DMAState {
   // Pointer to the DMA configuration.
-  DMAConfig* config;
+  DMAConfig config;
 
   // The four DMA channels.
   DMAChannelState channels[kDMANumChannels];
@@ -9498,7 +9498,7 @@ typedef struct DMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-void DMAInit(DMAState* dma, DMAConfig* config);
+void DMAInit(DMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
 uint8_t DMAReadPort(DMAState* dma, uint16_t port);
@@ -9531,14 +9531,9 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config->logger, &kLogModuleDMA, level, __VA_ARGS__)
+  YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
 
-void DMAInit(DMAState* dma, DMAConfig* config) {
-  static const DMAState zero_dma_state = {0};
-  *dma = zero_dma_state;
-
-  dma->config = config;
-
+void DMAInit(DMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
@@ -9673,9 +9668,18 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
       break;
 
     // Master Reset (port 0x0D)
-    case kDMAPortMasterReset:
-      DMAInit(dma, dma->config);
+    case kDMAPortMasterReset: {
+      // A master reset returns the controller to its power-on state, so
+      // unlike DMAInit() this does have to clear what is there. The config is
+      // what the host wired up and survives - a reset is the chip's, not the
+      // machine's.
+      const DMAConfig config = dma->config;
+      const DMAState zero_dma_state = {0};
+      *dma = zero_dma_state;
+      dma->config = config;
+      DMAInit(dma);
       break;
+    }
 
     // Mask Register for all channels (port 0x0F)
     case kDMAPortAllMask:
@@ -9728,18 +9732,17 @@ YAX86_HOT void DMATransferByte(DMAState* dma, uint8_t channel_index) {
     case kDMAModeTransferTypeVerify:  // Verify - no actual transfer
       break;
     case kDMAModeTransferTypeWrite:  // Write to memory (device -> memory)
-      if (dma->config->read_device_byte && dma->config->write_memory_byte) {
+      if (dma->config.read_device_byte && dma->config.write_memory_byte) {
         const uint8_t data =
-            dma->config->read_device_byte(dma->config->context, channel_index);
-        dma->config->write_memory_byte(dma->config->context, address, data);
+            dma->config.read_device_byte(dma->config.context, channel_index);
+        dma->config.write_memory_byte(dma->config.context, address, data);
       }
       break;
     case kDMAModeTransferTypeRead:  // Read from memory (memory -> device)
-      if (dma->config->read_memory_byte && dma->config->write_device_byte) {
+      if (dma->config.read_memory_byte && dma->config.write_device_byte) {
         const uint8_t data =
-            dma->config->read_memory_byte(dma->config->context, address);
-        dma->config->write_device_byte(
-            dma->config->context, channel_index, data);
+            dma->config.read_memory_byte(dma->config.context, address);
+        dma->config.write_device_byte(dma->config.context, channel_index, data);
       }
       break;
     default:
@@ -9761,8 +9764,8 @@ YAX86_HOT void DMATransferByte(DMAState* dma, uint8_t channel_index) {
     dma->status_register |= (1 << channel_index);
 
     // Notify the system that TC has been reached.
-    if (dma->config->on_terminal_count) {
-      dma->config->on_terminal_count(dma->config->context, channel_index);
+    if (dma->config.on_terminal_count) {
+      dma->config.on_terminal_count(dma->config.context, channel_index);
     }
 
     // Handle auto-initialization or mask the channel
@@ -10710,7 +10713,7 @@ struct FDCCommandMetadata;
 // State of the Floppy Disk Controller.
 typedef struct FDCState {
   // Pointer to the FDC configuration.
-  FDCConfig* config;
+  FDCConfig config;
 
   // Value of the Digital Output Register (DOR) from the last write to port
   // 0x3F2.
@@ -10758,7 +10761,7 @@ typedef struct FDCState {
 } FDCState;
 
 // Initializes the FDC to its power-on state.
-void FDCInit(FDCState* fdc, FDCConfig* config);
+void FDCInit(FDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
 uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
@@ -10800,7 +10803,7 @@ void FDCTick(FDCState* fdc);
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config->logger, &kLogModuleFDC, level, __VA_ARGS__)
+  YAX86_LOG(fdc->config.logger, &kLogModuleFDC, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -10856,9 +10859,8 @@ typedef struct FDCCommandMetadata {
 // Helper to raise an IRQ6 if the callback is set and interrupts are enabled in
 // DOR.
 static inline void FDCRaiseIRQ6(FDCState* fdc) {
-  if (fdc->config && fdc->config->raise_irq6 &&
-      (fdc->dor & kFDCDORInterruptEnable)) {
-    fdc->config->raise_irq6(fdc->config->context);
+  if (fdc->config.raise_irq6 && (fdc->dor & kFDCDORInterruptEnable)) {
+    fdc->config.raise_irq6(fdc->config.context);
   }
 }
 
@@ -11013,8 +11015,8 @@ static void FDCHandleWriteData(FDCState* fdc) {
     // For Write, we need to request the first byte immediately.
     fdc->transfer.dma_request_active = true;
     fdc->transfer.tc_received = false;
-    if (fdc->config && fdc->config->request_dma) {
-      fdc->config->request_dma(fdc->config->context);
+    if (fdc->config.request_dma) {
+      fdc->config.request_dma(fdc->config.context);
     }
     return;
   }
@@ -11038,9 +11040,9 @@ static void FDCHandleWriteData(FDCState* fdc) {
 
   // Data has arrived in data_register. Write it to image.
   uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
-  if (fdc->config && fdc->config->write_image_byte) {
-    fdc->config->write_image_byte(
-        fdc->config->context, drive_index, fdc->transfer.current_offset,
+  if (fdc->config.write_image_byte) {
+    fdc->config.write_image_byte(
+        fdc->config.context, drive_index, fdc->transfer.current_offset,
         fdc->transfer.data_register);
   }
 
@@ -11102,8 +11104,8 @@ static void FDCHandleWriteData(FDCState* fdc) {
 
   // Request next byte via DMA.
   fdc->transfer.dma_request_active = true;
-  if (fdc->config && fdc->config->request_dma) {
-    fdc->config->request_dma(fdc->config->context);
+  if (fdc->config.request_dma) {
+    fdc->config.request_dma(fdc->config.context);
   }
 }
 
@@ -11178,9 +11180,9 @@ YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
 
   // Read next byte.
   uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
-  if (fdc->config && fdc->config->read_image_byte) {
-    fdc->transfer.data_register = fdc->config->read_image_byte(
-        fdc->config->context, drive_index, fdc->transfer.current_offset);
+  if (fdc->config.read_image_byte) {
+    fdc->transfer.data_register = fdc->config.read_image_byte(
+        fdc->config.context, drive_index, fdc->transfer.current_offset);
   } else {
     fdc->transfer.data_register = 0;
   }
@@ -11191,8 +11193,8 @@ YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
 
   // Request DMA transfer.
   fdc->transfer.dma_request_active = true;
-  if (fdc->config && fdc->config->request_dma) {
-    fdc->config->request_dma(fdc->config->context);
+  if (fdc->config.request_dma) {
+    fdc->config.request_dma(fdc->config.context);
   }
 
   // Calculate sector size again for boundary check.
@@ -11343,12 +11345,10 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     {.opcode = kFDCCmdScanHighOrEqual, .num_param_bytes = 8, .handler = NULL},
 };
 
-void FDCInit(FDCState* fdc, FDCConfig* config) {
-  static const FDCState zero_fdc_state = {0};
-  *fdc = zero_fdc_state;
-
-  fdc->config = config;
-}
+// Nothing to do: an FDC powers on with every field at zero, and the caller has
+// already zeroed the state. Kept so that every module is brought up the same
+// way, and so that a non-zero default acquired later has somewhere to go.
+void FDCInit(YAX86_UNUSED FDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
@@ -12414,7 +12414,7 @@ typedef struct HDCConfig {
 // State of the HDC.
 typedef struct HDCState {
   // Pointer to caller-provided runtime configuration.
-  HDCConfig* config;
+  HDCConfig config;
 
   // Attached drives.
   HDCDriveState drives[kHDCNumDrives];
@@ -12453,7 +12453,7 @@ typedef struct HDCState {
 } HDCState;
 
 // Initializes the HDC to its power-on state.
-void HDCInit(HDCState* hdc, HDCConfig* config);
+void HDCInit(HDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
 uint32_t HDCGetOptionROMSize(void);
@@ -13322,7 +13322,7 @@ const uint8_t kHDCOptionROMData[] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_HDC_LOG(level, ...) \
-  YAX86_LOG(hdc->config->logger, &kLogModuleHDC, level, __VA_ARGS__)
+  YAX86_LOG(hdc->config.logger, &kLogModuleHDC, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -13737,9 +13737,9 @@ static uint8_t HDCReadTransferByte(HDCState* hdc) {
     case kHDCTransferIdentify:
       return hdc->sector_buffer[hdc->transfer_byte_index];
     case kHDCTransferRead:
-      if (hdc->config->read_image_byte) {
-        return hdc->config->read_image_byte(
-            hdc->config->context, hdc->transfer_drive,
+      if (hdc->config.read_image_byte) {
+        return hdc->config.read_image_byte(
+            hdc->config.context, hdc->transfer_drive,
             hdc->transfer_offset + hdc->transfer_byte_index);
       }
       return 0;
@@ -13788,9 +13788,9 @@ static uint8_t HDCReadDataHighRegister(HDCState* hdc) {
 
 // Writes one byte of the drive's image.
 static void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
-  if (hdc->config->write_image_byte) {
-    hdc->config->write_image_byte(
-        hdc->config->context, hdc->transfer_drive,
+  if (hdc->config.write_image_byte) {
+    hdc->config.write_image_byte(
+        hdc->config.context, hdc->transfer_drive,
         hdc->transfer_offset + hdc->transfer_byte_index, value);
   }
   HDCAdvanceTransfer(hdc);
@@ -13938,13 +13938,7 @@ void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   hdc->drives[drive] = empty_drive_state;
 }
 
-void HDCInit(HDCState* hdc, HDCConfig* config) {
-  static const HDCState zero_hdc_state = {0};
-  *hdc = zero_hdc_state;
-
-  hdc->config = config;
-  hdc->status = kHDCStatusIdle;
-}
+void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
 uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
 
@@ -14733,7 +14727,7 @@ STATIC_VECTOR_TYPE(KeyboardBuffer, uint8_t, kKeyboardBufferSize)
 // State of the Keyboard.
 typedef struct KeyboardState {
   // Pointer to the keyboard configuration.
-  KeyboardConfig* config;
+  KeyboardConfig config;
 
   // State of PPI Port B bit 7, or PBKB in GLaBIOS.
   // - false = enable keyboard
@@ -14762,7 +14756,7 @@ typedef struct KeyboardState {
 } KeyboardState;
 
 // Initializes the keyboard to its power-on state.
-void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config);
+void KeyboardInit(KeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
 void KeyboardHandleControl(
@@ -14801,11 +14795,7 @@ enum {
   kKeyboardSelfTestOK = 0xAA,
 };
 
-void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config) {
-  static const KeyboardState zero_keyboard_state = {0};
-  *keyboard = zero_keyboard_state;
-  keyboard->config = config;
-
+void KeyboardInit(KeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
@@ -14819,11 +14809,11 @@ void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config) {
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
 static inline void KeyboardSendScancode(
     KeyboardState* keyboard, uint8_t scancode) {
-  if (keyboard->config && keyboard->config->send_scancode) {
-    keyboard->config->send_scancode(keyboard->config->context, scancode);
+  if (keyboard->config.send_scancode) {
+    keyboard->config.send_scancode(keyboard->config.context, scancode);
   }
-  if (keyboard->config && keyboard->config->raise_irq1) {
-    keyboard->config->raise_irq1(keyboard->config->context);
+  if (keyboard->config.raise_irq1) {
+    keyboard->config.raise_irq1(keyboard->config.context);
   }
   keyboard->waiting_for_ack = true;
 }
@@ -15613,7 +15603,7 @@ typedef enum PICReadRegister {
 // State of a single 8259 PIC chip.
 typedef struct PICState {
   // Pointer to caller-provided runtime configuration.
-  PICConfig* config;
+  PICConfig config;
 
   // Initialization state.
   PICInitState init_state;
@@ -15663,7 +15653,7 @@ typedef struct PICState {
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-void PICInit(PICState* pic, PICConfig* config);
+void PICInit(PICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -15720,7 +15710,7 @@ uint8_t PICGetPendingInterrupt(PICState* pic);
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_PIC_LOG(level, ...) \
-  YAX86_LOG(pic->config->logger, &kLogModulePIC, level, __VA_ARGS__)
+  YAX86_LOG(pic->config.logger, &kLogModulePIC, level, __VA_ARGS__)
 
 // ============================================================================
 // Constants
@@ -15775,7 +15765,7 @@ static inline PICMode PICGetMode(PICState* pic) {
 
   // Otherwise, we are cascaded.
   // If SP pin is set, we are slave; otherwise, master.
-  return pic->config->sp ? kPICSlave : kPICMaster;
+  return pic->config.sp ? kPICSlave : kPICMaster;
 }
 
 // Returns if the PIC is configured as a single PIC.
@@ -15819,12 +15809,7 @@ static inline void PICUpdateUnmaskedRequest(PICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-void PICInit(PICState* pic, PICConfig* config) {
-  // Zero out the PIC state.
-  static const PICState zero_pic_state = {0};
-  *pic = zero_pic_state;
-  pic->config = config;
-
+void PICInit(PICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
   PICUpdateUnmaskedRequest(pic);
@@ -16766,14 +16751,14 @@ typedef struct PITChannelState {
 // State of the PIT.
 typedef struct PITState {
   // Pointer to the PIT configuration.
-  PITConfig* config;
+  PITConfig config;
 
   // The three timer channels.
   PITChannelState channels[kPITNumChannels];
 } PITState;
 
 // Initializes the PIT to its power-on state.
-void PITInit(PITState* pit, PITConfig* config);
+void PITInit(PITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
 uint8_t PITReadPort(PITState* pit, uint16_t port);
@@ -16880,9 +16865,9 @@ static inline void PITChannelSetOutputState(
   // This is the only effect any channel's output has outside the PIT, which is
   // why PITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
   // another channel's output an effect here and that has to change with it.
-  if (channel_index == kPITChannelTimer && new_output_state && pit->config &&
-      pit->config->raise_irq_0) {
-    pit->config->raise_irq_0(pit->config->context);
+  if (channel_index == kPITChannelTimer && new_output_state &&
+      pit->config.raise_irq_0) {
+    pit->config.raise_irq_0(pit->config.context);
   }
 }
 
@@ -17021,11 +17006,7 @@ static const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
-void PITInit(PITState* pit, PITConfig* config) {
-  static const PITState zero_pit_state = {0};
-  *pit = zero_pit_state;
-  pit->config = config;
-
+void PITInit(PITState* pit) {
   // On the IBM PC, the output pins of all three channels are initially pulled
   // high.
   for (int i = 0; i < kPITNumChannels; ++i) {
@@ -17051,8 +17032,8 @@ static inline bool PITModeOscillates(uint8_t mode) {
 static inline void PITNotifySpeakerFrequency(
     PITState* pit, const PITChannelState* channel, int channel_index,
     bool has_count) {
-  if (channel_index != kPITSpeakerChannel || !pit->config ||
-      !pit->config->set_pc_speaker_frequency) {
+  if (channel_index != kPITSpeakerChannel ||
+      !pit->config.set_pc_speaker_frequency) {
     return;
   }
   uint32_t frequency = 0;
@@ -17061,7 +17042,7 @@ static inline void PITNotifySpeakerFrequency(
         kPITTickFrequencyHz / (channel->reload_value ? channel->reload_value
                                                      : kPITFallbackReloadValue);
   }
-  pit->config->set_pc_speaker_frequency(pit->config->context, frequency);
+  pit->config.set_pc_speaker_frequency(pit->config.context, frequency);
 }
 
 // Helper function to load the counter and handle side effects.
@@ -18464,8 +18445,9 @@ enum {
 };
 
 typedef struct PlatformState {
-  // Pointer to caller-provided runtime configuration.
-  PlatformConfig* config;
+  // Caller-provided runtime configuration. Filled in before PlatformInit(),
+  // which is where it is checked, and read-only afterwards.
+  PlatformConfig config;
 
   // Logger shared by the platform and every module it owns.
   Logger logger;
@@ -18476,42 +18458,28 @@ typedef struct PlatformState {
   // CPUConfig.decode_cache.
   CPUDecodeCacheEntry cpu_decode_cache[kDecodeCacheEntries];
 
-  // PIC runtime configuration.
-  PICConfig pic_config;
   // PIC state.
   PICState pic;
 
-  // PIT runtime configuration.
-  PITConfig pit_config;
   // PIT state.
   PITState pit;
 
-  // PPI runtime configuration.
-  PPIConfig ppi_config;
   // PPI state.
   PPIState ppi;
 
-  // Keyboard runtime configuration.
-  KeyboardConfig keyboard_config;
   // Keyboard state.
   KeyboardState keyboard;
 
   // DMA controller runtime configuration.
-  DMAConfig dma_config;
   // DMA controller state.
   DMAState dma;
 
   // FDC state.
-  FDCConfig fdc_config;
   FDCState fdc;
 
-  // HDC runtime configuration.
-  HDCConfig hdc_config;
   // HDC state.
   HDCState hdc;
 
-  // Video runtime configuration.
-  VideoConfig video_config;
   // Video state.
   VideoState video;
 
@@ -18591,12 +18559,16 @@ typedef struct PlatformState {
   bool skip_breakpoint_check;
 } PlatformState;
 
-// Initialize the platform state with the provided configuration. Returns true
-// if the platform state was successfully initialized, or false if:
+// Initialize the platform state. Returns true if the platform state was
+// successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
 //   - No physical memory buffer was provided.
 //   - No video memory buffer was provided.
-bool PlatformInit(PlatformState* platform, PlatformConfig* config);
+// The caller zero-initializes the PlatformState and fills in the fields of its
+// config first. Nothing here zeroes anything: every module's state is a field
+// of this one, so the caller's single zeroing covers all of them, and each
+// module's init sets only what wants a non-zero value.
+bool PlatformInit(PlatformState* platform);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.
@@ -19099,7 +19071,6 @@ static void CPUCallbackWritePortByte(
   WritePortByte((PlatformState*)cpu->config.context, port, value);
 }
 
-
 // ============================================================================
 // Callbacks for 8259 PIC module
 // ============================================================================
@@ -19177,8 +19148,8 @@ static void PPICallbackSetKeyboardControl(
 static void PPICallbackSetPCSpeakerFrequency(
     void* context, uint32_t frequency_hz) {
   PlatformState* platform = (PlatformState*)context;
-  if (platform->config->set_pc_speaker_frequency) {
-    platform->config->set_pc_speaker_frequency(platform, frequency_hz);
+  if (platform->config.set_pc_speaker_frequency) {
+    platform->config.set_pc_speaker_frequency(platform, frequency_hz);
   }
 }
 
@@ -19411,10 +19382,6 @@ static void CPUCallbackGetInstructionFetchWindow(
 }
 
 static void PlatformInitCPU(PlatformState* platform) {
-  // The CPU's caller is what zeroes it, and this is the CPU's caller. CPUInit()
-  // below sets only the fields that want a non-zero value.
-  const CPUState kEmptyCPUState = {0};
-  platform->cpu = kEmptyCPUState;
   platform->cpu.config.context = platform;
   platform->cpu.config.logger = &platform->logger;
   platform->cpu.config.read_memory_byte = CPUCallbackReadMemoryByte;
@@ -19429,7 +19396,7 @@ static void PlatformInitCPU(PlatformState* platform) {
       &platform->pic.has_unmasked_request;
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
   platform->cpu.config.decode_cache_num_entries = kDecodeCacheEntries;
-  if (platform->config->enable_dos_idle_skip) {
+  if (platform->config.enable_dos_idle_skip) {
     platform->cpu.config.handle_interrupt = CPUCallbackHandleInterrupt;
   }
   platform->cpu.config.read_port = CPUCallbackReadPortByte;
@@ -19455,17 +19422,17 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
       .context = platform,
       .entry_type = kMemoryMapEntryConventional,
       .start = 0x0000,
-      .end = platform->config->physical_memory_size - 1,
+      .end = platform->config.physical_memory_size - 1,
       // Conventional memory is the caller's buffer, accessed directly.
-      .read_data = platform->config->physical_memory,
-      .write_data = platform->config->physical_memory};
+      .read_data = platform->config.physical_memory,
+      .write_data = platform->config.physical_memory};
   AddMemoryMapEntry(platform, &conventional_memory);
 }
 
 static void PlatformInitPIC(PlatformState* platform) {
-  platform->pic_config.sp = false;
-  platform->pic_config.logger = &platform->logger;
-  PICInit(&platform->pic, &platform->pic_config);
+  platform->pic.config.sp = false;
+  platform->pic.config.logger = &platform->logger;
+  PICInit(&platform->pic);
   PortMapEntry pic_entry = {
       .entry_type = kPortMapEntryPIC,
       .start = 0x20,
@@ -19478,12 +19445,12 @@ static void PlatformInitPIC(PlatformState* platform) {
 }
 
 static void PlatformInitPIT(PlatformState* platform) {
-  platform->pit_config.context = platform;
-  platform->pit_config.logger = &platform->logger;
-  platform->pit_config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
-  platform->pit_config.set_pc_speaker_frequency =
+  platform->pit.config.context = platform;
+  platform->pit.config.logger = &platform->logger;
+  platform->pit.config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
+  platform->pit.config.set_pc_speaker_frequency =
       PITCallbackSetPCSpeakerFrequency;
-  PITInit(&platform->pit, &platform->pit_config);
+  PITInit(&platform->pit);
   PortMapEntry pit_entry = {
       .entry_type = kPortMapEntryPIT,
       .start = 0x40,
@@ -19496,20 +19463,20 @@ static void PlatformInitPIT(PlatformState* platform) {
 }
 
 static void PlatformInitPPI(PlatformState* platform) {
-  platform->ppi_config.context = platform;
-  platform->ppi_config.logger = &platform->logger;
-  platform->ppi_config.num_floppy_drives = 1;
-  platform->ppi_config.memory_size = kPPIMemorySize256KB;
+  platform->ppi.config.context = platform;
+  platform->ppi.config.logger = &platform->logger;
+  platform->ppi.config.num_floppy_drives = 1;
+  platform->ppi.config.memory_size = kPPIMemorySize256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
-  platform->ppi_config.display_mode =
-      platform->config->video_adapter == kVideoAdapterCGA ? kPPIDisplayCGA80x25
-                                                          : kPPIDisplayMDA;
-  platform->ppi_config.fpu_installed = false;
-  platform->ppi_config.set_pc_speaker_frequency =
+  platform->ppi.config.display_mode =
+      platform->config.video_adapter == kVideoAdapterCGA ? kPPIDisplayCGA80x25
+                                                         : kPPIDisplayMDA;
+  platform->ppi.config.fpu_installed = false;
+  platform->ppi.config.set_pc_speaker_frequency =
       PPICallbackSetPCSpeakerFrequency;
-  platform->ppi_config.set_keyboard_control = PPICallbackSetKeyboardControl;
-  PPIInit(&platform->ppi, &platform->ppi_config);
+  platform->ppi.config.set_keyboard_control = PPICallbackSetKeyboardControl;
+  PPIInit(&platform->ppi);
   PortMapEntry ppi_entry = {
       .entry_type = kPortMapEntryPPI,
       .start = 0x60,
@@ -19522,21 +19489,21 @@ static void PlatformInitPPI(PlatformState* platform) {
 }
 
 static void PlatformInitKeyboard(PlatformState* platform) {
-  platform->keyboard_config.context = platform;
-  platform->keyboard_config.logger = &platform->logger;
-  platform->keyboard_config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
-  platform->keyboard_config.send_scancode = KeyboardCallbackSendScancode;
-  KeyboardInit(&platform->keyboard, &platform->keyboard_config);
+  platform->keyboard.config.context = platform;
+  platform->keyboard.config.logger = &platform->logger;
+  platform->keyboard.config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
+  platform->keyboard.config.send_scancode = KeyboardCallbackSendScancode;
+  KeyboardInit(&platform->keyboard);
 }
 
 static void PlatformInitFDC(PlatformState* platform) {
-  platform->fdc_config.context = platform;
-  platform->fdc_config.logger = &platform->logger;
-  platform->fdc_config.raise_irq6 = FDCCallbackRaiseIRQ6;
-  platform->fdc_config.request_dma = FDCCallbackRequestDMA;
-  platform->fdc_config.read_image_byte = NULL;
-  platform->fdc_config.write_image_byte = NULL;
-  FDCInit(&platform->fdc, &platform->fdc_config);
+  platform->fdc.config.context = platform;
+  platform->fdc.config.logger = &platform->logger;
+  platform->fdc.config.raise_irq6 = FDCCallbackRaiseIRQ6;
+  platform->fdc.config.request_dma = FDCCallbackRequestDMA;
+  platform->fdc.config.read_image_byte = NULL;
+  platform->fdc.config.write_image_byte = NULL;
+  FDCInit(&platform->fdc);
   PortMapEntry fdc_entry = {
       .entry_type = (PortMapEntryType)kPortMapEntryFDC,
       .start = 0x3F0,
@@ -19549,9 +19516,9 @@ static void PlatformInitFDC(PlatformState* platform) {
 }
 
 static void PlatformInitHDC(PlatformState* platform) {
-  platform->hdc_config.context = platform;
-  platform->hdc_config.logger = &platform->logger;
-  HDCInit(&platform->hdc, &platform->hdc_config);
+  platform->hdc.config.context = platform;
+  platform->hdc.config.logger = &platform->logger;
+  HDCInit(&platform->hdc);
 
   const uint32_t option_rom_size = HDCGetOptionROMSize();
   MemoryMapEntry option_rom_entry = {
@@ -19577,14 +19544,14 @@ static void PlatformInitHDC(PlatformState* platform) {
 }
 
 static void PlatformInitDMA(PlatformState* platform) {
-  platform->dma_config.context = platform;
-  platform->dma_config.logger = &platform->logger;
-  platform->dma_config.read_memory_byte = DMACallbackReadMemoryByte;
-  platform->dma_config.write_memory_byte = DMACallbackWriteMemoryByte;
-  platform->dma_config.read_device_byte = DMACallbackReadDeviceByte;
-  platform->dma_config.write_device_byte = DMACallbackWriteDeviceByte;
-  platform->dma_config.on_terminal_count = DMACallbackOnTerminalCount;
-  DMAInit(&platform->dma, &platform->dma_config);
+  platform->dma.config.context = platform;
+  platform->dma.config.logger = &platform->logger;
+  platform->dma.config.read_memory_byte = DMACallbackReadMemoryByte;
+  platform->dma.config.write_memory_byte = DMACallbackWriteMemoryByte;
+  platform->dma.config.read_device_byte = DMACallbackReadDeviceByte;
+  platform->dma.config.write_device_byte = DMACallbackWriteDeviceByte;
+  platform->dma.config.on_terminal_count = DMACallbackOnTerminalCount;
+  DMAInit(&platform->dma);
   PortMapEntry dma_entry = {
       .entry_type = (PortMapEntryType)kPortMapEntryDMA,
       .start = 0x00,
@@ -19606,12 +19573,12 @@ static void PlatformInitDMA(PlatformState* platform) {
 }
 
 static void PlatformInitVideo(PlatformState* platform) {
-  platform->video_config = kDefaultVideoConfig;
-  platform->video_config.context = platform;
-  platform->video_config.logger = &platform->logger;
-  platform->video_config.adapter = platform->config->video_adapter;
-  platform->video_config.vram = platform->config->vram;
-  VideoInit(&platform->video, &platform->video_config);
+  platform->video.config = kDefaultVideoConfig;
+  platform->video.config.context = platform;
+  platform->video.config.logger = &platform->logger;
+  platform->video.config.adapter = platform->config.video_adapter;
+  platform->video.config.vram = platform->config.vram;
+  VideoInit(&platform->video);
 
   const VideoAdapterMetadata* adapter =
       VideoGetAdapterMetadata(&platform->video);
@@ -19624,7 +19591,7 @@ static void PlatformInitVideo(PlatformState* platform) {
       // Reads go straight to the buffer: nothing observes them, and the guest
       // reads back what it wrote. Writes keep a callback so the adapter can
       // see them - see VideoWriteVRAMByte.
-      .read_data = platform->config->vram,
+      .read_data = platform->config.vram,
       .write_byte_fn = VideoCallbackWriteVRAMByte,
   };
   AddMemoryMapEntry(platform, &vram_entry);
@@ -19643,25 +19610,24 @@ static void PlatformInitVideo(PlatformState* platform) {
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
-bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
-  platform->config = config;
+bool PlatformInit(PlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
-  LoggerInit(&platform->logger, config->logger_config);
+  LoggerInit(&platform->logger, platform->config.logger_config);
 
-  if (config->physical_memory_size < kMinPhysicalMemorySize ||
-      config->physical_memory_size > kMaxPhysicalMemorySize) {
+  if (platform->config.physical_memory_size < kMinPhysicalMemorySize ||
+      platform->config.physical_memory_size > kMaxPhysicalMemorySize) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "physical_memory_size %u is not between %u and %u bytes",
-        (unsigned)config->physical_memory_size,
+        (unsigned)platform->config.physical_memory_size,
         (unsigned)kMinPhysicalMemorySize, (unsigned)kMaxPhysicalMemorySize);
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
-  if (config->physical_memory == NULL) {
+  if (platform->config.physical_memory == NULL) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "no physical_memory buffer was provided");
@@ -19669,7 +19635,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   }
   // The video adapter reads and writes this directly, so an absent buffer
   // would leave the screen permanently blank with nothing to say why.
-  if (config->vram == NULL) {
+  if (platform->config.vram == NULL) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "no vram buffer was provided");
@@ -20901,7 +20867,7 @@ typedef struct PPIConfig {
 // State of the PPI.
 typedef struct PPIState {
   // Pointer to the PPI configuration.
-  PPIConfig* config;
+  PPIConfig config;
 
   // Port A: Keyboard scancode latch.
   uint8_t port_a_latch;
@@ -20914,7 +20880,7 @@ typedef struct PPIState {
 } PPIState;
 
 // Initializes the PPI to its power-on state.
-void PPIInit(PPIState* ppi, PPIConfig* config);
+void PPIInit(PPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
 uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
@@ -20953,11 +20919,8 @@ void PPISetScancode(PPIState* ppi, uint8_t scancode);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-void PPIInit(PPIState* ppi, PPIConfig* config) {
-  static const PPIState zero_ppi_state = {0};
-  *ppi = zero_ppi_state;
-  ppi->config = config;
-  // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is 
+void PPIInit(PPIState* ppi) {
+  // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
 }
@@ -20982,21 +20945,21 @@ uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
         // Read from SW1-4.
         uint8_t port_c = 0;
         // Bit 0: Floppy drive (IPL) installed
-        port_c |= (ppi->config->num_floppy_drives > 0) & 0x01;
+        port_c |= (ppi->config.num_floppy_drives > 0) & 0x01;
         // Bit 1: FPU installed
-        port_c |= (ppi->config->fpu_installed << 1);
+        port_c |= (ppi->config.fpu_installed << 1);
         // Bits 2-3: Memory size
-        port_c |= ((ppi->config->memory_size & 0x03) << 2);
+        port_c |= ((ppi->config.memory_size & 0x03) << 2);
         // Bits 4-7 are for unsupported features (cassette, parity, etc.).
         return port_c;
       } else {
         // Read from SW5-8.
         uint8_t port_c = 0;
         // Bits 0-1: Video mode.
-        port_c |= ppi->config->display_mode & 0x03;
+        port_c |= ppi->config.display_mode & 0x03;
         // Bits 2-3: Number of drives. Slightly confusingly, the encoding is
         // 1-based, i.e. 00=1 drive, 01=2 drives, etc.
-        port_c |= (((GetNumFloppyDrives(ppi->config) - 1) & 0x03) << 2);
+        port_c |= (((GetNumFloppyDrives(&ppi->config) - 1) & 0x03) << 2);
         // Bits 4-7 are for unsupported features.
         return port_c;
       }
@@ -21032,19 +20995,19 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
 
       // Check for changes in PC speaker control bits and fire callback.
       bool speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
-      if (old_speaker_enabled != speaker_enabled && ppi->config &&
-          ppi->config->set_pc_speaker_frequency) {
+      if (old_speaker_enabled != speaker_enabled &&
+          ppi->config.set_pc_speaker_frequency) {
         const uint32_t frequency =
             PPIIsPCSpeakerEnabled(ppi) ? ppi->pc_speaker_frequency_from_pit : 0;
-        ppi->config->set_pc_speaker_frequency(ppi->config->context, frequency);
+        ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency);
       }
 
       // Check for changes in keyboard control bits and fire callback.
       uint8_t keyboard_control = PPIGetKeyboardControl(ppi);
-      if (old_keyboard_control != keyboard_control && ppi->config &&
-          ppi->config->set_keyboard_control) {
-        ppi->config->set_keyboard_control(
-            ppi->config->context,
+      if (old_keyboard_control != keyboard_control &&
+          ppi->config.set_keyboard_control) {
+        ppi->config.set_keyboard_control(
+            ppi->config.context,
             (ppi->port_b & kPPIPortBKeyboardEnableClear) != 0,
             (ppi->port_b & kPPIPortBKeyboardClockLow) != 0);
       }
@@ -21067,8 +21030,8 @@ void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   // Invoke the callback only if the speaker is currently enabled and the
   // frequency has changed.
   if (PPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
-      ppi->config && ppi->config->set_pc_speaker_frequency) {
-    ppi->config->set_pc_speaker_frequency(ppi->config->context, frequency_hz);
+      ppi->config.set_pc_speaker_frequency) {
+    ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency_hz);
   }
 }
 
@@ -22449,7 +22412,7 @@ static const VideoConfig kDefaultVideoConfig = {
 // Video state.
 typedef struct VideoState {
   // Caller-provided runtime configuration.
-  VideoConfig* config;
+  VideoConfig config;
 
   // The video adapter being emulated, copied from the config at init time.
   VideoAdapter adapter;
@@ -22481,7 +22444,7 @@ typedef struct VideoState {
 } VideoState;
 
 // Initialize video state with the provided configuration.
-void VideoInit(VideoState* video, VideoConfig* config);
+void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
 const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
@@ -22600,7 +22563,7 @@ static inline void VideoPixelRunFlush(VideoPixelRun* run) {
   // Batching lets the region's pixel count be accumulated once per batch
   // rather than once per pixel.
   run->video->num_pixels_emitted_for_region += run->count;
-  run->video->config->write_pixels(
+  run->video->config.write_pixels(
       run->video, run->origin, run->pixels, run->count);
   run->origin.x += run->count;
   run->count = 0;
@@ -23516,7 +23479,7 @@ typedef struct MDACellColors {
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
 static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
-  const VideoConfig* config = video->config;
+  const VideoConfig* config = &video->config;
   MDACellColors colors = {
       .foreground = &config->foreground,
       .background = &config->background,
@@ -23619,7 +23582,7 @@ YAX86_PRIVATE void MDARenderRegion(
             (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
-        const RGB* rgb = cursor_scan_line ? &video->config->foreground
+        const RGB* rgb = cursor_scan_line ? &video->config.foreground
                                           : (is_foreground ? colors.foreground
                                                            : colors.background);
         VideoPixelRunPush(run, *rgb);
@@ -23679,7 +23642,7 @@ static const uint8_t kCGAGraphicsPalettes[3][3] = {
 };
 
 static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
-  return video->config->cga_palette[color & (kNumCGAColors - 1)];
+  return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
@@ -23889,7 +23852,7 @@ YAX86_PRIVATE void CGARenderRegion(
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_VIDEO_LOG(level, ...) \
-  YAX86_LOG(video->config->logger, &kLogModuleVideo, level, __VA_ARGS__)
+  YAX86_LOG(video->config.logger, &kLogModuleVideo, level, __VA_ARGS__)
 
 // Power-on 6845 register values for the IBM Monochrome Display.
 static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
@@ -23938,7 +23901,7 @@ const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
 // ============================================================================
 
 YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
-  if (!video->config || !video->config->vram) {
+  if (!video->config.vram) {
     return kVideoUnmappedPortValue;
   }
   // VRAM is aliased throughout the adapter's window, so an address past the end
@@ -23950,20 +23913,20 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   // compile to a hardware divide in the middle of the render loop - and the
   // Cortex-M0+ this targets has no divide instruction at all.
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  return video->config->vram[address & (vram_size - 1)];
+  return video->config.vram[address & (vram_size - 1)];
 }
 
 YAX86_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value) {
-  if (!video->config || !video->config->vram) {
+  if (!video->config.vram) {
     return;
   }
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
   address &= vram_size - 1;
-  if (video->config->vram[address] == value) {
+  if (video->config.vram[address] == value) {
     return;
   }
-  video->config->vram[address] = value;
+  video->config.vram[address] = value;
   if (video->dirty_state.status == kVideoFullRedraw) {
     return;
   }
@@ -23988,13 +23951,9 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
 // Initialization
 // ============================================================================
 
-void VideoInit(VideoState* video, VideoConfig* config) {
-  static const VideoState kEmptyVideoState = {0};
-  *video = kEmptyVideoState;
-  video->config = config;
-  video->adapter = config && config->adapter == kVideoAdapterCGA
-                       ? kVideoAdapterCGA
-                       : kVideoAdapterMDA;
+void VideoInit(VideoState* video) {
+  video->adapter = video->config.adapter == kVideoAdapterCGA ? kVideoAdapterCGA
+                                                             : kVideoAdapterMDA;
 
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == kVideoAdapterCGA
@@ -24471,8 +24430,8 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 
 static void VideoRenderBlankRegion(
     VideoState* video, VideoPixelRun* run, VideoRegion region) {
-  RGB blank = video->adapter == kVideoAdapterCGA ? video->config->cga_palette[0]
-                                                 : video->config->background;
+  RGB blank = video->adapter == kVideoAdapterCGA ? video->config.cga_palette[0]
+                                                 : video->config.background;
   uint16_t end_x = region.origin.x + region.width;
   uint16_t end_y = region.origin.y + region.height;
   for (uint16_t y = region.origin.y; y < end_y; ++y) {
@@ -24495,8 +24454,8 @@ static void VideoRenderDirtyRegion(
       .width = (end_column - start_column) * column_width,
       .height = end_y - first_y,
   };
-  if (video->config->begin_render_region) {
-    video->config->begin_render_region(video, region);
+  if (video->config.begin_render_region) {
+    video->config.begin_render_region(video, region);
   }
 
   video->num_pixels_emitted_for_region = 0;
@@ -24532,14 +24491,13 @@ static void VideoRenderDirtyRegion(
         video->num_pixels_emitted_for_region, declared_pixels);
   }
 
-  if (video->config->end_render_region) {
-    video->config->end_render_region(video);
+  if (video->config.end_render_region) {
+    video->config.end_render_region(video);
   }
 }
 
 void VideoRender(VideoState* video) {
-  if (!video->config || !video->config->write_pixels ||
-      video->dirty_state.status == kVideoClean) {
+  if (!video->config.write_pixels || video->dirty_state.status == kVideoClean) {
     return;
   }
 

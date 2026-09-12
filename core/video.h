@@ -1357,7 +1357,7 @@ static const VideoConfig kDefaultVideoConfig = {
 // Video state.
 typedef struct VideoState {
   // Caller-provided runtime configuration.
-  VideoConfig* config;
+  VideoConfig config;
 
   // The video adapter being emulated, copied from the config at init time.
   VideoAdapter adapter;
@@ -1389,7 +1389,7 @@ typedef struct VideoState {
 } VideoState;
 
 // Initialize video state with the provided configuration.
-void VideoInit(VideoState* video, VideoConfig* config);
+void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
 const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
@@ -1508,7 +1508,7 @@ static inline void VideoPixelRunFlush(VideoPixelRun* run) {
   // Batching lets the region's pixel count be accumulated once per batch
   // rather than once per pixel.
   run->video->num_pixels_emitted_for_region += run->count;
-  run->video->config->write_pixels(
+  run->video->config.write_pixels(
       run->video, run->origin, run->pixels, run->count);
   run->origin.x += run->count;
   run->count = 0;
@@ -2424,7 +2424,7 @@ typedef struct MDACellColors {
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
 static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
-  const VideoConfig* config = video->config;
+  const VideoConfig* config = &video->config;
   MDACellColors colors = {
       .foreground = &config->foreground,
       .background = &config->background,
@@ -2527,7 +2527,7 @@ YAX86_PRIVATE void MDARenderRegion(
             (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
-        const RGB* rgb = cursor_scan_line ? &video->config->foreground
+        const RGB* rgb = cursor_scan_line ? &video->config.foreground
                                           : (is_foreground ? colors.foreground
                                                            : colors.background);
         VideoPixelRunPush(run, *rgb);
@@ -2587,7 +2587,7 @@ static const uint8_t kCGAGraphicsPalettes[3][3] = {
 };
 
 static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
-  return video->config->cga_palette[color & (kNumCGAColors - 1)];
+  return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
@@ -2797,7 +2797,7 @@ YAX86_PRIVATE void CGARenderRegion(
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_VIDEO_LOG(level, ...) \
-  YAX86_LOG(video->config->logger, &kLogModuleVideo, level, __VA_ARGS__)
+  YAX86_LOG(video->config.logger, &kLogModuleVideo, level, __VA_ARGS__)
 
 // Power-on 6845 register values for the IBM Monochrome Display.
 static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
@@ -2846,7 +2846,7 @@ const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
 // ============================================================================
 
 YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
-  if (!video->config || !video->config->vram) {
+  if (!video->config.vram) {
     return kVideoUnmappedPortValue;
   }
   // VRAM is aliased throughout the adapter's window, so an address past the end
@@ -2858,20 +2858,20 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   // compile to a hardware divide in the middle of the render loop - and the
   // Cortex-M0+ this targets has no divide instruction at all.
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
-  return video->config->vram[address & (vram_size - 1)];
+  return video->config.vram[address & (vram_size - 1)];
 }
 
 YAX86_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value) {
-  if (!video->config || !video->config->vram) {
+  if (!video->config.vram) {
     return;
   }
   uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
   address &= vram_size - 1;
-  if (video->config->vram[address] == value) {
+  if (video->config.vram[address] == value) {
     return;
   }
-  video->config->vram[address] = value;
+  video->config.vram[address] = value;
   if (video->dirty_state.status == kVideoFullRedraw) {
     return;
   }
@@ -2896,13 +2896,9 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
 // Initialization
 // ============================================================================
 
-void VideoInit(VideoState* video, VideoConfig* config) {
-  static const VideoState kEmptyVideoState = {0};
-  *video = kEmptyVideoState;
-  video->config = config;
-  video->adapter = config && config->adapter == kVideoAdapterCGA
-                       ? kVideoAdapterCGA
-                       : kVideoAdapterMDA;
+void VideoInit(VideoState* video) {
+  video->adapter = video->config.adapter == kVideoAdapterCGA ? kVideoAdapterCGA
+                                                             : kVideoAdapterMDA;
 
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == kVideoAdapterCGA
@@ -3379,8 +3375,8 @@ void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
 
 static void VideoRenderBlankRegion(
     VideoState* video, VideoPixelRun* run, VideoRegion region) {
-  RGB blank = video->adapter == kVideoAdapterCGA ? video->config->cga_palette[0]
-                                                 : video->config->background;
+  RGB blank = video->adapter == kVideoAdapterCGA ? video->config.cga_palette[0]
+                                                 : video->config.background;
   uint16_t end_x = region.origin.x + region.width;
   uint16_t end_y = region.origin.y + region.height;
   for (uint16_t y = region.origin.y; y < end_y; ++y) {
@@ -3403,8 +3399,8 @@ static void VideoRenderDirtyRegion(
       .width = (end_column - start_column) * column_width,
       .height = end_y - first_y,
   };
-  if (video->config->begin_render_region) {
-    video->config->begin_render_region(video, region);
+  if (video->config.begin_render_region) {
+    video->config.begin_render_region(video, region);
   }
 
   video->num_pixels_emitted_for_region = 0;
@@ -3440,14 +3436,13 @@ static void VideoRenderDirtyRegion(
         video->num_pixels_emitted_for_region, declared_pixels);
   }
 
-  if (video->config->end_render_region) {
-    video->config->end_render_region(video);
+  if (video->config.end_render_region) {
+    video->config.end_render_region(video);
   }
 }
 
 void VideoRender(VideoState* video) {
-  if (!video->config || !video->config->write_pixels ||
-      video->dirty_state.status == kVideoClean) {
+  if (!video->config.write_pixels || video->dirty_state.status == kVideoClean) {
     return;
   }
 

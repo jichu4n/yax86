@@ -84,7 +84,7 @@ STATIC_VECTOR_TYPE(KeyboardBuffer, uint8_t, kKeyboardBufferSize)
 // State of the Keyboard.
 typedef struct KeyboardState {
   // Pointer to the keyboard configuration.
-  KeyboardConfig* config;
+  KeyboardConfig config;
 
   // State of PPI Port B bit 7, or PBKB in GLaBIOS.
   // - false = enable keyboard
@@ -113,7 +113,7 @@ typedef struct KeyboardState {
 } KeyboardState;
 
 // Initializes the keyboard to its power-on state.
-void KeyboardInit(KeyboardState* keyboard, KeyboardConfig* config);
+void KeyboardInit(KeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
 void KeyboardHandleControl(

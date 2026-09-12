@@ -41,7 +41,7 @@ static inline void VideoPixelRunFlush(VideoPixelRun* run) {
   // Batching lets the region's pixel count be accumulated once per batch
   // rather than once per pixel.
   run->video->num_pixels_emitted_for_region += run->count;
-  run->video->config->write_pixels(
+  run->video->config.write_pixels(
       run->video, run->origin, run->pixels, run->count);
   run->origin.x += run->count;
   run->count = 0;

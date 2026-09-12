@@ -112,7 +112,6 @@ static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[kCGAVRAMSize];
 static PlatformState g_platform;
 // Held for the platform's lifetime, which is why it is not a local.
-static PlatformConfig g_platform_config;
 static LoggerConfig g_logger_config;
 
 #ifdef YAX86_PICO_SYS_CLK_KHZ
@@ -171,22 +170,21 @@ static bool ResetMachine(void) {
   static const PlatformState kEmptyPlatform = {0};
   g_platform = kEmptyPlatform;
 
-  static const PlatformConfig kEmptyConfig = {0};
-  g_platform_config = kEmptyConfig;
-  g_platform_config.logger_config = &g_logger_config;
-  g_platform_config.physical_memory_size = kGuestRAMSize;
-  g_platform_config.physical_memory = g_guest_ram;
-  g_platform_config.vram = g_vram;
-  g_platform_config.video_adapter = kVideoAdapterCGA;
+  PlatformConfig* config = &g_platform.config;
+  config->logger_config = &g_logger_config;
+  config->physical_memory_size = kGuestRAMSize;
+  config->physical_memory = g_guest_ram;
+  config->vram = g_vram;
+  config->video_adapter = kVideoAdapterCGA;
   // enable_dos_idle_skip is left off. The run stops at the command prompt,
   // which is where DOS starts idling, so the skip would have nothing to skip -
   // and leaving it off keeps the workload a measurement of how fast guest
   // instructions execute rather than of how many of them are elided.
-  if (!PlatformInit(&g_platform, &g_platform_config)) {
+  if (!PlatformInit(&g_platform)) {
     return false;
   }
-  g_platform.fdc_config.read_image_byte = FloppyReadByte;
-  g_platform.fdc_config.write_image_byte = FloppyWriteByte;
+  g_platform.fdc.config.read_image_byte = FloppyReadByte;
+  g_platform.fdc.config.write_image_byte = FloppyWriteByte;
   FDCInsertDisk(&g_platform.fdc, 0, &kFDCFormat360KB);
   return true;
 }
