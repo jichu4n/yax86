@@ -775,7 +775,7 @@ static const VideoConfig kDefaultVideoConfig = {
 // Video state.
 typedef struct VideoState {
   // Caller-provided runtime configuration.
-  VideoConfig* config;
+  VideoConfig config;
 
   // The video adapter being emulated, copied from the config at init time.
   VideoAdapter adapter;
@@ -807,7 +807,7 @@ typedef struct VideoState {
 } VideoState;
 
 // Initialize video state with the provided configuration.
-void VideoInit(VideoState* video, VideoConfig* config);
+void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
 const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);

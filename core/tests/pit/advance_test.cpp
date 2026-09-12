@@ -31,7 +31,7 @@ class AdvanceTest : public ::testing::Test {
     config->context = nullptr;
     config->raise_irq_0 = MockRaiseIRQ0;
     config->set_pc_speaker_frequency = nullptr;
-    PITInit(pit, config);
+    PITInit(pit);
   }
 
   // Programs a channel with the given mode and reload value.

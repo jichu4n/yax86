@@ -238,7 +238,7 @@ typedef struct HDCConfig {
 // State of the HDC.
 typedef struct HDCState {
   // Pointer to caller-provided runtime configuration.
-  HDCConfig* config;
+  HDCConfig config;
 
   // Attached drives.
   HDCDriveState drives[kHDCNumDrives];
@@ -277,7 +277,7 @@ typedef struct HDCState {
 } HDCState;
 
 // Initializes the HDC to its power-on state.
-void HDCInit(HDCState* hdc, HDCConfig* config);
+void HDCInit(HDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
 uint32_t HDCGetOptionROMSize(void);

@@ -45,8 +45,8 @@ bool HardDiskAttach(PlatformState* platform, const char* path) {
     }
   }
 
-  platform->hdc_config.read_image_byte = HardDiskReadByte;
-  platform->hdc_config.write_image_byte = HardDiskWriteByte;
+  platform->hdc.config.read_image_byte = HardDiskReadByte;
+  platform->hdc.config.write_image_byte = HardDiskWriteByte;
   HDCAttachDrive(&platform->hdc, 0, &kHDCGeometry10MB);
   return true;
 }

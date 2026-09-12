@@ -124,15 +124,15 @@ class VideoTestBase : public ::testing::Test {
     logger_config_.min_level = kLogLevelError;
     LoggerInit(&logger_, &logger_config_);
 
-    config_ = kDefaultVideoConfig;
-    config_.adapter = adapter;
-    config_.vram = mock_vram;
-    config_.logger = &logger_;
-    config_.write_pixels = MockWritePixels;
-    config_.begin_render_region = MockBeginRenderRegion;
-    config_.end_render_region = MockEndRenderRegion;
+    video_.config = kDefaultVideoConfig;
+    video_.config.adapter = adapter;
+    video_.config.vram = mock_vram;
+    video_.config.logger = &logger_;
+    video_.config.write_pixels = MockWritePixels;
+    video_.config.begin_render_region = MockBeginRenderRegion;
+    video_.config.end_render_region = MockEndRenderRegion;
 
-    VideoInit(&video_, &config_);
+    VideoInit(&video_);
   }
 
   // Every rendered region must emit exactly the pixels it declared, or a
@@ -230,7 +230,6 @@ class VideoTestBase : public ::testing::Test {
 
   LoggerConfig logger_config_ = {};
   Logger logger_ = {};
-  VideoConfig config_ = {0};
   VideoState video_ = {0};
 };
 

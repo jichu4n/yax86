@@ -44,7 +44,6 @@ constexpr uint8_t kChannel0Mode2 = 0x34;
 // A plain struct rather than a test fixture, because most of these tests run
 // two machines side by side and compare them.
 struct IdleMachine {
-  PlatformConfig config = {0};
   PlatformState platform = {};
   uint8_t ram[64 * 1024] = {0};
   uint8_t vram[kCGAVRAMSize] = {0};
@@ -54,11 +53,11 @@ struct IdleMachine {
   bool Init(
       bool enable_idle_skip, uint8_t vector = kDOSIdleVector,
       bool program_timer = true) {
-    config.physical_memory_size = sizeof(ram);
-    config.physical_memory = ram;
-    config.vram = vram;
-    config.enable_dos_idle_skip = enable_idle_skip;
-    if (!PlatformInit(&platform, &config)) {
+    platform.config.physical_memory_size = sizeof(ram);
+    platform.config.physical_memory = ram;
+    platform.config.vram = vram;
+    platform.config.enable_dos_idle_skip = enable_idle_skip;
+    if (!PlatformInit(&platform)) {
       return false;
     }
 

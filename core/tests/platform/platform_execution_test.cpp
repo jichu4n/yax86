@@ -34,12 +34,12 @@ enum : uint8_t {
 class PlatformExecutionTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.physical_memory_size = sizeof(ram_);
-    config_.context = this;
-    config_.physical_memory = ram_;
-    config_.vram = vram_;
+    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.context = this;
+    platform_.config.physical_memory = ram_;
+    platform_.config.vram = vram_;
 
-    ASSERT_TRUE(PlatformInit(&platform_, &config_));
+    ASSERT_TRUE(PlatformInit(&platform_));
 
     // Run test programs out of RAM rather than the BIOS entry point.
     platform_.cpu.registers[kCS] = 0;
@@ -72,7 +72,6 @@ class PlatformExecutionTest : public ::testing::Test {
     return status;
   }
 
-  PlatformConfig config_ = {0};
   PlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
@@ -186,7 +185,6 @@ TEST_F(PlatformExecutionTest, PlatformTickRunsOneInstructionWithAWarmCache) {
 
 // A whole machine, so that two of them can be run side by side.
 struct Machine {
-  PlatformConfig config = {0};
   PlatformState platform = {};
   uint8_t ram[64 * 1024] = {0};
   uint8_t vram[kCGAVRAMSize] = {0};
@@ -213,10 +211,10 @@ struct Outcome {
 Outcome RunTimerProgram(bool batched) {
   auto machine = std::unique_ptr<Machine>(new Machine());
   PlatformState* platform = &machine->platform;
-  machine->config.physical_memory_size = sizeof(machine->ram);
-  machine->config.physical_memory = machine->ram;
-  machine->config.vram = machine->vram;
-  EXPECT_TRUE(PlatformInit(platform, &machine->config));
+  platform->config.physical_memory_size = sizeof(machine->ram);
+  platform->config.physical_memory = machine->ram;
+  platform->config.vram = machine->vram;
+  EXPECT_TRUE(PlatformInit(platform));
 
   // STI / loop: INC AX / IN AL, 0x40 / ADD BL, AL / IN AL, 0x40 /
   // ADD BH, AL / CMP CX, 3 / JB loop / HLT
@@ -336,14 +334,13 @@ TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
   ASSERT_EQ(RunInstructions(8), kPlatformRunning);
   const uint64_t stepped = platform_.cpu.instructions_retired;
 
-  PlatformConfig batched_config = {0};
   PlatformState batched = {};
   static uint8_t batched_ram[64 * 1024] = {0};
   static uint8_t batched_vram[kCGAVRAMSize] = {0};
-  batched_config.physical_memory_size = sizeof(batched_ram);
-  batched_config.physical_memory = batched_ram;
-  batched_config.vram = batched_vram;
-  ASSERT_TRUE(PlatformInit(&batched, &batched_config));
+  batched.config.physical_memory_size = sizeof(batched_ram);
+  batched.config.physical_memory = batched_ram;
+  batched.config.vram = batched_vram;
+  ASSERT_TRUE(PlatformInit(&batched));
   batched.cpu.registers[kCS] = 0;
   batched.cpu.registers[kIP] = kProgramOffset;
   batched.cpu.registers[kSS] = 0;

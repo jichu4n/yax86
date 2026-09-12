@@ -186,7 +186,7 @@ typedef enum DMARegisterByte {
 // State for the entire 8237 DMA controller.
 typedef struct DMAState {
   // Pointer to the DMA configuration.
-  DMAConfig* config;
+  DMAConfig config;
 
   // The four DMA channels.
   DMAChannelState channels[kDMANumChannels];
@@ -209,7 +209,7 @@ typedef struct DMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-void DMAInit(DMAState* dma, DMAConfig* config);
+void DMAInit(DMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
 uint8_t DMAReadPort(DMAState* dma, uint16_t port);

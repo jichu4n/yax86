@@ -6,9 +6,7 @@ namespace {
 
 class ICWTest : public ::testing::Test {
  protected:
-  void SetUp() override { PICInit(&pic_, &config_); }
-
-  PICConfig config_ = {0};
+  void SetUp() override { PICInit(&pic_); }
   PICState pic_ = {0};
 };
 
@@ -20,7 +18,7 @@ TEST_F(ICWTest, InitialState) {
 }
 
 TEST_F(ICWTest, SinglePIC) {
-  config_.sp = false;
+  pic_.config.sp = false;
 
   // Write ICW1: single PIC, no ICW4.
   PICWritePort(&pic_, 0x20, 0x12);
@@ -37,7 +35,7 @@ TEST_F(ICWTest, SinglePIC) {
 }
 
 TEST_F(ICWTest, SinglePICWithICW4) {
-  config_.sp = false;
+  pic_.config.sp = false;
 
   // Write ICW1: single PIC, ICW4 needed.
   PICWritePort(&pic_, 0x20, 0x13);
@@ -55,7 +53,7 @@ TEST_F(ICWTest, SinglePICWithICW4) {
 }
 
 TEST_F(ICWTest, MasterPIC) {
-  config_.sp = false;
+  pic_.config.sp = false;
 
   // Write ICW1: cascaded, no ICW4.
   PICWritePort(&pic_, 0x20, 0x10);
@@ -74,7 +72,7 @@ TEST_F(ICWTest, MasterPIC) {
 }
 
 TEST_F(ICWTest, MasterPICWithICW4) {
-  config_.sp = false;
+  pic_.config.sp = false;
 
   // Write ICW1: cascaded, ICW4 needed.
   PICWritePort(&pic_, 0x20, 0x11);
@@ -97,7 +95,7 @@ TEST_F(ICWTest, MasterPICWithICW4) {
 }
 
 TEST_F(ICWTest, SlavePIC) {
-  config_.sp = true;
+  pic_.config.sp = true;
 
   // Write ICW1: cascaded, no ICW4.
   PICWritePort(&pic_, 0xA0, 0x10);
@@ -116,7 +114,7 @@ TEST_F(ICWTest, SlavePIC) {
 }
 
 TEST_F(ICWTest, SlavePICWithICW4) {
-  config_.sp = true;
+  pic_.config.sp = true;
 
   // Write ICW1: cascaded, ICW4 needed.
   PICWritePort(&pic_, 0xA0, 0x11);

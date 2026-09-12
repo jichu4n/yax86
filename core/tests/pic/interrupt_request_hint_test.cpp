@@ -21,8 +21,8 @@ enum {
 class InterruptRequestHintTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.sp = false;
-    PICInit(&pic_, &config_);
+    pic_.config.sp = false;
+    PICInit(&pic_);
     PICWritePort(&pic_, kCommandPort, kICW1_INIT | kICW1_SNGL);
     PICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
     ASSERT_EQ(pic_.init_state, kPICReady);
@@ -34,15 +34,13 @@ class InterruptRequestHintTest : public ::testing::Test {
     EXPECT_EQ(pic_.has_unmasked_request, (pic_.irr & ~pic_.imr) != 0)
         << "irr " << (int)pic_.irr << " imr " << (int)pic_.imr;
   }
-
-  PICConfig config_ = {0};
   PICState pic_ = {0};
 };
 
 // A PIC out of reset has everything masked, so nothing can be requested.
 TEST_F(InterruptRequestHintTest, StartsClear) {
   PICState fresh = {0};
-  PICInit(&fresh, &config_);
+  PICInit(&fresh);
   EXPECT_FALSE(fresh.has_unmasked_request);
   EXPECT_EQ(fresh.imr, 0xFF);
 }
@@ -140,10 +138,9 @@ TEST_F(InterruptRequestHintTest, ReinitializingClearsIt) {
 // A slave's request reaches the CPU as the master's cascade line, and the CPU
 // only ever reads the master's flag - so the master's has to rise with it.
 TEST_F(InterruptRequestHintTest, ASlaveRequestSetsTheMastersFlag) {
-  PICConfig slave_config = {0};
-  slave_config.sp = true;
   PICState slave = {0};
-  PICInit(&slave, &slave_config);
+  slave.config.sp = true;
+  PICInit(&slave);
   PICWritePort(&slave, 0xA0, kICW1_INIT);
   PICWritePort(&slave, 0xA1, 0x70);
   PICWritePort(&slave, 0xA1, 2);

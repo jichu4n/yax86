@@ -17,8 +17,8 @@ enum {
 class IRQTest : public ::testing::Test {
  protected:
   void SetUpSinglePIC() {
-    master_config_.sp = false;
-    PICInit(&master_, &master_config_);
+    master_.config.sp = false;
+    PICInit(&master_);
 
     // ICW1: single PIC, no ICW4 needed.
     PICWritePort(&master_, 0x20, kICW1_INIT | kICW1_SNGL);
@@ -34,16 +34,16 @@ class IRQTest : public ::testing::Test {
 
   void SetUpCascadedPICs() {
     // Master PIC setup
-    master_config_.sp = false;
-    PICInit(&master_, &master_config_);
+    master_.config.sp = false;
+    PICInit(&master_);
     PICWritePort(&master_, 0x20, kICW1_INIT);  // Cascaded, ICW4 not needed
     PICWritePort(&master_, 0x21, kICW2_BASE_AT_M);
     PICWritePort(&master_, 0x21, 1 << 2);  // Slave is on IRQ 2
     ASSERT_EQ(master_.init_state, kPICReady);
 
     // Slave PIC setup
-    slave_config_.sp = true;
-    PICInit(&slave_, &slave_config_);
+    slave_.config.sp = true;
+    PICInit(&slave_);
     PICWritePort(&slave_, 0xA0, kICW1_INIT);  // Cascaded, ICW4 not needed
     PICWritePort(&slave_, 0xA1, kICW2_BASE_AT_S);
     PICWritePort(&slave_, 0xA1, 2);  // Slave ID is 2
@@ -57,11 +57,7 @@ class IRQTest : public ::testing::Test {
     PICWritePort(&master_, 0x21, 0x00);
     PICWritePort(&slave_, 0xA1, 0x00);
   }
-
-  PICConfig master_config_ = {0};
   PICState master_ = {0};
-
-  PICConfig slave_config_ = {0};
   PICState slave_ = {0};
 };
 

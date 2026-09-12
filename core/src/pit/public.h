@@ -121,14 +121,14 @@ typedef struct PITChannelState {
 // State of the PIT.
 typedef struct PITState {
   // Pointer to the PIT configuration.
-  PITConfig* config;
+  PITConfig config;
 
   // The three timer channels.
   PITChannelState channels[kPITNumChannels];
 } PITState;
 
 // Initializes the PIT to its power-on state.
-void PITInit(PITState* pit, PITConfig* config);
+void PITInit(PITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
 uint8_t PITReadPort(PITState* pit, uint16_t port);

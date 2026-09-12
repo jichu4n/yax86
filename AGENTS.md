@@ -286,6 +286,30 @@ Alongside the table, state:
 - **Core modules depend on no external runtime.** They reach the host only
   through callbacks, which is what lets the same code build for SDL, Emscripten
   and an RP2040.
+- **Every module is brought up the same way**: zero-initialize its `XState`,
+  fill in the fields of `state.config`, call `XInit(&state)`. The config is a
+  field of the state rather than a separate object, so there is nothing whose
+  lifetime has to outlast the module, and `XInit()` is where a host's mistake
+  is checked and reported.
+- **No `XInit()` zeroes anything.** Each sets only the fields that want a
+  non-zero power-on value, and a caller that has already zeroed the state in
+  order to fill in its config would otherwise be paying for it twice. For the
+  whole machine that is one zeroing: every module's state is a field of
+  `PlatformState`, so zeroing that covers all of them.
+- The consequence is that **a host must zero-initialize its `PlatformState`**.
+  `static PlatformState platform;` does it, as does `= {0}`. Miss it and the
+  machine comes up with garbage in every module rather than in one.
+- `FDCInit()` is empty, because an FDC powers on with every field at zero. It
+  is kept so that every module is brought up the same way, and so that a
+  non-zero default acquired later has somewhere to go.
+- **A reset is not an init.** `DMAWritePort()`'s master reset does have to
+  clear the controller's state, and it saves and restores the config across
+  doing so - a reset is the chip's, not the machine's, and the config is what
+  the host wired up. That distinction is what the DMA tests caught when the
+  reset was left calling `DMAInit()` after it stopped zeroing.
+- The logger is the exception and stays a pointer: `Logger` is a `util` type
+  rather than an emulated module, and several of them may reasonably share one
+  `LoggerConfig`.
 - Each directory under `core/src` is a module, bundled into a single header in
   `core` according to its `bundle.json` — `core/src/cpu` becomes `core/cpu.h`.
   A module's external interface is its `public.h`.
@@ -304,11 +328,9 @@ Alongside the table, state:
 ### cpu — state and config
 
 - **`CPUConfig` is a field of `CPUState`, and a caller fills it in before
-  `CPUInit()`.** There is one object: zero-initialize a `CPUState`, set the
-  config fields you want, call `CPUInit(&cpu)`. `CPUInit()` zeroes nothing —
-  only two fields of a CPU want a non-zero initial value, and a struct the
-  caller has already had to zero in order to fill in its config does not want
-  zeroing twice.
+  `CPUInit()`** — the same shape every module follows, described under "How the
+  core fits together". What is specific to the CPU is why it is held by value
+  rather than by pointer, and where in the struct it sits.
 - Held by value rather than by pointer. The dereference cost **+0.34% at `-O3`
   and 3.37% at `-O2`** on a path that reads a config field every instruction,
   and a pointer made the config an object the caller had to keep alive for as
@@ -1300,12 +1322,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #75:
+SRAM, at #76:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.704242** | **5.889** | **0.495** | **123.5%** | 471,380 | 180,376 | 85,675 |
-| `-O2` | 4.969282 | 5.575 | 0.469 | 116.9% | 459,804 | 175,368 | 74,095 |
+| `-O3` | **4.751336** | **5.831** | **0.490** | **122.2%** | 471,500 | 180,488 | 85,631 |
+| `-O2` | 4.995468 | 5.546 | 0.466 | 116.3% | 459,668 | 175,256 | 73,807 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler

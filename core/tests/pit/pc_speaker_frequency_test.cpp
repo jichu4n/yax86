@@ -28,9 +28,9 @@ static uint8_t Channel2ControlWord(uint8_t mode) {
 class PCSpeakerFrequencyTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.context = nullptr;
-    config_.set_pc_speaker_frequency = MockSetSpeakerFrequency;
-    PITInit(&pit_, &config_);
+    pit_.config.context = nullptr;
+    pit_.config.set_pc_speaker_frequency = MockSetSpeakerFrequency;
+    PITInit(&pit_);
     reported_frequencies.clear();
   }
 
@@ -50,8 +50,6 @@ class PCSpeakerFrequencyTest : public ::testing::Test {
   uint32_t LastFrequency() const {
     return reported_frequencies.empty() ? 0 : reported_frequencies.back();
   }
-
-  PITConfig config_ = {0};
   PITState pit_ = {0};
 };
 
@@ -141,7 +139,7 @@ TEST_F(PCSpeakerFrequencyTest, LatchCommandDoesNotReport) {
 }
 
 TEST_F(PCSpeakerFrequencyTest, NoCallbackConfigured) {
-  config_.set_pc_speaker_frequency = nullptr;
+  pit_.config.set_pc_speaker_frequency = nullptr;
   ProgramChannel2(3);
   WriteChannel2Count(1193);
   EXPECT_TRUE(reported_frequencies.empty());
