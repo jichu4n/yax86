@@ -12,7 +12,7 @@
 // Read a byte from an I/O port.
 YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return ByteValue(
-      cpu->config->read_port ? cpu->config->read_port(cpu, port) : 0xFF);
+      cpu->config.read_port ? cpu->config.read_port(cpu, port) : 0xFF);
 }
 
 // Read a word from an I/O port as a uint16_t. The 8088 has an 8-bit data bus,
@@ -57,10 +57,10 @@ ExecuteInDX(const InstructionContext* ctx) {
 
 // Write a byte to an I/O port.
 static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
-  if (!cpu->config->write_port) {
+  if (!cpu->config.write_port) {
     return;
   }
-  cpu->config->write_port(cpu, port, FromOperandValue(&value));
+  cpu->config.write_port(cpu, port, FromOperandValue(&value));
 }
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to

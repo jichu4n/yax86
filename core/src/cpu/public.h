@@ -322,10 +322,14 @@ enum {
 };
 
 // State of the emulated CPU.
+//
+// A caller zero-initializes one of these, fills in the fields of config, and
+// calls CPUInit(). Everything outside config is the CPU's own: some of it is
+// there to be read - the registers, the flags, instructions_retired - and a
+// debugger or a test may write a register, because nothing is derived from
+// one. The fields that other fields depend on are not writable that way and
+// have setters, which are the sole writers of what they maintain.
 typedef struct CPUState {
-  // Pointer to caller-provided runtime configuration
-  CPUConfig* config;
-
   // Register values
   uint16_t registers[kNumRegisters];
   // Flag values
@@ -386,6 +390,20 @@ typedef struct CPUState {
   // once instead.
   CPUDirectDataWindow direct_data_window;
 
+  // The decode cache the fetch may actually use: CPUConfig.decode_cache where
+  // CPUInit() accepted it and it has not been taken away, and NULL otherwise.
+  //
+  // Derived rather than read from the config directly, so that a rejected
+  // count and a cache withdrawn for a watchpoint come out the same way and the
+  // fetch tests one thing rather than two. CPUSetDecodeCacheEnabled() is the
+  // sole writer after CPUInit().
+  struct CPUDecodeCacheEntry* decode_cache;
+  // One less than CPUConfig.decode_cache_num_entries, so that an address
+  // becomes an index with a mask rather than a remainder - a remainder by a
+  // runtime value is a division, which this target has no instruction for.
+  // Derived by CPUInit(), and zero where the count did not pass.
+  uint32_t decode_cache_index_mask;
+
   // How many times each 4KB page has been written, as a wrapping byte. A
   // cached decode records what its page stood at and is discarded once the two
   // disagree, which is what makes caching safe against code that writes over
@@ -396,16 +414,26 @@ typedef struct CPUState {
   // to find out would cost about what the counter does.
   uint8_t code_page_generation[kNumCodePages];
 
-  // One less than CPUConfig.decode_cache_num_entries, so that an address
-  // becomes an index with a mask rather than a remainder - a remainder by a
-  // runtime value is a division, which this target has no instruction for.
-  // Derived and checked by CPUInit(), and zero where the count did not pass,
-  // which is why the minimum count is two rather than one.
-  uint32_t decode_cache_index_mask;
+  // Caller-provided runtime configuration. Filled in before CPUInit(), which
+  // is where it is checked, and read-only afterwards - it is what this CPU was
+  // constructed with rather than somewhere to put things later.
+  //
+  // Held by value rather than by pointer. Reaching it through a pointer cost
+  // 1.80% at -O3 on a path that touches it once per instruction, and made the
+  // config an object the caller had to keep alive for as long as the CPU.
+  CPUConfig config;
 } CPUState;
 
 // Initialize CPU state.
-void CPUInit(CPUState* cpu, CPUConfig* config);
+//
+// The caller zero-initializes the CPUState and fills in the fields of its
+// config first. This does not zero anything: only two fields of a CPU want a
+// non-zero initial value, and a struct the caller has already had to zero in
+// order to fill in its config does not want zeroing twice.
+//
+// This is the only place the config is checked, so a host is told about a
+// mistake here or not at all.
+void CPUInit(CPUState* cpu);
 
 // Get the value of a CPU flag.
 static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
@@ -496,6 +524,22 @@ static inline void CPUSetDirectDataWindow(
 static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
+}
+
+// Hands the decode cache back, or takes it away.
+//
+// The storage and its size are constructor arguments and do not change; what
+// changes is whether the CPU may use them. A host takes the cache away while
+// something has to observe every instruction fetch, since a hit runs an
+// instruction without reading its bytes - which is what the platform does
+// while a memory watchpoint is enabled.
+//
+// A cache CPUInit() rejected stays rejected: enabling one that was never
+// usable does not make it so.
+static inline void CPUSetDecodeCacheEnabled(CPUState* cpu, bool enabled) {
+  cpu->decode_cache = (enabled && cpu->decode_cache_index_mask != 0)
+                          ? cpu->config.decode_cache
+                          : NULL;
 }
 
 // Discards every cached decode.

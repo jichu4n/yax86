@@ -448,9 +448,7 @@ typedef struct PlatformState {
   // Logger shared by the platform and every module it owns.
   Logger logger;
 
-  // CPU runtime configuration.
-  CPUConfig cpu_config;
-  // CPU state.
+  // CPU state, which holds its own configuration.
   CPUState cpu;
   // Storage for the CPU's decode cache, handed to it through
   // CPUConfig.decode_cache.

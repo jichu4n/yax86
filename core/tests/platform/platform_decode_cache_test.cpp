@@ -55,8 +55,8 @@ class PlatformDecodeCacheTest : public ::testing::Test {
 };
 
 TEST_F(PlatformDecodeCacheTest, ThePlatformHandsTheCPUItsDecodeCache) {
-  EXPECT_EQ(platform_.cpu_config.decode_cache, platform_.cpu_decode_cache);
-  EXPECT_EQ(platform_.cpu_config.decode_cache_num_entries, kDecodeCacheEntries);
+  EXPECT_EQ(platform_.cpu.decode_cache, platform_.cpu_decode_cache);
+  EXPECT_EQ(platform_.cpu.config.decode_cache_num_entries, kDecodeCacheEntries);
   // Which CPUInit() accepted, rather than logging and running without one.
   EXPECT_EQ(platform_.cpu.decode_cache_index_mask, kDecodeCacheEntries - 1);
 }
@@ -99,10 +99,10 @@ TEST_F(PlatformDecodeCacheTest, AWatchpointTakesTheCacheAway) {
   const int8_t index =
       PlatformAddMemoryWatchpoint(&platform_, 0x0200, 0x0200, true, true);
   ASSERT_GE(index, 0);
-  EXPECT_EQ(platform_.cpu_config.decode_cache, nullptr);
+  EXPECT_EQ(platform_.cpu.decode_cache, nullptr);
 
   PlatformRemoveMemoryWatchpoint(&platform_, index);
-  EXPECT_EQ(platform_.cpu_config.decode_cache, platform_.cpu_decode_cache);
+  EXPECT_EQ(platform_.cpu.decode_cache, platform_.cpu_decode_cache);
 }
 
 TEST_F(PlatformDecodeCacheTest, NoDecodeIsReusedWhileAWatchpointIsEnabled) {

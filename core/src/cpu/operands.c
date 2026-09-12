@@ -104,8 +104,8 @@ YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
-  return cpu->config->read_memory_byte
-             ? cpu->config->read_memory_byte(cpu, raw_address)
+  return cpu->config.read_memory_byte
+             ? cpu->config.read_memory_byte(cpu, raw_address)
              : 0xFF;
 }
 
@@ -193,10 +193,10 @@ YAX86_PRIVATE void WriteRawMemoryByte(
     cpu->direct_data_window.data[address] = value;
     return;
   }
-  if (!cpu->config->write_memory_byte) {
+  if (!cpu->config.write_memory_byte) {
     return;
   }
-  cpu->config->write_memory_byte(cpu, address, value);
+  cpu->config.write_memory_byte(cpu, address, value);
 }
 
 // Write a byte to memory.
