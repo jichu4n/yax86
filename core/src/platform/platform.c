@@ -993,9 +993,11 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->next_event_ticks =
       PlatformCyclesUntilNextEvent(platform, kMaxEventInterval);
 
+  // Set before the two calls below, because each of them recomputes the
+  // enabled flags and one of those is derived from this.
+  platform->is_step_mode = false;
   PlatformClearBreakpoints(platform);
   PlatformClearMemoryWatchpoints(platform);
-  platform->is_step_mode = false;
   platform->has_stop_info = false;
   platform->stop_pending = false;
   platform->skip_breakpoint_check = false;
@@ -1147,7 +1149,14 @@ static bool PlatformCheckBreakpoints(PlatformState* platform) {
   return false;
 }
 
-YAX86_HOT PlatformRunStatus PlatformTick(PlatformState* platform) {
+// The body of both entry points.
+//
+// may_run_several_instructions is what separates them. PlatformTick() runs one
+// instruction because that is what it promises its caller; PlatformRun() is
+// driving the machine rather than stepping it, so it lets a tick batch. Both
+// callers pass a constant, so the tests below fold away in each.
+YAX86_HOT static PlatformRunStatus PlatformTickInternal(
+    PlatformState* platform, bool may_run_several_instructions) {
   // Stop before executing the instruction at a breakpoint. Nothing else in the
   // machine is ticked, because no time has passed yet.
   if (platform->has_enabled_breakpoints && !platform->cpu.is_halted) {
@@ -1161,8 +1170,23 @@ YAX86_HOT PlatformRunStatus PlatformTick(PlatformState* platform) {
     }
   }
 
+  // How long the CPU may run before something in the machine needs to see it.
+  // It spends this on running several cached instructions in one tick, which
+  // is what makes the per-tick work here amortize over more than one
+  // instruction.
+  //
+  // A deadline already due leaves no budget at all: the subtraction would
+  // otherwise wrap to something enormous and let the CPU run on past a device
+  // that is already waiting.
+  const uint16_t max_run_cycles =
+      may_run_several_instructions &&
+              platform->can_run_several_instructions_per_tick &&
+              !PlatformIsEventDue(platform)
+          ? (uint16_t)(platform->next_event_ticks - platform->ticks)
+          : 0;
+
   // Tick the CPU.
-  CPUTickResult cpu_result = CPUTick(&platform->cpu);
+  CPUTickResult cpu_result = CPUTick(&platform->cpu, max_run_cycles);
 
   // The instruction took as long as it took, and every device is clocked from
   // that - but in arrears. Rather than offering each device its share of the
@@ -1201,6 +1225,10 @@ YAX86_HOT PlatformRunStatus PlatformTick(PlatformState* platform) {
   return kPlatformRunning;
 }
 
+PlatformRunStatus PlatformTick(PlatformState* platform) {
+  return PlatformTickInternal(platform, false);
+}
+
 // Advance the clock over time the guest has said it has no use for, up to
 // max_cycles. Every device is brought up to date across the skipped interval
 // rather than having it taken away from them, so the guest's timer tick count
@@ -1232,7 +1260,7 @@ PlatformRun(PlatformState* platform, uint32_t max_cycles) {
   const uint32_t start = platform->ticks;
   uint32_t elapsed = 0;
   while (elapsed < max_cycles) {
-    PlatformRunStatus status = PlatformTick(platform);
+    PlatformRunStatus status = PlatformTickInternal(platform, true);
     if (status != kPlatformRunning) {
       return status;
     }
@@ -1307,6 +1335,12 @@ static void PlatformUpdateEnabledFlags(PlatformState* platform) {
       break;
     }
   }
+  // A breakpoint is tested before a tick and a step reported after one, so
+  // both need every instruction boundary to be a tick boundary. A memory
+  // watchpoint needs no test here: it fires from inside an instruction and
+  // asks the CPU to stop, which ends the run where it happened.
+  platform->can_run_several_instructions_per_tick =
+      !platform->has_enabled_breakpoints && !platform->is_step_mode;
   // Instruction fetch reads through a direct window when one is open, which
   // cannot fire a watchpoint. Turning watchpoints on stops the platform
   // handing out new windows, and this discards whichever one is already open.
@@ -1388,6 +1422,9 @@ void PlatformClearMemoryWatchpoints(PlatformState* platform) {
 
 void PlatformSetStepMode(PlatformState* platform, bool is_step_mode) {
   platform->is_step_mode = is_step_mode;
+  // Step mode is one of the two things that stop the CPU running several
+  // instructions per tick, and this is what recomputes that.
+  PlatformUpdateEnabledFlags(platform);
 }
 
 const PlatformStopInfo* PlatformGetStopInfo(const PlatformState* platform) {

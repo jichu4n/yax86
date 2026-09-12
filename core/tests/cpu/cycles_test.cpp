@@ -30,7 +30,7 @@ uint16_t CycleCost(const string& name, const string& asm_code) {
   auto helper = CPUTestHelper::CreateWithProgram(name, asm_code);
   helper->cpu_.registers[kBX] = kOperandAddress;
   helper->cpu_.registers[kSP] = kStackPointer;
-  EXPECT_EQ(CPUTick(&helper->cpu_), kCPUTickExecuted);
+  EXPECT_EQ(CPUTick(&helper->cpu_, 0), kCPUTickExecuted);
   return helper->cpu_.cycles_this_tick;
 }
 

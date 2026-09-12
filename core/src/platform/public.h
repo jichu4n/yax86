@@ -551,6 +551,14 @@ typedef struct PlatformState {
   // Whether to stop after each instruction.
   bool is_step_mode;
 
+  // Whether the CPU may run several instructions per tick. False while a
+  // breakpoint or step mode is in use, since both have to see every
+  // instruction boundary and a run puts several of them inside one tick.
+  //
+  // Recomputed by PlatformUpdateEnabledFlags(), which is the sole writer of
+  // this and of the two flags above.
+  bool can_run_several_instructions_per_tick;
+
   // Whether stop_info describes a stop that has occurred.
   bool has_stop_info;
   // Details of the most recent stop.
@@ -583,12 +591,24 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 // CPU retires no instruction but still advances the clock, so that whatever is
 // meant to wake it can.
 //
+// Exactly one, which is what makes this the entry point to step a machine
+// with. PlatformRun() lets a tick run several instructions back to back where
+// nothing needs to see the boundaries between them, which is worth a good deal
+// but leaves the caller unable to say where in a tick it is.
+//
 // Returns kPlatformRunning if the machine should keep running.
 PlatformRunStatus PlatformTick(PlatformState* platform);
 
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
+//
+// Unlike PlatformTick(), a tick here may run several instructions back to
+// back - up to four, and never past the point where a device is due to be
+// serviced or something else needs to be acted on at an instruction boundary.
+// Nothing observable moves as a result: every device still sees every cycle,
+// and an interrupt is still delivered where it would have been. What is saved
+// is the per-tick work, which is most of what a cached instruction costs.
 //
 // max_cycles must be well under 2^31. Progress is measured as an unsigned
 // difference from the tick count this call started at, which is what keeps it
