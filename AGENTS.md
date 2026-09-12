@@ -817,6 +817,19 @@ Alongside the table, state:
   rather than by arithmetic: its last page comes out straddled and takes the
   fallback. That is the case for any option ROM whose size is not a multiple of
   4KB.
+- **Registering a region and telling the CPU about it are separate steps.**
+  What the CPU derives from the map - both its windows and its decode cache -
+  is discarded by `PlatformUpdateAfterMemoryMapChange()`, which the public
+  `RegisterMemoryMapEntry()` calls and the four registrations during startup do
+  not. Startup therefore recomputes once at the end rather than once per
+  region, three of which were only undone by the next registration.
+- That recompute is the last thing `PlatformInit()` does, because what the CPU
+  derives depends on whether a watchpoint is enabled as well as on the map, and
+  the clears above it are what settle that. It is not the only thing that
+  establishes the derived state at startup - `PlatformClearMemoryWatchpoints()`
+  reaches it through `PlatformUpdateEnabledFlags()` - and that overlap is real
+  rather than accidental: a watchpoint change and a map change are two triggers
+  for one recompute, and both need it.
 - `RegisterMemoryMapEntry()` extends the index rather than rebuilding it. Only
   the pages the new entry touches can change, and entries may not overlap, so
   nothing already in the index can have a share of one of them — a registration
@@ -1152,12 +1165,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.1.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #72:
+SRAM, at #74:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **5.367740** | **5.161** | **0.434** | **108.2%** | 474,172 | 182,472 | 88,473 |
-| `-O2` | 5.945354 | 4.659 | 0.392 | 97.7% | 459,708 | 175,496 | 74,157 |
+| `-O3` | **5.252304** | **5.274** | **0.443** | **110.6%** | 474,044 | 182,472 | 88,329 |
+| `-O2` | 5.837343 | 4.746 | 0.399 | 99.5% | 459,708 | 175,496 | 74,253 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The seconds go
