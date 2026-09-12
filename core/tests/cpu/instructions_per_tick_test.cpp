@@ -54,16 +54,16 @@ class InstructionsPerTickTest : public ::testing::Test {
  protected:
   void SetUp() override {
     memory_.assign(kMemorySize, 0);
-    config_ = CPUConfig{};
-    config_.context = this;
-    config_.read_memory_byte = ReadMemoryByte;
-    config_.write_memory_byte = WriteMemoryByte;
-    config_.get_instruction_fetch_window = GetInstructionFetchWindow;
-    config_.acknowledge_interrupt = AcknowledgeInterrupt;
-    config_.interrupt_request_hint = &interrupt_requested_;
-    config_.decode_cache = cache_;
-    config_.decode_cache_num_entries = kNumCacheEntries;
-    CPUInit(&cpu_, &config_);
+    cpu_ = CPUState{};
+    cpu_.config.context = this;
+    cpu_.config.read_memory_byte = ReadMemoryByte;
+    cpu_.config.write_memory_byte = WriteMemoryByte;
+    cpu_.config.get_instruction_fetch_window = GetInstructionFetchWindow;
+    cpu_.config.acknowledge_interrupt = AcknowledgeInterrupt;
+    cpu_.config.interrupt_request_hint = &interrupt_requested_;
+    cpu_.config.decode_cache = cache_;
+    cpu_.config.decode_cache_num_entries = kNumCacheEntries;
+    CPUInit(&cpu_);
     CPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
     cpu_.registers[kCS] = 0;
     cpu_.registers[kDS] = 0;
@@ -110,13 +110,13 @@ class InstructionsPerTickTest : public ::testing::Test {
 
   static uint8_t ReadMemoryByte(CPUState* cpu, uint32_t address) {
     InstructionsPerTickTest* self =
-        static_cast<InstructionsPerTickTest*>(cpu->config->context);
+        static_cast<InstructionsPerTickTest*>(cpu->config.context);
     return address < kMemorySize ? self->memory_[address] : 0xFF;
   }
 
   static void WriteMemoryByte(CPUState* cpu, uint32_t address, uint8_t value) {
     InstructionsPerTickTest* self =
-        static_cast<InstructionsPerTickTest*>(cpu->config->context);
+        static_cast<InstructionsPerTickTest*>(cpu->config.context);
     if (address < kMemorySize) {
       self->memory_[address] = value;
     }
@@ -124,7 +124,7 @@ class InstructionsPerTickTest : public ::testing::Test {
 
   static void GetInstructionFetchWindow(CPUState* cpu, uint32_t address) {
     InstructionsPerTickTest* self =
-        static_cast<InstructionsPerTickTest*>(cpu->config->context);
+        static_cast<InstructionsPerTickTest*>(cpu->config.context);
     if (address >= kMemorySize) {
       cpu->instruction_fetch_window.data = nullptr;
       return;
@@ -136,7 +136,7 @@ class InstructionsPerTickTest : public ::testing::Test {
 
   static bool AcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
     InstructionsPerTickTest* self =
-        static_cast<InstructionsPerTickTest*>(cpu->config->context);
+        static_cast<InstructionsPerTickTest*>(cpu->config.context);
     if (!self->interrupt_requested_) {
       return false;
     }
@@ -147,7 +147,6 @@ class InstructionsPerTickTest : public ::testing::Test {
   }
 
   std::vector<uint8_t> memory_;
-  CPUConfig config_ = {};
   CPUState cpu_ = {};
   CPUDecodeCacheEntry cache_[kNumCacheEntries] = {};
   bool interrupt_requested_ = false;
@@ -191,9 +190,9 @@ TEST_F(InstructionsPerTickTest, AColdCacheRunsOneInstructionPerTick) {
 TEST_F(InstructionsPerTickTest, NoDecodeCacheRunsOneInstructionPerTick) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
-  // Clearing the pointer is how a host takes the cache away, which is what the
-  // platform does while a memory watchpoint is enabled.
-  config_.decode_cache = nullptr;
+  // Taking the cache away is what the platform does while a memory watchpoint
+  // is enabled.
+  CPUSetDecodeCacheEnabled(&cpu_, false);
 
   EXPECT_EQ(RunOneTick(), 1u);
 }
@@ -361,7 +360,7 @@ TEST_F(InstructionsPerTickTest, ARunStopsWhenAnInterruptIsRequested) {
 TEST_F(InstructionsPerTickTest, NoInterruptHintRunsOneInstructionPerTick) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
-  config_.interrupt_request_hint = nullptr;
+  cpu_.config.interrupt_request_hint = nullptr;
 
   EXPECT_EQ(RunOneTick(), 1u);
 }
@@ -408,7 +407,7 @@ TEST_F(InstructionsPerTickTest, ARunStopsWhenAStopIsRequested) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
 
-  config_.on_after_execute_instruction = [](CPUState* cpu, const Instruction*) {
+  cpu_.config.on_after_execute_instruction = [](CPUState* cpu, const Instruction*) {
     if (cpu->registers[kAX] == 2) {
       CPURequestStop(cpu);
     }

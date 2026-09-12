@@ -301,6 +301,53 @@ Alongside the table, state:
   `*_rom_data.{c,h}` are committed and CI runs `git diff --exit-code`, so
   regenerate and commit them when a ROM changes.
 
+### cpu — state and config
+
+- **`CPUConfig` is a field of `CPUState`, and a caller fills it in before
+  `CPUInit()`.** There is one object: zero-initialize a `CPUState`, set the
+  config fields you want, call `CPUInit(&cpu)`. `CPUInit()` zeroes nothing —
+  only two fields of a CPU want a non-zero initial value, and a struct the
+  caller has already had to zero in order to fill in its config does not want
+  zeroing twice.
+- Held by value rather than by pointer. The dereference cost **0.77% at `-O3`
+  and 3.26% at `-O2`** on a path that reads a config field every instruction,
+  and a pointer made the config an object the caller had to keep alive for as
+  long as the CPU — a rule nothing stated and nothing enforced.
+- **Three kinds of field, and the difference is what may write them:**
+  - **Config — constructor arguments.** Written by the caller before
+    `CPUInit()`, checked there, read-only afterwards. `CPUInit()` is the only
+    reader of `decode_cache_num_entries`, so a host that changes it later
+    changes nothing.
+  - **Plain state.** `registers`, `flags`, `instructions_retired`,
+    `cycles_this_tick`. Nothing is derived from them, so a debugger or a test
+    writing one directly is fine and reads better than a setter would. There
+    are about 1,400 such writes in the tests.
+  - **Coupled state — a setter, which is its sole writer.** The fields another
+    field's correctness depends on: `CPUSetDecodeCacheEnabled()`,
+    `CPUSetDirectDataWindow()`, `CPUInvalidateInstructionFetchWindow()`. This
+    is the sole-writer discipline `PlatformUpdateEnabledFlags()` and
+    `PICUpdateUnmaskedRequest()` already follow, stated as a rule.
+- **`CPUSetDirectDataWindow()` is not an aberration**, and an earlier note here
+  called it one. The window is *derived* — the platform computes which slice of
+  its memory the CPU may index, from whichever map entry covers address 0 and
+  only while no watchpoint is enabled — rather than handed over raw, and its
+  `data`/`end` pair carries an invariant that makes the bounds test a single
+  compare. That is coupled state, and a setter is what coupled state gets.
+  What made `CPUSetDecodeCache()` wrong was different: it passed *constructor
+  arguments* through a setter.
+- **A per-call parameter is none of the three.** `CPUTick()`'s `max_run_cycles`
+  is host-provided but set every tick, so it is an argument, not a field. Do
+  not "fix" it into the config: config is written once, and a value that
+  changes every call written once is wrong rather than tidy.
+- **Where a field sits in `CPUState` is worth 1.0–1.7%.** A Cortex-M0+ encodes
+  only a 5-bit immediate offset in `ldr`, so a field beyond about 124 bytes
+  into the struct costs extra instructions to address. `CPUConfig` is ~70 bytes
+  and `code_page_generation` is 256, and putting either ahead of the hot
+  scalars pushes them out of range: config first measures **1.04% slower at
+  `-O3` and 1.69% at `-O2`** than config last, and moving the generations after
+  the decode cache fields is worth another 0.56% at `-O2`. Large or cold
+  members belong at the end.
+
 ### cpu — instruction decoding
 
 - `CPUFetchNextInstruction()` decodes directly into the caller's `Instruction`.
@@ -438,18 +485,21 @@ Alongside the table, state:
   most of the win — an earlier attempt that copied was recorded at +1.4%
   against this one's +10.86%. Lending the entry out is safe because no
   instruction handler writes through the `Instruction` it is given.
-- **Host-provided data goes in `CPUConfig` and is checked in `CPUInit()`**,
-  which is the only place a host's mistake can be reported. That is the pattern
-  for this codebase; `CPUSetDirectDataWindow()` is an aberration to be brought
-  into line separately, so do not copy its shape. A compile-time array would
-  have been worse still: it would put the size of `CPUState` behind a macro,
+- **The storage and its size are constructor arguments, so they are in
+  `CPUConfig`** and checked in `CPUInit()` — see the state and config section
+  below for why that is where host-provided data goes. A compile-time array
+  would have been worse: it would put the size of `CPUState` behind a macro,
   and a single-header library whose layout depends on a define is a mismatch
   waiting to happen between `libyax86_core.a` and whatever includes it.
-- **That costs 1.80% at `-O3`** and 0.19% at `-O2`, all of it the extra
-  dereference through `cpu->config` on a path that otherwise touches no config
-  field. It is paid deliberately, for one shape across everything a host
-  provides; embedding `CPUConfig` in `CPUState` would take it back, and this is
-  the measurement that says what that is worth.
+- What changes over a CPU's life is not the storage but whether the CPU may use
+  it, which is `CPUState.decode_cache` — derived by `CPUInit()` and by
+  `CPUSetDecodeCacheEnabled()`, which is its sole writer afterwards. A rejected
+  count and a cache withdrawn for a watchpoint both leave it NULL, so the fetch
+  tests one thing rather than two.
+- `CPUInvalidateDecodeCache()` walks `config.decode_cache` rather than the
+  derived pointer, so entries are discarded even while the cache is withdrawn.
+  A host that hands it back must not find stale decodes waiting in it, and
+  `InvalidatingReachesEntriesWhileTheCacheIsAway` is what says so.
 - The count must be a power of two of at least two, because the index is a
   mask — a remainder by a runtime value is a division, which this target has no
   instruction for. A bad count is logged and the CPU runs without a cache.
@@ -1040,7 +1090,7 @@ Alongside the table, state:
   explicitly defines it to whatever placement attribute it needs. The Pico
   harness defines it to `__not_in_flash()`, which puts the function in SRAM
   instead of executing it from QSPI flash through a 16KB XIP cache.
-- **87 functions carry it, chosen from an on-target profile rather than by
+- **86 functions carry it, chosen from an on-target profile rather than by
   intuition.** On the Pico it is worth **1.59x at 400MHz** and 1.23x at 125MHz.
   The win is larger when overclocked because the flash SPI clock does not scale
   with the core, so an XIP miss costs more core cycles the faster the core runs.
@@ -1072,9 +1122,9 @@ Alongside the table, state:
   through by construction. If the count in the bundle ever drops, something is
   wrong with the bundler:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 164
+  grep -c YAX86_HOT core/yax86_core.h    # 163
   ```
-  That is 87 annotations plus the macro block in `util/common.h`, whose seven
+  That is 86 annotations plus the macro block in `util/common.h`, whose seven
   lines all match on the substring, once per each of the 11 module bundles.
 - `YAX86_ALWAYS_INLINE` is not about placement, but exists for the same reason:
   something the compiler was doing for free stops being free and nothing in the
@@ -1272,12 +1322,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.1.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #73:
+SRAM, at #75:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.844023** | **5.719** | **0.481** | **119.9%** | 473,756 | 182,120 | 89,073 |
-| `-O2` | 5.285173 | 5.242 | 0.441 | 109.9% | 460,012 | 175,736 | 74,581 |
+| `-O3` | **4.807093** | **5.763** | **0.484** | **120.8%** | 473,612 | 182,104 | 89,215 |
+| `-O2` | 5.118089 | 5.413 | 0.455 | 113.5% | 460,796 | 176,072 | 75,339 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so both reported levels now
   emulate the part faster than the part ran. **The seconds go

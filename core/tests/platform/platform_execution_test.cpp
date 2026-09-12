@@ -605,7 +605,7 @@ TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
 // this names the wiring so that dropping it is not a diffuse failure.
 TEST_F(PlatformExecutionTest, TheCPUsInterruptHintTracksThePIC) {
   ASSERT_EQ(
-      platform_.cpu.config->interrupt_request_hint,
+      platform_.cpu.config.interrupt_request_hint,
       &platform_.pic.has_unmasked_request);
 
   // Vector base 0x08, everything masked.
@@ -613,15 +613,15 @@ TEST_F(PlatformExecutionTest, TheCPUsInterruptHintTracksThePIC) {
   WritePortByte(&platform_, 0x21, 0x08);
   WritePortByte(&platform_, 0x21, 0x01);
   WritePortByte(&platform_, 0x21, 0xFF);
-  EXPECT_FALSE(*platform_.cpu.config->interrupt_request_hint);
+  EXPECT_FALSE(*platform_.cpu.config.interrupt_request_hint);
 
   // A masked request is not one the CPU could take, so the hint stays false.
   ASSERT_TRUE(PlatformRaiseIRQ(&platform_, 0));
-  EXPECT_FALSE(*platform_.cpu.config->interrupt_request_hint);
+  EXPECT_FALSE(*platform_.cpu.config.interrupt_request_hint);
 
   // Unmasking it makes the request takeable, with no IRQ raised in between.
   WritePortByte(&platform_, 0x21, 0xFE);
-  EXPECT_TRUE(*platform_.cpu.config->interrupt_request_hint);
+  EXPECT_TRUE(*platform_.cpu.config.interrupt_request_hint);
 }
 
 // A software interrupt executing while an acknowledged hardware IRQ is waiting

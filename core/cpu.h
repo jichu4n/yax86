@@ -904,10 +904,14 @@ enum {
 };
 
 // State of the emulated CPU.
+//
+// A caller zero-initializes one of these, fills in the fields of config, and
+// calls CPUInit(). Everything outside config is the CPU's own: some of it is
+// there to be read - the registers, the flags, instructions_retired - and a
+// debugger or a test may write a register, because nothing is derived from
+// one. The fields that other fields depend on are not writable that way and
+// have setters, which are the sole writers of what they maintain.
 typedef struct CPUState {
-  // Pointer to caller-provided runtime configuration
-  CPUConfig* config;
-
   // Register values
   uint16_t registers[kNumRegisters];
   // Flag values
@@ -968,6 +972,20 @@ typedef struct CPUState {
   // once instead.
   CPUDirectDataWindow direct_data_window;
 
+  // The decode cache the fetch may actually use: CPUConfig.decode_cache where
+  // CPUInit() accepted it and it has not been taken away, and NULL otherwise.
+  //
+  // Derived rather than read from the config directly, so that a rejected
+  // count and a cache withdrawn for a watchpoint come out the same way and the
+  // fetch tests one thing rather than two. CPUSetDecodeCacheEnabled() is the
+  // sole writer after CPUInit().
+  struct CPUDecodeCacheEntry* decode_cache;
+  // One less than CPUConfig.decode_cache_num_entries, so that an address
+  // becomes an index with a mask rather than a remainder - a remainder by a
+  // runtime value is a division, which this target has no instruction for.
+  // Derived by CPUInit(), and zero where the count did not pass.
+  uint32_t decode_cache_index_mask;
+
   // How many times each 4KB page has been written, as a wrapping byte. A
   // cached decode records what its page stood at and is discarded once the two
   // disagree, which is what makes caching safe against code that writes over
@@ -978,16 +996,26 @@ typedef struct CPUState {
   // to find out would cost about what the counter does.
   uint8_t code_page_generation[kNumCodePages];
 
-  // One less than CPUConfig.decode_cache_num_entries, so that an address
-  // becomes an index with a mask rather than a remainder - a remainder by a
-  // runtime value is a division, which this target has no instruction for.
-  // Derived and checked by CPUInit(), and zero where the count did not pass,
-  // which is why the minimum count is two rather than one.
-  uint32_t decode_cache_index_mask;
+  // Caller-provided runtime configuration. Filled in before CPUInit(), which
+  // is where it is checked, and read-only afterwards - it is what this CPU was
+  // constructed with rather than somewhere to put things later.
+  //
+  // Held by value rather than by pointer. Reaching it through a pointer cost
+  // 1.80% at -O3 on a path that touches it once per instruction, and made the
+  // config an object the caller had to keep alive for as long as the CPU.
+  CPUConfig config;
 } CPUState;
 
 // Initialize CPU state.
-void CPUInit(CPUState* cpu, CPUConfig* config);
+//
+// The caller zero-initializes the CPUState and fills in the fields of its
+// config first. This does not zero anything: only two fields of a CPU want a
+// non-zero initial value, and a struct the caller has already had to zero in
+// order to fill in its config does not want zeroing twice.
+//
+// This is the only place the config is checked, so a host is told about a
+// mistake here or not at all.
+void CPUInit(CPUState* cpu);
 
 // Get the value of a CPU flag.
 static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
@@ -1078,6 +1106,22 @@ static inline void CPUSetDirectDataWindow(
 static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
+}
+
+// Hands the decode cache back, or takes it away.
+//
+// The storage and its size are constructor arguments and do not change; what
+// changes is whether the CPU may use them. A host takes the cache away while
+// something has to observe every instruction fetch, since a hit runs an
+// instruction without reading its bytes - which is what the platform does
+// while a memory watchpoint is enabled.
+//
+// A cache CPUInit() rejected stays rejected: enabling one that was never
+// usable does not make it so.
+static inline void CPUSetDecodeCacheEnabled(CPUState* cpu, bool enabled) {
+  cpu->decode_cache = (enabled && cpu->decode_cache_index_mask != 0)
+                          ? cpu->config.decode_cache
+                          : NULL;
 }
 
 // Discards every cached decode.
@@ -2031,8 +2075,8 @@ YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
-  return cpu->config->read_memory_byte
-             ? cpu->config->read_memory_byte(cpu, raw_address)
+  return cpu->config.read_memory_byte
+             ? cpu->config.read_memory_byte(cpu, raw_address)
              : 0xFF;
 }
 
@@ -2120,10 +2164,10 @@ YAX86_PRIVATE void WriteRawMemoryByte(
     cpu->direct_data_window.data[address] = value;
     return;
   }
-  if (!cpu->config->write_memory_byte) {
+  if (!cpu->config.write_memory_byte) {
     return;
   }
-  cpu->config->write_memory_byte(cpu, address, value);
+  cpu->config.write_memory_byte(cpu, address, value);
 }
 
 // Write a byte to memory.
@@ -4483,7 +4527,7 @@ ExecuteSetALFromCarry(const InstructionContext* ctx) {
 // Read a byte from an I/O port.
 YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return ByteValue(
-      cpu->config->read_port ? cpu->config->read_port(cpu, port) : 0xFF);
+      cpu->config.read_port ? cpu->config.read_port(cpu, port) : 0xFF);
 }
 
 // Read a word from an I/O port as a uint16_t. The 8088 has an 8-bit data bus,
@@ -4528,10 +4572,10 @@ ExecuteInDX(const InstructionContext* ctx) {
 
 // Write a byte to an I/O port.
 static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
-  if (!cpu->config->write_port) {
+  if (!cpu->config.write_port) {
     return;
   }
-  cpu->config->write_port(cpu, port, FromOperandValue(&value));
+  cpu->config.write_port(cpu, port, FromOperandValue(&value));
 }
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
@@ -7245,33 +7289,29 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config.logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state
 // ============================================================================
 
-YAX86_HOT void CPUInit(CPUState* cpu, CPUConfig* config) {
-  // Zero out the CPU state
-  const CPUState zero_cpu_state = {0};
-  *cpu = zero_cpu_state;
+void CPUInit(CPUState* cpu) {
   cpu->flags = kInitialFlags;
-  cpu->config = config;
 
   // The only place the count is read, so a host gets told here or not at all.
-  const uint32_t num_entries = config->decode_cache_num_entries;
-  if (config->decode_cache == NULL) {
+  const uint32_t num_entries = cpu->config.decode_cache_num_entries;
+  if (cpu->config.decode_cache == NULL) {
     return;
   }
   if (num_entries < 2 || (num_entries & (num_entries - 1)) != 0) {
     YAX86_CPU_LOG(
         kLogLevelError,
-        "decode cache of %u entries is not a power of two of at least two, "
-        "running without one",
+        "decode cache of %u entries is not a power of two, running without one",
         (unsigned)num_entries);
     return;
   }
   cpu->decode_cache_index_mask = num_entries - 1;
+  CPUSetDecodeCacheEnabled(cpu, true);
 }
 
 // ============================================================================
@@ -7431,8 +7471,8 @@ YAX86_HOT static void CPUInitInstructionFetchState(
       raw_address >= window->end) {
     // Nothing open covers this address, so ask for a window that does. The
     // host fills one in, or sets its data to NULL to decline.
-    if (cpu->config->get_instruction_fetch_window != NULL) {
-      cpu->config->get_instruction_fetch_window(cpu, raw_address);
+    if (cpu->config.get_instruction_fetch_window != NULL) {
+      cpu->config.get_instruction_fetch_window(cpu, raw_address);
     } else {
       cpu->instruction_fetch_window.data = NULL;
     }
@@ -7577,7 +7617,10 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 }
 
 void CPUInvalidateDecodeCache(CPUState* cpu) {
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
+  // The config's storage rather than the derived pointer, so that entries are
+  // discarded even while the cache is withdrawn - a host that hands it back
+  // must not find stale decodes waiting in it.
+  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
   }
@@ -7607,13 +7650,11 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // A caller must not hold the pointer across another fetch.
 YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
     CPUState* cpu, Instruction* scratch, Instruction** instruction) {
-  // Two tests, because the two ways there is no cache are recorded in
-  // different places: the host may clear the pointer at any time, and the mask
-  // is zero where CPUInit() rejected the count. Dropping the second measures
-  // 1.9% slower at -O3, so it is not the spare test it looks like.
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
-  const uint32_t index_mask = cpu->decode_cache_index_mask;
-  if (cache == NULL || index_mask == 0) {
+  // One test, because a rejected count and a cache withdrawn for a watchpoint
+  // both leave this NULL - which is what CPUState.decode_cache being derived
+  // rather than read from the config is for.
+  CPUDecodeCacheEntry* const cache = cpu->decode_cache;
+  if (cache == NULL) {
     *instruction = scratch;
     return CPUFetchNextInstruction(cpu, scratch);
   }
@@ -7626,7 +7667,8 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   const uint32_t address = ToRawAddress(cpu, &start);
   const uint8_t generation =
       cpu->code_page_generation[address >> kCodePageShift];
-  CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
 
   if (IsDecodeCacheHit(entry, address, generation)) {
     *instruction = &entry->instruction;
@@ -7673,8 +7715,8 @@ YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the on_before_execute_instruction callback if provided.
-  if (cpu->config->on_before_execute_instruction) {
-    cpu->config->on_before_execute_instruction(cpu, instruction);
+  if (cpu->config.on_before_execute_instruction) {
+    cpu->config.on_before_execute_instruction(cpu, instruction);
   }
 
   // Run the instruction handler.
@@ -7689,8 +7731,8 @@ CPUExecuteDecodedInstruction(
   }
 
   // Run the on_after_execute_instruction callback if provided.
-  if (cpu->config->on_after_execute_instruction) {
-    cpu->config->on_after_execute_instruction(cpu, instruction);
+  if (cpu->config.on_after_execute_instruction) {
+    cpu->config.on_after_execute_instruction(cpu, instruction);
   }
 
   return kInstructionExecuted;
@@ -7736,8 +7778,8 @@ static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // an interrupt handler callback, handle the interrupt within the VM using the
   // Interrupt Vector Table.
   InterruptHandlerResult interrupt_handler_result =
-      cpu->config->handle_interrupt
-          ? cpu->config->handle_interrupt(cpu, interrupt_number)
+      cpu->config.handle_interrupt
+          ? cpu->config.handle_interrupt(cpu, interrupt_number)
           : kInterruptHandlerUnhandled;
 
   if (interrupt_handler_result == kInterruptHandlerHandled) {
@@ -7774,11 +7816,11 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   // indirect call into a controller that almost always reports nothing, and
   // this runs at every instruction boundary. A host that supplies none is
   // asked every time.
-  const bool* const request_hint = cpu->config->interrupt_request_hint;
+  const bool* const request_hint = cpu->config.interrupt_request_hint;
   uint8_t intr_vector;
   if (CPUGetFlag(cpu, kIF) && (request_hint == NULL || *request_hint) &&
-      cpu->config->acknowledge_interrupt &&
-      cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
+      cpu->config.acknowledge_interrupt &&
+      cpu->config.acknowledge_interrupt(cpu, &intr_vector)) {
     DispatchInterrupt(cpu, intr_vector);
     return true;
   }
@@ -7853,8 +7895,8 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
       // one already waiting, which is what makes this reachable. A host that
       // supplies no hint cannot be asked without an acknowledge call, so it
       // ends the run instead of guessing.
-      cpu->config->interrupt_request_hint != NULL &&
-      !*cpu->config->interrupt_request_hint;
+      cpu->config.interrupt_request_hint != NULL &&
+      !*cpu->config.interrupt_request_hint;
 }
 
 // The decoded instruction at CS:IP if the cache is holding a current one, and
@@ -7866,12 +7908,8 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
 // the 8088 hardware suite supplies a budget and stays a single-instruction
 // test.
 YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
-  // Both tests, for the same reason the fetch makes both: the host may clear
-  // the pointer at any time, and the mask is zero where CPUInit() rejected the
-  // count.
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
-  const uint32_t index_mask = cpu->decode_cache_index_mask;
-  if (cache == NULL || index_mask == 0) {
+  CPUDecodeCacheEntry* const cache = cpu->decode_cache;
+  if (cache == NULL) {
     return NULL;
   }
   const MemoryAddress start = {
@@ -7879,7 +7917,8 @@ YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
       .offset = cpu->registers[kIP],
   };
   const uint32_t address = ToRawAddress(cpu, &start);
-  CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
   if (!IsDecodeCacheHit(
           entry, address,
           cpu->code_page_generation[address >> kCodePageShift])) {

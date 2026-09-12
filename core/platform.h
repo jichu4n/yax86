@@ -1131,9 +1131,7 @@ typedef struct PlatformState {
   // Logger shared by the platform and every module it owns.
   Logger logger;
 
-  // CPU runtime configuration.
-  CPUConfig cpu_config;
-  // CPU state.
+  // CPU state, which holds its own configuration.
   CPUState cpu;
   // Storage for the CPU's decode cache, handed to it through
   // CPUConfig.decode_cache.
@@ -1745,24 +1743,23 @@ void WritePortWord(PlatformState* platform, uint16_t port, uint16_t value) {
 // ============================================================================
 
 static uint8_t CPUCallbackReadMemoryByte(CPUState* cpu, uint32_t address) {
-  return ReadMemoryByte((PlatformState*)cpu->config->context, address);
+  return ReadMemoryByte((PlatformState*)cpu->config.context, address);
 }
 
 static void CPUCallbackWriteMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
-  WriteMemoryByte((PlatformState*)cpu->config->context, address, value);
+  WriteMemoryByte((PlatformState*)cpu->config.context, address, value);
 }
 
 static uint8_t CPUCallbackReadPortByte(CPUState* cpu, uint16_t port) {
-  return ReadPortByte((PlatformState*)cpu->config->context, port);
+  return ReadPortByte((PlatformState*)cpu->config.context, port);
 }
 
 static void CPUCallbackWritePortByte(
     CPUState* cpu, uint16_t port, uint8_t value) {
-  WritePortByte((PlatformState*)cpu->config->context, port, value);
+  WritePortByte((PlatformState*)cpu->config.context, port, value);
 }
 
-static const CPUConfig kEmptyCPUConfig = {0};
 
 // ============================================================================
 // Callbacks for 8259 PIC module
@@ -2013,7 +2010,7 @@ static void PlatformInitBIOS(PlatformState* platform) {
 // the interrupt in service as part of it - so a vector is never produced
 // unless the CPU is taking it right now.
 static bool CPUCallbackAcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
-  PlatformState* platform = (PlatformState*)cpu->config->context;
+  PlatformState* platform = (PlatformState*)cpu->config.context;
   const uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector == kPICNoPendingInterrupt) {
     return false;
@@ -2037,7 +2034,7 @@ enum {
 YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == kDOSIdleInterrupt) {
-    PlatformState* platform = (PlatformState*)cpu->config->context;
+    PlatformState* platform = (PlatformState*)cpu->config.context;
     platform->is_guest_idle = true;
   }
   return kInterruptHandlerUnhandled;
@@ -2053,7 +2050,7 @@ static void CPUCallbackGetInstructionFetchWindow(
     CPUState* cpu, uint32_t address) {
   CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
   window->data = NULL;
-  PlatformState* platform = (PlatformState*)cpu->config->context;
+  PlatformState* platform = (PlatformState*)cpu->config.context;
   if (platform->has_enabled_memory_watchpoints) {
     return;
   }
@@ -2075,27 +2072,30 @@ static void CPUCallbackGetInstructionFetchWindow(
 }
 
 static void PlatformInitCPU(PlatformState* platform) {
-  platform->cpu_config = kEmptyCPUConfig;
-  platform->cpu_config.context = platform;
-  platform->cpu_config.logger = &platform->logger;
-  platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
-  platform->cpu_config.get_instruction_fetch_window =
+  // The CPU's caller is what zeroes it, and this is the CPU's caller. CPUInit()
+  // below sets only the fields that want a non-zero value.
+  const CPUState kEmptyCPUState = {0};
+  platform->cpu = kEmptyCPUState;
+  platform->cpu.config.context = platform;
+  platform->cpu.config.logger = &platform->logger;
+  platform->cpu.config.read_memory_byte = CPUCallbackReadMemoryByte;
+  platform->cpu.config.get_instruction_fetch_window =
       CPUCallbackGetInstructionFetchWindow;
-  platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
-  platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
+  platform->cpu.config.write_memory_byte = CPUCallbackWriteMemoryByte;
+  platform->cpu.config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
   // Points into the PIC's own state, so the CPU sees a change the moment the
   // PIC makes one. PICInit() below runs after this, which is fine - the
   // pointer is to storage that already exists, not to a value read now.
-  platform->cpu_config.interrupt_request_hint =
+  platform->cpu.config.interrupt_request_hint =
       &platform->pic.has_unmasked_request;
-  platform->cpu_config.decode_cache = platform->cpu_decode_cache;
-  platform->cpu_config.decode_cache_num_entries = kDecodeCacheEntries;
+  platform->cpu.config.decode_cache = platform->cpu_decode_cache;
+  platform->cpu.config.decode_cache_num_entries = kDecodeCacheEntries;
   if (platform->config->enable_dos_idle_skip) {
-    platform->cpu_config.handle_interrupt = CPUCallbackHandleInterrupt;
+    platform->cpu.config.handle_interrupt = CPUCallbackHandleInterrupt;
   }
-  platform->cpu_config.read_port = CPUCallbackReadPortByte;
-  platform->cpu_config.write_port = CPUCallbackWritePortByte;
-  CPUInit(&platform->cpu, &platform->cpu_config);
+  platform->cpu.config.read_port = CPUCallbackReadPortByte;
+  platform->cpu.config.write_port = CPUCallbackWritePortByte;
+  CPUInit(&platform->cpu);
 
   // Initialize CPU registers.
   // CS:IP points to the BIOS entry point at 0xFFFF0.
@@ -2678,11 +2678,11 @@ static void PlatformUpdateDecodeCache(PlatformState* platform) {
   // given no cache, which puts those bytes back through ReadMemoryByte() where
   // the check is.
   //
-  // Only the pointer moves, and nothing needs discarding on the way back: the
-  // page generations were maintained throughout.
-  platform->cpu_config.decode_cache = platform->has_enabled_memory_watchpoints
-                                          ? NULL
-                                          : platform->cpu_decode_cache;
+  // The storage and its size never change; what changes is whether the CPU may
+  // use them. Nothing needs discarding on the way back - the page generations
+  // were maintained throughout.
+  CPUSetDecodeCacheEnabled(
+      &platform->cpu, !platform->has_enabled_memory_watchpoints);
 }
 
 // Recompute the cached hot path early-out flags.
