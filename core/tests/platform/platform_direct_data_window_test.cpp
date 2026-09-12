@@ -196,6 +196,7 @@ TEST_F(
   entry.read_data = region;
   entry.write_data = region;
   ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &entry));
+  PlatformUpdateAfterMemoryMapChange(&platform_);
 
   EXPECT_EQ(platform_.cpu.direct_data_window.data, ram_);
   EXPECT_EQ(platform_.cpu.direct_data_window.end, sizeof(ram_));

@@ -138,8 +138,18 @@ typedef struct MemoryMapEntry {
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
 //   - The number of memory map entries would exceed kMaxMemoryMapEntries.
+//
+// This does not tell the CPU that the map has changed. Follow a registration,
+// or a run of them, with PlatformUpdateAfterMemoryMapChange(). Skipping it
+// leaves the CPU free to reuse a decoded instruction it took from an address
+// that was unmapped at the time and so read as open bus - which no page
+// generation catches, because nothing was written. PlatformInit() registers
+// every region the machine has and updates once at the end.
 bool RegisterMemoryMapEntry(
     struct PlatformState* platform, const MemoryMapEntry* entry);
+// Discard what the CPU derives from the memory map: its instruction fetch
+// window, its direct data window and its decode cache.
+void PlatformUpdateAfterMemoryMapChange(struct PlatformState* platform);
 // Look up the memory map entry corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory map entry.
 MemoryMapEntry* GetMemoryMapEntryForAddress(

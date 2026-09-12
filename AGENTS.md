@@ -817,6 +817,23 @@ Alongside the table, state:
   rather than by arithmetic: its last page comes out straddled and takes the
   fallback. That is the case for any option ROM whose size is not a multiple of
   4KB.
+- **Registering a region and telling the CPU about it are separate steps.**
+  `RegisterMemoryMapEntry()` records the entry;
+  `PlatformUpdateAfterMemoryMapChange()` discards what the CPU derives from the
+  map. A caller does both, and may do the second once after a run of the first
+  - which is what `PlatformInit()` does for the four regions the machine has.
+- **The decode cache is what makes the second call obligatory.** An address
+  that is not mapped reads as open bus, so an instruction executed there can be
+  cached as 0xFF bytes; mapping a region over it moves no page generation,
+  because nothing was written. The two windows are less demanding - entries may
+  not overlap, so a newly registered region cannot be inside an open fetch
+  window, and the data window is whichever entry covers address 0, which a
+  missed update leaves closed rather than wrong.
+- That recompute is the last thing `PlatformInit()` does, because what the CPU
+  derives depends on whether a watchpoint is enabled as well as on the map, and
+  the clears above it are what settle that. A watchpoint change reaches the
+  same state through `PlatformUpdateEnabledFlags()`: two triggers for one
+  recompute, and both need it.
 - `RegisterMemoryMapEntry()` extends the index rather than rebuilding it. Only
   the pages the new entry touches can change, and entries may not overlap, so
   nothing already in the index can have a share of one of them — a registration
@@ -1151,16 +1168,19 @@ Notes on the machinery:
 
 ### Current figures
 
-GCC 16.1.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #72:
+GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
+SRAM, at #74:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **5.367740** | **5.161** | **0.434** | **108.2%** | 474,172 | 182,472 | 88,473 |
-| `-O2` | 5.945354 | 4.659 | 0.392 | 97.7% | 459,708 | 175,496 | 74,157 |
+| `-O3` | **5.309044** | **5.218** | **0.438** | **109.4%** | 473,836 | 182,440 | 88,293 |
+| `-O2` | 5.848098 | 4.737 | 0.398 | 99.3% | 459,620 | 175,448 | 74,269 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
-  configuration to emulate the part faster than the part ran. **The seconds go
+  configuration to emulate the part faster than the part ran. **The compiler
+  moves these as much as a change does** - the same commit measures 1.3% faster
+  under GCC 16.2.0 than under 16.1.0 - so record the version alongside them and
+  rebuild a baseline rather than comparing across one. **The seconds go
   out of date with every optimization** — this table is a snapshot to
   sanity-check a fresh measurement against, not a baseline to compare a branch
   to. Build the baseline from its own commit, as above.

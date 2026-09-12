@@ -139,6 +139,7 @@ TEST_F(PlatformFetchWindowTest, RegisteringAMemoryRegionDiscardsTheWindow) {
   entry.read_data = region;
   entry.write_data = region;
   ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &entry));
+  PlatformUpdateAfterMemoryMapChange(&platform_);
 
   EXPECT_EQ(platform_.cpu.instruction_fetch_window.data, nullptr);
 }
