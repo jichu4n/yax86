@@ -16,8 +16,7 @@ static void SetPCSpeakerFrequency(void* context, uint32_t frequency_hz) {
 
 class PCSpeakerTest : public ::testing::Test {
  protected:
-  PlatformState platform_;
-  PlatformConfig platform_config_ = {0};
+  PlatformState platform_ = {};
   // Never accessed - these tests drive the PIT and the PPI through I/O ports
   // only - but the platform needs memory in order to initialize.
   uint8_t ram_[64 * 1024] = {0};
@@ -28,16 +27,16 @@ class PCSpeakerTest : public ::testing::Test {
     g_last_speaker_frequency = 0;
 
     // Initialize platform config.
-    platform_config_.physical_memory_size = sizeof(ram_);
-    platform_config_.physical_memory = ram_;
-    platform_config_.vram = vram_;
+    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.physical_memory = ram_;
+    platform_.config.vram = vram_;
 
     // Initialize the platform.
-    ASSERT_TRUE(PlatformInit(&platform_, &platform_config_));
+    ASSERT_TRUE(PlatformInit(&platform_));
 
     // Wire up the mock speaker callback.
     // This is the connection that is currently a TODO in the main platform.
-    platform_.ppi.config->set_pc_speaker_frequency = SetPCSpeakerFrequency;
+    platform_.ppi.config.set_pc_speaker_frequency = SetPCSpeakerFrequency;
   }
 
   // Helper to set the PIT frequency for channel 2.

@@ -768,7 +768,7 @@ typedef enum DMARegisterByte {
 // State for the entire 8237 DMA controller.
 typedef struct DMAState {
   // Pointer to the DMA configuration.
-  DMAConfig* config;
+  DMAConfig config;
 
   // The four DMA channels.
   DMAChannelState channels[kDMANumChannels];
@@ -791,7 +791,7 @@ typedef struct DMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-void DMAInit(DMAState* dma, DMAConfig* config);
+void DMAInit(DMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
 uint8_t DMAReadPort(DMAState* dma, uint16_t port);
@@ -824,14 +824,9 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config->logger, &kLogModuleDMA, level, __VA_ARGS__)
+  YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
 
-void DMAInit(DMAState* dma, DMAConfig* config) {
-  static const DMAState zero_dma_state = {0};
-  *dma = zero_dma_state;
-
-  dma->config = config;
-
+void DMAInit(DMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
@@ -966,9 +961,18 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
       break;
 
     // Master Reset (port 0x0D)
-    case kDMAPortMasterReset:
-      DMAInit(dma, dma->config);
+    case kDMAPortMasterReset: {
+      // A master reset returns the controller to its power-on state, so
+      // unlike DMAInit() this does have to clear what is there. The config is
+      // what the host wired up and survives - a reset is the chip's, not the
+      // machine's.
+      const DMAConfig config = dma->config;
+      const DMAState zero_dma_state = {0};
+      *dma = zero_dma_state;
+      dma->config = config;
+      DMAInit(dma);
       break;
+    }
 
     // Mask Register for all channels (port 0x0F)
     case kDMAPortAllMask:
@@ -1021,18 +1025,17 @@ YAX86_HOT void DMATransferByte(DMAState* dma, uint8_t channel_index) {
     case kDMAModeTransferTypeVerify:  // Verify - no actual transfer
       break;
     case kDMAModeTransferTypeWrite:  // Write to memory (device -> memory)
-      if (dma->config->read_device_byte && dma->config->write_memory_byte) {
+      if (dma->config.read_device_byte && dma->config.write_memory_byte) {
         const uint8_t data =
-            dma->config->read_device_byte(dma->config->context, channel_index);
-        dma->config->write_memory_byte(dma->config->context, address, data);
+            dma->config.read_device_byte(dma->config.context, channel_index);
+        dma->config.write_memory_byte(dma->config.context, address, data);
       }
       break;
     case kDMAModeTransferTypeRead:  // Read from memory (memory -> device)
-      if (dma->config->read_memory_byte && dma->config->write_device_byte) {
+      if (dma->config.read_memory_byte && dma->config.write_device_byte) {
         const uint8_t data =
-            dma->config->read_memory_byte(dma->config->context, address);
-        dma->config->write_device_byte(
-            dma->config->context, channel_index, data);
+            dma->config.read_memory_byte(dma->config.context, address);
+        dma->config.write_device_byte(dma->config.context, channel_index, data);
       }
       break;
     default:
@@ -1054,8 +1057,8 @@ YAX86_HOT void DMATransferByte(DMAState* dma, uint8_t channel_index) {
     dma->status_register |= (1 << channel_index);
 
     // Notify the system that TC has been reached.
-    if (dma->config->on_terminal_count) {
-      dma->config->on_terminal_count(dma->config->context, channel_index);
+    if (dma->config.on_terminal_count) {
+      dma->config.on_terminal_count(dma->config.context, channel_index);
     }
 
     // Handle auto-initialization or mask the channel

@@ -3,7 +3,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_PIC_LOG(level, ...) \
-  YAX86_LOG(pic->config->logger, &kLogModulePIC, level, __VA_ARGS__)
+  YAX86_LOG(pic->config.logger, &kLogModulePIC, level, __VA_ARGS__)
 
 // ============================================================================
 // Constants
@@ -58,7 +58,7 @@ static inline PICMode PICGetMode(PICState* pic) {
 
   // Otherwise, we are cascaded.
   // If SP pin is set, we are slave; otherwise, master.
-  return pic->config->sp ? kPICSlave : kPICMaster;
+  return pic->config.sp ? kPICSlave : kPICMaster;
 }
 
 // Returns if the PIC is configured as a single PIC.
@@ -102,12 +102,7 @@ static inline void PICUpdateUnmaskedRequest(PICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-void PICInit(PICState* pic, PICConfig* config) {
-  // Zero out the PIC state.
-  static const PICState zero_pic_state = {0};
-  *pic = zero_pic_state;
-  pic->config = config;
-
+void PICInit(PICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
   PICUpdateUnmaskedRequest(pic);

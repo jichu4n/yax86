@@ -23,7 +23,7 @@ typedef struct MDACellColors {
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
 static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
-  const VideoConfig* config = video->config;
+  const VideoConfig* config = &video->config;
   MDACellColors colors = {
       .foreground = &config->foreground,
       .background = &config->background,
@@ -126,7 +126,7 @@ YAX86_PRIVATE void MDARenderRegion(
             (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
-        const RGB* rgb = cursor_scan_line ? &video->config->foreground
+        const RGB* rgb = cursor_scan_line ? &video->config.foreground
                                           : (is_foreground ? colors.foreground
                                                            : colors.background);
         VideoPixelRunPush(run, *rgb);

@@ -16,8 +16,8 @@ constexpr HDCDriveGeometry kTestGeometry = {
 class HDCTaskFileTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.context = this;
-    HDCInit(&hdc_, &config_);
+    hdc_.config.context = this;
+    HDCInit(&hdc_);
     HDCAttachDrive(&hdc_, 0, &kTestGeometry);
   }
 
@@ -71,8 +71,6 @@ class HDCTaskFileTest : public ::testing::Test {
     }
     return text;
   }
-
-  HDCConfig config_ = {0};
   HDCState hdc_ = {0};
 };
 

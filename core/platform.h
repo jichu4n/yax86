@@ -1125,8 +1125,9 @@ enum {
 };
 
 typedef struct PlatformState {
-  // Pointer to caller-provided runtime configuration.
-  PlatformConfig* config;
+  // Caller-provided runtime configuration. Filled in before PlatformInit(),
+  // which is where it is checked, and read-only afterwards.
+  PlatformConfig config;
 
   // Logger shared by the platform and every module it owns.
   Logger logger;
@@ -1137,42 +1138,28 @@ typedef struct PlatformState {
   // CPUConfig.decode_cache.
   CPUDecodeCacheEntry cpu_decode_cache[kDecodeCacheEntries];
 
-  // PIC runtime configuration.
-  PICConfig pic_config;
   // PIC state.
   PICState pic;
 
-  // PIT runtime configuration.
-  PITConfig pit_config;
   // PIT state.
   PITState pit;
 
-  // PPI runtime configuration.
-  PPIConfig ppi_config;
   // PPI state.
   PPIState ppi;
 
-  // Keyboard runtime configuration.
-  KeyboardConfig keyboard_config;
   // Keyboard state.
   KeyboardState keyboard;
 
   // DMA controller runtime configuration.
-  DMAConfig dma_config;
   // DMA controller state.
   DMAState dma;
 
   // FDC state.
-  FDCConfig fdc_config;
   FDCState fdc;
 
-  // HDC runtime configuration.
-  HDCConfig hdc_config;
   // HDC state.
   HDCState hdc;
 
-  // Video runtime configuration.
-  VideoConfig video_config;
   // Video state.
   VideoState video;
 
@@ -1252,12 +1239,16 @@ typedef struct PlatformState {
   bool skip_breakpoint_check;
 } PlatformState;
 
-// Initialize the platform state with the provided configuration. Returns true
-// if the platform state was successfully initialized, or false if:
+// Initialize the platform state. Returns true if the platform state was
+// successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
 //   - No physical memory buffer was provided.
 //   - No video memory buffer was provided.
-bool PlatformInit(PlatformState* platform, PlatformConfig* config);
+// The caller zero-initializes the PlatformState and fills in the fields of its
+// config first. Nothing here zeroes anything: every module's state is a field
+// of this one, so the caller's single zeroing covers all of them, and each
+// module's init sets only what wants a non-zero value.
+bool PlatformInit(PlatformState* platform);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.
@@ -1760,7 +1751,6 @@ static void CPUCallbackWritePortByte(
   WritePortByte((PlatformState*)cpu->config.context, port, value);
 }
 
-
 // ============================================================================
 // Callbacks for 8259 PIC module
 // ============================================================================
@@ -1838,8 +1828,8 @@ static void PPICallbackSetKeyboardControl(
 static void PPICallbackSetPCSpeakerFrequency(
     void* context, uint32_t frequency_hz) {
   PlatformState* platform = (PlatformState*)context;
-  if (platform->config->set_pc_speaker_frequency) {
-    platform->config->set_pc_speaker_frequency(platform, frequency_hz);
+  if (platform->config.set_pc_speaker_frequency) {
+    platform->config.set_pc_speaker_frequency(platform, frequency_hz);
   }
 }
 
@@ -2072,10 +2062,6 @@ static void CPUCallbackGetInstructionFetchWindow(
 }
 
 static void PlatformInitCPU(PlatformState* platform) {
-  // The CPU's caller is what zeroes it, and this is the CPU's caller. CPUInit()
-  // below sets only the fields that want a non-zero value.
-  const CPUState kEmptyCPUState = {0};
-  platform->cpu = kEmptyCPUState;
   platform->cpu.config.context = platform;
   platform->cpu.config.logger = &platform->logger;
   platform->cpu.config.read_memory_byte = CPUCallbackReadMemoryByte;
@@ -2090,7 +2076,7 @@ static void PlatformInitCPU(PlatformState* platform) {
       &platform->pic.has_unmasked_request;
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
   platform->cpu.config.decode_cache_num_entries = kDecodeCacheEntries;
-  if (platform->config->enable_dos_idle_skip) {
+  if (platform->config.enable_dos_idle_skip) {
     platform->cpu.config.handle_interrupt = CPUCallbackHandleInterrupt;
   }
   platform->cpu.config.read_port = CPUCallbackReadPortByte;
@@ -2116,17 +2102,17 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
       .context = platform,
       .entry_type = kMemoryMapEntryConventional,
       .start = 0x0000,
-      .end = platform->config->physical_memory_size - 1,
+      .end = platform->config.physical_memory_size - 1,
       // Conventional memory is the caller's buffer, accessed directly.
-      .read_data = platform->config->physical_memory,
-      .write_data = platform->config->physical_memory};
+      .read_data = platform->config.physical_memory,
+      .write_data = platform->config.physical_memory};
   AddMemoryMapEntry(platform, &conventional_memory);
 }
 
 static void PlatformInitPIC(PlatformState* platform) {
-  platform->pic_config.sp = false;
-  platform->pic_config.logger = &platform->logger;
-  PICInit(&platform->pic, &platform->pic_config);
+  platform->pic.config.sp = false;
+  platform->pic.config.logger = &platform->logger;
+  PICInit(&platform->pic);
   PortMapEntry pic_entry = {
       .entry_type = kPortMapEntryPIC,
       .start = 0x20,
@@ -2139,12 +2125,12 @@ static void PlatformInitPIC(PlatformState* platform) {
 }
 
 static void PlatformInitPIT(PlatformState* platform) {
-  platform->pit_config.context = platform;
-  platform->pit_config.logger = &platform->logger;
-  platform->pit_config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
-  platform->pit_config.set_pc_speaker_frequency =
+  platform->pit.config.context = platform;
+  platform->pit.config.logger = &platform->logger;
+  platform->pit.config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
+  platform->pit.config.set_pc_speaker_frequency =
       PITCallbackSetPCSpeakerFrequency;
-  PITInit(&platform->pit, &platform->pit_config);
+  PITInit(&platform->pit);
   PortMapEntry pit_entry = {
       .entry_type = kPortMapEntryPIT,
       .start = 0x40,
@@ -2157,20 +2143,20 @@ static void PlatformInitPIT(PlatformState* platform) {
 }
 
 static void PlatformInitPPI(PlatformState* platform) {
-  platform->ppi_config.context = platform;
-  platform->ppi_config.logger = &platform->logger;
-  platform->ppi_config.num_floppy_drives = 1;
-  platform->ppi_config.memory_size = kPPIMemorySize256KB;
+  platform->ppi.config.context = platform;
+  platform->ppi.config.logger = &platform->logger;
+  platform->ppi.config.num_floppy_drives = 1;
+  platform->ppi.config.memory_size = kPPIMemorySize256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
-  platform->ppi_config.display_mode =
-      platform->config->video_adapter == kVideoAdapterCGA ? kPPIDisplayCGA80x25
-                                                          : kPPIDisplayMDA;
-  platform->ppi_config.fpu_installed = false;
-  platform->ppi_config.set_pc_speaker_frequency =
+  platform->ppi.config.display_mode =
+      platform->config.video_adapter == kVideoAdapterCGA ? kPPIDisplayCGA80x25
+                                                         : kPPIDisplayMDA;
+  platform->ppi.config.fpu_installed = false;
+  platform->ppi.config.set_pc_speaker_frequency =
       PPICallbackSetPCSpeakerFrequency;
-  platform->ppi_config.set_keyboard_control = PPICallbackSetKeyboardControl;
-  PPIInit(&platform->ppi, &platform->ppi_config);
+  platform->ppi.config.set_keyboard_control = PPICallbackSetKeyboardControl;
+  PPIInit(&platform->ppi);
   PortMapEntry ppi_entry = {
       .entry_type = kPortMapEntryPPI,
       .start = 0x60,
@@ -2183,21 +2169,21 @@ static void PlatformInitPPI(PlatformState* platform) {
 }
 
 static void PlatformInitKeyboard(PlatformState* platform) {
-  platform->keyboard_config.context = platform;
-  platform->keyboard_config.logger = &platform->logger;
-  platform->keyboard_config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
-  platform->keyboard_config.send_scancode = KeyboardCallbackSendScancode;
-  KeyboardInit(&platform->keyboard, &platform->keyboard_config);
+  platform->keyboard.config.context = platform;
+  platform->keyboard.config.logger = &platform->logger;
+  platform->keyboard.config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
+  platform->keyboard.config.send_scancode = KeyboardCallbackSendScancode;
+  KeyboardInit(&platform->keyboard);
 }
 
 static void PlatformInitFDC(PlatformState* platform) {
-  platform->fdc_config.context = platform;
-  platform->fdc_config.logger = &platform->logger;
-  platform->fdc_config.raise_irq6 = FDCCallbackRaiseIRQ6;
-  platform->fdc_config.request_dma = FDCCallbackRequestDMA;
-  platform->fdc_config.read_image_byte = NULL;
-  platform->fdc_config.write_image_byte = NULL;
-  FDCInit(&platform->fdc, &platform->fdc_config);
+  platform->fdc.config.context = platform;
+  platform->fdc.config.logger = &platform->logger;
+  platform->fdc.config.raise_irq6 = FDCCallbackRaiseIRQ6;
+  platform->fdc.config.request_dma = FDCCallbackRequestDMA;
+  platform->fdc.config.read_image_byte = NULL;
+  platform->fdc.config.write_image_byte = NULL;
+  FDCInit(&platform->fdc);
   PortMapEntry fdc_entry = {
       .entry_type = (PortMapEntryType)kPortMapEntryFDC,
       .start = 0x3F0,
@@ -2210,9 +2196,9 @@ static void PlatformInitFDC(PlatformState* platform) {
 }
 
 static void PlatformInitHDC(PlatformState* platform) {
-  platform->hdc_config.context = platform;
-  platform->hdc_config.logger = &platform->logger;
-  HDCInit(&platform->hdc, &platform->hdc_config);
+  platform->hdc.config.context = platform;
+  platform->hdc.config.logger = &platform->logger;
+  HDCInit(&platform->hdc);
 
   const uint32_t option_rom_size = HDCGetOptionROMSize();
   MemoryMapEntry option_rom_entry = {
@@ -2238,14 +2224,14 @@ static void PlatformInitHDC(PlatformState* platform) {
 }
 
 static void PlatformInitDMA(PlatformState* platform) {
-  platform->dma_config.context = platform;
-  platform->dma_config.logger = &platform->logger;
-  platform->dma_config.read_memory_byte = DMACallbackReadMemoryByte;
-  platform->dma_config.write_memory_byte = DMACallbackWriteMemoryByte;
-  platform->dma_config.read_device_byte = DMACallbackReadDeviceByte;
-  platform->dma_config.write_device_byte = DMACallbackWriteDeviceByte;
-  platform->dma_config.on_terminal_count = DMACallbackOnTerminalCount;
-  DMAInit(&platform->dma, &platform->dma_config);
+  platform->dma.config.context = platform;
+  platform->dma.config.logger = &platform->logger;
+  platform->dma.config.read_memory_byte = DMACallbackReadMemoryByte;
+  platform->dma.config.write_memory_byte = DMACallbackWriteMemoryByte;
+  platform->dma.config.read_device_byte = DMACallbackReadDeviceByte;
+  platform->dma.config.write_device_byte = DMACallbackWriteDeviceByte;
+  platform->dma.config.on_terminal_count = DMACallbackOnTerminalCount;
+  DMAInit(&platform->dma);
   PortMapEntry dma_entry = {
       .entry_type = (PortMapEntryType)kPortMapEntryDMA,
       .start = 0x00,
@@ -2267,12 +2253,12 @@ static void PlatformInitDMA(PlatformState* platform) {
 }
 
 static void PlatformInitVideo(PlatformState* platform) {
-  platform->video_config = kDefaultVideoConfig;
-  platform->video_config.context = platform;
-  platform->video_config.logger = &platform->logger;
-  platform->video_config.adapter = platform->config->video_adapter;
-  platform->video_config.vram = platform->config->vram;
-  VideoInit(&platform->video, &platform->video_config);
+  platform->video.config = kDefaultVideoConfig;
+  platform->video.config.context = platform;
+  platform->video.config.logger = &platform->logger;
+  platform->video.config.adapter = platform->config.video_adapter;
+  platform->video.config.vram = platform->config.vram;
+  VideoInit(&platform->video);
 
   const VideoAdapterMetadata* adapter =
       VideoGetAdapterMetadata(&platform->video);
@@ -2285,7 +2271,7 @@ static void PlatformInitVideo(PlatformState* platform) {
       // Reads go straight to the buffer: nothing observes them, and the guest
       // reads back what it wrote. Writes keep a callback so the adapter can
       // see them - see VideoWriteVRAMByte.
-      .read_data = platform->config->vram,
+      .read_data = platform->config.vram,
       .write_byte_fn = VideoCallbackWriteVRAMByte,
   };
   AddMemoryMapEntry(platform, &vram_entry);
@@ -2304,25 +2290,24 @@ static void PlatformInitVideo(PlatformState* platform) {
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
-bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
-  platform->config = config;
+bool PlatformInit(PlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
-  LoggerInit(&platform->logger, config->logger_config);
+  LoggerInit(&platform->logger, platform->config.logger_config);
 
-  if (config->physical_memory_size < kMinPhysicalMemorySize ||
-      config->physical_memory_size > kMaxPhysicalMemorySize) {
+  if (platform->config.physical_memory_size < kMinPhysicalMemorySize ||
+      platform->config.physical_memory_size > kMaxPhysicalMemorySize) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "physical_memory_size %u is not between %u and %u bytes",
-        (unsigned)config->physical_memory_size,
+        (unsigned)platform->config.physical_memory_size,
         (unsigned)kMinPhysicalMemorySize, (unsigned)kMaxPhysicalMemorySize);
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
-  if (config->physical_memory == NULL) {
+  if (platform->config.physical_memory == NULL) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "no physical_memory buffer was provided");
@@ -2330,7 +2315,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   }
   // The video adapter reads and writes this directly, so an absent buffer
   // would leave the screen permanently blank with nothing to say why.
-  if (config->vram == NULL) {
+  if (platform->config.vram == NULL) {
     YAX86_LOG(
         &platform->logger, &kLogModulePlatform, kLogLevelError,
         "no vram buffer was provided");

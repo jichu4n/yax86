@@ -39,7 +39,7 @@ static const uint8_t kCGAGraphicsPalettes[3][3] = {
 };
 
 static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
-  return video->config->cga_palette[color & (kNumCGAColors - 1)];
+  return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan

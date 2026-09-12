@@ -31,17 +31,17 @@ enum {
 class PlatformPCSpeakerTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.physical_memory_size = sizeof(ram_);
-    config_.context = this;
-    config_.physical_memory = ram_;
-    config_.vram = vram_;
-    config_.set_pc_speaker_frequency = [](PlatformState* p,
-                                          uint32_t frequency_hz) {
-      auto* test = static_cast<PlatformPCSpeakerTest*>(p->config->context);
+    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.context = this;
+    platform_.config.physical_memory = ram_;
+    platform_.config.vram = vram_;
+    platform_.config.set_pc_speaker_frequency = [](PlatformState* p,
+                                                   uint32_t frequency_hz) {
+      auto* test = static_cast<PlatformPCSpeakerTest*>(p->config.context);
       test->frequencies_.push_back(frequency_hz);
     };
 
-    ASSERT_TRUE(PlatformInit(&platform_, &config_));
+    ASSERT_TRUE(PlatformInit(&platform_));
   }
 
   // Programs PIT channel 2 for a square wave at the given reload value.
@@ -61,7 +61,6 @@ class PlatformPCSpeakerTest : public ::testing::Test {
     return frequencies_.empty() ? 0 : frequencies_.back();
   }
 
-  PlatformConfig config_ = {0};
   PlatformState platform_ = {0};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
@@ -135,7 +134,7 @@ TEST_F(PlatformPCSpeakerTest, NothingIsReportedWhileTheSpeakerIsOff) {
 TEST_F(PlatformPCSpeakerTest, NoCallbackConfigured) {
   // A host with no speaker leaves the callback NULL. Driving the speaker must
   // still work.
-  config_.set_pc_speaker_frequency = nullptr;
+  platform_.config.set_pc_speaker_frequency = nullptr;
   SetTone(kReload1000Hz);
   WritePortB(kTimer2Gate | kSpeakerData);
   WritePortB(0);

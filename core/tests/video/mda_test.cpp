@@ -105,8 +105,8 @@ TEST_F(MDATest, RenderCharacterNormal) {
   WriteChar(0, 'A', 0x07);
   Render();
 
-  int foreground_pixels = CountPixelsInFirstCell(config_.foreground);
-  int background_pixels = CountPixelsInFirstCell(config_.background);
+  int foreground_pixels = CountPixelsInFirstCell(video_.config.foreground);
+  int background_pixels = CountPixelsInFirstCell(video_.config.background);
   EXPECT_GT(foreground_pixels, 0);
   EXPECT_GT(background_pixels, 0);
   EXPECT_EQ(foreground_pixels + background_pixels, kCharWidth * kCharHeight);
@@ -138,7 +138,8 @@ TEST_F(MDATest, RenderCharacterInverse) {
   Render();
 
   EXPECT_EQ(
-      CountPixelsInFirstCell(config_.foreground), kCharWidth * kCharHeight);
+      CountPixelsInFirstCell(video_.config.foreground),
+      kCharWidth * kCharHeight);
 }
 
 TEST_F(MDATest, RenderCharacterUnderline) {
@@ -146,7 +147,8 @@ TEST_F(MDATest, RenderCharacterUnderline) {
   Render();
 
   EXPECT_EQ(
-      CountPixels(0, kUnderlinePosition, kCharWidth, 1, config_.foreground),
+      CountPixels(
+          0, kUnderlinePosition, kCharWidth, 1, video_.config.foreground),
       kCharWidth);
 }
 
@@ -155,14 +157,15 @@ TEST_F(MDATest, RenderCharacterInvisible) {
   Render();
 
   EXPECT_EQ(
-      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+      CountPixelsInFirstCell(video_.config.background),
+      kCharWidth * kCharHeight);
 }
 
 TEST_F(MDATest, RenderCharacterIntense) {
   WriteChar(0, 'A', 0x0F);
   Render();
 
-  EXPECT_GT(CountPixelsInFirstCell(config_.intense_foreground), 0);
+  EXPECT_GT(CountPixelsInFirstCell(video_.config.intense_foreground), 0);
 }
 
 TEST_F(MDATest, RenderCharacterIntenseUnderline) {
@@ -171,7 +174,8 @@ TEST_F(MDATest, RenderCharacterIntenseUnderline) {
 
   EXPECT_EQ(
       CountPixels(
-          0, kUnderlinePosition, kCharWidth, 1, config_.intense_foreground),
+          0, kUnderlinePosition, kCharWidth, 1,
+          video_.config.intense_foreground),
       kCharWidth);
 }
 
@@ -180,26 +184,27 @@ TEST_F(MDATest, RenderCharacterFallback) {
   WriteChar(0, 'A', 0x02);
   Render();
 
-  EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
+  EXPECT_GT(CountPixelsInFirstCell(video_.config.foreground), 0);
 }
 
 TEST_F(MDATest, RenderBlinkingCharacter) {
   // Blink is enabled in the default mode control register.
   WriteChar(0, 'A', 0x87);
   Render();
-  int visible_pixels = CountPixelsInFirstCell(config_.foreground);
+  int visible_pixels = CountPixelsInFirstCell(video_.config.foreground);
   EXPECT_GT(visible_pixels, 0);
 
   // Advance to the opposite blink phase - the character disappears.
   AdvanceFrames(kVideoFramesPerTextBlinkPhase);
   Render();
   EXPECT_EQ(
-      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+      CountPixelsInFirstCell(video_.config.background),
+      kCharWidth * kCharHeight);
 
   // And comes back in the phase after that.
   AdvanceFrames(kVideoFramesPerTextBlinkPhase);
   Render();
-  EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
+  EXPECT_EQ(CountPixelsInFirstCell(video_.config.foreground), visible_pixels);
 }
 
 // The 6845 generates the cursor blink itself, while the character blink
@@ -216,11 +221,11 @@ TEST_F(MDATest, CharactersBlinkAtHalfTheCursorRate) {
   WriteChar(1, 'A', 0x87);
 
   auto cursor_pixels = [&] {
-    return CountPixels(0, 0, kCharWidth, kCharHeight, config_.foreground);
+    return CountPixels(0, 0, kCharWidth, kCharHeight, video_.config.foreground);
   };
   auto char_pixels = [&] {
     return CountPixels(
-        kCharWidth, 0, kCharWidth, kCharHeight, config_.foreground);
+        kCharWidth, 0, kCharWidth, kCharHeight, video_.config.foreground);
   };
 
   Render();
@@ -248,11 +253,11 @@ TEST_F(MDATest, BlinkIsIgnoredWhenDisabledInControlRegister) {
       video_.control_register & ~kVideoControlEnableBlink);
   WriteChar(0, 'A', 0x87);
   Render();
-  int visible_pixels = CountPixelsInFirstCell(config_.foreground);
+  int visible_pixels = CountPixelsInFirstCell(video_.config.foreground);
 
   AdvanceFrames(kVideoFramesPerTextBlinkPhase);
   Render();
-  EXPECT_EQ(CountPixelsInFirstCell(config_.foreground), visible_pixels);
+  EXPECT_EQ(CountPixelsInFirstCell(video_.config.foreground), visible_pixels);
 }
 
 TEST_F(MDATest, RenderCursor) {
@@ -268,11 +273,12 @@ TEST_F(MDATest, RenderCursor) {
   int cursor_x = kCharWidth;
   int cursor_y = kCharHeight;
   EXPECT_EQ(
-      CountPixels(cursor_x, cursor_y + 11, kCharWidth, 2, config_.foreground),
+      CountPixels(
+          cursor_x, cursor_y + 11, kCharWidth, 2, video_.config.foreground),
       kCharWidth * 2);
   // The scan lines above the cursor are untouched by it.
   EXPECT_EQ(
-      CountPixels(cursor_x, cursor_y, kCharWidth, 11, config_.background),
+      CountPixels(cursor_x, cursor_y, kCharWidth, 11, video_.config.background),
       kCharWidth * 11);
 }
 
@@ -282,7 +288,8 @@ TEST_F(MDATest, CursorCanBeDisabled) {
   Render();
 
   EXPECT_EQ(
-      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+      CountPixelsInFirstCell(video_.config.background),
+      kCharWidth * kCharHeight);
 }
 
 TEST_F(MDATest, StartAddressScrollsTheDisplay) {
@@ -291,12 +298,13 @@ TEST_F(MDATest, StartAddressScrollsTheDisplay) {
   WriteChar(80, 'A', 0x07);
   Render();
   EXPECT_EQ(
-      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+      CountPixelsInFirstCell(video_.config.background),
+      kCharWidth * kCharHeight);
 
   WriteRegister(kCRTCRegisterStartAddressH, 80 >> 8);
   WriteRegister(kCRTCRegisterStartAddressL, 80 & 0xFF);
   Render();
-  EXPECT_GT(CountPixelsInFirstCell(config_.foreground), 0);
+  EXPECT_GT(CountPixelsInFirstCell(video_.config.foreground), 0);
 }
 
 TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
@@ -307,7 +315,8 @@ TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
   Render();
 
   EXPECT_EQ(
-      CountPixelsInFirstCell(config_.background), kCharWidth * kCharHeight);
+      CountPixelsInFirstCell(video_.config.background),
+      kCharWidth * kCharHeight);
   // The whole frame buffer is blanked, not just the character cells.
   EXPECT_EQ(mock_pixel_write_count, 720 * 350);
   EXPECT_EQ(
