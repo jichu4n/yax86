@@ -1422,7 +1422,11 @@ static void UpdateMemoryPageMapForEntry(
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
 //   - The number of memory map entries would exceed kMaxMemoryMapEntries.
-bool RegisterMemoryMapEntry(
+// Records a memory map entry without telling anything that the map has
+// changed. What the CPU derives from the map - its two windows and its decode
+// cache - is left to the caller, so that a run of registrations pays for one
+// recompute rather than one each.
+static bool AddMemoryMapEntry(
     PlatformState* platform, const MemoryMapEntry* entry) {
   // The index has a slot per page of the address space and none above it, so
   // an entry reaching past the top could not be recorded in it. Rejecting one
@@ -1448,15 +1452,29 @@ bool RegisterMemoryMapEntry(
   }
   UpdateMemoryPageMapForEntry(
       platform, MemoryMapLength(&platform->memory_map) - 1);
+  return true;
+}
+
+// Discards whatever the CPU derived from the memory map. Called after the map
+// changes, which during startup is once for the whole of it.
+static void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
   // An open fetch window points into whichever region used to own those
   // addresses, so it must not outlive a change to the map.
   CPUInvalidateInstructionFetchWindow(&platform->cpu);
-  // The data window is derived from whichever entry covers address 0, which
-  // this may have just become.
+  // The data window is derived from whichever entry covers address 0, which a
+  // registration may have just become.
   PlatformUpdateDirectDataWindow(platform);
   // Nothing was written, so the page generations say nothing - what the bytes
   // at those addresses mean has changed.
   CPUInvalidateDecodeCache(&platform->cpu);
+}
+
+bool RegisterMemoryMapEntry(
+    PlatformState* platform, const MemoryMapEntry* entry) {
+  if (!AddMemoryMapEntry(platform, entry)) {
+    return false;
+  }
+  PlatformUpdateAfterMemoryMapChange(platform);
   return true;
 }
 
@@ -1967,7 +1985,7 @@ static void PlatformInitBIOS(PlatformState* platform) {
       // directly. write_data is left NULL because the BIOS ROM is read-only.
       .read_data = BIOSGetROMData(),
   };
-  RegisterMemoryMapEntry(platform, &bios_rom);
+  AddMemoryMapEntry(platform, &bios_rom);
 }
 
 // Runs the CPU's interrupt acknowledge cycle against the PIC. This is the
@@ -2082,7 +2100,7 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
       // Conventional memory is the caller's buffer, accessed directly.
       .read_data = platform->config->physical_memory,
       .write_data = platform->config->physical_memory};
-  RegisterMemoryMapEntry(platform, &conventional_memory);
+  AddMemoryMapEntry(platform, &conventional_memory);
 }
 
 static void PlatformInitPIC(PlatformState* platform) {
@@ -2186,7 +2204,7 @@ static void PlatformInitHDC(PlatformState* platform) {
       // left NULL because the option ROM is read-only.
       .read_data = HDCGetOptionROMData(),
   };
-  RegisterMemoryMapEntry(platform, &option_rom_entry);
+  AddMemoryMapEntry(platform, &option_rom_entry);
 
   PortMapEntry port_entry = {
       .context = &platform->hdc,
@@ -2250,7 +2268,7 @@ static void PlatformInitVideo(PlatformState* platform) {
       .read_data = platform->config->vram,
       .write_byte_fn = VideoCallbackWriteVRAMByte,
   };
-  RegisterMemoryMapEntry(platform, &vram_entry);
+  AddMemoryMapEntry(platform, &vram_entry);
 
   PortMapEntry port_entry = {
       .context = platform,
@@ -2327,6 +2345,12 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->has_stop_info = false;
   platform->stop_pending = false;
   platform->skip_breakpoint_check = false;
+
+  // Last, because what the CPU derives from the map also depends on whether a
+  // watchpoint is enabled, which the clears above are what settle. Every
+  // region the machine has is registered by now too, so the whole of startup
+  // costs one recompute rather than one per registration.
+  PlatformUpdateAfterMemoryMapChange(platform);
 
   return true;
 }
