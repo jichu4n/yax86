@@ -232,10 +232,8 @@ typedef struct CPUConfig {
   // runs more than once be decoded once. NULL means every instruction is
   // decoded.
   //
-  // The pointer is read on every instruction, so clearing and restoring it
-  // takes the cache away and hands it back. The count is read only by
-  // CPUInit(), which checks it and logs a bad one, so changing that afterwards
-  // does nothing.
+  // Read only by CPUInit(), which checks the count and clears its own copy of
+  // the pointer if it does not pass.
   struct CPUDecodeCacheEntry* decode_cache;
   // Must be a power of two of at least two. See decode_cache_index_mask.
   uint32_t decode_cache_num_entries;
@@ -320,10 +318,12 @@ enum {
 };
 
 // State of the emulated CPU.
+//
+// A caller zero-initializes one of these, fills in the fields of config, and
+// calls CPUInit(). Everything outside config is the CPU's own. A register or
+// flag may be written directly, since nothing is derived from one; a field
+// another field depends on has a setter, which is its sole writer.
 typedef struct CPUState {
-  // Pointer to caller-provided runtime configuration
-  CPUConfig* config;
-
   // Register values
   uint16_t registers[kNumRegisters];
   // Flag values
@@ -384,6 +384,12 @@ typedef struct CPUState {
   // once instead.
   CPUDirectDataWindow direct_data_window;
 
+  // One less than CPUConfig.decode_cache_num_entries, so that an address
+  // becomes an index with a mask rather than a remainder - a remainder by a
+  // runtime value is a division, which this target has no instruction for.
+  // Derived by CPUInit().
+  uint32_t decode_cache_index_mask;
+
   // How many times each 4KB page has been written, as a wrapping byte. A
   // cached decode records what its page stood at and is discarded once the two
   // disagree, which is what makes caching safe against code that writes over
@@ -394,16 +400,23 @@ typedef struct CPUState {
   // to find out would cost about what the counter does.
   uint8_t code_page_generation[kNumCodePages];
 
-  // One less than CPUConfig.decode_cache_num_entries, so that an address
-  // becomes an index with a mask rather than a remainder - a remainder by a
-  // runtime value is a division, which this target has no instruction for.
-  // Derived and checked by CPUInit(), and zero where the count did not pass,
-  // which is why the minimum count is two rather than one.
-  uint32_t decode_cache_index_mask;
+  // Caller-provided runtime configuration. Filled in before CPUInit(), which
+  // is where it is checked, and read-only afterwards.
+  //
+  // Held by value rather than by pointer: a pointer cost 3.37% at -O2 on a
+  // path that reads a config field every instruction, and made the config an
+  // object the caller had to keep alive for as long as the CPU.
+  CPUConfig config;
 } CPUState;
 
-// Initialize CPU state.
-void CPUInit(CPUState* cpu, CPUConfig* config);
+// Initialize CPU state. The caller zero-initializes the CPUState and fills in
+// the fields of its config first.
+//
+// This zeroes nothing - a struct the caller has already had to zero in order
+// to fill in its config does not want zeroing twice - and it is the only place
+// the config is checked, so a host is told about a mistake here or not at
+// all.
+void CPUInit(CPUState* cpu);
 
 // Get the value of a CPU flag.
 static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {

@@ -70,7 +70,6 @@ class CPUTestHelper {
     uint8_t* memory;
     size_t memory_size;
   } context_;
-  CPUConfig config_;
 };
 
 #endif  // TEST_HELPERS_H
