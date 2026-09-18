@@ -88,6 +88,7 @@ TEST_F(PlatformDecodeCacheTest, RegisteringAMemoryRegionDiscardsEveryDecode) {
   extra_rom.end = 0xD07FF;
   extra_rom.read_data = rom_;
   ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &extra_rom));
+  PlatformUpdateAfterMemoryMapChange(&platform_);
 
   RunAt(kProgramOffset);
   EXPECT_EQ(al(), 0x22);

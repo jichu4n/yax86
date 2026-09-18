@@ -76,6 +76,10 @@ static void UpdateMemoryPageMapForEntry(
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
 //   - The number of memory map entries would exceed kMaxMemoryMapEntries.
+// Records a memory map entry without telling anything that the map has
+// changed. What the CPU derives from the map - its two windows and its decode
+// cache - is left to the caller, so that a run of registrations pays for one
+// recompute rather than one each.
 bool RegisterMemoryMapEntry(
     PlatformState* platform, const MemoryMapEntry* entry) {
   // The index has a slot per page of the address space and none above it, so
@@ -102,16 +106,20 @@ bool RegisterMemoryMapEntry(
   }
   UpdateMemoryPageMapForEntry(
       platform, MemoryMapLength(&platform->memory_map) - 1);
-  // An open fetch window points into whichever region used to own those
-  // addresses, so it must not outlive a change to the map.
-  CPUInvalidateInstructionFetchWindow(&platform->cpu);
-  // The data window is derived from whichever entry covers address 0, which
-  // this may have just become.
-  PlatformUpdateDirectDataWindow(platform);
-  // Nothing was written, so the page generations say nothing - what the bytes
-  // at those addresses mean has changed.
-  CPUInvalidateDecodeCache(&platform->cpu);
   return true;
+}
+
+void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
+  // The window is a pointer into whichever region the host handed it out from,
+  // so it does not outlive a change to the map.
+  CPUInvalidateInstructionFetchWindow(&platform->cpu);
+  // The data window is whichever entry covers address 0, which a registration
+  // may have just become.
+  PlatformUpdateDirectDataWindow(platform);
+  // A decode taken before a region was mapped came from open bus. No page
+  // generation moved, because nothing was written - what the bytes at those
+  // addresses mean has changed.
+  CPUInvalidateDecodeCache(&platform->cpu);
 }
 
 // What the page index has to say about an address: the entry covering the whole
@@ -981,6 +989,10 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
   platform->has_stop_info = false;
   platform->stop_pending = false;
   platform->skip_breakpoint_check = false;
+
+  // Last, because what the CPU derives from the map also depends on whether a
+  // watchpoint is enabled, which the clears above are what settle.
+  PlatformUpdateAfterMemoryMapChange(platform);
 
   return true;
 }

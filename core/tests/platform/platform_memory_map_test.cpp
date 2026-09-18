@@ -28,7 +28,11 @@ class PlatformMemoryMapTest : public ::testing::Test {
     entry.end = end;
     entry.read_data = region_;
     entry.write_data = region_;
-    return RegisterMemoryMapEntry(&platform_, &entry);
+    if (!RegisterMemoryMapEntry(&platform_, &entry)) {
+      return false;
+    }
+    PlatformUpdateAfterMemoryMapChange(&platform_);
+    return true;
   }
 
   PlatformConfig config_ = {0};
