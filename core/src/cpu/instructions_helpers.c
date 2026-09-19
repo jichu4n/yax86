@@ -58,7 +58,7 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
       src->address.type == kOperandAddressTypeRegister &&
       src->address.value.register_address.register_index == kSP;
   const OperandValue value =
-      source_is_stack_pointer ? WordValue(cpu->registers[kSP]) : src->value;
+      source_is_stack_pointer ? cpu->registers[kSP] : src->value;
   WriteToStackTop(cpu, value);
 }
 

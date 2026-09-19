@@ -107,15 +107,13 @@ extern InstructionResult ExecuteLoadDSWithPointer(
 
 // Common logic for ADD instructions
 extern InstructionResult ExecuteAdd(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for INC instructions
 extern InstructionResult ExecuteInc(
     const InstructionContext* ctx, Operand* dest);
 // Common logic for ADC instructions
 extern InstructionResult ExecuteAddWithCarry(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 
 // ADD r/m8, r8
 // ADD r/m16, r16
@@ -155,12 +153,10 @@ extern void SetFlagsAfterSub(
 
 // Common logic for SUB instructions
 extern InstructionResult ExecuteSub(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for SBB instructions
 extern InstructionResult ExecuteSubWithBorrow(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for DEC instructions
 extern InstructionResult ExecuteDec(
     const InstructionContext* ctx, Operand* dest);
@@ -207,8 +203,7 @@ extern InstructionResult ExecuteCwd(const InstructionContext* ctx);
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
 extern InstructionResult ExecuteCmp(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 
 // CMP r/m8, r8
 // CMP r/m16, r16
@@ -231,19 +226,16 @@ extern void SetFlagsAfterBooleanInstruction(
     const InstructionContext* ctx, uint32_t result);
 // Common logic for AND instructions.
 extern InstructionResult ExecuteBooleanAnd(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for OR instructions.
 extern InstructionResult ExecuteBooleanOr(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for XOR instructions.
 extern InstructionResult ExecuteBooleanXor(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for TEST instructions.
 extern InstructionResult ExecuteTest(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 
 // AND r/m8, r8
 // AND r/m16, r16
@@ -296,12 +288,10 @@ extern InstructionResult ExecuteTestImmediateToALOrAX(
 
 // Common logic for far jumps.
 extern InstructionResult ExecuteFarJump(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset);
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset);
 // Common logic for far calls.
 extern InstructionResult ExecuteFarCall(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset);
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset);
 // Common logic for returning from an interrupt.
 extern InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu);
 

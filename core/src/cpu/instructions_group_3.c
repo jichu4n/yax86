@@ -17,7 +17,7 @@ typedef InstructionResult (*Group3ExecuteInstructionFn)(
 static InstructionResult ExecuteGroup3Test(
     const InstructionContext* ctx, Operand* op) {
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteTest(ctx, op, &src_value);
+  return ExecuteTest(ctx, op, src_value);
 }
 
 // NOT r/m8
@@ -32,7 +32,7 @@ static InstructionResult ExecuteNot(
 // NEG r/m16
 static InstructionResult ExecuteNeg(
     const InstructionContext* ctx, Operand* op) {
-  int32_t op_value = FromSignedOperand(op);
+  int32_t op_value = FromSignedOperand(ctx->metadata->width, op);
   int32_t result_value = -op_value;
   WriteOperand(ctx, op, result_value);
   SetFlagsAfterSub(ctx, 0, op_value, result_value, false);
@@ -115,7 +115,9 @@ static InstructionResult ExecuteImul(
     const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  int32_t result = FromSignedOperand(&dest) * FromSignedOperand(op);
+  const Width width = ctx->metadata->width;
+  int32_t result =
+      FromSignedOperand(width, &dest) * FromSignedOperand(width, op);
   return ExecuteMulCommon(
       ctx, &dest, result,
       result > kMaxSignedValue[ctx->metadata->width] ||
@@ -148,7 +150,7 @@ static InstructionResult ExecuteDiv(
   OperandValue dest_high_half =
       ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
   uint32_t dividend =
-      FromOperand(&dest) | (FromOperandValue(&dest_high_half)
+      FromOperand(&dest) | (FromOperandValue(dest_high_half)
                             << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
@@ -163,7 +165,7 @@ static InstructionResult ExecuteDiv(
 static InstructionResult ExecuteIdiv(
     const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
-  int32_t divisor = FromSignedOperand(op);
+  int32_t divisor = FromSignedOperand(ctx->metadata->width, op);
   if (divisor == 0) {
     CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
@@ -175,7 +177,7 @@ static InstructionResult ExecuteIdiv(
   OperandValue dest_high_half =
       ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
   int32_t dividend =
-      FromOperand(&dest) | (FromSignedOperandValue(&dest_high_half)
+      FromOperand(&dest) | (FromSignedOperandValue(width, dest_high_half)
                             << kMulDivResultHighHalfShiftWidth[width]);
   int32_t quotient = dividend / divisor;
   // The 8086/8088 divides the magnitudes and checks the result against the

@@ -11,7 +11,7 @@
 
 // Jump to a relative signed byte offset.
 YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
-    const InstructionContext* ctx, const OperandValue* offset_value) {
+    const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
   return kInstructionExecuted;
@@ -19,7 +19,7 @@ YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
 
 // Jump to a relative signed word offset.
 YAX86_HOT static InstructionResult ExecuteRelativeJumpWord(
-    const InstructionContext* ctx, const OperandValue* offset_value) {
+    const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
   return kInstructionExecuted;
@@ -27,14 +27,14 @@ YAX86_HOT static InstructionResult ExecuteRelativeJumpWord(
 
 // Table of relative jump instructions, indexed by width.
 static InstructionResult (*const kRelativeJumpFn[kNumWidths])(
-    const InstructionContext* ctx, const OperandValue* offset_value) = {
+    const InstructionContext* ctx, OperandValue offset_value) = {
     ExecuteRelativeJumpByte,  // kByte
     ExecuteRelativeJumpWord,  // kWord
 };
 
 // Common logic for JMP instructions.
 static InstructionResult ExecuteRelativeJump(
-    const InstructionContext* ctx, const OperandValue* offset_value) {
+    const InstructionContext* ctx, OperandValue offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
@@ -43,13 +43,12 @@ static InstructionResult ExecuteRelativeJump(
 YAX86_PRIVATE InstructionResult
 ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
-  return ExecuteRelativeJump(ctx, &offset_value);
+  return ExecuteRelativeJump(ctx, offset_value);
 }
 
 // Common logic for far jumps.
 YAX86_PRIVATE InstructionResult ExecuteFarJump(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset) {
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset) {
   ctx->cpu->registers[kCS] = FromOperandValue(segment);
   ctx->cpu->registers[kIP] = FromOperandValue(offset);
   return kInstructionExecuted;
@@ -58,13 +57,13 @@ YAX86_PRIVATE InstructionResult ExecuteFarJump(
 // JMP ptr16:16
 YAX86_PRIVATE InstructionResult
 ExecuteDirectFarJump(const InstructionContext* ctx) {
-  OperandValue new_cs = WordValue(
-      ((uint16_t)ctx->instruction->immediate[2]) |
-      (((uint16_t)ctx->instruction->immediate[3]) << 8));
-  OperandValue new_ip = WordValue(
-      ((uint16_t)ctx->instruction->immediate[0]) |
-      (((uint16_t)ctx->instruction->immediate[1]) << 8));
-  return ExecuteFarJump(ctx, &new_cs, &new_ip);
+  OperandValue new_cs =
+      (OperandValue)(((uint16_t)ctx->instruction->immediate[2]) |
+                     (((uint16_t)ctx->instruction->immediate[3]) << 8));
+  OperandValue new_ip =
+      (OperandValue)(((uint16_t)ctx->instruction->immediate[0]) |
+                     (((uint16_t)ctx->instruction->immediate[1]) << 8));
+  return ExecuteFarJump(ctx, new_cs, new_ip);
 }
 
 // ============================================================================
@@ -79,7 +78,7 @@ static InstructionResult ExecuteConditionalJump(
     // The base cost in the cycle table is for the branch not being taken.
     CPUAddCycles(ctx->cpu, kJumpTakenCycles);
     OperandValue offset_value = ReadImmediate(ctx);
-    return ExecuteRelativeJump(ctx, &offset_value);
+    return ExecuteRelativeJump(ctx, offset_value);
   }
   return kInstructionExecuted;
 }
@@ -161,8 +160,8 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 
 // Common logic for near calls.
 static InstructionResult ExecuteNearCall(
-    const InstructionContext* ctx, const OperandValue* offset) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+    const InstructionContext* ctx, OperandValue offset) {
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteRelativeJump(ctx, offset);
 }
 
@@ -170,24 +169,23 @@ static InstructionResult ExecuteNearCall(
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
-  return ExecuteNearCall(ctx, &offset);
+  return ExecuteNearCall(ctx, offset);
 }
 
 // Common logic for far calls.
 YAX86_PRIVATE InstructionResult ExecuteFarCall(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset) {
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset) {
   // Push the current CS and IP onto the stack.
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, ctx->cpu->registers[kCS]);
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteFarJump(ctx, segment, offset);
 }
 
 // CALL ptr16:16
 YAX86_PRIVATE InstructionResult
 ExecuteDirectFarCall(const InstructionContext* ctx) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, ctx->cpu->registers[kCS]);
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteDirectFarJump(ctx);
 }
 
@@ -195,7 +193,7 @@ ExecuteDirectFarCall(const InstructionContext* ctx) {
 static InstructionResult ExecuteNearReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
-  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
+  ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
   ctx->cpu->registers[kSP] += arg_size;
   return kInstructionExecuted;
 }
@@ -210,7 +208,7 @@ ExecuteNearReturn(const InstructionContext* ctx) {
 YAX86_PRIVATE InstructionResult
 ExecuteNearReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
-  return ExecuteNearReturnCommon(ctx, FromOperandValue(&arg_size_value));
+  return ExecuteNearReturnCommon(ctx, FromOperandValue(arg_size_value));
 }
 
 // Common logic for RETF instructions.
@@ -218,8 +216,8 @@ static InstructionResult ExecuteFarReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   OperandValue new_cs = Pop(ctx->cpu);
-  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
-  ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
+  ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
+  ctx->cpu->registers[kCS] = FromOperandValue(new_cs);
   ctx->cpu->registers[kSP] += arg_size;
   return kInstructionExecuted;
 }
@@ -234,7 +232,7 @@ ExecuteFarReturn(const InstructionContext* ctx) {
 YAX86_PRIVATE InstructionResult
 ExecuteFarReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
-  return ExecuteFarReturnCommon(ctx, FromOperandValue(&arg_size_value));
+  return ExecuteFarReturnCommon(ctx, FromOperandValue(arg_size_value));
 }
 
 // ============================================================================
@@ -244,11 +242,11 @@ ExecuteFarReturnAndPop(const InstructionContext* ctx) {
 // Common logic for returning from an interrupt.
 YAX86_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
   OperandValue ip_value = Pop(cpu);
-  cpu->registers[kIP] = FromOperandValue(&ip_value);
+  cpu->registers[kIP] = FromOperandValue(ip_value);
   OperandValue cs_value = Pop(cpu);
-  cpu->registers[kCS] = FromOperandValue(&cs_value);
+  cpu->registers[kCS] = FromOperandValue(cs_value);
   OperandValue flags_value = Pop(cpu);
-  cpu->flags = ToFlagsRegisterValue(FromOperandValue(&flags_value));
+  cpu->flags = ToFlagsRegisterValue(FromOperandValue(flags_value));
   return kInstructionExecuted;
 }
 
@@ -274,8 +272,7 @@ YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
 // INT n
 YAX86_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
-  CPURaiseInternalInterrupt(
-      ctx->cpu, FromOperandValue(&interrupt_number_value));
+  CPURaiseInternalInterrupt(ctx->cpu, FromOperandValue(interrupt_number_value));
   return kInstructionExecuted;
 }
 
