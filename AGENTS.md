@@ -524,6 +524,41 @@ Alongside the table, state:
   `CPUInit()` rejected the count. Dropping the second measures **1.9% slower at
   `-O3`** — one of the clearer examples here of an arrangement that reads
   cheaper and is not. It is also why the minimum count is two rather than one.
+- **A decode records what the instruction costs as well as what it is.**
+  `Instruction.base_cycles` is the opcode's base cost plus the effective
+  address computation, both of which depend only on the encoding, so a hit
+  charges the clock from a field instead of reading a table and re-deriving the
+  addressing mode. An on-target profile put those two terms at 2.5% of the run;
+  caching them is worth **2.83% at `-O3`** and 3.13% at `-O2`. It rides in the
+  `Instruction` rather than beside it in the entry, so the cost is kept exactly
+  where the decode it belongs to is kept, and `AHitChargesForTheAddressItComputes`
+  and `ARunStopsAtTheBudget` are the two tests that catch it going stale.
+- **The base cost is settled inside `CPUFetchNextInstruction()`, and where it
+  is read from decides whether one table or two pays.** `OpcodeMetadata` has
+  two bytes of padding, so `base_cycles` lives there for free and there is no
+  second table — but only because the decoder reads it through the `metadata`
+  pointer it already holds. Reading it from the caller instead, by indexing
+  `opcode_table[opcode].base_cycles`, measures **0.63% slower at `-O3` and
+  0.65% at `-O2`**: it is one index either way, but a 1-byte field at an 8-byte
+  stride spreads 256 costs over 2KB where a packed array keeps them in a couple
+  of XIP lines. Caching the cost is what made that read cold — it happens once
+  per decode now rather than once per instruction, so it no longer follows the
+  decoder through the table and cannot rely on the line being warm.
+- `Instruction.base_cycles` is `uint16_t` though 46 is the largest value it can
+  hold. A byte measures **0.51% worse at `-O3`** and 0.55% at `-O2`, and buys
+  no space: `address` leads `CPUDecodeCacheEntry` so that an 18-byte
+  `Instruction` still packs into 24 bytes, and a 17-byte one rounds up to the
+  same 24.
+- **The fetch has exactly one call to the decoder**, which is load-bearing
+  rather than tidiness. The obvious shape — an early return for the no-cache
+  path, a second `CPUFetchNextInstruction()` below it — gives `-O2` two call
+  sites, at which point it stops inlining the decoder and puts it in flash
+  behind a veneer. That measures **2.54% slower at `-O2`**, where `-O3` is
+  indifferent between the two (0.01%, inside the noise floor). It is the
+  `YAX86_ALWAYS_INLINE` case from the placement section, met by removing the
+  second call site rather than by a mark - and it is why the no-cache path
+  joins the cached one at the decode instead of returning early, which is the
+  one piece of this function that does not read as the simplest thing.
 - The platform spends **256 entries, 6KB**, which is not the fastest
   arrangement measured. 512 is 0.11% faster for another 6KB, 1024 is 0.04%
   slower, and 128 is 0.83% slower. 0.11% does not buy 6KB on this part: at 256
@@ -761,7 +796,9 @@ Alongside the table, state:
 
 - The cycle model in `cycles.c` is a base cost per opcode, plus the effective
   address calculation, plus four cycles for every byte the instruction moves
-  over the 8088's 8-bit data bus. The third term dominates, and it is charged
+  over the 8088's 8-bit data bus. The first two are settled by the encoding, so
+  a decode works them out once into `Instruction.base_cycles`; the third is
+  charged as the instruction runs. The third term dominates, and it is charged
   from the accesses that actually happen rather than from a table — so an
   instruction that touches memory it has no reason to touch is billed for it.
 - Stores must therefore resolve their destination with
@@ -1317,12 +1354,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #79:
+SRAM, at #80:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.599082** | **6.024** | **0.506** | **126.3%** | 471,444 | 180,416 | 85,483 |
-| `-O2` | 4.841886 | 5.721 | 0.481 | 119.9% | 459,636 | 175,232 | 73,687 |
+| `-O3` | **4.472593** | **6.194** | **0.521** | **129.9%** | 470,852 | 180,160 | 84,891 |
+| `-O2` | 4.694807 | 5.901 | 0.496 | 123.7% | 459,292 | 175,184 | 73,347 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler
