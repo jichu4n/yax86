@@ -396,23 +396,6 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtCodeThatHasBeenWrittenOver) {
   EXPECT_EQ(RunOneTick(), 1u);
 }
 
-// A stop asked for from inside an instruction hands control back at that
-// instruction, not several later.
-TEST_F(InstructionsPerTickTest, ARunStopsWhenAStopIsRequested) {
-  Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
-  WarmCache(3);
-
-  cpu_.config.on_after_execute_instruction = [](CPUState* cpu,
-                                                const Instruction*) {
-    if (cpu->registers[kAX] == 2) {
-      CPURequestStop(cpu);
-    }
-  };
-
-  EXPECT_EQ(CPUTick(&cpu_, UINT16_MAX), kCPUTickStopped);
-  EXPECT_EQ(cpu_.instructions_retired, 2u);
-}
-
 // The clock is charged what the whole run cost, since that is what the caller
 // advances the rest of the machine by.
 TEST_F(InstructionsPerTickTest, TheTickIsChargedForTheWholeRun) {

@@ -713,8 +713,6 @@ typedef enum CPUTickResult {
   // halted until an interrupt wakes it, so the caller must keep ticking the
   // rest of the machine.
   kCPUTickHalted,
-  // Execution was stopped part way through the tick via CPURequestStop().
-  kCPUTickStopped,
 } CPUTickResult;
 
 // Result of the handle_interrupt callback, directing how the CPU should
@@ -825,18 +823,6 @@ typedef struct CPUConfig {
   InterruptHandlerResult (*handle_interrupt)(
       struct CPUState* cpu, uint8_t interrupt_number);
 
-  // Callback invoked before executing an instruction. This can be used to
-  // inspect or modify the instruction before it is executed, or to inject a
-  // pending interrupt. To stop execution, call CPURequestStop().
-  void (*on_before_execute_instruction)(
-      struct CPUState* cpu, struct Instruction* instruction);
-
-  // Callback invoked after executing an instruction. This can be used to
-  // inspect the instruction after it is executed, or to inject a pending
-  // interrupt. To stop execution, call CPURequestStop().
-  void (*on_after_execute_instruction)(
-      struct CPUState* cpu, const struct Instruction* instruction);
-
   // Callback to read a byte from an I/O port.
   //
   // On the 8086, accessing an invalid I/O port will most likely yield garbage
@@ -932,10 +918,6 @@ typedef struct CPUState {
   // harness did, at the cost of giving up batching. 64 bits because a machine
   // left running overflows 32 of them in under an hour.
   uint64_t instructions_retired;
-
-  // Whether a stop has been requested during the current tick. See
-  // CPURequestStop().
-  bool stop_requested;
 
   // Cycles charged by the instruction currently executing on top of its base
   // cost: its time on the data bus, and whatever it adds for itself when its
@@ -1035,18 +1017,6 @@ static inline void CPUClearInternalInterrupt(CPUState* cpu) {
 // a conditional jump that is taken, a shift by a count in CL, a multiply or a
 // divide.
 void CPUAddCycles(CPUState* cpu, uint16_t cycles);
-
-// Request that the current tick stop as soon as the instruction in progress
-// finishes, causing CPUTick() to return kCPUTickStopped.
-//
-// This is intended to be called from within a CPU callback - a memory or I/O
-// port access, an interrupt handler, or an instruction hook - which is why
-// stopping is signalled out of band rather than through a return value: those
-// callbacks return values of their own and have no way to carry a status.
-//
-// The request applies only to the tick during which it was made. CPUTick()
-// clears it on entry, so a request made outside a tick has no effect.
-static inline void CPURequestStop(CPUState* cpu) { cpu->stop_requested = true; }
 
 // Hands the CPU guest memory it may read and write by indexing, covering the
 // half-open range of linear addresses [0, end). Optional - a host that
@@ -7661,28 +7631,13 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
 YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
-  // Run the on_before_execute_instruction callback if provided.
-  if (cpu->config.on_before_execute_instruction) {
-    cpu->config.on_before_execute_instruction(cpu, instruction);
-  }
-
   // Run the instruction handler.
   InstructionContext context = {
       .cpu = cpu,
       .instruction = instruction,
       .metadata = metadata,
   };
-  InstructionResult result = metadata->handler(&context);
-  if (result != kInstructionExecuted) {
-    return result;
-  }
-
-  // Run the on_after_execute_instruction callback if provided.
-  if (cpu->config.on_after_execute_instruction) {
-    cpu->config.on_after_execute_instruction(cpu, instruction);
-  }
-
-  return kInstructionExecuted;
+  return metadata->handler(&context);
 }
 
 // Checks an instruction against the opcode table before running it.
@@ -7810,9 +7765,8 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
   return
       // A budget of zero is how a host asks for one instruction per tick.
       cpu->pending_cycles < max_run_cycles &&
-      // INT n, INTO and a divide error dispatch at the end of the tick, as
-      // does a stop a callback asked for.
-      !cpu->has_pending_internal_interrupt && !cpu->stop_requested &&
+      // INT n, INTO and a divide error dispatch at the end of the tick.
+      !cpu->has_pending_internal_interrupt &&
       // The test that skips execution while halted is made before the run
       // starts.
       !cpu->is_halted &&
@@ -7855,9 +7809,6 @@ YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
 }
 
 YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
-  // A stop request only applies to the tick during which it was made.
-  cpu->stop_requested = false;
-
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;
@@ -7963,11 +7914,6 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
     ExecutePendingInterrupt(cpu);
   }
 
-  // A stop requested from within a callback takes precedence over everything
-  // else: the caller asked to be handed control back at this exact point.
-  if (cpu->stop_requested) {
-    return kCPUTickStopped;
-  }
   // This reports what the tick did, not what state the CPU ended up in. A tick
   // that executes HLT ran an instruction, so it reports kCPUTickExecuted even
   // though the CPU is now halted; the ticks that follow report kCPUTickHalted.
