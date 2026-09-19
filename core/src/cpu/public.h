@@ -608,6 +608,12 @@ typedef struct Instruction {
 
   // Total length of the original encoded instruction in bytes.
   uint8_t size;
+
+  // What the instruction costs before it runs: its base cost from the opcode
+  // table plus the effective address computation. Both are settled by the
+  // encoding, so the decode works them out once and every later run of the
+  // same decode is charged from here.
+  uint16_t base_cycles;
 } Instruction;
 
 // One cached decode.
@@ -619,9 +625,11 @@ typedef struct Instruction {
 // instruction handler writes through the Instruction it is given, so lending
 // out the entry is safe.
 typedef struct CPUDecodeCacheEntry {
-  Instruction instruction;
-  // The linear address the instruction starts at, which is the key.
+  // The linear address the instruction starts at, which is the key. First so
+  // that the entry packs into 24 bytes: Instruction is 18 and needs 2-byte
+  // alignment, where the key needs 4.
   uint32_t address;
+  Instruction instruction;
   // What code_page_generation said for that address's page when the decode was
   // taken. A hit requires it to still say the same.
   uint8_t generation;
