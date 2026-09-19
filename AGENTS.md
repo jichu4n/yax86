@@ -689,11 +689,6 @@ Alongside the table, state:
   reach one. `EveryEntryHasAHandler` in `opcode_table_test.cpp` keeps it that
   way — an entry added later with the field left out would be a call through
   null rather than an invalid instruction.
-- `on_before_execute_instruction` fires after validation, so it does not run
-  for an instruction about to be rejected as an encoding mismatch, and it does
-  run for a hand-built prefix opcode, which `ExecuteInvalidOpcode()` rejects
-  from inside the handler. Only `core/tools/cpu_demo` uses the callback, and it
-  never builds an `Instruction` by hand.
 - `CPUExecuteDecodedInstruction()` is `YAX86_NOINLINE`. Inlined into
   `CPUTick()` it measures 31% slower on a Cortex-M0+: the execute path wants
   registers, the core has few, and folding the two together makes both spill.
@@ -1322,12 +1317,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #76:
+SRAM, at #78:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.751336** | **5.831** | **0.490** | **122.2%** | 471,500 | 180,488 | 85,631 |
-| `-O2` | 4.995468 | 5.546 | 0.466 | 116.3% | 459,668 | 175,256 | 73,807 |
+| `-O3` | **4.682388** | **5.916** | **0.497** | **124.0%** | 471,444 | 180,416 | 85,571 |
+| `-O2` | 4.848096 | 5.714 | 0.480 | 119.8% | 459,636 | 175,232 | 73,775 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler
