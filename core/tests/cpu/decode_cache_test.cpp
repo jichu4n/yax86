@@ -22,6 +22,11 @@ enum : uint8_t {
   kOpIncBx = 0x43,
   // MOV AL, moffs8
   kOpMovAlMoffs8 = 0xA0,
+  // MOV r8, r/m8
+  kOpMovR8Rm8 = 0x8A,
+  // ModR/M byte selecting AL as the destination and [BX] as the source, which
+  // is an address the CPU has to compute rather than a register.
+  kModRmAlFromBx = 0x07,
   // ES segment override prefix
   kPrefixES = 0x26,
 };
@@ -240,6 +245,37 @@ TEST_F(DecodeCacheTest, AHitAdvancesIPAndChargesCyclesAsTheDecodeDid) {
   RunAt(kProgramAddress);
   EXPECT_EQ(cpu_.registers[kIP], ip_after_miss);
   EXPECT_EQ(cpu_.cycles_this_tick, cycles_after_miss);
+}
+
+// The address computation is part of what an entry records, so a hit has to
+// be charged for it - and an entry that another instruction has since taken
+// over must be charged for its own address rather than the one before it. The
+// two forms below differ only in the segment override, which the 8086 pays two
+// cycles for because the address is formed against a different segment base.
+TEST_F(DecodeCacheTest, AHitChargesForTheAddressItComputes) {
+  constexpr uint16_t kSegmentOverrideCycles = 2;
+  const uint32_t plain = kProgramAddress;
+  // A whole cache further on, so the two land in the same entry.
+  const uint32_t overridden = kProgramAddress + kNumCacheEntries;
+  Write(plain, {kOpMovR8Rm8, kModRmAlFromBx});
+  Write(overridden, {kPrefixES, kOpMovR8Rm8, kModRmAlFromBx});
+
+  RunAt(plain);
+  const uint16_t plain_cycles = cpu_.cycles_this_tick;
+  RunAt(plain);
+  EXPECT_EQ(cpu_.cycles_this_tick, plain_cycles);
+
+  RunAt(overridden);
+  const uint16_t overridden_cycles = cpu_.cycles_this_tick;
+  EXPECT_EQ(overridden_cycles, plain_cycles + kSegmentOverrideCycles);
+  RunAt(overridden);
+  EXPECT_EQ(cpu_.cycles_this_tick, overridden_cycles);
+
+  // Each of these decodes into the entry the other one was holding.
+  RunAt(plain);
+  EXPECT_EQ(cpu_.cycles_this_tick, plain_cycles);
+  RunAt(overridden);
+  EXPECT_EQ(cpu_.cycles_this_tick, overridden_cycles);
 }
 
 // A failed decode has already written part of an instruction into its entry,

@@ -524,6 +524,30 @@ Alongside the table, state:
   `CPUInit()` rejected the count. Dropping the second measures **1.9% slower at
   `-O3`** — one of the clearer examples here of an arrangement that reads
   cheaper and is not. It is also why the minimum count is two rather than one.
+- **An entry records what the instruction costs as well as what it is.** The
+  base cost from `kOpcodeBaseCycles` and the effective address computation both
+  depend only on the encoding, so a hit charges the clock from a field rather
+  than reading a 256-byte table and re-deriving the addressing mode from the
+  ModR/M byte. An on-target profile put those two terms at 2.5% of the whole
+  run on their own; caching them is worth **3.07% at `-O3`** and 2.03% at
+  `-O2`, and costs 20 bytes of core `.text` at `-O3` and 4 at `-O2`. The entry
+  had two bytes of padding to spend, so 256 of them still come to 6KB.
+- The cost is written after every successful decode rather than only where the
+  decode is kept, because it is what the caller charges for the instruction it
+  is about to run either way — an entry that is not kept still answers this
+  fetch. `AHitChargesForTheAddressItComputes` pins it, running two instructions
+  whose addressing modes cost differently through one colliding entry, and it
+  and `ARunStopsAtTheBudget` are the only two tests that catch a missing
+  rewrite.
+- **The fetch has one call to the decoder and one place the cost is worked
+  out.** That is load-bearing rather than tidiness: written with an early
+  return for the no-cache path and a second decode below it, `-O2` sees two
+  callers of the helper, stops inlining `GetEffectiveAddressCycles()` into
+  either, and puts it in flash behind a veneer. That arrangement measures
+  **0.54% slower than master at `-O2`** where the joined one is 2.03% faster,
+  with `-O3` barely moving between them. It is the `YAX86_ALWAYS_INLINE` case
+  from the placement section, met by removing the second call site rather than
+  by a mark.
 - The platform spends **256 entries, 6KB**, which is not the fastest
   arrangement measured. 512 is 0.11% faster for another 6KB, 1024 is 0.04%
   slower, and 128 is 0.83% slower. 0.11% does not buy 6KB on this part: at 256
@@ -761,7 +785,9 @@ Alongside the table, state:
 
 - The cycle model in `cycles.c` is a base cost per opcode, plus the effective
   address calculation, plus four cycles for every byte the instruction moves
-  over the 8088's 8-bit data bus. The third term dominates, and it is charged
+  over the 8088's 8-bit data bus. The first two are settled by the encoding, so
+  a decode works them out once and the cache entry keeps them; the third is
+  charged as the instruction runs. The third term dominates, and it is charged
   from the accesses that actually happen rather than from a table — so an
   instruction that touches memory it has no reason to touch is billed for it.
 - Stores must therefore resolve their destination with
@@ -1317,12 +1343,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #79:
+SRAM, at #80:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.599082** | **6.024** | **0.506** | **126.3%** | 471,444 | 180,416 | 85,483 |
-| `-O2` | 4.841886 | 5.721 | 0.481 | 119.9% | 459,636 | 175,232 | 73,687 |
+| `-O3` | **4.461997** | **6.209** | **0.522** | **130.2%** | 471,428 | 180,448 | 85,503 |
+| `-O2` | 4.745855 | 5.837 | 0.491 | 122.4% | 459,636 | 175,232 | 73,691 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler
