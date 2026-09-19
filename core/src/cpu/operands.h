@@ -5,28 +5,22 @@
 #include "public.h"
 #include "types.h"
 
-// Helper function to construct an OperandValue for a byte.
-extern OperandValue ByteValue(uint8_t byte_value);
-
-// Helper function to construct OperandValue for a word.
-extern OperandValue WordValue(uint16_t word_value);
-
-// Helper function to construct OperandValue given a Width and a value.
+// Narrow a computed result to what an operand of the given width holds.
 extern OperandValue ToOperandValue(Width width, uint32_t raw_value);
 
 // Helper function to zero-extend OperandValue to a 32-bit value. This makes it
 // simpler to do direct arithmetic without worrying about overflow.
-extern uint32_t FromOperandValue(const OperandValue* value);
+extern uint32_t FromOperandValue(OperandValue value);
 
 // Helper function to sign-extend OperandValue to a 32-bit value. This makes it
 // simpler to do direct arithmetic without worrying about overflow.
-extern int32_t FromSignedOperandValue(const OperandValue* value);
+extern int32_t FromSignedOperandValue(Width width, OperandValue value);
 
 // Helper function to extract a zero-extended value from an operand.
 extern uint32_t FromOperand(const Operand* operand);
 
 // Helper function to extract a sign-extended value from an operand.
-extern int32_t FromSignedOperand(const Operand* operand);
+extern int32_t FromSignedOperand(Width width, const Operand* operand);
 
 // Computes the raw effective address corresponding to a MemoryAddress.
 extern uint32_t ToRawAddress(const CPUState* cpu, const MemoryAddress* address);

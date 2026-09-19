@@ -524,6 +524,37 @@ Alongside the table, state:
   `CPUInit()` rejected the count. Dropping the second measures **1.9% slower at
   `-O3`** — one of the clearer examples here of an arrangement that reads
   cheaper and is not. It is also why the minimum count is two rather than one.
+- **An entry records what the instruction costs as well as what it is.** The
+  base cost from `kOpcodeBaseCycles` and the effective address computation
+  depend only on the encoding, so a hit charges the clock from a field instead
+  of reading a 256-byte table and re-deriving the addressing mode. An on-target
+  profile put those two terms at 2.5% of the run; caching them is worth **3.07%
+  at `-O3`** and 2.03% at `-O2`. The entry had two bytes of padding to spend,
+  so 256 of them still come to 6KB.
+- The cost is written after every successful decode rather than only where the
+  decode is kept, since an entry that is not kept still answers this fetch.
+  `AHitChargesForTheAddressItComputes` and `ARunStopsAtTheBudget` are the only
+  two tests that catch a missing rewrite.
+- **Folding `kOpcodeBaseCycles` into `OpcodeMetadata` does not pay**, though it
+  is free on size: the struct has two bytes of padding to put the field in, so
+  the 256-byte array disappears for 272 bytes of core `.text` at `-O3`. It
+  measures **0.63% slower at `-O3` and 0.65% at `-O2`** — both levels agreeing,
+  so it is work rather than layout. The read is one index either way, but a
+  1-byte field at an 8-byte stride spreads 256 costs over 2KB where the array
+  keeps them in a couple of XIP lines. The locality that would have paid for it
+  is gone precisely because of the bullet above: the base cost is read once per
+  decode now, not once per instruction, so these reads no longer follow the
+  decoder through the table. Winning it back means settling the cost inside
+  `CPUFetchNextInstruction()`, where `metadata` is already in a register, which
+  needs the field on `Instruction` instead of on the entry.
+- **The fetch has one call to the decoder and one place the cost is worked
+  out**, which is load-bearing rather than tidiness. Given an early return for
+  the no-cache path and a second decode below it, `-O2` sees two callers, stops
+  inlining `GetEffectiveAddressCycles()` into either and puts it in flash
+  behind a veneer: **0.54% slower than master** where the joined form is 2.03%
+  faster, with `-O3` barely moving between them. It is the
+  `YAX86_ALWAYS_INLINE` case from the placement section, met by removing the
+  second call site rather than by a mark.
 - The platform spends **256 entries, 6KB**, which is not the fastest
   arrangement measured. 512 is 0.11% faster for another 6KB, 1024 is 0.04%
   slower, and 128 is 0.83% slower. 0.11% does not buy 6KB on this part: at 256
@@ -721,8 +752,9 @@ Alongside the table, state:
   like the same dispatch and are not. `Width width : 1` is a one-bit bitfield,
   so there is no representable value outside the enum: the compiler proves the
   `default` arm unreachable and emits nothing for it, which is what makes the
-  explicit invalid return free and lets these read like `ToOperandValue()` and
-  `FromOperandValue()` rather than as bare ternaries. `OperandAddress.type` is
+  explicit invalid return free and lets these read like
+  `ReadRegisterOperandValue()` and `WriteMemoryOperand()` rather than as bare
+  ternaries. `OperandAddress.type` is
   a whole `OperandAddressType`, and while `arm-none-eabi` defaults to
   `-fshort-enums` and so gives it one byte, 254 of that byte's 256 values are
   outside the enum and C does not promise a variable holds only named ones. A
@@ -757,11 +789,62 @@ Alongside the table, state:
   at `-O3`, but costs 0.35% at `-O2` by moving other inlining decisions, so it
   is left unmarked.
 
+### cpu — operand values
+
+- **An operand value is a number, not a struct.** `OperandValue` is a
+  `uint16_t`, and every read, write, immediate and port helper takes and
+  returns one by value. It used to be a `Width` beside a union of a byte and a
+  word, and what that cost was not the arithmetic — it was that a struct on
+  this path is a struct *in memory*. Worth **24.37% at `-O3`** and 9.75% at
+  `-O2`, and the core is 3,360 bytes smaller at `-O3` and 1,812 at `-O2`. It is
+  the largest single result in the campaign by a wide margin.
+- The mechanism is the ABI, and it is worth knowing exactly. AAPCS returns a
+  composite of four bytes or fewer in a register and anything larger through
+  memory, so a 10-byte `Operand` was returned through the stack. Worse, on
+  Thumb-1 GCC turns a small copy it cannot do in aligned words into a **call to
+  `memcpy`** — including a four-byte one, when the destination is a field at an
+  odd halfword offset inside a larger struct. Reading one register operand came
+  out as `memset(10)`, `memcpy(4)` and `memcpy(10)`, three calls through a
+  veneer into flash to fetch a register.
+- **An on-target profile is what found it**, and it found it by name:
+  `memcpy`, `memset` and their veneers were 5.4% of the whole `dos-boot` run,
+  and every hot-path call site of either was one of the three operand readers.
+  Nothing about the source says "this calls into libc"; `nm` and `objdump` did.
+  When a structure on this path is suspect, look at the call sites of
+  `__wrap_memcpy` before theorizing.
+- **A byte-wide value is held in the low byte with the high byte zero.** That
+  invariant is what lets `FromOperandValue()` widen by doing nothing, where it
+  used to switch on the width the value carried. Every path that produces a
+  byte truncates to one, and the one that has to work for it is
+  `ReadRegisterOperandByte()`, where AH and the high half of a word register
+  live in the bits the cast drops. Eight unit tests across `add_sub`, `group_2`
+  and `mov_xchg_xlat` fail if that cast goes, and so does the hardware suite.
+- What the type no longer carries is the width, so **sign extension takes one
+  explicitly** — `FromSignedOperandValue(width, value)` and
+  `FromSignedOperand(width, operand)`, from the opcode table entry the caller
+  already has. Zero extension needs none, by the invariant above.
+- **Do not initialize an operand with a designated initializer.** `Operand
+  operand = {.address = {...}}` makes C zero every member the initializer does
+  not name, which is a `memset` call over the whole struct before a single
+  field is written. Assigning the fields one at a time instead was **2.78% at
+  `-O3` on its own**, from that one function. Same lesson as the decode, where
+  settling each field where it becomes known rather than zeroing up front was
+  worth 4.63%.
+- `Operand` is still `{OperandAddress address; OperandValue value;}` and is
+  still returned by value, so `ReadRegisterOrMemoryOperand()` still holds the
+  seven remaining `memcpy` call sites in the core. Handing the address back
+  through a pointer and the value in a register would remove them; the
+  obstacle is that `GetRegisterOrMemoryOperandAddress()` is
+  `YAX86_ALWAYS_INLINE` and splitting the read at every handler would inline it
+  into about thirty of them.
+
 ### cpu — what an instruction costs
 
 - The cycle model in `cycles.c` is a base cost per opcode, plus the effective
   address calculation, plus four cycles for every byte the instruction moves
-  over the 8088's 8-bit data bus. The third term dominates, and it is charged
+  over the 8088's 8-bit data bus. The first two are settled by the encoding, so
+  a decode works them out once and the cache entry keeps them; the third is
+  charged as the instruction runs. The third term dominates, and it is charged
   from the accesses that actually happen rather than from a table — so an
   instruction that touches memory it has no reason to touch is billed for it.
 - Stores must therefore resolve their destination with
@@ -1317,12 +1400,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #79:
+SRAM, at #81:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.599082** | **6.024** | **0.506** | **126.3%** | 471,444 | 180,416 | 85,483 |
-| `-O2` | 4.841886 | 5.721 | 0.481 | 119.9% | 459,636 | 175,232 | 73,687 |
+| `-O3` | **3.587752** | **7.721** | **0.649** | **161.9%** | 469,140 | 179,984 | 82,143 |
+| `-O2` | 4.324144 | 6.407 | 0.538 | 134.3% | 457,748 | 175,216 | 71,879 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler

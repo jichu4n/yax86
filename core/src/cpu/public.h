@@ -622,6 +622,10 @@ typedef struct CPUDecodeCacheEntry {
   Instruction instruction;
   // The linear address the instruction starts at, which is the key.
   uint32_t address;
+  // Its base cost plus the effective address computation, which depend only on
+  // the encoding - so a hit neither reads the opcode cycle table nor
+  // re-derives the addressing mode.
+  uint16_t base_cycles;
   // What code_page_generation said for that address's page when the decode was
   // taken. A hit requires it to still say the same.
   uint8_t generation;

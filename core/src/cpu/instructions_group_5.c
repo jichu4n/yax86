@@ -26,14 +26,14 @@ static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
 // JMP ptr16
 static InstructionResult ExecuteIndirectNearJump(
     const InstructionContext* ctx, Operand* dest) {
-  ctx->cpu->registers[kIP] = FromOperandValue(&dest->value);
+  ctx->cpu->registers[kIP] = FromOperandValue(dest->value);
   return kInstructionExecuted;
 }
 
 // CALL ptr16
 static InstructionResult ExecuteIndirectNearCall(
     const InstructionContext* ctx, Operand* dest) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
@@ -42,7 +42,7 @@ static InstructionResult ExecuteIndirectFarCall(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
-  return ExecuteFarCall(ctx, &segment.value, &dest->value);
+  return ExecuteFarCall(ctx, segment.value, dest->value);
 }
 
 // JMP ptr16:16
@@ -50,7 +50,7 @@ static InstructionResult ExecuteIndirectFarJump(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
-  return ExecuteFarJump(ctx, &segment.value, &dest->value);
+  return ExecuteFarJump(ctx, segment.value, dest->value);
 }
 
 // PUSH r/m16

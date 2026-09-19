@@ -64,7 +64,7 @@ YAX86_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
 YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   OperandValue base = ReadImmediate(ctx);
-  uint16_t base_value = FromOperandValue(&base);
+  uint16_t base_value = FromOperandValue(base);
   if (base_value == 0) {
     // AAM divides by its immediate operand, so a base of 0 raises a divide
     // error just like DIV by zero does, rather than being an invalid encoding.
@@ -89,7 +89,7 @@ YAX86_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   OperandValue base = ReadImmediate(ctx);
-  uint8_t base_value = FromOperandValue(&base);
+  uint8_t base_value = FromOperandValue(base);
   al += ah * base_value;
   ah = 0;
   ctx->cpu->registers[kAX] = (ah << 8) | al;

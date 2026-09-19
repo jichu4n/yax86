@@ -177,7 +177,7 @@ YAX86_HOT static InstructionResult ExecuteScasIteration(
     const InstructionContext* ctx) {
   Operand src = GetStringDestinationOperand(ctx);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  ExecuteCmp(ctx, &dest, &src.value);
+  ExecuteCmp(ctx, &dest, src.value);
   UpdateStringDestinationAddress(ctx);
   return kInstructionExecuted;
 }
@@ -192,7 +192,7 @@ YAX86_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx) {
 static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
   Operand dest = GetStringSourceOperand(ctx);
   Operand src = GetStringDestinationOperand(ctx);
-  ExecuteCmp(ctx, &dest, &src.value);
+  ExecuteCmp(ctx, &dest, src.value);
   UpdateStringSourceAddress(ctx);
   UpdateStringDestinationAddress(ctx);
   return kInstructionExecuted;

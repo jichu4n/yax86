@@ -26,7 +26,7 @@ ExecutePopRegister(const InstructionContext* ctx) {
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -50,21 +50,21 @@ ExecutePopSegmentRegister(const InstructionContext* ctx) {
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
 // PUSHF
 YAX86_PRIVATE InstructionResult
 ExecutePushFlags(const InstructionContext* ctx) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->flags));
+  PushValue(ctx->cpu, ctx->cpu->flags);
   return kInstructionExecuted;
 }
 
 // POPF
 YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx->cpu);
-  ctx->cpu->flags = ToFlagsRegisterValue(FromOperandValue(&value));
+  ctx->cpu->flags = ToFlagsRegisterValue(FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -78,7 +78,7 @@ ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   // both address it and the 8086 computes the effective address first.
   OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -102,7 +102,8 @@ static const OperandAddress* GetAHRegisterAddress(void) {
 YAX86_PRIVATE InstructionResult
 ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
   WriteRegisterOperandByte(
-      ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
+      ctx->cpu, GetAHRegisterAddress(),
+      (OperandValue)(ctx->cpu->flags & 0x00FF));
   return kInstructionExecuted;
 }
 
@@ -112,7 +113,6 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value =
       ReadRegisterOperandByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
-  ctx->cpu->flags =
-      ToFlagsRegisterValue((ctx->cpu->flags & 0xFF00) | value.value.byte_value);
+  ctx->cpu->flags = ToFlagsRegisterValue((ctx->cpu->flags & 0xFF00) | value);
   return kInstructionExecuted;
 }

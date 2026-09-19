@@ -11,8 +11,7 @@
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
 YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteCmp(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
   uint32_t result = raw_dest_value - raw_src_value;
@@ -26,7 +25,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteCmp(ctx, &dest, &src.value);
+  return ExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP r8, r/m8
@@ -35,7 +34,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteCmp(ctx, &dest, &src.value);
+  return ExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP AL, imm8
@@ -44,5 +43,5 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteCmp(ctx, &dest, &src_value);
+  return ExecuteCmp(ctx, &dest, src_value);
 }
