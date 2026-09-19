@@ -1204,9 +1204,9 @@ typedef struct CPUDecodeCacheEntry {
   Instruction instruction;
   // The linear address the instruction starts at, which is the key.
   uint32_t address;
-  // What the instruction costs before it runs: its base cost plus the address
-  // it has to compute. Both depend only on the encoding, so a hit neither
-  // reads the opcode cycle table nor re-derives the addressing mode.
+  // Its base cost plus the effective address computation, which depend only on
+  // the encoding - so a hit neither reads the opcode cycle table nor
+  // re-derives the addressing mode.
   uint16_t base_cycles;
   // What code_page_generation said for that address's page when the decode was
   // taken. A hit requires it to still say the same.
@@ -7563,9 +7563,8 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
          entry->generation == generation;
 }
 
-// What an instruction costs before it runs, which is what a decode cache entry
-// records. Everything either term reads is part of the encoding, so the answer
-// is a property of the decode rather than of the machine it runs on.
+// What an instruction costs before it runs. Both terms read only the encoding,
+// so the answer belongs to the decode and an entry can keep it.
 YAX86_ALWAYS_INLINE static uint16_t GetInstructionBaseCycles(
     const Instruction* instruction) {
   return (uint16_t)kOpcodeBaseCycles[instruction->opcode] +
@@ -7587,9 +7586,9 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
 
   // Where the decode is going to land, and the key it would be kept under. The
-  // two paths below join up again at the decode, so that there is one call to
-  // the decoder and one place the base cycles are worked out - a second call
-  // site is enough for GCC to stop inlining what it inlines into one.
+  // two paths below join up at the decode rather than each making their own
+  // call, because a second call site is enough for GCC to stop inlining
+  // GetEffectiveAddressCycles() into either.
   CPUDecodeCacheEntry* target = scratch;
   uint32_t address = 0;
   uint8_t generation = 0;
@@ -7617,8 +7616,8 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   if (status != kFetchSuccess) {
     return status;
   }
-  // Written whether or not the decode is kept, since it is what the caller
-  // charges for the instruction it is about to run either way.
+  // Written whether or not the decode is kept, since the caller charges it
+  // either way.
   target->base_cycles = GetInstructionBaseCycles(&target->instruction);
 
   // Kept only when the whole instruction came from the page the generation was
@@ -7877,10 +7876,10 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
       const uint16_t instruction_ip = cpu->registers[kIP];
       cpu->registers[kIP] += instruction->size;
 
-      // What the instruction costs before it runs came with the decode, and
-      // then it charges itself as it runs - its traffic on the data bus, and
-      // any part of its cost that depends on its operands. A run accumulates
-      // all of it, which is what the budget below is spent against.
+      // What the instruction costs before it runs came with the decode; its
+      // bus traffic and anything that depends on its operands it charges
+      // itself as it runs. A run accumulates all of it, which is what the
+      // budget below is spent against.
       CPUAddCycles(cpu, entry->base_cycles);
 
       // Step 2: Execute the instruction. The fetch above derived has_mod_rm
