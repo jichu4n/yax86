@@ -1,0 +1,1080 @@
+diff -ruN core/src/cpu/cpu.c /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/cpu.c
+--- core/src/cpu/cpu.c	2026-08-20 00:03:32.461026363 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/cpu.c	2026-08-20 09:11:03.807714514 -0700
+@@ -133,14 +133,93 @@
+   }
+ }
+ 
+-CPUFetchNextInstructionStatus CPUFetchNextInstruction(
+-    CPUState* cpu, Instruction* instruction) {
+-  const Instruction zero_instruction = {0};
+-  *instruction = zero_instruction;
++// Walks the bytes of one instruction. Where the platform can hand out a direct
++// window it reads from that; otherwise every byte takes the ordinary path.
++typedef struct InstructionFetcher {
++  CPUState* cpu;
++  uint16_t ip;
++  // The window, already advanced to the next unread byte, and what is left of
++  // it. NULL and zero when there is no window.
++  const uint8_t* data;
++  uint32_t remaining;
++} InstructionFetcher;
++
++static inline uint8_t FetchNextByte(InstructionFetcher* fetcher) {
++  if (fetcher->remaining > 0) {
++    --fetcher->remaining;
++    ++fetcher->ip;
++    return *fetcher->data++;
++  }
++  const MemoryAddress address = {
++      .segment_register_index = kCS,
++      .offset = fetcher->ip++,
++  };
++  return ReadRawMemoryByte(fetcher->cpu, ToRawAddress(fetcher->cpu, &address));
++}
++
++static inline void FetcherOpenWindow(InstructionFetcher* fetcher) {
++  CPUState* const cpu = fetcher->cpu;
++  const MemoryAddress start = {
++      .segment_register_index = kCS,
++      .offset = fetcher->ip,
++  };
++  const uint32_t linear = ToRawAddress(cpu, &start);
++
++  fetcher->data = NULL;
++  fetcher->remaining = 0;
++
++  // Still inside the window the last instruction used, which is the usual case
++  // - execution is sequential and a window spans a whole memory region.
++  if (cpu->fetch_window != NULL && linear >= cpu->fetch_window_start &&
++      linear < cpu->fetch_window_end) {
++    fetcher->data = cpu->fetch_window + (linear - cpu->fetch_window_start);
++    fetcher->remaining = cpu->fetch_window_end - linear;
++  } else if (cpu->config->get_read_pointer != NULL) {
++    uint32_t available = 0;
++    const uint8_t* data =
++        cpu->config->get_read_pointer(cpu, linear, &available);
++    if (data != NULL) {
++      cpu->fetch_window = data;
++      cpu->fetch_window_start = linear;
++      cpu->fetch_window_end = linear + available;
++      fetcher->data = data;
++      fetcher->remaining = available;
++    } else {
++      cpu->fetch_window = NULL;
++    }
++  }
++
++  // IP is 16 bits and wraps within the segment, where the linear address does
++  // not, so the window must stop where the wrap would be.
++  const uint32_t until_wrap = 0x10000u - (uint32_t)fetcher->ip;
++  if (fetcher->remaining > until_wrap) {
++    fetcher->remaining = until_wrap;
++  }
++}
++
++void CPUInvalidateFetchWindow(CPUState* cpu) { cpu->fetch_window = NULL; }
++
++void CPUSetDirectMemory(CPUState* cpu, uint8_t* data, uint32_t size) {
++  cpu->direct_memory = data;
++  cpu->direct_memory_size = data != NULL ? size : 0;
++}
++
++YAX86_HOT CPUFetchNextInstructionStatus
++CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
++  // Only the fields that are read whatever the encoding turns out to be. The
++  // displacement and immediate arrays are read no further than their size
++  // says, and mod_rm is only read when has_mod_rm is set, so clearing the
++  // whole struct was writing twelve bytes per instruction to no end.
++  instruction->segment_override = kNoSegmentOverride;
++  instruction->repetition_prefix = 0;
++  instruction->has_mod_rm = false;
++  instruction->displacement_size = 0;
++  instruction->immediate_size = 0;
+ 
+   uint8_t current_byte;
+   const uint16_t original_ip = cpu->registers[kIP];
+-  uint16_t ip = cpu->registers[kIP];
++  InstructionFetcher fetcher = {.cpu = cpu, .ip = original_ip};
++  FetcherOpenWindow(&fetcher);
+ 
+   // Prefix
+   //
+@@ -149,12 +228,12 @@
+   // in its size. It exists only to stop a run of prefix bytes from fetching
+   // forever - see kMaxPrefixBytes.
+   uint8_t prefix_size = 0;
+-  current_byte = ReadNextInstructionByte(cpu, &ip);
++  current_byte = FetchNextByte(&fetcher);
+   while (ApplyPrefixByte(instruction, current_byte)) {
+     if (++prefix_size > kMaxPrefixBytes) {
+       return kFetchPrefixTooLong;
+     }
+-    current_byte = ReadNextInstructionByte(cpu, &ip);
++    current_byte = FetchNextByte(&fetcher);
+   }
+ 
+   // Opcode
+@@ -163,7 +242,7 @@
+ 
+   // ModR/M
+   if (metadata->has_modrm) {
+-    uint8_t mod_rm_byte = ReadNextInstructionByte(cpu, &ip);
++    uint8_t mod_rm_byte = FetchNextByte(&fetcher);
+     instruction->has_mod_rm = true;
+     instruction->mod_rm.mod = (mod_rm_byte >> 6) & 0x03;  // Bits 6-7
+     instruction->mod_rm.reg = (mod_rm_byte >> 3) & 0x07;  // Bits 3-5
+@@ -174,27 +253,32 @@
+         GetDisplacementSize(instruction->mod_rm.mod, instruction->mod_rm.rm);
+     instruction->displacement_size = displacement_size;
+     for (uint8_t i = 0; i < displacement_size; ++i) {
+-      instruction->displacement[i] = ReadNextInstructionByte(cpu, &ip);
++      instruction->displacement[i] = FetchNextByte(&fetcher);
+     }
+   }
+ 
+   // Immediate operand
+   //
++  // mod_rm is only meaningful when has_mod_rm is set, and the only opcodes
++  // whose immediate size depends on REG are group 3, which always carry one.
++  // Reading it here regardless is therefore harmless but must be defined.
++  //
+   // immediate_size is a three bit field, so it can express more bytes than
+   // immediate[] holds. No entry in the opcode table does - the widest is the 4
+   // of a far pointer - but nothing in the type says so, and a compiler that
+   // cannot see it is right to warn about the writes below. Bounding it by the
+   // array is what makes the invariant explicit.
+-  uint8_t immediate_size = GetImmediateSize(metadata, instruction->mod_rm.reg);
++  uint8_t immediate_size = GetImmediateSize(
++      metadata, instruction->has_mod_rm ? instruction->mod_rm.reg : 0);
+   if (immediate_size > kMaxImmediateBytes) {
+     immediate_size = kMaxImmediateBytes;
+   }
+   instruction->immediate_size = immediate_size;
+   for (uint8_t i = 0; i < immediate_size; ++i) {
+-    instruction->immediate[i] = ReadNextInstructionByte(cpu, &ip);
++    instruction->immediate[i] = FetchNextByte(&fetcher);
+   }
+ 
+-  instruction->size = ip - original_ip;
++  instruction->size = (uint8_t)(fetcher.ip - original_ip);
+ 
+   return kFetchSuccess;
+ }
+@@ -203,28 +287,24 @@
+ // Execution
+ // ============================================================================
+ 
+-InstructionResult CPUExecuteInstruction(
+-    CPUState* cpu, Instruction* instruction) {
++// Run an instruction whose metadata the caller already has.
++//
++// CPUTick() decodes the instruction itself, so it knows the opcode table entry
++// and knows the encoding agrees with it - it produced both. Repeating the
++// lookup and the consistency check on that path costs a table read, two
++// compares and a recomputed immediate size on every instruction the emulator
++// runs, to re-establish something that cannot have changed in between.
++// Deliberately not inlined, and placed like the rest of the hot path. Inlined
++// into CPUTick() this measured 31% slower on a Cortex-M0+: the execute path
++// needs registers, the core has few, and folding the two together spills.
++YAX86_HOT __attribute__((noinline)) static InstructionResult
++ExecuteDecodedInstruction(
++    CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
+   // Run the on_before_execute_instruction callback if provided.
+   if (cpu->config->on_before_execute_instruction) {
+     cpu->config->on_before_execute_instruction(cpu, instruction);
+   }
+ 
+-  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+-  if (!metadata->handler) {
+-    return kInstructionInvalid;
+-  }
+-
+-  // Check encoded instruction against expected instruction format.
+-  if (instruction->has_mod_rm != metadata->has_modrm) {
+-    return kInstructionInvalid;
+-  }
+-  if (instruction->immediate_size !=
+-      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
+-                           : metadata->immediate_size)) {
+-    return kInstructionInvalid;
+-  }
+-
+   // Run the instruction handler.
+   InstructionContext context = {
+       .cpu = cpu,
+@@ -244,6 +324,25 @@
+   return kInstructionExecuted;
+ }
+ 
++// Checks the instruction against the opcode table before running it, for a
++// caller that built the Instruction rather than decoding one.
++YAX86_HOT InstructionResult
++CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
++  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
++  if (!metadata->handler) {
++    return kInstructionInvalid;
++  }
++  if (instruction->has_mod_rm != metadata->has_modrm) {
++    return kInstructionInvalid;
++  }
++  if (instruction->immediate_size !=
++      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
++                           : metadata->immediate_size)) {
++    return kInstructionInvalid;
++  }
++  return ExecuteDecodedInstruction(cpu, instruction, metadata);
++}
++
+ // Save state and vector to the handler for an interrupt.
+ static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
+   // Prepare for interrupt processing.
+@@ -292,7 +391,9 @@
+   // enabled. Acknowledging it is what produces its vector - there is nothing to
+   // latch beforehand, and the controller keeps requesting until acknowledged.
+   uint8_t intr_vector;
++  const bool* const request_hint = cpu->config->interrupt_request_hint;
+   if (CPUGetFlag(cpu, kIF) && cpu->config->acknowledge_interrupt &&
++      (request_hint == NULL || *request_hint) &&
+       cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
+     DispatchInterrupt(cpu, intr_vector);
+     return true;
+@@ -301,7 +402,7 @@
+   return false;
+ }
+ 
+-CPUTickResult CPUTick(CPUState* cpu) {
++YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
+   // A stop request only applies to the tick during which it was made.
+   cpu->stop_requested = false;
+ 
+@@ -343,8 +444,12 @@
+         cpu, kOpcodeBaseCycles[instruction.opcode] +
+                  GetEffectiveAddressCycles(&instruction));
+ 
+-    // Step 2: Execute the instruction.
+-    if (CPUExecuteInstruction(cpu, &instruction) != kInstructionExecuted) {
++    // Step 2: Execute the instruction. The decode above already established
++    // which table entry this is and that the encoding matches it.
++    const OpcodeMetadata* const metadata = &opcode_table[instruction.opcode];
++    if (metadata->handler == NULL ||
++        ExecuteDecodedInstruction(cpu, &instruction, metadata) !=
++            kInstructionExecuted) {
+       YAX86_CPU_LOG(
+           kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
+           instruction_cs, instruction_ip, instruction.opcode);
+diff -ruN core/src/cpu/instructions_ctrl_flow.c /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/instructions_ctrl_flow.c
+--- core/src/cpu/instructions_ctrl_flow.c	2026-08-07 19:25:28.048800603 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/instructions_ctrl_flow.c	2026-08-20 09:25:35.979879656 -0700
+@@ -35,7 +35,9 @@
+ // Common logic for JMP instructions.
+ static InstructionResult ExecuteRelativeJump(
+     const InstructionContext* ctx, const OperandValue* offset_value) {
+-  return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
++  return ctx->metadata->width == kByte
++             ? ExecuteRelativeJumpByte(ctx, offset_value)
++             : ExecuteRelativeJumpWord(ctx, offset_value);
+ }
+ 
+ // JMP rel8
+diff -ruN core/src/cpu/opcode_table.c /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/opcode_table.c
+--- core/src/cpu/opcode_table.c	2026-08-20 00:03:32.461026363 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/opcode_table.c	2026-08-20 00:51:32.356771849 -0700
+@@ -13,7 +13,7 @@
+ //
+ // Const because nothing writes it, which on a target that executes from flash
+ // keeps 2KB of it out of RAM.
+-YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
++YAX86_PRIVATE YAX86_HOT_DATA const OpcodeMetadata opcode_table[256] = {
+     // ADD r/m8, r8
+     {.opcode = 0x00,
+      .has_modrm = true,
+diff -ruN core/src/cpu/operands.c /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/operands.c
+--- core/src/cpu/operands.c	2026-08-19 22:45:50.386571457 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/operands.c	2026-08-20 09:16:29.524721595 -0700
+@@ -98,12 +98,17 @@
+ 
+ // Read a byte from memory as a uint8_t.
+ YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
++  // Guest RAM, which is where nearly every operand lands, is reached by
++  // indexing. The call below ends up indexing the same array, having gone
++  // through a function pointer and a bounds check to get there.
++  if (raw_address < cpu->direct_memory_size) {
++    return cpu->direct_memory[raw_address];
++  }
+   return cpu->config->read_memory_byte
+              ? cpu->config->read_memory_byte(cpu, raw_address)
+              : 0xFF;
+ }
+ 
+-// Read a word from memory as a uint16_t.
+ YAX86_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
+   uint8_t low_byte_value = ReadRawMemoryByte(cpu, raw_address);
+   uint8_t high_byte_value = ReadRawMemoryByte(cpu, raw_address + 1);
+@@ -150,11 +155,17 @@
+   return WordValue(word_value);
+ }
+ 
++// The tables above stay, because they are the readable statement of which
++// function handles which case and callers outside this file use them. On the
++// hot path the call goes direct instead: an indirect call through a table is a
++// pair of loads and a branch the compiler cannot see through, where a test on
++// a one-bit width lets it inline both sides.
++
+ // Table of Read* functions, indexed by OperandAddressType and Width.
+ YAX86_PRIVATE
+ OperandValue (*const kReadOperandValueFn[kNumOperandAddressTypes][kNumWidths])(
+     CPUState* cpu, const OperandAddress* address) = {
+-    // kOperandTypeRegister
++    // kOperandAddressTypeRegister
+     {ReadRegisterOperandByte, ReadRegisterOperandWord},
+     // kOperandTypeMemory
+     {ReadMemoryOperandByte, ReadMemoryOperandWord},
+@@ -163,13 +174,16 @@
+ // Write a byte as uint8_t to memory.
+ YAX86_PRIVATE void WriteRawMemoryByte(
+     CPUState* cpu, uint32_t address, uint8_t value) {
++  if (address < cpu->direct_memory_size) {
++    cpu->direct_memory[address] = value;
++    return;
++  }
+   if (!cpu->config->write_memory_byte) {
+     return;
+   }
+   cpu->config->write_memory_byte(cpu, address, value);
+ }
+ 
+-// Write a byte to memory.
+ YAX86_PRIVATE void WriteMemoryOperandByte(
+     CPUState* cpu, const OperandAddress* address, OperandValue value) {
+   AddBusCycles(cpu, 1);
+@@ -214,7 +228,7 @@
+ YAX86_PRIVATE void (*const kWriteOperandFn[kNumOperandAddressTypes]
+                                           [kNumWidths])(
+     CPUState* cpu, const OperandAddress* address, OperandValue value) = {
+-    // kOperandTypeRegister
++    // kOperandAddressTypeRegister
+     {WriteRegisterOperandByte, WriteRegisterOperandWord},
+     // kOperandTypeMemory
+     {WriteMemoryOperandByte, WriteMemoryOperandWord},
+@@ -371,7 +385,9 @@
+   if (mod == 3) {
+     // Register operand
+     address.type = kOperandAddressTypeRegister;
+-    address.value.register_address = kGetRegisterAddressFn[width](cpu, rm);
++    address.value.register_address = width == kByte
++                                         ? GetRegisterAddressByte(cpu, rm)
++                                         : GetRegisterAddressWord(cpu, rm);
+   } else {
+     // Memory operand
+     address.type = kOperandAddressTypeMemory;
+@@ -404,8 +420,14 @@
+ // Read a value from an operand address.
+ YAX86_PRIVATE OperandValue
+ ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
+-  return kReadOperandValueFn[address->type][ctx->metadata->width](
+-      ctx->cpu, address);
++  // Direct rather than through kReadOperandValueFn, see the note above.
++  const Width read_width = ctx->metadata->width;
++  if (address->type == kOperandAddressTypeRegister) {
++    return read_width == kByte ? ReadRegisterOperandByte(ctx->cpu, address)
++                               : ReadRegisterOperandWord(ctx->cpu, address);
++  }
++  return read_width == kByte ? ReadMemoryOperandByte(ctx->cpu, address)
++                             : ReadMemoryOperandWord(ctx->cpu, address);
+ }
+ 
+ // Get a register or memory operand for an instruction based on the ModR/M
+@@ -429,7 +451,9 @@
+           .type = kOperandAddressTypeRegister,
+           .value = {
+               .register_address =
+-                  kGetRegisterAddressFn[width](ctx->cpu, register_index),
++                  (width == kByte
++                       ? GetRegisterAddressByte(ctx->cpu, register_index)
++                       : GetRegisterAddressWord(ctx->cpu, register_index)),
+           }}};
+   operand.value = ReadOperandValue(ctx, &operand.address);
+   return operand;
+@@ -460,8 +484,20 @@
+     const InstructionContext* ctx, const OperandAddress* address,
+     uint32_t raw_value) {
+   Width width = ctx->metadata->width;
+-  kWriteOperandFn[address->type][width](
+-      ctx->cpu, address, ToOperandValue(width, raw_value));
++  // Direct rather than through kWriteOperandFn, see the note above.
++  if (address->type == kOperandAddressTypeRegister) {
++    if (width == kByte) {
++      WriteRegisterOperandByte(
++          ctx->cpu, address, ToOperandValue(width, raw_value));
++    } else {
++      WriteRegisterOperandWord(
++          ctx->cpu, address, ToOperandValue(width, raw_value));
++    }
++  } else if (width == kByte) {
++    WriteMemoryOperandByte(ctx->cpu, address, ToOperandValue(width, raw_value));
++  } else {
++    WriteMemoryOperandWord(ctx->cpu, address, ToOperandValue(width, raw_value));
++  }
+ }
+ 
+ // Write a value to a register or memory operand.
+@@ -473,5 +509,7 @@
+ // Read an immediate value from the instruction.
+ YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
+   Width width = ctx->metadata->width;
+-  return kReadImmediateValueFn[width](ctx->instruction);
++  // Direct rather than through kReadImmediateValueFn, see the note above.
++  return width == kByte ? ReadImmediateOperandByte(ctx->instruction)
++                        : ReadImmediateOperandWord(ctx->instruction);
+ }
+diff -ruN core/src/cpu/public.h /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/public.h
+--- core/src/cpu/public.h	2026-08-20 00:03:32.461026363 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/cpu/public.h	2026-08-20 09:11:03.807676522 -0700
+@@ -167,6 +167,17 @@
+   // to the real-life 8088.
+   uint8_t (*read_memory_byte)(struct CPUState* cpu, uint32_t address);
+ 
++  // Optional. Returns a pointer to memory at address and, through available,
++  // how many bytes may be read contiguously from it - or NULL if the region
++  // cannot be read directly, which is the case for a device, for unmapped
++  // memory, and while memory watchpoints are enabled.
++  //
++  // Instruction fetch uses this to read a whole instruction from one lookup
++  // instead of paying the full memory path per byte. Everything still works if
++  // it is NULL, only slower.
++  const uint8_t* (*get_read_pointer)(
++      struct CPUState* cpu, uint32_t address, uint32_t* available);
++
+   // Callback to write a byte to memory.
+   //
+   // On the 8086, accessing an invalid memory address will yield garbage data
+@@ -190,6 +201,17 @@
+   // the CPU takes no external interrupts.
+   bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
+ 
++  // Optional. When set, points at a flag the host keeps true whenever
++  // acknowledge_interrupt could produce a vector. The CPU reads it before
++  // making the call and skips the call when it is false, which on a machine
++  // that is not being interrupted is nearly every instruction.
++  //
++  // The flag may be true when there is nothing to take - that only costs the
++  // call it would have made anyway. It may never be false when there is, so a
++  // host that cannot guarantee that must leave this NULL, which is the
++  // default and asks on every instruction as before.
++  const bool* interrupt_request_hint;
++
+   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
+   // through the Interrupt Vector Table.
+   InterruptHandlerResult (*handle_interrupt)(
+@@ -249,6 +271,27 @@
+   // clears this state.
+   bool is_halted;
+ 
++  // The window instruction fetch is currently reading from, kept across
++  // instructions because execution is mostly sequential and re-opening it
++  // costs a call into the host and a lookup. Addresses are linear.
++  //
++  // Only ever a cache of what get_read_pointer would return, so dropping it is
++  // always safe - see CPUInvalidateFetchWindow().
++  const uint8_t* fetch_window;
++  uint32_t fetch_window_start;
++  uint32_t fetch_window_end;
++
++  // Plain read/write storage starting at linear address 0, which the CPU may
++  // reach by indexing rather than through read_memory_byte and
++  // write_memory_byte. Every operand that lands in guest RAM - most of them -
++  // then costs an index instead of a call through a function pointer into a
++  // host that ends up indexing the same array anyway.
++  //
++  // Zero size means no such region, which is the initial state and what every
++  // host gets until it says otherwise. Set it with CPUSetDirectMemory().
++  uint8_t* direct_memory;
++  uint32_t direct_memory_size;
++
+   // Instructions retired since CPUInit(). A halted tick retires none.
+   //
+   // Counted here rather than left to the caller because CPUTick() already
+@@ -290,6 +333,25 @@
+   }
+ }
+ 
++// Drop any cached instruction fetch window.
++//
++// The host must call this whenever what a direct read would return stops
++// matching what the memory map says - when a region is registered, or when a
++// memory watchpoint is added that a cached window would otherwise read past.
++void CPUInvalidateFetchWindow(struct CPUState* cpu);
++
++// Give the CPU a region of plain storage, mapped at linear address 0, that it
++// may read and write by indexing instead of through the memory callbacks.
++//
++// The region must behave exactly as the callbacks would for those addresses:
++// plain storage, no side effects, and nothing watching it. A host with memory
++// watchpoints enabled must pass a size of 0 for as long as they are enabled,
++// since a direct access cannot fire one.
++//
++// Passing 0 - the default - sends every access through the callbacks, which is
++// what a host that cannot make those promises should do.
++void CPUSetDirectMemory(struct CPUState* cpu, uint8_t* data, uint32_t size);
++
+ // Raise an interrupt from within the CPU, to be taken at the end of the
+ // instruction currently executing. This is for the sources the 8086 calls
+ // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
+diff -ruN core/src/pic/pic.c /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/pic/pic.c
+--- core/src/pic/pic.c	2026-08-07 13:52:25.672888557 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/pic/pic.c	2026-08-20 09:25:35.971479278 -0700
+@@ -95,6 +95,13 @@
+ // PIC initialization
+ // ============================================================================
+ 
++// Recompute the hint the CPU reads instead of asking on every instruction.
++// Called wherever the request or mask registers change - see
++// PICState.has_unmasked_request.
++static inline void PICUpdateUnmaskedRequest(PICState* pic) {
++  pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
++}
++
+ void PICInit(PICState* pic, PICConfig* config) {
+   // Zero out the PIC state.
+   static const PICState zero_pic_state = {0};
+@@ -103,6 +110,7 @@
+ 
+   // All interrupts masked by default.
+   pic->imr = 0xFF;
++  PICUpdateUnmaskedRequest(pic);
+ }
+ 
+ // ============================================================================
+@@ -118,6 +126,7 @@
+       kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
+       pic->isr);
+   pic->irr |= (1 << irq);
++  PICUpdateUnmaskedRequest(pic);
+ 
+   // If this is a slave PIC, also raise the cascade IRQ on the master.
+   if (PICIsSlave(pic) && pic->cascade_pic) {
+@@ -130,6 +139,7 @@
+     return;
+   }
+   pic->irr &= ~(1 << irq);
++  PICUpdateUnmaskedRequest(pic);
+ 
+   // If this is a slave PIC and no interrupts are pending, lower the cascade
+   // IRQ on the master.
+@@ -183,6 +193,7 @@
+         pic->isr = 0x00;
+         // All interrupts masked by default.
+         pic->imr = 0xFF;
++        PICUpdateUnmaskedRequest(pic);
+ 
+         // The next write to the data port will be ICW2.
+         pic->init_state = kPICExpectICW2;
+@@ -257,6 +268,7 @@
+         default:
+           // This is an OCW1, which sets the IMR.
+           pic->imr = value;
++          PICUpdateUnmaskedRequest(pic);
+           break;
+       }
+       break;
+@@ -313,6 +325,7 @@
+   // This is a normal interrupt on this PIC (or it's a slave reporting up).
+   pic->isr |= pending_irq_mask;
+   pic->irr &= ~pending_irq_mask;
++  PICUpdateUnmaskedRequest(pic);
+ 
+   return (pic->icw2 & kICW2_BASE) + pending_irq;
+ }
+diff -ruN core/src/pic/public.h /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/pic/public.h
+--- core/src/pic/public.h	2026-08-07 13:52:25.672888557 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/pic/public.h	2026-08-20 09:10:42.662420808 -0700
+@@ -119,6 +119,16 @@
+   // masked.
+   uint8_t imr;
+ 
++  // Whether any requested interrupt is unmasked, recomputed whenever the
++  // request or mask registers change.
++  //
++  // Conservative rather than exact: it ignores priority, so it can be true
++  // when PICGetPendingInterrupt() would still decline. That only costs a call
++  // that returns nothing. What it may never be is falsely false, because the
++  // CPU uses it to skip asking at all - and it asks on every instruction that
++  // runs with interrupts enabled, which is nearly all of them.
++  bool has_unmasked_request;
++
+   // The register to read on the next read from the data port.
+   PICReadRegister read_register;
+ 
+diff -ruN core/src/platform/platform.c /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/platform/platform.c
+--- core/src/platform/platform.c	2026-08-20 00:03:32.461026363 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/platform/platform.c	2026-08-20 09:13:59.363259946 -0700
+@@ -10,6 +10,10 @@
+ #define YAX86_PLATFORM_LOG(level, ...) \
+   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
+ 
++// Rebuild the page index that GetMemoryMapEntryForAddress() reads.
++YAX86_PRIVATE void RebuildMemoryPageMap(PlatformState* platform);
++YAX86_PRIVATE void PlatformUpdateDirectMemory(PlatformState* platform);
++
+ // How long until the next device needs attention, in CPU cycles from now.
+ static uint32_t PlatformCyclesUntilNextEvent(
+     const PlatformState* platform, uint32_t max_cycles);
+@@ -58,15 +62,86 @@
+       return false;
+     }
+   }
+-  return MemoryMapAppend(&platform->memory_map, entry);
++  if (!MemoryMapAppend(&platform->memory_map, entry)) {
++    return false;
++  }
++  RebuildMemoryPageMap(platform);
++  CPUInvalidateFetchWindow(&platform->cpu);
++  return true;
++}
++
++// Rebuild the page index. Only called while the memory map is being set up, so
++// the cost of walking every page against every entry does not matter.
++YAX86_PRIVATE void RebuildMemoryPageMap(PlatformState* platform) {
++  for (uint32_t page = 0; page < kNumMemoryPages; ++page) {
++    const uint32_t page_start = page << kMemoryPageShift;
++    const uint32_t page_end = page_start + kMemoryPageSize - 1;
++    uint8_t index = kMemoryPageUnmapped;
++    for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
++      const MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
++      if (entry->start <= page_start && entry->end >= page_end) {
++        index = i;
++        break;
++      }
++      if (!(entry->end < page_start || entry->start > page_end)) {
++        // Overlaps without covering. Entries may not overlap each other, so no
++        // other entry can cover this page either.
++        index = kMemoryPageStraddled;
++        break;
++      }
++    }
++    platform->memory_page_map[page] = index;
++  }
++}
++
++// The page lookup, inline, for the accessors below. A call was costing more
++// than the body: the body is a load and a compare, while the call is a push,
++// a branch, a pop and a return on a core with no cheap way to do any of it.
++static inline MemoryMapEntry* LookupMemoryPage(
++    PlatformState* platform, uint32_t address) {
++  if (address < kMemoryAddressSpaceSize) {
++    const uint8_t index =
++        platform->memory_page_map[address >> kMemoryPageShift];
++    if (index < kMaxMemoryMapEntries) {
++      return MemoryMapGet(&platform->memory_map, index);
++    }
++    if (index == kMemoryPageUnmapped) {
++      return NULL;
++    }
++  }
++  return NULL;  // Straddled or out of range; the caller falls back.
++}
++
++// Whether LookupMemoryPage() could answer for this address, or whether the
++// caller has to walk the map.
++static inline bool IsMemoryPageResolvable(
++    const PlatformState* platform, uint32_t address) {
++  return address < kMemoryAddressSpaceSize &&
++         platform->memory_page_map[address >> kMemoryPageShift] !=
++             kMemoryPageStraddled;
+ }
+ 
+ // Look up the memory region corresponding to an address. Returns NULL if the
+ // address is not mapped to a known memory region.
+-MemoryMapEntry* GetMemoryMapEntryForAddress(
++//
++// This is the hottest lookup in the emulator - every instruction byte and
++// nearly every operand comes through it - and it used to walk the map. A walk
++// is cheap where branches are predicted and the region wanted is usually
++// first; on a core with neither it was 13% of the profile, because code
++// running from the BIOS ROM misses the first entry every time.
++YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
+     PlatformState* platform, uint32_t address) {
+-  // TODO: Use a more efficient data structure for lookups, such as a sorted
+-  // array with binary search.
++  if (address < kMemoryAddressSpaceSize) {
++    const uint8_t index =
++        platform->memory_page_map[address >> kMemoryPageShift];
++    if (index < kMaxMemoryMapEntries) {
++      return MemoryMapGet(&platform->memory_map, index);
++    }
++    if (index == kMemoryPageUnmapped) {
++      return NULL;
++    }
++  }
++  // Above the address space, or a page shared by more than one entry.
+   for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
+     MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
+     if (address >= entry->start && address <= entry->end) {
+@@ -130,11 +205,19 @@
+ }
+ 
+ // Read a byte from a logical memory address.
+-uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
++YAX86_HOT uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+   if (platform->has_enabled_memory_watchpoints) {
+     PlatformCheckMemoryWatchpoints(platform, address, false);
+   }
+-  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
++  // Conventional memory is plain storage and is where nearly every access
++  // goes, so answer it with a bounds check rather than a page lookup. The map
++  // still holds the same region, and still answers everything else.
++  if (address < platform->conventional_memory_size) {
++    return platform->conventional_memory[address];
++  }
++  MemoryMapEntry* entry = IsMemoryPageResolvable(platform, address)
++                              ? LookupMemoryPage(platform, address)
++                              : GetMemoryMapEntryForAddress(platform, address);
+   if (entry) {
+     // Plain storage, which is what every region except video memory is. Going
+     // straight to the buffer saves an indirect call on the hottest path in the
+@@ -155,18 +238,34 @@
+ }
+ 
+ // Read a word from a logical memory address.
+-uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
++YAX86_HOT uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
++  // Both halves in conventional memory is the common case, and doing it here
++  // saves two calls and two bounds checks. The pair is read as bytes rather
++  // than a halfword because the address need not be even and a Cortex-M0+
++  // faults on an unaligned halfword load.
++  if (!platform->has_enabled_memory_watchpoints &&
++      address + 1 < platform->conventional_memory_size) {
++    const uint8_t* bytes = &platform->conventional_memory[address];
++    return (uint16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
++  }
+   uint8_t low_byte = ReadMemoryByte(platform, address);
+   uint8_t high_byte = ReadMemoryByte(platform, address + 1);
+   return (high_byte << 8) | low_byte;
+ }
+ 
+ // Write a byte to a logical memory address.
+-void WriteMemoryByte(PlatformState* platform, uint32_t address, uint8_t value) {
++YAX86_HOT void WriteMemoryByte(
++    PlatformState* platform, uint32_t address, uint8_t value) {
+   if (platform->has_enabled_memory_watchpoints) {
+     PlatformCheckMemoryWatchpoints(platform, address, true);
+   }
+-  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
++  if (address < platform->conventional_memory_size) {
++    platform->conventional_memory[address] = value;
++    return;
++  }
++  MemoryMapEntry* entry = IsMemoryPageResolvable(platform, address)
++                              ? LookupMemoryPage(platform, address)
++                              : GetMemoryMapEntryForAddress(platform, address);
+   if (entry) {
+     if (entry->write_data) {
+       entry->write_data[address - entry->start] = value;
+@@ -186,6 +285,13 @@
+ // Write a word to a logical memory address.
+ void WriteMemoryWord(
+     PlatformState* platform, uint32_t address, uint16_t value) {
++  if (!platform->has_enabled_memory_watchpoints &&
++      address + 1 < platform->conventional_memory_size) {
++    uint8_t* bytes = &platform->conventional_memory[address];
++    bytes[0] = (uint8_t)(value & 0xFF);
++    bytes[1] = (uint8_t)(value >> 8);
++    return;
++  }
+   WriteMemoryByte(platform, address, value & 0xFF);
+   WriteMemoryByte(platform, address + 1, (value >> 8) & 0xFF);
+ }
+@@ -304,12 +410,13 @@
+ // ============================================================================
+ 
+ static uint8_t PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+-  return PICReadPort((PICState*)entry->context, port);
++  return PICReadPort(&((PlatformState*)entry->context)->pic, port);
+ }
+ 
+ static void PICCallbackWritePortByte(
+     PortMapEntry* entry, uint16_t port, uint8_t value) {
+-  PICWritePort((PICState*)entry->context, port, value);
++  PlatformState* platform = (PlatformState*)entry->context;
++  PICWritePort(&platform->pic, port, value);
+ }
+ 
+ static void PICCallbackPlatformRaiseIRQ0(void* context) {
+@@ -576,11 +683,37 @@
+   return kInterruptHandlerUnhandled;
+ }
+ 
++// Hands the CPU a direct window for instruction fetch. Declines wherever a
++// read has to be observed or computed: a device region, unmapped memory, or
++// any access at all while watchpoints are on.
++static const uint8_t* CPUCallbackGetReadPointer(
++    CPUState* cpu, uint32_t address, uint32_t* available) {
++  PlatformState* platform = (PlatformState*)cpu->config->context;
++  if (platform->has_enabled_memory_watchpoints) {
++    return NULL;
++  }
++  if (!IsMemoryPageResolvable(platform, address)) {
++    return NULL;
++  }
++  MemoryMapEntry* entry = LookupMemoryPage(platform, address);
++  if (entry == NULL || entry->read_data == NULL) {
++    return NULL;
++  }
++  *available = entry->end - address + 1;
++  return &entry->read_data[address - entry->start];
++}
++
+ static void PlatformInitCPU(PlatformState* platform) {
+   platform->cpu_config = kEmptyCPUConfig;
+   platform->cpu_config.context = platform;
+   platform->cpu_config.logger = &platform->logger;
+   platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
++  platform->cpu_config.get_read_pointer = CPUCallbackGetReadPointer;
++  // The master PIC is the only source of external interrupts, and a slave
++  // request reaches the CPU as a request on the master's cascade line, so the
++  // master's own hint covers both.
++  platform->cpu_config.interrupt_request_hint =
++      &platform->pic.has_unmasked_request;
+   platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
+   platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
+   if (platform->config->enable_dos_idle_skip) {
+@@ -611,6 +744,10 @@
+       .read_data = platform->config->physical_memory,
+       .write_data = platform->config->physical_memory};
+   MemoryMapAppend(&platform->memory_map, &conventional_memory);
++  platform->conventional_memory = platform->config->physical_memory;
++  platform->conventional_memory_size = platform->config->physical_memory_size;
++  PlatformUpdateDirectMemory(platform);
++  RebuildMemoryPageMap(platform);
+ }
+ 
+ static void PlatformInitPIC(PlatformState* platform) {
+@@ -623,7 +760,9 @@
+       .end = 0x21,
+       .read_byte = PICCallbackReadPortByte,
+       .write_byte = PICCallbackWritePortByte,
+-      .context = &platform->pic,
++      // The platform, not the PIC: a write here can make an interrupt
++      // eligible, which the CPU has to be told about.
++      .context = platform,
+   };
+   RegisterPortMapEntry(platform, &pic_entry);
+ }
+@@ -852,6 +991,7 @@
+   PlatformClearBreakpoints(platform);
+   PlatformClearMemoryWatchpoints(platform);
+   platform->is_step_mode = false;
++  platform->has_debug_features = false;
+   platform->has_stop_info = false;
+   platform->stop_pending = false;
+   platform->skip_breakpoint_check = false;
+@@ -935,7 +1075,7 @@
+ 
+ // Bring every device up to date with the cycles that have run since the last
+ // sync, and schedule the next deadline.
+-void PlatformSync(PlatformState* platform) {
++YAX86_HOT void PlatformSync(PlatformState* platform) {
+   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
+   platform->last_sync_ticks = platform->ticks;
+ 
+@@ -997,10 +1137,11 @@
+   return false;
+ }
+ 
+-PlatformRunStatus PlatformTick(PlatformState* platform) {
++YAX86_HOT PlatformRunStatus PlatformTick(PlatformState* platform) {
+   // Stop before executing the instruction at a breakpoint. Nothing else in the
+   // machine is ticked, because no time has passed yet.
+-  if (platform->has_enabled_breakpoints && !platform->cpu.is_halted) {
++  if (platform->has_debug_features && platform->has_enabled_breakpoints &&
++      !platform->cpu.is_halted) {
+     if (platform->skip_breakpoint_check) {
+       // Resuming from a breakpoint stop - execute this instruction rather than
+       // stopping on it again.
+@@ -1024,8 +1165,9 @@
+     PlatformSync(platform);
+   }
+ 
+-  // A watchpoint may have fired from the CPU or from a DMA transfer.
+-  if (platform->stop_pending) {
++  // A watchpoint may have fired from the CPU or from a DMA transfer. Only a
++  // watchpoint sets this, so it cannot be pending unless one exists.
++  if (platform->has_debug_features && platform->stop_pending) {
+     platform->stop_pending = false;
+     return kPlatformStopped;
+   }
+@@ -1043,7 +1185,8 @@
+     return kPlatformHung;
+   }
+ 
+-  if (platform->is_step_mode && cpu_result == kCPUTickExecuted) {
++  if (platform->has_debug_features && platform->is_step_mode &&
++      cpu_result == kCPUTickExecuted) {
+     PlatformRecordStop(platform, kPlatformStopStep, 0, 0, false);
+     return kPlatformStopped;
+   }
+@@ -1105,11 +1248,26 @@
+ // ============================================================================
+ 
+ // Recompute the cached hot path early-out flags.
++// Hand the CPU conventional memory to index directly, or take it away again.
++//
++// A direct access cannot fire a watchpoint, so while any is enabled the CPU
++// gets nothing and every access goes back through the callbacks - which is
++// also what invalidating the fetch window is for.
++YAX86_PRIVATE void PlatformUpdateDirectMemory(PlatformState* platform) {
++  CPUInvalidateFetchWindow(&platform->cpu);
++  CPUSetDirectMemory(
++      &platform->cpu,
++      platform->has_enabled_memory_watchpoints ? NULL
++                                               : platform->conventional_memory,
++      platform->conventional_memory_size);
++}
++
+ static void PlatformUpdateEnabledFlags(PlatformState* platform) {
+   platform->has_enabled_breakpoints = false;
+   for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
+     if (platform->breakpoints[i].enabled) {
+       platform->has_enabled_breakpoints = true;
++      platform->has_debug_features = true;
+       break;
+     }
+   }
+@@ -1117,9 +1275,14 @@
+   for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
+     if (platform->memory_watchpoints[i].enabled) {
+       platform->has_enabled_memory_watchpoints = true;
++      platform->has_debug_features = true;
+       break;
+     }
+   }
++  platform->has_debug_features = platform->has_enabled_breakpoints ||
++                                 platform->has_enabled_memory_watchpoints ||
++                                 platform->is_step_mode;
++  PlatformUpdateDirectMemory(platform);
+ }
+ 
+ int8_t PlatformAddBreakpoint(
+@@ -1133,6 +1296,7 @@
+     breakpoint->cs = cs;
+     breakpoint->ip = ip;
+     platform->has_enabled_breakpoints = true;
++    platform->has_debug_features = true;
+     return (int8_t)i;
+   }
+   return kInvalidWatchIndex;
+@@ -1171,6 +1335,8 @@
+     watchpoint->on_read = on_read;
+     watchpoint->on_write = on_write;
+     platform->has_enabled_memory_watchpoints = true;
++    platform->has_debug_features = true;
++    PlatformUpdateDirectMemory(platform);
+     return (int8_t)i;
+   }
+   return kInvalidWatchIndex;
+@@ -1191,10 +1357,12 @@
+     platform->memory_watchpoints[i].enabled = false;
+   }
+   platform->has_enabled_memory_watchpoints = false;
++  PlatformUpdateDirectMemory(platform);
+ }
+ 
+ void PlatformSetStepMode(PlatformState* platform, bool is_step_mode) {
+   platform->is_step_mode = is_step_mode;
++  PlatformUpdateEnabledFlags(platform);
+ }
+ 
+ const PlatformStopInfo* PlatformGetStopInfo(const PlatformState* platform) {
+diff -ruN core/src/platform/public.h /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/platform/public.h
+--- core/src/platform/public.h	2026-08-20 00:03:32.461026363 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/platform/public.h	2026-08-20 07:51:03.647606203 -0700
+@@ -49,6 +49,20 @@
+   // Maximum number of memory map entries.
+   kMaxMemoryMapEntries = 16,
+ 
++  // The memory map is indexed by page so that a lookup is a load rather than a
++  // walk. 4KB pages over the 8086's 1MB, which is 256 bytes of index.
++  kMemoryPageShift = 12,
++  kMemoryPageSize = 1 << kMemoryPageShift,
++  kMemoryAddressSpaceSize = 0x100000,
++  kNumMemoryPages = kMemoryAddressSpaceSize >> kMemoryPageShift,
++  // A page no entry covers.
++  kMemoryPageUnmapped = 0xFF,
++  // A page more than one entry has a share of, which has to be resolved by
++  // address. Nothing registers such a region today - every one of them is page
++  // aligned - but the index must not quietly answer the wrong entry if one
++  // ever does.
++  kMemoryPageStraddled = 0xFE,
++
+   // Maximum size of physical memory in bytes.
+   kMaxPhysicalMemorySize = 640 * 1024,
+   // Minimum size of physical memory in bytes.
+@@ -426,6 +440,12 @@
+   // CPU state.
+   CPUState cpu;
+ 
++  // Conventional memory, cached from the config so that the hot path neither
++  // walks the memory map nor chases the config pointer to reach it. Every
++  // instruction fetch and most operands land here.
++  uint8_t* conventional_memory;
++  uint32_t conventional_memory_size;
++
+   // PIC runtime configuration.
+   PICConfig pic_config;
+   // PIC state.
+@@ -496,6 +516,11 @@
+   // PlatformConfig.enable_dos_idle_skip is on.
+   bool is_guest_idle;
+ 
++  // Which memory map entry owns each 4KB page, or kMemoryPageUnmapped /
++  // kMemoryPageStraddled. Rebuilt whenever the map changes, which is only
++  // during setup.
++  uint8_t memory_page_map[kNumMemoryPages];
++
+   // Value of ticks when the devices were last brought up to date.
+   uint32_t last_sync_ticks;
+   // Value of ticks at which the earliest device deadline falls due. Compared
+@@ -514,6 +539,12 @@
+   bool has_enabled_breakpoints;
+   bool has_enabled_memory_watchpoints;
+ 
++  // Whether any of the above, or step mode, is in use - that is, whether the
++  // per-instruction path has to do anything on behalf of a debugger at all.
++  // One test instead of three, on a core with no branch predictor, for
++  // something that is false in every run that is not being debugged.
++  bool has_debug_features;
++
+   // Whether to stop after each instruction.
+   bool is_step_mode;
+ 
+diff -ruN core/src/util/common.h /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/util/common.h
+--- core/src/util/common.h	2026-08-07 13:52:25.672888557 -0700
++++ /tmp/claude-1000/-home-chuan-Projects-yax86/d43f0b21-edb5-43eb-baf4-69e296801160/scratchpad/datawin/core/src/util/common.h	2026-08-20 00:51:32.356712085 -0700
+@@ -24,4 +24,26 @@
+ #define YAX86_UNUSED
+ #endif  // defined(__GNUC__) || defined(__clang__)
+ 
++// Marks a function or object as being on the per-instruction hot path.
++//
++// Empty by default, because on a machine with a normal cache hierarchy there is
++// nothing useful to say. A target whose fastest memory has to be chosen
++// explicitly can define it to whatever placement attribute it needs - on an
++// RP2040, code runs from QSPI flash through a 16KB cache, and putting the hot
++// path in SRAM instead takes that cache out of the picture.
++//
++// Define it before including this header, or on the command line.
++#ifndef YAX86_HOT
++#define YAX86_HOT
++#endif  // YAX86_HOT
++
++// The same, for data rather than code.
++//
++// Separate from YAX86_HOT because a compiler will not put executable code and
++// read-only data in one section, and because a target may well want to place
++// them differently even where it could.
++#ifndef YAX86_HOT_DATA
++#define YAX86_HOT_DATA
++#endif  // YAX86_HOT_DATA
++
+ #endif  // YAX86_UTIL_COMMON_H

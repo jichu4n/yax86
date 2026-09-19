@@ -247,11 +247,9 @@ TEST_F(DecodeCacheTest, AHitAdvancesIPAndChargesCyclesAsTheDecodeDid) {
   EXPECT_EQ(cpu_.cycles_this_tick, cycles_after_miss);
 }
 
-// The address computation is part of what an entry records, so a hit has to
-// be charged for it - and an entry that another instruction has since taken
-// over must be charged for its own address rather than the one before it. The
-// two forms below differ only in the segment override, which the 8086 pays two
-// cycles for because the address is formed against a different segment base.
+// An entry records the address computation too, so an entry another
+// instruction has since taken over must charge for its own. The two forms
+// below differ only in the segment override, which costs two cycles.
 TEST_F(DecodeCacheTest, AHitChargesForTheAddressItComputes) {
   constexpr uint16_t kSegmentOverrideCycles = 2;
   const uint32_t plain = kProgramAddress;
