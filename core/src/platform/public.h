@@ -178,11 +178,6 @@ uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
 // rather than causing a page fault. This interface mirrors that behavior.
 void WriteMemoryByte(
     struct PlatformState* platform, uint32_t address, uint8_t value);
-// Write a word to a logical memory address, either directly to the
-// corresponding memory map entry's write_data buffer or via its
-// write_byte_fn callback.
-void WriteMemoryWord(
-    struct PlatformState* platform, uint32_t address, uint16_t value);
 
 // ============================================================================
 // I/O port mapping
@@ -245,17 +240,10 @@ PortMapEntry* GetPortMapEntryByType(
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
 uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
-// Read a word from an I/O port by invoking the corresponding I/O port map
-// entry's read_byte callback. This reads two consecutive bytes from the port.
-uint16_t ReadPortWord(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
 void WritePortByte(
     struct PlatformState* platform, uint16_t port, uint8_t value);
-// Write a word to an I/O port by invoking the corresponding I/O port map
-// entry's write_byte callback. This writes two consecutive bytes to the port.
-void WritePortWord(
-    struct PlatformState* platform, uint16_t port, uint16_t value);
 
 // ============================================================================
 // Execution control

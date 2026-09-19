@@ -18047,11 +18047,6 @@ uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
 // rather than causing a page fault. This interface mirrors that behavior.
 void WriteMemoryByte(
     struct PlatformState* platform, uint32_t address, uint8_t value);
-// Write a word to a logical memory address, either directly to the
-// corresponding memory map entry's write_data buffer or via its
-// write_byte_fn callback.
-void WriteMemoryWord(
-    struct PlatformState* platform, uint32_t address, uint16_t value);
 
 // ============================================================================
 // I/O port mapping
@@ -18114,17 +18109,10 @@ PortMapEntry* GetPortMapEntryByType(
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
 uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
-// Read a word from an I/O port by invoking the corresponding I/O port map
-// entry's read_byte callback. This reads two consecutive bytes from the port.
-uint16_t ReadPortWord(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
 void WritePortByte(
     struct PlatformState* platform, uint16_t port, uint8_t value);
-// Write a word to an I/O port by invoking the corresponding I/O port map
-// entry's write_byte callback. This writes two consecutive bytes to the port.
-void WritePortWord(
-    struct PlatformState* platform, uint16_t port, uint16_t value);
 
 // ============================================================================
 // Execution control
@@ -18630,13 +18618,6 @@ YAX86_HOT void WriteMemoryByte(
       kLogLevelDebug, "write of %02X to unmapped address %05X", value, address);
 }
 
-// Write a word to a logical memory address.
-void WriteMemoryWord(
-    PlatformState* platform, uint32_t address, uint16_t value) {
-  WriteMemoryByte(platform, address, value & 0xFF);
-  WriteMemoryByte(platform, address + 1, (value >> 8) & 0xFF);
-}
-
 // Register an I/O port map entry in the platform state. Returns true if the
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
@@ -18695,14 +18676,6 @@ YAX86_HOT uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   return entry->read_byte(entry, port);
 }
 
-// Read a word from an I/O port by invoking the corresponding I/O port map
-// entry's read_byte callback. This reads two consecutive bytes from the port.
-uint16_t ReadPortWord(PlatformState* platform, uint16_t port) {
-  uint8_t low_byte = ReadPortByte(platform, port);
-  uint8_t high_byte = ReadPortByte(platform, port + 1);
-  return (high_byte << 8) | low_byte;
-}
-
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
 YAX86_HOT void WritePortByte(
@@ -18714,13 +18687,6 @@ YAX86_HOT void WritePortByte(
     return;
   }
   entry->write_byte(entry, port, value);
-}
-
-// Write a word to an I/O port by invoking the corresponding I/O port map
-// entry's write_byte callback. This writes two consecutive bytes to the port.
-void WritePortWord(PlatformState* platform, uint16_t port, uint16_t value) {
-  WritePortByte(platform, port, value & 0xFF);
-  WritePortByte(platform, port + 1, (value >> 8) & 0xFF);
 }
 
 // ============================================================================

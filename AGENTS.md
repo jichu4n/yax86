@@ -1317,12 +1317,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #78:
+SRAM, at #79:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.682388** | **5.916** | **0.497** | **124.0%** | 471,444 | 180,416 | 85,571 |
-| `-O2` | 4.848096 | 5.714 | 0.480 | 119.8% | 459,636 | 175,232 | 73,775 |
+| `-O3` | **4.599082** | **6.024** | **0.506** | **126.3%** | 471,444 | 180,416 | 85,483 |
+| `-O2` | 4.841886 | 5.721 | 0.481 | 119.9% | 459,636 | 175,232 | 73,687 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler
