@@ -8,30 +8,27 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config.logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state
 // ============================================================================
 
-YAX86_HOT void CPUInit(CPUState* cpu, CPUConfig* config) {
-  // Zero out the CPU state
-  const CPUState zero_cpu_state = {0};
-  *cpu = zero_cpu_state;
+void CPUInit(CPUState* cpu) {
   cpu->flags = kInitialFlags;
-  cpu->config = config;
 
   // The only place the count is read, so a host gets told here or not at all.
-  const uint32_t num_entries = config->decode_cache_num_entries;
-  if (config->decode_cache == NULL) {
+  const uint32_t num_entries = cpu->config.decode_cache_num_entries;
+  if (cpu->config.decode_cache == NULL) {
     return;
   }
-  if (num_entries < 2 || (num_entries & (num_entries - 1)) != 0) {
+  if (num_entries == 0 || (num_entries & (num_entries - 1)) != 0) {
     YAX86_CPU_LOG(
         kLogLevelError,
-        "decode cache of %u entries is not a power of two of at least two, "
-        "running without one",
+        "decode cache of %u entries is not a power of two, running without one",
         (unsigned)num_entries);
+    // The CPU's own copy, so a rejected cache is simply not there.
+    cpu->config.decode_cache = NULL;
     return;
   }
   cpu->decode_cache_index_mask = num_entries - 1;
@@ -194,8 +191,8 @@ YAX86_HOT static void CPUInitInstructionFetchState(
       raw_address >= window->end) {
     // Nothing open covers this address, so ask for a window that does. The
     // host fills one in, or sets its data to NULL to decline.
-    if (cpu->config->get_instruction_fetch_window != NULL) {
-      cpu->config->get_instruction_fetch_window(cpu, raw_address);
+    if (cpu->config.get_instruction_fetch_window != NULL) {
+      cpu->config.get_instruction_fetch_window(cpu, raw_address);
     } else {
       cpu->instruction_fetch_window.data = NULL;
     }
@@ -340,7 +337,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 }
 
 void CPUInvalidateDecodeCache(CPUState* cpu) {
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
+  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
   }
@@ -366,13 +363,10 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // A caller must not hold the pointer across another fetch.
 YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
     CPUState* cpu, Instruction* scratch, Instruction** instruction) {
-  // Two tests, because the two ways there is no cache are recorded in
-  // different places: the host may clear the pointer at any time, and the mask
-  // is zero where CPUInit() rejected the count. Dropping the second measures
-  // 1.9% slower at -O3, so it is not the spare test it looks like.
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
-  const uint32_t index_mask = cpu->decode_cache_index_mask;
-  if (cache == NULL || index_mask == 0) {
+  // NULL covers both having no cache and having asked for an unusable one,
+  // since CPUInit() clears its own copy of a count that did not pass.
+  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
     *instruction = scratch;
     return CPUFetchNextInstruction(cpu, scratch);
   }
@@ -385,7 +379,8 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   const uint32_t address = ToRawAddress(cpu, &start);
   const uint8_t generation =
       cpu->code_page_generation[address >> kCodePageShift];
-  CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
 
   if (IsDecodeCacheHit(entry, address, generation)) {
     *instruction = &entry->instruction;
@@ -432,8 +427,8 @@ YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the on_before_execute_instruction callback if provided.
-  if (cpu->config->on_before_execute_instruction) {
-    cpu->config->on_before_execute_instruction(cpu, instruction);
+  if (cpu->config.on_before_execute_instruction) {
+    cpu->config.on_before_execute_instruction(cpu, instruction);
   }
 
   // Run the instruction handler.
@@ -448,8 +443,8 @@ CPUExecuteDecodedInstruction(
   }
 
   // Run the on_after_execute_instruction callback if provided.
-  if (cpu->config->on_after_execute_instruction) {
-    cpu->config->on_after_execute_instruction(cpu, instruction);
+  if (cpu->config.on_after_execute_instruction) {
+    cpu->config.on_after_execute_instruction(cpu, instruction);
   }
 
   return kInstructionExecuted;
@@ -495,8 +490,8 @@ static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // an interrupt handler callback, handle the interrupt within the VM using the
   // Interrupt Vector Table.
   InterruptHandlerResult interrupt_handler_result =
-      cpu->config->handle_interrupt
-          ? cpu->config->handle_interrupt(cpu, interrupt_number)
+      cpu->config.handle_interrupt
+          ? cpu->config.handle_interrupt(cpu, interrupt_number)
           : kInterruptHandlerUnhandled;
 
   if (interrupt_handler_result == kInterruptHandlerHandled) {
@@ -533,11 +528,11 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   // indirect call into a controller that almost always reports nothing, and
   // this runs at every instruction boundary. A host that supplies none is
   // asked every time.
-  const bool* const request_hint = cpu->config->interrupt_request_hint;
+  const bool* const request_hint = cpu->config.interrupt_request_hint;
   uint8_t intr_vector;
   if (CPUGetFlag(cpu, kIF) && (request_hint == NULL || *request_hint) &&
-      cpu->config->acknowledge_interrupt &&
-      cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
+      cpu->config.acknowledge_interrupt &&
+      cpu->config.acknowledge_interrupt(cpu, &intr_vector)) {
     DispatchInterrupt(cpu, intr_vector);
     return true;
   }
@@ -595,8 +590,8 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
       // STI, POPF and IRET can enable interrupts with a request already
       // waiting. Without a hint that cannot be told without an acknowledge
       // cycle, so a host supplying none ends the run here.
-      cpu->config->interrupt_request_hint != NULL &&
-      !*cpu->config->interrupt_request_hint;
+      cpu->config.interrupt_request_hint != NULL &&
+      !*cpu->config.interrupt_request_hint;
 }
 
 // The decoded instruction at CS:IP if the cache holds a current one, and NULL
@@ -605,12 +600,8 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
 YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
-  // Both tests, for the same reason the fetch makes both: the host may clear
-  // the pointer at any time, and the mask is zero where CPUInit() rejected the
-  // count.
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
-  const uint32_t index_mask = cpu->decode_cache_index_mask;
-  if (cache == NULL || index_mask == 0) {
+  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
     return NULL;
   }
   const MemoryAddress start = {
@@ -618,7 +609,8 @@ YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
       .offset = cpu->registers[kIP],
   };
   const uint32_t address = ToRawAddress(cpu, &start);
-  CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
   if (!IsDecodeCacheHit(
           entry, address,
           cpu->code_page_generation[address >> kCodePageShift])) {

@@ -39,14 +39,14 @@ class DecodeCacheTest : public ::testing::Test {
   // initializing again.
   void Init(CPUDecodeCacheEntry* entries, uint32_t num_entries) {
     memory_.assign(kMemorySize, 0);
-    config_ = CPUConfig{};
-    config_.context = this;
-    config_.read_memory_byte = ReadMemoryByte;
-    config_.write_memory_byte = WriteMemoryByte;
-    config_.get_instruction_fetch_window = GetInstructionFetchWindow;
-    config_.decode_cache = entries;
-    config_.decode_cache_num_entries = num_entries;
-    CPUInit(&cpu_, &config_);
+    cpu_ = CPUState{};
+    cpu_.config.context = this;
+    cpu_.config.read_memory_byte = ReadMemoryByte;
+    cpu_.config.write_memory_byte = WriteMemoryByte;
+    cpu_.config.get_instruction_fetch_window = GetInstructionFetchWindow;
+    cpu_.config.decode_cache = entries;
+    cpu_.config.decode_cache_num_entries = num_entries;
+    CPUInit(&cpu_);
     CPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
     cpu_.registers[kCS] = 0;
     cpu_.registers[kDS] = 0;
@@ -79,12 +79,12 @@ class DecodeCacheTest : public ::testing::Test {
   }
 
   static uint8_t ReadMemoryByte(CPUState* cpu, uint32_t address) {
-    DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config->context);
+    DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     return address < kMemorySize ? self->memory_[address] : 0xFF;
   }
 
   static void WriteMemoryByte(CPUState* cpu, uint32_t address, uint8_t value) {
-    DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config->context);
+    DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     if (address < kMemorySize) {
       self->memory_[address] = value;
     }
@@ -101,7 +101,7 @@ class DecodeCacheTest : public ::testing::Test {
   }
 
   static void GetInstructionFetchWindow(CPUState* cpu, uint32_t address) {
-    DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config->context);
+    DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     if (address >= kMemorySize) {
       cpu->instruction_fetch_window.data = nullptr;
       return;
@@ -113,7 +113,6 @@ class DecodeCacheTest : public ::testing::Test {
 
   std::vector<std::string> log_lines_;
   std::vector<uint8_t> memory_;
-  CPUConfig config_ = {};
   CPUState cpu_ = {};
   CPUDecodeCacheEntry cache_[kNumCacheEntries] = {};
 };
@@ -303,7 +302,7 @@ TEST_F(DecodeCacheTest, WithoutACacheEveryInstructionIsDecoded) {
 // the only one that cannot silently index past the storage.
 TEST_F(DecodeCacheTest, ACountThatIsNotAPowerOfTwoIsRefused) {
   Init(cache_, kNumCacheEntries - 1);
-  EXPECT_EQ(cpu_.decode_cache_index_mask, 0u);
+  EXPECT_EQ(cpu_.config.decode_cache, nullptr);
 
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
   RunAt(kProgramAddress);
@@ -312,17 +311,17 @@ TEST_F(DecodeCacheTest, ACountThatIsNotAPowerOfTwoIsRefused) {
   EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
 }
 
-// A single entry would leave a mask of zero, which is how CPUInit() records
-// that there is no usable cache.
-TEST_F(DecodeCacheTest, ACountOfOneIsRefused) {
+// One entry is a legal power of two: every address maps to it, so it holds the
+// last instruction decoded and nothing else.
+TEST_F(DecodeCacheTest, ACountOfOneIsAccepted) {
   Init(cache_, 1);
-  EXPECT_EQ(cpu_.decode_cache_index_mask, 0u);
+  ASSERT_EQ(cpu_.config.decode_cache, cache_);
 
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
   RunAt(kProgramAddress);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
 }
 
 // A host about to run 10% slower than it asked to should be told why.
@@ -335,12 +334,18 @@ TEST_F(DecodeCacheTest, ABadCountIsLogged) {
   Logger logger;
   LoggerInit(&logger, &logger_config);
 
+  // The logger has to be in place before the init that rejects the count:
+  // CPUInit() clears its own copy of the pointer on the way out, so a second
+  // call sees no cache and has nothing to complain about.
   log_lines_.clear();
-  Init(cache_, kNumCacheEntries - 1);
-  config_.logger = &logger;
-  CPUInit(&cpu_, &config_);
+  cpu_ = CPUState{};
+  cpu_.config.logger = &logger;
+  cpu_.config.decode_cache = cache_;
+  cpu_.config.decode_cache_num_entries = kNumCacheEntries - 1;
+  CPUInit(&cpu_);
 
   EXPECT_EQ(log_lines_.size(), 1u);
+  EXPECT_EQ(cpu_.config.decode_cache, nullptr);
 }
 
 // A loop is what the cache is for.

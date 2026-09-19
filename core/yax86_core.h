@@ -1454,10 +1454,8 @@ typedef struct CPUConfig {
   // runs more than once be decoded once. NULL means every instruction is
   // decoded.
   //
-  // The pointer is read on every instruction, so clearing and restoring it
-  // takes the cache away and hands it back. The count is read only by
-  // CPUInit(), which checks it and logs a bad one, so changing that afterwards
-  // does nothing.
+  // Read only by CPUInit(), which checks the count and clears its own copy of
+  // the pointer if it does not pass.
   struct CPUDecodeCacheEntry* decode_cache;
   // Must be a power of two of at least two. See decode_cache_index_mask.
   uint32_t decode_cache_num_entries;
@@ -1542,10 +1540,12 @@ enum {
 };
 
 // State of the emulated CPU.
+//
+// A caller zero-initializes one of these, fills in the fields of config, and
+// calls CPUInit(). Everything outside config is the CPU's own. A register or
+// flag may be written directly, since nothing is derived from one; a field
+// another field depends on has a setter, which is its sole writer.
 typedef struct CPUState {
-  // Pointer to caller-provided runtime configuration
-  CPUConfig* config;
-
   // Register values
   uint16_t registers[kNumRegisters];
   // Flag values
@@ -1606,6 +1606,12 @@ typedef struct CPUState {
   // once instead.
   CPUDirectDataWindow direct_data_window;
 
+  // One less than CPUConfig.decode_cache_num_entries, so that an address
+  // becomes an index with a mask rather than a remainder - a remainder by a
+  // runtime value is a division, which this target has no instruction for.
+  // Derived by CPUInit().
+  uint32_t decode_cache_index_mask;
+
   // How many times each 4KB page has been written, as a wrapping byte. A
   // cached decode records what its page stood at and is discarded once the two
   // disagree, which is what makes caching safe against code that writes over
@@ -1616,16 +1622,23 @@ typedef struct CPUState {
   // to find out would cost about what the counter does.
   uint8_t code_page_generation[kNumCodePages];
 
-  // One less than CPUConfig.decode_cache_num_entries, so that an address
-  // becomes an index with a mask rather than a remainder - a remainder by a
-  // runtime value is a division, which this target has no instruction for.
-  // Derived and checked by CPUInit(), and zero where the count did not pass,
-  // which is why the minimum count is two rather than one.
-  uint32_t decode_cache_index_mask;
+  // Caller-provided runtime configuration. Filled in before CPUInit(), which
+  // is where it is checked, and read-only afterwards.
+  //
+  // Held by value rather than by pointer: a pointer cost 3.37% at -O2 on a
+  // path that reads a config field every instruction, and made the config an
+  // object the caller had to keep alive for as long as the CPU.
+  CPUConfig config;
 } CPUState;
 
-// Initialize CPU state.
-void CPUInit(CPUState* cpu, CPUConfig* config);
+// Initialize CPU state. The caller zero-initializes the CPUState and fills in
+// the fields of its config first.
+//
+// This zeroes nothing - a struct the caller has already had to zero in order
+// to fill in its config does not want zeroing twice - and it is the only place
+// the config is checked, so a host is told about a mistake here or not at
+// all.
+void CPUInit(CPUState* cpu);
 
 // Get the value of a CPU flag.
 static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
@@ -2656,8 +2669,8 @@ YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
-  return cpu->config->read_memory_byte
-             ? cpu->config->read_memory_byte(cpu, raw_address)
+  return cpu->config.read_memory_byte
+             ? cpu->config.read_memory_byte(cpu, raw_address)
              : 0xFF;
 }
 
@@ -2745,10 +2758,10 @@ YAX86_PRIVATE void WriteRawMemoryByte(
     cpu->direct_data_window.data[address] = value;
     return;
   }
-  if (!cpu->config->write_memory_byte) {
+  if (!cpu->config.write_memory_byte) {
     return;
   }
-  cpu->config->write_memory_byte(cpu, address, value);
+  cpu->config.write_memory_byte(cpu, address, value);
 }
 
 // Write a byte to memory.
@@ -5108,7 +5121,7 @@ ExecuteSetALFromCarry(const InstructionContext* ctx) {
 // Read a byte from an I/O port.
 YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return ByteValue(
-      cpu->config->read_port ? cpu->config->read_port(cpu, port) : 0xFF);
+      cpu->config.read_port ? cpu->config.read_port(cpu, port) : 0xFF);
 }
 
 // Read a word from an I/O port as a uint16_t. The 8088 has an 8-bit data bus,
@@ -5153,10 +5166,10 @@ ExecuteInDX(const InstructionContext* ctx) {
 
 // Write a byte to an I/O port.
 static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
-  if (!cpu->config->write_port) {
+  if (!cpu->config.write_port) {
     return;
   }
-  cpu->config->write_port(cpu, port, FromOperandValue(&value));
+  cpu->config.write_port(cpu, port, FromOperandValue(&value));
 }
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
@@ -7870,30 +7883,27 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config->logger, &kLogModuleCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config.logger, &kLogModuleCPU, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state
 // ============================================================================
 
-YAX86_HOT void CPUInit(CPUState* cpu, CPUConfig* config) {
-  // Zero out the CPU state
-  const CPUState zero_cpu_state = {0};
-  *cpu = zero_cpu_state;
+void CPUInit(CPUState* cpu) {
   cpu->flags = kInitialFlags;
-  cpu->config = config;
 
   // The only place the count is read, so a host gets told here or not at all.
-  const uint32_t num_entries = config->decode_cache_num_entries;
-  if (config->decode_cache == NULL) {
+  const uint32_t num_entries = cpu->config.decode_cache_num_entries;
+  if (cpu->config.decode_cache == NULL) {
     return;
   }
-  if (num_entries < 2 || (num_entries & (num_entries - 1)) != 0) {
+  if (num_entries == 0 || (num_entries & (num_entries - 1)) != 0) {
     YAX86_CPU_LOG(
         kLogLevelError,
-        "decode cache of %u entries is not a power of two of at least two, "
-        "running without one",
+        "decode cache of %u entries is not a power of two, running without one",
         (unsigned)num_entries);
+    // The CPU's own copy, so a rejected cache is simply not there.
+    cpu->config.decode_cache = NULL;
     return;
   }
   cpu->decode_cache_index_mask = num_entries - 1;
@@ -8056,8 +8066,8 @@ YAX86_HOT static void CPUInitInstructionFetchState(
       raw_address >= window->end) {
     // Nothing open covers this address, so ask for a window that does. The
     // host fills one in, or sets its data to NULL to decline.
-    if (cpu->config->get_instruction_fetch_window != NULL) {
-      cpu->config->get_instruction_fetch_window(cpu, raw_address);
+    if (cpu->config.get_instruction_fetch_window != NULL) {
+      cpu->config.get_instruction_fetch_window(cpu, raw_address);
     } else {
       cpu->instruction_fetch_window.data = NULL;
     }
@@ -8202,7 +8212,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 }
 
 void CPUInvalidateDecodeCache(CPUState* cpu) {
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
+  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
   }
@@ -8228,13 +8238,10 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // A caller must not hold the pointer across another fetch.
 YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
     CPUState* cpu, Instruction* scratch, Instruction** instruction) {
-  // Two tests, because the two ways there is no cache are recorded in
-  // different places: the host may clear the pointer at any time, and the mask
-  // is zero where CPUInit() rejected the count. Dropping the second measures
-  // 1.9% slower at -O3, so it is not the spare test it looks like.
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
-  const uint32_t index_mask = cpu->decode_cache_index_mask;
-  if (cache == NULL || index_mask == 0) {
+  // NULL covers both having no cache and having asked for an unusable one,
+  // since CPUInit() clears its own copy of a count that did not pass.
+  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
     *instruction = scratch;
     return CPUFetchNextInstruction(cpu, scratch);
   }
@@ -8247,7 +8254,8 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   const uint32_t address = ToRawAddress(cpu, &start);
   const uint8_t generation =
       cpu->code_page_generation[address >> kCodePageShift];
-  CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
 
   if (IsDecodeCacheHit(entry, address, generation)) {
     *instruction = &entry->instruction;
@@ -8294,8 +8302,8 @@ YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the on_before_execute_instruction callback if provided.
-  if (cpu->config->on_before_execute_instruction) {
-    cpu->config->on_before_execute_instruction(cpu, instruction);
+  if (cpu->config.on_before_execute_instruction) {
+    cpu->config.on_before_execute_instruction(cpu, instruction);
   }
 
   // Run the instruction handler.
@@ -8310,8 +8318,8 @@ CPUExecuteDecodedInstruction(
   }
 
   // Run the on_after_execute_instruction callback if provided.
-  if (cpu->config->on_after_execute_instruction) {
-    cpu->config->on_after_execute_instruction(cpu, instruction);
+  if (cpu->config.on_after_execute_instruction) {
+    cpu->config.on_after_execute_instruction(cpu, instruction);
   }
 
   return kInstructionExecuted;
@@ -8357,8 +8365,8 @@ static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // an interrupt handler callback, handle the interrupt within the VM using the
   // Interrupt Vector Table.
   InterruptHandlerResult interrupt_handler_result =
-      cpu->config->handle_interrupt
-          ? cpu->config->handle_interrupt(cpu, interrupt_number)
+      cpu->config.handle_interrupt
+          ? cpu->config.handle_interrupt(cpu, interrupt_number)
           : kInterruptHandlerUnhandled;
 
   if (interrupt_handler_result == kInterruptHandlerHandled) {
@@ -8395,11 +8403,11 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   // indirect call into a controller that almost always reports nothing, and
   // this runs at every instruction boundary. A host that supplies none is
   // asked every time.
-  const bool* const request_hint = cpu->config->interrupt_request_hint;
+  const bool* const request_hint = cpu->config.interrupt_request_hint;
   uint8_t intr_vector;
   if (CPUGetFlag(cpu, kIF) && (request_hint == NULL || *request_hint) &&
-      cpu->config->acknowledge_interrupt &&
-      cpu->config->acknowledge_interrupt(cpu, &intr_vector)) {
+      cpu->config.acknowledge_interrupt &&
+      cpu->config.acknowledge_interrupt(cpu, &intr_vector)) {
     DispatchInterrupt(cpu, intr_vector);
     return true;
   }
@@ -8457,8 +8465,8 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
       // STI, POPF and IRET can enable interrupts with a request already
       // waiting. Without a hint that cannot be told without an acknowledge
       // cycle, so a host supplying none ends the run here.
-      cpu->config->interrupt_request_hint != NULL &&
-      !*cpu->config->interrupt_request_hint;
+      cpu->config.interrupt_request_hint != NULL &&
+      !*cpu->config.interrupt_request_hint;
 }
 
 // The decoded instruction at CS:IP if the cache holds a current one, and NULL
@@ -8467,12 +8475,8 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
 YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
-  // Both tests, for the same reason the fetch makes both: the host may clear
-  // the pointer at any time, and the mask is zero where CPUInit() rejected the
-  // count.
-  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
-  const uint32_t index_mask = cpu->decode_cache_index_mask;
-  if (cache == NULL || index_mask == 0) {
+  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
     return NULL;
   }
   const MemoryAddress start = {
@@ -8480,7 +8484,8 @@ YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
       .offset = cpu->registers[kIP],
   };
   const uint32_t address = ToRawAddress(cpu, &start);
-  CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
+  CPUDecodeCacheEntry* const entry =
+      &cache[address & cpu->decode_cache_index_mask];
   if (!IsDecodeCacheHit(
           entry, address,
           cpu->code_page_generation[address >> kCodePageShift])) {
@@ -18328,9 +18333,7 @@ typedef struct PlatformState {
   // Logger shared by the platform and every module it owns.
   Logger logger;
 
-  // CPU runtime configuration.
-  CPUConfig cpu_config;
-  // CPU state.
+  // CPU state, which holds its own configuration.
   CPUState cpu;
   // Storage for the CPU's decode cache, handed to it through
   // CPUConfig.decode_cache.
@@ -18810,24 +18813,22 @@ void WritePortWord(PlatformState* platform, uint16_t port, uint16_t value) {
 // ============================================================================
 
 static uint8_t CPUCallbackReadMemoryByte(CPUState* cpu, uint32_t address) {
-  return ReadMemoryByte((PlatformState*)cpu->config->context, address);
+  return ReadMemoryByte((PlatformState*)cpu->config.context, address);
 }
 
 static void CPUCallbackWriteMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
-  WriteMemoryByte((PlatformState*)cpu->config->context, address, value);
+  WriteMemoryByte((PlatformState*)cpu->config.context, address, value);
 }
 
 static uint8_t CPUCallbackReadPortByte(CPUState* cpu, uint16_t port) {
-  return ReadPortByte((PlatformState*)cpu->config->context, port);
+  return ReadPortByte((PlatformState*)cpu->config.context, port);
 }
 
 static void CPUCallbackWritePortByte(
     CPUState* cpu, uint16_t port, uint8_t value) {
-  WritePortByte((PlatformState*)cpu->config->context, port, value);
+  WritePortByte((PlatformState*)cpu->config.context, port, value);
 }
-
-static const CPUConfig kEmptyCPUConfig = {0};
 
 // ============================================================================
 // Callbacks for 8259 PIC module
@@ -19078,7 +19079,7 @@ static void PlatformInitBIOS(PlatformState* platform) {
 // the interrupt in service as part of it - so a vector is never produced
 // unless the CPU is taking it right now.
 static bool CPUCallbackAcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
-  PlatformState* platform = (PlatformState*)cpu->config->context;
+  PlatformState* platform = (PlatformState*)cpu->config.context;
   const uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector == kPICNoPendingInterrupt) {
     return false;
@@ -19102,7 +19103,7 @@ enum {
 YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == kDOSIdleInterrupt) {
-    PlatformState* platform = (PlatformState*)cpu->config->context;
+    PlatformState* platform = (PlatformState*)cpu->config.context;
     platform->is_guest_idle = true;
   }
   return kInterruptHandlerUnhandled;
@@ -19116,7 +19117,7 @@ static void CPUCallbackGetInstructionFetchWindow(
     CPUState* cpu, uint32_t address) {
   CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
   window->data = NULL;
-  PlatformState* platform = (PlatformState*)cpu->config->context;
+  PlatformState* platform = (PlatformState*)cpu->config.context;
   // Anything that is not a single entry's page - unmapped, or shared by more
   // than one entry - has no window to hand out.
   const uint8_t index = GetMemoryPageMapIndex(platform, address);
@@ -19135,27 +19136,30 @@ static void CPUCallbackGetInstructionFetchWindow(
 }
 
 static void PlatformInitCPU(PlatformState* platform) {
-  platform->cpu_config = kEmptyCPUConfig;
-  platform->cpu_config.context = platform;
-  platform->cpu_config.logger = &platform->logger;
-  platform->cpu_config.read_memory_byte = CPUCallbackReadMemoryByte;
-  platform->cpu_config.get_instruction_fetch_window =
+  // The CPU's caller is what zeroes it, and this is the CPU's caller. CPUInit()
+  // below sets only the fields that want a non-zero value.
+  const CPUState kEmptyCPUState = {0};
+  platform->cpu = kEmptyCPUState;
+  platform->cpu.config.context = platform;
+  platform->cpu.config.logger = &platform->logger;
+  platform->cpu.config.read_memory_byte = CPUCallbackReadMemoryByte;
+  platform->cpu.config.get_instruction_fetch_window =
       CPUCallbackGetInstructionFetchWindow;
-  platform->cpu_config.write_memory_byte = CPUCallbackWriteMemoryByte;
-  platform->cpu_config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
+  platform->cpu.config.write_memory_byte = CPUCallbackWriteMemoryByte;
+  platform->cpu.config.acknowledge_interrupt = CPUCallbackAcknowledgeInterrupt;
   // Points into the PIC's own state, so the CPU sees a change the moment the
   // PIC makes one. PICInit() below runs after this, which is fine - the
   // pointer is to storage that already exists, not to a value read now.
-  platform->cpu_config.interrupt_request_hint =
+  platform->cpu.config.interrupt_request_hint =
       &platform->pic.has_unmasked_request;
-  platform->cpu_config.decode_cache = platform->cpu_decode_cache;
-  platform->cpu_config.decode_cache_num_entries = kDecodeCacheEntries;
+  platform->cpu.config.decode_cache = platform->cpu_decode_cache;
+  platform->cpu.config.decode_cache_num_entries = kDecodeCacheEntries;
   if (platform->config->enable_dos_idle_skip) {
-    platform->cpu_config.handle_interrupt = CPUCallbackHandleInterrupt;
+    platform->cpu.config.handle_interrupt = CPUCallbackHandleInterrupt;
   }
-  platform->cpu_config.read_port = CPUCallbackReadPortByte;
-  platform->cpu_config.write_port = CPUCallbackWritePortByte;
-  CPUInit(&platform->cpu, &platform->cpu_config);
+  platform->cpu.config.read_port = CPUCallbackReadPortByte;
+  platform->cpu.config.write_port = CPUCallbackWritePortByte;
+  CPUInit(&platform->cpu);
 
   // Initialize CPU registers.
   // CS:IP points to the BIOS entry point at 0xFFFF0.

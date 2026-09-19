@@ -55,8 +55,8 @@ class PlatformDecodeCacheTest : public ::testing::Test {
 };
 
 TEST_F(PlatformDecodeCacheTest, ThePlatformHandsTheCPUItsDecodeCache) {
-  EXPECT_EQ(platform_.cpu_config.decode_cache, platform_.cpu_decode_cache);
-  EXPECT_EQ(platform_.cpu_config.decode_cache_num_entries, kDecodeCacheEntries);
+  EXPECT_EQ(platform_.cpu.config.decode_cache, platform_.cpu_decode_cache);
+  EXPECT_EQ(platform_.cpu.config.decode_cache_num_entries, kDecodeCacheEntries);
   // Which CPUInit() accepted, rather than logging and running without one.
   EXPECT_EQ(platform_.cpu.decode_cache_index_mask, kDecodeCacheEntries - 1);
 }

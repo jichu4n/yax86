@@ -129,12 +129,10 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     : memory_size_(memory_size),
       memory_(make_unique<uint8_t[]>(memory_size)),
       context_{this, memory_.get(), memory_size},
-      config_{0} {
-  CPUInit(&cpu_, &config_);
-
-  config_.context = &context_;
-  config_.read_memory_byte = [](CPUState* cpu, uint32_t address) {
-    Context* context = reinterpret_cast<Context*>(cpu->config->context);
+      cpu_{} {
+  cpu_.config.context = &context_;
+  cpu_.config.read_memory_byte = [](CPUState* cpu, uint32_t address) {
+    Context* context = reinterpret_cast<Context*>(cpu->config.context);
     if (address >= context->memory_size) {
       ostringstream oss;
       oss << "Memory read out of bounds: 0x" << hex << address
@@ -148,9 +146,9 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     }
     return context->memory[address];
   };
-  config_.write_memory_byte = [](CPUState* cpu, uint32_t address,
-                                 uint8_t value) {
-    Context* context = reinterpret_cast<Context*>(cpu->config->context);
+  cpu_.config.write_memory_byte = [](CPUState* cpu, uint32_t address,
+                                     uint8_t value) {
+    Context* context = reinterpret_cast<Context*>(cpu->config.context);
     if (address >= context->memory_size) {
       ostringstream oss;
       oss << "Memory write out of bounds: 0x" << hex << address
@@ -164,11 +162,13 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     }
     context->memory[address] = value;
   };
-  config_.handle_interrupt =
+  cpu_.config.handle_interrupt =
       [](CPUState* cpu, uint8_t interrupt_number) -> InterruptHandlerResult {
     throw runtime_error(
         "Interrupt " + to_string(interrupt_number) + " not handled in test");
   };
+
+  CPUInit(&cpu_);
 }
 
 CPUTestHelper::~CPUTestHelper() {}

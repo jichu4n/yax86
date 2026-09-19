@@ -114,15 +114,15 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  CPUConfig config = {0};
-  config.on_before_execute_instruction =
+  CPUState cpu = {};
+  cpu.config.on_before_execute_instruction =
       [](YAX86_UNUSED CPUState* cpu, YAX86_UNUSED Instruction* instruction) {
         // cout << "Executing instruction at " << hex
         //      << ((cpu->registers[kCS] << 4) + cpu->registers[kIP]) << " : "
         //      << static_cast<int>(instruction->opcode) << endl;
         // sleep(1);
       };
-  config.read_memory_byte = [](CPUState* cpu, uint32_t address) -> uint8_t {
+  cpu.config.read_memory_byte = [](CPUState* cpu, uint32_t address) -> uint8_t {
     if (address >= sizeof(memory)) {
       cerr << "Memory read out of bounds at address: " << hex << address
            << endl;
@@ -130,8 +130,8 @@ int main(int argc, char* argv[]) {
     }
     return memory[address];
   };
-  config.write_memory_byte = [](CPUState* cpu, uint32_t address,
-                                uint8_t value) {
+  cpu.config.write_memory_byte = [](CPUState* cpu, uint32_t address,
+                                    uint8_t value) {
     if (address >= sizeof(memory)) {
       cerr << "Memory write out of bounds at address: " << hex << address
            << endl;
@@ -139,11 +139,10 @@ int main(int argc, char* argv[]) {
     }
     memory[address] = value;
   };
-  config.handle_interrupt = HandleInterrupt;
+  cpu.config.handle_interrupt = HandleInterrupt;
 
   // Initialize CPU state
-  CPUState cpu;
-  CPUInit(&cpu, &config);
+  CPUInit(&cpu);
 
   // Load the assembly program into memory
   auto machine_code = Assemble(argv[1]);

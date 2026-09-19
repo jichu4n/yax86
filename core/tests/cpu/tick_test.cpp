@@ -83,9 +83,9 @@ void RaiseINTR(uint8_t vector) {
 unique_ptr<CPUTestHelper> WithCode(const vector<uint8_t>& code) {
   auto helper = make_unique<CPUTestHelper>();
   helper->LoadCOM(code);
-  helper->cpu_.config->handle_interrupt = nullptr;
+  helper->cpu_.config.handle_interrupt = nullptr;
   g_controller = FakeController();
-  helper->cpu_.config->acknowledge_interrupt = AcknowledgeInterrupt;
+  helper->cpu_.config.acknowledge_interrupt = AcknowledgeInterrupt;
   helper->cpu_.registers[kSS] = 0;
   helper->cpu_.registers[kSP] = 0x0800;
   return helper;
@@ -375,7 +375,7 @@ TEST_F(TickTest, HintReadingTrueTakesTheInterrupt) {
   helper->memory_[0x700] = kOpNop;
 
   bool hint = true;
-  helper->cpu_.config->interrupt_request_hint = &hint;
+  helper->cpu_.config.interrupt_request_hint = &hint;
 
   ASSERT_EQ(CPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
   RaiseINTR(0x08);
@@ -396,7 +396,7 @@ TEST_F(TickTest, HintReadingFalseSuppressesTheAcknowledgeCycle) {
   helper->memory_[0x700] = kOpNop;
 
   bool hint = false;
-  helper->cpu_.config->interrupt_request_hint = &hint;
+  helper->cpu_.config.interrupt_request_hint = &hint;
 
   ASSERT_EQ(CPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
   RaiseINTR(0x08);
@@ -423,7 +423,7 @@ TEST_F(TickTest, NoHintAsksTheControllerEveryTime) {
   SetVector(helper.get(), 0x08, 0x0060, 0x0100);
   helper->memory_[0x700] = kOpNop;
 
-  ASSERT_EQ(helper->cpu_.config->interrupt_request_hint, nullptr);
+  ASSERT_EQ(helper->cpu_.config.interrupt_request_hint, nullptr);
 
   ASSERT_EQ(CPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
   RaiseINTR(0x08);

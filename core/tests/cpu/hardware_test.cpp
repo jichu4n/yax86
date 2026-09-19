@@ -394,20 +394,19 @@ std::string RunMooTest(
     int* num_divergences) {
   memset(g_memory, 0, sizeof(g_memory));
 
-  CPUConfig config = {0};
-  config.read_memory_byte = ReadMemoryByte;
-  config.write_memory_byte = WriteMemoryByte;
-  config.get_instruction_fetch_window = GetInstructionFetchWindow;
+  CPUState cpu = {};
+  cpu.config.read_memory_byte = ReadMemoryByte;
+  cpu.config.write_memory_byte = WriteMemoryByte;
+  cpu.config.get_instruction_fetch_window = GetInstructionFetchWindow;
   // A decode cache, for the same reason the window below is supplied: a
   // capability the host provides is unreachable here unless this suite
   // provides it. Each test runs one instruction from a cold CPU, so nothing
   // here can be a hit - what three million encodings check is the fill. The
   // hit is covered by decode_cache_test.cpp and by the dos-boot invariant.
   CPUDecodeCacheEntry decode_cache[kHardwareTestDecodeCacheEntries] = {};
-  config.decode_cache = decode_cache;
-  config.decode_cache_num_entries = kHardwareTestDecodeCacheEntries;
-  CPUState cpu;
-  CPUInit(&cpu, &config);
+  cpu.config.decode_cache = decode_cache;
+  cpu.config.decode_cache_num_entries = kHardwareTestDecodeCacheEntries;
+  CPUInit(&cpu);
   // Hands the CPU the whole of memory to read and write by indexing, for the
   // same reason the fetch window above is supplied: anything gated on a
   // host-supplied capability is unreachable in this suite unless the suite
