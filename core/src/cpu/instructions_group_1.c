@@ -10,7 +10,7 @@
 // ============================================================================
 
 typedef InstructionResult (*Group1ExecuteInstructionFn)(
-    const InstructionContext* ctx, Operand* dest, const OperandValue* src);
+    const InstructionContext* ctx, Operand* dest, OperandValue src);
 
 // Group 1 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte.
@@ -32,7 +32,7 @@ ExecuteGroup1Instruction(const InstructionContext* ctx) {
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue src_value = ReadImmediate(ctx);
-  return fn(ctx, &dest, &src_value);
+  return fn(ctx, &dest, src_value);
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
@@ -44,7 +44,7 @@ ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   OperandValue src_value =
       ReadImmediateOperandByte(ctx->instruction);  // immediate is always 8-bit
   OperandValue src_value_extended =
-      WordValue((uint16_t)((int16_t)((int8_t)src_value.value.byte_value)));
+      (OperandValue)((int16_t)((int8_t)src_value));
   // Sign-extend the immediate value to the destination width.
-  return fn(ctx, &dest, &src_value_extended);
+  return fn(ctx, &dest, src_value_extended);
 }

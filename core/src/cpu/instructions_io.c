@@ -11,8 +11,8 @@
 
 // Read a byte from an I/O port.
 YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
-  return ByteValue(
-      cpu->config.read_port ? cpu->config.read_port(cpu, port) : 0xFF);
+  return (OperandValue)(cpu->config.read_port ? cpu->config.read_port(cpu, port)
+                                              : 0xFF);
 }
 
 // Read a word from an I/O port as a uint16_t. The 8088 has an 8-bit data bus,
@@ -20,9 +20,9 @@ YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
 // on this: writing a 6845 register index and its data in one OUT DX, AX is the
 // standard idiom, and it is what the BIOS uses.
 static OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
-  uint8_t low = ReadByteFromPort(cpu, port).value.byte_value;
-  uint8_t high = ReadByteFromPort(cpu, (uint16_t)(port + 1)).value.byte_value;
-  return WordValue((high << 8) | low);
+  uint8_t low = (uint8_t)ReadByteFromPort(cpu, port);
+  uint8_t high = (uint8_t)ReadByteFromPort(cpu, (uint16_t)(port + 1));
+  return (OperandValue)((high << 8) | low);
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
@@ -36,7 +36,7 @@ static InstructionResult ExecuteIn(
     const InstructionContext* ctx, uint16_t port) {
   OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  WriteOperand(ctx, &dest, FromOperandValue(&value));
+  WriteOperand(ctx, &dest, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -45,7 +45,7 @@ static InstructionResult ExecuteIn(
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
-  return ExecuteIn(ctx, FromOperandValue(&port));
+  return ExecuteIn(ctx, FromOperandValue(port));
 }
 
 // IN AL, DX
@@ -60,16 +60,16 @@ static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
   if (!cpu->config.write_port) {
     return;
   }
-  cpu->config.write_port(cpu, port, FromOperandValue(&value));
+  cpu->config.write_port(cpu, port, FromOperandValue(value));
 }
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
 // consecutive ports.
 static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
-  uint32_t raw_value = FromOperandValue(&value);
-  WriteByteToPort(cpu, port, ByteValue(raw_value & 0xFF));
+  uint32_t raw_value = FromOperandValue(value);
+  WriteByteToPort(cpu, port, (OperandValue)(raw_value & 0xFF));
   WriteByteToPort(
-      cpu, (uint16_t)(port + 1), ByteValue((raw_value >> 8) & 0xFF));
+      cpu, (uint16_t)(port + 1), (OperandValue)((raw_value >> 8) & 0xFF));
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
@@ -91,7 +91,7 @@ static InstructionResult ExecuteOut(
 YAX86_PRIVATE InstructionResult
 ExecuteOutImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
-  return ExecuteOut(ctx, FromOperandValue(&port));
+  return ExecuteOut(ctx, FromOperandValue(port));
 }
 
 // OUT DX, AL

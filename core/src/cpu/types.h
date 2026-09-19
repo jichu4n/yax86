@@ -95,16 +95,19 @@ typedef struct OperandAddress {
   } value;
 } OperandAddress;
 
-// Operand value.
-typedef struct OperandValue {
-  // Data width.
-  Width width;
-  // The value of the operand.
-  union {
-    uint8_t byte_value;   // For byte operands
-    uint16_t word_value;  // For word operands
-  } value;
-} OperandValue;
+// The value of an operand.
+//
+// A number rather than a struct, because a struct here is a struct on the
+// stack: an operand value is produced and consumed on the hottest path in the
+// emulator, and one that does not fit in a register travels through memory
+// every time it is passed, returned or assigned.
+//
+// A byte-wide value is held in the low byte with the high byte zero. Every
+// path that produces one truncates to a byte, which is what lets a consumer
+// widen it by doing nothing. What the type no longer carries is the width, and
+// the width is what sign extension needs - so that is passed explicitly, from
+// the opcode table entry the caller already has.
+typedef uint16_t OperandValue;
 
 // An operand.
 typedef struct Operand {
