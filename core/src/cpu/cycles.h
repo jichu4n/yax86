@@ -20,10 +20,6 @@ enum {
 
 #ifndef YAX86_IMPLEMENTATION
 
-// Base execution cost per opcode, excluding the effective address calculation
-// and time on the data bus.
-extern const uint8_t kOpcodeBaseCycles[256];
-
 // Cycles to compute the effective address of a ModR/M memory operand.
 extern uint8_t GetEffectiveAddressCycles(const Instruction* instruction);
 
