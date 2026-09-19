@@ -98,7 +98,7 @@ typedef enum PICReadRegister {
 // State of a single 8259 PIC chip.
 typedef struct PICState {
   // Pointer to caller-provided runtime configuration.
-  PICConfig* config;
+  PICConfig config;
 
   // Initialization state.
   PICInitState init_state;
@@ -148,7 +148,7 @@ typedef struct PICState {
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-void PICInit(PICState* pic, PICConfig* config);
+void PICInit(PICState* pic);
 
 // ============================================================================
 // IRQ line control

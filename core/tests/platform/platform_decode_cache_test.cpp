@@ -18,13 +18,13 @@ enum : uint8_t {
 class PlatformDecodeCacheTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.physical_memory_size = sizeof(ram_);
-    config_.context = this;
-    config_.physical_memory = ram_;
-    config_.vram = vram_;
-    config_.video_adapter = kVideoAdapterCGA;
+    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.context = this;
+    platform_.config.physical_memory = ram_;
+    platform_.config.vram = vram_;
+    platform_.config.video_adapter = kVideoAdapterCGA;
 
-    ASSERT_TRUE(PlatformInit(&platform_, &config_));
+    ASSERT_TRUE(PlatformInit(&platform_));
     platform_.cpu.registers[kCS] = 0;
     platform_.cpu.registers[kDS] = 0;
     platform_.cpu.registers[kSS] = 0;
@@ -47,8 +47,7 @@ class PlatformDecodeCacheTest : public ::testing::Test {
 
   uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
 
-  PlatformConfig config_ = {0};
-  PlatformState platform_;
+  PlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
   uint8_t rom_[0x800] = {0};

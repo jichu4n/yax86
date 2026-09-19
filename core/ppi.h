@@ -749,7 +749,7 @@ typedef struct PPIConfig {
 // State of the PPI.
 typedef struct PPIState {
   // Pointer to the PPI configuration.
-  PPIConfig* config;
+  PPIConfig config;
 
   // Port A: Keyboard scancode latch.
   uint8_t port_a_latch;
@@ -762,7 +762,7 @@ typedef struct PPIState {
 } PPIState;
 
 // Initializes the PPI to its power-on state.
-void PPIInit(PPIState* ppi, PPIConfig* config);
+void PPIInit(PPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
 uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
@@ -801,11 +801,8 @@ void PPISetScancode(PPIState* ppi, uint8_t scancode);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-void PPIInit(PPIState* ppi, PPIConfig* config) {
-  static const PPIState zero_ppi_state = {0};
-  *ppi = zero_ppi_state;
-  ppi->config = config;
-  // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is 
+void PPIInit(PPIState* ppi) {
+  // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
 }
@@ -830,21 +827,21 @@ uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
         // Read from SW1-4.
         uint8_t port_c = 0;
         // Bit 0: Floppy drive (IPL) installed
-        port_c |= (ppi->config->num_floppy_drives > 0) & 0x01;
+        port_c |= (ppi->config.num_floppy_drives > 0) & 0x01;
         // Bit 1: FPU installed
-        port_c |= (ppi->config->fpu_installed << 1);
+        port_c |= (ppi->config.fpu_installed << 1);
         // Bits 2-3: Memory size
-        port_c |= ((ppi->config->memory_size & 0x03) << 2);
+        port_c |= ((ppi->config.memory_size & 0x03) << 2);
         // Bits 4-7 are for unsupported features (cassette, parity, etc.).
         return port_c;
       } else {
         // Read from SW5-8.
         uint8_t port_c = 0;
         // Bits 0-1: Video mode.
-        port_c |= ppi->config->display_mode & 0x03;
+        port_c |= ppi->config.display_mode & 0x03;
         // Bits 2-3: Number of drives. Slightly confusingly, the encoding is
         // 1-based, i.e. 00=1 drive, 01=2 drives, etc.
-        port_c |= (((GetNumFloppyDrives(ppi->config) - 1) & 0x03) << 2);
+        port_c |= (((GetNumFloppyDrives(&ppi->config) - 1) & 0x03) << 2);
         // Bits 4-7 are for unsupported features.
         return port_c;
       }
@@ -880,19 +877,19 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
 
       // Check for changes in PC speaker control bits and fire callback.
       bool speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
-      if (old_speaker_enabled != speaker_enabled && ppi->config &&
-          ppi->config->set_pc_speaker_frequency) {
+      if (old_speaker_enabled != speaker_enabled &&
+          ppi->config.set_pc_speaker_frequency) {
         const uint32_t frequency =
             PPIIsPCSpeakerEnabled(ppi) ? ppi->pc_speaker_frequency_from_pit : 0;
-        ppi->config->set_pc_speaker_frequency(ppi->config->context, frequency);
+        ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency);
       }
 
       // Check for changes in keyboard control bits and fire callback.
       uint8_t keyboard_control = PPIGetKeyboardControl(ppi);
-      if (old_keyboard_control != keyboard_control && ppi->config &&
-          ppi->config->set_keyboard_control) {
-        ppi->config->set_keyboard_control(
-            ppi->config->context,
+      if (old_keyboard_control != keyboard_control &&
+          ppi->config.set_keyboard_control) {
+        ppi->config.set_keyboard_control(
+            ppi->config.context,
             (ppi->port_b & kPPIPortBKeyboardEnableClear) != 0,
             (ppi->port_b & kPPIPortBKeyboardClockLow) != 0);
       }
@@ -915,8 +912,8 @@ void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   // Invoke the callback only if the speaker is currently enabled and the
   // frequency has changed.
   if (PPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
-      ppi->config && ppi->config->set_pc_speaker_frequency) {
-    ppi->config->set_pc_speaker_frequency(ppi->config->context, frequency_hz);
+      ppi->config.set_pc_speaker_frequency) {
+    ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency_hz);
   }
 }
 

@@ -1,6 +1,6 @@
-#include "pic.h"
-
 #include <gtest/gtest.h>
+
+#include "pic.h"
 
 namespace {
 
@@ -23,8 +23,8 @@ class OCWTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // Initialize the PIC to a known-ready state (single PIC mode).
-    config_.sp = false;
-    PICInit(&pic_, &config_);
+    pic_.config.sp = false;
+    PICInit(&pic_);
 
     // ICW1: single PIC, no ICW4 needed.
     PICWritePort(&pic_, 0x20, kICW1_INIT | kICW1_SNGL);
@@ -33,8 +33,6 @@ class OCWTest : public ::testing::Test {
 
     ASSERT_EQ(pic_.init_state, kPICReady);
   }
-
-  PICConfig config_ = {0};
   PICState pic_ = {0};
 };
 

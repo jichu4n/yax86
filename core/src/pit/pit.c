@@ -54,9 +54,9 @@ static inline void PITChannelSetOutputState(
   // This is the only effect any channel's output has outside the PIT, which is
   // why PITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
   // another channel's output an effect here and that has to change with it.
-  if (channel_index == kPITChannelTimer && new_output_state && pit->config &&
-      pit->config->raise_irq_0) {
-    pit->config->raise_irq_0(pit->config->context);
+  if (channel_index == kPITChannelTimer && new_output_state &&
+      pit->config.raise_irq_0) {
+    pit->config.raise_irq_0(pit->config.context);
   }
 }
 
@@ -195,11 +195,7 @@ static const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
-void PITInit(PITState* pit, PITConfig* config) {
-  static const PITState zero_pit_state = {0};
-  *pit = zero_pit_state;
-  pit->config = config;
-
+void PITInit(PITState* pit) {
   // On the IBM PC, the output pins of all three channels are initially pulled
   // high.
   for (int i = 0; i < kPITNumChannels; ++i) {
@@ -225,8 +221,8 @@ static inline bool PITModeOscillates(uint8_t mode) {
 static inline void PITNotifySpeakerFrequency(
     PITState* pit, const PITChannelState* channel, int channel_index,
     bool has_count) {
-  if (channel_index != kPITSpeakerChannel || !pit->config ||
-      !pit->config->set_pc_speaker_frequency) {
+  if (channel_index != kPITSpeakerChannel ||
+      !pit->config.set_pc_speaker_frequency) {
     return;
   }
   uint32_t frequency = 0;
@@ -235,7 +231,7 @@ static inline void PITNotifySpeakerFrequency(
         kPITTickFrequencyHz / (channel->reload_value ? channel->reload_value
                                                      : kPITFallbackReloadValue);
   }
-  pit->config->set_pc_speaker_frequency(pit->config->context, frequency);
+  pit->config.set_pc_speaker_frequency(pit->config.context, frequency);
 }
 
 // Helper function to load the counter and handle side effects.

@@ -8,14 +8,13 @@ namespace {
 class PlatformVideoTest : public ::testing::Test {
  protected:
   void Init(VideoAdapter adapter) {
-    config_.physical_memory_size = sizeof(ram_);
-    config_.physical_memory = ram_;
-    config_.vram = vram_;
-    config_.video_adapter = adapter;
-    ASSERT_TRUE(PlatformInit(&platform_, &config_));
+    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.physical_memory = ram_;
+    platform_.config.vram = vram_;
+    platform_.config.video_adapter = adapter;
+    ASSERT_TRUE(PlatformInit(&platform_));
   }
 
-  PlatformConfig config_ = {0};
   PlatformState platform_ = {0};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
@@ -24,7 +23,7 @@ class PlatformVideoTest : public ::testing::Test {
 TEST_F(PlatformVideoTest, DefaultsToMDA) {
   Init(static_cast<VideoAdapter>(0));
   EXPECT_EQ(platform_.video.adapter, kVideoAdapterMDA);
-  EXPECT_EQ(platform_.ppi_config.display_mode, kPPIDisplayMDA);
+  EXPECT_EQ(platform_.ppi.config.display_mode, kPPIDisplayMDA);
 
   MemoryMapEntry* vram =
       GetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);
@@ -44,7 +43,7 @@ TEST_F(PlatformVideoTest, RegistersCGA) {
   EXPECT_EQ(platform_.video.adapter, kVideoAdapterCGA);
   // The BIOS branches on the DIP switches to decide which adapter to program,
   // so they have to agree with what the platform registered.
-  EXPECT_EQ(platform_.ppi_config.display_mode, kPPIDisplayCGA80x25);
+  EXPECT_EQ(platform_.ppi.config.display_mode, kPPIDisplayCGA80x25);
 
   MemoryMapEntry* vram =
       GetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);

@@ -149,7 +149,7 @@ TEST_P(VideoTimingTest, RenderIsSafeWithoutCallbacks) {
   VideoConfig bare_config = kDefaultVideoConfig;
   bare_config.adapter = GetParam();
   VideoState bare_video = {0};
-  VideoInit(&bare_video, &bare_config);
+  VideoInit(&bare_video);
   VideoRender(&bare_video);
   VideoTick(&bare_video, 1000);
   EXPECT_EQ(VideoReadVRAM(&bare_video, 0), 0xFF);

@@ -26,19 +26,18 @@ class KeyboardControlTest : public ::testing::Test {
     g_last_kb_clock = false;
 
     // Initialize config and PPI state.
-    config_ = {0};
-    PPIInit(&ppi_, &config_);
+    ppi_ = {};
+    PPIInit(&ppi_);
     // Explicitly reset port B to 0 for these tests. PPIInit initializes it to
     // a non-zero default (kPPIPortBKeyboardClockLow), but these tests assume
     // a zero-initialized state to verify state transitions.
     ppi_.port_b = 0;
 
     // Wire up the mock callback.
-    config_.set_keyboard_control = MockSetKeyboardControl;
+    ppi_.config.set_keyboard_control = MockSetKeyboardControl;
   }
 
   PPIState ppi_ = {0};
-  PPIConfig config_ = {0};
 };
 
 TEST_F(KeyboardControlTest, NoChangeNoCallback) {
@@ -103,7 +102,7 @@ TEST_F(KeyboardControlTest, CallbackOnFlipOff) {
 
 TEST_F(KeyboardControlTest, NoCallbackIfNull) {
   // Arrange: Set the callback to nullptr.
-  config_.set_keyboard_control = nullptr;
+  ppi_.config.set_keyboard_control = nullptr;
 
   // Act: Write a value that would normally trigger the callback.
   PPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardClockLow);

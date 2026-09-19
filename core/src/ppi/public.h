@@ -167,7 +167,7 @@ typedef struct PPIConfig {
 // State of the PPI.
 typedef struct PPIState {
   // Pointer to the PPI configuration.
-  PPIConfig* config;
+  PPIConfig config;
 
   // Port A: Keyboard scancode latch.
   uint8_t port_a_latch;
@@ -180,7 +180,7 @@ typedef struct PPIState {
 } PPIState;
 
 // Initializes the PPI to its power-on state.
-void PPIInit(PPIState* ppi, PPIConfig* config);
+void PPIInit(PPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
 uint8_t PPIReadPort(PPIState* ppi, uint16_t port);

@@ -23,9 +23,9 @@ class HDCTransferTest : public ::testing::Test {
       image_[i] = PatternAt(i);
     }
 
-    config_.context = this;
-    config_.read_image_byte = [](void* context, uint8_t drive,
-                                 uint32_t offset) -> uint8_t {
+    hdc_.config.context = this;
+    hdc_.config.read_image_byte = [](void* context, uint8_t drive,
+                                     uint32_t offset) -> uint8_t {
       HDCTransferTest* test = static_cast<HDCTransferTest*>(context);
       test->read_offsets_.push_back(offset);
       test->last_drive_ = drive;
@@ -33,8 +33,8 @@ class HDCTransferTest : public ::testing::Test {
       EXPECT_LT(offset, kTestImageSize);
       return offset < kTestImageSize ? test->image_[offset] : 0xFF;
     };
-    config_.write_image_byte = [](void* context, uint8_t drive, uint32_t offset,
-                                  uint8_t value) {
+    hdc_.config.write_image_byte = [](void* context, uint8_t drive,
+                                      uint32_t offset, uint8_t value) {
       HDCTransferTest* test = static_cast<HDCTransferTest*>(context);
       test->last_drive_ = drive;
       EXPECT_LT(offset, kTestImageSize);
@@ -44,7 +44,7 @@ class HDCTransferTest : public ::testing::Test {
       }
     };
 
-    HDCInit(&hdc_, &config_);
+    HDCInit(&hdc_);
     HDCAttachDrive(&hdc_, 0, &kTestGeometry);
     SelectDrive(0);
   }
@@ -114,8 +114,6 @@ class HDCTransferTest : public ::testing::Test {
       Write(kHDCRegisterData, data[i]);
     }
   }
-
-  HDCConfig config_ = {0};
   HDCState hdc_ = {0};
   uint8_t image_[kTestImageSize] = {0};
   std::vector<uint32_t> read_offsets_;
@@ -312,9 +310,9 @@ TEST_F(HDCTransferTest, TransfersUseTheDriveSelectedWhenTheCommandStarted) {
 }
 
 TEST_F(HDCTransferTest, ADriveWithNoImageReadsAsZeroes) {
-  config_.read_image_byte = nullptr;
-  config_.write_image_byte = nullptr;
-  HDCInit(&hdc_, &config_);
+  hdc_.config.read_image_byte = nullptr;
+  hdc_.config.write_image_byte = nullptr;
+  HDCInit(&hdc_);
   HDCAttachDrive(&hdc_, 0, &kTestGeometry);
   SelectDrive(0);
 

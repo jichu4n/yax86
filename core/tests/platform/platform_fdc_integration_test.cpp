@@ -11,16 +11,16 @@ static uint8_t MockImageRead(void* context, uint8_t drive, uint32_t offset) {
 class PlatformFDCIntegrationTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.physical_memory_size = sizeof(ram_);  // 64KB RAM
-    config_.context = this;
-    config_.physical_memory = ram_;
-    config_.vram = vram_;
+    platform_.config.physical_memory_size = sizeof(ram_);  // 64KB RAM
+    platform_.config.context = this;
+    platform_.config.physical_memory = ram_;
+    platform_.config.vram = vram_;
 
     // Initialize platform.
-    ASSERT_TRUE(PlatformInit(&platform_, &config_));
+    ASSERT_TRUE(PlatformInit(&platform_));
 
     // Hook FDC image callback directly.
-    platform_.fdc_config.read_image_byte = MockImageRead;
+    platform_.fdc.config.read_image_byte = MockImageRead;
   }
 
   void WritePort(uint16_t port, uint8_t value) {
@@ -29,8 +29,7 @@ class PlatformFDCIntegrationTest : public ::testing::Test {
 
   uint8_t ReadPort(uint16_t port) { return ReadPortByte(&platform_, port); }
 
-  PlatformConfig config_ = {0};
-  PlatformState platform_;
+  PlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };

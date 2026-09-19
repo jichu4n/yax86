@@ -1,5 +1,6 @@
-#include "gtest/gtest.h"
 #include "fdc.h"
+
+#include "gtest/gtest.h"
 
 namespace {
 
@@ -11,20 +12,22 @@ enum DmaMode {
 class FDCTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    config_.context = this;
-    config_.raise_irq6 = [](void* context) {
+    fdc_.config.context = this;
+    fdc_.config.raise_irq6 = [](void* context) {
       static_cast<FDCTest*>(context)->irq6_raised_ = true;
     };
-    config_.read_image_byte = [](void* context, uint8_t drive, uint32_t offset) -> uint8_t {
+    fdc_.config.read_image_byte = [](void* context, uint8_t drive,
+                                     uint32_t offset) -> uint8_t {
       // Return a pattern based on offset.
       return (uint8_t)(offset & 0xFF);
     };
-    config_.write_image_byte = [](void* context, uint8_t drive, uint32_t offset, uint8_t value) {
+    fdc_.config.write_image_byte = [](void* context, uint8_t drive,
+                                      uint32_t offset, uint8_t value) {
       FDCTest* test = static_cast<FDCTest*>(context);
       test->last_written_byte_ = value;
       test->last_written_offset_ = offset;
     };
-    config_.request_dma = [](void* context) {
+    fdc_.config.request_dma = [](void* context) {
       FDCTest* test = static_cast<FDCTest*>(context);
       test->dma_requested_ = true;
       if (test->dma_mode_ == kDmaModeRead) {
@@ -32,7 +35,7 @@ class FDCTest : public ::testing::Test {
       }
     };
 
-    FDCInit(&fdc_, &config_);
+    FDCInit(&fdc_);
     // Enable interrupts and release reset by default for tests.
     // This simulates the state after a proper BIOS initialization.
     FDCWritePort(&fdc_, kFDCPortDOR, kFDCDORReset | kFDCDORInterruptEnable);
@@ -41,8 +44,8 @@ class FDCTest : public ::testing::Test {
     for (int i = 0; i < 4; ++i) {
       SendCommand(0x08);
       FDCTick(&fdc_);
-      ReadResult(); // ST0
-      ReadResult(); // PCN
+      ReadResult();  // ST0
+      ReadResult();  // PCN
     }
     // Clear the IRQ flag so tests start fresh.
     irq6_raised_ = false;
@@ -50,24 +53,16 @@ class FDCTest : public ::testing::Test {
     dma_mode_ = kDmaModeRead;
   }
 
-  void SendCommand(uint8_t cmd) {
-    FDCWritePort(&fdc_, kFDCPortData, cmd);
-  }
+  void SendCommand(uint8_t cmd) { FDCWritePort(&fdc_, kFDCPortData, cmd); }
 
   void SendParameter(uint8_t param) {
     FDCWritePort(&fdc_, kFDCPortData, param);
   }
 
-  void WriteDmaByte(uint8_t value) {
-    FDCWritePort(&fdc_, kFDCPortData, value);
-  }
+  void WriteDmaByte(uint8_t value) { FDCWritePort(&fdc_, kFDCPortData, value); }
 
-  uint8_t ReadResult() {
-    return FDCReadPort(&fdc_, kFDCPortData);
-  }
-
-  FDCConfig config_;
-  FDCState fdc_;
+  uint8_t ReadResult() { return FDCReadPort(&fdc_, kFDCPortData); }
+  FDCState fdc_ = {};
   bool irq6_raised_ = false;
   bool dma_requested_ = false;
   DmaMode dma_mode_ = kDmaModeRead;
@@ -86,15 +81,15 @@ TEST_F(FDCTest, ReadData) {
   dma_requested_ = false;
   dma_mode_ = kDmaModeRead;
 
-  SendCommand(0x06); // Read Data
-  SendParameter(0x00); // Drive 0, Head 0
-  SendParameter(0x00); // C=0
-  SendParameter(0x00); // H=0
-  SendParameter(0x01); // R=1 (Sector 1)
-  SendParameter(0x02); // N=2 (512 bytes)
-  SendParameter(0x09); // EOT=9
-  SendParameter(0x2A); // GPL
-  SendParameter(0xFF); // DTL
+  SendCommand(0x06);    // Read Data
+  SendParameter(0x00);  // Drive 0, Head 0
+  SendParameter(0x00);  // C=0
+  SendParameter(0x00);  // H=0
+  SendParameter(0x01);  // R=1 (Sector 1)
+  SendParameter(0x02);  // N=2 (512 bytes)
+  SendParameter(0x09);  // EOT=9
+  SendParameter(0x2A);  // GPL
+  SendParameter(0xFF);  // DTL
 
   // Tick 1: Initialization.
   FDCTick(&fdc_);
@@ -137,15 +132,18 @@ TEST_F(FDCTest, ReadData) {
 
   // ST0: Normal Termination (Bits 7-6 = 00).
   EXPECT_EQ(st0 & 0xC0, 0x00);
-  // Sector should be 1 (current sector was read, maybe incremented? 
+  // Sector should be 1 (current sector was read, maybe incremented?
   // Code increments sector AFTER byte index reaches size).
   // Wait, if TC happened at end of sector, sector might be 2.
   // But here we manually sent TC after 512 bytes.
   // The code increments R after the sector loop.
   // If we stopped exactly at 512, R might be 1 or 2 depending on check order.
   // Let's just check valid read for now.
-  (void)c; (void)h; (void)r; (void)n;
-  
+  (void)c;
+  (void)h;
+  (void)r;
+  (void)n;
+
   // FDC should be Idle now.
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
 }
@@ -159,17 +157,17 @@ TEST_F(FDCTest, WriteData) {
   dma_mode_ = kDmaModeWrite;
 
   // Issue Write Data command (0x05).
-  SendCommand(0x05); 
-  SendParameter(0x00); // Drive 0
-  SendParameter(0x00); 
-  SendParameter(0x00); 
-  SendParameter(0x01); // Sector 1
-  SendParameter(0x02); 
-  SendParameter(0x09); 
-  SendParameter(0x2A); 
-  SendParameter(0xFF); 
+  SendCommand(0x05);
+  SendParameter(0x00);  // Drive 0
+  SendParameter(0x00);
+  SendParameter(0x00);
+  SendParameter(0x01);  // Sector 1
+  SendParameter(0x02);
+  SendParameter(0x09);
+  SendParameter(0x2A);
+  SendParameter(0xFF);
 
-  // Tick 1: Initialization. 
+  // Tick 1: Initialization.
   // NOTE: Write Data requests first byte immediately in Init block.
   FDCTick(&fdc_);
   EXPECT_TRUE(dma_requested_);
@@ -212,29 +210,30 @@ TEST_F(FDCTest, ReadTrackEnd) {
   irq6_raised_ = false;
   dma_requested_ = false;
   dma_mode_ = kDmaModeRead;
-  SendCommand(0x06); 
-  SendParameter(0x00); 
-  SendParameter(0x00); 
-  SendParameter(0x00); 
-  SendParameter(0x09); // R=9 (Last Sector)
-  SendParameter(0x02); // N=2
-  SendParameter(0x09); // EOT=9
-  SendParameter(0x2A); 
-  SendParameter(0xFF); 
+  SendCommand(0x06);
+  SendParameter(0x00);
+  SendParameter(0x00);
+  SendParameter(0x00);
+  SendParameter(0x09);  // R=9 (Last Sector)
+  SendParameter(0x02);  // N=2
+  SendParameter(0x09);  // EOT=9
+  SendParameter(0x2A);
+  SendParameter(0xFF);
 
   // Tick 1: Init.
   FDCTick(&fdc_);
 
   // Read 512 bytes (1 sector).
   for (int i = 0; i < 512; ++i) {
-    FDCTick(&fdc_); // Read byte, Request DMA
-    // Handle DMA read immediately (simulated by test callback setting dma_requested)
-    dma_requested_ = false; 
+    FDCTick(&fdc_);  // Read byte, Request DMA
+    // Handle DMA read immediately (simulated by test callback setting
+    // dma_requested)
+    dma_requested_ = false;
   }
 
   // At this point, we finished the last byte of Sector 9.
   // The handler should have incremented sector to 10 and set tc_received (EOT).
-  
+
   // Tick: Terminate command (detects tc_received).
   FDCTick(&fdc_);
 
@@ -242,13 +241,13 @@ TEST_F(FDCTest, ReadTrackEnd) {
   EXPECT_TRUE(irq6_raised_);
 
   // Check Result Sector (R).
-  ReadResult(); // ST0
-  ReadResult(); // ST1
-  ReadResult(); // ST2
-  ReadResult(); // C
-  ReadResult(); // H
-  uint8_t r = ReadResult(); // R
-  ReadResult(); // N
+  ReadResult();              // ST0
+  ReadResult();              // ST1
+  ReadResult();              // ST2
+  ReadResult();              // C
+  ReadResult();              // H
+  uint8_t r = ReadResult();  // R
+  ReadResult();              // N
 
   // Expect R = 10 (9 + 1).
   EXPECT_EQ(r, 10);
@@ -263,32 +262,32 @@ TEST_F(FDCTest, ReadDataMultiTrack) {
   dma_requested_ = false;
   dma_mode_ = kDmaModeRead;
   // Command 0x86: MT=1, MFM=0, SK=0, CMD=06
-  SendCommand(0x86); 
-  SendParameter(0x00); // Drive 0, Head 0
-  SendParameter(0x00); // C=0
-  SendParameter(0x00); // H=0
-  SendParameter(0x09); // R=9 (Last Sector of Side 0)
-  SendParameter(0x02); // N=2 (512 bytes)
-  SendParameter(0x09); // EOT=9
-  SendParameter(0x2A); 
-  SendParameter(0xFF); 
+  SendCommand(0x86);
+  SendParameter(0x00);  // Drive 0, Head 0
+  SendParameter(0x00);  // C=0
+  SendParameter(0x00);  // H=0
+  SendParameter(0x09);  // R=9 (Last Sector of Side 0)
+  SendParameter(0x02);  // N=2 (512 bytes)
+  SendParameter(0x09);  // EOT=9
+  SendParameter(0x2A);
+  SendParameter(0xFF);
 
   // Tick 1: Init.
   FDCTick(&fdc_);
 
   // Read 512 bytes (Sector 9, Head 0).
   for (int i = 0; i < 512; ++i) {
-    FDCTick(&fdc_); 
+    FDCTick(&fdc_);
     dma_requested_ = false;
   }
 
   // At this point, we finished Head 0, Sector 9.
   // With MT=1, it should rollover to Head 1, Sector 1.
   // dma_requested_ should be true again for the next byte (from Head 1).
-  
+
   // Read 512 bytes (Sector 1, Head 1).
   for (int i = 0; i < 512; ++i) {
-    FDCTick(&fdc_); 
+    FDCTick(&fdc_);
     EXPECT_TRUE(dma_requested_);
     dma_requested_ = false;
   }
@@ -303,13 +302,13 @@ TEST_F(FDCTest, ReadDataMultiTrack) {
   EXPECT_TRUE(irq6_raised_);
 
   // Check Result Phase.
-  ReadResult(); // ST0
-  ReadResult(); // ST1
-  ReadResult(); // ST2
-  ReadResult(); // C
-  uint8_t h = ReadResult(); // H
-  uint8_t r = ReadResult(); // R
-  ReadResult(); // N
+  ReadResult();              // ST0
+  ReadResult();              // ST1
+  ReadResult();              // ST2
+  ReadResult();              // C
+  uint8_t h = ReadResult();  // H
+  uint8_t r = ReadResult();  // R
+  ReadResult();              // N
 
   // Expect Head = 1 (Rolled over).
   EXPECT_EQ(h, 1);
@@ -319,39 +318,41 @@ TEST_F(FDCTest, ReadDataMultiTrack) {
 
 TEST_F(FDCTest, GLaBIOSBootSequence) {
   // Simulate the full GLaBIOS initialization and boot sequence.
-  
+
   // 0. Initial State: No disk, Reset active?
   // We assume power-on state.
-  FDCInit(&fdc_, &config_);
+  FDCInit(&fdc_);
   FDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
 
   // 1. Reset FDC (GLaBIOS FDC_RESET)
   // Disable FDC, Disable DMA/IRQ (Bit 3=0), Reset (Bit 2=0) -> 0x00
   FDCWritePort(&fdc_, kFDCPortDOR, 0x00);
-  
+
   // Enable FDC, Enable DMA/IRQ (Bit 3=1), Release Reset (Bit 2=1) -> 0x0C
   // This triggers the Reset Interrupt.
   irq6_raised_ = false;
   FDCWritePort(&fdc_, kFDCPortDOR, 0x0C);
-  
+
   // Verify Reset Interrupt.
   EXPECT_TRUE(irq6_raised_);
   irq6_raised_ = false;
 
   // 2. Sense Interrupt Status Loop (GLaBIOS FDC_SENSE_INT)
-  // After reset, FDC enters polling mode. GLaBIOS checks status for all 4 drives.
+  // After reset, FDC enters polling mode. GLaBIOS checks status for all 4
+  // drives.
   for (int i = 0; i < 4; ++i) {
-    SendCommand(0x08); // Sense Interrupt Status
+    SendCommand(0x08);  // Sense Interrupt Status
     FDCTick(&fdc_);
-    
+
     // Result Phase
     EXPECT_EQ(fdc_.phase, kFDCPhaseResult);
     uint8_t st0 = ReadResult();
     uint8_t pcn = ReadResult();
-    
-    // ST0 should indicate Polling (0x80) or similar abnormal termination due to reset.
-    // Our implementation sets kFDCST0AbnormalTerminationPolling (0xC0) | i.
-    EXPECT_EQ(st0 & 0xC3, 0xC0 | (i & 0x03)); 
+
+    // ST0 should indicate Polling (0x80) or similar abnormal termination due to
+    // reset. Our implementation sets kFDCST0AbnormalTerminationPolling (0xC0) |
+    // i.
+    EXPECT_EQ(st0 & 0xC3, 0xC0 | (i & 0x03));
     (void)pcn;
   }
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
@@ -372,11 +373,11 @@ TEST_F(FDCTest, GLaBIOSBootSequence) {
   // Param: Drive 0
   SendCommand(0x07);
   SendParameter(0x00);
-  
+
   // Execution (Seek)
-  FDCTick(&fdc_); // Start Seek
-  FDCTick(&fdc_); // Finish Seek
-  
+  FDCTick(&fdc_);  // Start Seek
+  FDCTick(&fdc_);  // Finish Seek
+
   // Verify Interrupt.
   EXPECT_TRUE(irq6_raised_);
   irq6_raised_ = false;
@@ -384,10 +385,10 @@ TEST_F(FDCTest, GLaBIOSBootSequence) {
   // 5. Sense Interrupt Status (Check Recalibrate Result)
   SendCommand(0x08);
   FDCTick(&fdc_);
-  
+
   uint8_t st0 = ReadResult();
   uint8_t pcn = ReadResult();
-  
+
   // ST0: Seek End (0x20) set.
   EXPECT_TRUE(st0 & 0x20);
   // PCN: Should be 0.
@@ -396,23 +397,23 @@ TEST_F(FDCTest, GLaBIOSBootSequence) {
   // 6. Read Boot Sector (GLaBIOS INT 13h, AH=02h)
   // Read Data (0x06), MT=0, MFM=1 (0x46 usually, but 0x06 base)
   // C=0, H=0, R=1, N=2 (512b)
-  
+
   dma_requested_ = false;
   dma_mode_ = kDmaModeRead;
-  
-  SendCommand(0x06); 
-  SendParameter(0x00); // Drive 0, Head 0
-  SendParameter(0x00); // C
-  SendParameter(0x00); // H
-  SendParameter(0x01); // R=1
-  SendParameter(0x02); // N=2
-  SendParameter(0x09); // EOT
-  SendParameter(0x2A); // GPL
-  SendParameter(0xFF); // DTL
+
+  SendCommand(0x06);
+  SendParameter(0x00);  // Drive 0, Head 0
+  SendParameter(0x00);  // C
+  SendParameter(0x00);  // H
+  SendParameter(0x01);  // R=1
+  SendParameter(0x02);  // N=2
+  SendParameter(0x09);  // EOT
+  SendParameter(0x2A);  // GPL
+  SendParameter(0xFF);  // DTL
 
   // Init Tick
   FDCTick(&fdc_);
-  
+
   // Read 512 bytes
   for (int i = 0; i < 512; ++i) {
     dma_requested_ = false;
@@ -424,22 +425,22 @@ TEST_F(FDCTest, GLaBIOSBootSequence) {
 
   // TC
   FDCHandleTC(&fdc_);
-  
+
   // Terminate
   FDCTick(&fdc_);
-  
+
   // Verify Completion
   EXPECT_TRUE(irq6_raised_);
-  
+
   // Result Phase
-  st0 = ReadResult(); // ST0
-  ReadResult(); // ST1
-  ReadResult(); // ST2
-  ReadResult(); // C
-  ReadResult(); // H
-  ReadResult(); // R
-  ReadResult(); // N
-  
+  st0 = ReadResult();  // ST0
+  ReadResult();        // ST1
+  ReadResult();        // ST2
+  ReadResult();        // C
+  ReadResult();        // H
+  ReadResult();        // R
+  ReadResult();        // N
+
   // Success (Bits 7-6 = 00)
   EXPECT_EQ(st0 & 0xC0, 0x00);
 }
@@ -447,8 +448,8 @@ TEST_F(FDCTest, GLaBIOSBootSequence) {
 TEST_F(FDCTest, RecalibrateAndSenseInterruptStatus) {
   // 1. Issue Recalibrate command for Drive 0.
   irq6_raised_ = false;
-  SendCommand(0x07); // Recalibrate
-  SendParameter(0x00); // Drive 0
+  SendCommand(0x07);    // Recalibrate
+  SendParameter(0x00);  // Drive 0
 
   // Tick the FDC to process the command. Recalibrate needs at least 2 ticks
   // (start seek, finish seek).
@@ -460,15 +461,16 @@ TEST_F(FDCTest, RecalibrateAndSenseInterruptStatus) {
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
 
   // 2. Issue Sense Interrupt Status command.
-  SendCommand(0x08); // Sense Interrupt Status
+  SendCommand(0x08);  // Sense Interrupt Status
 
   // Tick to execute Sense Interrupt Status.
   FDCTick(&fdc_);
 
   // No execution phase for Sense Interrupt Status, goes straight to Result.
-  // Actually, wait, Sense Interrupt Status handler finishes execution immediately.
-  // But FDCFinishCommandExecution transitions to kFDCPhaseResult if there are bytes.
-  
+  // Actually, wait, Sense Interrupt Status handler finishes execution
+  // immediately. But FDCFinishCommandExecution transitions to kFDCPhaseResult
+  // if there are bytes.
+
   // Actually, Sense Interrupt Status result bytes are available immediately.
   // Read ST0.
   uint8_t st0 = ReadResult();
@@ -480,7 +482,7 @@ TEST_F(FDCTest, RecalibrateAndSenseInterruptStatus) {
 
   // Read PCN (Present Cylinder Number).
   uint8_t pcn = ReadResult();
-  EXPECT_EQ(pcn, 0x00); // Should be 0 after recalibrate.
+  EXPECT_EQ(pcn, 0x00);  // Should be 0 after recalibrate.
 
   // Verify we are back to Idle.
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
@@ -488,7 +490,7 @@ TEST_F(FDCTest, RecalibrateAndSenseInterruptStatus) {
 
 TEST_F(FDCTest, SenseInterruptStatusNoPending) {
   // Issue Sense Interrupt Status command without any prior Seek/Recalibrate.
-  SendCommand(0x08); // Sense Interrupt Status
+  SendCommand(0x08);  // Sense Interrupt Status
 
   // Tick to execute.
   FDCTick(&fdc_);
@@ -513,15 +515,16 @@ TEST_F(FDCTest, DORResetAndInterrupt) {
   // 2. Exit Reset (Bit 2 = 1) and Enable Interrupts (Bit 3 = 1).
   // Write DOR with Reset=1, InterruptEnable=1.
   FDCWritePort(&fdc_, kFDCPortDOR, kFDCDORReset | kFDCDORInterruptEnable);
-  
+
   // Interrupt should be raised immediately upon exiting reset.
   EXPECT_TRUE(irq6_raised_);
 
   // 3. Verify status for all drives using Sense Interrupt Status.
-  // After a reset, FDC sets "Abnormal Termination due to Polling" for all drives.
+  // After a reset, FDC sets "Abnormal Termination due to Polling" for all
+  // drives.
   for (int i = 0; i < 4; ++i) {
-    SendCommand(0x08); // Sense Interrupt Status
-    FDCTick(&fdc_); // Execute command
+    SendCommand(0x08);  // Sense Interrupt Status
+    FDCTick(&fdc_);     // Execute command
 
     uint8_t st0 = ReadResult();
     uint8_t pcn = ReadResult();
@@ -538,15 +541,15 @@ TEST_F(FDCTest, DORResetAndInterrupt) {
   SendCommand(0x08);
   FDCTick(&fdc_);
   uint8_t st0 = ReadResult();
-  EXPECT_EQ(st0, 0x80); // Invalid Command
+  EXPECT_EQ(st0, 0x80);  // Invalid Command
 }
 
 TEST_F(FDCTest, SeekAndSenseInterruptStatus) {
   // 1. Issue Seek command for Drive 1 to Cylinder 10.
   irq6_raised_ = false;
-  SendCommand(0x0F); // Seek
-  SendParameter(0x01); // Drive 1
-  SendParameter(0x0A); // NCN = 10
+  SendCommand(0x0F);    // Seek
+  SendParameter(0x01);  // Drive 1
+  SendParameter(0x0A);  // NCN = 10
 
   // Tick the FDC to process the command (start seek, finish seek).
   FDCTick(&fdc_);
@@ -557,7 +560,7 @@ TEST_F(FDCTest, SeekAndSenseInterruptStatus) {
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
 
   // 2. Issue Sense Interrupt Status command.
-  SendCommand(0x08); // Sense Interrupt Status
+  SendCommand(0x08);  // Sense Interrupt Status
   FDCTick(&fdc_);
 
   uint8_t st0 = ReadResult();
@@ -569,7 +572,7 @@ TEST_F(FDCTest, SeekAndSenseInterruptStatus) {
 
   // Read PCN (Present Cylinder Number).
   uint8_t pcn = ReadResult();
-  EXPECT_EQ(pcn, 0x0A); // Should be 10.
+  EXPECT_EQ(pcn, 0x0A);  // Should be 10.
 
   // Verify we are back to Idle.
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
@@ -579,7 +582,7 @@ TEST_F(FDCTest, SpecifyCommand) {
   // Issue Specify command (0x03).
   SendCommand(0x03);
   // Send Parameter 1 (SRT/HUT).
-  SendParameter(0xDF); 
+  SendParameter(0xDF);
   // Send Parameter 2 (HLT/ND).
   SendParameter(0x03);
 
@@ -588,9 +591,9 @@ TEST_F(FDCTest, SpecifyCommand) {
 
   // Verify FDC returned to Idle.
   EXPECT_EQ(fdc_.phase, kFDCPhaseIdle);
-  
+
   // Verify no interrupt was raised.
   EXPECT_FALSE(irq6_raised_);
 }
 
-} // namespace
+}  // namespace

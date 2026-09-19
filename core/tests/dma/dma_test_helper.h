@@ -46,18 +46,17 @@ class DMATest : public ::testing::Test {
     g_data_to_device = 0;
 
     // Set up the DMA config with our mock callbacks.
-    config_.context = this;
-    config_.read_memory_byte = MockReadMemory;
-    config_.write_memory_byte = MockWriteMemory;
-    config_.read_device_byte = MockReadDevice;
-    config_.write_device_byte = MockWriteDevice;
+    dma_.config.context = this;
+    dma_.config.read_memory_byte = MockReadMemory;
+    dma_.config.write_memory_byte = MockWriteMemory;
+    dma_.config.read_device_byte = MockReadDevice;
+    dma_.config.write_device_byte = MockWriteDevice;
 
     // Initialize the DMA controller.
-    DMAInit(&dma_, &config_);
+    DMAInit(&dma_);
   }
 
   DMAState dma_ = {0};
-  DMAConfig config_ = {0};
 };
 
 }  // namespace

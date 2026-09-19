@@ -57,7 +57,7 @@ class CGATest : public VideoTestBase {
     VideoWritePort(&video_, kCGAPortColorSelect, value);
   }
 
-  RGB Color(uint8_t index) const { return config_.cga_palette[index]; }
+  RGB Color(uint8_t index) const { return video_.config.cga_palette[index]; }
 
   // Write a byte of graphics mode VRAM. Even scan lines live in the first half
   // of VRAM and odd scan lines in the second.
