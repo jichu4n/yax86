@@ -1830,6 +1830,12 @@ typedef struct Instruction {
 
   // Total length of the original encoded instruction in bytes.
   uint8_t size;
+
+  // What the instruction costs before it runs: its base cost from the opcode
+  // table plus the effective address computation. Both are settled by the
+  // encoding, so the decode works them out once and every later run of the
+  // same decode is charged from here.
+  uint16_t base_cycles;
 } Instruction;
 
 // One cached decode.
@@ -1841,13 +1847,11 @@ typedef struct Instruction {
 // instruction handler writes through the Instruction it is given, so lending
 // out the entry is safe.
 typedef struct CPUDecodeCacheEntry {
-  Instruction instruction;
-  // The linear address the instruction starts at, which is the key.
+  // The linear address the instruction starts at, which is the key. First so
+  // that the entry packs into 24 bytes: Instruction is 18 and needs 2-byte
+  // alignment, where the key needs 4.
   uint32_t address;
-  // Its base cost plus the effective address computation, which depend only on
-  // the encoding - so a hit neither reads the opcode cycle table nor
-  // re-derives the addressing mode.
-  uint16_t base_cycles;
+  Instruction instruction;
   // What code_page_generation said for that address's page when the decode was
   // taken. A hit requires it to still say the same.
   uint8_t generation;
@@ -8384,6 +8388,12 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   instruction->size = (uint8_t)(fetch_state.next_byte_offset - original_ip);
 
+  // What the instruction costs before it runs. Settled here because metadata
+  // is already in hand, so the base cost is read from an entry the decode has
+  // loaded rather than indexed again from the caller.
+  instruction->base_cycles =
+      (uint16_t)metadata->base_cycles + GetEffectiveAddressCycles(instruction);
+
   return kFetchSuccess;
 }
 
@@ -8405,14 +8415,6 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
          entry->generation == generation;
 }
 
-// What an instruction costs before it runs. Both terms read only the encoding,
-// so the answer belongs to the decode and an entry can keep it.
-YAX86_ALWAYS_INLINE static uint16_t GetInstructionBaseCycles(
-    const Instruction* instruction) {
-  return (uint16_t)opcode_table[instruction->opcode].base_cycles +
-         GetEffectiveAddressCycles(instruction);
-}
-
 // Fetches the next instruction, from the decode cache where it is there.
 //
 // What comes back through entry is the entry holding the instruction to run:
@@ -8429,8 +8431,8 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
 
   // Where the decode is going to land, and the key it would be kept under. The
   // two paths below join up at the decode rather than each making their own
-  // call, because a second call site is enough for GCC to stop inlining
-  // GetEffectiveAddressCycles() into either.
+  // call, because a second call site is enough for GCC to stop inlining what
+  // it inlines into one.
   CPUDecodeCacheEntry* target = scratch;
   uint32_t address = 0;
   uint8_t generation = 0;
@@ -8458,9 +8460,6 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   if (status != kFetchSuccess) {
     return status;
   }
-  // Written whether or not the decode is kept, since the caller charges it
-  // either way.
-  target->base_cycles = GetInstructionBaseCycles(&target->instruction);
 
   // Kept only when the whole instruction came from the page the generation was
   // read for, and did not run off the end of the segment. Past either boundary
@@ -8722,7 +8721,7 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
       // bus traffic and anything that depends on its operands it charges
       // itself as it runs. A run accumulates all of it, which is what the
       // budget below is spent against.
-      CPUAddCycles(cpu, entry->base_cycles);
+      CPUAddCycles(cpu, instruction->base_cycles);
 
       // Step 2: Execute the instruction. The fetch above derived has_mod_rm
       // and immediate_size from this same table entry, so the checks

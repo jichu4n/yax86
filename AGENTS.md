@@ -524,37 +524,41 @@ Alongside the table, state:
   `CPUInit()` rejected the count. Dropping the second measures **1.9% slower at
   `-O3`** — one of the clearer examples here of an arrangement that reads
   cheaper and is not. It is also why the minimum count is two rather than one.
-- **An entry records what the instruction costs as well as what it is.** The
-  base cost from `kOpcodeBaseCycles` and the effective address computation
-  depend only on the encoding, so a hit charges the clock from a field instead
-  of reading a 256-byte table and re-deriving the addressing mode. An on-target
-  profile put those two terms at 2.5% of the run; caching them is worth **3.07%
-  at `-O3`** and 2.03% at `-O2`. The entry had two bytes of padding to spend,
-  so 256 of them still come to 6KB.
-- The cost is written after every successful decode rather than only where the
-  decode is kept, since an entry that is not kept still answers this fetch.
-  `AHitChargesForTheAddressItComputes` and `ARunStopsAtTheBudget` are the only
-  two tests that catch a missing rewrite.
-- **Folding `kOpcodeBaseCycles` into `OpcodeMetadata` does not pay**, though it
-  is free on size: the struct has two bytes of padding to put the field in, so
-  the 256-byte array disappears for 272 bytes of core `.text` at `-O3`. It
-  measures **0.63% slower at `-O3` and 0.65% at `-O2`** — both levels agreeing,
-  so it is work rather than layout. The read is one index either way, but a
-  1-byte field at an 8-byte stride spreads 256 costs over 2KB where the array
-  keeps them in a couple of XIP lines. The locality that would have paid for it
-  is gone precisely because of the bullet above: the base cost is read once per
-  decode now, not once per instruction, so these reads no longer follow the
-  decoder through the table. Winning it back means settling the cost inside
-  `CPUFetchNextInstruction()`, where `metadata` is already in a register, which
-  needs the field on `Instruction` instead of on the entry.
-- **The fetch has one call to the decoder and one place the cost is worked
-  out**, which is load-bearing rather than tidiness. Given an early return for
-  the no-cache path and a second decode below it, `-O2` sees two callers, stops
-  inlining `GetEffectiveAddressCycles()` into either and puts it in flash
-  behind a veneer: **0.54% slower than master** where the joined form is 2.03%
-  faster, with `-O3` barely moving between them. It is the
+- **A decode records what the instruction costs as well as what it is.**
+  `Instruction.base_cycles` is the opcode's base cost plus the effective
+  address computation, both of which depend only on the encoding, so a hit
+  charges the clock from a field instead of reading a table and re-deriving the
+  addressing mode. An on-target profile put those two terms at 2.5% of the run;
+  caching them is worth **3.07% at `-O3`** and 2.03% at `-O2`. It rides in the
+  `Instruction` rather than beside it in the entry, so the cost is kept exactly
+  where the decode it belongs to is kept, and `AHitChargesForTheAddressItComputes`
+  and `ARunStopsAtTheBudget` are the two tests that catch it going stale.
+- **The base cost is settled inside `CPUFetchNextInstruction()`, and where it
+  is read from decides whether one table or two pays.** `OpcodeMetadata` has
+  two bytes of padding, so `base_cycles` lives there for free and there is no
+  second table — but only because the decoder reads it through the `metadata`
+  pointer it already holds. Reading it from the caller instead, by indexing
+  `opcode_table[opcode].base_cycles`, measures **0.63% slower at `-O3` and
+  0.65% at `-O2`**: it is one index either way, but a 1-byte field at an 8-byte
+  stride spreads 256 costs over 2KB where a packed array keeps them in a couple
+  of XIP lines. Caching the cost is what made that read cold — it happens once
+  per decode now rather than once per instruction, so it no longer follows the
+  decoder through the table and cannot rely on the line being warm.
+- `Instruction.base_cycles` is `uint16_t` though 46 is the largest value it can
+  hold. A byte measures **0.51% worse at `-O3`** and 0.55% at `-O2`, and buys
+  no space: `address` leads `CPUDecodeCacheEntry` so that an 18-byte
+  `Instruction` still packs into 24 bytes, and a 17-byte one rounds up to the
+  same 24.
+- **The fetch has exactly one call to the decoder**, which is load-bearing
+  rather than tidiness. The obvious shape — an early return for the no-cache
+  path, a second `CPUFetchNextInstruction()` below it — gives `-O2` two call
+  sites, at which point it stops inlining the decoder and puts it in flash
+  behind a veneer. That measures **2.54% slower at `-O2`**, where `-O3` is
+  indifferent between the two (0.01%, inside the noise floor). It is the
   `YAX86_ALWAYS_INLINE` case from the placement section, met by removing the
-  second call site rather than by a mark.
+  second call site rather than by a mark - and it is why the no-cache path
+  joins the cached one at the decode instead of returning early, which is the
+  one piece of this function that does not read as the simplest thing.
 - The platform spends **256 entries, 6KB**, which is not the fastest
   arrangement measured. 512 is 0.11% faster for another 6KB, 1024 is 0.04%
   slower, and 128 is 0.83% slower. 0.11% does not buy 6KB on this part: at 256
@@ -793,7 +797,7 @@ Alongside the table, state:
 - The cycle model in `cycles.c` is a base cost per opcode, plus the effective
   address calculation, plus four cycles for every byte the instruction moves
   over the 8088's 8-bit data bus. The first two are settled by the encoding, so
-  a decode works them out once and the cache entry keeps them; the third is
+  a decode works them out once into `Instruction.base_cycles`; the third is
   charged as the instruction runs. The third term dominates, and it is charged
   from the accesses that actually happen rather than from a table — so an
   instruction that touches memory it has no reason to touch is billed for it.
