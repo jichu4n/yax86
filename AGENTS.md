@@ -535,6 +535,18 @@ Alongside the table, state:
   decode is kept, since an entry that is not kept still answers this fetch.
   `AHitChargesForTheAddressItComputes` and `ARunStopsAtTheBudget` are the only
   two tests that catch a missing rewrite.
+- **Folding `kOpcodeBaseCycles` into `OpcodeMetadata` does not pay**, though it
+  is free on size: the struct has two bytes of padding to put the field in, so
+  the 256-byte array disappears for 272 bytes of core `.text` at `-O3`. It
+  measures **0.63% slower at `-O3` and 0.65% at `-O2`** — both levels agreeing,
+  so it is work rather than layout. The read is one index either way, but a
+  1-byte field at an 8-byte stride spreads 256 costs over 2KB where the array
+  keeps them in a couple of XIP lines. The locality that would have paid for it
+  is gone precisely because of the bullet above: the base cost is read once per
+  decode now, not once per instruction, so these reads no longer follow the
+  decoder through the table. Winning it back means settling the cost inside
+  `CPUFetchNextInstruction()`, where `metadata` is already in a register, which
+  needs the field on `Instruction` instead of on the entry.
 - **The fetch has one call to the decoder and one place the cost is worked
   out**, which is load-bearing rather than tidiness. Given an early return for
   the no-cache path and a second decode below it, `-O2` sees two callers, stops
