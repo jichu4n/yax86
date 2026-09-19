@@ -561,6 +561,14 @@ typedef struct PlatformState {
   // Whether to stop after each instruction.
   bool is_step_mode;
 
+  // Whether a tick may run more than one instruction. False while a breakpoint
+  // or step mode is in use, since both need every instruction boundary to be a
+  // tick boundary.
+  //
+  // Recomputed by PlatformUpdateEnabledFlags(), which is the sole writer of
+  // this and of the two flags above.
+  bool allow_instruction_batching;
+
   // Whether stop_info describes a stop that has occurred.
   bool has_stop_info;
   // Details of the most recent stop.
@@ -593,12 +601,21 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 // CPU retires no instruction but still advances the clock, so that whatever is
 // meant to wake it can.
 //
+// Exactly one, which is what makes this the entry point to step a machine
+// with. PlatformRun() batches instructions into a tick instead.
+//
 // Returns kPlatformRunning if the machine should keep running.
 PlatformRunStatus PlatformTick(PlatformState* platform);
 
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
 // stopped the run, or kPlatformRunning if the full budget was consumed.
+//
+// Unlike PlatformTick(), a tick here may run several instructions back to
+// back, never past the point where a device is due to be serviced or something
+// else needs acting on at an instruction boundary. Nothing observable moves:
+// every device still sees every cycle and an interrupt is still delivered
+// where it would have been. What is saved is the per-tick work.
 //
 // max_cycles must be well under 2^31. Progress is measured as an unsigned
 // difference from the tick count this call started at, which is what keeps it

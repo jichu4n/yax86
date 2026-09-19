@@ -238,8 +238,8 @@ harness, which truncates MHz and MIPS to two decimals when it prints them. For
 
 Alongside the table, state:
 
-- **The invariant, and that it did not move.** `dos-boot` retires 2,328,015
-  instructions in 27,701,507 emulated cycles, at every level and on every run.
+- **The invariant, and that it did not move.** `dos-boot` retires 2,328,122
+  instructions in 27,702,773 emulated cycles, at every level and on every run.
   If either number changed, the change altered behaviour and the times either
   side of it are not comparable — say so and explain why, rather than
   presenting the speedup.
@@ -472,7 +472,7 @@ Alongside the table, state:
   some *other* way. The platform reports those from `WriteMemoryByte()`, which
   is the path DMA takes. Without that call DOS loads itself over the boot
   sector unseen, which the first prototype did: 13,247,281 instructions retired
-  instead of 2,328,015.
+  against the 2.3 million the workload runs.
 - The counter coming back round is the case that has no honest local answer. At
   256 writes to a page a decode taken exactly that long ago looks current
   again, so the wrap discards the whole cache instead — a 256-iteration loop
@@ -784,6 +784,110 @@ Alongside the table, state:
   pointer NULL and is asked every time, exactly as before. The mock configs in
   `cpu_test.cpp` and `CPUTestHelper` do, which is what exercises that path.
 
+### cpu — runs of instructions
+
+- A tick driven through `PlatformRun()` executes up to `kMaxInstructionsPerTick`
+  instructions back to back. What that removes is not the instruction, it is
+  the round trip — `PlatformTick()`'s deadline test and stop checks, and
+  `CPUTick()`'s own prologue and epilogue, all of which are per tick. Worth
+  **9.17% at `-O3`** and 9.74% at `-O2`, which is the largest win left after
+  the decode cache and is only possible because of it.
+- **Only the first instruction of a run is fetched**; every one after it comes
+  from the decode cache, so a step in a run costs a probe rather than a decode.
+  That is also what keeps a cold CPU to one instruction per tick however large
+  a budget it is handed, which is what lets the 8088 hardware suite supply a
+  budget and stay a single-instruction test.
+- A run is not limited to straight-line code. The next instruction is looked up
+  at CS:IP, wherever the one before it left that, so a backwards jump into
+  cached code carries on inside the same tick.
+- **`CPUTick()`'s `max_run_cycles` is how long a tick may run**, and it is the
+  switch as well as the bound: **zero runs exactly one instruction**.
+  `PlatformTick()` passes zero because it promises its caller one instruction;
+  `PlatformRun()` passes what is left before the nearest device deadline. Both
+  call the same body with a constant, so the tests fold away in each.
+- It is a parameter rather than a field on `CPUState` because it is set on
+  every tick. Config is for what a host wires up once and `CPUInit()` checks; a
+  value that changes every call is an argument, and writing it into the state
+  first would be poking the object to pass a parameter.
+- **`kMaxInstructionsPerTick` is a cap on how coarse a tick can be, not a
+  tuning knob for how long a run should be.** What governs that is
+  `max_run_cycles`, which is what keeps a device from being serviced late; the
+  instruction count only bounds the case where the next deadline is far away,
+  and what it costs is that `PlatformRun()` overshoots its budget by up to one
+  run.
+- It was 4, chosen from straight-line runs averaging 3.65 instructions, and
+  that was the wrong basis: a run also carries on through a taken branch into
+  cached code, so runs are longer than straight-line stretches. Measured on
+  `dos-boot` in emulated MHz, which normalizes for each bound producing its own
+  invariant: 2 gives 5.349, 4 gives 5.554, 8 gives 5.657, 16 gives 5.719 and 32
+  gives 5.746. **16 is where the curve stops paying** — it is worth 2.9% over
+  4, where 32 adds 0.5% for twice the overshoot.
+- **A run ends at everything the end of a tick would otherwise have dealt
+  with**, and each of those is a point where running one more instruction first
+  would act too late: the budget, a self-raised interrupt
+  (`has_pending_internal_interrupt` — `INT n`, `INTO`, a divide error), a
+  requested stop, `HLT`, TF, and the PIC's interrupt request hint. A host that
+  supplies no hint cannot be asked without an acknowledge call, so it ends the
+  run rather than guessing.
+- **A port access gets a tick to itself**, and needs both halves of that. A run
+  ends *after* one because `IN`/`OUT` can reprogram a device and move the
+  deadline the budget was computed from. A run also declines to carry on *into*
+  one, because a port handler calls `PlatformSync()` and so is the one
+  instruction that looks at the clock — and part way through a run the clock
+  stops short of the instructions already run in it, since the host is only
+  told what a tick cost once the tick is over. `IN AL, 0x40` two instructions
+  into a run reads a PIT count that is two instructions stale.
+- Both are one masked compare: `IN` and `OUT` are 0xE4–0xE7 and 0xEC–0xEF,
+  which differ only in bit 3, so `(opcode & 0xF4) == 0xE4` matches those eight
+  bytes and nothing else. Writing it as two `& 0xF8` compares does not work and
+  is not a near miss — `0xE4 & 0xF8` is `0xE0`, so both arms are dead and the
+  guard never fires.
+- **Breakpoints and step mode are suppressed from the platform, not the CPU.**
+  A breakpoint is tested before a tick and a step reported after one, so both
+  need every instruction boundary to be a tick boundary, and neither is visible
+  from inside `CPUTick()`. `PlatformUpdateEnabledFlags()` recomputes
+  `allow_instruction_batching` from them and `PlatformTick()`
+  withholds the budget. Memory watchpoints need no test of their own: one fires
+  from inside an instruction and calls `CPURequestStop()`, which ends the run
+  where it happened.
+- `PlatformInit()` does not zero `PlatformState`, so `is_step_mode` is assigned
+  before `PlatformClearBreakpoints()`, which recomputes the flag derived from
+  it.
+- **Batching is exactly equivalent to stepping, and there is a test that says
+  so.** `ABatchedRunIsIndistinguishableFromSteppingIt` runs one program two
+  ways — `PlatformTick()` per instruction, and `PlatformRun(platform, 1)`,
+  which is one batched tick — and compares the tick count, the retired count
+  and the registers exactly. It is a stronger check than the `dos-boot`
+  invariant, which is measured through a harness that polls the screen on
+  emulated-cycle boundaries and so moves when a batch ends at a different
+  cycle. The program accumulates what it reads from the PIT rather than
+  discarding it, and puts a port read one instruction into what would be a run;
+  without that, alignment happens to place the read first in its tick and the
+  test cannot see a stale clock.
+- **`dos-boot` moves by 107 instructions and 1,266 cycles, and none of it is
+  emulation.** Building the same branch with `kMaxInstructionsPerTick` set to 1
+  reproduces master's 2,328,015 / 27,701,507 exactly. What moves is the
+  harness: `PlatformRun()` overshoots its budget by a run rather than by an
+  instruction, so `result.cycles` crosses the screen-poll deadline at a
+  different point and the Enter that answers DOS's date prompt is injected at a
+  different emulated time. It is the same effect as the poll interval itself,
+  which the campaign notes measured at 11,816 instructions.
+- **This loop's arrangement has to be measured against the base it lands on,
+  not carried across one.** The two locals naming the instruction for the
+  invalid-instruction log are live across the whole loop body, and reporting
+  them from a `YAX86_NOINLINE` helper instead — which reconstructs the address
+  as `IP` less the instruction's size — was worth **10.7% at `-O2`** against
+  the first version of the decode cache. Against the version that landed the
+  same pair is a wash: the helper measures 0.12% better at `-O3` and 0.25%
+  worse at `-O2`. The locals are kept, because at that margin the simpler code
+  wins and the helper's correctness rests on no handler touching CS or IP
+  before rejecting an instruction, which nothing enforces. A 10.7% result on
+  one base and a 0.2% result on the next is the same inlining lottery the
+  campaign measured at ±6%, and it is why a queued figure here is a reason to
+  try a change rather than a number to expect.
+- Hoisting `executed_instruction` out of the loop measures neutral and
+  identical in size — GCC was already doing it.
+
 ### cpu — instruction counting
 
 - `CPUState.instructions_retired` counts instructions the CPU actually ran; a
@@ -940,7 +1044,7 @@ Alongside the table, state:
   explicitly defines it to whatever placement attribute it needs. The Pico
   harness defines it to `__not_in_flash()`, which puts the function in SRAM
   instead of executing it from QSPI flash through a 16KB XIP cache.
-- **86 functions carry it, chosen from an on-target profile rather than by
+- **87 functions carry it, chosen from an on-target profile rather than by
   intuition.** On the Pico it is worth **1.59x at 400MHz** and 1.23x at 125MHz.
   The win is larger when overclocked because the flash SPI clock does not scale
   with the core, so an XIP miss costs more core cycles the faster the core runs.
@@ -949,8 +1053,11 @@ Alongside the table, state:
   give 100% for 46.5KB. The extra 2.8% costs three times the memory and
   forecloses the 192KB guest RAM option outright — 206,664 bytes of image plus
   64KB more guest RAM does not fit in 256KB, where the targeted build does.
-- `CPUTick()` and `PlatformTick()` carry the mark even though at `-O3` they are
-  inlined into `PlatformRun()`, which already did. The mark buys nothing there
+- `CPUTick()` and `PlatformTickInternal()` carry the mark even though at `-O3`
+  they are inlined into `PlatformRun()`, which already did. The mark is on
+  `PlatformTickInternal()` rather than on the public `PlatformTick()`, because
+  that is the body `PlatformRun()` calls; `PlatformTick()` is a wrapper nothing
+  hot goes through. The mark buys nothing there
   and costs 1.1KB, because an explicit section attribute overrides
   `-ffunction-sections`: all the marked functions share one section, so
   `--gc-sections` can no longer drop the out-of-line copies individually. It is
@@ -969,9 +1076,9 @@ Alongside the table, state:
   through by construction. If the count in the bundle ever drops, something is
   wrong with the bundler:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 163
+  grep -c YAX86_HOT core/yax86_core.h    # 164
   ```
-  That is 86 annotations plus the macro block in `util/common.h`, whose seven
+  That is 87 annotations plus the macro block in `util/common.h`, whose seven
   lines all match on the substring, once per each of the 11 module bundles.
 - `YAX86_ALWAYS_INLINE` is not about placement, but exists for the same reason:
   something the compiler was doing for free stops being free and nothing in the
@@ -1086,7 +1193,7 @@ Alongside the table, state:
   which is the mix of guest code the emulator exists to run. What it executes
   is whatever the BIOS and DOS do, so it is only comparable against another
   yax86 build.
-- **It is deterministic: 27,701,507 emulated cycles and 2,328,015 retired
+- **It is deterministic: 27,702,773 emulated cycles and 2,328,122 retired
   instructions, every run, at every optimization level.** Both are printed. If
   either moves, the change altered behaviour and the times either side of it
   are not comparable — check that before believing a speedup.
@@ -1169,12 +1276,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #74:
+SRAM, at #73:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **5.309044** | **5.218** | **0.438** | **109.4%** | 473,836 | 182,440 | 88,293 |
-| `-O2` | 5.848098 | 4.737 | 0.398 | 99.3% | 459,620 | 175,448 | 74,269 |
+| `-O3` | **4.862942** | **5.697** | **0.479** | **119.4%** | 473,556 | 182,088 | 88,969 |
+| `-O2` | 5.329064 | 5.198 | 0.437 | 109.0% | 459,924 | 175,688 | 74,597 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler

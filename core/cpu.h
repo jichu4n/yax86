@@ -948,6 +948,9 @@ typedef struct CPUState {
   // Cycles the last call to CPUTick consumed, at the 4.77MHz CPU clock. The
   // caller drives the rest of the machine from this, so that everything timed
   // against the CPU keeps the ratio real hardware has.
+  //
+  // A tick that runs several instructions charges the whole run here, so this
+  // is what the run cost rather than what one instruction cost.
   uint16_t cycles_this_tick;
 
   // The run of bytes instruction fetch is currently reading from, as handed
@@ -1264,9 +1267,35 @@ CPUFetchNextInstructionStatus CPUFetchNextInstruction(
 InstructionResult CPUExecuteInstruction(
     CPUState* cpu, Instruction* instruction);
 
+enum {
+  // The most instructions one call to CPUTick() will run back to back.
+  //
+  // This is a bound on how coarse a tick can be, not on how long a run should
+  // be - what governs that is max_run_cycles, which is what keeps a device
+  // from being serviced late. This only caps the case where the next deadline
+  // is far away, and its cost is that PlatformRun() overshoots the budget it
+  // was given by up to one run.
+  //
+  // On dos-boot, raising it from 4 to 16 is worth 2.9% and 32 only 0.5% beyond
+  // that, while doubling the overshoot - so this is where the curve stops
+  // paying rather than where it flattens.
+  kMaxInstructionsPerTick = 16,
+};
+
 // Run a single instruction cycle, including fetching and executing the next
 // instruction at CS:IP, and handling interrupts.
-CPUTickResult CPUTick(CPUState* cpu);
+//
+// max_run_cycles is how long the tick may keep running before the host needs
+// control back, which for a host driving a machine is how far away the nearest
+// device deadline is. A tick runs several instructions back to back where it
+// can, and this is what stops it running past the point at which a device
+// should have been serviced - so the guest sees an interrupt exactly where it
+// would have without the batching.
+//
+// Zero runs exactly one instruction. That is what a host stepping the machine
+// passes, and what a host that has to see every instruction boundary itself
+// passes, and it is the behaviour this had before there were runs at all.
+CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 
 #endif  // YAX86_CPU_PUBLIC_H
 
@@ -7557,6 +7586,14 @@ void CPUInvalidateDecodeCache(CPUState* cpu) {
   }
 }
 
+// Whether an entry holds a decode of the instruction at address that is still
+// current. The generation is passed in because both callers have it already.
+YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
+    const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
+  return entry->valid && entry->address == address &&
+         entry->generation == generation;
+}
+
 // Fetches the next instruction, from the decode cache where it is there.
 //
 // What comes back through instruction is a pointer to the instruction to run:
@@ -7587,8 +7624,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
       cpu->code_page_generation[address >> kCodePageShift];
   CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
 
-  if (entry->valid && entry->address == address &&
-      entry->generation == generation) {
+  if (IsDecodeCacheHit(entry, address, generation)) {
     *instruction = &entry->instruction;
     return kFetchSuccess;
   }
@@ -7746,7 +7782,89 @@ static bool ExecutePendingInterrupt(CPUState* cpu) {
   return false;
 }
 
-YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
+// ============================================================================
+// Runs of instructions
+// ============================================================================
+//
+// A tick runs several instructions back to back where it can. What that saves
+// is the round trip: PlatformTick()'s deadline test and stop checks, and
+// CPUTick()'s own prologue and epilogue, all of which are per tick rather than
+// per instruction.
+//
+// Two things bound a run: CPUTick()'s max_run_cycles, so that a device
+// deadline is not passed over, and kMaxInstructionsPerTick.
+
+enum {
+  // IN and OUT are two families of four - 0xE4-0xE7 takes the port number as
+  // an immediate, 0xEC-0xEF takes it in DX - differing only in bit 3. Leaving
+  // that bit free along with the two that select direction and width matches
+  // both families and nothing else.
+  kPortInstructionMask = 0xF4,
+  kPortInstructionValue = 0xE4,
+};
+
+// Whether an opcode reads or writes an I/O port.
+YAX86_ALWAYS_INLINE static bool IsPortInstruction(uint8_t opcode) {
+  return (opcode & kPortInstructionMask) == kPortInstructionValue;
+}
+
+// Whether a run may carry on into the instruction after the one just executed.
+//
+// Everything here is something the end of a tick would otherwise have dealt
+// with, and which running another instruction first would deal with too late.
+YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
+    const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
+  return
+      // A budget of zero is how a host asks for one instruction per tick.
+      cpu->pending_cycles < max_run_cycles &&
+      // INT n, INTO and a divide error dispatch at the end of the tick, as
+      // does a stop a callback asked for.
+      !cpu->has_pending_internal_interrupt && !cpu->stop_requested &&
+      // The test that skips execution while halted is made before the run
+      // starts.
+      !cpu->is_halted &&
+      // IN and OUT can reprogram a device and move the deadline the budget was
+      // computed from. The other half of this rule is at the call site.
+      !IsPortInstruction(opcode) &&
+      // An instruction that sets TF - POPF, IRET - must be the last of its
+      // run, or the next one runs without trapping.
+      !CPUGetFlag(cpu, kTF) &&
+      // STI, POPF and IRET can enable interrupts with a request already
+      // waiting. Without a hint that cannot be told without an acknowledge
+      // cycle, so a host supplying none ends the run here.
+      cpu->config->interrupt_request_hint != NULL &&
+      !*cpu->config->interrupt_request_hint;
+}
+
+// The decoded instruction at CS:IP if the cache holds a current one, and NULL
+// otherwise.
+//
+// A run carries on only into a cached instruction, which keeps a step cheap
+// and keeps a cold CPU to one instruction per tick however large its budget.
+YAX86_HOT static Instruction* CPUCachedInstructionAtIP(CPUState* cpu) {
+  // Both tests, for the same reason the fetch makes both: the host may clear
+  // the pointer at any time, and the mask is zero where CPUInit() rejected the
+  // count.
+  CPUDecodeCacheEntry* const cache = cpu->config->decode_cache;
+  const uint32_t index_mask = cpu->decode_cache_index_mask;
+  if (cache == NULL || index_mask == 0) {
+    return NULL;
+  }
+  const MemoryAddress start = {
+      .segment_register_index = kCS,
+      .offset = cpu->registers[kIP],
+  };
+  const uint32_t address = ToRawAddress(cpu, &start);
+  CPUDecodeCacheEntry* const entry = &cache[address & index_mask];
+  if (!IsDecodeCacheHit(
+          entry, address,
+          cpu->code_page_generation[address >> kCodePageShift])) {
+    return NULL;
+  }
+  return &entry->instruction;
+}
+
+YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
   // A stop request only applies to the tick during which it was made.
   cpu->stop_requested = false;
 
@@ -7767,53 +7885,83 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu) {
 
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
-    // Step 1: Fetch the next instruction, and increment IP.
+    // Step 1: Fetch the next instruction.
     //
     // The local is only where a decode lands when there is no cache to decode
     // into. What runs is whatever the fetch points at.
     Instruction scratch;
     Instruction* instruction;
-    uint16_t instruction_cs = cpu->registers[kCS];
-    uint16_t instruction_ip = cpu->registers[kIP];
     CPUFetchNextInstructionStatus fetch_status =
         CPUFetchNextInstructionCached(cpu, &scratch, &instruction);
     if (fetch_status != kFetchSuccess) {
       YAX86_CPU_LOG(
           kLogLevelError, "%04X:%04X failed to fetch instruction, status %d",
-          instruction_cs, instruction_ip, (int)fetch_status);
+          cpu->registers[kCS], cpu->registers[kIP], (int)fetch_status);
       return kCPUTickInvalid;
     }
-    cpu->registers[kIP] += instruction->size;
 
-    // The cost of the instruction is its base cost plus the address it had to
-    // compute, and then whatever it charges itself as it runs - its traffic on
-    // the data bus, and any part of its cost that depends on its operands.
-    CPUAddCycles(
-        cpu, kOpcodeBaseCycles[instruction->opcode] +
-                 GetEffectiveAddressCycles(instruction));
-
-    // Step 2: Execute the instruction. The fetch above derived has_mod_rm and
-    // immediate_size from this same table entry, so the checks
-    // CPUExecuteInstruction() makes cannot fail here.
-    const OpcodeMetadata* const metadata = &opcode_table[instruction->opcode];
-    if (CPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
-        kInstructionExecuted) {
-      YAX86_CPU_LOG(
-          kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
-          instruction_cs, instruction_ip, instruction->opcode);
-      return kCPUTickInvalid;
-    }
+    // A successful fetch is always followed by an instruction: the only way
+    // out of the loop below without running one is a return.
     executed_instruction = true;
-    ++cpu->instructions_retired;
+
+    // A tick that has to trap runs exactly one instruction: TF was set when it
+    // started, so the single-step interrupt belongs to the instruction about
+    // to run, and one that clears TF still owes that trap.
+    uint8_t remaining =
+        trap_flag_was_set ? 1 : (uint8_t)kMaxInstructionsPerTick;
+
+    for (;;) {
+      const uint16_t instruction_cs = cpu->registers[kCS];
+      const uint16_t instruction_ip = cpu->registers[kIP];
+      cpu->registers[kIP] += instruction->size;
+
+      // The cost of the instruction is its base cost plus the address it had
+      // to compute, and then whatever it charges itself as it runs - its
+      // traffic on the data bus, and any part of its cost that depends on its
+      // operands. A run accumulates all of it, which is what the budget below
+      // is spent against.
+      CPUAddCycles(
+          cpu, kOpcodeBaseCycles[instruction->opcode] +
+                   GetEffectiveAddressCycles(instruction));
+
+      // Step 2: Execute the instruction. The fetch above derived has_mod_rm
+      // and immediate_size from this same table entry, so the checks
+      // CPUExecuteInstruction() makes cannot fail here.
+      const OpcodeMetadata* const metadata = &opcode_table[instruction->opcode];
+      if (CPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
+          kInstructionExecuted) {
+        YAX86_CPU_LOG(
+            kLogLevelError, "%04X:%04X invalid instruction, opcode %02X",
+            instruction_cs, instruction_ip, instruction->opcode);
+        return kCPUTickInvalid;
+      }
+      ++cpu->instructions_retired;
+
+      // Step 3: Carry on into the next instruction where nothing needs the
+      // host's attention and the cache already holds it.
+      if (--remaining == 0 ||
+          !CPUCanContinueRun(cpu, instruction->opcode, max_run_cycles)) {
+        break;
+      }
+      instruction = CPUCachedInstructionAtIP(cpu);
+      // A port handler calls PlatformSync(), making it the one instruction
+      // that looks at the clock - and part way through a run the clock stops
+      // short of the instructions already run in it, since a tick's cost is
+      // reported once it is over. Ending before one leaves every port access
+      // the first instruction of its tick.
+      if (instruction == NULL || IsPortInstruction(instruction->opcode)) {
+        break;
+      }
+    }
     cpu->cycles_this_tick = cpu->pending_cycles;
   }
 
-  // Step 3: Handle a pending interrupt. This runs even while halted, because
+  // Step 4: Handle a pending interrupt. This runs even while halted, because
   // an interrupt is the only thing that can clear the halted state -
   // ExecutePendingInterrupt() resets is_halted when it dispatches one.
   const bool dispatched_interrupt = ExecutePendingInterrupt(cpu);
 
-  // Step 4: The trap flag raises a single-step interrupt after an instruction
+  // Step 5: The trap flag raises a single-step interrupt after an instruction
   // executes, so a halted CPU must not trap - otherwise the trap would wake it
   // and then fire again on every subsequent tick.
   //

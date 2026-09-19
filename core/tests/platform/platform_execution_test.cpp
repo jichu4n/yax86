@@ -1,3 +1,4 @@
+#include <memory>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -328,6 +329,223 @@ TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
 // drive it one instruction at a time to find out - which is what a benchmark
 // harness would otherwise do, giving up PlatformRun()'s batching for a number
 // the platform already has.
+// How many NOPs the two batching tests below run. Any number a run may take in
+// one go will do.
+constexpr uint16_t kNumProgramInstructions = 8;
+
+// PlatformRun() batches instructions into a tick, which PlatformTick() does
+// not. These pin down both halves of that, and the two debug features that
+// take it away again.
+
+// A run is entered only from the decode cache, so the program is run through
+// once to fill it before any of this is visible.
+TEST_F(PlatformExecutionTest, PlatformRunBatchesCachedInstructions) {
+  Load(std::vector<uint8_t>(kNumProgramInstructions, kOpNop));
+
+  // What one instruction costs, from a tick that runs exactly one.
+  ASSERT_EQ(PlatformTick(&platform_), kPlatformRunning);
+  const uint16_t one_instruction = platform_.cpu.cycles_this_tick;
+  ASSERT_GT(one_instruction, 0);
+  ASSERT_EQ(RunInstructions(kNumProgramInstructions - 1), kPlatformRunning);
+
+  // All cached and none needing the host's attention, so one tick runs the
+  // lot - which holds only while the program is shorter than a run may be.
+  ASSERT_LE(kNumProgramInstructions, kMaxInstructionsPerTick);
+  platform_.cpu.registers[kIP] = kProgramOffset;
+  ASSERT_EQ(PlatformRun(&platform_, one_instruction), kPlatformRunning);
+  // One tick did all of them, so the clock was charged for all at once.
+  EXPECT_EQ(
+      platform_.cpu.cycles_this_tick,
+      kNumProgramInstructions * one_instruction);
+  EXPECT_EQ(ip(), kProgramOffset + kNumProgramInstructions);
+}
+
+// PlatformTick() promises one instruction, which is what makes it the entry
+// point to step a machine with. A warm cache must not change that.
+TEST_F(PlatformExecutionTest, PlatformTickRunsOneInstructionWithAWarmCache) {
+  Load({kOpNop, kOpNop, kOpNop, kOpNop});
+  ASSERT_EQ(RunInstructions(4), kPlatformRunning);
+
+  platform_.cpu.registers[kIP] = kProgramOffset;
+  const uint64_t before = platform_.cpu.instructions_retired;
+  ASSERT_EQ(PlatformTick(&platform_), kPlatformRunning);
+  EXPECT_EQ(platform_.cpu.instructions_retired - before, 1u);
+  EXPECT_EQ(ip(), kProgramOffset + 1);
+}
+
+// A breakpoint is tested before a tick, so a batching tick would run straight
+// past one in the middle of a run.
+TEST_F(PlatformExecutionTest, ABreakpointFiresInsideWhatWouldBeARun) {
+  Load({kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpHlt});
+  ASSERT_EQ(RunInstructions(5), kPlatformRunning);
+
+  platform_.cpu.registers[kIP] = kProgramOffset;
+  ASSERT_GE(PlatformAddBreakpoint(&platform_, 0, kProgramOffset + 2), 0);
+
+  EXPECT_EQ(PlatformRun(&platform_, 1000), kPlatformStopped);
+  EXPECT_EQ(ip(), kProgramOffset + 2);
+  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
+  ASSERT_NE(stop_info, nullptr);
+  EXPECT_EQ(stop_info->reason, kPlatformStopBreakpoint);
+}
+
+// Clearing the breakpoint hands batching back, which is what pins the flag to
+// the breakpoint rather than to whether one has ever been set.
+TEST_F(PlatformExecutionTest, ClearingABreakpointAllowsRunsAgain) {
+  Load(std::vector<uint8_t>(kNumProgramInstructions, kOpNop));
+  ASSERT_EQ(PlatformTick(&platform_), kPlatformRunning);
+  const uint16_t one_instruction = platform_.cpu.cycles_this_tick;
+  ASSERT_EQ(RunInstructions(kNumProgramInstructions - 1), kPlatformRunning);
+
+  ASSERT_GE(PlatformAddBreakpoint(&platform_, 0, 0xF000), 0);
+  platform_.cpu.registers[kIP] = kProgramOffset;
+  ASSERT_EQ(PlatformRun(&platform_, one_instruction), kPlatformRunning);
+  EXPECT_EQ(platform_.cpu.cycles_this_tick, one_instruction);
+
+  PlatformClearBreakpoints(&platform_);
+  platform_.cpu.registers[kIP] = kProgramOffset;
+  ASSERT_EQ(PlatformRun(&platform_, one_instruction), kPlatformRunning);
+  EXPECT_EQ(
+      platform_.cpu.cycles_this_tick,
+      kNumProgramInstructions * one_instruction);
+}
+
+// Step mode reports a stop after a tick, so a tick that ran several would step
+// several instructions at a time.
+TEST_F(PlatformExecutionTest, StepModeStepsOneInstructionWithAWarmCache) {
+  Load({kOpNop, kOpNop, kOpNop, kOpNop});
+  ASSERT_EQ(RunInstructions(4), kPlatformRunning);
+
+  platform_.cpu.registers[kIP] = kProgramOffset;
+  PlatformSetStepMode(&platform_, true);
+
+  EXPECT_EQ(PlatformRun(&platform_, 1000), kPlatformStopped);
+  EXPECT_EQ(ip(), kProgramOffset + 1);
+}
+
+// A whole machine, so that two of them can be run side by side.
+struct Machine {
+  PlatformConfig config = {0};
+  PlatformState platform = {};
+  uint8_t ram[64 * 1024] = {0};
+  uint8_t vram[kCGAVRAMSize] = {0};
+};
+
+// What a run of the program below came to. Exact, so that any difference at
+// all between the two ways of driving it shows up.
+struct Outcome {
+  uint32_t ticks;
+  uint64_t retired;
+  uint16_t ax;
+  uint16_t bx;
+  uint16_t cx;
+  bool halted;
+};
+
+// Runs a program that loops until the timer interrupt has fired three times,
+// with the machine driven either one instruction at a time or in runs.
+//
+// The program reads a port every time round its loop and takes an interrupt
+// that acknowledges one, so it covers both of the things a run has to stop
+// for, and its exit condition is a count the interrupt handler keeps - which
+// makes where it ends a property of the emulation rather than of the driver.
+Outcome RunTimerProgram(bool batched) {
+  auto machine = std::unique_ptr<Machine>(new Machine());
+  PlatformState* platform = &machine->platform;
+  machine->config.physical_memory_size = sizeof(machine->ram);
+  machine->config.physical_memory = machine->ram;
+  machine->config.vram = machine->vram;
+  EXPECT_TRUE(PlatformInit(platform, &machine->config));
+
+  // STI / loop: INC AX / IN AL, 0x40 / ADD BL, AL / IN AL, 0x40 /
+  // ADD BH, AL / CMP CX, 3 / JB loop / HLT
+  //
+  // Two things matter about this shape. The port reads are accumulated rather
+  // than discarded, so BX records every value the timer handed back - what the
+  // PIT reports depends on how far the clock has been advanced when the read
+  // is made, so a stale one shows up here. And the first of them sits one
+  // instruction into what would otherwise be a run, which is where a read
+  // would see a clock that stops short of the instruction before it.
+  const std::vector<uint8_t> program = {kOpSti, 0x40, 0xE4, 0x40,  0x00, 0xC3,
+                                        0xE4,   0x40, 0x00, 0xC7,  0x83, 0xF9,
+                                        0x03,   0x72, 0xF2, kOpHlt};
+  for (size_t i = 0; i < program.size(); ++i) {
+    machine->ram[kProgramOffset + i] = program[i];
+  }
+  // IRQ0 handler: INC CX / MOV AL, 0x20 / OUT 0x20, AL / IRET
+  const uint16_t kHandler = 0x0400;
+  const std::vector<uint8_t> handler = {0x41, 0xB0, 0x20, 0xE6, 0x20, 0xCF};
+  for (size_t i = 0; i < handler.size(); ++i) {
+    machine->ram[kHandler + i] = handler[i];
+  }
+  // Interrupt vector 8, which is where the PIC is about to be told to put
+  // IRQ0.
+  machine->ram[8 * 4] = kHandler & 0xFF;
+  machine->ram[8 * 4 + 1] = kHandler >> 8;
+
+  // Vector base 0x08, IRQ0 alone unmasked.
+  WritePortByte(platform, 0x20, 0x13);
+  WritePortByte(platform, 0x21, 0x08);
+  WritePortByte(platform, 0x21, 0x01);
+  WritePortByte(platform, 0x21, 0xFE);
+  // Channel 0, both bytes, square wave, reload 0x1000 - short enough that
+  // three interrupts arrive quickly.
+  WritePortByte(platform, 0x43, 0x36);
+  WritePortByte(platform, 0x40, 0x00);
+  WritePortByte(platform, 0x40, 0x10);
+
+  platform->cpu.registers[kCS] = 0;
+  platform->cpu.registers[kIP] = kProgramOffset;
+  platform->cpu.registers[kSS] = 0;
+  platform->cpu.registers[kSP] = 0xFFFE;
+
+  // A budget of one cycle runs exactly one tick, so the batched machine takes
+  // the same number of steps as the stepped one and neither runs on past the
+  // HLT. What differs is only how many instructions a tick is allowed.
+  for (int i = 0; i < 2000000 && !platform->cpu.is_halted; ++i) {
+    if (batched) {
+      PlatformRun(platform, 1);
+    } else {
+      PlatformTick(platform);
+    }
+  }
+
+  Outcome outcome = {};
+  outcome.ticks = platform->ticks;
+  outcome.retired = platform->cpu.instructions_retired;
+  outcome.ax = platform->cpu.registers[kAX];
+  outcome.bx = platform->cpu.registers[kBX];
+  outcome.cx = platform->cpu.registers[kCX];
+  outcome.halted = platform->cpu.is_halted;
+  return outcome;
+}
+
+// The claim a run rests on: it changes how often the host hears from the
+// machine, and nothing else. Every device still sees every cycle, every
+// interrupt is delivered at the instruction boundary it would have been, and
+// the guest cannot tell.
+//
+// This is a stronger check than the dos-boot invariant on hardware, which is
+// measured through a harness that polls the screen on emulated-cycle
+// boundaries and so moves when a batch ends at a different cycle. Here there
+// is no host in the loop and the comparison is exact.
+TEST(PlatformBatchingTest, ABatchedRunIsIndistinguishableFromSteppingIt) {
+  const Outcome stepped = RunTimerProgram(false);
+  const Outcome batched = RunTimerProgram(true);
+
+  ASSERT_TRUE(stepped.halted);
+  ASSERT_TRUE(batched.halted);
+  // The program only halts once the handler has run three times, so this is
+  // also what says the interrupts were delivered at all.
+  ASSERT_EQ(stepped.cx, 3u);
+
+  EXPECT_EQ(batched.ticks, stepped.ticks);
+  EXPECT_EQ(batched.retired, stepped.retired);
+  EXPECT_EQ(batched.ax, stepped.ax);
+  EXPECT_EQ(batched.bx, stepped.bx);
+  EXPECT_EQ(batched.cx, stepped.cx);
+}
+
 TEST_F(PlatformExecutionTest, CountsRetiredInstructions) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop});
 
