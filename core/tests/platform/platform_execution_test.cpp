@@ -9,8 +9,7 @@ namespace {
 // Address at which test programs are loaded. Well clear of the interrupt
 // vector table at 0x0000-0x03FF.
 constexpr uint16_t kProgramOffset = 0x0100;
-// Address used by tests that watch a data access. Well clear of the program,
-// so that instruction fetches do not trip the watchpoint.
+// Address used by tests that touch data. Well clear of the program.
 constexpr uint16_t kDataOffset = 0x2000;
 
 // Opcodes used to hand-assemble test programs.
@@ -84,7 +83,6 @@ TEST_F(PlatformExecutionTest, TickReportsRunning) {
 
   EXPECT_EQ(PlatformTick(&platform_), kPlatformRunning);
   EXPECT_EQ(ip(), kProgramOffset + 1);
-  EXPECT_EQ(PlatformGetStopInfo(&platform_), nullptr);
 }
 
 TEST_F(PlatformExecutionTest, RunConsumesFullBudget) {
@@ -138,193 +136,6 @@ TEST_F(PlatformExecutionTest, HaltWithInterruptsEnabledKeepsRunning) {
   EXPECT_LT(platform_.ticks, 80u);
 }
 
-TEST_F(PlatformExecutionTest, BreakpointStopsBeforeExecutingInstruction) {
-  Load({kOpNop, kOpMovAlImm8, 0x42, kOpNop});
-
-  const int8_t index = PlatformAddBreakpoint(&platform_, 0, kProgramOffset + 1);
-  ASSERT_GE(index, 0);
-
-  EXPECT_EQ(RunInstructions(8), kPlatformStopped);
-  EXPECT_EQ(ip(), kProgramOffset + 1);
-  // The MOV has not run yet.
-  EXPECT_EQ(platform_.cpu.registers[kAX] & 0xFF, 0);
-
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopBreakpoint);
-  EXPECT_EQ(stop_info->index, index);
-  EXPECT_EQ(stop_info->cs, 0);
-  EXPECT_EQ(stop_info->ip, kProgramOffset + 1);
-}
-
-TEST_F(PlatformExecutionTest, ResumingFromBreakpointMakesProgress) {
-  Load({kOpNop, kOpMovAlImm8, 0x42, kOpNop});
-  ASSERT_GE(PlatformAddBreakpoint(&platform_, 0, kProgramOffset + 1), 0);
-  ASSERT_EQ(RunInstructions(8), kPlatformStopped);
-
-  // Resuming must execute the instruction under the breakpoint rather than
-  // stopping on it again. Two ticks run the MOV and the trailing NOP.
-  EXPECT_EQ(RunInstructions(2), kPlatformRunning);
-  EXPECT_EQ(platform_.cpu.registers[kAX] & 0xFF, 0x42);
-  EXPECT_EQ(ip(), kProgramOffset + 4);
-}
-
-TEST_F(PlatformExecutionTest, RemovedBreakpointDoesNotFire) {
-  Load({kOpNop, kOpNop, kOpNop, kOpNop});
-
-  const int8_t index = PlatformAddBreakpoint(&platform_, 0, kProgramOffset + 2);
-  ASSERT_GE(index, 0);
-  ASSERT_TRUE(PlatformRemoveBreakpoint(&platform_, index));
-  // Removing it a second time reports failure.
-  EXPECT_FALSE(PlatformRemoveBreakpoint(&platform_, index));
-
-  EXPECT_EQ(RunInstructions(4), kPlatformRunning);
-  EXPECT_EQ(ip(), kProgramOffset + 4);
-}
-
-TEST_F(PlatformExecutionTest, AddBreakpointFailsWhenFull) {
-  for (int i = 0; i < kMaxBreakpoints; ++i) {
-    EXPECT_EQ(PlatformAddBreakpoint(&platform_, 0, (uint16_t)(0x8000 + i)), i);
-  }
-  EXPECT_EQ(PlatformAddBreakpoint(&platform_, 0, 0x9000), kInvalidWatchIndex);
-
-  PlatformClearBreakpoints(&platform_);
-  EXPECT_EQ(PlatformAddBreakpoint(&platform_, 0, 0x9000), 0);
-}
-
-TEST_F(PlatformExecutionTest, MemoryWatchpointStopsOnWrite) {
-  // MOV AL, 0x42 / MOV [kDataOffset], AL / NOP
-  Load(
-      {kOpMovAlImm8, 0x42, kOpMovMoffs8Al, kDataOffset & 0xFF, kDataOffset >> 8,
-       kOpNop});
-
-  const int8_t index = PlatformAddMemoryWatchpoint(
-      &platform_, kDataOffset, kDataOffset, /*on_read=*/false,
-      /*on_write=*/true);
-  ASSERT_GE(index, 0);
-
-  EXPECT_EQ(RunInstructions(8), kPlatformStopped);
-  // The instruction that tripped the watchpoint runs to completion.
-  EXPECT_EQ(ram_[kDataOffset], 0x42);
-
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopMemoryWatchpoint);
-  EXPECT_EQ(stop_info->index, index);
-  EXPECT_EQ(stop_info->address, kDataOffset);
-  EXPECT_TRUE(stop_info->is_write);
-}
-
-TEST_F(PlatformExecutionTest, MemoryWatchpointIgnoresUnwatchedDirection) {
-  // MOV AL, [kDataOffset] / NOP
-  Load({kOpMovAlMoffs8, kDataOffset & 0xFF, kDataOffset >> 8, kOpNop, kOpNop});
-  ram_[kDataOffset] = 0x99;
-
-  // Watch writes only - the program only reads.
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, kDataOffset, kDataOffset, /*on_read=*/false,
-          /*on_write=*/true),
-      0);
-
-  EXPECT_EQ(RunInstructions(3), kPlatformRunning);
-  EXPECT_EQ(platform_.cpu.registers[kAX] & 0xFF, 0x99);
-  EXPECT_EQ(PlatformGetStopInfo(&platform_), nullptr);
-}
-
-TEST_F(PlatformExecutionTest, MemoryWatchpointStopsOnRead) {
-  Load({kOpMovAlMoffs8, kDataOffset & 0xFF, kDataOffset >> 8, kOpNop, kOpNop});
-  ram_[kDataOffset] = 0x99;
-
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, kDataOffset, kDataOffset, /*on_read=*/true,
-          /*on_write=*/false),
-      0);
-
-  EXPECT_EQ(RunInstructions(3), kPlatformStopped);
-
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopMemoryWatchpoint);
-  EXPECT_EQ(stop_info->address, kDataOffset);
-  EXPECT_FALSE(stop_info->is_write);
-}
-
-TEST_F(PlatformExecutionTest, ClearedMemoryWatchpointDoesNotFire) {
-  Load({kOpMovAlMoffs8, kDataOffset & 0xFF, kDataOffset >> 8, kOpNop, kOpNop});
-
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, kDataOffset, kDataOffset, /*on_read=*/true,
-          /*on_write=*/true),
-      0);
-  PlatformClearMemoryWatchpoints(&platform_);
-
-  EXPECT_EQ(RunInstructions(3), kPlatformRunning);
-}
-
-TEST_F(PlatformExecutionTest, AddMemoryWatchpointRejectsInvalidRange) {
-  EXPECT_EQ(
-      PlatformAddMemoryWatchpoint(&platform_, 0x200, 0x100, true, true),
-      kInvalidWatchIndex);
-  // Watching neither reads nor writes would never fire.
-  EXPECT_EQ(
-      PlatformAddMemoryWatchpoint(&platform_, 0x100, 0x200, false, false),
-      kInvalidWatchIndex);
-}
-
-TEST_F(PlatformExecutionTest, StepModeStopsAfterEachInstruction) {
-  Load({kOpNop, kOpNop, kOpNop});
-  PlatformSetStepMode(&platform_, true);
-
-  for (int i = 1; i <= 3; ++i) {
-    EXPECT_EQ(RunInstructions(100), kPlatformStopped) << "step " << i;
-    EXPECT_EQ(ip(), kProgramOffset + i);
-    const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-    ASSERT_NE(stop_info, nullptr);
-    EXPECT_EQ(stop_info->reason, kPlatformStopStep);
-    EXPECT_EQ(stop_info->ip, kProgramOffset + i);
-  }
-
-  PlatformSetStepMode(&platform_, false);
-  EXPECT_EQ(RunInstructions(4), kPlatformRunning);
-}
-
-TEST_F(PlatformExecutionTest, StepModeStopsOnHaltingInstruction) {
-  // STI first, so that the halt is wakeable and does not report as hung.
-  Load({kOpSti, kOpHlt, kOpNop});
-  PlatformSetStepMode(&platform_, true);
-
-  EXPECT_EQ(RunInstructions(100), kPlatformStopped);
-  EXPECT_EQ(ip(), kProgramOffset + 1);
-
-  // HLT is an instruction, so stepping must stop after it runs rather than
-  // running away because the CPU happens to be halted afterwards.
-  EXPECT_EQ(RunInstructions(100), kPlatformStopped);
-  EXPECT_EQ(ip(), kProgramOffset + 2);
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopStep);
-  EXPECT_TRUE(platform_.cpu.is_halted);
-
-  // Once halted, no instruction retires, so stepping does not stop again -
-  // the machine simply keeps ticking until an interrupt wakes the CPU.
-  EXPECT_EQ(RunInstructions(100), kPlatformRunning);
-  EXPECT_TRUE(platform_.cpu.is_halted);
-}
-
-TEST_F(PlatformExecutionTest, HungIsReportedAheadOfAStepStop) {
-  Load({kOpCli, kOpHlt});
-  PlatformSetStepMode(&platform_, true);
-
-  EXPECT_EQ(RunInstructions(100), kPlatformStopped);
-
-  // The HLT retires, which would otherwise be a step stop, but a CPU that can
-  // never be woken is the more useful thing to report.
-  EXPECT_EQ(RunInstructions(100), kPlatformHung);
-}
-
 // The platform counts retired instructions so that a caller does not have to
 // drive it one instruction at a time to find out - which is what a benchmark
 // harness would otherwise do, giving up PlatformRun()'s batching for a number
@@ -370,56 +181,6 @@ TEST_F(PlatformExecutionTest, PlatformTickRunsOneInstructionWithAWarmCache) {
   const uint64_t before = platform_.cpu.instructions_retired;
   ASSERT_EQ(PlatformTick(&platform_), kPlatformRunning);
   EXPECT_EQ(platform_.cpu.instructions_retired - before, 1u);
-  EXPECT_EQ(ip(), kProgramOffset + 1);
-}
-
-// A breakpoint is tested before a tick, so a batching tick would run straight
-// past one in the middle of a run.
-TEST_F(PlatformExecutionTest, ABreakpointFiresInsideWhatWouldBeARun) {
-  Load({kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpHlt});
-  ASSERT_EQ(RunInstructions(5), kPlatformRunning);
-
-  platform_.cpu.registers[kIP] = kProgramOffset;
-  ASSERT_GE(PlatformAddBreakpoint(&platform_, 0, kProgramOffset + 2), 0);
-
-  EXPECT_EQ(PlatformRun(&platform_, 1000), kPlatformStopped);
-  EXPECT_EQ(ip(), kProgramOffset + 2);
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopBreakpoint);
-}
-
-// Clearing the breakpoint hands batching back, which is what pins the flag to
-// the breakpoint rather than to whether one has ever been set.
-TEST_F(PlatformExecutionTest, ClearingABreakpointAllowsRunsAgain) {
-  Load(std::vector<uint8_t>(kNumProgramInstructions, kOpNop));
-  ASSERT_EQ(PlatformTick(&platform_), kPlatformRunning);
-  const uint16_t one_instruction = platform_.cpu.cycles_this_tick;
-  ASSERT_EQ(RunInstructions(kNumProgramInstructions - 1), kPlatformRunning);
-
-  ASSERT_GE(PlatformAddBreakpoint(&platform_, 0, 0xF000), 0);
-  platform_.cpu.registers[kIP] = kProgramOffset;
-  ASSERT_EQ(PlatformRun(&platform_, one_instruction), kPlatformRunning);
-  EXPECT_EQ(platform_.cpu.cycles_this_tick, one_instruction);
-
-  PlatformClearBreakpoints(&platform_);
-  platform_.cpu.registers[kIP] = kProgramOffset;
-  ASSERT_EQ(PlatformRun(&platform_, one_instruction), kPlatformRunning);
-  EXPECT_EQ(
-      platform_.cpu.cycles_this_tick,
-      kNumProgramInstructions * one_instruction);
-}
-
-// Step mode reports a stop after a tick, so a tick that ran several would step
-// several instructions at a time.
-TEST_F(PlatformExecutionTest, StepModeStepsOneInstructionWithAWarmCache) {
-  Load({kOpNop, kOpNop, kOpNop, kOpNop});
-  ASSERT_EQ(RunInstructions(4), kPlatformRunning);
-
-  platform_.cpu.registers[kIP] = kProgramOffset;
-  PlatformSetStepMode(&platform_, true);
-
-  EXPECT_EQ(PlatformRun(&platform_, 1000), kPlatformStopped);
   EXPECT_EQ(ip(), kProgramOffset + 1);
 }
 

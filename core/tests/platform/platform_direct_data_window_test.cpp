@@ -130,60 +130,6 @@ TEST_F(PlatformDirectDataWindowTest, WordStraddlingTheTopOfTheWindow) {
   EXPECT_EQ(ax(), 0xFF34);
 }
 
-// An access through the window is a load or a store, so the platform has to
-// take the window away rather than let a watchpoint go unnoticed.
-TEST_F(PlatformDirectDataWindowTest, WatchpointOnAnOperandWriteStillFires) {
-  Load(
-      {kOpMovAlImm8, 0x42, kOpMovMoffs8Al, kDataOffset & 0xFF, kDataOffset >> 8,
-       kOpHlt});
-
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, kDataOffset, kDataOffset, /*on_read=*/false,
-          /*on_write=*/true),
-      0);
-  EXPECT_EQ(platform_.cpu.direct_data_window.data, nullptr);
-  EXPECT_EQ(platform_.cpu.direct_data_window.end, 0u);
-
-  EXPECT_EQ(RunInstructions(3), kPlatformStopped);
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopMemoryWatchpoint);
-  EXPECT_EQ(stop_info->address, (uint32_t)kDataOffset);
-  EXPECT_TRUE(stop_info->is_write);
-}
-
-TEST_F(PlatformDirectDataWindowTest, WatchpointOnAnOperandReadStillFires) {
-  Load({kOpMovAlMoffs8, kDataOffset & 0xFF, kDataOffset >> 8, kOpHlt});
-
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, kDataOffset, kDataOffset, /*on_read=*/true,
-          /*on_write=*/false),
-      0);
-  ASSERT_EQ(platform_.cpu.direct_data_window.data, nullptr);
-
-  EXPECT_EQ(RunInstructions(2), kPlatformStopped);
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopMemoryWatchpoint);
-  EXPECT_EQ(stop_info->address, (uint32_t)kDataOffset);
-  EXPECT_FALSE(stop_info->is_write);
-}
-
-TEST_F(PlatformDirectDataWindowTest, ClearingWatchpointsHandsTheWindowBack) {
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, kDataOffset, kDataOffset, /*on_read=*/true,
-          /*on_write=*/false),
-      0);
-  ASSERT_EQ(platform_.cpu.direct_data_window.data, nullptr);
-
-  PlatformClearMemoryWatchpoints(&platform_);
-  EXPECT_EQ(platform_.cpu.direct_data_window.data, ram_);
-  EXPECT_EQ(platform_.cpu.direct_data_window.end, sizeof(ram_));
-}
-
 // Registering a region recomputes the window rather than discarding it, so a
 // region that has nothing to do with address 0 leaves it in place.
 TEST_F(

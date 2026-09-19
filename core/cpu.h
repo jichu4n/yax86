@@ -765,11 +765,10 @@ typedef struct CPUConfig {
   // rather than the tail of it starting at the address, so that a jump
   // backwards within the same region still lands inside it.
   //
-  // The window is kept across instructions, so a host that changes what an
-  // address means - remapping memory, or turning on a watchpoint - has to call
-  // CPUInvalidateInstructionFetchWindow(). Writes through the same buffer need
-  // no such call, and self-modifying code keeps working, because the window is
-  // a pointer into the host's own storage rather than a copy of it.
+  // The window is kept across instructions. Writes through the same buffer
+  // need no invalidation, and self-modifying code keeps working, because the
+  // window is a pointer into the host's own storage rather than a copy of it.
+  // A host that wants it dropped clears data itself.
   void (*get_instruction_fetch_window)(struct CPUState* cpu, uint32_t address);
 
   // Callback to write a byte to memory.
@@ -816,10 +815,9 @@ typedef struct CPUConfig {
   // decoded.
   //
   // The pointer is read on every instruction, so clearing and restoring it
-  // takes the cache away and hands it back - which is what the platform does
-  // while a memory watchpoint is enabled. The count is read only by CPUInit(),
-  // which checks it and logs a bad one, so changing that afterwards does
-  // nothing.
+  // takes the cache away and hands it back. The count is read only by
+  // CPUInit(), which checks it and logs a bad one, so changing that afterwards
+  // does nothing.
   struct CPUDecodeCacheEntry* decode_cache;
   // Must be a power of two of at least two. See decode_cache_index_mask.
   uint32_t decode_cache_num_entries;
@@ -1030,25 +1028,12 @@ void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 //
 // This is intended to be called from within a CPU callback - a memory or I/O
 // port access, an interrupt handler, or an instruction hook - which is why
-// stopping is signalled out of band rather than through a return value: a
-// watchpoint fires inside read_memory_byte, which returns a uint8_t and has no
-// way to carry a status.
+// stopping is signalled out of band rather than through a return value: those
+// callbacks return values of their own and have no way to carry a status.
 //
 // The request applies only to the tick during which it was made. CPUTick()
 // clears it on entry, so a request made outside a tick has no effect.
 static inline void CPURequestStop(CPUState* cpu) { cpu->stop_requested = true; }
-
-// Discards the window instruction fetch is reading from, so that the next
-// fetch asks CPUConfig.get_instruction_fetch_window again.
-//
-// A host must call this whenever it changes what an address means - remapping
-// memory, or enabling something that has to observe reads - because the window
-// is a direct pointer that would otherwise outlive the change. Writing through
-// the same buffer does not need it: the window is a pointer into the host's
-// storage, not a copy.
-static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
-  cpu->instruction_fetch_window.data = NULL;
-}
 
 // Hands the CPU guest memory it may read and write by indexing, covering the
 // half-open range of linear addresses [0, end). Optional - a host that
@@ -1058,9 +1043,9 @@ static inline void CPUInvalidateInstructionFetchWindow(CPUState* cpu) {
 //
 // The window must be plain storage whose reads and writes are the caller's
 // buffer and nothing else. A host must not hand over a region where a read has
-// to be observed or computed - a device, or anything the host has to be told
-// about, such as an address under a watchpoint - because an access through the
-// window is a load or a store and the host never learns of it.
+// to be observed or computed - a device, or anything else the host has to be
+// told about - because an access through the window is a load or a store and
+// the host never learns of it.
 //
 // Writes through the same buffer need no further call, so a host writing guest
 // memory itself, or by DMA, stays coherent with the CPU for free. What does

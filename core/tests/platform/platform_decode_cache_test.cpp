@@ -14,7 +14,7 @@ enum : uint8_t {
 
 // Reusing a decoded instruction is only safe while everything that changes
 // what is at an address says so. The platform is where most of those changes
-// happen - DMA writes, a region being mapped, a watchpoint being enabled.
+// happen - DMA writes, and a region being mapped.
 class PlatformDecodeCacheTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -90,30 +90,6 @@ TEST_F(PlatformDecodeCacheTest, RegisteringAMemoryRegionDiscardsEveryDecode) {
   ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &extra_rom));
   PlatformUpdateAfterMemoryMapChange(&platform_);
 
-  RunAt(kProgramOffset);
-  EXPECT_EQ(al(), 0x22);
-}
-
-// A hit runs an instruction without reading its bytes, so it would hide a read
-// watchpoint on the code being run.
-TEST_F(PlatformDecodeCacheTest, AWatchpointTakesTheCacheAway) {
-  const int8_t index =
-      PlatformAddMemoryWatchpoint(&platform_, 0x0200, 0x0200, true, true);
-  ASSERT_GE(index, 0);
-  EXPECT_EQ(platform_.cpu_config.decode_cache, nullptr);
-
-  PlatformRemoveMemoryWatchpoint(&platform_, index);
-  EXPECT_EQ(platform_.cpu_config.decode_cache, platform_.cpu_decode_cache);
-}
-
-TEST_F(PlatformDecodeCacheTest, NoDecodeIsReusedWhileAWatchpointIsEnabled) {
-  PokeBehindTheCPUsBack(kProgramOffset, {kOpMovAlImm8, 0x11});
-  RunAt(kProgramOffset);
-  ASSERT_EQ(al(), 0x11);
-
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(&platform_, 0x0200, 0x0200, true, true), 0);
-  PokeBehindTheCPUsBack(kProgramOffset, {kOpMovAlImm8, 0x22});
   RunAt(kProgramOffset);
   EXPECT_EQ(al(), 0x22);
 }
