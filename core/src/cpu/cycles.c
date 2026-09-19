@@ -1,6 +1,7 @@
 #ifndef YAX86_IMPLEMENTATION
-#include "../util/common.h"
 #include "cycles.h"
+
+#include "../util/common.h"
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -18,9 +19,14 @@
 //
 // The cost of an instruction is built from three parts.
 //
-// 1. A base cost per opcode, below. These are the published 8086 figures for
-//    the register form, less the time the figure already accounts for on the
-//    bus, which is charged separately in part 3.
+// 1. A base cost per opcode, which is OpcodeMetadata.base_cycles in
+//    opcode_table.c. These are the published 8086 figures for the register
+//    form, less the time the figure already accounts for on the bus, which is
+//    charged separately in part 3. Where the published figure covers an
+//    instruction that necessarily touches memory - the stack instructions, the
+//    string instructions, the software interrupts - that bus time has been
+//    taken back out, so that charging the traffic separately does not count it
+//    twice. PUSH ES is 2 rather than 10 for this reason, and POP r16 is 0.
 //
 // 2. The effective address calculation, for instructions that address memory
 //    through a ModR/M byte.
@@ -39,63 +45,6 @@
 
 // Cycles per byte transferred over the data bus.
 enum { kBusCyclesPerByte = 4 };
-
-// Base execution cost per opcode, excluding both the effective address
-// calculation and time on the data bus.
-//
-// Where the published figure covers an instruction that necessarily touches
-// memory - the stack instructions, the string instructions, the software
-// interrupts - the bus time it includes has been taken back out, so that
-// charging the traffic separately does not count it twice.
-YAX86_PRIVATE const uint8_t kOpcodeBaseCycles[256] = {
-    // 0x00: ALU r/m,r and r,r/m are 3; with an immediate, 4. PUSH sreg is 10
-    // for a 2 byte write, POP sreg 8.
-    3, 3, 3, 3, 4, 4, 2, 0,        // 00 ADD, 06 PUSH ES, 07 POP ES
-    3, 3, 3, 3, 4, 4, 2, 0,        // 08 OR, 0E PUSH CS, 0F POP CS
-    3, 3, 3, 3, 4, 4, 2, 0,        // 10 ADC, 16 PUSH SS, 17 POP SS
-    3, 3, 3, 3, 4, 4, 2, 0,        // 18 SBB, 1E PUSH DS, 1F POP DS
-    3, 3, 3, 3, 4, 4, 2, 4,        // 20 AND, 26 ES:, 27 DAA
-    3, 3, 3, 3, 4, 4, 2, 4,        // 28 SUB, 2E CS:, 2F DAS
-    3, 3, 3, 3, 4, 4, 2, 8,        // 30 XOR, 36 SS:, 37 AAA
-    3, 3, 3, 3, 4, 4, 2, 8,        // 38 CMP, 3E DS:, 3F AAS
-    // 0x40: INC and DEC of a 16 bit register are 2 each.
-    2, 2, 2, 2, 2, 2, 2, 2,        // 40 INC r16
-    2, 2, 2, 2, 2, 2, 2, 2,        // 48 DEC r16
-    // 0x50: PUSH is 11 and POP 8, both less the 8 cycles of their word access.
-    3, 3, 3, 3, 3, 3, 3, 3,        // 50 PUSH r16
-    0, 0, 0, 0, 0, 0, 0, 0,        // 58 POP r16
-    // 0x60: undocumented aliases of the conditional jumps at 0x70.
-    4, 4, 4, 4, 4, 4, 4, 4,        // 60 Jcc alias
-    4, 4, 4, 4, 4, 4, 4, 4,        // 68 Jcc alias
-    // 0x70: not taken. A taken jump adds 12 for the flushed queue.
-    4, 4, 4, 4, 4, 4, 4, 4,        // 70 Jcc
-    4, 4, 4, 4, 4, 4, 4, 4,        // 78 Jcc
-    // 0x80: group 1 with an immediate, TEST, XCHG, MOV.
-    4, 4, 4, 4, 3, 3, 4, 4,        // 80 group 1, 84 TEST, 86 XCHG
-    2, 2, 2, 2, 2, 2, 2, 0,        // 88 MOV, 8C MOV sreg, 8D LEA, 8F POP r/m
-    // 0x90: NOP and XCHG with AX are 3. CALL far is 28 less its 4 byte write.
-    3, 3, 3, 3, 3, 3, 3, 3,        // 90 NOP, 91 XCHG AX,r
-    2, 5, 12, 3, 2, 0, 4, 4,       // 98 CBW, 99 CWD, 9A CALL far, 9C PUSHF
-    // 0xA0: MOV to and from a direct address, and the string instructions,
-    // all less their bus time.
-    2, 2, 2, 2, 10, 10, 14, 14,    // A0 MOV moffs, A4 MOVS, A6 CMPS
-    4, 4, 3, 3, 4, 4, 7, 7,        // A8 TEST, AA STOS, AC LODS, AE SCAS
-    // 0xB0: MOV immediate into a register.
-    4, 4, 4, 4, 4, 4, 4, 4,        // B0 MOV r8, imm8
-    4, 4, 4, 4, 4, 4, 4, 4,        // B8 MOV r16, imm16
-    // 0xC0: RET, LES, LDS, MOV r/m immediate.
-    12, 8, 12, 8, 8, 8, 2, 2,      // C0 RET aliases, C2 RET, C4 LES, C6 MOV
-    9, 10, 9, 10, 1, 1, 3, 32,     // C8 RETF aliases, CC INT3, CD INT, CF IRET
-    // 0xD0: shifts and rotates. By CL adds 4 per bit, charged at execution.
-    2, 2, 8, 8, 8, 8, 2, 11,       // D0 shift by 1, D2 shift by CL, D4 AAM
-    0, 0, 0, 0, 0, 0, 0, 0,        // D8 ESC, no coprocessor is present
-    // 0xE0: LOOP and the conditional jumps on CX, then IN, OUT, CALL and JMP.
-    5, 6, 6, 6, 10, 10, 10, 10,    // E0 LOOPNZ, E3 JCXZ, E4 IN, E6 OUT
-    11, 15, 15, 15, 8, 8, 8, 8,    // E8 CALL, E9 JMP, EC IN DX, EE OUT DX
-    // 0xF0: prefixes, HLT, the group 3 and group 4/5 instructions.
-    2, 2, 2, 2, 2, 2, 3, 3,        // F0 LOCK, F2 REPNZ, F4 HLT, F6 group 3
-    2, 2, 2, 2, 2, 2, 3, 3,        // F8 CLC, FA CLI, FC CLD, FE group 4/5
-};
 
 // Cycles to compute an effective address, by addressing mode. The 8086 pays
 // for each component it has to add together.
@@ -117,7 +66,8 @@ enum {
 };
 
 // Cycles to compute the effective address of a ModR/M memory operand.
-YAX86_PRIVATE uint8_t GetEffectiveAddressCycles(const Instruction* instruction) {
+YAX86_PRIVATE uint8_t
+GetEffectiveAddressCycles(const Instruction* instruction) {
   if (!instruction->has_mod_rm || instruction->mod_rm.mod == 0x03) {
     // A register operand needs no address computed.
     return 0;

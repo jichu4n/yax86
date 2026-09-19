@@ -1501,6 +1501,9 @@ typedef InstructionResult (*OpcodeHandler)(const InstructionContext* context);
 typedef struct OpcodeMetadata {
   // Opcode.
   uint8_t opcode;
+  // What the instruction costs before the effective address computation and
+  // its time on the data bus - see cycles.c for how the three fit together.
+  uint8_t base_cycles;
 
   // Instruction has ModR/M byte
   bool has_modrm : 1;
@@ -1547,10 +1550,6 @@ enum {
 };
 
 #ifndef YAX86_IMPLEMENTATION
-
-// Base execution cost per opcode, excluding the effective address calculation
-// and time on the data bus.
-extern const uint8_t kOpcodeBaseCycles[256];
 
 // Cycles to compute the effective address of a ModR/M memory operand.
 extern uint8_t GetEffectiveAddressCycles(const Instruction* instruction);
@@ -1726,8 +1725,9 @@ extern OperandValue ReadImmediate(const InstructionContext* ctx);
 
 #line 1 "./src/cpu/cycles.c"
 #ifndef YAX86_IMPLEMENTATION
-#include "../util/common.h"
 #include "cycles.h"
+
+#include "../util/common.h"
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -1745,9 +1745,14 @@ extern OperandValue ReadImmediate(const InstructionContext* ctx);
 //
 // The cost of an instruction is built from three parts.
 //
-// 1. A base cost per opcode, below. These are the published 8086 figures for
-//    the register form, less the time the figure already accounts for on the
-//    bus, which is charged separately in part 3.
+// 1. A base cost per opcode, which is OpcodeMetadata.base_cycles in
+//    opcode_table.c. These are the published 8086 figures for the register
+//    form, less the time the figure already accounts for on the bus, which is
+//    charged separately in part 3. Where the published figure covers an
+//    instruction that necessarily touches memory - the stack instructions, the
+//    string instructions, the software interrupts - that bus time has been
+//    taken back out, so that charging the traffic separately does not count it
+//    twice. PUSH ES is 2 rather than 10 for this reason, and POP r16 is 0.
 //
 // 2. The effective address calculation, for instructions that address memory
 //    through a ModR/M byte.
@@ -1766,63 +1771,6 @@ extern OperandValue ReadImmediate(const InstructionContext* ctx);
 
 // Cycles per byte transferred over the data bus.
 enum { kBusCyclesPerByte = 4 };
-
-// Base execution cost per opcode, excluding both the effective address
-// calculation and time on the data bus.
-//
-// Where the published figure covers an instruction that necessarily touches
-// memory - the stack instructions, the string instructions, the software
-// interrupts - the bus time it includes has been taken back out, so that
-// charging the traffic separately does not count it twice.
-YAX86_PRIVATE const uint8_t kOpcodeBaseCycles[256] = {
-    // 0x00: ALU r/m,r and r,r/m are 3; with an immediate, 4. PUSH sreg is 10
-    // for a 2 byte write, POP sreg 8.
-    3, 3, 3, 3, 4, 4, 2, 0,        // 00 ADD, 06 PUSH ES, 07 POP ES
-    3, 3, 3, 3, 4, 4, 2, 0,        // 08 OR, 0E PUSH CS, 0F POP CS
-    3, 3, 3, 3, 4, 4, 2, 0,        // 10 ADC, 16 PUSH SS, 17 POP SS
-    3, 3, 3, 3, 4, 4, 2, 0,        // 18 SBB, 1E PUSH DS, 1F POP DS
-    3, 3, 3, 3, 4, 4, 2, 4,        // 20 AND, 26 ES:, 27 DAA
-    3, 3, 3, 3, 4, 4, 2, 4,        // 28 SUB, 2E CS:, 2F DAS
-    3, 3, 3, 3, 4, 4, 2, 8,        // 30 XOR, 36 SS:, 37 AAA
-    3, 3, 3, 3, 4, 4, 2, 8,        // 38 CMP, 3E DS:, 3F AAS
-    // 0x40: INC and DEC of a 16 bit register are 2 each.
-    2, 2, 2, 2, 2, 2, 2, 2,        // 40 INC r16
-    2, 2, 2, 2, 2, 2, 2, 2,        // 48 DEC r16
-    // 0x50: PUSH is 11 and POP 8, both less the 8 cycles of their word access.
-    3, 3, 3, 3, 3, 3, 3, 3,        // 50 PUSH r16
-    0, 0, 0, 0, 0, 0, 0, 0,        // 58 POP r16
-    // 0x60: undocumented aliases of the conditional jumps at 0x70.
-    4, 4, 4, 4, 4, 4, 4, 4,        // 60 Jcc alias
-    4, 4, 4, 4, 4, 4, 4, 4,        // 68 Jcc alias
-    // 0x70: not taken. A taken jump adds 12 for the flushed queue.
-    4, 4, 4, 4, 4, 4, 4, 4,        // 70 Jcc
-    4, 4, 4, 4, 4, 4, 4, 4,        // 78 Jcc
-    // 0x80: group 1 with an immediate, TEST, XCHG, MOV.
-    4, 4, 4, 4, 3, 3, 4, 4,        // 80 group 1, 84 TEST, 86 XCHG
-    2, 2, 2, 2, 2, 2, 2, 0,        // 88 MOV, 8C MOV sreg, 8D LEA, 8F POP r/m
-    // 0x90: NOP and XCHG with AX are 3. CALL far is 28 less its 4 byte write.
-    3, 3, 3, 3, 3, 3, 3, 3,        // 90 NOP, 91 XCHG AX,r
-    2, 5, 12, 3, 2, 0, 4, 4,       // 98 CBW, 99 CWD, 9A CALL far, 9C PUSHF
-    // 0xA0: MOV to and from a direct address, and the string instructions,
-    // all less their bus time.
-    2, 2, 2, 2, 10, 10, 14, 14,    // A0 MOV moffs, A4 MOVS, A6 CMPS
-    4, 4, 3, 3, 4, 4, 7, 7,        // A8 TEST, AA STOS, AC LODS, AE SCAS
-    // 0xB0: MOV immediate into a register.
-    4, 4, 4, 4, 4, 4, 4, 4,        // B0 MOV r8, imm8
-    4, 4, 4, 4, 4, 4, 4, 4,        // B8 MOV r16, imm16
-    // 0xC0: RET, LES, LDS, MOV r/m immediate.
-    12, 8, 12, 8, 8, 8, 2, 2,      // C0 RET aliases, C2 RET, C4 LES, C6 MOV
-    9, 10, 9, 10, 1, 1, 3, 32,     // C8 RETF aliases, CC INT3, CD INT, CF IRET
-    // 0xD0: shifts and rotates. By CL adds 4 per bit, charged at execution.
-    2, 2, 8, 8, 8, 8, 2, 11,       // D0 shift by 1, D2 shift by CL, D4 AAM
-    0, 0, 0, 0, 0, 0, 0, 0,        // D8 ESC, no coprocessor is present
-    // 0xE0: LOOP and the conditional jumps on CX, then IN, OUT, CALL and JMP.
-    5, 6, 6, 6, 10, 10, 10, 10,    // E0 LOOPNZ, E3 JCXZ, E4 IN, E6 OUT
-    11, 15, 15, 15, 8, 8, 8, 8,    // E8 CALL, E9 JMP, EC IN DX, EE OUT DX
-    // 0xF0: prefixes, HLT, the group 3 and group 4/5 instructions.
-    2, 2, 2, 2, 2, 2, 3, 3,        // F0 LOCK, F2 REPNZ, F4 HLT, F6 group 3
-    2, 2, 2, 2, 2, 2, 3, 3,        // F8 CLC, FA CLI, FC CLD, FE group 4/5
-};
 
 // Cycles to compute an effective address, by addressing mode. The 8086 pays
 // for each component it has to add together.
@@ -1844,7 +1792,8 @@ enum {
 };
 
 // Cycles to compute the effective address of a ModR/M memory operand.
-YAX86_PRIVATE uint8_t GetEffectiveAddressCycles(const Instruction* instruction) {
+YAX86_PRIVATE uint8_t
+GetEffectiveAddressCycles(const Instruction* instruction) {
   if (!instruction->has_mod_rm || instruction->mod_rm.mod == 0x03) {
     // A register operand needs no address computed.
     return 0;
@@ -5687,93 +5636,113 @@ ExecuteGroup5Instruction(const InstructionContext* ctx) {
 //
 // Const because nothing writes it, which on a target that executes from flash
 // keeps 2KB of it out of RAM.
+//
+// base_cycles is part 1 of the cycle model, and is only half of what an
+// instruction costs before it runs - cycles.c has the other half and the
+// rules these figures were derived under, which is where to read them
+// against.
 YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // ADD r/m8, r8
     {.opcode = 0x00,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteAddRegisterToRegisterOrMemory},
     // ADD r/m16, r16
     {.opcode = 0x01,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteAddRegisterToRegisterOrMemory},
     // ADD r8, r/m8
     {.opcode = 0x02,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteAddRegisterOrMemoryToRegister},
     // ADD r16, r/m16
     {.opcode = 0x03,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteAddRegisterOrMemoryToRegister},
     // ADD AL, imm8
     {.opcode = 0x04,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteAddImmediateToALOrAX},
     // ADD AX, imm16
     {.opcode = 0x05,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteAddImmediateToALOrAX},
     // PUSH ES
     {.opcode = 0x06,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushSegmentRegister},
     // POP ES
     {.opcode = 0x07,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopSegmentRegister},
     // OR r/m8, r8
     {.opcode = 0x08,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteBooleanOrRegisterToRegisterOrMemory},
     // OR r/m16, r16
     {.opcode = 0x09,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteBooleanOrRegisterToRegisterOrMemory},
     // OR r8, r/m8
     {.opcode = 0x0A,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteBooleanOrRegisterOrMemoryToRegister},
     // OR r16, r/m16
     {.opcode = 0x0B,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteBooleanOrRegisterOrMemoryToRegister},
     // OR AL, imm8
     {.opcode = 0x0C,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteBooleanOrImmediateToALOrAX},
     // OR AX, imm16
     {.opcode = 0x0D,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteBooleanOrImmediateToALOrAX},
     // PUSH CS
     {.opcode = 0x0E,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
@@ -5784,468 +5753,545 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // POP sreg is only two bits wide, so 0x0F decodes as POP CS. Later x86
     // parts repurposed 0x0F as the two-byte opcode prefix.
     {.opcode = 0x0F,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopSegmentRegister},
     // ADC r/m8, r8
     {.opcode = 0x10,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteAddRegisterToRegisterOrMemoryWithCarry},
     // ADC r/m16, r16
     {.opcode = 0x11,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteAddRegisterToRegisterOrMemoryWithCarry},
     // ADC r8, r/m8
     {.opcode = 0x12,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteAddRegisterOrMemoryToRegisterWithCarry},
     // ADC r16, r/m16
     {.opcode = 0x13,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteAddRegisterOrMemoryToRegisterWithCarry},
     // ADC AL, imm8
     {.opcode = 0x14,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteAddImmediateToALOrAXWithCarry},
     // ADC AX, imm16
     {.opcode = 0x15,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteAddImmediateToALOrAXWithCarry},
     // PUSH SS
     {.opcode = 0x16,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushSegmentRegister},
     // POP SS
     {.opcode = 0x17,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopSegmentRegister},
     // SBB r/m8, r8
     {.opcode = 0x18,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteSubRegisterFromRegisterOrMemoryWithBorrow},
     // SBB r/m16, r16
     {.opcode = 0x19,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteSubRegisterFromRegisterOrMemoryWithBorrow},
     // SBB r8, r/m8
     {.opcode = 0x1A,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteSubRegisterOrMemoryFromRegisterWithBorrow},
     // SBB r16, r/m16
     {.opcode = 0x1B,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteSubRegisterOrMemoryFromRegisterWithBorrow},
     // SBB AL, imm8
     {.opcode = 0x1C,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSubImmediateFromALOrAXWithBorrow},
     // SBB AX, imm16
     {.opcode = 0x1D,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteSubImmediateFromALOrAXWithBorrow},
     // PUSH DS
     {.opcode = 0x1E,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushSegmentRegister},
     // POP DS
     {.opcode = 0x1F,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopSegmentRegister},
     // AND r/m8, r8
     {.opcode = 0x20,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteBooleanAndRegisterToRegisterOrMemory},
     // AND r/m16, r16
     {.opcode = 0x21,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteBooleanAndRegisterToRegisterOrMemory},
     // AND r8, r/m8
     {.opcode = 0x22,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteBooleanAndRegisterOrMemoryToRegister},
     // AND r16, r/m16
     {.opcode = 0x23,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteBooleanAndRegisterOrMemoryToRegister},
     // AND AL, imm8
     {.opcode = 0x24,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteBooleanAndImmediateToALOrAX},
     // AND AX, imm16
     {.opcode = 0x25,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteBooleanAndImmediateToALOrAX},
     // ES prefix - 0x26
-    {.opcode = 0x26, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0x26, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // DAA
     {.opcode = 0x27,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteDaa},
     // SUB r/m8, r8
     {.opcode = 0x28,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteSubRegisterFromRegisterOrMemory},
     // SUB r/m16, r16
     {.opcode = 0x29,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteSubRegisterFromRegisterOrMemory},
     // SUB r8, r/m8
     {.opcode = 0x2A,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteSubRegisterOrMemoryFromRegister},
     // SUB r16, r/m16
     {.opcode = 0x2B,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteSubRegisterOrMemoryFromRegister},
     // SUB AL, imm8
     {.opcode = 0x2C,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSubImmediateFromALOrAX},
     // SUB AX, imm16
     {.opcode = 0x2D,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteSubImmediateFromALOrAX},
     // CS prefix - 0x2E
-    {.opcode = 0x2E, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0x2E, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // DAS
     {.opcode = 0x2F,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteDas},
     // XOR r/m8, r8
     {.opcode = 0x30,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteBooleanXorRegisterToRegisterOrMemory},
     // XOR r/m16, r16
     {.opcode = 0x31,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteBooleanXorRegisterToRegisterOrMemory},
     // XOR r8, r/m8
     {.opcode = 0x32,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteBooleanXorRegisterOrMemoryToRegister},
     // XOR r16, r/m16
     {.opcode = 0x33,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteBooleanXorRegisterOrMemoryToRegister},
     // XOR AL, imm8
     {.opcode = 0x34,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteBooleanXorImmediateToALOrAX},
     // XOR AX, imm16
     {.opcode = 0x35,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteBooleanXorImmediateToALOrAX},
     // SS prefix - 0x36
-    {.opcode = 0x36, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0x36, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // AAA
     {.opcode = 0x37,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteAaa},
     // CMP r/m8, r8
     {.opcode = 0x38,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteCmpRegisterToRegisterOrMemory},
     // CMP r/m16, r16
     {.opcode = 0x39,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteCmpRegisterToRegisterOrMemory},
     // CMP r8, r/m8
     {.opcode = 0x3A,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteCmpRegisterOrMemoryToRegister},
     // CMP r16, r/m16
     {.opcode = 0x3B,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteCmpRegisterOrMemoryToRegister},
     // CMP AL, imm8
     {.opcode = 0x3C,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteCmpImmediateToALOrAX},
     // CMP AX, imm16
     {.opcode = 0x3D,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteCmpImmediateToALOrAX},
     // DS prefix - 0x3E
-    {.opcode = 0x3E, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0x3E, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // AAS
     {.opcode = 0x3F,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteAas},
     // INC AX
     {.opcode = 0x40,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // INC CX
     {.opcode = 0x41,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // INC DX
     {.opcode = 0x42,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // INC BX
     {.opcode = 0x43,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // INC SP
     {.opcode = 0x44,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // INC BP
     {.opcode = 0x45,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // INC SI
     {.opcode = 0x46,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // INC DI
     {.opcode = 0x47,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteIncRegister},
     // DEC AX
     {.opcode = 0x48,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // DEC CX
     {.opcode = 0x49,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // DEC DX
     {.opcode = 0x4A,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // DEC BX
     {.opcode = 0x4B,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // DEC SP
     {.opcode = 0x4C,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // DEC BP
     {.opcode = 0x4D,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // DEC SI
     {.opcode = 0x4E,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // DEC DI
     {.opcode = 0x4F,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteDecRegister},
     // PUSH AX
     {.opcode = 0x50,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // PUSH CX
     {.opcode = 0x51,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // PUSH DX
     {.opcode = 0x52,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // PUSH BX
     {.opcode = 0x53,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // PUSH SP
     {.opcode = 0x54,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // PUSH BP
     {.opcode = 0x55,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // PUSH SI
     {.opcode = 0x56,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // PUSH DI
     {.opcode = 0x57,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushRegister},
     // POP AX
     {.opcode = 0x58,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
     // POP CX
     {.opcode = 0x59,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
     // POP DX
     {.opcode = 0x5A,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
     // POP BX
     {.opcode = 0x5B,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
     // POP SP
     {.opcode = 0x5C,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
     // POP BP
     {.opcode = 0x5D,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
     // POP SI
     {.opcode = 0x5E,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegister},
     // POP DI
     {.opcode = 0x5F,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
@@ -6259,216 +6305,252 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // desynchronize the instruction stream.
     // JO rel8 (alias of 0x70)
     {.opcode = 0x60,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNO rel8 (alias of 0x71)
     {.opcode = 0x61,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JB/JNAE/JC rel8 (alias of 0x72)
     {.opcode = 0x62,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNB/JAE/JNC rel8 (alias of 0x73)
     {.opcode = 0x63,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JE/JZ rel8 (alias of 0x74)
     {.opcode = 0x64,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNE/JNZ rel8 (alias of 0x75)
     {.opcode = 0x65,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JBE/JNA rel8 (alias of 0x76)
     {.opcode = 0x66,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNBE/JA rel8 (alias of 0x77)
     {.opcode = 0x67,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JS rel8 (alias of 0x78)
     {.opcode = 0x68,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNS rel8 (alias of 0x79)
     {.opcode = 0x69,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JP/JPE rel8 (alias of 0x7A)
     {.opcode = 0x6A,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNP/JPO rel8 (alias of 0x7B)
     {.opcode = 0x6B,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JL/JNGE rel8 (alias of 0x7C)
     {.opcode = 0x6C,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLOrJNL},
     // JNL/JGE rel8 (alias of 0x7D)
     {.opcode = 0x6D,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLOrJNL},
     // JLE/JNG rel8 (alias of 0x7E)
     {.opcode = 0x6E,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // JNLE/JG rel8 (alias of 0x7F)
     {.opcode = 0x6F,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // JO rel8
     {.opcode = 0x70,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNO rel8
     {.opcode = 0x71,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JB/JNAE/JC rel8
     {.opcode = 0x72,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNB/JAE/JNC rel8
     {.opcode = 0x73,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JE/JZ rel8
     {.opcode = 0x74,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNE/JNZ rel8
     {.opcode = 0x75,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JBE/JNA rel8
     {.opcode = 0x76,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNBE/JA rel8
     {.opcode = 0x77,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JS rel8
     {.opcode = 0x78,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNS rel8
     {.opcode = 0x79,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JP/JPE rel8
     {.opcode = 0x7A,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JNP/JPO rel8
     {.opcode = 0x7B,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteUnsignedConditionalJump},
     // JL/JNGE rel8
     {.opcode = 0x7C,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLOrJNL},
     // JNL/JGE rel8
     {.opcode = 0x7D,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLOrJNL},
     // JLE/JNG rel8
     {.opcode = 0x7E,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // JNLE/JG rel8
     {.opcode = 0x7F,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteSignedConditionalJumpJLEOrJNLE},
     // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m8, imm8 (Group 1)
     {.opcode = 0x80,
+     .base_cycles = 4,
      .has_modrm = true,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteGroup1Instruction},
     // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m16, imm16 (Group 1)
     {.opcode = 0x81,
+     .base_cycles = 4,
      .has_modrm = true,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteGroup1Instruction},
     // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m8, imm8 (Group 1)
     {.opcode = 0x82,
+     .base_cycles = 4,
      .has_modrm = true,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteGroup1Instruction},
     // ADD/OR/ADC/SBB/AND/SUB/XOR/CMP r/m16, imm8 (Group 1)
     {.opcode = 0x83,
+     .base_cycles = 4,
      .has_modrm = true,
      // This is a special case - the immediate is 8 bits but the destination is
      // 16 bits.
@@ -6477,357 +6559,417 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
      .handler = ExecuteGroup1InstructionWithSignExtension},
     // TEST r/m8, r8
     {.opcode = 0x84,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteTestRegisterToRegisterOrMemory},
     // TEST r/m16, r16
     {.opcode = 0x85,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteTestRegisterToRegisterOrMemory},
     // XCHG r/m8, r8
     {.opcode = 0x86,
+     .base_cycles = 4,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteExchangeRegisterOrMemory},
     // XCHG r/m16, r16
     {.opcode = 0x87,
+     .base_cycles = 4,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegisterOrMemory},
     // MOV r/m8, r8
     {.opcode = 0x88,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteMoveRegisterToRegisterOrMemory},
     // MOV r/m16, r16
     {.opcode = 0x89,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteMoveRegisterToRegisterOrMemory},
     // MOV r8, r/m8
     {.opcode = 0x8A,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteMoveRegisterOrMemoryToRegister},
     // MOV r16, r/m16
     {.opcode = 0x8B,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteMoveRegisterOrMemoryToRegister},
     // MOV r/m16, sreg
     {.opcode = 0x8C,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteMoveSegmentRegisterToRegisterOrMemory},
     // LEA r16, m
     {.opcode = 0x8D,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteLoadEffectiveAddress},
     // MOV sreg, r/m16
     {.opcode = 0x8E,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteMoveRegisterOrMemoryToSegmentRegister},
     // POP r/m16
     {.opcode = 0x8F,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopRegisterOrMemory},
     // XCHG AX, AX (NOP)
     {.opcode = 0x90,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // XCHG AX, CX
     {.opcode = 0x91,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // XCHG AX, DX
     {.opcode = 0x92,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // XCHG AX, BX
     {.opcode = 0x93,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // XCHG AX, SP
     {.opcode = 0x94,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // XCHG AX, BP
     {.opcode = 0x95,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // XCHG AX, SI
     {.opcode = 0x96,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // XCHG AX, DI
     {.opcode = 0x97,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteExchangeRegister},
     // CBW
     {.opcode = 0x98,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteCbw},
     // CWD
     {.opcode = 0x99,
+     .base_cycles = 5,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteCwd},
     // CALL ptr16:16 (4 bytes: 2 for offset, 2 for segment)
     {.opcode = 0x9A,
+     .base_cycles = 12,
      .has_modrm = false,
      .immediate_size = 4,
      .width = kWord,
      .handler = ExecuteDirectFarCall},
     // WAIT
     {.opcode = 0x9B,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // PUSHF
     {.opcode = 0x9C,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePushFlags},
     // POPF
     {.opcode = 0x9D,
+     .base_cycles = 0,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecutePopFlags},
     // SAHF
     {.opcode = 0x9E,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteStoreAHToFlags},
     // LAHF
     {.opcode = 0x9F,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteLoadAHFromFlags},
     // MOV AL, moffs16
     {.opcode = 0xA0,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kByte,
      .handler = ExecuteMoveMemoryOffsetToALOrAX},
     // MOV AX, moffs16
     {.opcode = 0xA1,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveMemoryOffsetToALOrAX},
     // MOV moffs16, AL
     {.opcode = 0xA2,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kByte,
      .handler = ExecuteMoveALOrAXToMemoryOffset},
     // MOV moffs16, AX
     {.opcode = 0xA3,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveALOrAXToMemoryOffset},
     // MOVSB
     {.opcode = 0xA4,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteMovs},
     // MOVSW
     {.opcode = 0xA5,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteMovs},
     // CMPSB
     {.opcode = 0xA6,
+     .base_cycles = 14,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteCmps},
     // CMPSW
     {.opcode = 0xA7,
+     .base_cycles = 14,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteCmps},
     // TEST AL, imm8
     {.opcode = 0xA8,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteTestImmediateToALOrAX},
     // TEST AX, imm16
     {.opcode = 0xA9,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteTestImmediateToALOrAX},
     // STOSB
     {.opcode = 0xAA,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteStos},
     // STOSW
     {.opcode = 0xAB,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteStos},
     // LODSB
     {.opcode = 0xAC,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteLods},
     // LODSW
     {.opcode = 0xAD,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteLods},
     // SCASB
     {.opcode = 0xAE,
+     .base_cycles = 7,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteScas},
     // SCASW
     {.opcode = 0xAF,
+     .base_cycles = 7,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteScas},
     // MOV AL, imm8
     {.opcode = 0xB0,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV CL, imm8
     {.opcode = 0xB1,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV DL, imm8
     {.opcode = 0xB2,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV BL, imm8
     {.opcode = 0xB3,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV AH, imm8
     {.opcode = 0xB4,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV CH, imm8
     {.opcode = 0xB5,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV DH, imm8
     {.opcode = 0xB6,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV BH, imm8
     {.opcode = 0xB7,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV AX, imm16
     {.opcode = 0xB8,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV CX, imm16
     {.opcode = 0xB9,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV DX, imm16
     {.opcode = 0xBA,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV BX, imm16
     {.opcode = 0xBB,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV SP, imm16
     {.opcode = 0xBC,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV BP, imm16
     {.opcode = 0xBD,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV SI, imm16
     {.opcode = 0xBE,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegister},
     // MOV DI, imm16
     {.opcode = 0xBF,
+     .base_cycles = 4,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
@@ -6838,128 +6980,150 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // opcodes. 0xC0 takes a 16-bit immediate, so decoding it as an unknown
     // single-byte opcode would desynchronize the instruction stream.
     {.opcode = 0xC0,
+     .base_cycles = 12,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteNearReturnAndPop},
     // RET (alias of 0xC3)
     {.opcode = 0xC1,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteNearReturn},
     // RET imm16
     {.opcode = 0xC2,
+     .base_cycles = 12,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteNearReturnAndPop},
     // RET
     {.opcode = 0xC3,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteNearReturn},
     // LES r16, m32
     {.opcode = 0xC4,
+     .base_cycles = 8,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteLoadESWithPointer},
     // LDS r16, m32
     {.opcode = 0xC5,
+     .base_cycles = 8,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteLoadDSWithPointer},
     // MOV r/m8, imm8
     {.opcode = 0xC6,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteMoveImmediateToRegisterOrMemory},
     // MOV r/m16, imm16
     {.opcode = 0xC7,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteMoveImmediateToRegisterOrMemory},
     // RETF imm16 (alias of 0xCA)
     {.opcode = 0xC8,
+     .base_cycles = 9,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteFarReturnAndPop},
     // RETF (alias of 0xCB)
     {.opcode = 0xC9,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteFarReturn},
     // RETF imm16
     {.opcode = 0xCA,
+     .base_cycles = 9,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteFarReturnAndPop},
     // RETF
     {.opcode = 0xCB,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteFarReturn},
     // INT 3
     {.opcode = 0xCC,
+     .base_cycles = 1,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteInt3},
     // INT imm8
     {.opcode = 0xCD,
+     .base_cycles = 1,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteIntN},
     // INTO
     {.opcode = 0xCE,
+     .base_cycles = 3,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteInto},
     // IRET
     {.opcode = 0xCF,
+     .base_cycles = 32,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteIret},
     // ROL/ROR/RCL/RCR/SHL/SHR/SAR r/m8, 1 (Group 2)
     {.opcode = 0xD0,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteGroup2ShiftOrRotateBy1Instruction},
     // ROL/ROR/RCL/RCR/SHL/SHR/SAR r/m16, 1 (Group 2)
     {.opcode = 0xD1,
+     .base_cycles = 2,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteGroup2ShiftOrRotateBy1Instruction},
     // ROL/ROR/RCL/RCR/SHL/SHR/SAR r/m8, CL (Group 2)
     {.opcode = 0xD2,
+     .base_cycles = 8,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteGroup2ShiftOrRotateByCLInstruction},
     // ROL/ROR/RCL/RCR/SHL/SHR/SAR r/m16, CL (Group 2)
     {.opcode = 0xD3,
+     .base_cycles = 8,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteGroup2ShiftOrRotateByCLInstruction},
     // AAM
     {.opcode = 0xD4,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteAam},
     // AAD
     {.opcode = 0xD5,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
@@ -6969,173 +7133,202 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // Undocumented, but real and stable across x86 generations: sets AL to
     // 0xFF if CF is set and 0x00 otherwise. Affects no flags.
     {.opcode = 0xD6,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteSetALFromCarry},
     // XLAT/XLATB
     {.opcode = 0xD7,
+     .base_cycles = 11,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteTranslateByte},
     // ESC instruction 0xD8 for 8087 numeric coprocessor
     {.opcode = 0xD8,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // ESC instruction 0xD9 for 8087 numeric coprocessor
     {.opcode = 0xD9,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // ESC instruction 0xDA for 8087 numeric coprocessor
     {.opcode = 0xDA,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // ESC instruction 0xDB for 8087 numeric coprocessor
     {.opcode = 0xDB,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // ESC instruction 0xDC for 8087 numeric coprocessor
     {.opcode = 0xDC,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // ESC instruction 0xDD for 8087 numeric coprocessor
     {.opcode = 0xDD,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // ESC instruction 0xDE for 8087 numeric coprocessor
     {.opcode = 0xDE,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // ESC instruction 0xDF for 8087 numeric coprocessor
     {.opcode = 0xDF,
+     .base_cycles = 0,
      .has_modrm = true,
      .immediate_size = 0,
      .handler = ExecuteNoOp},
     // LOOPNE/LOOPNZ rel8
     {.opcode = 0xE0,
+     .base_cycles = 5,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteLoopZOrNZ},
     // LOOPE/LOOPZ rel8
     {.opcode = 0xE1,
+     .base_cycles = 6,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteLoopZOrNZ},
     // LOOP rel8
     {.opcode = 0xE2,
+     .base_cycles = 6,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteLoop},
     // JCXZ rel8
     {.opcode = 0xE3,
+     .base_cycles = 6,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteJumpIfCXIsZero},
     // IN AL, imm8
     {.opcode = 0xE4,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteInImmediate},
     // IN AX, imm8
     {.opcode = 0xE5,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kWord,
      .handler = ExecuteInImmediate},
     // OUT imm8, AL
     {.opcode = 0xE6,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteOutImmediate},
     // OUT imm8, AX
     {.opcode = 0xE7,
+     .base_cycles = 10,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kWord,
      .handler = ExecuteOutImmediate},
     // CALL rel16
     {.opcode = 0xE8,
+     .base_cycles = 11,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteDirectNearCall},
     // JMP rel16
     {.opcode = 0xE9,
+     .base_cycles = 15,
      .has_modrm = false,
      .immediate_size = 2,
      .width = kWord,
      .handler = ExecuteShortOrNearJump},
     // JMP ptr16:16 (4 bytes: 2 for offset, 2 for segment)
     {.opcode = 0xEA,
+     .base_cycles = 15,
      .has_modrm = false,
      .immediate_size = 4,
      .width = kWord,
      .handler = ExecuteDirectFarJump},
     // JMP rel8
     {.opcode = 0xEB,
+     .base_cycles = 15,
      .has_modrm = false,
      .immediate_size = 1,
      .width = kByte,
      .handler = ExecuteShortOrNearJump},
     // IN AL, DX
     {.opcode = 0xEC,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteInDX},
     // IN AX, DX
     {.opcode = 0xED,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteInDX},
     // OUT DX, AL
     {.opcode = 0xEE,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteOutDX},
     // OUT DX, AX
     {.opcode = 0xEF,
+     .base_cycles = 8,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteOutDX},
     // 0xF0 - LOCK prefix
-    {.opcode = 0xF0, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0xF0, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // LOCK prefix (alias of 0xF0) - consumed by the prefix decoder.
-    {.opcode = 0xF1, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0xF1, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // 0xF2 - REPNE prefix
-    {.opcode = 0xF2, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0xF2, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // 0xF3 - REP/REPE prefix
-    {.opcode = 0xF3, .handler = ExecuteInvalidOpcode},
+    {.opcode = 0xF3, .base_cycles = 2, .handler = ExecuteInvalidOpcode},
     // HLT
     {.opcode = 0xF4,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteHlt},
     // CMC
     {.opcode = 0xF5,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .handler = ExecuteComplementCarryFlag},
     // TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m8 (Group 3)
     // The immediate size depends on the ModR/M byte.
     {.opcode = 0xF6,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
@@ -7143,54 +7336,63 @@ YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m16 (Group 3)
     // The immediate size depends on the ModR/M byte.
     {.opcode = 0xF7,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
      .handler = ExecuteGroup3Instruction},
     // CLC
     {.opcode = 0xF8,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteClearOrSetFlag},
     // STC
     {.opcode = 0xF9,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteClearOrSetFlag},
     // CLI
     {.opcode = 0xFA,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteClearOrSetFlag},
     // STI
     {.opcode = 0xFB,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteClearOrSetFlag},
     // CLD
     {.opcode = 0xFC,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteClearOrSetFlag},
     // STD
     {.opcode = 0xFD,
+     .base_cycles = 2,
      .has_modrm = false,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteClearOrSetFlag},
     // INC/DEC r/m8 (Group 4)
     {.opcode = 0xFE,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kByte,
      .handler = ExecuteGroup4Instruction},
     // INC/DEC/CALL/JMP/PUSH r/m16 (Group 5)
     {.opcode = 0xFF,
+     .base_cycles = 3,
      .has_modrm = true,
      .immediate_size = 0,
      .width = kWord,
@@ -7567,7 +7769,7 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // so the answer belongs to the decode and an entry can keep it.
 YAX86_ALWAYS_INLINE static uint16_t GetInstructionBaseCycles(
     const Instruction* instruction) {
-  return (uint16_t)kOpcodeBaseCycles[instruction->opcode] +
+  return (uint16_t)opcode_table[instruction->opcode].base_cycles +
          GetEffectiveAddressCycles(instruction);
 }
 

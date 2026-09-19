@@ -358,7 +358,7 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // so the answer belongs to the decode and an entry can keep it.
 YAX86_ALWAYS_INLINE static uint16_t GetInstructionBaseCycles(
     const Instruction* instruction) {
-  return (uint16_t)kOpcodeBaseCycles[instruction->opcode] +
+  return (uint16_t)opcode_table[instruction->opcode].base_cycles +
          GetEffectiveAddressCycles(instruction);
 }
 
