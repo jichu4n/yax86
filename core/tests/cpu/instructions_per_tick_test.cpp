@@ -188,8 +188,7 @@ TEST_F(InstructionsPerTickTest, AColdCacheRunsOneInstructionPerTick) {
 TEST_F(InstructionsPerTickTest, NoDecodeCacheRunsOneInstructionPerTick) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
-  // Clearing the pointer is how a host takes the cache away, which is what the
-  // platform does while a memory watchpoint is enabled.
+  // A host that supplies no cache runs one instruction per tick.
   config_.decode_cache = nullptr;
 
   EXPECT_EQ(RunOneTick(), 1u);
@@ -398,8 +397,8 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtCodeThatHasBeenWrittenOver) {
   EXPECT_EQ(RunOneTick(), 1u);
 }
 
-// A stop asked for from inside an instruction - which is what a memory
-// watchpoint does - hands control back at that instruction, not three later.
+// A stop asked for from inside an instruction hands control back at that
+// instruction, not several later.
 TEST_F(InstructionsPerTickTest, ARunStopsWhenAStopIsRequested) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);

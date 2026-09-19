@@ -400,20 +400,13 @@ Alongside the table, state:
 - **Caching a pointer is safe where caching bytes would not be.** The window
   points into the host's own storage, so a write through the memory map is
   visible to the next fetch with no invalidation and self-modifying code keeps
-  working. What needs invalidating is a change to what an address *means*,
-  which is what `CPUInvalidateInstructionFetchWindow()` is for. The platform
-  calls it from `RegisterMemoryMapEntry()`, and unconditionally at the end of
-  `PlatformUpdateEnabledFlags()` — so a breakpoint change discards the window
-  too, which costs nothing and keeps the rule simple to state.
-- `PlatformUpdateEnabledFlags()` is the **sole writer** of
-  `has_enabled_breakpoints` and `has_enabled_memory_watchpoints`. Every path
-  that changes a breakpoint or watchpoint recomputes both through it, so a flag
-  can never disagree with the array it summarizes, and no path can change one
-  without also discarding the window.
-- The watchpoint case is the subtle one. A direct read cannot fire a
-  watchpoint, so the platform declines to hand out a window at all while any is
-  enabled — but declining does nothing about a window already open, which is
-  the reason for the rule above.
+  working.
+- **Nothing invalidates the window, and nothing needs to.** A window spans
+  exactly the memory map entry it was handed out from; registering a region
+  cannot overlap an existing entry, and there is no way to unregister or
+  change one, so no change to the map can reach inside an open window. Add
+  unregistration and that stops being true - the window would then have to be
+  dropped where the map changes.
 - The window stops at a segment wrap. IP is 16 bits and wraps within the
   segment where the linear address does not, so `remaining` is clamped to
   `0x10000 - ip` and the bytes past it go through the ordinary path, which
@@ -488,14 +481,10 @@ Alongside the table, state:
   address it used to hold alongside the wreckage of a different instruction —
   and the address tag would not catch it, because the address is the field the
   failed decode leaves alone.
-- **A hit runs an instruction without reading its bytes**, so it would hide a
-  read watchpoint on the code being run. The platform clears the config pointer
-  for as long as any watchpoint is enabled, in `PlatformUpdateEnabledFlags()`.
-  Only the pointer moves: the count was checked at init and the storage handed
-  back is the same storage, so nothing is rechecked and the generations were
-  maintained throughout. `RegisterMemoryMapEntry()` is the one case that does
-  discard every decode, because nothing was *written* — what changed is which
-  region owns the address, which no counter can express.
+- The cache is handed over once at init and never taken away. What does discard
+  every decode is `PlatformUpdateAfterMemoryMapChange()`, because a
+  registration writes nothing — what changed is which region owns the address,
+  which no counter can express.
 - **The 8088 hardware suite supplies a cache**, for the same reason it supplies
   the two windows. Each of its tests runs one instruction from a cold CPU, so
   nothing there can be a hit: what three million encodings check is the fill.
@@ -552,12 +541,6 @@ Alongside the table, state:
   `write_data` are the same buffer. Video memory reads from a buffer but writes
   through `VideoCallbackWriteVRAMByte()`, so a region shaped like that is
   correctly excluded rather than having its writes swallowed.
-- **The watchpoint case is what the gating is for.** An access through the
-  window is a load or a store, so it cannot fire a watchpoint. Every path that
-  touches one already goes through `PlatformUpdateEnabledFlags()`, which is
-  where the window is recomputed — enabling a watchpoint takes it away and
-  clearing them all hands it back. Three tests in
-  `platform_direct_data_window_test.cpp` fail if that call is dropped.
 - `RegisterMemoryMapEntry()` recomputes the window rather than discarding it,
   since a new region usually has nothing to do with address 0. Writes through
   the same buffer need no call at all: the window is a pointer into the host's
@@ -842,17 +825,11 @@ Alongside the table, state:
   bytes and nothing else. Writing it as two `& 0xF8` compares does not work and
   is not a near miss — `0xE4 & 0xF8` is `0xE0`, so both arms are dead and the
   guard never fires.
-- **Breakpoints and step mode are suppressed from the platform, not the CPU.**
-  A breakpoint is tested before a tick and a step reported after one, so both
-  need every instruction boundary to be a tick boundary, and neither is visible
-  from inside `CPUTick()`. `PlatformUpdateEnabledFlags()` recomputes
-  `allow_instruction_batching` from them and `PlatformTick()`
-  withholds the budget. Memory watchpoints need no test of their own: one fires
-  from inside an instruction and calls `CPURequestStop()`, which ends the run
-  where it happened.
-- `PlatformInit()` does not zero `PlatformState`, so `is_step_mode` is assigned
-  before `PlatformClearBreakpoints()`, which recomputes the flag derived from
-  it.
+- **A host that needs to stop somewhere drives `PlatformTick()` itself** and
+  inspects the CPU between calls. The platform holds no breakpoints and no step
+  mode: `PlatformTick()` already runs exactly one instruction, so a stepping
+  loop is a host loop, and a host comparing CS:IP costs the shared code
+  nothing.
 - **Batching is exactly equivalent to stepping, and there is a test that says
   so.** `ABatchedRunIsIndistinguishableFromSteppingIt` runs one program two
   ways — `PlatformTick()` per instruction, and `PlatformRun(platform, 1)`,
@@ -933,11 +910,8 @@ Alongside the table, state:
   not overlap, so a newly registered region cannot be inside an open fetch
   window, and the data window is whichever entry covers address 0, which a
   missed update leaves closed rather than wrong.
-- That recompute is the last thing `PlatformInit()` does, because what the CPU
-  derives depends on whether a watchpoint is enabled as well as on the map, and
-  the clears above it are what settle that. A watchpoint change reaches the
-  same state through `PlatformUpdateEnabledFlags()`: two triggers for one
-  recompute, and both need it.
+- That recompute is the last thing `PlatformInit()` does, by which point every
+  region the machine has is registered.
 - `RegisterMemoryMapEntry()` extends the index rather than rebuilding it. Only
   the pages the new entry touches can change, and entries may not overlap, so
   nothing already in the index can have a share of one of them — a registration
@@ -1276,12 +1250,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #73:
+SRAM, at #77:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.862942** | **5.697** | **0.479** | **119.4%** | 473,556 | 182,088 | 88,969 |
-| `-O2` | 5.329064 | 5.198 | 0.437 | 109.0% | 459,924 | 175,688 | 74,597 |
+| `-O3` | **4.720149** | **5.869** | **0.493** | **123.0%** | 471,332 | 180,400 | 85,277 |
+| `-O2` | 5.136848 | 5.393 | 0.453 | 113.1% | 459,100 | 175,056 | 73,337 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler

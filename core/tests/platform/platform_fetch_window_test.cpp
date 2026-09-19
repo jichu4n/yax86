@@ -86,64 +86,6 @@ TEST_F(PlatformFetchWindowTest, SelfModifyingCodeIsVisibleThroughTheWindow) {
   EXPECT_EQ(al(), 0x42);
 }
 
-// A window bypasses the watchpoint check, so turning watchpoints on has to
-// discard whichever one is already open. Without that, a watchpoint added
-// after execution began would never fire on an instruction fetch.
-TEST_F(PlatformFetchWindowTest, WatchpointAddedAfterAWindowIsOpenStillFires) {
-  Load({kOpNop, kOpNop, kOpNop, kOpNop, kOpHlt});
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
-  ASSERT_NE(platform_.cpu.instruction_fetch_window.data, nullptr);
-
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, kProgramOffset + 2, kProgramOffset + 2,
-          /*on_read=*/true, /*on_write=*/false),
-      0);
-  EXPECT_EQ(platform_.cpu.instruction_fetch_window.data, nullptr);
-
-  EXPECT_EQ(RunInstructions(4), kPlatformStopped);
-  const PlatformStopInfo* stop_info = PlatformGetStopInfo(&platform_);
-  ASSERT_NE(stop_info, nullptr);
-  EXPECT_EQ(stop_info->reason, kPlatformStopMemoryWatchpoint);
-  EXPECT_EQ(stop_info->address, (uint32_t)(kProgramOffset + 2));
-  EXPECT_FALSE(stop_info->is_write);
-}
-
-TEST_F(PlatformFetchWindowTest, ClearingWatchpointsLetsAWindowOpenAgain) {
-  Load({kOpNop, kOpNop, kOpNop, kOpHlt});
-  ASSERT_GE(
-      PlatformAddMemoryWatchpoint(
-          &platform_, 0xF000, 0xF000, /*on_read=*/true, /*on_write=*/false),
-      0);
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
-  // No window is handed out at all while watchpoints are enabled.
-  EXPECT_EQ(platform_.cpu.instruction_fetch_window.data, nullptr);
-
-  PlatformClearMemoryWatchpoints(&platform_);
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
-  EXPECT_NE(platform_.cpu.instruction_fetch_window.data, nullptr);
-}
-
-// Registering a region moves addresses from one entry to another, so an open
-// window may no longer describe what lives there.
-TEST_F(PlatformFetchWindowTest, RegisteringAMemoryRegionDiscardsTheWindow) {
-  Load({kOpNop, kOpNop, kOpHlt});
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
-  ASSERT_NE(platform_.cpu.instruction_fetch_window.data, nullptr);
-
-  static uint8_t region[4096] = {0};
-  MemoryMapEntry entry = {0};
-  entry.entry_type = 0x7F;
-  entry.start = 0xD0000;
-  entry.end = 0xD0000 + sizeof(region) - 1;
-  entry.read_data = region;
-  entry.write_data = region;
-  ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &entry));
-  PlatformUpdateAfterMemoryMapChange(&platform_);
-
-  EXPECT_EQ(platform_.cpu.instruction_fetch_window.data, nullptr);
-}
-
 // IP wraps within the segment where a linear address does not, so the window
 // has to stop at the wrap and let the ordinary path recompute the address.
 TEST_F(

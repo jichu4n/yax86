@@ -16,8 +16,6 @@ static uint32_t PlatformCyclesUntilNextEvent(
 
 // Hand the CPU conventional memory to index directly, or take it away again.
 static void PlatformUpdateDirectDataWindow(PlatformState* platform);
-// Hand the CPU storage for its decode cache, or take it away again.
-static void PlatformUpdateDecodeCache(PlatformState* platform);
 
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
@@ -110,9 +108,6 @@ bool RegisterMemoryMapEntry(
 }
 
 void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
-  // The window is a pointer into whichever region the host handed it out from,
-  // so it does not outlive a change to the map.
-  CPUInvalidateInstructionFetchWindow(&platform->cpu);
   // The data window is whichever entry covers address 0, which a registration
   // may have just become.
   PlatformUpdateDirectDataWindow(platform);
@@ -172,51 +167,8 @@ YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
   return NULL;
 }
 
-// Record the details of a stop for PlatformGetStopInfo().
-static void PlatformRecordStop(
-    PlatformState* platform, PlatformStopReason reason, uint8_t index,
-    uint32_t address, bool is_write) {
-  PlatformStopInfo* stop_info = &platform->stop_info;
-  stop_info->reason = reason;
-  stop_info->cs = platform->cpu.registers[kCS];
-  stop_info->ip = platform->cpu.registers[kIP];
-  stop_info->index = index;
-  stop_info->address = address;
-  stop_info->is_write = is_write;
-  platform->has_stop_info = true;
-}
-
-// Stop if the access at address falls within an enabled memory watchpoint.
-// Only called when has_enabled_memory_watchpoints is set.
-static void PlatformCheckMemoryWatchpoints(
-    PlatformState* platform, uint32_t address, bool is_write) {
-  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
-    const PlatformMemoryWatchpoint* watchpoint =
-        &platform->memory_watchpoints[i];
-    if (!watchpoint->enabled || address < watchpoint->start ||
-        address > watchpoint->end ||
-        !(is_write ? watchpoint->on_write : watchpoint->on_read)) {
-      continue;
-    }
-    PlatformRecordStop(
-        platform, kPlatformStopMemoryWatchpoint, i, address, is_write);
-    // Unlike a breakpoint or a step, a watchpoint fires in the middle of a
-    // tick, so the stop is deferred to the end of that tick.
-    platform->stop_pending = true;
-    // Ask the CPU to hand control back as soon as the instruction in progress
-    // finishes. A watchpoint can also fire from a DMA transfer, in which case
-    // there is no CPU tick in progress and this is a no-op - PlatformTick()
-    // picks the stop up from stop_pending either way.
-    CPURequestStop(&platform->cpu);
-    return;
-  }
-}
-
 // Read a byte from a logical memory address.
 YAX86_HOT uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
-  if (platform->has_enabled_memory_watchpoints) {
-    PlatformCheckMemoryWatchpoints(platform, address, false);
-  }
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     // Plain storage, which is what every region except video memory is. Going
@@ -247,9 +199,6 @@ uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
 // Write a byte to a logical memory address.
 YAX86_HOT void WriteMemoryByte(
     PlatformState* platform, uint32_t address, uint8_t value) {
-  if (platform->has_enabled_memory_watchpoints) {
-    PlatformCheckMemoryWatchpoints(platform, address, true);
-  }
   // Writes that do not come from the CPU arrive here, and can land on bytes it
   // has already decoded. DMA is the one that matters: DOS loads itself over
   // the boot sector that way.
@@ -670,17 +619,12 @@ YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
 // Hands the CPU a direct window for instruction fetch.
 //
 // Declines wherever a read has to be observed or computed rather than loaded:
-// a device region, unmapped memory, a page shared by two entries, or any
-// access at all while a memory watchpoint is enabled - a direct read cannot
-// fire one.
+// a device region, unmapped memory, or a page shared by two entries.
 static void CPUCallbackGetInstructionFetchWindow(
     CPUState* cpu, uint32_t address) {
   CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
   window->data = NULL;
   PlatformState* platform = (PlatformState*)cpu->config->context;
-  if (platform->has_enabled_memory_watchpoints) {
-    return;
-  }
   // Anything that is not a single entry's page - unmapped, or shared by more
   // than one entry - has no window to hand out.
   const uint8_t index = GetMemoryPageMapIndex(platform, address);
@@ -985,15 +929,7 @@ bool PlatformInit(PlatformState* platform, PlatformConfig* config) {
 
   // Set before the two calls below, because each of them recomputes the
   // enabled flags and one of those is derived from this.
-  platform->is_step_mode = false;
-  PlatformClearBreakpoints(platform);
-  PlatformClearMemoryWatchpoints(platform);
-  platform->has_stop_info = false;
-  platform->stop_pending = false;
-  platform->skip_breakpoint_check = false;
-
-  // Last, because what the CPU derives from the map also depends on whether a
-  // watchpoint is enabled, which the clears above are what settle.
+  // Last, because every region the machine has is registered by now.
   PlatformUpdateAfterMemoryMapChange(platform);
 
   return true;
@@ -1121,46 +1057,16 @@ YAX86_HOT void PlatformSync(PlatformState* platform) {
       PlatformCyclesUntilNextEvent(platform, kMaxEventInterval);
 }
 
-// Stop if there is an enabled breakpoint on the instruction about to execute.
-// Only called when has_enabled_breakpoints is set. Returns true if execution
-// should stop.
-static bool PlatformCheckBreakpoints(PlatformState* platform) {
-  const uint16_t cs = platform->cpu.registers[kCS];
-  const uint16_t ip = platform->cpu.registers[kIP];
-  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
-    const PlatformBreakpoint* breakpoint = &platform->breakpoints[i];
-    if (breakpoint->enabled && breakpoint->cs == cs && breakpoint->ip == ip) {
-      PlatformRecordStop(platform, kPlatformStopBreakpoint, i, 0, false);
-      return true;
-    }
-  }
-  return false;
-}
-
 // The body of both entry points. PlatformTick() promises its caller one
 // instruction; PlatformRun() is driving the machine rather than stepping it.
 // Both pass a constant, so the tests below fold away in each.
 YAX86_HOT static PlatformRunStatus PlatformTickInternal(
     PlatformState* platform, bool may_batch_instructions) {
-  // Stop before executing the instruction at a breakpoint. Nothing else in the
-  // machine is ticked, because no time has passed yet.
-  if (platform->has_enabled_breakpoints && !platform->cpu.is_halted) {
-    if (platform->skip_breakpoint_check) {
-      // Resuming from a breakpoint stop - execute this instruction rather than
-      // stopping on it again.
-      platform->skip_breakpoint_check = false;
-    } else if (PlatformCheckBreakpoints(platform)) {
-      platform->skip_breakpoint_check = true;
-      return kPlatformStopped;
-    }
-  }
-
   // How long the CPU may run before something in the machine needs to see it.
   // A deadline already due leaves no budget: the subtraction would otherwise
   // wrap and let the CPU run on past a device that is already waiting.
   const uint16_t max_run_cycles =
-      may_batch_instructions && platform->allow_instruction_batching &&
-              !PlatformIsEventDue(platform)
+      may_batch_instructions && !PlatformIsEventDue(platform)
           ? (uint16_t)(platform->next_event_ticks - platform->ticks)
           : 0;
 
@@ -1177,12 +1083,6 @@ YAX86_HOT static PlatformRunStatus PlatformTickInternal(
     PlatformSync(platform);
   }
 
-  // A watchpoint may have fired from the CPU or from a DMA transfer.
-  if (platform->stop_pending) {
-    platform->stop_pending = false;
-    return kPlatformStopped;
-  }
-
   if (cpu_result == kCPUTickInvalid) {
     return kPlatformInvalid;
   }
@@ -1194,11 +1094,6 @@ YAX86_HOT static PlatformRunStatus PlatformTickInternal(
   if (platform->cpu.is_halted && !CPUGetFlag(&platform->cpu, kIF) &&
       !platform->cpu.has_pending_internal_interrupt) {
     return kPlatformHung;
-  }
-
-  if (platform->is_step_mode && cpu_result == kCPUTickExecuted) {
-    PlatformRecordStop(platform, kPlatformStopStep, 0, 0, false);
-    return kPlatformStopped;
   }
 
   return kPlatformRunning;
@@ -1259,17 +1154,11 @@ PlatformRun(PlatformState* platform, uint32_t max_cycles) {
 }
 
 // ============================================================================
-// Breakpoints and watchpoints
+// The CPU's view of guest memory
 // ============================================================================
 
 static void PlatformUpdateDirectDataWindow(PlatformState* platform) {
   CPUInvalidateDirectDataWindow(&platform->cpu);
-  // An access through the window is a load or a store, so it cannot fire a
-  // watchpoint. While any is enabled the CPU is given nothing and every access
-  // goes through ReadMemoryByte() and WriteMemoryByte(), where the check is.
-  if (platform->has_enabled_memory_watchpoints) {
-    return;
-  }
   // The window is a prefix of the address space, so it is whichever region
   // covers address 0 and only while that region is plain storage reached
   // through one buffer in both directions. Conventional memory is that region;
@@ -1283,128 +1172,4 @@ static void PlatformUpdateDirectDataWindow(PlatformState* platform) {
   // A map entry's end is the last address in the region; a window's is one
   // past it.
   CPUSetDirectDataWindow(&platform->cpu, entry->write_data, entry->end + 1);
-}
-
-static void PlatformUpdateDecodeCache(PlatformState* platform) {
-  // A hit runs an instruction without reading its bytes, so it cannot fire a
-  // read watchpoint on the code it is running. While any is enabled the CPU is
-  // given no cache, which puts those bytes back through ReadMemoryByte() where
-  // the check is.
-  //
-  // Only the pointer moves, and nothing needs discarding on the way back: the
-  // page generations were maintained throughout.
-  platform->cpu_config.decode_cache = platform->has_enabled_memory_watchpoints
-                                          ? NULL
-                                          : platform->cpu_decode_cache;
-}
-
-// Recompute the cached hot path early-out flags.
-static void PlatformUpdateEnabledFlags(PlatformState* platform) {
-  platform->has_enabled_breakpoints = false;
-  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
-    if (platform->breakpoints[i].enabled) {
-      platform->has_enabled_breakpoints = true;
-      break;
-    }
-  }
-  platform->has_enabled_memory_watchpoints = false;
-  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
-    if (platform->memory_watchpoints[i].enabled) {
-      platform->has_enabled_memory_watchpoints = true;
-      break;
-    }
-  }
-  // A breakpoint is tested before a tick and a step reported after one, so
-  // both need every instruction boundary to be a tick boundary. A memory
-  // watchpoint needs no test: it fires from inside an instruction and asks the
-  // CPU to stop, which ends the run where it happened.
-  platform->allow_instruction_batching =
-      !platform->has_enabled_breakpoints && !platform->is_step_mode;
-  // Instruction fetch reads through a direct window when one is open, which
-  // cannot fire a watchpoint. Turning watchpoints on stops the platform
-  // handing out new windows, and this discards whichever one is already open.
-  CPUInvalidateInstructionFetchWindow(&platform->cpu);
-  PlatformUpdateDirectDataWindow(platform);
-  PlatformUpdateDecodeCache(platform);
-}
-
-int8_t PlatformAddBreakpoint(
-    PlatformState* platform, uint16_t cs, uint16_t ip) {
-  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
-    PlatformBreakpoint* breakpoint = &platform->breakpoints[i];
-    if (breakpoint->enabled) {
-      continue;
-    }
-    breakpoint->enabled = true;
-    breakpoint->cs = cs;
-    breakpoint->ip = ip;
-    PlatformUpdateEnabledFlags(platform);
-    return (int8_t)i;
-  }
-  return kInvalidWatchIndex;
-}
-
-bool PlatformRemoveBreakpoint(PlatformState* platform, uint8_t index) {
-  if (index >= kMaxBreakpoints || !platform->breakpoints[index].enabled) {
-    return false;
-  }
-  platform->breakpoints[index].enabled = false;
-  PlatformUpdateEnabledFlags(platform);
-  return true;
-}
-
-void PlatformClearBreakpoints(PlatformState* platform) {
-  for (uint8_t i = 0; i < kMaxBreakpoints; ++i) {
-    platform->breakpoints[i].enabled = false;
-  }
-  PlatformUpdateEnabledFlags(platform);
-}
-
-int8_t PlatformAddMemoryWatchpoint(
-    PlatformState* platform, uint32_t start, uint32_t end, bool on_read,
-    bool on_write) {
-  if (start > end || (!on_read && !on_write)) {
-    return kInvalidWatchIndex;
-  }
-  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
-    PlatformMemoryWatchpoint* watchpoint = &platform->memory_watchpoints[i];
-    if (watchpoint->enabled) {
-      continue;
-    }
-    watchpoint->enabled = true;
-    watchpoint->start = start;
-    watchpoint->end = end;
-    watchpoint->on_read = on_read;
-    watchpoint->on_write = on_write;
-    PlatformUpdateEnabledFlags(platform);
-    return (int8_t)i;
-  }
-  return kInvalidWatchIndex;
-}
-
-bool PlatformRemoveMemoryWatchpoint(PlatformState* platform, uint8_t index) {
-  if (index >= kMaxMemoryWatchpoints ||
-      !platform->memory_watchpoints[index].enabled) {
-    return false;
-  }
-  platform->memory_watchpoints[index].enabled = false;
-  PlatformUpdateEnabledFlags(platform);
-  return true;
-}
-
-void PlatformClearMemoryWatchpoints(PlatformState* platform) {
-  for (uint8_t i = 0; i < kMaxMemoryWatchpoints; ++i) {
-    platform->memory_watchpoints[i].enabled = false;
-  }
-  PlatformUpdateEnabledFlags(platform);
-}
-
-void PlatformSetStepMode(PlatformState* platform, bool is_step_mode) {
-  platform->is_step_mode = is_step_mode;
-  // Step mode is one of the two things that stop a tick batching.
-  PlatformUpdateEnabledFlags(platform);
-}
-
-const PlatformStopInfo* PlatformGetStopInfo(const PlatformState* platform) {
-  return platform->has_stop_info ? &platform->stop_info : NULL;
 }
