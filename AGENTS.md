@@ -236,8 +236,8 @@ harness, which truncates MHz and MIPS to two decimals when it prints them. For
 
 Alongside the table, state:
 
-- **The invariant, and that it did not move.** `dos-boot` retires 2,328,122
-  instructions in 27,702,773 emulated cycles, at every level and on every run.
+- **The invariant, and that it did not move.** `dos-boot` retires 2,328,128
+  instructions in 27,702,858 emulated cycles, at every level and on every run.
   If either number changed, the change altered behaviour and the times either
   side of it are not comparable — say so and explain why, rather than
   presenting the speedup.
@@ -952,6 +952,86 @@ Alongside the table, state:
   less work — its timer-polling loops get more turns before the same number of
   PIT ticks elapse, so retired instructions go *up* as emulated cycles go down.
 
+### cpu — bulk string runs
+
+- A `REP MOVS` or `REP STOS` whose every byte lies inside the direct data
+  window is carried out as a loop over that window, rather than an element at a
+  time through the operand machinery. An iteration otherwise builds an operand
+  address, resolves a segment through it, dispatches on width and charges the
+  bus, twice over, to move two bytes — and calls through a function pointer to
+  do it. Worth **3.10% at `-O3`** on `dos-boot`.
+- `REP SCAS` and `REP CMPS` get no bulk path, and not for want of trying: both
+  read flags per element and stop on them, so there is no run to plan. `LODS`
+  writes a register rather than memory, so repeating it does nothing a single
+  iteration with the final count would not.
+- **The element path is the definition, and the bulk path has to be
+  indistinguishable from it** — same memory, same registers, same flags, same
+  cycle count. `string_bulk_test.cpp` runs each case both ways and compares all
+  four, which is what makes a divergence a failure rather than a judgement
+  call. Of eight deliberate breakages, each is caught by the test aimed at it.
+- **A run is declined rather than made to work.** Three things disqualify one,
+  and the awkward cases are all on the far side of that line: a count of zero,
+  an offset that would wrap the top of its segment, and any byte outside the
+  window. What is left is a straight walk over an array.
+- The segment wrap has to be tested separately from the window bound, because
+  the two coincide on any host whose window happens to end at a segment
+  boundary — which is why the tests put the run in a segment based part way up
+  memory, where an offset can wrap with every address still inside the window.
+- **Overlap needs no special handling, because the loops walk elements in the
+  order the element path visits them.** A forward `REP MOVSB` from `SI` to
+  `SI+1` propagates one byte through the whole range on real hardware, and a
+  loop that copies in the same order reproduces that for free. What would break
+  it is `memcpy`, which may copy in any order — see below.
+- The word loop reads both bytes of an element before writing either, which is
+  the order `ReadMemoryOperandWord()` and `WriteMemoryOperandWord()` impose.
+  It only shows up where the two ends overlap by exactly one byte, which is one
+  test and nothing else.
+- **All four loops walk pointers rather than indexing an array**, and that is
+  what keeps the compiler from rewriting them. Written as `memory[index]`,
+  `gcc -O3` recognizes the byte-wide `STOS` loop and emits a call to
+  `memset()` — on this target the SDK's assembly one, in flash behind a veneer.
+  It **measures the same**, 4.779637s against 4.779589s, so what the index form
+  costs is not speed but a link-time dependency on libc the core does not
+  otherwise have.
+- The copy loops are out of reach of the same transform for a second reason:
+  the step is a runtime value the compiler cannot prove positive, so it cannot
+  conclude the two ranges do not overlap. That one is load-bearing rather than
+  lucky — specializing a loop on a forward direction would hand it exactly the
+  proof it needs, and a `memcpy()` may copy in any order, which is what the
+  overlapping cases depend on it not doing.
+- **A synthesized `mem*` call is not the same defect as a written one.** The
+  check under "operand values" exists to catch a *struct* being copied on the
+  operand path, which is where 5.4% of a run once went; a store loop the
+  compiler recognized is a different thing, and whether it is worth avoiding is
+  a question about libc dependence rather than about speed.
+- Each instruction's bulk run lives in its own function beside the iteration it
+  replaces, so the handler reads as the two paths it chooses between. Both are
+  inlined into their caller at `-O3`, and `core .text` is identical either way.
+- **`PlanBulkStringRun()` is out of line in flash, and is left that way.** It
+  has two callers, which is the shape that usually stops GCC inlining a helper
+  and costs a veneer on the hot path — but both marks that would change it
+  measure worse or neutral: `YAX86_HOT` is **0.00%** for 296 bytes of SRAM, and
+  `YAX86_ALWAYS_INLINE` is **0.73% slower** while making the core 216 bytes
+  *smaller*, having grown both handlers enough to move the register allocation
+  around them.
+- The reason the mark buys nothing is that the planner runs **once per repeat,
+  not once per element** — it is on the hot path by name and not by traffic,
+  which is the distinction the placement section draws. A repeat that moves 64
+  bytes amortizes one flash fetch over the whole run.
+- **The run reports one write per 4KB page to the decode cache, not one per
+  byte.** A page's generation only has to *change* for a decode taken from it
+  to be discarded, so one report says the same thing — and it leaves the
+  counter coming back round after 256 runs rather than after 256 bytes, which
+  is a full flush avoided rather than a flush missed.
+- **That is what moved the invariant, and none of it is emulation.** Fewer
+  flushes mean more decode-cache hits, a run ends at a miss, so `PlatformRun()`
+  overshoots its budget by a different amount and the Enter answering DOS's
+  date prompt lands at a different emulated time. Building both sides with
+  `kMaxInstructionsPerTick` set to 1 gives identical figures —
+  2,328,015 / 27,701,507, the same pair #73 recorded — which is what says the
+  emulation is unchanged. Reporting per byte instead restores the old invariant
+  exactly and costs 0.13%.
+
 ### cpu — the interrupt request hint
 
 - `CPUConfig.interrupt_request_hint` is an optional `const bool*` the CPU reads
@@ -1406,7 +1486,7 @@ Alongside the table, state:
   which is the mix of guest code the emulator exists to run. What it executes
   is whatever the BIOS and DOS do, so it is only comparable against another
   yax86 build.
-- **It is deterministic: 27,702,773 emulated cycles and 2,328,122 retired
+- **It is deterministic: 27,702,858 emulated cycles and 2,328,128 retired
   instructions, every run, at every optimization level.** Both are printed. If
   either moves, the change altered behaviour and the times either side of it
   are not comparable — check that before believing a speedup.
@@ -1488,16 +1568,15 @@ Notes on the machinery:
 
 ### Current figures
 
-GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #85:
+GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 250MHz, 128K of guest RAM, hot path in
+SRAM, at #88:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **3.109428** | **8.909** | **0.749** | **186.8%** | 470,508 | 179,648 | 83,043 |
-| `-O2` | 3.349155 | 8.272 | 0.695 | 173.4% | 457,636 | 175,312 | 71,807 |
+| `-O3` | **4.779589** | **5.796** | **0.487** | **121.5%** | 471,420 | 179,888 | 84,395 |
 
-- A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
-  configuration to emulate the part faster than the part ran. **The compiler
+- A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` clears parity at the
+  250MHz the campaign targets with room to spare. **The compiler
   moves these as much as a change does** - the same commit measures 1.3% faster
   under GCC 16.2.0 than under 16.1.0 - so record the version alongside them and
   rebuild a baseline rather than comparing across one. **The seconds go
