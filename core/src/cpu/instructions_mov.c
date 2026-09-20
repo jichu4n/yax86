@@ -76,12 +76,10 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   // override prefix.
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kDS,
-              .offset = (uint16_t)FromOperandValue(src_offset_value),
-          }}};
-  ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
+      .register_index = kDS,
+      .offset = (uint16_t)FromOperandValue(src_offset_value),
+  };
+  ApplySegmentOverride(ctx->instruction, &src_address.register_index);
   OperandValue src_value = ReadOperandValue(ctx, &src_address);
   WriteOperand(ctx, &dest, FromOperandValue(src_value));
   return kInstructionExecuted;
@@ -99,12 +97,10 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   // override prefix.
   OperandAddress dest_address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kDS,
-              .offset = (uint16_t)FromOperandValue(dest_offset_value),
-          }}};
-  ApplySegmentOverride(ctx->instruction, &dest_address.value.memory_address);
+      .register_index = kDS,
+      .offset = (uint16_t)FromOperandValue(dest_offset_value),
+  };
+  ApplySegmentOverride(ctx->instruction, &dest_address.register_index);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   return kInstructionExecuted;
 }
@@ -165,15 +161,10 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
   // segment override prefix.
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
-      .value =
-          {.memory_address =
-               {
-                   .segment_register_index = kDS,
-                   .offset =
-                       (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
-               }},
+      .register_index = kDS,
+      .offset = (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
   };
-  ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
+  ApplySegmentOverride(ctx->instruction, &src_address.register_index);
   OperandValue src_value = ReadMemoryOperandByte(ctx->cpu, &src_address);
   WriteOperandAddress(ctx, &al.address, FromOperandValue(src_value));
   return kInstructionExecuted;

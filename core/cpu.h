@@ -1431,8 +1431,9 @@ static const uint8_t kNumBits[kNumWidths] = {
 
 // The address of a register operand.
 typedef struct RegisterAddress {
-  // Register index.
-  RegisterIndex register_index;
+  // Register index. A uint8_t so the layout does not depend on
+  // -fshort-enums.
+  uint8_t register_index;
   // Byte offset within the register; only relevant for byte-sized operands.
   // 0 for low byte (AL, CL, DL, BL), 8 for high byte (AH, CH, DH, BH).
   uint8_t byte_offset;
@@ -1440,8 +1441,10 @@ typedef struct RegisterAddress {
 
 // The address of a memory operand.
 typedef struct MemoryAddress {
-  // Segment register.
-  RegisterIndex segment_register_index;
+  // Segment register. A uint8_t because ApplySegmentOverride() writes it
+  // through a pointer, and an enum's width is the target's business - one byte
+  // under -fshort-enums and four otherwise.
+  uint8_t segment_register_index;
   // Effective address offset.
   uint16_t offset;
 } MemoryAddress;
@@ -1457,15 +1460,20 @@ enum {
   kNumOperandAddressTypes = kOperandAddressTypeMemory + 1,
 };
 
-// Operand address.
+// Where an operand lives.
+//
+// Four bytes, which is the largest a composite AAPCS returns in a register
+// rather than through memory.
 typedef struct OperandAddress {
-  // Type of operand (register or memory).
-  OperandAddressType type;
-  // Address of the operand.
-  union {
-    RegisterAddress register_address;  // For register operands
-    MemoryAddress memory_address;      // For memory operands
-  } value;
+  // kOperandAddressTypeRegister or kOperandAddressTypeMemory. A uint8_t rather
+  // than the enum to ensure the four byte layout.
+  uint8_t type;
+  // The register the operand is in, or the segment register it is addressed
+  // through.
+  uint8_t register_index;
+  // The byte within that register - 0 for AL, 8 for AH - or the effective
+  // address offset within that segment.
+  uint16_t offset;
 } OperandAddress;
 
 // The value of an operand.
@@ -1602,8 +1610,9 @@ extern uint32_t FromOperand(const Operand* operand);
 // Helper function to extract a sign-extended value from an operand.
 extern int32_t FromSignedOperand(Width width, const Operand* operand);
 
-// Computes the raw effective address corresponding to a MemoryAddress.
-extern uint32_t ToRawAddress(const CPUState* cpu, const MemoryAddress* address);
+// Computes the raw address a segment register and an offset address.
+extern uint32_t ToRawAddress(
+    const CPUState* cpu, uint8_t segment_register_index, uint16_t offset);
 
 // Read a byte from memory as a uint8_t.
 extern uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address);
@@ -1660,9 +1669,10 @@ extern RegisterAddress GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm);
 // reg or R/M field.
 extern RegisterAddress GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm);
 
-// Apply segment override prefixes to a MemoryAddress.
+// Replace a segment register index with whatever the instruction's segment
+// override prefix names, if it carries one.
 extern void ApplySegmentOverride(
-    const Instruction* instruction, MemoryAddress* address);
+    const Instruction* instruction, uint8_t* segment_register_index);
 
 // Compute the memory address for an instruction.
 extern MemoryAddress GetMemoryOperandAddress(
@@ -1908,22 +1918,11 @@ enum {
   kPhysicalAddressMask = 0xFFFFF,
 };
 
-// Computes the raw effective address corresponding to a MemoryAddress.
-YAX86_PRIVATE uint32_t
-ToRawAddress(const CPUState* cpu, const MemoryAddress* address) {
-  uint16_t segment = cpu->registers[address->segment_register_index];
-  return ((((uint32_t)segment) << 4) + (uint32_t)(address->offset)) &
-         kPhysicalAddressMask;
-}
-
-// The address of the byte following a memory operand. The offset is 16 bits
-// wide and wraps within the segment, so the high byte of a word at offset
-// 0xFFFF comes from offset 0 of the same segment rather than from the
-// paragraph above it.
-static MemoryAddress NextMemoryAddress(const MemoryAddress* address) {
-  MemoryAddress next_address = *address;
-  ++next_address.offset;
-  return next_address;
+// Computes the raw address a segment register and an offset address.
+YAX86_PRIVATE uint32_t ToRawAddress(
+    const CPUState* cpu, uint8_t segment_register_index, uint16_t offset) {
+  uint16_t segment = cpu->registers[segment_register_index];
+  return ((((uint32_t)segment) << 4) + (uint32_t)offset) & kPhysicalAddressMask;
 }
 
 // Read a byte from memory as a uint8_t.
@@ -1951,19 +1950,21 @@ YAX86_HOT YAX86_PRIVATE OperandValue
 ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 1);
   return ReadRawMemoryByte(
-      cpu, ToRawAddress(cpu, &address->value.memory_address));
+      cpu, ToRawAddress(cpu, address->register_index, address->offset));
 }
 
 // Read a word from memory to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 2);
-  const MemoryAddress* low_byte_address = &address->value.memory_address;
-  const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
+  // The offset is 16 bits wide and wraps within the segment, so the high byte
+  // of a word at offset 0xFFFF comes from offset 0 of the same segment rather
+  // than from the paragraph above it.
+  const uint8_t segment = address->register_index;
   uint8_t low_byte_value =
-      ReadRawMemoryByte(cpu, ToRawAddress(cpu, low_byte_address));
-  uint8_t high_byte_value =
-      ReadRawMemoryByte(cpu, ToRawAddress(cpu, &high_byte_address));
+      ReadRawMemoryByte(cpu, ToRawAddress(cpu, segment, address->offset));
+  uint8_t high_byte_value = ReadRawMemoryByte(
+      cpu, ToRawAddress(cpu, segment, (uint16_t)(address->offset + 1)));
   return (OperandValue)((((uint16_t)high_byte_value) << 8) |
                         (uint16_t)low_byte_value);
 }
@@ -1984,19 +1985,16 @@ YAX86_PRIVATE OperandValue ReadMemoryOperandValue(
 // Read a byte from a register to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
-  const RegisterAddress* register_address = &address->value.register_address;
   // Truncated to a byte, which is the invariant every consumer widens by
   // doing nothing: AH and the high half of a word register live in the bits
   // this drops.
-  return (uint8_t)(cpu->registers[register_address->register_index] >>
-                   register_address->byte_offset);
+  return (uint8_t)(cpu->registers[address->register_index] >> address->offset);
 }
 
 // Read a word from a register to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
-  const RegisterAddress* register_address = &address->value.register_address;
-  return cpu->registers[register_address->register_index];
+  return cpu->registers[address->register_index];
 }
 
 // Read a register operand of the given width to an OperandValue.
@@ -2034,18 +2032,22 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 1);
   WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, &address->value.memory_address), (uint8_t)value);
+      cpu, ToRawAddress(cpu, address->register_index, address->offset),
+      (uint8_t)value);
 }
 
 // Write a word to memory.
 YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 2);
-  const MemoryAddress* low_byte_address = &address->value.memory_address;
-  const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
-  WriteRawMemoryByte(cpu, ToRawAddress(cpu, low_byte_address), (uint8_t)value);
+  // See ReadMemoryOperandWord() for why the high byte's offset wraps within
+  // the segment.
+  const uint8_t segment = address->register_index;
   WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, &high_byte_address), (uint8_t)(value >> 8));
+      cpu, ToRawAddress(cpu, segment, address->offset), (uint8_t)value);
+  WriteRawMemoryByte(
+      cpu, ToRawAddress(cpu, segment, (uint16_t)(address->offset + 1)),
+      (uint8_t)(value >> 8));
 }
 
 // Write a memory operand of the given width.
@@ -2066,20 +2068,16 @@ YAX86_PRIVATE void WriteMemoryOperand(
 // Write a byte to a register.
 YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
-  const RegisterAddress* register_address = &address->value.register_address;
-  const uint16_t updated_byte = ((uint16_t)(uint8_t)value)
-                                << register_address->byte_offset;
-  const uint16_t other_byte =
-      cpu->registers[register_address->register_index] &
-      (((uint16_t)0xFF) << (8 - register_address->byte_offset));
-  cpu->registers[register_address->register_index] = other_byte | updated_byte;
+  const uint16_t updated_byte = ((uint16_t)(uint8_t)value) << address->offset;
+  const uint16_t other_byte = cpu->registers[address->register_index] &
+                              (((uint16_t)0xFF) << (8 - address->offset));
+  cpu->registers[address->register_index] = other_byte | updated_byte;
 }
 
 // Write a word to a register.
 YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
-  const RegisterAddress* register_address = &address->value.register_address;
-  cpu->registers[register_address->register_index] = value;
+  cpu->registers[address->register_index] = value;
 }
 
 // Write a register operand of the given width.
@@ -2124,11 +2122,11 @@ GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
-    address.register_index = (RegisterIndex)reg_or_rm;
+    address.register_index = reg_or_rm;
     address.byte_offset = 0;
   } else {
     // AH, CH, DH, BH
-    address.register_index = (RegisterIndex)(reg_or_rm - 4);
+    address.register_index = reg_or_rm - 4;
     address.byte_offset = 8;
   }
   return address;
@@ -2139,7 +2137,7 @@ GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
 YAX86_PRIVATE RegisterAddress
 GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   const RegisterAddress address = {
-      .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
+      .register_index = reg_or_rm, .byte_offset = 0};
   return address;
 }
 
@@ -2159,12 +2157,12 @@ GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
   return fallback;
 }
 
-// Apply segment override prefixes to a MemoryAddress.
+// Replace a segment register index with whatever the instruction's segment
+// override prefix names, if it carries one.
 YAX86_PRIVATE void ApplySegmentOverride(
-    const Instruction* instruction, MemoryAddress* address) {
+    const Instruction* instruction, uint8_t* segment_register_index) {
   if (instruction->segment_override != kNoSegmentOverride) {
-    address->segment_register_index =
-        (RegisterIndex)instruction->segment_override;
+    *segment_register_index = instruction->segment_override;
   }
 }
 
@@ -2222,7 +2220,7 @@ GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
   }
 
   // Apply segment override prefixes if present
-  ApplySegmentOverride(instruction, &address);
+  ApplySegmentOverride(instruction, &address.segment_register_index);
 
   // Add displacement if present
   switch (instruction->displacement_size) {
@@ -2267,13 +2265,18 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
   uint8_t rm = instruction->mod_rm.rm;
   if (mod == 3) {
     // Register operand
-    address.type = kOperandAddressTypeRegister;
-    address.value.register_address =
+    const RegisterAddress register_address =
         GetRegisterAddress(cpu, rm, ctx->metadata->width);
+    address.type = kOperandAddressTypeRegister;
+    address.register_index = register_address.register_index;
+    address.offset = register_address.byte_offset;
   } else {
     // Memory operand
+    const MemoryAddress memory_address =
+        GetMemoryOperandAddress(cpu, instruction);
     address.type = kOperandAddressTypeMemory;
-    address.value.memory_address = GetMemoryOperandAddress(cpu, instruction);
+    address.register_index = (uint8_t)memory_address.segment_register_index;
+    address.offset = memory_address.offset;
   }
   return address;
 }
@@ -2346,8 +2349,10 @@ YAX86_HOT YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
   // zero all ten bytes of the struct before a single one of them is written.
   Operand operand;
   operand.address.type = kOperandAddressTypeRegister;
-  operand.address.value.register_address =
+  const RegisterAddress register_address =
       GetRegisterAddress(ctx->cpu, register_index, width);
+  operand.address.register_index = register_address.register_index;
+  operand.address.offset = register_address.byte_offset;
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
 }
@@ -2933,11 +2938,9 @@ YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
 static void WriteToStackTop(CPUState* cpu, OperandValue value) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kSS,
-              .offset = cpu->registers[kSP],
-          }}};
+      .register_index = kSS,
+      .offset = cpu->registers[kSP],
+  };
   WriteMemoryOperandWord(cpu, &address, value);
 }
 
@@ -2954,7 +2957,7 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
   // 80286 and later store the entry value instead.
   const bool source_is_stack_pointer =
       src->address.type == kOperandAddressTypeRegister &&
-      src->address.value.register_address.register_index == kSP;
+      src->address.register_index == kSP;
   const OperandValue value =
       source_is_stack_pointer ? cpu->registers[kSP] : src->value;
   WriteToStackTop(cpu, value);
@@ -2963,11 +2966,9 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
 YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kSS,
-              .offset = cpu->registers[kSP],
-          }}};
+      .register_index = kSS,
+      .offset = cpu->registers[kSP],
+  };
   OperandValue value = ReadMemoryOperandWord(cpu, &address);
   cpu->registers[kSP] += 2;
   return value;
@@ -3078,12 +3079,10 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   // override prefix.
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kDS,
-              .offset = (uint16_t)FromOperandValue(src_offset_value),
-          }}};
-  ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
+      .register_index = kDS,
+      .offset = (uint16_t)FromOperandValue(src_offset_value),
+  };
+  ApplySegmentOverride(ctx->instruction, &src_address.register_index);
   OperandValue src_value = ReadOperandValue(ctx, &src_address);
   WriteOperand(ctx, &dest, FromOperandValue(src_value));
   return kInstructionExecuted;
@@ -3101,12 +3100,10 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   // override prefix.
   OperandAddress dest_address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kDS,
-              .offset = (uint16_t)FromOperandValue(dest_offset_value),
-          }}};
-  ApplySegmentOverride(ctx->instruction, &dest_address.value.memory_address);
+      .register_index = kDS,
+      .offset = (uint16_t)FromOperandValue(dest_offset_value),
+  };
+  ApplySegmentOverride(ctx->instruction, &dest_address.register_index);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   return kInstructionExecuted;
 }
@@ -3167,15 +3164,10 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
   // segment override prefix.
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
-      .value =
-          {.memory_address =
-               {
-                   .segment_register_index = kDS,
-                   .offset =
-                       (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
-               }},
+      .register_index = kDS,
+      .offset = (uint16_t)(ctx->cpu->registers[kBX] + FromOperand(&al)),
   };
-  ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
+  ApplySegmentOverride(ctx->instruction, &src_address.register_index);
   OperandValue src_value = ReadMemoryOperandByte(ctx->cpu, &src_address);
   WriteOperandAddress(ctx, &al.address, FromOperandValue(src_value));
   return kInstructionExecuted;
@@ -3227,13 +3219,15 @@ static InstructionResult ExecuteLoadSegmentWithPointer(
   Operand destSegmentRegister =
       ReadRegisterOperandForRegisterIndex(ctx, segment_register_index);
 
+  const MemoryAddress src_memory_address =
+      GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = GetMemoryOperandAddress(ctx->cpu, ctx->instruction),
-      }};
+      .register_index = (uint8_t)src_memory_address.segment_register_index,
+      .offset = src_memory_address.offset,
+  };
   OperandValue src_offset_value = ReadMemoryOperandWord(ctx->cpu, &src_address);
-  src_address.value.memory_address.offset += 2;
+  src_address.offset += 2;
   OperandValue src_segment_value =
       ReadMemoryOperandWord(ctx->cpu, &src_address);
 
@@ -4245,11 +4239,9 @@ ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
 static const OperandAddress* GetAHRegisterAddress(void) {
   static OperandAddress ah = {
       .type = kOperandAddressTypeRegister,
-      .value = {
-          .register_address = {
-              .register_index = kAX,
-              .byte_offset = 8,
-          }}};
+      .register_index = kAX,
+      .offset = 8,
+  };
   return &ah;
 }
 
@@ -4480,16 +4472,10 @@ static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
 static Operand GetStringSourceOperand(const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value =
-          {
-              .memory_address =
-                  {
-                      .segment_register_index = kDS,
-                      .offset = ctx->cpu->registers[kSI],
-                  },
-          },
+      .register_index = kDS,
+      .offset = ctx->cpu->registers[kSI],
   };
-  ApplySegmentOverride(ctx->instruction, &address.value.memory_address);
+  ApplySegmentOverride(ctx->instruction, &address.register_index);
   Operand operand = {
       .address = address,
       .value = ReadOperandValue(ctx, &address),
@@ -4502,14 +4488,8 @@ static OperandAddress GetStringDestinationOperandAddress(
     const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value =
-          {
-              .memory_address =
-                  {
-                      .segment_register_index = kES,
-                      .offset = ctx->cpu->registers[kDI],
-                  },
-          },
+      .register_index = kES,
+      .offset = ctx->cpu->registers[kDI],
   };
   return address;
 }
@@ -5242,22 +5222,9 @@ static InstructionResult ExecuteNeg(
 // Table of where to store the higher half of the result for
 // MUL, IMUL, DIV, and IDIV instructions, indexed by the data width.
 static const OperandAddress kMulDivResultHighHalfAddress[kNumWidths] = {
-    {.type = kOperandAddressTypeRegister,
-     .value =
-         {
-             .register_address =
-                 {
-                     .register_index = kAX,
-                     .byte_offset = 8,
-                 },
-         }},
-    {.type = kOperandAddressTypeRegister,
-     .value = {
-         .register_address =
-             {
-                 .register_index = kDX,
-             },
-     }}};
+    {.type = kOperandAddressTypeRegister, .register_index = kAX, .offset = 8},
+    {.type = kOperandAddressTypeRegister, .register_index = kDX, .offset = 0},
+};
 
 // Number of bits to shift to extract the high part of the result of MUL, IMUL,
 // DIV, and IDIV instructions, indexed by the data width.
@@ -5494,7 +5461,7 @@ ExecuteGroup4Instruction(const InstructionContext* ctx) {
 static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
     const InstructionContext* ctx, const Operand* offset) {
   OperandAddress segment_address = offset->address;
-  segment_address.value.memory_address.offset += 2;  // Skip the offset
+  segment_address.offset += 2;  // Skip the offset
   OperandValue segment_value =
       ReadMemoryOperandWord(ctx->cpu, &segment_address);
   Operand operand = {
@@ -7527,11 +7494,8 @@ YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
     ++fetch_state->next_byte_offset;
     return *fetch_state->next_byte++;
   }
-  const MemoryAddress address = {
-      .segment_register_index = kCS,
-      .offset = fetch_state->next_byte_offset++,
-  };
-  return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
+  return ReadRawMemoryByte(
+      cpu, ToRawAddress(cpu, kCS, fetch_state->next_byte_offset++));
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
@@ -7548,11 +7512,7 @@ YAX86_HOT static void CPUInitInstructionFetchState(
   // skip it would be paid by the hosts that do supply one, which is every host
   // that cares about the speed. Measured on x86-64, adding it grew
   // CPUFetchNextInstruction by 11 bytes.
-  const MemoryAddress fetch_address = {
-      .segment_register_index = kCS,
-      .offset = ip,
-  };
-  const uint32_t raw_address = ToRawAddress(cpu, &fetch_address);
+  const uint32_t raw_address = ToRawAddress(cpu, kCS, ip);
 
   const CPUInstructionFetchWindow* const window =
       &cpu->instruction_fetch_window;
@@ -7762,11 +7722,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   uint8_t generation = 0;
 
   if (cache != NULL) {
-    const MemoryAddress start = {
-        .segment_register_index = kCS,
-        .offset = ip,
-    };
-    address = ToRawAddress(cpu, &start);
+    address = ToRawAddress(cpu, kCS, ip);
     generation = cpu->code_page_generation[address >> kCodePageShift];
     target = &cache[address & cpu->decode_cache_index_mask];
     if (IsDecodeCacheHit(target, address, generation)) {
@@ -7978,11 +7934,7 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   if (cache == NULL) {
     return NULL;
   }
-  const MemoryAddress start = {
-      .segment_register_index = kCS,
-      .offset = cpu->registers[kIP],
-  };
-  const uint32_t address = ToRawAddress(cpu, &start);
+  const uint32_t address = ToRawAddress(cpu, kCS, cpu->registers[kIP]);
   CPUDecodeCacheEntry* const entry =
       &cache[address & cpu->decode_cache_index_mask];
   if (!IsDecodeCacheHit(

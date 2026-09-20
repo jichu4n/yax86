@@ -90,11 +90,9 @@ ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
 static const OperandAddress* GetAHRegisterAddress(void) {
   static OperandAddress ah = {
       .type = kOperandAddressTypeRegister,
-      .value = {
-          .register_address = {
-              .register_index = kAX,
-              .byte_offset = 8,
-          }}};
+      .register_index = kAX,
+      .offset = 8,
+  };
   return &ah;
 }
 

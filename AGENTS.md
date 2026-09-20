@@ -865,13 +865,49 @@ Alongside the table, state:
   `-O3` on its own**, from that one function. Same lesson as the decode, where
   settling each field where it becomes known rather than zeroing up front was
   worth 4.63%.
-- `Operand` is still `{OperandAddress address; OperandValue value;}` and is
-  still returned by value, so `ReadRegisterOrMemoryOperand()` still holds the
-  seven remaining `memcpy` call sites in the core. Handing the address back
-  through a pointer and the value in a register would remove them; the
-  obstacle is that `GetRegisterOrMemoryOperandAddress()` is
-  `YAX86_ALWAYS_INLINE` and splitting the read at every handler would inline it
-  into about thirty of them.
+- **`OperandAddress` is flat, four bytes, and that is a size rather than a
+  taste.** AAPCS returns a composite of four bytes or fewer in a register and
+  anything larger through memory, so four is the line a returned struct has to
+  stay under. A tagged union of `RegisterAddress` and `MemoryAddress` cost six
+  - a byte for the tag, a byte of padding, four for the larger arm - and the
+  union was the wrong tool anyway, because **both arms are the same shape**: a
+  register index and a small number beside it. Sharing the fields costs four.
+  `register_index` is the register for a register operand and the segment
+  register for a memory one; `offset` is the byte within the register, 0 or 8,
+  or the effective address within the segment.
+- **Three ways to stop copying it were built and measured, and the cheapest
+  reading is the fastest.** Against master, on `dos-boot`:
+
+  | | `-O3` | `-O2` |
+  | --- | --- | --- |
+  | passing the address by pointer | +11.07% | +6.68% |
+  | shrinking it to four bytes | **+15.67%** | **+22.67%** |
+  | both together | +8.83% | +21.16% |
+
+  **Doing both is worse than shrinking alone at both levels.** Once the struct
+  fits in a register, an out-parameter forces a store where a return would have
+  kept it in `r0`, so the two changes fight. Prefer making a hot struct fit the
+  return register over routing it through memory, and measure them separately
+  rather than assuming they add.
+- Afterwards the core contains **no call to `memcpy` or `memset` at all**; the
+  two left in the image are TinyUSB's. Worth re-checking after anything that
+  changes how operands are passed, and it is a `grep` rather than a judgement:
+  ```sh
+  arm-none-eabi-objdump -d build-pico/O3/yax86_pico_bench.elf |
+      grep -cP 'bl\t2000....\s<____wrap_mem'
+  ```
+- `MemoryAddress.segment_register_index` is a `uint8_t` rather than a
+  `RegisterIndex`, because `ApplySegmentOverride()` writes it through a
+  pointer. An enum's width is the target's business - one byte under
+  `-fshort-enums`, four otherwise - so a `uint8_t*` to one is correct only by
+  accident of endianness, and the native test build is exactly the target where
+  it is four.
+- `Operand` is still `{OperandAddress address; OperandValue value;}` at six
+  bytes, so it is still over the return line and still handed back by value.
+  That is the next question rather than an oversight: it cannot be shrunk under
+  four - a 16-bit offset and a 16-bit value are already four before the tag -
+  so an out-parameter is the only move left there, and it wants measuring on
+  top of this rather than alongside it.
 
 ### cpu — what an instruction costs
 
@@ -1435,12 +1471,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #81:
+SRAM, at #84:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **3.631868** | **7.628** | **0.641** | **159.9%** | 468,652 | 179,888 | 81,655 |
-| `-O2` | 4.279075 | 6.474 | 0.544 | 135.7% | 457,244 | 175,120 | 71,375 |
+| `-O3` | **3.139696** | **8.823** | **0.742** | **185.0%** | 469,508 | 179,552 | 82,435 |
+| `-O2` | 3.488154 | 7.942 | 0.667 | 166.5% | 456,996 | 175,040 | 71,183 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler
