@@ -18,6 +18,13 @@ enum {
   kNumWidths = kWord + 1,
 };
 
+enum {
+  // How many bytes a segment addresses. An offset is 16 bits and wraps within
+  // its segment where a linear address does not, so this is where anything
+  // walking memory through an offset has to stop.
+  kSegmentSize = 0x10000,
+};
+
 // Bitmask to extract the sign bit of a value.
 static const uint32_t kSignBit[kNumWidths] = {
     1 << 7,   // kByte

@@ -43,9 +43,6 @@
 // jump that is taken, a shift by a count in CL, a multiply or divide - add the
 // difference themselves through CPUAddCycles().
 
-// Cycles per byte transferred over the data bus.
-enum { kBusCyclesPerByte = 4 };
-
 // Cycles to compute an effective address, by addressing mode. The 8086 pays
 // for each component it has to add together.
 enum {

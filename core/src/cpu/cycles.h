@@ -16,6 +16,9 @@ enum {
   // Extra cycles a shift or rotate costs for each bit it moves, when the count
   // comes from CL rather than being 1.
   kShiftCyclesPerBit = 4,
+  // Cycles per byte transferred over the data bus. The 8088's bus is 8 bits
+  // wide, so a word costs twice a byte.
+  kBusCyclesPerByte = 4,
 };
 
 #ifndef YAX86_IMPLEMENTATION

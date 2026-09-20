@@ -97,12 +97,6 @@ static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
   return false;
 }
 
-enum {
-  // How many bytes a segment addresses. IP is 16 bits and wraps within the
-  // segment, so this is also where a fetch through a window has to stop.
-  kSegmentSize = 0x10000,
-};
-
 // Where one call to CPUFetchNextInstruction() has got to.
 //
 // Scratch for a single decode, and nothing more. What survives between
