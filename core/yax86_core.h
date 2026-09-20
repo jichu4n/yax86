@@ -2102,14 +2102,10 @@ enum {
 // Where an operand lives.
 //
 // Four bytes, which is the largest a composite AAPCS returns in a register
-// rather than through memory. Keep it that way: a register operand and a
-// memory one are the same shape - an index and a small number beside it - so
-// the two fields below each do duty for both, and a fifth byte would cost
-// every operand a trip through the stack.
+// rather than through memory.
 typedef struct OperandAddress {
   // kOperandAddressTypeRegister or kOperandAddressTypeMemory. A uint8_t rather
-  // than the enum so that the four byte layout is this type's own promise,
-  // rather than something -fshort-enums happens to give it.
+  // than the enum to ensure the four byte layout.
   uint8_t type;
   // The register the operand is in, or the segment register it is addressed
   // through.
