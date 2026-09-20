@@ -263,11 +263,11 @@ GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
-    address.register_index = (RegisterIndex)reg_or_rm;
+    address.register_index = reg_or_rm;
     address.byte_offset = 0;
   } else {
     // AH, CH, DH, BH
-    address.register_index = (RegisterIndex)(reg_or_rm - 4);
+    address.register_index = reg_or_rm - 4;
     address.byte_offset = 8;
   }
   return address;
@@ -278,7 +278,7 @@ GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
 YAX86_PRIVATE RegisterAddress
 GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   const RegisterAddress address = {
-      .register_index = (RegisterIndex)reg_or_rm, .byte_offset = 0};
+      .register_index = reg_or_rm, .byte_offset = 0};
   return address;
 }
 
@@ -409,7 +409,7 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
     const RegisterAddress register_address =
         GetRegisterAddress(cpu, rm, ctx->metadata->width);
     address.type = kOperandAddressTypeRegister;
-    address.register_index = (uint8_t)register_address.register_index;
+    address.register_index = register_address.register_index;
     address.offset = register_address.byte_offset;
   } else {
     // Memory operand
@@ -492,7 +492,7 @@ YAX86_HOT YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
   operand.address.type = kOperandAddressTypeRegister;
   const RegisterAddress register_address =
       GetRegisterAddress(ctx->cpu, register_index, width);
-  operand.address.register_index = (uint8_t)register_address.register_index;
+  operand.address.register_index = register_address.register_index;
   operand.address.offset = register_address.byte_offset;
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;

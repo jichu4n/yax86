@@ -58,8 +58,9 @@ static const uint8_t kNumBits[kNumWidths] = {
 
 // The address of a register operand.
 typedef struct RegisterAddress {
-  // Register index.
-  RegisterIndex register_index;
+  // Register index. A uint8_t so the layout does not depend on
+  // -fshort-enums.
+  uint8_t register_index;
   // Byte offset within the register; only relevant for byte-sized operands.
   // 0 for low byte (AL, CL, DL, BL), 8 for high byte (AH, CH, DH, BH).
   uint8_t byte_offset;
