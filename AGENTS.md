@@ -799,12 +799,13 @@ Alongside the table, state:
   dispatch that runs once per operand does not pay for a store that also runs
   once per operand. So do not "tidy" the `if` into a `switch` for symmetry, and
   do not narrow the field to enable it; both were built and measured.
-- `OpcodeMetadata` still packs `has_modrm : 1`, `immediate_size : 3` and
-  `width : 1`, and widening them to whole bytes is a candidate change. **Take
-  care with `width`**: widening it is what makes the width switch stop being
-  free, because a byte has 254 values the enum does not name. Widening the
-  other two while leaving `width : 1` is the best `-O3` arrangement of the five
-  built, at 6.4808s.
+- `OpcodeMetadata` holds `base_cycles`, `has_modrm`, `immediate_size` and
+  `width` as full bytes without bitfields, and omits the redundant `opcode`
+  field (since the table is indexed by opcode). On a 32-bit target, the four
+  single-byte fields precede the 4-byte handler pointer, giving exactly 8 bytes
+  per entry with zero padding and a power-of-two 2,048-byte table size. Every
+  metadata field is read with a single aligned `ldrb` instruction without bit
+  shifts or masking.
 - `-Os` loses 1.00% to the tables, and the cause is inlining rather than the
   `default` arm — marking all six wrappers `YAX86_ALWAYS_INLINE` recovers it,
   at 0.26% and 0.06% off `-O3` and `-O2`. The marks are not taken: `-O3` and
