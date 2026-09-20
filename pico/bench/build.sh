@@ -4,7 +4,7 @@
 # the RP2040 runs code from flash through a 16KB XIP cache, so the level that
 # wins on a desktop is not necessarily the one that wins here.
 #
-#   ./build.sh                 # the default level, -O2
+#   ./build.sh                 # the default level, -O3
 #   ./build.sh O3              # just -O3
 #   ./build.sh Os O2 O3        # all three, to compare
 #
@@ -37,7 +37,7 @@ for arg in "$@"; do
     esac
 done
 if [ ${#OPT_LEVELS[@]} -eq 0 ]; then
-    OPT_LEVELS=(O2)
+    OPT_LEVELS=(O3)
 fi
 
 if [ -z "${PICO_SDK_PATH:-}" ]; then

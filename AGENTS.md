@@ -209,21 +209,19 @@ below for how to build, flash and run.
 Every PR that claims a speed or size change carries a results table, measured
 on hardware with the `dos-boot` workload:
 
-- **`-O3` and `-O2`**, both levels, GCC, at **400MHz** with the hot path in
-  SRAM and the default 128K of guest RAM. `-Os` is not reported: it is the
-  slowest level here by a wide margin, it is the one `YAX86_HOT` hurts, and
-  nothing ships at it.
+- **`-O3`**, GCC, at **250MHz** with the hot path in SRAM and the default 128K
+  of guest RAM. `-O2` and `-Os` are not reported: `-O3` is what ships, and with
+  performance now clearing 8088 parity below 250MHz, 250MHz is the intended
+  operating overclock.
 - **Seconds, emulated MHz, MIPS and "vs a real 8088"**, for the baseline and
-  for the branch, at each level.
+  for the branch.
 - The **gain**, as the increase in emulated MHz over the baseline row.
 
 ```
 | level | | seconds | emulated MHz | MIPS | vs a real 8088 | gain | core `.text` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `-O3` | master   | 6.728870     | 4.117     | 0.346     | 86.3%     | —          | 89,285 |
-| `-O3` | this     | **6.513592** | **4.253** | **0.357** | **89.2%** | **+3.31%** | 87,229 |
-| `-O2` | master   | 7.352727     | 3.768     | 0.317     | 79.0%     | —          | 74,457 |
-| `-O2` | this     | 7.213556     | 3.840     | 0.323     | 80.5%     | +1.93%     | 73,853 |
+| `-O3` | master   | 4.975485     | 5.568     | 0.468     | 116.7%     | —          | 83,043 |
+| `-O3` | this     | **4.814238** | **5.754** | **0.484** | **120.6%** | **+3.35%** | 82,435 |
 ```
 
 The derived columns are computed from the seconds rather than read off the
@@ -248,8 +246,8 @@ Alongside the table, state:
   session. A figure recorded in an earlier PR is a cross-check, not a baseline.
 - **How many runs, and their spread.** Two or three is enough at this noise
   floor.
-- **`core .text` at both levels**, since several changes here have won on speed
-  and size at once and a size regression is worth knowing about either way.
+- **`core .text`**, since several changes here have won on speed and size at
+  once and a size regression is worth knowing about either way.
 - Which tests were run. `./tools/run-tests.sh`, and the 8088 hardware suite
   where the change touches decode or execute.
 
@@ -1430,8 +1428,8 @@ configures and builds into `build-pico/<level>` and prints what the image costs
 in flash and SRAM:
 
 ```sh
-./pico/bench/build.sh                                  # the default level, -O2
-YAX86_PICO_SYS_CLK_KHZ=400000 ./pico/bench/build.sh O2 O3   # what a PR reports
+./pico/bench/build.sh                                  # the default level, -O3
+YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh O3       # what a PR reports
 ```
 
 `run.js` reboots the board into BOOTSEL with `picotool`, loads the image and
@@ -1562,7 +1560,7 @@ SRAM, at #85:
   and a hang before USB enumerates leaves no way in except the BOOTSEL button —
   no good on a board being flashed remotely.
 - **Do not raise the clock past 400MHz.** That is a standing instruction, not a
-  technical limit. 400MHz is also the clock a PR reports at.
+  technical limit. **250MHz is the intended overclock frequency that PRs report at.**
 - A watchdog turns a hang into a reboot, and the reboot lands back in `main`
   where a marker says not to try the same clock twice.
   `watchdog_caused_reboot()` alone is not evidence of a hang — `picotool`
