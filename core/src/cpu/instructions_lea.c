@@ -34,13 +34,15 @@ static InstructionResult ExecuteLoadSegmentWithPointer(
   Operand destSegmentRegister =
       ReadRegisterOperandForRegisterIndex(ctx, segment_register_index);
 
+  const MemoryAddress src_memory_address =
+      GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
   OperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = GetMemoryOperandAddress(ctx->cpu, ctx->instruction),
-      }};
+      .register_index = (uint8_t)src_memory_address.segment_register_index,
+      .offset = src_memory_address.offset,
+  };
   OperandValue src_offset_value = ReadMemoryOperandWord(ctx->cpu, &src_address);
-  src_address.value.memory_address.offset += 2;
+  src_address.offset += 2;
   OperandValue src_segment_value =
       ReadMemoryOperandWord(ctx->cpu, &src_address);
 

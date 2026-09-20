@@ -42,22 +42,9 @@ static InstructionResult ExecuteNeg(
 // Table of where to store the higher half of the result for
 // MUL, IMUL, DIV, and IDIV instructions, indexed by the data width.
 static const OperandAddress kMulDivResultHighHalfAddress[kNumWidths] = {
-    {.type = kOperandAddressTypeRegister,
-     .value =
-         {
-             .register_address =
-                 {
-                     .register_index = kAX,
-                     .byte_offset = 8,
-                 },
-         }},
-    {.type = kOperandAddressTypeRegister,
-     .value = {
-         .register_address =
-             {
-                 .register_index = kDX,
-             },
-     }}};
+    {.type = kOperandAddressTypeRegister, .register_index = kAX, .offset = 8},
+    {.type = kOperandAddressTypeRegister, .register_index = kDX, .offset = 0},
+};
 
 // Number of bits to shift to extract the high part of the result of MUL, IMUL,
 // DIV, and IDIV instructions, indexed by the data width.

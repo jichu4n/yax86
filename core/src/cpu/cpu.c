@@ -162,7 +162,8 @@ YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
       .segment_register_index = kCS,
       .offset = fetch_state->next_byte_offset++,
   };
-  return ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address));
+  return ReadRawMemoryByte(
+      cpu, ToRawAddress(cpu, address.segment_register_index, address.offset));
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
@@ -183,7 +184,8 @@ YAX86_HOT static void CPUInitInstructionFetchState(
       .segment_register_index = kCS,
       .offset = ip,
   };
-  const uint32_t raw_address = ToRawAddress(cpu, &fetch_address);
+  const uint32_t raw_address = ToRawAddress(
+      cpu, fetch_address.segment_register_index, fetch_address.offset);
 
   const CPUInstructionFetchWindow* const window =
       &cpu->instruction_fetch_window;
@@ -397,7 +399,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
         .segment_register_index = kCS,
         .offset = ip,
     };
-    address = ToRawAddress(cpu, &start);
+    address = ToRawAddress(cpu, start.segment_register_index, start.offset);
     generation = cpu->code_page_generation[address >> kCodePageShift];
     target = &cache[address & cpu->decode_cache_index_mask];
     if (IsDecodeCacheHit(target, address, generation)) {
@@ -613,7 +615,8 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
       .segment_register_index = kCS,
       .offset = cpu->registers[kIP],
   };
-  const uint32_t address = ToRawAddress(cpu, &start);
+  const uint32_t address =
+      ToRawAddress(cpu, start.segment_register_index, start.offset);
   CPUDecodeCacheEntry* const entry =
       &cache[address & cpu->decode_cache_index_mask];
   if (!IsDecodeCacheHit(

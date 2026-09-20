@@ -19,16 +19,10 @@ static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
 static Operand GetStringSourceOperand(const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value =
-          {
-              .memory_address =
-                  {
-                      .segment_register_index = kDS,
-                      .offset = ctx->cpu->registers[kSI],
-                  },
-          },
+      .register_index = kDS,
+      .offset = ctx->cpu->registers[kSI],
   };
-  ApplySegmentOverride(ctx->instruction, &address.value.memory_address);
+  ApplySegmentOverride(ctx->instruction, &address.register_index);
   Operand operand = {
       .address = address,
       .value = ReadOperandValue(ctx, &address),
@@ -41,14 +35,8 @@ static OperandAddress GetStringDestinationOperandAddress(
     const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value =
-          {
-              .memory_address =
-                  {
-                      .segment_register_index = kES,
-                      .offset = ctx->cpu->registers[kDI],
-                  },
-          },
+      .register_index = kES,
+      .offset = ctx->cpu->registers[kDI],
   };
   return address;
 }

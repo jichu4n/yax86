@@ -67,8 +67,10 @@ typedef struct RegisterAddress {
 
 // The address of a memory operand.
 typedef struct MemoryAddress {
-  // Segment register.
-  RegisterIndex segment_register_index;
+  // Segment register. A uint8_t because ApplySegmentOverride() writes it
+  // through a pointer, and an enum's width is the target's business - one byte
+  // under -fshort-enums and four otherwise.
+  uint8_t segment_register_index;
   // Effective address offset.
   uint16_t offset;
 } MemoryAddress;
@@ -84,15 +86,24 @@ enum {
   kNumOperandAddressTypes = kOperandAddressTypeMemory + 1,
 };
 
-// Operand address.
+// Where an operand lives.
+//
+// Four bytes, which is the largest a composite AAPCS returns in a register
+// rather than through memory. Keep it that way: a register operand and a
+// memory one are the same shape - an index and a small number beside it - so
+// the two fields below each do duty for both, and a fifth byte would cost
+// every operand a trip through the stack.
 typedef struct OperandAddress {
-  // Type of operand (register or memory).
-  OperandAddressType type;
-  // Address of the operand.
-  union {
-    RegisterAddress register_address;  // For register operands
-    MemoryAddress memory_address;      // For memory operands
-  } value;
+  // kOperandAddressTypeRegister or kOperandAddressTypeMemory. A uint8_t rather
+  // than the enum so that the four byte layout is this type's own promise,
+  // rather than something -fshort-enums happens to give it.
+  uint8_t type;
+  // The register the operand is in, or the segment register it is addressed
+  // through.
+  uint8_t register_index;
+  // The byte within that register - 0 for AL, 8 for AH - or the effective
+  // address offset within that segment.
+  uint16_t offset;
 } OperandAddress;
 
 // The value of an operand.

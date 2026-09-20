@@ -35,11 +35,9 @@ YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
 static void WriteToStackTop(CPUState* cpu, OperandValue value) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kSS,
-              .offset = cpu->registers[kSP],
-          }}};
+      .register_index = kSS,
+      .offset = cpu->registers[kSP],
+  };
   WriteMemoryOperandWord(cpu, &address, value);
 }
 
@@ -56,7 +54,7 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
   // 80286 and later store the entry value instead.
   const bool source_is_stack_pointer =
       src->address.type == kOperandAddressTypeRegister &&
-      src->address.value.register_address.register_index == kSP;
+      src->address.register_index == kSP;
   const OperandValue value =
       source_is_stack_pointer ? cpu->registers[kSP] : src->value;
   WriteToStackTop(cpu, value);
@@ -65,11 +63,9 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
 YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
-      .value = {
-          .memory_address = {
-              .segment_register_index = kSS,
-              .offset = cpu->registers[kSP],
-          }}};
+      .register_index = kSS,
+      .offset = cpu->registers[kSP],
+  };
   OperandValue value = ReadMemoryOperandWord(cpu, &address);
   cpu->registers[kSP] += 2;
   return value;
