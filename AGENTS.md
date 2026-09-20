@@ -218,10 +218,10 @@ on hardware with the `dos-boot` workload:
 - The **gain**, as the increase in emulated MHz over the baseline row.
 
 ```
-| level | | seconds | emulated MHz | MIPS | vs a real 8088 | gain | core `.text` |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `-O3` | master   | 4.975485     | 5.568     | 0.468     | 116.7%     | —          | 83,043 |
-| `-O3` | this     | **4.814238** | **5.754** | **0.484** | **120.6%** | **+3.35%** | 82,435 |
+| | seconds | emulated MHz | MIPS | vs a real 8088 | gain | core `.text` |
+| --- | --- | --- | --- | --- | --- | --- |
+| master | 4.975485     | 5.568     | 0.468     | 116.7%     | —          | 83,043 |
+| this   | **4.814238** | **5.754** | **0.484** | **120.6%** | **+3.35%** | 82,435 |
 ```
 
 The derived columns are computed from the seconds rather than read off the
