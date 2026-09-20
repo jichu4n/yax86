@@ -106,7 +106,7 @@ static InstructionResult ExecuteGroup2Sar(
     return kInstructionExecuted;
   }
   count = ClampShiftCount(ctx, count);
-  int32_t value = FromSignedOperand(op);
+  int32_t value = FromSignedOperand(ctx->metadata->width, op);
   int32_t result = value >> count;
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (count - 1)) & 1) != 0;

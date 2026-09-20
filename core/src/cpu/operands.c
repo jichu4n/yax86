@@ -5,70 +5,51 @@
 #include "cycles.h"
 #endif  // YAX86_IMPLEMENTATION
 
-// Helper functions to construct OperandValue.
-YAX86_PRIVATE OperandValue ByteValue(uint8_t byte_value) {
-  OperandValue value = {
-      .width = kByte,
-      .value = {.byte_value = byte_value},
-  };
-  return value;
-}
+// What the unreachable arm of a width dispatch returns.
+//
+// Width names two values and every switch below handles both, so nothing
+// reaches these arms. They exist because C does not promise an enum object
+// holds only the values its enumerators name, and a function with a return
+// type has to return something.
+//
+// All ones in the low byte is what an 8086 reads from an address nothing
+// drives, and it is a legal value at either width. 0xFFFF is not: at kByte it
+// would break the zero high byte a byte-wide value is promised to have, which
+// is the invariant FromOperandValue() widens by doing nothing.
+enum { kUnreachableOperandValue = 0xFF };
 
-// Helper function to construct OperandValue for a word.
-YAX86_PRIVATE OperandValue WordValue(uint16_t word_value) {
-  OperandValue value = {
-      .width = kWord,
-      .value = {.word_value = word_value},
-  };
-  return value;
-}
-
-// Helper function to construct OperandValue given a Width and a value.
+// Narrow a computed result to what an operand of the given width holds. A
+// byte keeps a zero high byte, which is what makes widening it again free.
 YAX86_PRIVATE OperandValue ToOperandValue(Width width, uint32_t raw_value) {
+  return (OperandValue)(raw_value & kMaxValue[width]);
+}
+
+// Widen an operand value for arithmetic, which is done in 32 bits so that
+// nothing overflows on the way. A byte value already has a zero high byte, so
+// this is where that invariant is spent rather than a width being consulted.
+YAX86_PRIVATE uint32_t FromOperandValue(OperandValue value) { return value; }
+
+// The same, sign-extended. This one does need the width, since which bit is
+// the sign bit is exactly what the value no longer says.
+YAX86_PRIVATE int32_t FromSignedOperandValue(Width width, OperandValue value) {
   switch (width) {
     case kByte:
-      return ByteValue(raw_value & kMaxValue[width]);
+      return (int32_t)((int8_t)value);
     case kWord:
-      return WordValue(raw_value & kMaxValue[width]);
+      return (int32_t)((int16_t)value);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
-}
-
-// Helper function to zero-extend OperandValue to a 32-bit value. This makes it
-// simpler to do direct arithmetic without worrying about overflow.
-YAX86_PRIVATE uint32_t FromOperandValue(const OperandValue* value) {
-  switch (value->width) {
-    case kByte:
-      return value->value.byte_value;
-    case kWord:
-      return value->value.word_value;
-  }
-  // Should never reach here, but return a default value to avoid warnings.
-  return 0xFFFF;
-}
-
-// Helper function to sign-extend OperandValue to a 32-bit value. This makes it
-// simpler to do direct arithmetic without worrying about overflow.
-YAX86_PRIVATE int32_t FromSignedOperandValue(const OperandValue* value) {
-  switch (value->width) {
-    case kByte:
-      return (int32_t)((int8_t)value->value.byte_value);
-    case kWord:
-      return (int32_t)((int16_t)value->value.word_value);
-  }
-  // Should never reach here, but return a default value to avoid warnings.
-  return 0xFFFF;
+  return kUnreachableOperandValue;
 }
 
 // Helper function to extract a zero-extended value from an operand.
 YAX86_PRIVATE uint32_t FromOperand(const Operand* operand) {
-  return FromOperandValue(&operand->value);
+  return FromOperandValue(operand->value);
 }
 
 // Helper function to extract a sign-extended value from an operand.
-YAX86_PRIVATE int32_t FromSignedOperand(const Operand* operand) {
-  return FromSignedOperandValue(&operand->value);
+YAX86_PRIVATE int32_t FromSignedOperand(Width width, const Operand* operand) {
+  return FromSignedOperandValue(width, operand->value);
 }
 
 enum {
@@ -120,9 +101,8 @@ YAX86_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 1);
-  uint8_t byte_value =
-      ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address->value.memory_address));
-  return ByteValue(byte_value);
+  return ReadRawMemoryByte(
+      cpu, ToRawAddress(cpu, &address->value.memory_address));
 }
 
 // Read a word from memory to an OperandValue.
@@ -135,8 +115,8 @@ ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
       ReadRawMemoryByte(cpu, ToRawAddress(cpu, low_byte_address));
   uint8_t high_byte_value =
       ReadRawMemoryByte(cpu, ToRawAddress(cpu, &high_byte_address));
-  return WordValue(
-      (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value);
+  return (OperandValue)((((uint16_t)high_byte_value) << 8) |
+                        (uint16_t)low_byte_value);
 }
 
 // Read a memory operand of the given width to an OperandValue.
@@ -149,24 +129,25 @@ YAX86_PRIVATE OperandValue ReadMemoryOperandValue(
       return ReadMemoryOperandWord(cpu, address);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
+  return kUnreachableOperandValue;
 }
 
 // Read a byte from a register to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
-  uint8_t byte_value = cpu->registers[register_address->register_index] >>
-                       register_address->byte_offset;
-  return ByteValue(byte_value);
+  // Truncated to a byte, which is the invariant every consumer widens by
+  // doing nothing: AH and the high half of a word register live in the bits
+  // this drops.
+  return (uint8_t)(cpu->registers[register_address->register_index] >>
+                   register_address->byte_offset);
 }
 
 // Read a word from a register to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
-  uint16_t word_value = cpu->registers[register_address->register_index];
-  return WordValue(word_value);
+  return cpu->registers[register_address->register_index];
 }
 
 // Read a register operand of the given width to an OperandValue.
@@ -179,7 +160,7 @@ YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
       return ReadRegisterOperandWord(cpu, address);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
+  return kUnreachableOperandValue;
 }
 
 // Write a byte as uint8_t to memory.
@@ -204,8 +185,7 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 1);
   WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, &address->value.memory_address),
-      value.value.byte_value);
+      cpu, ToRawAddress(cpu, &address->value.memory_address), (uint8_t)value);
 }
 
 // Write a word to memory.
@@ -214,11 +194,9 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandWord(
   AddBusCycles(cpu, 2);
   const MemoryAddress* low_byte_address = &address->value.memory_address;
   const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
+  WriteRawMemoryByte(cpu, ToRawAddress(cpu, low_byte_address), (uint8_t)value);
   WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, low_byte_address), value.value.word_value & 0xFF);
-  WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, &high_byte_address),
-      (value.value.word_value >> 8) & 0xFF);
+      cpu, ToRawAddress(cpu, &high_byte_address), (uint8_t)(value >> 8));
 }
 
 // Write a memory operand of the given width.
@@ -240,7 +218,7 @@ YAX86_PRIVATE void WriteMemoryOperand(
 YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
-  const uint16_t updated_byte = ((uint16_t)value.value.byte_value)
+  const uint16_t updated_byte = ((uint16_t)(uint8_t)value)
                                 << register_address->byte_offset;
   const uint16_t other_byte =
       cpu->registers[register_address->register_index] &
@@ -252,7 +230,7 @@ YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
 YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
-  cpu->registers[register_address->register_index] = value.value.word_value;
+  cpu->registers[register_address->register_index] = value;
 }
 
 // Write a register operand of the given width.
@@ -454,15 +432,14 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
 // Read an 8-bit immediate value.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadImmediateOperandByte(const Instruction* instruction) {
-  return ByteValue(instruction->immediate[0]);
+  return instruction->immediate[0];
 }
 
 // Read a 16-bit immediate value.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadImmediateOperandWord(const Instruction* instruction) {
-  return WordValue(
-      ((uint16_t)instruction->immediate[0]) |
-      (((uint16_t)instruction->immediate[1]) << 8));
+  return (OperandValue)(((uint16_t)instruction->immediate[0]) |
+                        (((uint16_t)instruction->immediate[1]) << 8));
 }
 
 // Read an immediate value of the given width.
@@ -475,7 +452,7 @@ ReadImmediateOperand(const Instruction* instruction, Width width) {
       return ReadImmediateOperandWord(instruction);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
+  return kUnreachableOperandValue;
 }
 
 // Read a value from an operand address.
@@ -515,14 +492,13 @@ ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
 // Get a register operand for an instruction.
 YAX86_HOT YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index) {
-  Width width = ctx->metadata->width;
-  Operand operand = {
-      .address = {
-          .type = kOperandAddressTypeRegister,
-          .value = {
-              .register_address =
-                  GetRegisterAddress(ctx->cpu, register_index, width),
-          }}};
+  const Width width = ctx->metadata->width;
+  // Settled field by field rather than through an initializer, which would
+  // zero all ten bytes of the struct before a single one of them is written.
+  Operand operand;
+  operand.address.type = kOperandAddressTypeRegister;
+  operand.address.value.register_address =
+      GetRegisterAddress(ctx->cpu, register_index, width);
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
 }

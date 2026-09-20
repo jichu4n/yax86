@@ -779,8 +779,9 @@ Alongside the table, state:
   like the same dispatch and are not. `Width width : 1` is a one-bit bitfield,
   so there is no representable value outside the enum: the compiler proves the
   `default` arm unreachable and emits nothing for it, which is what makes the
-  explicit invalid return free and lets these read like `ToOperandValue()` and
-  `FromOperandValue()` rather than as bare ternaries. `OperandAddress.type` is
+  explicit invalid return free and lets these read like
+  `ReadRegisterOperandValue()` and `WriteMemoryOperand()` rather than as bare
+  ternaries. `OperandAddress.type` is
   a whole `OperandAddressType`, and while `arm-none-eabi` defaults to
   `-fshort-enums` and so gives it one byte, 254 of that byte's 256 values are
   outside the enum and C does not promise a variable holds only named ones. A
@@ -814,6 +815,63 @@ Alongside the table, state:
   line, and it lands in flash. `YAX86_HOT` moves it to SRAM and is worth 0.11%
   at `-O3`, but costs 0.35% at `-O2` by moving other inlining decisions, so it
   is left unmarked.
+
+### cpu — operand values
+
+- **An operand value is a number, not a struct.** `OperandValue` is a
+  `uint16_t`, and every read, write, immediate and port helper takes and
+  returns one by value. It used to be a `Width` beside a union of a byte and a
+  word, and what that cost was not the arithmetic — it was that a struct on
+  this path is a struct *in memory*. Worth **23.15% at `-O3`** and 9.72% at
+  `-O2`, and the core is 3,236 bytes smaller at `-O3` and 1,972 at `-O2`. It is
+  the largest single result in the campaign by a wide margin.
+- The mechanism is the ABI, and it is worth knowing exactly. AAPCS returns a
+  composite of four bytes or fewer in a register and anything larger through
+  memory, so a 10-byte `Operand` was returned through the stack. Worse, on
+  Thumb-1 GCC turns a small copy it cannot do in aligned words into a **call to
+  `memcpy`** — including a four-byte one, when the destination is a field at an
+  odd halfword offset inside a larger struct. Reading one register operand came
+  out as `memset(10)`, `memcpy(4)` and `memcpy(10)`, three calls through a
+  veneer into flash to fetch a register.
+- **An on-target profile is what found it**, and it found it by name:
+  `memcpy`, `memset` and their veneers were 5.4% of the whole `dos-boot` run,
+  and every hot-path call site of either was one of the three operand readers.
+  Nothing about the source says "this calls into libc"; `nm` and `objdump` did.
+  When a structure on this path is suspect, look at the call sites of
+  `__wrap_memcpy` before theorizing.
+- **A byte-wide value is held in the low byte with the high byte zero.** That
+  invariant is what lets `FromOperandValue()` widen by doing nothing, where it
+  used to switch on the width the value carried. Every path that produces a
+  byte truncates to one, and the one that has to work for it is
+  `ReadRegisterOperandByte()`, where AH and the high half of a word register
+  live in the bits the cast drops. Eight unit tests across `add_sub`, `group_2`
+  and `mov_xchg_xlat` fail if that cast goes, and so does the hardware suite.
+- **The unreachable arm of a width dispatch returns `kUnreachableOperandValue`,
+  which is `0xFF`.** `Width` names two values and every switch handles both, so
+  nothing reaches those arms; they exist because C does not promise an enum
+  object holds only named values. All ones in the low byte is what an 8086
+  reads from an address nothing drives, and it is legal at either width, where
+  `0xFFFF` is not - at `kByte` it would break the zero high byte the invariant
+  above promises. The arms cost nothing: naming them, and bringing the one that
+  said `0xFFFF` into line, leaves core `.text` unchanged at both levels.
+- What the type no longer carries is the width, so **sign extension takes one
+  explicitly** — `FromSignedOperandValue(width, value)` and
+  `FromSignedOperand(width, operand)`, from the opcode table entry the caller
+  already has. Zero extension needs none, by the invariant above.
+- **Do not initialize an operand with a designated initializer.** `Operand
+  operand = {.address = {...}}` makes C zero every member the initializer does
+  not name, which is a `memset` call over the whole struct before a single
+  field is written. Assigning the fields one at a time instead is **3.46% at
+  `-O3` on its own**, from that one function. Same lesson as the decode, where
+  settling each field where it becomes known rather than zeroing up front was
+  worth 4.63%.
+- `Operand` is still `{OperandAddress address; OperandValue value;}` and is
+  still returned by value, so `ReadRegisterOrMemoryOperand()` still holds the
+  seven remaining `memcpy` call sites in the core. Handing the address back
+  through a pointer and the value in a register would remove them; the
+  obstacle is that `GetRegisterOrMemoryOperandAddress()` is
+  `YAX86_ALWAYS_INLINE` and splitting the read at every handler would inline it
+  into about thirty of them.
 
 ### cpu — what an instruction costs
 
@@ -1377,12 +1435,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #80:
+SRAM, at #81:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.472593** | **6.194** | **0.521** | **129.9%** | 470,852 | 180,160 | 84,891 |
-| `-O2` | 4.694807 | 5.901 | 0.496 | 123.7% | 459,292 | 175,184 | 73,347 |
+| `-O3` | **3.631868** | **7.628** | **0.641** | **159.9%** | 468,652 | 179,888 | 81,655 |
+| `-O2` | 4.279075 | 6.474 | 0.544 | 135.7% | 457,244 | 175,120 | 71,375 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler

@@ -2108,16 +2108,19 @@ typedef struct OperandAddress {
   } value;
 } OperandAddress;
 
-// Operand value.
-typedef struct OperandValue {
-  // Data width.
-  Width width;
-  // The value of the operand.
-  union {
-    uint8_t byte_value;   // For byte operands
-    uint16_t word_value;  // For word operands
-  } value;
-} OperandValue;
+// The value of an operand.
+//
+// A number rather than a struct, because a struct here is a struct on the
+// stack: an operand value is produced and consumed on the hottest path in the
+// emulator, and one that does not fit in a register travels through memory
+// every time it is passed, returned or assigned.
+//
+// A byte-wide value is held in the low byte with the high byte zero. Every
+// path that produces one truncates to a byte, which is what lets a consumer
+// widen it by doing nothing. What the type no longer carries is the width, and
+// the width is what sign extension needs - so that is passed explicitly, from
+// the opcode table entry the caller already has.
+typedef uint16_t OperandValue;
 
 // An operand.
 typedef struct Operand {
@@ -2222,28 +2225,22 @@ extern void AddBusCycles(CPUState* cpu, uint8_t num_bytes);
 #include "public.h"
 #include "types.h"
 
-// Helper function to construct an OperandValue for a byte.
-extern OperandValue ByteValue(uint8_t byte_value);
-
-// Helper function to construct OperandValue for a word.
-extern OperandValue WordValue(uint16_t word_value);
-
-// Helper function to construct OperandValue given a Width and a value.
+// Narrow a computed result to what an operand of the given width holds.
 extern OperandValue ToOperandValue(Width width, uint32_t raw_value);
 
 // Helper function to zero-extend OperandValue to a 32-bit value. This makes it
 // simpler to do direct arithmetic without worrying about overflow.
-extern uint32_t FromOperandValue(const OperandValue* value);
+extern uint32_t FromOperandValue(OperandValue value);
 
 // Helper function to sign-extend OperandValue to a 32-bit value. This makes it
 // simpler to do direct arithmetic without worrying about overflow.
-extern int32_t FromSignedOperandValue(const OperandValue* value);
+extern int32_t FromSignedOperandValue(Width width, OperandValue value);
 
 // Helper function to extract a zero-extended value from an operand.
 extern uint32_t FromOperand(const Operand* operand);
 
 // Helper function to extract a sign-extended value from an operand.
-extern int32_t FromSignedOperand(const Operand* operand);
+extern int32_t FromSignedOperand(Width width, const Operand* operand);
 
 // Computes the raw effective address corresponding to a MemoryAddress.
 extern uint32_t ToRawAddress(const CPUState* cpu, const MemoryAddress* address);
@@ -2497,70 +2494,51 @@ void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
 #include "cycles.h"
 #endif  // YAX86_IMPLEMENTATION
 
-// Helper functions to construct OperandValue.
-YAX86_PRIVATE OperandValue ByteValue(uint8_t byte_value) {
-  OperandValue value = {
-      .width = kByte,
-      .value = {.byte_value = byte_value},
-  };
-  return value;
-}
+// What the unreachable arm of a width dispatch returns.
+//
+// Width names two values and every switch below handles both, so nothing
+// reaches these arms. They exist because C does not promise an enum object
+// holds only the values its enumerators name, and a function with a return
+// type has to return something.
+//
+// All ones in the low byte is what an 8086 reads from an address nothing
+// drives, and it is a legal value at either width. 0xFFFF is not: at kByte it
+// would break the zero high byte a byte-wide value is promised to have, which
+// is the invariant FromOperandValue() widens by doing nothing.
+enum { kUnreachableOperandValue = 0xFF };
 
-// Helper function to construct OperandValue for a word.
-YAX86_PRIVATE OperandValue WordValue(uint16_t word_value) {
-  OperandValue value = {
-      .width = kWord,
-      .value = {.word_value = word_value},
-  };
-  return value;
-}
-
-// Helper function to construct OperandValue given a Width and a value.
+// Narrow a computed result to what an operand of the given width holds. A
+// byte keeps a zero high byte, which is what makes widening it again free.
 YAX86_PRIVATE OperandValue ToOperandValue(Width width, uint32_t raw_value) {
+  return (OperandValue)(raw_value & kMaxValue[width]);
+}
+
+// Widen an operand value for arithmetic, which is done in 32 bits so that
+// nothing overflows on the way. A byte value already has a zero high byte, so
+// this is where that invariant is spent rather than a width being consulted.
+YAX86_PRIVATE uint32_t FromOperandValue(OperandValue value) { return value; }
+
+// The same, sign-extended. This one does need the width, since which bit is
+// the sign bit is exactly what the value no longer says.
+YAX86_PRIVATE int32_t FromSignedOperandValue(Width width, OperandValue value) {
   switch (width) {
     case kByte:
-      return ByteValue(raw_value & kMaxValue[width]);
+      return (int32_t)((int8_t)value);
     case kWord:
-      return WordValue(raw_value & kMaxValue[width]);
+      return (int32_t)((int16_t)value);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
-}
-
-// Helper function to zero-extend OperandValue to a 32-bit value. This makes it
-// simpler to do direct arithmetic without worrying about overflow.
-YAX86_PRIVATE uint32_t FromOperandValue(const OperandValue* value) {
-  switch (value->width) {
-    case kByte:
-      return value->value.byte_value;
-    case kWord:
-      return value->value.word_value;
-  }
-  // Should never reach here, but return a default value to avoid warnings.
-  return 0xFFFF;
-}
-
-// Helper function to sign-extend OperandValue to a 32-bit value. This makes it
-// simpler to do direct arithmetic without worrying about overflow.
-YAX86_PRIVATE int32_t FromSignedOperandValue(const OperandValue* value) {
-  switch (value->width) {
-    case kByte:
-      return (int32_t)((int8_t)value->value.byte_value);
-    case kWord:
-      return (int32_t)((int16_t)value->value.word_value);
-  }
-  // Should never reach here, but return a default value to avoid warnings.
-  return 0xFFFF;
+  return kUnreachableOperandValue;
 }
 
 // Helper function to extract a zero-extended value from an operand.
 YAX86_PRIVATE uint32_t FromOperand(const Operand* operand) {
-  return FromOperandValue(&operand->value);
+  return FromOperandValue(operand->value);
 }
 
 // Helper function to extract a sign-extended value from an operand.
-YAX86_PRIVATE int32_t FromSignedOperand(const Operand* operand) {
-  return FromSignedOperandValue(&operand->value);
+YAX86_PRIVATE int32_t FromSignedOperand(Width width, const Operand* operand) {
+  return FromSignedOperandValue(width, operand->value);
 }
 
 enum {
@@ -2612,9 +2590,8 @@ YAX86_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 1);
-  uint8_t byte_value =
-      ReadRawMemoryByte(cpu, ToRawAddress(cpu, &address->value.memory_address));
-  return ByteValue(byte_value);
+  return ReadRawMemoryByte(
+      cpu, ToRawAddress(cpu, &address->value.memory_address));
 }
 
 // Read a word from memory to an OperandValue.
@@ -2627,8 +2604,8 @@ ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
       ReadRawMemoryByte(cpu, ToRawAddress(cpu, low_byte_address));
   uint8_t high_byte_value =
       ReadRawMemoryByte(cpu, ToRawAddress(cpu, &high_byte_address));
-  return WordValue(
-      (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value);
+  return (OperandValue)((((uint16_t)high_byte_value) << 8) |
+                        (uint16_t)low_byte_value);
 }
 
 // Read a memory operand of the given width to an OperandValue.
@@ -2641,24 +2618,25 @@ YAX86_PRIVATE OperandValue ReadMemoryOperandValue(
       return ReadMemoryOperandWord(cpu, address);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
+  return kUnreachableOperandValue;
 }
 
 // Read a byte from a register to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
-  uint8_t byte_value = cpu->registers[register_address->register_index] >>
-                       register_address->byte_offset;
-  return ByteValue(byte_value);
+  // Truncated to a byte, which is the invariant every consumer widens by
+  // doing nothing: AH and the high half of a word register live in the bits
+  // this drops.
+  return (uint8_t)(cpu->registers[register_address->register_index] >>
+                   register_address->byte_offset);
 }
 
 // Read a word from a register to an OperandValue.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   const RegisterAddress* register_address = &address->value.register_address;
-  uint16_t word_value = cpu->registers[register_address->register_index];
-  return WordValue(word_value);
+  return cpu->registers[register_address->register_index];
 }
 
 // Read a register operand of the given width to an OperandValue.
@@ -2671,7 +2649,7 @@ YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
       return ReadRegisterOperandWord(cpu, address);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
+  return kUnreachableOperandValue;
 }
 
 // Write a byte as uint8_t to memory.
@@ -2696,8 +2674,7 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 1);
   WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, &address->value.memory_address),
-      value.value.byte_value);
+      cpu, ToRawAddress(cpu, &address->value.memory_address), (uint8_t)value);
 }
 
 // Write a word to memory.
@@ -2706,11 +2683,9 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandWord(
   AddBusCycles(cpu, 2);
   const MemoryAddress* low_byte_address = &address->value.memory_address;
   const MemoryAddress high_byte_address = NextMemoryAddress(low_byte_address);
+  WriteRawMemoryByte(cpu, ToRawAddress(cpu, low_byte_address), (uint8_t)value);
   WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, low_byte_address), value.value.word_value & 0xFF);
-  WriteRawMemoryByte(
-      cpu, ToRawAddress(cpu, &high_byte_address),
-      (value.value.word_value >> 8) & 0xFF);
+      cpu, ToRawAddress(cpu, &high_byte_address), (uint8_t)(value >> 8));
 }
 
 // Write a memory operand of the given width.
@@ -2732,7 +2707,7 @@ YAX86_PRIVATE void WriteMemoryOperand(
 YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
-  const uint16_t updated_byte = ((uint16_t)value.value.byte_value)
+  const uint16_t updated_byte = ((uint16_t)(uint8_t)value)
                                 << register_address->byte_offset;
   const uint16_t other_byte =
       cpu->registers[register_address->register_index] &
@@ -2744,7 +2719,7 @@ YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
 YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const RegisterAddress* register_address = &address->value.register_address;
-  cpu->registers[register_address->register_index] = value.value.word_value;
+  cpu->registers[register_address->register_index] = value;
 }
 
 // Write a register operand of the given width.
@@ -2946,15 +2921,14 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
 // Read an 8-bit immediate value.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadImmediateOperandByte(const Instruction* instruction) {
-  return ByteValue(instruction->immediate[0]);
+  return instruction->immediate[0];
 }
 
 // Read a 16-bit immediate value.
 YAX86_HOT YAX86_PRIVATE OperandValue
 ReadImmediateOperandWord(const Instruction* instruction) {
-  return WordValue(
-      ((uint16_t)instruction->immediate[0]) |
-      (((uint16_t)instruction->immediate[1]) << 8));
+  return (OperandValue)(((uint16_t)instruction->immediate[0]) |
+                        (((uint16_t)instruction->immediate[1]) << 8));
 }
 
 // Read an immediate value of the given width.
@@ -2967,7 +2941,7 @@ ReadImmediateOperand(const Instruction* instruction, Width width) {
       return ReadImmediateOperandWord(instruction);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return ByteValue(0xFF);
+  return kUnreachableOperandValue;
 }
 
 // Read a value from an operand address.
@@ -3007,14 +2981,13 @@ ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
 // Get a register operand for an instruction.
 YAX86_HOT YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index) {
-  Width width = ctx->metadata->width;
-  Operand operand = {
-      .address = {
-          .type = kOperandAddressTypeRegister,
-          .value = {
-              .register_address =
-                  GetRegisterAddress(ctx->cpu, register_index, width),
-          }}};
+  const Width width = ctx->metadata->width;
+  // Settled field by field rather than through an initializer, which would
+  // zero all ten bytes of the struct before a single one of them is written.
+  Operand operand;
+  operand.address.type = kOperandAddressTypeRegister;
+  operand.address.value.register_address =
+      GetRegisterAddress(ctx->cpu, register_index, width);
   operand.value = ReadOperandValue(ctx, &operand.address);
   return operand;
 }
@@ -3183,15 +3156,13 @@ extern InstructionResult ExecuteLoadDSWithPointer(
 
 // Common logic for ADD instructions
 extern InstructionResult ExecuteAdd(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for INC instructions
 extern InstructionResult ExecuteInc(
     const InstructionContext* ctx, Operand* dest);
 // Common logic for ADC instructions
 extern InstructionResult ExecuteAddWithCarry(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 
 // ADD r/m8, r8
 // ADD r/m16, r16
@@ -3231,12 +3202,10 @@ extern void SetFlagsAfterSub(
 
 // Common logic for SUB instructions
 extern InstructionResult ExecuteSub(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for SBB instructions
 extern InstructionResult ExecuteSubWithBorrow(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for DEC instructions
 extern InstructionResult ExecuteDec(
     const InstructionContext* ctx, Operand* dest);
@@ -3283,8 +3252,7 @@ extern InstructionResult ExecuteCwd(const InstructionContext* ctx);
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
 extern InstructionResult ExecuteCmp(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 
 // CMP r/m8, r8
 // CMP r/m16, r16
@@ -3307,19 +3275,16 @@ extern void SetFlagsAfterBooleanInstruction(
     const InstructionContext* ctx, uint32_t result);
 // Common logic for AND instructions.
 extern InstructionResult ExecuteBooleanAnd(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for OR instructions.
 extern InstructionResult ExecuteBooleanOr(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for XOR instructions.
 extern InstructionResult ExecuteBooleanXor(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 // Common logic for TEST instructions.
 extern InstructionResult ExecuteTest(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value);
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value);
 
 // AND r/m8, r8
 // AND r/m16, r16
@@ -3372,12 +3337,10 @@ extern InstructionResult ExecuteTestImmediateToALOrAX(
 
 // Common logic for far jumps.
 extern InstructionResult ExecuteFarJump(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset);
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset);
 // Common logic for far calls.
 extern InstructionResult ExecuteFarCall(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset);
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset);
 // Common logic for returning from an interrupt.
 extern InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu);
 
@@ -3633,7 +3596,7 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
       src->address.type == kOperandAddressTypeRegister &&
       src->address.value.register_address.register_index == kSP;
   const OperandValue value =
-      source_is_stack_pointer ? WordValue(cpu->registers[kSP]) : src->value;
+      source_is_stack_pointer ? cpu->registers[kSP] : src->value;
   WriteToStackTop(cpu, value);
 }
 
@@ -3739,7 +3702,7 @@ ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
                       register_index_opcode_base[ctx->metadata->width]);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue src_value = ReadImmediate(ctx);
-  WriteOperand(ctx, &dest, FromOperandValue(&src_value));
+  WriteOperand(ctx, &dest, FromOperandValue(src_value));
   return kInstructionExecuted;
 }
 
@@ -3758,11 +3721,11 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
       .value = {
           .memory_address = {
               .segment_register_index = kDS,
-              .offset = (uint16_t)FromOperandValue(&src_offset_value),
+              .offset = (uint16_t)FromOperandValue(src_offset_value),
           }}};
   ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
   OperandValue src_value = ReadOperandValue(ctx, &src_address);
-  WriteOperand(ctx, &dest, FromOperandValue(&src_value));
+  WriteOperand(ctx, &dest, FromOperandValue(src_value));
   return kInstructionExecuted;
 }
 
@@ -3781,7 +3744,7 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
       .value = {
           .memory_address = {
               .segment_register_index = kDS,
-              .offset = (uint16_t)FromOperandValue(&dest_offset_value),
+              .offset = (uint16_t)FromOperandValue(dest_offset_value),
           }}};
   ApplySegmentOverride(ctx->instruction, &dest_address.value.memory_address);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
@@ -3794,7 +3757,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
   OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue src_value = ReadImmediate(ctx);
-  WriteOperandAddress(ctx, &dest, FromOperandValue(&src_value));
+  WriteOperandAddress(ctx, &dest, FromOperandValue(src_value));
   return kInstructionExecuted;
 }
 
@@ -3854,7 +3817,7 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
   };
   ApplySegmentOverride(ctx->instruction, &src_address.value.memory_address);
   OperandValue src_value = ReadMemoryOperandByte(ctx->cpu, &src_address);
-  WriteOperandAddress(ctx, &al.address, FromOperandValue(&src_value));
+  WriteOperandAddress(ctx, &al.address, FromOperandValue(src_value));
   return kInstructionExecuted;
 }
 
@@ -3914,8 +3877,8 @@ static InstructionResult ExecuteLoadSegmentWithPointer(
   OperandValue src_segment_value =
       ReadMemoryOperandWord(ctx->cpu, &src_address);
 
-  WriteOperand(ctx, &destRegister, FromOperandValue(&src_offset_value));
-  WriteOperand(ctx, &destSegmentRegister, FromOperandValue(&src_segment_value));
+  WriteOperand(ctx, &destRegister, FromOperandValue(src_offset_value));
+  WriteOperand(ctx, &destSegmentRegister, FromOperandValue(src_segment_value));
   return kInstructionExecuted;
 }
 
@@ -3994,7 +3957,7 @@ typedef void (*SetFlagsAfterAddFn)(
 
 // Common logic for ADD, ADC, and INC instructions.
 static InstructionResult ExecuteAddCommon(
-    const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -4008,8 +3971,7 @@ static InstructionResult ExecuteAddCommon(
 
 // Common logic for ADD instructions
 YAX86_PRIVATE InstructionResult ExecuteAdd(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ false, SetFlagsAfterAdd);
 }
@@ -4020,7 +3982,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value);
+  return ExecuteAdd(ctx, &dest, src.value);
 }
 
 // ADD r8, r/m8
@@ -4029,7 +3991,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteAdd(ctx, &dest, &src.value);
+  return ExecuteAdd(ctx, &dest, src.value);
 }
 
 // ADD AL, imm8
@@ -4038,13 +4000,12 @@ YAX86_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteAdd(ctx, &dest, &src_value);
+  return ExecuteAdd(ctx, &dest, src_value);
 }
 
 // Common logic for ADC instructions
 YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteAddWithCarry(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);
 }
@@ -4055,7 +4016,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteAddWithCarry(ctx, &dest, &src.value);
+  return ExecuteAddWithCarry(ctx, &dest, src.value);
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
@@ -4063,7 +4024,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteAddWithCarry(ctx, &dest, &src.value);
+  return ExecuteAddWithCarry(ctx, &dest, src.value);
 }
 
 // ADC AL, imm8
@@ -4072,15 +4033,15 @@ YAX86_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteAddWithCarry(ctx, &dest, &src_value);
+  return ExecuteAddWithCarry(ctx, &dest, src_value);
 }
 
 // Common logic for INC instructions
 YAX86_PRIVATE InstructionResult
 ExecuteInc(const InstructionContext* ctx, Operand* dest) {
-  OperandValue src_value = WordValue(1);
+  OperandValue src_value = 1;
   return ExecuteAddCommon(
-      ctx, dest, &src_value, /* carry */ false, SetFlagsAfterInc);
+      ctx, dest, src_value, /* carry */ false, SetFlagsAfterInc);
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
@@ -4163,7 +4124,7 @@ typedef void (*SetFlagsAfterSubFn)(
 
 // Common logic for SUB, SBB, and DEC instructions.
 YAX86_HOT static InstructionResult ExecuteSubCommon(
-    const InstructionContext* ctx, Operand* dest, const OperandValue* src_value,
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -4177,8 +4138,7 @@ YAX86_HOT static InstructionResult ExecuteSubCommon(
 
 // Common logic for SUB instructions
 YAX86_PRIVATE InstructionResult ExecuteSub(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteSubCommon(
       ctx, dest, src_value, /* borrow */ false, SetFlagsAfterSub);
 }
@@ -4189,7 +4149,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteSub(ctx, &dest, &src.value);
+  return ExecuteSub(ctx, &dest, src.value);
 }
 
 // SUB r8, r/m8
@@ -4198,7 +4158,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteSub(ctx, &dest, &src.value);
+  return ExecuteSub(ctx, &dest, src.value);
 }
 
 // SUB AL, imm8
@@ -4207,13 +4167,12 @@ YAX86_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteSub(ctx, &dest, &src_value);
+  return ExecuteSub(ctx, &dest, src_value);
 }
 
 // Common logic for SBB instructions
 YAX86_PRIVATE InstructionResult ExecuteSubWithBorrow(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteSubCommon(
       ctx, dest, src_value, /* borrow */ true, SetFlagsAfterSub);
 }
@@ -4225,7 +4184,7 @@ ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteSubWithBorrow(ctx, &dest, &src.value);
+  return ExecuteSubWithBorrow(ctx, &dest, src.value);
 }
 
 // SBB r8, r/m8
@@ -4235,7 +4194,7 @@ ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteSubWithBorrow(ctx, &dest, &src.value);
+  return ExecuteSubWithBorrow(ctx, &dest, src.value);
 }
 
 // SBB AL, imm8
@@ -4244,15 +4203,15 @@ YAX86_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteSubWithBorrow(ctx, &dest, &src_value);
+  return ExecuteSubWithBorrow(ctx, &dest, src_value);
 }
 
 // Common logic for DEC instructions
 YAX86_PRIVATE InstructionResult
 ExecuteDec(const InstructionContext* ctx, Operand* dest) {
-  OperandValue src_value = WordValue(1);
+  OperandValue src_value = 1;
   return ExecuteSubCommon(
-      ctx, dest, &src_value, /* borrow */ false, SetFlagsAfterDec);
+      ctx, dest, src_value, /* borrow */ false, SetFlagsAfterDec);
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
@@ -4324,8 +4283,7 @@ ExecuteCwd(const InstructionContext* ctx) {
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
 YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteCmp(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
   uint32_t result = raw_dest_value - raw_src_value;
@@ -4339,7 +4297,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteCmp(ctx, &dest, &src.value);
+  return ExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP r8, r/m8
@@ -4348,7 +4306,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteCmp(ctx, &dest, &src.value);
+  return ExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP AL, imm8
@@ -4357,7 +4315,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteCmp(ctx, &dest, &src_value);
+  return ExecuteCmp(ctx, &dest, src_value);
 }
 
 
@@ -4392,8 +4350,7 @@ YAX86_PRIVATE void SetFlagsAfterBooleanInstruction(
 
 // Common logic for AND instructions.
 YAX86_PRIVATE InstructionResult ExecuteBooleanAnd(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -4406,7 +4363,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteBooleanAnd(ctx, &dest, &src.value);
+  return ExecuteBooleanAnd(ctx, &dest, src.value);
 }
 
 // AND r8, r/m8
@@ -4415,7 +4372,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteBooleanAnd(ctx, &dest, &src.value);
+  return ExecuteBooleanAnd(ctx, &dest, src.value);
 }
 
 // AND AL, imm8
@@ -4424,13 +4381,12 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteBooleanAnd(ctx, &dest, &src_value);
+  return ExecuteBooleanAnd(ctx, &dest, src_value);
 }
 
 // Common logic for OR instructions.
 YAX86_PRIVATE InstructionResult ExecuteBooleanOr(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -4443,7 +4399,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteBooleanOr(ctx, &dest, &src.value);
+  return ExecuteBooleanOr(ctx, &dest, src.value);
 }
 
 // OR r8, r/m8
@@ -4452,7 +4408,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteBooleanOr(ctx, &dest, &src.value);
+  return ExecuteBooleanOr(ctx, &dest, src.value);
 }
 
 // OR AL, imm8
@@ -4461,13 +4417,12 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteBooleanOr(ctx, &dest, &src_value);
+  return ExecuteBooleanOr(ctx, &dest, src_value);
 }
 
 // Common logic for XOR instructions.
 YAX86_PRIVATE InstructionResult ExecuteBooleanXor(
-    const InstructionContext* ctx, Operand* dest,
-    const OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -4480,7 +4435,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteBooleanXor(ctx, &dest, &src.value);
+  return ExecuteBooleanXor(ctx, &dest, src.value);
 }
 
 // XOR r8, r/m8
@@ -4489,7 +4444,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperand(ctx);
   Operand src = ReadRegisterOrMemoryOperand(ctx);
-  return ExecuteBooleanXor(ctx, &dest, &src.value);
+  return ExecuteBooleanXor(ctx, &dest, src.value);
 }
 
 // XOR AL, imm8
@@ -4498,7 +4453,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteBooleanXor(ctx, &dest, &src_value);
+  return ExecuteBooleanXor(ctx, &dest, src_value);
 }
 
 // ============================================================================
@@ -4507,7 +4462,7 @@ ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
 
 // Common logic for TEST instructions.
 YAX86_PRIVATE InstructionResult ExecuteTest(
-    const InstructionContext* ctx, Operand* dest, OperandValue* src_value) {
+    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   SetFlagsAfterBooleanInstruction(ctx, result);
   return kInstructionExecuted;
@@ -4519,7 +4474,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   Operand src = ReadRegisterOperand(ctx);
-  return ExecuteTest(ctx, &dest, &src.value);
+  return ExecuteTest(ctx, &dest, src.value);
 }
 
 // TEST AL, imm8
@@ -4528,7 +4483,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteTest(ctx, &dest, &src_value);
+  return ExecuteTest(ctx, &dest, src_value);
 }
 
 
@@ -4554,7 +4509,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 
 // Jump to a relative signed byte offset.
 YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
-    const InstructionContext* ctx, const OperandValue* offset_value) {
+    const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
   return kInstructionExecuted;
@@ -4562,7 +4517,7 @@ YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
 
 // Jump to a relative signed word offset.
 YAX86_HOT static InstructionResult ExecuteRelativeJumpWord(
-    const InstructionContext* ctx, const OperandValue* offset_value) {
+    const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
   return kInstructionExecuted;
@@ -4570,14 +4525,14 @@ YAX86_HOT static InstructionResult ExecuteRelativeJumpWord(
 
 // Table of relative jump instructions, indexed by width.
 static InstructionResult (*const kRelativeJumpFn[kNumWidths])(
-    const InstructionContext* ctx, const OperandValue* offset_value) = {
+    const InstructionContext* ctx, OperandValue offset_value) = {
     ExecuteRelativeJumpByte,  // kByte
     ExecuteRelativeJumpWord,  // kWord
 };
 
 // Common logic for JMP instructions.
 static InstructionResult ExecuteRelativeJump(
-    const InstructionContext* ctx, const OperandValue* offset_value) {
+    const InstructionContext* ctx, OperandValue offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
@@ -4586,13 +4541,12 @@ static InstructionResult ExecuteRelativeJump(
 YAX86_PRIVATE InstructionResult
 ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
-  return ExecuteRelativeJump(ctx, &offset_value);
+  return ExecuteRelativeJump(ctx, offset_value);
 }
 
 // Common logic for far jumps.
 YAX86_PRIVATE InstructionResult ExecuteFarJump(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset) {
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset) {
   ctx->cpu->registers[kCS] = FromOperandValue(segment);
   ctx->cpu->registers[kIP] = FromOperandValue(offset);
   return kInstructionExecuted;
@@ -4601,13 +4555,13 @@ YAX86_PRIVATE InstructionResult ExecuteFarJump(
 // JMP ptr16:16
 YAX86_PRIVATE InstructionResult
 ExecuteDirectFarJump(const InstructionContext* ctx) {
-  OperandValue new_cs = WordValue(
-      ((uint16_t)ctx->instruction->immediate[2]) |
-      (((uint16_t)ctx->instruction->immediate[3]) << 8));
-  OperandValue new_ip = WordValue(
-      ((uint16_t)ctx->instruction->immediate[0]) |
-      (((uint16_t)ctx->instruction->immediate[1]) << 8));
-  return ExecuteFarJump(ctx, &new_cs, &new_ip);
+  OperandValue new_cs =
+      (OperandValue)(((uint16_t)ctx->instruction->immediate[2]) |
+                     (((uint16_t)ctx->instruction->immediate[3]) << 8));
+  OperandValue new_ip =
+      (OperandValue)(((uint16_t)ctx->instruction->immediate[0]) |
+                     (((uint16_t)ctx->instruction->immediate[1]) << 8));
+  return ExecuteFarJump(ctx, new_cs, new_ip);
 }
 
 // ============================================================================
@@ -4622,7 +4576,7 @@ static InstructionResult ExecuteConditionalJump(
     // The base cost in the cycle table is for the branch not being taken.
     CPUAddCycles(ctx->cpu, kJumpTakenCycles);
     OperandValue offset_value = ReadImmediate(ctx);
-    return ExecuteRelativeJump(ctx, &offset_value);
+    return ExecuteRelativeJump(ctx, offset_value);
   }
   return kInstructionExecuted;
 }
@@ -4704,8 +4658,8 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 
 // Common logic for near calls.
 static InstructionResult ExecuteNearCall(
-    const InstructionContext* ctx, const OperandValue* offset) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+    const InstructionContext* ctx, OperandValue offset) {
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteRelativeJump(ctx, offset);
 }
 
@@ -4713,24 +4667,23 @@ static InstructionResult ExecuteNearCall(
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
-  return ExecuteNearCall(ctx, &offset);
+  return ExecuteNearCall(ctx, offset);
 }
 
 // Common logic for far calls.
 YAX86_PRIVATE InstructionResult ExecuteFarCall(
-    const InstructionContext* ctx, const OperandValue* segment,
-    const OperandValue* offset) {
+    const InstructionContext* ctx, OperandValue segment, OperandValue offset) {
   // Push the current CS and IP onto the stack.
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, ctx->cpu->registers[kCS]);
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteFarJump(ctx, segment, offset);
 }
 
 // CALL ptr16:16
 YAX86_PRIVATE InstructionResult
 ExecuteDirectFarCall(const InstructionContext* ctx) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kCS]));
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, ctx->cpu->registers[kCS]);
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteDirectFarJump(ctx);
 }
 
@@ -4738,7 +4691,7 @@ ExecuteDirectFarCall(const InstructionContext* ctx) {
 static InstructionResult ExecuteNearReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
-  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
+  ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
   ctx->cpu->registers[kSP] += arg_size;
   return kInstructionExecuted;
 }
@@ -4753,7 +4706,7 @@ ExecuteNearReturn(const InstructionContext* ctx) {
 YAX86_PRIVATE InstructionResult
 ExecuteNearReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
-  return ExecuteNearReturnCommon(ctx, FromOperandValue(&arg_size_value));
+  return ExecuteNearReturnCommon(ctx, FromOperandValue(arg_size_value));
 }
 
 // Common logic for RETF instructions.
@@ -4761,8 +4714,8 @@ static InstructionResult ExecuteFarReturnCommon(
     const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   OperandValue new_cs = Pop(ctx->cpu);
-  ctx->cpu->registers[kIP] = FromOperandValue(&new_ip);
-  ctx->cpu->registers[kCS] = FromOperandValue(&new_cs);
+  ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
+  ctx->cpu->registers[kCS] = FromOperandValue(new_cs);
   ctx->cpu->registers[kSP] += arg_size;
   return kInstructionExecuted;
 }
@@ -4777,7 +4730,7 @@ ExecuteFarReturn(const InstructionContext* ctx) {
 YAX86_PRIVATE InstructionResult
 ExecuteFarReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
-  return ExecuteFarReturnCommon(ctx, FromOperandValue(&arg_size_value));
+  return ExecuteFarReturnCommon(ctx, FromOperandValue(arg_size_value));
 }
 
 // ============================================================================
@@ -4787,11 +4740,11 @@ ExecuteFarReturnAndPop(const InstructionContext* ctx) {
 // Common logic for returning from an interrupt.
 YAX86_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
   OperandValue ip_value = Pop(cpu);
-  cpu->registers[kIP] = FromOperandValue(&ip_value);
+  cpu->registers[kIP] = FromOperandValue(ip_value);
   OperandValue cs_value = Pop(cpu);
-  cpu->registers[kCS] = FromOperandValue(&cs_value);
+  cpu->registers[kCS] = FromOperandValue(cs_value);
   OperandValue flags_value = Pop(cpu);
-  cpu->flags = ToFlagsRegisterValue(FromOperandValue(&flags_value));
+  cpu->flags = ToFlagsRegisterValue(FromOperandValue(flags_value));
   return kInstructionExecuted;
 }
 
@@ -4817,8 +4770,7 @@ YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
 // INT n
 YAX86_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
-  CPURaiseInternalInterrupt(
-      ctx->cpu, FromOperandValue(&interrupt_number_value));
+  CPURaiseInternalInterrupt(ctx->cpu, FromOperandValue(interrupt_number_value));
   return kInstructionExecuted;
 }
 
@@ -4869,7 +4821,7 @@ ExecutePopRegister(const InstructionContext* ctx) {
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -4893,21 +4845,21 @@ ExecutePopSegmentRegister(const InstructionContext* ctx) {
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest.address, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest.address, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
 // PUSHF
 YAX86_PRIVATE InstructionResult
 ExecutePushFlags(const InstructionContext* ctx) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->flags));
+  PushValue(ctx->cpu, ctx->cpu->flags);
   return kInstructionExecuted;
 }
 
 // POPF
 YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx->cpu);
-  ctx->cpu->flags = ToFlagsRegisterValue(FromOperandValue(&value));
+  ctx->cpu->flags = ToFlagsRegisterValue(FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -4921,7 +4873,7 @@ ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   // both address it and the 8086 computes the effective address first.
   OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue value = Pop(ctx->cpu);
-  WriteOperandAddress(ctx, &dest, FromOperandValue(&value));
+  WriteOperandAddress(ctx, &dest, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -4945,7 +4897,8 @@ static const OperandAddress* GetAHRegisterAddress(void) {
 YAX86_PRIVATE InstructionResult
 ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
   WriteRegisterOperandByte(
-      ctx->cpu, GetAHRegisterAddress(), ByteValue(ctx->cpu->flags & 0x00FF));
+      ctx->cpu, GetAHRegisterAddress(),
+      (OperandValue)(ctx->cpu->flags & 0x00FF));
   return kInstructionExecuted;
 }
 
@@ -4955,8 +4908,7 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value =
       ReadRegisterOperandByte(ctx->cpu, GetAHRegisterAddress());
   // Clear the lower byte of flags and set it to the value in AH
-  ctx->cpu->flags =
-      ToFlagsRegisterValue((ctx->cpu->flags & 0xFF00) | value.value.byte_value);
+  ctx->cpu->flags = ToFlagsRegisterValue((ctx->cpu->flags & 0xFF00) | value);
   return kInstructionExecuted;
 }
 
@@ -5047,8 +4999,8 @@ ExecuteSetALFromCarry(const InstructionContext* ctx) {
 
 // Read a byte from an I/O port.
 YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
-  return ByteValue(
-      cpu->config.read_port ? cpu->config.read_port(cpu, port) : 0xFF);
+  return (OperandValue)(cpu->config.read_port ? cpu->config.read_port(cpu, port)
+                                              : 0xFF);
 }
 
 // Read a word from an I/O port as a uint16_t. The 8088 has an 8-bit data bus,
@@ -5056,9 +5008,9 @@ YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
 // on this: writing a 6845 register index and its data in one OUT DX, AX is the
 // standard idiom, and it is what the BIOS uses.
 static OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
-  uint8_t low = ReadByteFromPort(cpu, port).value.byte_value;
-  uint8_t high = ReadByteFromPort(cpu, (uint16_t)(port + 1)).value.byte_value;
-  return WordValue((high << 8) | low);
+  uint8_t low = (uint8_t)ReadByteFromPort(cpu, port);
+  uint8_t high = (uint8_t)ReadByteFromPort(cpu, (uint16_t)(port + 1));
+  return (OperandValue)((high << 8) | low);
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
@@ -5072,7 +5024,7 @@ static InstructionResult ExecuteIn(
     const InstructionContext* ctx, uint16_t port) {
   OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  WriteOperand(ctx, &dest, FromOperandValue(&value));
+  WriteOperand(ctx, &dest, FromOperandValue(value));
   return kInstructionExecuted;
 }
 
@@ -5081,7 +5033,7 @@ static InstructionResult ExecuteIn(
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
-  return ExecuteIn(ctx, FromOperandValue(&port));
+  return ExecuteIn(ctx, FromOperandValue(port));
 }
 
 // IN AL, DX
@@ -5096,16 +5048,16 @@ static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
   if (!cpu->config.write_port) {
     return;
   }
-  cpu->config.write_port(cpu, port, FromOperandValue(&value));
+  cpu->config.write_port(cpu, port, FromOperandValue(value));
 }
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
 // consecutive ports.
 static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
-  uint32_t raw_value = FromOperandValue(&value);
-  WriteByteToPort(cpu, port, ByteValue(raw_value & 0xFF));
+  uint32_t raw_value = FromOperandValue(value);
+  WriteByteToPort(cpu, port, (OperandValue)(raw_value & 0xFF));
   WriteByteToPort(
-      cpu, (uint16_t)(port + 1), ByteValue((raw_value >> 8) & 0xFF));
+      cpu, (uint16_t)(port + 1), (OperandValue)((raw_value >> 8) & 0xFF));
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
@@ -5127,7 +5079,7 @@ static InstructionResult ExecuteOut(
 YAX86_PRIVATE InstructionResult
 ExecuteOutImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
-  return ExecuteOut(ctx, FromOperandValue(&port));
+  return ExecuteOut(ctx, FromOperandValue(port));
 }
 
 // OUT DX, AL
@@ -5326,7 +5278,7 @@ YAX86_HOT static InstructionResult ExecuteScasIteration(
     const InstructionContext* ctx) {
   Operand src = GetStringDestinationOperand(ctx);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  ExecuteCmp(ctx, &dest, &src.value);
+  ExecuteCmp(ctx, &dest, src.value);
   UpdateStringDestinationAddress(ctx);
   return kInstructionExecuted;
 }
@@ -5341,7 +5293,7 @@ YAX86_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx) {
 static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
   Operand dest = GetStringSourceOperand(ctx);
   Operand src = GetStringDestinationOperand(ctx);
-  ExecuteCmp(ctx, &dest, &src.value);
+  ExecuteCmp(ctx, &dest, src.value);
   UpdateStringSourceAddress(ctx);
   UpdateStringDestinationAddress(ctx);
   return kInstructionExecuted;
@@ -5429,7 +5381,7 @@ YAX86_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
 YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   OperandValue base = ReadImmediate(ctx);
-  uint16_t base_value = FromOperandValue(&base);
+  uint16_t base_value = FromOperandValue(base);
   if (base_value == 0) {
     // AAM divides by its immediate operand, so a base of 0 raises a divide
     // error just like DIV by zero does, rather than being an invalid encoding.
@@ -5454,7 +5406,7 @@ YAX86_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   OperandValue base = ReadImmediate(ctx);
-  uint8_t base_value = FromOperandValue(&base);
+  uint8_t base_value = FromOperandValue(base);
   al += ah * base_value;
   ah = 0;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -5536,7 +5488,7 @@ YAX86_PRIVATE InstructionResult ExecuteDas(const InstructionContext* ctx) {
 // ============================================================================
 
 typedef InstructionResult (*Group1ExecuteInstructionFn)(
-    const InstructionContext* ctx, Operand* dest, const OperandValue* src);
+    const InstructionContext* ctx, Operand* dest, OperandValue src);
 
 // Group 1 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte.
@@ -5558,7 +5510,7 @@ ExecuteGroup1Instruction(const InstructionContext* ctx) {
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   Operand dest = ReadRegisterOrMemoryOperand(ctx);
   OperandValue src_value = ReadImmediate(ctx);
-  return fn(ctx, &dest, &src_value);
+  return fn(ctx, &dest, src_value);
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
@@ -5570,9 +5522,9 @@ ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   OperandValue src_value =
       ReadImmediateOperandByte(ctx->instruction);  // immediate is always 8-bit
   OperandValue src_value_extended =
-      WordValue((uint16_t)((int16_t)((int8_t)src_value.value.byte_value)));
+      (OperandValue)((int16_t)((int8_t)src_value));
   // Sign-extend the immediate value to the destination width.
-  return fn(ctx, &dest, &src_value_extended);
+  return fn(ctx, &dest, src_value_extended);
 }
 
 
@@ -5693,7 +5645,7 @@ static InstructionResult ExecuteGroup2Sar(
     return kInstructionExecuted;
   }
   count = ClampShiftCount(ctx, count);
-  int32_t value = FromSignedOperand(op);
+  int32_t value = FromSignedOperand(ctx->metadata->width, op);
   int32_t result = value >> count;
   WriteOperand(ctx, op, result);
   bool last_lsb = ((value >> (count - 1)) & 1) != 0;
@@ -5905,7 +5857,7 @@ typedef InstructionResult (*Group3ExecuteInstructionFn)(
 static InstructionResult ExecuteGroup3Test(
     const InstructionContext* ctx, Operand* op) {
   OperandValue src_value = ReadImmediate(ctx);
-  return ExecuteTest(ctx, op, &src_value);
+  return ExecuteTest(ctx, op, src_value);
 }
 
 // NOT r/m8
@@ -5920,7 +5872,7 @@ static InstructionResult ExecuteNot(
 // NEG r/m16
 static InstructionResult ExecuteNeg(
     const InstructionContext* ctx, Operand* op) {
-  int32_t op_value = FromSignedOperand(op);
+  int32_t op_value = FromSignedOperand(ctx->metadata->width, op);
   int32_t result_value = -op_value;
   WriteOperand(ctx, op, result_value);
   SetFlagsAfterSub(ctx, 0, op_value, result_value, false);
@@ -6003,7 +5955,9 @@ static InstructionResult ExecuteImul(
     const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
-  int32_t result = FromSignedOperand(&dest) * FromSignedOperand(op);
+  const Width width = ctx->metadata->width;
+  int32_t result =
+      FromSignedOperand(width, &dest) * FromSignedOperand(width, op);
   return ExecuteMulCommon(
       ctx, &dest, result,
       result > kMaxSignedValue[ctx->metadata->width] ||
@@ -6036,7 +5990,7 @@ static InstructionResult ExecuteDiv(
   OperandValue dest_high_half =
       ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
   uint32_t dividend =
-      FromOperand(&dest) | (FromOperandValue(&dest_high_half)
+      FromOperand(&dest) | (FromOperandValue(dest_high_half)
                             << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
@@ -6051,7 +6005,7 @@ static InstructionResult ExecuteDiv(
 static InstructionResult ExecuteIdiv(
     const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
-  int32_t divisor = FromSignedOperand(op);
+  int32_t divisor = FromSignedOperand(ctx->metadata->width, op);
   if (divisor == 0) {
     CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
@@ -6063,7 +6017,7 @@ static InstructionResult ExecuteIdiv(
   OperandValue dest_high_half =
       ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
   int32_t dividend =
-      FromOperand(&dest) | (FromSignedOperandValue(&dest_high_half)
+      FromOperand(&dest) | (FromSignedOperandValue(width, dest_high_half)
                             << kMulDivResultHighHalfShiftWidth[width]);
   int32_t quotient = dividend / divisor;
   // The 8086/8088 divides the magnitudes and checks the result against the
@@ -6193,14 +6147,14 @@ static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
 // JMP ptr16
 static InstructionResult ExecuteIndirectNearJump(
     const InstructionContext* ctx, Operand* dest) {
-  ctx->cpu->registers[kIP] = FromOperandValue(&dest->value);
+  ctx->cpu->registers[kIP] = FromOperandValue(dest->value);
   return kInstructionExecuted;
 }
 
 // CALL ptr16
 static InstructionResult ExecuteIndirectNearCall(
     const InstructionContext* ctx, Operand* dest) {
-  PushValue(ctx->cpu, WordValue(ctx->cpu->registers[kIP]));
+  PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
@@ -6209,7 +6163,7 @@ static InstructionResult ExecuteIndirectFarCall(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
-  return ExecuteFarCall(ctx, &segment.value, &dest->value);
+  return ExecuteFarCall(ctx, segment.value, dest->value);
 }
 
 // JMP ptr16:16
@@ -6217,7 +6171,7 @@ static InstructionResult ExecuteIndirectFarJump(
     const InstructionContext* ctx, Operand* dest) {
   Operand segment =
       GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
-  return ExecuteFarJump(ctx, &segment.value, &dest->value);
+  return ExecuteFarJump(ctx, segment.value, dest->value);
 }
 
 // PUSH r/m16
@@ -8540,11 +8494,11 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
-  PushValue(cpu, WordValue(cpu->flags));
+  PushValue(cpu, cpu->flags);
   CPUSetFlag(cpu, kIF, false);
   CPUSetFlag(cpu, kTF, false);
-  PushValue(cpu, WordValue(cpu->registers[kCS]));
-  PushValue(cpu, WordValue(cpu->registers[kIP]));
+  PushValue(cpu, cpu->registers[kCS]);
+  PushValue(cpu, cpu->registers[kIP]);
 
   // Invoke the interrupt handler callback first. If the caller did not provide
   // an interrupt handler callback, handle the interrupt within the VM using the

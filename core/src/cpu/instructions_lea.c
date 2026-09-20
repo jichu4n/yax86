@@ -44,8 +44,8 @@ static InstructionResult ExecuteLoadSegmentWithPointer(
   OperandValue src_segment_value =
       ReadMemoryOperandWord(ctx->cpu, &src_address);
 
-  WriteOperand(ctx, &destRegister, FromOperandValue(&src_offset_value));
-  WriteOperand(ctx, &destSegmentRegister, FromOperandValue(&src_segment_value));
+  WriteOperand(ctx, &destRegister, FromOperandValue(src_offset_value));
+  WriteOperand(ctx, &destSegmentRegister, FromOperandValue(src_segment_value));
   return kInstructionExecuted;
 }
 
