@@ -12,7 +12,8 @@
 // LEA r16, m
 YAX86_PRIVATE InstructionResult
 ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
   MemoryAddress memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
   // LEA yields the effective address - the offset within the segment - and
@@ -30,9 +31,11 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
 // Common logic for LES and LDS instructions.
 static InstructionResult ExecuteLoadSegmentWithPointer(
     const InstructionContext* ctx, RegisterIndex segment_register_index) {
-  Operand destRegister = ReadRegisterOperand(ctx);
-  Operand destSegmentRegister =
-      ReadRegisterOperandForRegisterIndex(ctx, segment_register_index);
+  Operand destRegister;
+  ReadRegisterOperand(ctx, &destRegister);
+  Operand destSegmentRegister;
+  ReadRegisterOperandForRegisterIndex(
+      ctx, segment_register_index, &destSegmentRegister);
 
   const MemoryAddress src_memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);

@@ -30,7 +30,8 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return fn(ctx, &dest, src_value);
 }
@@ -40,7 +41,8 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
   OperandValue src_value =
       ReadImmediateOperandByte(ctx->instruction);  // immediate is always 8-bit
   OperandValue src_value_extended =

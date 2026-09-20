@@ -74,8 +74,10 @@ YAX86_PRIVATE InstructionResult ExecuteAdd(
 // ADD r/m16, r16
 YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteAdd(ctx, &dest, src.value);
 }
 
@@ -83,8 +85,10 @@ ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 // ADD r16, r/m16
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteAdd(ctx, &dest, src.value);
 }
 
@@ -92,7 +96,8 @@ ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 // ADD AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteAdd(ctx, &dest, src_value);
 }
@@ -108,16 +113,20 @@ YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteAddWithCarry(
 // ADC r/m16, r16
 YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteAddWithCarry(ctx, &dest, src.value);
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
 YAX86_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteAddWithCarry(ctx, &dest, src.value);
 }
 
@@ -125,7 +134,8 @@ ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
 // ADC AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteAddWithCarry(ctx, &dest, src_value);
 }
@@ -143,6 +153,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteIncRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x40);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   return ExecuteInc(ctx, &dest);
 }

@@ -31,8 +31,10 @@ YAX86_PRIVATE InstructionResult ExecuteBooleanAnd(
 // AND r/m16, r16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteBooleanAnd(ctx, &dest, src.value);
 }
 
@@ -40,8 +42,10 @@ ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 // AND r16, r/m16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteBooleanAnd(ctx, &dest, src.value);
 }
 
@@ -49,7 +53,8 @@ ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 // AND AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanAndImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteBooleanAnd(ctx, &dest, src_value);
 }
@@ -67,8 +72,10 @@ YAX86_PRIVATE InstructionResult ExecuteBooleanOr(
 // OR r/m16, r16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteBooleanOr(ctx, &dest, src.value);
 }
 
@@ -76,8 +83,10 @@ ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 // OR r16, r/m16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteBooleanOr(ctx, &dest, src.value);
 }
 
@@ -85,7 +94,8 @@ ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 // OR AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanOrImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteBooleanOr(ctx, &dest, src_value);
 }
@@ -103,8 +113,10 @@ YAX86_PRIVATE InstructionResult ExecuteBooleanXor(
 // XOR r/m16, r16
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteBooleanXor(ctx, &dest, src.value);
 }
 
@@ -112,8 +124,10 @@ ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 // XOR r16, r/m16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteBooleanXor(ctx, &dest, src.value);
 }
 
@@ -121,7 +135,8 @@ ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 // XOR AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteBooleanXor(ctx, &dest, src_value);
 }
@@ -142,8 +157,10 @@ YAX86_PRIVATE InstructionResult ExecuteTest(
 // TEST r/m16, r16
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteTest(ctx, &dest, src.value);
 }
 
@@ -151,7 +168,8 @@ ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 // TEST AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, &dest, src_value);
 }

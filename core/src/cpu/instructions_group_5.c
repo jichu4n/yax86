@@ -10,17 +10,12 @@
 // ============================================================================
 
 // Helper to get the segment register value for far JMP and CALL instructions.
-static Operand GetSegmentRegisterOperandForIndirectFarJumpOrCall(
-    const InstructionContext* ctx, const Operand* offset) {
+static void GetSegmentRegisterOperandForIndirectFarJumpOrCall(
+    const InstructionContext* ctx, const Operand* offset, Operand* operand) {
   OperandAddress segment_address = offset->address;
   segment_address.offset += 2;  // Skip the offset
-  OperandValue segment_value =
-      ReadMemoryOperandWord(ctx->cpu, &segment_address);
-  Operand operand = {
-      .address = segment_address,
-      .value = segment_value,
-  };
-  return operand;
+  operand->address = segment_address;
+  operand->value = ReadMemoryOperandWord(ctx->cpu, &segment_address);
 }
 
 // JMP ptr16
@@ -40,16 +35,16 @@ static InstructionResult ExecuteIndirectNearCall(
 // CALL ptr16:16
 static InstructionResult ExecuteIndirectFarCall(
     const InstructionContext* ctx, Operand* dest) {
-  Operand segment =
-      GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
+  Operand segment;
+  GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
   return ExecuteFarCall(ctx, segment.value, dest->value);
 }
 
 // JMP ptr16:16
 static InstructionResult ExecuteIndirectFarJump(
     const InstructionContext* ctx, Operand* dest) {
-  Operand segment =
-      GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest);
+  Operand segment;
+  GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
   return ExecuteFarJump(ctx, segment.value, dest->value);
 }
 
@@ -84,6 +79,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteGroup5Instruction(const InstructionContext* ctx) {
   const Group5ExecuteInstructionFn fn =
       kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);
 }

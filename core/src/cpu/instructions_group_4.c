@@ -37,6 +37,7 @@ ExecuteGroup4Instruction(const InstructionContext* ctx) {
   }
   const Group4ExecuteInstructionFn fn =
       kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);
 }
