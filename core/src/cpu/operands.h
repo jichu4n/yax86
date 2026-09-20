@@ -22,7 +22,7 @@ extern uint32_t FromOperand(const Operand* operand);
 // Helper function to extract a sign-extended value from an operand.
 extern int32_t FromSignedOperand(Width width, const Operand* operand);
 
-// Computes the raw effective address corresponding to a MemoryAddress.
+// Computes the raw address a segment register and an offset address.
 extern uint32_t ToRawAddress(
     const CPUState* cpu, uint8_t segment_register_index, uint16_t offset);
 
@@ -81,7 +81,8 @@ extern RegisterAddress GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm);
 // reg or R/M field.
 extern RegisterAddress GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm);
 
-// Apply segment override prefixes to a MemoryAddress.
+// Replace a segment register index with whatever the instruction's segment
+// override prefix names, if it carries one.
 extern void ApplySegmentOverride(
     const Instruction* instruction, uint8_t* segment_register_index);
 

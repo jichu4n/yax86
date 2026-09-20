@@ -59,7 +59,7 @@ enum {
   kPhysicalAddressMask = 0xFFFFF,
 };
 
-// Computes the raw effective address corresponding to a MemoryAddress.
+// Computes the raw address a segment register and an offset address.
 YAX86_PRIVATE uint32_t ToRawAddress(
     const CPUState* cpu, uint8_t segment_register_index, uint16_t offset) {
   uint16_t segment = cpu->registers[segment_register_index];
@@ -298,7 +298,8 @@ GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
   return fallback;
 }
 
-// Apply segment override prefixes to a MemoryAddress.
+// Replace a segment register index with whatever the instruction's segment
+// override prefix names, if it carries one.
 YAX86_PRIVATE void ApplySegmentOverride(
     const Instruction* instruction, uint8_t* segment_register_index) {
   if (instruction->segment_override != kNoSegmentOverride) {

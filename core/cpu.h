@@ -1609,7 +1609,7 @@ extern uint32_t FromOperand(const Operand* operand);
 // Helper function to extract a sign-extended value from an operand.
 extern int32_t FromSignedOperand(Width width, const Operand* operand);
 
-// Computes the raw effective address corresponding to a MemoryAddress.
+// Computes the raw address a segment register and an offset address.
 extern uint32_t ToRawAddress(
     const CPUState* cpu, uint8_t segment_register_index, uint16_t offset);
 
@@ -1668,7 +1668,8 @@ extern RegisterAddress GetRegisterAddressByte(CPUState* cpu, uint8_t reg_or_rm);
 // reg or R/M field.
 extern RegisterAddress GetRegisterAddressWord(CPUState* cpu, uint8_t reg_or_rm);
 
-// Apply segment override prefixes to a MemoryAddress.
+// Replace a segment register index with whatever the instruction's segment
+// override prefix names, if it carries one.
 extern void ApplySegmentOverride(
     const Instruction* instruction, uint8_t* segment_register_index);
 
@@ -1916,7 +1917,7 @@ enum {
   kPhysicalAddressMask = 0xFFFFF,
 };
 
-// Computes the raw effective address corresponding to a MemoryAddress.
+// Computes the raw address a segment register and an offset address.
 YAX86_PRIVATE uint32_t ToRawAddress(
     const CPUState* cpu, uint8_t segment_register_index, uint16_t offset) {
   uint16_t segment = cpu->registers[segment_register_index];
@@ -2155,7 +2156,8 @@ GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
   return fallback;
 }
 
-// Apply segment override prefixes to a MemoryAddress.
+// Replace a segment register index with whatever the instruction's segment
+// override prefix names, if it carries one.
 YAX86_PRIVATE void ApplySegmentOverride(
     const Instruction* instruction, uint8_t* segment_register_index) {
   if (instruction->segment_override != kNoSegmentOverride) {
@@ -7491,12 +7493,8 @@ YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
     ++fetch_state->next_byte_offset;
     return *fetch_state->next_byte++;
   }
-  const MemoryAddress address = {
-      .segment_register_index = kCS,
-      .offset = fetch_state->next_byte_offset++,
-  };
   return ReadRawMemoryByte(
-      cpu, ToRawAddress(cpu, address.segment_register_index, address.offset));
+      cpu, ToRawAddress(cpu, kCS, fetch_state->next_byte_offset++));
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
@@ -7513,12 +7511,7 @@ YAX86_HOT static void CPUInitInstructionFetchState(
   // skip it would be paid by the hosts that do supply one, which is every host
   // that cares about the speed. Measured on x86-64, adding it grew
   // CPUFetchNextInstruction by 11 bytes.
-  const MemoryAddress fetch_address = {
-      .segment_register_index = kCS,
-      .offset = ip,
-  };
-  const uint32_t raw_address = ToRawAddress(
-      cpu, fetch_address.segment_register_index, fetch_address.offset);
+  const uint32_t raw_address = ToRawAddress(cpu, kCS, ip);
 
   const CPUInstructionFetchWindow* const window =
       &cpu->instruction_fetch_window;
@@ -7728,11 +7721,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
   uint8_t generation = 0;
 
   if (cache != NULL) {
-    const MemoryAddress start = {
-        .segment_register_index = kCS,
-        .offset = ip,
-    };
-    address = ToRawAddress(cpu, start.segment_register_index, start.offset);
+    address = ToRawAddress(cpu, kCS, ip);
     generation = cpu->code_page_generation[address >> kCodePageShift];
     target = &cache[address & cpu->decode_cache_index_mask];
     if (IsDecodeCacheHit(target, address, generation)) {
@@ -7944,12 +7933,7 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   if (cache == NULL) {
     return NULL;
   }
-  const MemoryAddress start = {
-      .segment_register_index = kCS,
-      .offset = cpu->registers[kIP],
-  };
-  const uint32_t address =
-      ToRawAddress(cpu, start.segment_register_index, start.offset);
+  const uint32_t address = ToRawAddress(cpu, kCS, cpu->registers[kIP]);
   CPUDecodeCacheEntry* const entry =
       &cache[address & cpu->decode_cache_index_mask];
   if (!IsDecodeCacheHit(
