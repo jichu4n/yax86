@@ -227,8 +227,9 @@ static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
 }
 
 // Returns the number of immediate bytes in an instruction.
-static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
-  switch (metadata->opcode) {
+static uint8_t GetImmediateSize(
+    const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
+  switch (opcode) {
     // TEST r/m8, imm8
     case 0xF6:
     // TEST r/m16, imm16
@@ -236,7 +237,7 @@ static uint8_t GetImmediateSize(const OpcodeMetadata* metadata, uint8_t reg) {
       // REG 0 and REG 1 are both TEST, which carries an immediate; the other
       // REG values do not. The 8086/8088 does not decode bit 0 of the REG
       // field here, which is what makes REG 1 an alias of REG 0.
-      return reg <= 1 ? metadata->opcode - 0xF5 : 0;
+      return reg <= 1 ? opcode - 0xF5 : 0;
     default:
       return metadata->immediate_size;
   }
@@ -310,12 +311,11 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   // Immediate operand
   //
-  // immediate_size is a three bit field, so it can express more bytes than
-  // immediate[] holds. No entry in the opcode table does - the widest is the 4
-  // of a far pointer - but nothing in the type says so, and a compiler that
-  // cannot see it is right to warn about the writes below. Bounding it by the
-  // array is what makes the invariant explicit.
-  uint8_t immediate_size = GetImmediateSize(metadata, reg);
+  // No entry in the opcode table exceeds the immediate[] array - the widest is
+  // the 4 of a far pointer - but a compiler that cannot see it is right to warn
+  // about the writes below. Bounding it by the array is what makes the
+  // invariant explicit.
+  uint8_t immediate_size = GetImmediateSize(metadata, instruction->opcode, reg);
   if (immediate_size > kMaxImmediateBytes) {
     immediate_size = kMaxImmediateBytes;
   }
@@ -462,8 +462,10 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
     return kInstructionInvalid;
   }
   if (instruction->immediate_size !=
-      (metadata->has_modrm ? GetImmediateSize(metadata, instruction->mod_rm.reg)
-                           : metadata->immediate_size)) {
+      (metadata->has_modrm
+           ? GetImmediateSize(metadata, instruction->opcode,
+                              instruction->mod_rm.reg)
+           : metadata->immediate_size)) {
     return kInstructionInvalid;
   }
 

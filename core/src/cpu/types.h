@@ -141,19 +141,18 @@ typedef InstructionResult (*OpcodeHandler)(const InstructionContext* context);
 
 // An entry in the opcode lookup table.
 typedef struct OpcodeMetadata {
-  // Opcode.
-  uint8_t opcode;
   // What the instruction costs before the effective address computation and
   // its time on the data bus - see cycles.c for how the three fit together.
   uint8_t base_cycles;
 
-  // Instruction has ModR/M byte
-  bool has_modrm : 1;
-  // Number of immediate data bytes: 0, 1, 2, or 4
-  uint8_t immediate_size : 3;
+  // Instruction has ModR/M byte.
+  bool has_modrm;
+
+  // Number of immediate data bytes: 0, 1, 2, or 4.
+  uint8_t immediate_size;
 
   // Width of the instruction's operands.
-  Width width : 1;
+  Width width : 8;
 
   // Handler function.
   OpcodeHandler handler;
