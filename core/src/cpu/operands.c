@@ -449,7 +449,10 @@ ReadImmediateOperand(const Instruction* instruction, Width width) {
 }
 
 // Read a value from an operand address.
-YAX86_PRIVATE OperandValue
+//
+// Always inlined. Left to itself GCC emits this out of line, in flash, and
+// puts a veneer and an XIP fetch on every operand read - 5.4% at -O3.
+YAX86_ALWAYS_INLINE YAX86_PRIVATE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
   // Not a switch, unlike the width dispatch it calls into. OperandAddressType
   // is a plain enum field rather than a bitfield, so most of the values it can
@@ -474,48 +477,47 @@ ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
 
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
-YAX86_HOT YAX86_PRIVATE Operand
-ReadRegisterOrMemoryOperand(const InstructionContext* ctx) {
-  Operand operand;
-  operand.address = GetRegisterOrMemoryOperandAddress(ctx);
-  operand.value = ReadOperandValue(ctx, &operand.address);
-  return operand;
+YAX86_HOT YAX86_PRIVATE void ReadRegisterOrMemoryOperand(
+    const InstructionContext* ctx, Operand* operand) {
+  operand->address = GetRegisterOrMemoryOperandAddress(ctx);
+  operand->value = ReadOperandValue(ctx, &operand->address);
 }
 
 // Get a register operand for an instruction.
-YAX86_HOT YAX86_PRIVATE Operand ReadRegisterOperandForRegisterIndex(
-    const InstructionContext* ctx, RegisterIndex register_index) {
+YAX86_HOT YAX86_PRIVATE void ReadRegisterOperandForRegisterIndex(
+    const InstructionContext* ctx, RegisterIndex register_index,
+    Operand* operand) {
   const Width width = ctx->metadata->width;
-  // Settled field by field rather than through an initializer, which would
-  // zero all ten bytes of the struct before a single one of them is written.
-  Operand operand;
-  operand.address.type = kOperandAddressTypeRegister;
+  // Do not fold these into an initializer: C would zero the whole struct
+  // before a single field of it is written.
+  operand->address.type = kOperandAddressTypeRegister;
   const RegisterAddress register_address =
       GetRegisterAddress(ctx->cpu, register_index, width);
-  operand.address.register_index = register_address.register_index;
-  operand.address.offset = register_address.byte_offset;
-  operand.value = ReadOperandValue(ctx, &operand.address);
-  return operand;
+  operand->address.register_index = register_address.register_index;
+  operand->address.offset = register_address.byte_offset;
+  operand->value = ReadOperandValue(ctx, &operand->address);
 }
 
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
-YAX86_PRIVATE Operand ReadRegisterOperand(const InstructionContext* ctx) {
-  return ReadRegisterOperandForRegisterIndex(
-      ctx, (RegisterIndex)ctx->instruction->mod_rm.reg);
+YAX86_PRIVATE void ReadRegisterOperand(
+    const InstructionContext* ctx, Operand* operand) {
+  ReadRegisterOperandForRegisterIndex(
+      ctx, (RegisterIndex)ctx->instruction->mod_rm.reg, operand);
 }
 
 // Get a segment register operand for an instruction from the REG field of the
 // Mod/RM byte.
-YAX86_PRIVATE Operand
-ReadSegmentRegisterOperand(const InstructionContext* ctx) {
+YAX86_PRIVATE void ReadSegmentRegisterOperand(
+    const InstructionContext* ctx, Operand* operand) {
   // The segment register field is only two bits wide. The 8086/8088 does not
   // decode the third bit at all, so REG 4 through 7 name the same four
   // registers over again - which is what makes 0x8C and 0x8E accept every REG
   // value. Masking it also keeps the index inside the register array, which
   // REG 4 and above would otherwise run past the end of.
-  return ReadRegisterOperandForRegisterIndex(
-      ctx, (RegisterIndex)(kES + (ctx->instruction->mod_rm.reg & 0x03)));
+  ReadRegisterOperandForRegisterIndex(
+      ctx, (RegisterIndex)(kES + (ctx->instruction->mod_rm.reg & 0x03)),
+      operand);
 }
 
 // Write a value to a register or memory operand address.

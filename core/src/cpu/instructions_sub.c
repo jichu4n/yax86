@@ -82,8 +82,10 @@ YAX86_PRIVATE InstructionResult ExecuteSub(
 // SUB r/m16, r16
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteSub(ctx, &dest, src.value);
 }
 
@@ -91,8 +93,10 @@ ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
 // SUB r16, r/m16
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteSub(ctx, &dest, src.value);
 }
 
@@ -100,7 +104,8 @@ ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
 // SUB AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteSub(ctx, &dest, src_value);
 }
@@ -117,8 +122,10 @@ YAX86_PRIVATE InstructionResult ExecuteSubWithBorrow(
 YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteSubWithBorrow(ctx, &dest, src.value);
 }
 
@@ -127,8 +134,10 @@ ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
 YAX86_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteSubWithBorrow(ctx, &dest, src.value);
 }
 
@@ -136,7 +145,8 @@ ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
 // SBB AX, imm16
 YAX86_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteSubWithBorrow(ctx, &dest, src_value);
 }
@@ -154,6 +164,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteDecRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x48);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   return ExecuteDec(ctx, &dest);
 }

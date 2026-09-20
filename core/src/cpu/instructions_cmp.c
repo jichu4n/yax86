@@ -23,8 +23,10 @@ YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteCmp(
 // CMP r/m16, r16
 YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
-  Operand src = ReadRegisterOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOperand(ctx, &src);
   return ExecuteCmp(ctx, &dest, src.value);
 }
 
@@ -32,8 +34,10 @@ ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 // CMP r16, r/m16
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperand(ctx);
-  Operand src = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOperand(ctx, &dest);
+  Operand src;
+  ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteCmp(ctx, &dest, src.value);
 }
 
@@ -41,7 +45,8 @@ ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 // CMP AX, imm16
 YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteCmp(ctx, &dest, src_value);
 }

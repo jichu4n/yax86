@@ -902,12 +902,31 @@ Alongside the table, state:
   `-fshort-enums`, four otherwise - so a `uint8_t*` to one is correct only by
   accident of endianness, and the native test build is exactly the target where
   it is four.
-- `Operand` is still `{OperandAddress address; OperandValue value;}` at six
-  bytes, so it is still over the return line and still handed back by value.
-  That is the next question rather than an oversight: it cannot be shrunk under
-  four - a 16-bit offset and a 16-bit value are already four before the tag -
-  so an out-parameter is the only move left there, and it wants measuring on
-  top of this rather than alongside it.
+- **`Operand` is handed back through a pointer, because it cannot be shrunk
+  under the return line.** At six bytes - a four byte address and a 16-bit
+  value - it is already past four before the tag, so the trick that worked for
+  `OperandAddress` is unavailable and an out-parameter is the only move. The
+  seven readers take an `Operand*` as their last argument.
+- **That only pays alongside `YAX86_ALWAYS_INLINE` on `ReadOperandValue()`, and
+  on its own it is a large loss.** Measured against the flat-address baseline:
+
+  | | `-O3` | `-O2` |
+  | --- | --- | --- |
+  | the out-parameter alone | **-5.46%** | -1.07% |
+  | the inline mark alone | +0.11% | +1.98% |
+  | both | **+0.97%** | **+4.15%** |
+
+- The reason is the inlining lottery rather than anything about the copy, and
+  the tell is in what the function calls. Returning by value,
+  `ReadRegisterOrMemoryOperand()` calls `ReadMemoryOperandWord()` and
+  `ReadMemoryByte()` - `ReadOperandValue()` having been inlined into it, both
+  arms landing in SRAM. With the out-parameter it is small enough that GCC
+  stops inlining `ReadOperandValue()` and calls it instead, and that one lives
+  in flash, so every operand read grew a veneer and an XIP fetch. **Check what
+  a changed function calls, not just whether it got smaller** - the
+  out-parameter version is 94 bytes against 244 and was the slower of the two.
+- The marked `ReadOperandValue()` costs 608 bytes of core `.text` at `-O3` and
+  624 at `-O2`, which is the price of the win above.
 
 ### cpu — what an instruction costs
 
@@ -1471,12 +1490,12 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 400MHz, 128K of guest RAM, hot path in
-SRAM, at #84:
+SRAM, at #85:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **3.139696** | **8.823** | **0.742** | **185.0%** | 469,508 | 179,552 | 82,435 |
-| `-O2` | 3.488154 | 7.942 | 0.667 | 166.5% | 456,996 | 175,040 | 71,183 |
+| `-O3` | **3.109428** | **8.909** | **0.749** | **186.8%** | 470,508 | 179,648 | 83,043 |
+| `-O2` | 3.349155 | 8.272 | 0.695 | 173.4% | 457,636 | 175,312 | 71,807 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` is now the first
   configuration to emulate the part faster than the part ran. **The compiler

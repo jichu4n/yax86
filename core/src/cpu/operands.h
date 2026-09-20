@@ -107,19 +107,23 @@ extern OperandValue ReadOperandValue(
 
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
-extern Operand ReadRegisterOrMemoryOperand(const InstructionContext* ctx);
+extern void ReadRegisterOrMemoryOperand(
+    const InstructionContext* ctx, Operand* operand);
 
 // Get a register operand for an instruction.
-extern Operand ReadRegisterOperandForRegisterIndex(
-    const InstructionContext* ctx, RegisterIndex register_index);
+extern void ReadRegisterOperandForRegisterIndex(
+    const InstructionContext* ctx, RegisterIndex register_index,
+    Operand* operand);
 
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
-extern Operand ReadRegisterOperand(const InstructionContext* ctx);
+extern void ReadRegisterOperand(
+    const InstructionContext* ctx, Operand* operand);
 
 // Get a segment register operand for an instruction from the REG field of the
 // Mod/RM byte.
-extern Operand ReadSegmentRegisterOperand(const InstructionContext* ctx);
+extern void ReadSegmentRegisterOperand(
+    const InstructionContext* ctx, Operand* operand);
 
 // Write a value to a register or memory operand address.
 extern void WriteOperandAddress(

@@ -35,7 +35,8 @@ static OperandValue (*const kReadFromPortFns[])(CPUState*, uint16_t) = {
 static InstructionResult ExecuteIn(
     const InstructionContext* ctx, uint16_t port) {
   OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   WriteOperand(ctx, &dest, FromOperandValue(value));
   return kInstructionExecuted;
 }
@@ -81,7 +82,8 @@ static void (*const kWriteToPortFns[])(CPUState*, uint16_t, OperandValue) = {
 // Common logic for OUT instructions.
 static InstructionResult ExecuteOut(
     const InstructionContext* ctx, uint16_t port) {
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand src;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
   return kInstructionExecuted;
 }

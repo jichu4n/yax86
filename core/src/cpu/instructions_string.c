@@ -16,18 +16,16 @@ static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
 
 // Get the source operand for string instructions. Typically DS:SI but can be
 // overridden by a segment override prefix.
-static Operand GetStringSourceOperand(const InstructionContext* ctx) {
+static void GetStringSourceOperand(
+    const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kDS,
       .offset = ctx->cpu->registers[kSI],
   };
   ApplySegmentOverride(ctx->instruction, &address.register_index);
-  Operand operand = {
-      .address = address,
-      .value = ReadOperandValue(ctx, &address),
-  };
-  return operand;
+  operand->address = address;
+  operand->value = ReadOperandValue(ctx, &address);
 }
 
 // Get the destination operand address for string instructions. Always ES:DI.
@@ -42,13 +40,11 @@ static OperandAddress GetStringDestinationOperandAddress(
 }
 
 // Get the destination operand for string instructions. Always ES:DI.
-static Operand GetStringDestinationOperand(const InstructionContext* ctx) {
+static void GetStringDestinationOperand(
+    const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = GetStringDestinationOperandAddress(ctx);
-  Operand operand = {
-      .address = address,
-      .value = ReadOperandValue(ctx, &address),
-  };
-  return operand;
+  operand->address = address;
+  operand->value = ReadOperandValue(ctx, &address);
 }
 
 // Update the source address register (SI) after a string operation.
@@ -94,7 +90,8 @@ static InstructionResult ExecuteStringInstructionWithREPPrefix(
 
 // Single MOVS iteration.
 static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
-  Operand src = GetStringSourceOperand(ctx);
+  Operand src;
+  GetStringSourceOperand(ctx, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   UpdateStringSourceAddress(ctx);
@@ -110,7 +107,8 @@ ExecuteMovs(const InstructionContext* ctx) {
 
 // Single STOS iteration.
 static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand src;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   UpdateStringDestinationAddress(ctx);
@@ -125,8 +123,10 @@ ExecuteStos(const InstructionContext* ctx) {
 
 // Single LODS iteration.
 static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
-  Operand src = GetStringSourceOperand(ctx);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand src;
+  GetStringSourceOperand(ctx, &src);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   WriteOperand(ctx, &dest, FromOperand(&src));
   UpdateStringSourceAddress(ctx);
   return kInstructionExecuted;
@@ -163,8 +163,10 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 // Single SCAS iteration.
 YAX86_HOT static InstructionResult ExecuteScasIteration(
     const InstructionContext* ctx) {
-  Operand src = GetStringDestinationOperand(ctx);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand src;
+  GetStringDestinationOperand(ctx, &src);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   ExecuteCmp(ctx, &dest, src.value);
   UpdateStringDestinationAddress(ctx);
   return kInstructionExecuted;
@@ -178,8 +180,10 @@ YAX86_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx) {
 
 // Single CMPS iteration.
 static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
-  Operand dest = GetStringSourceOperand(ctx);
-  Operand src = GetStringDestinationOperand(ctx);
+  Operand dest;
+  GetStringSourceOperand(ctx, &dest);
+  Operand src;
+  GetStringDestinationOperand(ctx, &src);
   ExecuteCmp(ctx, &dest, src.value);
   UpdateStringSourceAddress(ctx);
   UpdateStringDestinationAddress(ctx);

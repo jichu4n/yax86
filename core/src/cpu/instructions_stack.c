@@ -14,7 +14,8 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Operand src;
+  ReadRegisterOperandForRegisterIndex(ctx, register_index, &src);
   PushSourceOperand(ctx->cpu, &src);
   return kInstructionExecuted;
 }
@@ -24,7 +25,8 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(value));
   return kInstructionExecuted;
@@ -35,7 +37,8 @@ YAX86_HOT YAX86_PRIVATE InstructionResult
 ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
-  Operand src = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Operand src;
+  ReadRegisterOperandForRegisterIndex(ctx, register_index, &src);
   PushValue(ctx->cpu, src.value);
   return kInstructionExecuted;
 }
@@ -48,7 +51,8 @@ ExecutePopSegmentRegister(const InstructionContext* ctx) {
   // it just makes the next instruction fetch come from the new segment.
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, register_index);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   OperandValue value = Pop(ctx->cpu);
   WriteOperandAddress(ctx, &dest.address, FromOperandValue(value));
   return kInstructionExecuted;

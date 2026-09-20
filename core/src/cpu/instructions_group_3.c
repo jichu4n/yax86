@@ -90,7 +90,8 @@ static InstructionResult ExecuteMulCommon(
 static InstructionResult ExecuteMul(
     const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   uint32_t result = FromOperand(&dest) * FromOperand(op);
   return ExecuteMulCommon(
       ctx, &dest, result, result > kMaxValue[ctx->metadata->width]);
@@ -101,7 +102,8 @@ static InstructionResult ExecuteMul(
 static InstructionResult ExecuteImul(
     const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   const Width width = ctx->metadata->width;
   int32_t result =
       FromSignedOperand(width, &dest) * FromSignedOperand(width, op);
@@ -132,7 +134,8 @@ static InstructionResult ExecuteDiv(
   }
 
   Width width = ctx->metadata->width;
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
 
   OperandValue dest_high_half =
       ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
@@ -159,7 +162,8 @@ static InstructionResult ExecuteIdiv(
   }
 
   Width width = ctx->metadata->width;
-  Operand dest = ReadRegisterOperandForRegisterIndex(ctx, kAX);
+  Operand dest;
+  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
 
   OperandValue dest_high_half =
       ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
@@ -199,6 +203,7 @@ YAX86_PRIVATE InstructionResult
 ExecuteGroup3Instruction(const InstructionContext* ctx) {
   const Group3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  Operand dest = ReadRegisterOrMemoryOperand(ctx);
+  Operand dest;
+  ReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);
 }
