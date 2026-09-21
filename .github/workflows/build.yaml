@@ -48,6 +48,8 @@ jobs:
               -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
       - run: cmake --build ${{github.workspace}}/build-native -j$(nproc)
       - run: tools/run-tests.sh
+        env:
+          CC: ${{ matrix.compiler.cc }}
       - working-directory: ${{github.workspace}}/build-native/core
         run: ls -lh *.a
       - run: emcmake cmake -B ${{github.workspace}}/build-emscripten
