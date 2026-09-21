@@ -1417,10 +1417,12 @@ Alongside the table, state:
   through by construction. If the count in the bundle ever drops, something is
   wrong with the bundler:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 163
+  grep -c YAX86_HOT core/yax86_core.h    # 170
   ```
   That is 86 annotations plus the macro block in `util/common.h`, whose seven
-  lines all match on the substring, once per each of the 11 module bundles.
+  lines all match on the substring, once for each of the twelve times a
+  `bundle.json` names it - every module's public list, and the cpu module's
+  private list as well.
 - `YAX86_ALWAYS_INLINE` is not about placement, but exists for the same reason:
   something the compiler was doing for free stops being free and nothing in the
   source says so. The case it was added for is a small helper with one hot

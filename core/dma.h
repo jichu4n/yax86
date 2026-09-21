@@ -512,7 +512,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -1003,7 +1004,8 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_HOT YAX86_PUBLIC void DMATransferByte(DMAState* dma, uint8_t channel_index) {
+YAX86_HOT YAX86_PUBLIC void DMATransferByte(
+    DMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;
   }

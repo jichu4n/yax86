@@ -512,7 +512,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -810,7 +811,8 @@ YAX86_PUBLIC void KeyboardHandleControl(
     KeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
-YAX86_PUBLIC void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode);
+YAX86_PUBLIC void KeyboardHandleKeyPress(
+    KeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
@@ -911,7 +913,8 @@ YAX86_PUBLIC void KeyboardHandleControl(
   }
 }
 
-YAX86_PUBLIC void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+YAX86_PUBLIC void KeyboardHandleKeyPress(
+    KeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.

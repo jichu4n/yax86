@@ -1246,7 +1246,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -1993,12 +1994,12 @@ typedef enum CPUFetchNextInstructionStatus {
 // Since this function is part of the core CPU execution loop, assembling and
 // copying a whole instruction struct would have a measurable impact on
 // performance.
-YAX86_PUBLIC CPUFetchNextInstructionStatus CPUFetchNextInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC CPUFetchNextInstructionStatus
+CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction);
 
 // Execute a single fetched instruction.
-YAX86_PUBLIC InstructionResult CPUExecuteInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC InstructionResult
+CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
 
 enum {
   // The most instructions one call to CPUTick() will run back to back.
@@ -8834,7 +8835,8 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   return entry;
 }
 
-YAX86_HOT YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
+YAX86_HOT YAX86_PUBLIC CPUTickResult
+CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;
@@ -9478,7 +9480,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -9969,7 +9972,8 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_HOT YAX86_PUBLIC void DMATransferByte(DMAState* dma, uint8_t channel_index) {
+YAX86_HOT YAX86_PUBLIC void DMATransferByte(
+    DMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;
   }
@@ -10569,7 +10573,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -11044,7 +11049,8 @@ YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
 YAX86_PUBLIC void FDCHandleTC(FDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
-YAX86_PUBLIC void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
 YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive);
@@ -11810,9 +11816,12 @@ YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) { fdc->transfer.tc_received = true; }
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) {
+  fdc->transfer.tc_received = true;
+}
 
-YAX86_PUBLIC void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   if (drive >= kFDCNumDrives) {
     return;
   }
@@ -12376,7 +12385,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -14217,9 +14227,13 @@ YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
 
 YAX86_PUBLIC void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
-YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
+YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void) {
+  return kHDCOptionROMDataSize;
+}
 
-YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void) { return kHDCOptionROMData; }
+YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void) {
+  return kHDCOptionROMData;
+}
 
 
 // ==============================================================================
@@ -14749,7 +14763,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -15047,7 +15062,8 @@ YAX86_PUBLIC void KeyboardHandleControl(
     KeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
-YAX86_PUBLIC void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode);
+YAX86_PUBLIC void KeyboardHandleKeyPress(
+    KeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
@@ -15148,7 +15164,8 @@ YAX86_PUBLIC void KeyboardHandleControl(
   }
 }
 
-YAX86_PUBLIC void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+YAX86_PUBLIC void KeyboardHandleKeyPress(
+    KeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.
@@ -15719,7 +15736,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -16851,7 +16869,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -18130,7 +18149,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -18457,7 +18477,8 @@ YAX86_PUBLIC bool RegisterMemoryMapEntry(
     struct PlatformState* platform, const MemoryMapEntry* entry);
 // Discard what the CPU derives from the memory map: its instruction fetch
 // window, its direct data window and its decode cache.
-YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(struct PlatformState* platform);
+YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(
+    struct PlatformState* platform);
 // Look up the memory map entry corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory map entry.
 YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryForAddress(
@@ -18473,11 +18494,13 @@ YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-YAX86_PUBLIC uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint8_t
+ReadMemoryByte(struct PlatformState* platform, uint32_t address);
 // Read a word from a logical memory address, either directly from the
 // corresponding memory map entry's read_data buffer or via its read_byte_fn
 // callback.
-YAX86_PUBLIC uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint16_t
+ReadMemoryWord(struct PlatformState* platform, uint32_t address);
 // Write a byte to a logical memory address, either directly to the
 // corresponding memory map entry's write_data buffer or via its
 // write_byte_fn callback.
@@ -18547,7 +18570,8 @@ YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_PUBLIC uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
+YAX86_PUBLIC uint8_t
+ReadPortByte(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
 YAX86_PUBLIC void WritePortByte(
@@ -18808,7 +18832,8 @@ YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform);
 // reached, because the difference wraps to zero first. A budget of a display
 // frame or so, which is what a host driving the machine in real time passes,
 // is nowhere near this.
-YAX86_PUBLIC PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
+YAX86_PUBLIC PlatformRunStatus
+PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Bring every device up to date with the cycles that have run so far.
 //
@@ -19005,7 +19030,8 @@ YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
 }
 
 // Read a byte from a logical memory address.
-YAX86_HOT YAX86_PUBLIC uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+YAX86_HOT YAX86_PUBLIC uint8_t
+ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     // Plain storage, which is what every region except video memory is. Going
@@ -19027,7 +19053,8 @@ YAX86_HOT YAX86_PUBLIC uint8_t ReadMemoryByte(PlatformState* platform, uint32_t 
 }
 
 // Read a word from a logical memory address.
-YAX86_PUBLIC uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
+YAX86_PUBLIC uint16_t
+ReadMemoryWord(PlatformState* platform, uint32_t address) {
   uint8_t low_byte = ReadMemoryByte(platform, address);
   uint8_t high_byte = ReadMemoryByte(platform, address + 1);
   return (high_byte << 8) | low_byte;
@@ -19061,7 +19088,8 @@ YAX86_HOT YAX86_PUBLIC void WriteMemoryByte(
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-YAX86_PUBLIC bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
+YAX86_PUBLIC bool RegisterPortMapEntry(
+    PlatformState* platform, const PortMapEntry* entry) {
   if (PortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
     return false;
   }
@@ -19080,7 +19108,8 @@ YAX86_PUBLIC bool RegisterPortMapEntry(PlatformState* platform, const PortMapEnt
 
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
+    PlatformState* platform, uint16_t port) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
     if (port >= entry->start && port <= entry->end) {
@@ -19104,7 +19133,8 @@ YAX86_HOT YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_HOT YAX86_PUBLIC uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
+YAX86_HOT YAX86_PUBLIC uint8_t
+ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
@@ -19746,7 +19776,8 @@ YAX86_PUBLIC bool PlatformInit(PlatformState* platform) {
   return true;
 }
 
-YAX86_HOT YAX86_PUBLIC bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
+YAX86_HOT YAX86_PUBLIC bool PlatformRaiseIRQ(
+    PlatformState* platform, uint8_t irq) {
   if (irq >= 8) {
     return false;
   }
@@ -20513,7 +20544,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -20784,7 +20816,8 @@ YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi);
 
 // Sets the PC speaker frequency from the 8253 timer channel 2 output. This
 // should be wired up to the callback from the PIT emulation module.
-YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz);
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+    PPIState* ppi, uint32_t frequency_hz);
 
 // Sets the scancode byte that will be returned when the CPU reads from Port A.
 // This function should be called by the keyboard emulation module.
@@ -20914,7 +20947,8 @@ YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+    PPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
   // Invoke the callback only if the speaker is currently enabled and the
@@ -21457,7 +21491,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -22344,23 +22379,27 @@ typedef struct VideoState {
 YAX86_PUBLIC void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
-YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video);
 
 // The current video mode, derived from the mode control register.
 YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video);
 
 // Metadata for the current video mode.
-YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video);
 
 // Read a byte from a video I/O port.
 YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-YAX86_PUBLIC void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
 YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 // Write a byte to video RAM.
-YAX86_PUBLIC void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
@@ -23789,7 +23828,8 @@ static void VideoInvalidateCursor(VideoState* video);
 static void VideoInvalidateBlinkingText(VideoState* video);
 static void VideoInvalidateAll(VideoState* video);
 
-YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
 }
 
@@ -23837,7 +23877,8 @@ YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
   return VideoReadVRAMByte(video, address);
 }
 
-YAX86_PUBLIC void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return;
   }
@@ -23903,7 +23944,8 @@ YAX86_HOT YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video) {
              : kVideoModeCGAGraphics320x200;
 }
 
-YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video) {
   return &kVideoModeMetadata[VideoGetMode(video)];
 }
 
@@ -24274,7 +24316,8 @@ YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       video->selected_register = value & kCRTCRegisterIndexMask;

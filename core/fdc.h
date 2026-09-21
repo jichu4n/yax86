@@ -512,7 +512,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -987,7 +988,8 @@ YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
 YAX86_PUBLIC void FDCHandleTC(FDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
-YAX86_PUBLIC void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
 YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive);
@@ -1753,9 +1755,12 @@ YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) { fdc->transfer.tc_received = true; }
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) {
+  fdc->transfer.tc_received = true;
+}
 
-YAX86_PUBLIC void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   if (drive >= kFDCNumDrives) {
     return;
   }

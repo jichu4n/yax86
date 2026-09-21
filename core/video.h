@@ -512,7 +512,8 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -1399,23 +1400,27 @@ typedef struct VideoState {
 YAX86_PUBLIC void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
-YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video);
 
 // The current video mode, derived from the mode control register.
 YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video);
 
 // Metadata for the current video mode.
-YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video);
 
 // Read a byte from a video I/O port.
 YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-YAX86_PUBLIC void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
 YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 // Write a byte to video RAM.
-YAX86_PUBLIC void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
@@ -2844,7 +2849,8 @@ static void VideoInvalidateCursor(VideoState* video);
 static void VideoInvalidateBlinkingText(VideoState* video);
 static void VideoInvalidateAll(VideoState* video);
 
-YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
 }
 
@@ -2892,7 +2898,8 @@ YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
   return VideoReadVRAMByte(video, address);
 }
 
-YAX86_PUBLIC void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return;
   }
@@ -2958,7 +2965,8 @@ YAX86_HOT YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video) {
              : kVideoModeCGAGraphics320x200;
 }
 
-YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video) {
   return &kVideoModeMetadata[VideoGetMode(video)];
 }
 
@@ -3329,7 +3337,8 @@ YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       video->selected_register = value & kCRTCRegisterIndexMask;

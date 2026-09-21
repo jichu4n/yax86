@@ -168,7 +168,8 @@ YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
 }
 
 // Read a byte from a logical memory address.
-YAX86_HOT YAX86_PUBLIC uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+YAX86_HOT YAX86_PUBLIC uint8_t
+ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     // Plain storage, which is what every region except video memory is. Going
@@ -190,7 +191,8 @@ YAX86_HOT YAX86_PUBLIC uint8_t ReadMemoryByte(PlatformState* platform, uint32_t 
 }
 
 // Read a word from a logical memory address.
-YAX86_PUBLIC uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
+YAX86_PUBLIC uint16_t
+ReadMemoryWord(PlatformState* platform, uint32_t address) {
   uint8_t low_byte = ReadMemoryByte(platform, address);
   uint8_t high_byte = ReadMemoryByte(platform, address + 1);
   return (high_byte << 8) | low_byte;
@@ -224,7 +226,8 @@ YAX86_HOT YAX86_PUBLIC void WriteMemoryByte(
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-YAX86_PUBLIC bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
+YAX86_PUBLIC bool RegisterPortMapEntry(
+    PlatformState* platform, const PortMapEntry* entry) {
   if (PortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
     return false;
   }
@@ -243,7 +246,8 @@ YAX86_PUBLIC bool RegisterPortMapEntry(PlatformState* platform, const PortMapEnt
 
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
+    PlatformState* platform, uint16_t port) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
     if (port >= entry->start && port <= entry->end) {
@@ -267,7 +271,8 @@ YAX86_HOT YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_HOT YAX86_PUBLIC uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
+YAX86_HOT YAX86_PUBLIC uint8_t
+ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
@@ -909,7 +914,8 @@ YAX86_PUBLIC bool PlatformInit(PlatformState* platform) {
   return true;
 }
 
-YAX86_HOT YAX86_PUBLIC bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
+YAX86_HOT YAX86_PUBLIC bool PlatformRaiseIRQ(
+    PlatformState* platform, uint8_t irq) {
   if (irq >= 8) {
     return false;
   }

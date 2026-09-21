@@ -622,6 +622,10 @@ YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
 
 YAX86_PUBLIC void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
-YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
+YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void) {
+  return kHDCOptionROMDataSize;
+}
 
-YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void) { return kHDCOptionROMData; }
+YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void) {
+  return kHDCOptionROMData;
+}

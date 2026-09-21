@@ -149,7 +149,8 @@ YAX86_PUBLIC bool RegisterMemoryMapEntry(
     struct PlatformState* platform, const MemoryMapEntry* entry);
 // Discard what the CPU derives from the memory map: its instruction fetch
 // window, its direct data window and its decode cache.
-YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(struct PlatformState* platform);
+YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(
+    struct PlatformState* platform);
 // Look up the memory map entry corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory map entry.
 YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryForAddress(
@@ -165,11 +166,13 @@ YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-YAX86_PUBLIC uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint8_t
+ReadMemoryByte(struct PlatformState* platform, uint32_t address);
 // Read a word from a logical memory address, either directly from the
 // corresponding memory map entry's read_data buffer or via its read_byte_fn
 // callback.
-YAX86_PUBLIC uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint16_t
+ReadMemoryWord(struct PlatformState* platform, uint32_t address);
 // Write a byte to a logical memory address, either directly to the
 // corresponding memory map entry's write_data buffer or via its
 // write_byte_fn callback.
@@ -239,7 +242,8 @@ YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_PUBLIC uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
+YAX86_PUBLIC uint8_t
+ReadPortByte(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
 YAX86_PUBLIC void WritePortByte(
@@ -500,7 +504,8 @@ YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform);
 // reached, because the difference wraps to zero first. A budget of a display
 // frame or so, which is what a host driving the machine in real time passes,
 // is nowhere near this.
-YAX86_PUBLIC PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
+YAX86_PUBLIC PlatformRunStatus
+PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Bring every device up to date with the cycles that have run so far.
 //

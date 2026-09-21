@@ -670,12 +670,12 @@ typedef enum CPUFetchNextInstructionStatus {
 // Since this function is part of the core CPU execution loop, assembling and
 // copying a whole instruction struct would have a measurable impact on
 // performance.
-YAX86_PUBLIC CPUFetchNextInstructionStatus CPUFetchNextInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC CPUFetchNextInstructionStatus
+CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction);
 
 // Execute a single fetched instruction.
-YAX86_PUBLIC InstructionResult CPUExecuteInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC InstructionResult
+CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
 
 enum {
   // The most instructions one call to CPUTick() will run back to back.
