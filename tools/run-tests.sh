@@ -8,5 +8,7 @@ set -ex
 # time.
 tools/download-cpu-hardware-tests.sh
 
+tools/check-unbundled.sh
+
 ctest --test-dir build-native/core -j$(nproc) --output-on-failure
 core/tests/cpu/cpu_demo_test.sh

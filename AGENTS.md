@@ -113,6 +113,18 @@ behavior in the emulator tends to show up as a difference from the hardware
 under one of them and not the others. `MinSizeRel` is not built, for the same
 reason `-Os` is not benchmarked: nothing ships at it.
 
+### The unbundled syntax check
+
+The library ships as a single bundled translation unit, which is also the only
+configuration CMake builds. The unbundled form — compiling each source file in
+`core/src` independently — is what `YAX86_MODULE_PRIVATE`'s second arm and the
+file-local convention both rest on, and nothing else builds it.
+
+`tools/check-unbundled.sh` runs `$CC -std=c99 -fsyntax-only` over every source
+file with `-Wall -Wextra -Wpedantic -Werror -Icore` to catch missing includes or
+accidental dependencies on earlier files in the bundle before they rot. It runs
+automatically as part of `./tools/run-tests.sh`.
+
 ### Debugging the WASM build
 
 Use the Chrome DevTools MCP server against
