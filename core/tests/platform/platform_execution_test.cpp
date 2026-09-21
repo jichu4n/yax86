@@ -177,9 +177,9 @@ TEST_F(PlatformExecutionTest, PlatformTickRunsOneInstructionWithAWarmCache) {
   ASSERT_EQ(RunInstructions(4), kPlatformRunning);
 
   platform_.cpu.registers[kIP] = kProgramOffset;
-  const uint64_t before = platform_.cpu.instructions_retired;
+  const uint64_t before = CPUInstructionsRetired(&platform_.cpu);
   ASSERT_EQ(PlatformTick(&platform_), kPlatformRunning);
-  EXPECT_EQ(platform_.cpu.instructions_retired - before, 1u);
+  EXPECT_EQ(CPUInstructionsRetired(&platform_.cpu) - before, 1u);
   EXPECT_EQ(ip(), kProgramOffset + 1);
 }
 
@@ -271,7 +271,7 @@ Outcome RunTimerProgram(bool batched) {
 
   Outcome outcome = {};
   outcome.ticks = platform->ticks;
-  outcome.retired = platform->cpu.instructions_retired;
+  outcome.retired = CPUInstructionsRetired(&platform->cpu);
   outcome.ax = platform->cpu.registers[kAX];
   outcome.bx = platform->cpu.registers[kBX];
   outcome.cx = platform->cpu.registers[kCX];
@@ -308,9 +308,9 @@ TEST(PlatformBatchingTest, ABatchedRunIsIndistinguishableFromSteppingIt) {
 TEST_F(PlatformExecutionTest, CountsRetiredInstructions) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop});
 
-  EXPECT_EQ(platform_.cpu.instructions_retired, 0u);
+  EXPECT_EQ(CPUInstructionsRetired(&platform_.cpu), 0u);
   ASSERT_EQ(RunInstructions(4), kPlatformRunning);
-  EXPECT_EQ(platform_.cpu.instructions_retired, 4u);
+  EXPECT_EQ(CPUInstructionsRetired(&platform_.cpu), 4u);
 }
 
 // A halted CPU retires nothing, however long the machine is left running. The
@@ -318,12 +318,12 @@ TEST_F(PlatformExecutionTest, CountsRetiredInstructions) {
 TEST_F(PlatformExecutionTest, HaltedTicksRetireNoInstructions) {
   Load({kOpSti, kOpHlt});
   ASSERT_EQ(RunInstructions(2), kPlatformRunning);
-  const uint64_t retired_at_halt = platform_.cpu.instructions_retired;
+  const uint64_t retired_at_halt = CPUInstructionsRetired(&platform_.cpu);
   const uint32_t ticks_at_halt = platform_.ticks;
 
   ASSERT_EQ(RunInstructions(100), kPlatformRunning);
 
-  EXPECT_EQ(platform_.cpu.instructions_retired, retired_at_halt);
+  EXPECT_EQ(CPUInstructionsRetired(&platform_.cpu), retired_at_halt);
   EXPECT_GT(platform_.ticks, ticks_at_halt);
 }
 
@@ -332,7 +332,7 @@ TEST_F(PlatformExecutionTest, HaltedTicksRetireNoInstructions) {
 TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop});
   ASSERT_EQ(RunInstructions(8), kPlatformRunning);
-  const uint64_t stepped = platform_.cpu.instructions_retired;
+  const uint64_t stepped = CPUInstructionsRetired(&platform_.cpu);
 
   PlatformState batched = {};
   static uint8_t batched_ram[64 * 1024] = {0};
@@ -351,7 +351,7 @@ TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
   // A NOP is three cycles, so this is comfortably eight of them and no more.
   ASSERT_EQ(PlatformRun(&batched, 8 * 3), kPlatformRunning);
 
-  EXPECT_EQ(batched.cpu.instructions_retired, stepped);
+  EXPECT_EQ(CPUInstructionsRetired(&batched.cpu), stepped);
 }
 
 }  // namespace

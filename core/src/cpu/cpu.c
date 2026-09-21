@@ -673,7 +673,11 @@ YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
             instruction_cs, instruction_ip, instruction->opcode);
         return kCPUTickInvalid;
       }
-      ++cpu->instructions_retired;
+      // The carry is a branch not taken until 2^32 instructions have run;
+      // see instructions_retired_low for why the count is split.
+      if (++cpu->instructions_retired_low == 0) {
+        ++cpu->instructions_retired_high;
+      }
 
       // Step 3: Carry on into the next instruction where nothing needs the
       // host's attention and the cache already holds it.

@@ -411,7 +411,7 @@ static BenchResult RunBenchmark(void) {
     // An invalid opcode is not a stop: the 8088 has no invalid opcode
     // exception, so a real machine would carry on. Anything else means the
     // machine can no longer make progress.
-    const uint64_t retired_before = g_platform.cpu.instructions_retired;
+    const uint64_t retired_before = CPUInstructionsRetired(&g_platform.cpu);
     PlatformRunStatus status = kPlatformRunning;
     for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
       const uint32_t batch_start = g_platform.ticks;
@@ -422,7 +422,8 @@ static BenchResult RunBenchmark(void) {
         break;
       }
     }
-    result.instructions += g_platform.cpu.instructions_retired - retired_before;
+    result.instructions +=
+        CPUInstructionsRetired(&g_platform.cpu) - retired_before;
     result.cycles += (uint32_t)(g_platform.ticks - last_ticks);
     last_ticks = g_platform.ticks;
     if (status != kPlatformRunning && status != kPlatformInvalid) {

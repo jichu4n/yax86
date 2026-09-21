@@ -1186,13 +1186,33 @@ Alongside the table, state:
 
 ### cpu — instruction counting
 
-- `CPUState.instructions_retired` counts instructions the CPU actually ran; a
-  halted tick advances the clock but retires nothing. It lives in the CPU
-  because `CPUTick()` already knows which it did, where a caller could only
-  find out by sampling `is_halted` before every tick and giving up
-  `PlatformRun()`'s batching for a number the core already has. Counting in
-  `CPUTick()` costs 0.17% under callgrind; the same counter driven from
-  `PlatformTick()`, where the flag has to be re-derived, costs 1.09%.
+- The count is what the CPU actually ran; a halted tick advances the clock but
+  retires nothing. It lives in the CPU because `CPUTick()` already knows which
+  it did, where a caller could only find out by sampling `is_halted` before
+  every tick and giving up `PlatformRun()`'s batching for a number the core
+  already has. Counting in `CPUTick()` costs 0.17% under callgrind; the same
+  counter driven from `PlatformTick()`, where the flag has to be re-derived,
+  costs 1.09%.
+- **It is kept as two `uint32_t` halves rather than one `uint64_t`**, read
+  together by `CPUInstructionsRetired()`. The increment sits in the hottest
+  basic block the emulator has, and a 64-bit one is eight instructions on a
+  Cortex-M0+ — two loads, two constants, an add, an add with carry, two stores
+  — where the low half alone is three and the carry above it is a branch not
+  taken until 2^32 instructions have run. Worth **1.19% at `-O3`**, for 16
+  bytes of core `.text`. The count still has to reach 64 bits: a machine left
+  running retires 2^32 instructions in a couple of hours.
+- **Batching the count per run instead does not pay, and the reason is worth
+  keeping.** Folding it in once a tick from what is left of the run budget —
+  which removes the 64-bit add from the loop entirely — measures **0.11%**,
+  and making the budget a constant so the subtraction has nothing to carry
+  measures **0.31% slower**. `dos-boot` runs 2,328,128 instructions in
+  1,018,378 ticks, so **a run averages 2.29 instructions**: eight instructions
+  saved per instruction against ten paid per tick is a margin that register
+  pressure eats. Anything moved from per-instruction to per-tick on this path
+  has to clear that ratio, and it is a low bar.
+- The carry is unreachable in any run a test could make, so
+  `TheRetiredCountCarriesIntoItsHighHalf` starts the count just below the
+  boundary rather than driving it up to one.
 
 ### platform — the memory map
 
@@ -1569,11 +1589,11 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 250MHz, 128K of guest RAM, hot path in
-SRAM, at #88:
+SRAM, at #89:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.779589** | **5.796** | **0.487** | **121.5%** | 471,420 | 179,888 | 84,395 |
+| `-O3` | **4.723184** | **5.865** | **0.493** | **123.0%** | 471,420 | 179,860 | 84,411 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` clears parity at the
   250MHz the campaign targets with room to spare. **The compiler

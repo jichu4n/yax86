@@ -39,6 +39,11 @@ enum : uint8_t {
   // Group 3 with /6 is DIV r/m8; the ModR/M below selects DIV BL.
   kOpGroup3Byte = 0xF6,
   kModRmDivBl = 0xF3,
+  // Group 4 holds only INC and DEC, so /2 names nothing. The encoding decodes
+  // cleanly and is rejected by its handler, which is the one way an
+  // instruction fails to execute after a successful fetch.
+  kOpGroup4Byte = 0xFE,
+  kModRmInvalidGroup4 = 0xD0,
 };
 
 // These pin down what ends a run, since every one of them is a point at which
@@ -95,15 +100,16 @@ class InstructionsPerTickTest : public ::testing::Test {
     cpu_.registers[kSP] = 0xFFFE;
     cpu_.is_halted = false;
     cpu_.flags = kInitialFlags;
-    cpu_.instructions_retired = 0;
+    cpu_.instructions_retired_low = 0;
+    cpu_.instructions_retired_high = 0;
   }
 
   // Runs one tick with a budget too large to be what ends the run, and returns
   // how many instructions it retired.
   uint64_t RunOneTick() {
-    const uint64_t before = cpu_.instructions_retired;
+    const uint64_t before = CPUInstructionsRetired(&cpu_);
     CPUTick(&cpu_, UINT16_MAX);
-    return cpu_.instructions_retired - before;
+    return CPUInstructionsRetired(&cpu_) - before;
   }
 
   static uint8_t ReadMemoryByte(CPUState* cpu, uint32_t address) {
@@ -160,6 +166,39 @@ TEST_F(InstructionsPerTickTest, ARunRetiresSeveralInstructionsInOneTick) {
   EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 3);
 }
 
+// The carry into the high half is unreachable in any run a test could make -
+// it happens once every 2^32 instructions - so the count is started just below
+// the boundary instead of being driven up to it.
+TEST_F(InstructionsPerTickTest, TheRetiredCountCarriesIntoItsHighHalf) {
+  Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpHlt});
+  WarmCache(2);
+  cpu_.instructions_retired_low = UINT32_MAX;
+
+  EXPECT_EQ(RunOneTick(), 2u);
+  EXPECT_EQ(CPUInstructionsRetired(&cpu_), (uint64_t)UINT32_MAX + 2u);
+  EXPECT_EQ(cpu_.instructions_retired_high, 1u);
+}
+
+// A run that cannot finish still retired everything up to the instruction that
+// stopped it, and the instruction that stopped it retired nothing - it is
+// reported rather than run. Nothing else here leaves a run part way through.
+TEST_F(
+    InstructionsPerTickTest, ARunKeepsWhatItRetiredBeforeAnInvalidInstruction) {
+  Load(
+      kProgramAddress,
+      {kOpIncAx, kOpIncAx, kOpGroup4Byte, kModRmInvalidGroup4, kOpHlt});
+  // WarmCache() insists every tick succeeds, which this program cannot do.
+  // The decode is what fills the cache, and this instruction decodes.
+  for (int i = 0; i < 3; ++i) {
+    CPUTick(&cpu_, 0);
+  }
+  Reset();
+
+  EXPECT_EQ(CPUTick(&cpu_, UINT16_MAX), kCPUTickInvalid);
+  EXPECT_EQ(CPUInstructionsRetired(&cpu_), 2u);
+  EXPECT_EQ(cpu_.registers[kAX], 2u);
+}
+
 // The bound is on the tick rather than on the budget: there are twice as many
 // cached instructions here as a run may take, and cycles to spare for all of
 // them.
@@ -198,9 +237,9 @@ TEST_F(InstructionsPerTickTest, NoBudgetRunsOneInstructionPerTick) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
 
-  const uint64_t before = cpu_.instructions_retired;
+  const uint64_t before = CPUInstructionsRetired(&cpu_);
   CPUTick(&cpu_, 0);
-  EXPECT_EQ(cpu_.instructions_retired - before, 1u);
+  EXPECT_EQ(CPUInstructionsRetired(&cpu_) - before, 1u);
 }
 
 // A run stops where the host would have taken control back anyway, which is
@@ -218,7 +257,7 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtTheBudget) {
   // Two instructions' worth of budget is spent by two instructions, so the
   // third does not start.
   CPUTick(&cpu_, (uint16_t)(2 * one_instruction));
-  EXPECT_EQ(cpu_.instructions_retired, 2u);
+  EXPECT_EQ(CPUInstructionsRetired(&cpu_), 2u);
   EXPECT_EQ(cpu_.cycles_this_tick, 2 * one_instruction);
 }
 
