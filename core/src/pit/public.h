@@ -116,6 +116,15 @@ typedef struct PITChannelState {
   PITByte rw_byte;
   // Whether a latch command is active.
   bool latch_active;
+  // Ticks this channel has been advanced by on paper and not yet in fact.
+  //
+  // Only channel 0's output leaves the chip, so the edges channels 1 and 2
+  // produce in between two looks at them change nothing - which lets an
+  // advance charge them a count and move on. Every path into the PIT that can
+  // see a channel settles what it owes first, so nothing outside pit.c can
+  // observe the difference. Reading counter, latch or output_state straight
+  // out of this struct can, and gets the state as of the last such path.
+  uint32_t pending_ticks;
 } PITChannelState;
 
 // State of the PIT.
