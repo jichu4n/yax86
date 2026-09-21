@@ -85,6 +85,52 @@ class AdvanceTest : public ::testing::Test {
     EXPECT_EQ(advanced_trace.irq_ticks.size(), stepped_trace.irq_ticks.size())
         << context;
   }
+
+  // Writes a new reload value to a channel's data port without a control word
+  // in front of it, which is how a guest changes a count on a channel it has
+  // already programmed.
+  void WriteReload(PITState* pit, int channel, uint16_t reload) {
+    PITWritePort(
+        pit, static_cast<uint16_t>(kPITPortChannel0 + channel),
+        static_cast<uint8_t>(reload & 0xFF));
+    PITWritePort(
+        pit, static_cast<uint16_t>(kPITPortChannel0 + channel),
+        static_cast<uint8_t>(reload >> 8));
+  }
+
+  // Channels 1 and 2 are advanced lazily: an advance charges them ticks, and
+  // whatever looks at them next settles the count - skipping whole cycles on
+  // the way, since nothing outside the chip saw the edges in between. Channel
+  // 0 is walked tick by tick because its rising edge is IRQ 0, so programming
+  // all three alike and comparing them compares the skipped answer against the
+  // unskipped one.
+  void ExpectDeferredChannelsMatchChannel0(
+      uint8_t mode, uint16_t reload, uint32_t ticks) {
+    PITConfig config = {0};
+    PITState pit = {0};
+    InitPIT(&pit, &config);
+    for (int channel = 0; channel < kPITNumChannels; ++channel) {
+      Program(&pit, channel, mode, reload);
+    }
+    PITAdvance(&pit, ticks);
+
+    const std::string context = "mode " + std::to_string(mode) + ", reload " +
+                                std::to_string(reload) + ", " +
+                                std::to_string(ticks) + " ticks";
+    for (int channel = 1; channel < kPITNumChannels; ++channel) {
+      // Reading the channel's data port is one of the things that settles
+      // what it owes.
+      PITReadPort(&pit, static_cast<uint16_t>(kPITPortChannel0 + channel));
+      const std::string where =
+          context + ", channel " + std::to_string(channel);
+      EXPECT_EQ(pit.channels[channel].pending_ticks, 0u) << where;
+      EXPECT_EQ(pit.channels[channel].counter, pit.channels[0].counter)
+          << where;
+      EXPECT_EQ(
+          pit.channels[channel].output_state, pit.channels[0].output_state)
+          << where;
+    }
+  }
 };
 
 TEST_F(AdvanceTest, Mode0MatchesTicking) {
@@ -180,29 +226,76 @@ TEST_F(AdvanceTest, ChannelZeroStillSchedulesADeadline) {
   EXPECT_LE(ticks, 1356u);
 }
 
-// A channel nobody waits for still has to keep correct time, because the
-// output state is read on demand - the PPI exposes channel 2's on port 0x62.
-// Skipping its deadline must not skip its bookkeeping.
+// A channel nobody waits for still has to keep correct time, because a guest
+// can read its counter back off its data port whenever it likes. Skipping its
+// deadline, and charging it ticks rather than walking them, must not skip its
+// bookkeeping.
 TEST_F(AdvanceTest, UnscheduledChannelsStillAdvance) {
-  PITConfig stepped_config = {0};
-  PITState stepped = {0};
-  InitPIT(&stepped, &stepped_config);
-  Program(&stepped, 2, 3, 1356);
+  // What the BIOS leaves channel 2 in after the POST beep.
+  ExpectDeferredChannelsMatchChannel0(3, 1356, 5000);
+}
 
-  PITConfig advanced_config = {0};
-  PITState advanced = {0};
-  InitPIT(&advanced, &advanced_config);
-  Program(&advanced, 2, 3, 1356);
-
-  constexpr uint32_t kTicks = 5000;
-  for (uint32_t i = 0; i < kTicks; ++i) {
-    PITTick(&stepped);
+TEST_F(AdvanceTest, DeferredChannelsMatchChannelZeroForEveryShapeOfCount) {
+  for (uint8_t mode : {0, 2, 3}) {
+    // Both parities matter in mode 3, and a reload of 1 makes a period of one
+    // tick in mode 2, where a whole cycle is every cycle.
+    for (uint16_t reload : {1, 2, 3, 4, 5, 18, 19, 1356, 0}) {
+      for (uint32_t ticks :
+           {0u, 1u, 2u, 17u, 18u, 19u, 1000u, 4096u, 200000u}) {
+        ExpectDeferredChannelsMatchChannel0(mode, reload, ticks);
+      }
+    }
   }
-  PITAdvance(&advanced, kTicks);
+}
 
-  EXPECT_EQ(advanced.channels[2].counter, stepped.channels[2].counter);
-  EXPECT_EQ(
-      advanced.channels[2].output_state, stepped.channels[2].output_state);
+// A reload arriving on the data port alone, with no control word in front of
+// it to settle the channel first, must not leave ticks owed from before the
+// write to be applied to the count it just loaded. Channel 0 is never charged
+// ticks, so it is what the answer should look like.
+//
+// The new count is prime and does not divide the ticks owed, so that applying
+// them late cannot land back on the right answer by arithmetic accident - a
+// count of 100 against 1000 ticks does, and hides the bug entirely.
+TEST_F(AdvanceTest, AReloadSettlesWhatTheChannelOwedFirst) {
+  PITConfig config = {0};
+  PITState pit = {0};
+  InitPIT(&pit, &config);
+  for (int channel = 0; channel < kPITNumChannels; ++channel) {
+    Program(&pit, channel, 2, 18);
+  }
+  PITAdvance(&pit, 1000);
+
+  for (int channel = 0; channel < kPITNumChannels; ++channel) {
+    WriteReload(&pit, channel, 7);
+  }
+
+  for (int channel = 1; channel < kPITNumChannels; ++channel) {
+    PITReadPort(&pit, static_cast<uint16_t>(kPITPortChannel0 + channel));
+    EXPECT_EQ(pit.channels[channel].pending_ticks, 0u) << "channel " << channel;
+    EXPECT_EQ(pit.channels[channel].counter, pit.channels[0].counter)
+        << "channel " << channel;
+    EXPECT_EQ(pit.channels[channel].counter, 7u) << "channel " << channel;
+  }
+}
+
+// A latch takes the counter as it stands, not as it stood when something last
+// looked at the channel.
+TEST_F(AdvanceTest, ALatchSettlesWhatTheChannelOwedFirst) {
+  PITConfig config = {0};
+  PITState pit = {0};
+  InitPIT(&pit, &config);
+  for (int channel = 0; channel < kPITNumChannels; ++channel) {
+    Program(&pit, channel, 2, 18);
+  }
+  PITAdvance(&pit, 1000);
+
+  const uint8_t latch_channel_2 =
+      static_cast<uint8_t>((2 << 6) | (kPITAccessLatch << 4));
+  PITWritePort(&pit, kPITPortControl, latch_channel_2);
+
+  EXPECT_EQ(pit.channels[2].pending_ticks, 0u);
+  EXPECT_TRUE(pit.channels[2].latch_active);
+  EXPECT_EQ(pit.channels[2].latch, pit.channels[0].counter);
 }
 
 }  // namespace

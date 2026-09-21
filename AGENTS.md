@@ -1294,10 +1294,57 @@ Alongside the table, state:
   truncates every skip. Over 20 emulated seconds at the prompt the skip is
   worth 1.4x with the other channels scheduled and 5.6x without.
 - Only channel 0's output leaves the PIT — `PITChannelSetOutputState()` raises
-  IRQ 0 from it. Channels 1 and 2 record a transition and nothing more, and
-  that record is recomputed whenever the PIT is advanced, which every path that
-  reads it does first. **Give another channel's output an effect and the
-  scheduling has to change with it**; there is a comment at both ends saying so.
+  IRQ 0 from it. Channels 1 and 2 record a transition and nothing more.
+  **Give another channel's output an effect and both the scheduling and the
+  deferral below have to change with it**; there is a comment at each end
+  saying so.
+
+### pit — channels nobody listens to
+
+- **`PITAdvance()` walks channel 0 and charges channels 1 and 2 a count**,
+  which whatever looks at them next settles. Worth **1.08% at `-O3`** on
+  `dos-boot`. What that removes is not bookkeeping the machine needs: channel
+  1 is DRAM refresh at a reload of 18, so it changes its output roughly
+  770,000 times over a boot, and nothing anywhere reads it.
+- The saving comes from deferring **across** advances rather than within one.
+  A sync advances the PIT by about five ticks, which is well under channel 1's
+  18-tick period, so there is nothing to batch inside a single call — the win
+  is that a hundred thousand advances collapse into one catch-up.
+- **A catch-up skips whole cycles, which is what keeps it from replaying what
+  it deferred.** `PITModeMetadata.period_ticks` is how many ticks bring a
+  channel back to the state it is in now, counter and output alike: mode 2's
+  is `reload_value` and mode 3's is `2 * ceil(reload_value / 2)`, since it
+  reaches terminal count on each half and toggles there. Without it a channel
+  unread for a whole boot would walk 6.9 million ticks on the port read that
+  finally looked at it.
+- **Skipping a cycle skips the edges inside it, so this is only legal where
+  the edges reach nothing.** That is the same property that lets
+  `PITTicksUntilNextEvent()` schedule for channel 0 alone, and it is why the
+  reduction lives in `PITCatchUpChannel()` rather than in
+  `PITAdvanceChannel()` — channel 0 goes through the latter and must raise
+  every IRQ 0.
+- **The state in `PITChannelState` is only true as of the last look.** Every
+  path into the PIT that can see a channel — a data port read, a data port
+  write, a control word — settles it first, so nothing outside `pit.c` can
+  observe the difference. Reading `counter`, `latch` or `output_state` out of
+  the struct can, and a test that does has to go through a port first.
+- The data port write needs its own catch-up and it is the one that is easy to
+  miss: a reload arriving with no control word in front of it loads the
+  counter, and ticks owed from before the write must not then be applied to
+  the count it just loaded. **Pick test values where applying them late cannot
+  land on the right answer anyway** — a new count of 100 against 1000 owed
+  ticks divides exactly, and the first version of that test passed with the
+  catch-up removed.
+- Channel 0 is never deferred, which makes it the reference the deferred
+  channels are checked against: `advance_test.cpp` programs all three alike,
+  advances, and requires 1 and 2 to agree with 0 after a port read. Of five
+  deliberate breakages each is caught by the test aimed at it.
+- `PITTick()` is one tick of `PITAdvance()`. It has to be, or a tick would
+  apply itself to a counter that still owed ticks from an advance.
+- **`YAX86_HOT` on `PITAdvanceChannel()` is 0.26% slower** and is not taken.
+  The restructure left it out of line in flash, which looks like exactly the
+  case the mark is for; moving it to SRAM puts a veneer in flash for the port
+  handlers that call it, and costs more than the fetch it saves.
 
 ### hdc — hard disk controller
 
@@ -1589,11 +1636,11 @@ Notes on the machinery:
 ### Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.0, 250MHz, 128K of guest RAM, hot path in
-SRAM, at #89:
+SRAM, at #90:
 
 | level | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ----- | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| `-O3` | **4.723184** | **5.865** | **0.493** | **123.0%** | 471,420 | 179,860 | 84,411 |
+| `-O3` | **4.673167** | **5.928** | **0.498** | **124.3%** | 471,604 | 179,808 | 84,847 |
 
 - A real 4.77MHz 8088 runs this in 5.807 seconds, so `-O3` clears parity at the
   250MHz the campaign targets with room to spare. **The compiler
