@@ -27,10 +27,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -1477,11 +1477,11 @@ extern const uint8_t kFontCGA8x8Bitmap[256][8];
 // Read a byte from the emulated video RAM, or 0xFF if no callback is installed.
 // VRAM is aliased throughout the adapter's window, so an address past the end
 // wraps around.
-YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
+YAX86_MODULE_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
 
 // Write a byte to the emulated video RAM, ignored if no callback is installed.
 // The address wraps in the same way as for reads.
-YAX86_PRIVATE void VideoWriteVRAMByte(
+YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value);
 
 // A horizontal run of pixels on its way to the host, buffered so that the
@@ -1535,56 +1535,56 @@ static inline void VideoPixelRunPush(VideoPixelRun* run, RGB rgb) {
 // natural columns; vertical coordinates are dirty rows - a character row in
 // text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
 // modes.
-YAX86_PRIVATE void VideoInvalidateRows(
+YAX86_MODULE_PRIVATE void VideoInvalidateRows(
     VideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row);
 
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.
-YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
 
 // Whether characters carrying the blink attribute are currently visible. This
 // runs at half the cursor's rate, so the two drift in and out of phase.
-YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video);
 
 // Whether the text mode cursor is enabled in the 6845 registers.
-YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
 
 // The first scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor start register. May be out of range for the current
 // character height.
-YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
 
 // The last scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor end register. May be out of range for the current
 // character height.
-YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
 
 // The address of the first displayed character, in character units, from the
 // 6845 start address registers.
-YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
+YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
 
 // The address of the text mode cursor, in character units, from the 6845 cursor
 // address registers.
-YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
+YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
 
 // Whether the text mode cursor is currently drawn, and if so where. The offset
 // is relative to start_address in character cells, and is only written when
 // this returns true. The cursor is not drawn when it is disabled, when its
 // blink phase is off, or when it addresses a cell outside the display.
-YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
     const VideoState* video, const VideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset);
 
 // Render a dirty region of the current MDA text display. Pixels are emitted in
 // row-major order.
-YAX86_PRIVATE void MDARenderRegion(
+YAX86_MODULE_PRIVATE void MDARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
 // Render a dirty region of the current CGA display. Pixels are emitted in
 // row-major order.
-YAX86_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void CGARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
@@ -1611,7 +1611,7 @@ YAX86_PRIVATE void CGARenderRegion(
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-mda-9x14/fontlist.js
-YAX86_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
+YAX86_MODULE_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
      0x00, 0x00},  // [] (0)
     {0x00, 0x00, 0xfc, 0x102, 0x14a, 0x102, 0x102, 0x17a, 0x132, 0x102, 0xfc,
@@ -2130,7 +2130,7 @@ YAX86_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-cga-8x8/fontlist.js
-YAX86_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
+YAX86_MODULE_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},  // [] (0)
     {0x7e, 0x81, 0xa5, 0x81, 0xbd, 0x99, 0x81, 0x7e},  // [☺] (1)
     {0x7e, 0xff, 0xdb, 0xff, 0xc3, 0xe7, 0xff, 0x7e},  // [☻] (2)
@@ -2477,7 +2477,7 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
 // first makes write_pixels a row-major stream suitable for an SPI window.
-YAX86_PRIVATE void MDARenderRegion(
+YAX86_MODULE_PRIVATE void MDARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly
@@ -2755,7 +2755,7 @@ static void CGARenderGraphics640x200Region(
   }
 }
 
-YAX86_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void CGARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
@@ -2845,7 +2845,7 @@ const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
 // Video RAM
 // ============================================================================
 
-YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
+YAX86_MODULE_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   if (!video->config.vram) {
     return kVideoUnmappedPortValue;
   }
@@ -2861,7 +2861,7 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   return video->config.vram[address & (vram_size - 1)];
 }
 
-YAX86_PRIVATE void VideoWriteVRAMByte(
+YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value) {
   if (!video->config.vram) {
     return;
@@ -2959,38 +2959,38 @@ const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
 // 6845 CRT controller
 // ============================================================================
 
-YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterStartAddressH] << 8) |
          video->registers[kCRTCRegisterStartAddressL];
 }
 
-YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterCursorH] << 8) |
          video->registers[kCRTCRegisterCursorL];
 }
 
-YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
   return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
          kCRTCCursorDisabled;
 }
 
-YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
 }
 
-YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
-YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
   return (video->frames / kVideoFramesPerCursorBlinkPhase) % 2 == 0;
 }
 
-YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
   return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
-YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
     const VideoState* video, const VideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset) {
   if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
@@ -3046,7 +3046,7 @@ static VideoDirtyGeometry VideoGetDirtyGeometry(const VideoState* video) {
   return geometry;
 }
 
-YAX86_PRIVATE void VideoInvalidateRows(
+YAX86_MODULE_PRIVATE void VideoInvalidateRows(
     VideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
   if (start_column >= end_column || end_column > kVideoDirtyColumns ||

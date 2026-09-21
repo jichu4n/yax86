@@ -9,7 +9,7 @@
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-YAX86_HOT YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
+YAX86_HOT YAX86_MODULE_PRIVATE void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];
@@ -26,7 +26,7 @@ YAX86_HOT YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   CPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
-YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
+YAX86_MODULE_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
   return (value | (uint16_t)kFlagsAlwaysSet) & ~(uint16_t)kFlagsAlwaysClear;
 }
 
@@ -41,12 +41,12 @@ static void WriteToStackTop(CPUState* cpu, OperandValue value) {
   WriteMemoryOperandWord(cpu, &address, value);
 }
 
-YAX86_PRIVATE void PushValue(CPUState* cpu, OperandValue value) {
+YAX86_MODULE_PRIVATE void PushValue(CPUState* cpu, OperandValue value) {
   cpu->registers[kSP] -= 2;
   WriteToStackTop(cpu, value);
 }
 
-YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
+YAX86_MODULE_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
   cpu->registers[kSP] -= 2;
   // The 8086/8088 moves the stack pointer before it reads the source, so
   // PUSH SP stores the value SP has after the decrement rather than the one it
@@ -60,7 +60,7 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
   WriteToStackTop(cpu, value);
 }
 
-YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
+YAX86_MODULE_PRIVATE OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
@@ -72,7 +72,7 @@ YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
 }
 
 // Dummy instruction for unsupported opcodes.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
   return kInstructionExecuted;
 }
@@ -83,7 +83,7 @@ ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
 // from CPUTick(). It exists so that every entry in the opcode table is
 // callable, which is what lets the tick path dispatch without first checking
 // for a null handler.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInvalidOpcode(YAX86_UNUSED const InstructionContext* ctx) {
   return kInstructionInvalid;
 }

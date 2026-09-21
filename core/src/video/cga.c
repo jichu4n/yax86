@@ -207,7 +207,7 @@ static void CGARenderGraphics640x200Region(
   }
 }
 
-YAX86_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void CGARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);

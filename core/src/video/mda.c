@@ -76,7 +76,7 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
 // first makes write_pixels a row-major stream suitable for an SPI window.
-YAX86_PRIVATE void MDARenderRegion(
+YAX86_MODULE_PRIVATE void MDARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly

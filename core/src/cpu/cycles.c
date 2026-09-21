@@ -63,7 +63,7 @@ enum {
 };
 
 // Cycles to compute the effective address of a ModR/M memory operand.
-YAX86_PRIVATE uint8_t
+YAX86_MODULE_PRIVATE uint8_t
 GetEffectiveAddressCycles(const Instruction* instruction) {
   if (!instruction->has_mod_rm || instruction->mod_rm.mod == 0x03) {
     // A register operand needs no address computed.
@@ -99,7 +99,7 @@ GetEffectiveAddressCycles(const Instruction* instruction) {
   return cycles;
 }
 
-YAX86_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
+YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
   cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
 }
 
