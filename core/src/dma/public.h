@@ -35,7 +35,7 @@ enum {
 };
 
 // Log module for the DMA.
-static const LogModule kLogModuleDMA = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleDMA = {
     .id = kLogModuleIDDMA,
     .name = "DMA",
 };

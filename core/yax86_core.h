@@ -1276,11 +1276,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -1352,7 +1352,7 @@ enum {
 };
 
 // Log module for the CPU.
-static const LogModule kLogModuleCPU = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleCPU = {
     .id = kLogModuleIDCPU,
     .name = "CPU",
 };
@@ -9555,11 +9555,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -9651,7 +9651,7 @@ enum {
 };
 
 // Log module for the DMA.
-static const LogModule kLogModuleDMA = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleDMA = {
     .id = kLogModuleIDDMA,
     .name = "DMA",
 };
@@ -10656,11 +10656,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -10838,7 +10838,7 @@ enum {
 };
 
 // Log module for the FDC.
-static const LogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleFDC = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
@@ -10856,7 +10856,7 @@ typedef struct FDCDiskFormat {
 } FDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-static const FDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const FDCDiskFormat kFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,
@@ -12476,11 +12476,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -12565,7 +12565,7 @@ enum {
 };
 
 // Log module for the HDC.
-static const LogModule kLogModuleHDC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleHDC = {
     .id = kLogModuleIDHDC,
     .name = "HDC",
 };
@@ -12719,7 +12719,7 @@ enum {
       kHDCGeometry10MBNumCylinders * kHDCGeometry10MBNumHeads *
       kHDCGeometry10MBNumSectorsPerTrack * kHDCSectorSize,
 };
-static const HDCDriveGeometry kHDCGeometry10MB = {
+YAX86_PUBLIC_HEADER const HDCDriveGeometry kHDCGeometry10MB = {
     .num_cylinders = kHDCGeometry10MBNumCylinders,
     .num_heads = kHDCGeometry10MBNumHeads,
     .num_sectors_per_track = kHDCGeometry10MBNumSectorsPerTrack,
@@ -14865,11 +14865,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -15079,7 +15079,7 @@ enum {
 };
 
 // Log module for the Keyboard.
-static const LogModule kLogModuleKeyboard = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleKeyboard = {
     .id = kLogModuleIDKeyboard,
     .name = "KEYBOARD",
 };
@@ -15846,11 +15846,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -15939,7 +15939,7 @@ enum {
 };
 
 // Log module for the PIC.
-static const LogModule kLogModulePIC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePIC = {
     .id = kLogModuleIDPIC,
     .name = "PIC",
 };
@@ -16986,11 +16986,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -17072,7 +17072,7 @@ enum {
 };
 
 // Log module for the PIT.
-static const LogModule kLogModulePIT = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePIT = {
     .id = kLogModuleIDPIT,
     .name = "PIT",
 };
@@ -18276,11 +18276,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -18455,7 +18455,7 @@ enum {
 };
 
 // Log module for the Platform.
-static const LogModule kLogModulePlatform = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePlatform = {
     .id = kLogModuleIDPlatform,
     .name = "PLATFORM",
 };
@@ -20693,11 +20693,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -20820,7 +20820,7 @@ enum {
 };
 
 // Log module for the PPI.
-static const LogModule kLogModulePPI = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePPI = {
     .id = kLogModuleIDPPI,
     .name = "PPI",
 };
@@ -21647,11 +21647,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -21725,7 +21725,7 @@ enum {
 };
 
 // Log module for the Video.
-static const LogModule kLogModuleVideo = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleVideo = {
     .id = kLogModuleIDVideo,
     .name = "VIDEO",
 };
@@ -22131,107 +22131,108 @@ enum {
 // ============================================================================
 
 // Metadata for each video mode, indexed by mode number.
-static const VideoModeMetadata kVideoModeMetadata[kNumVideoModes] = {
-    // 0x00: CGA text, 40x25, color burst off
-    {
-        .mode = kVideoModeCGAText40x25Mono,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 8,
-        .columns = 40,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x01: CGA text, 40x25, 16 colors
-    {
-        .mode = kVideoModeCGAText40x25Color,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 8,
-        .columns = 40,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x02: CGA text, 80x25, color burst off
-    {
-        .mode = kVideoModeCGAText80x25Mono,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 640,
-        .height = 200,
-        .num_pages = 4,
-        .columns = 80,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x03: CGA text, 80x25, 16 colors
-    {
-        .mode = kVideoModeCGAText80x25Color,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 640,
-        .height = 200,
-        .num_pages = 4,
-        .columns = 80,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x04: CGA graphics, 320x200, 4 colors
-    {
-        .mode = kVideoModeCGAGraphics320x200,
-        .type = kVideoModeGraphics,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 1,
-    },
-    // 0x05: CGA graphics, 320x200, 4 colors, alternate palette
-    {
-        .mode = kVideoModeCGAGraphics320x200Alt,
-        .type = kVideoModeGraphics,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 1,
-    },
-    // 0x06: CGA graphics, 640x200, 2 colors
-    {
-        .mode = kVideoModeCGAGraphics640x200,
-        .type = kVideoModeGraphics,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 640,
-        .height = 200,
-        .num_pages = 1,
-    },
-    // 0x07: MDA text, 80x25, monochrome
-    {
-        .mode = kVideoModeMDAText80x25,
-        .type = kVideoModeText,
-        .vram_address = kMDAVRAMAddress,
-        .vram_size = kMDAVRAMSize,
-        .width = 720,
-        .height = 350,
-        .num_pages = 1,
-        .columns = 80,
-        .rows = 25,
-        .char_width = 9,
-        .char_height = 14,
-    },
+YAX86_PUBLIC_HEADER const VideoModeMetadata
+    kVideoModeMetadata[kNumVideoModes] = {
+        // 0x00: CGA text, 40x25, color burst off
+        {
+            .mode = kVideoModeCGAText40x25Mono,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 8,
+            .columns = 40,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x01: CGA text, 40x25, 16 colors
+        {
+            .mode = kVideoModeCGAText40x25Color,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 8,
+            .columns = 40,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x02: CGA text, 80x25, color burst off
+        {
+            .mode = kVideoModeCGAText80x25Mono,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 640,
+            .height = 200,
+            .num_pages = 4,
+            .columns = 80,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x03: CGA text, 80x25, 16 colors
+        {
+            .mode = kVideoModeCGAText80x25Color,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 640,
+            .height = 200,
+            .num_pages = 4,
+            .columns = 80,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x04: CGA graphics, 320x200, 4 colors
+        {
+            .mode = kVideoModeCGAGraphics320x200,
+            .type = kVideoModeGraphics,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 1,
+        },
+        // 0x05: CGA graphics, 320x200, 4 colors, alternate palette
+        {
+            .mode = kVideoModeCGAGraphics320x200Alt,
+            .type = kVideoModeGraphics,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 1,
+        },
+        // 0x06: CGA graphics, 640x200, 2 colors
+        {
+            .mode = kVideoModeCGAGraphics640x200,
+            .type = kVideoModeGraphics,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 640,
+            .height = 200,
+            .num_pages = 1,
+        },
+        // 0x07: MDA text, 80x25, monochrome
+        {
+            .mode = kVideoModeMDAText80x25,
+            .type = kVideoModeText,
+            .vram_address = kMDAVRAMAddress,
+            .vram_size = kMDAVRAMSize,
+            .width = 720,
+            .height = 350,
+            .num_pages = 1,
+            .columns = 80,
+            .rows = 25,
+            .char_width = 9,
+            .char_height = 14,
+        },
 };
 
 // Metadata for a video adapter - the facts about an adapter that do not depend
@@ -22281,39 +22282,40 @@ typedef struct VideoAdapterMetadata {
 // line at 16.257MHz over 370 lines, which is 259 cycles per line and just under
 // 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
 // 304 cycles per line and just under 60Hz.
-static const VideoAdapterMetadata kVideoAdapterMetadata[kNumVideoAdapters] = {
-    // MDA
-    {
-        .adapter = kVideoAdapterMDA,
-        .frame_buffer_width = 720,
-        .frame_buffer_height = 350,
-        .vram_address = kMDAVRAMAddress,
-        .vram_size = kMDAVRAMSize,
-        .port_start = kMDAPortStart,
-        .port_end = kMDAPortEnd,
-        // High resolution mode, video enable, blink enable.
-        .default_control_register = 0x29,
-        .cycles_per_scan_line = 259,
-        .display_cycles_per_scan_line = 211,
-        .scan_lines_per_frame = 370,
-        .displayed_scan_lines = 350,
-    },
-    // CGA
-    {
-        .adapter = kVideoAdapterCGA,
-        .frame_buffer_width = 640,
-        .frame_buffer_height = 200,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .port_start = kCGAPortStart,
-        .port_end = kCGAPortEnd,
-        // 80x25 text mode, video enable, blink enable.
-        .default_control_register = 0x29,
-        .cycles_per_scan_line = 304,
-        .display_cycles_per_scan_line = 213,
-        .scan_lines_per_frame = 262,
-        .displayed_scan_lines = 200,
-    },
+YAX86_PUBLIC_HEADER const VideoAdapterMetadata
+    kVideoAdapterMetadata[kNumVideoAdapters] = {
+        // MDA
+        {
+            .adapter = kVideoAdapterMDA,
+            .frame_buffer_width = 720,
+            .frame_buffer_height = 350,
+            .vram_address = kMDAVRAMAddress,
+            .vram_size = kMDAVRAMSize,
+            .port_start = kMDAPortStart,
+            .port_end = kMDAPortEnd,
+            // High resolution mode, video enable, blink enable.
+            .default_control_register = 0x29,
+            .cycles_per_scan_line = 259,
+            .display_cycles_per_scan_line = 211,
+            .scan_lines_per_frame = 370,
+            .displayed_scan_lines = 350,
+        },
+        // CGA
+        {
+            .adapter = kVideoAdapterCGA,
+            .frame_buffer_width = 640,
+            .frame_buffer_height = 200,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .port_start = kCGAPortStart,
+            .port_end = kCGAPortEnd,
+            // 80x25 text mode, video enable, blink enable.
+            .default_control_register = 0x29,
+            .cycles_per_scan_line = 304,
+            .display_cycles_per_scan_line = 213,
+            .scan_lines_per_frame = 262,
+            .displayed_scan_lines = 200,
+        },
 };
 
 enum {
@@ -22445,7 +22447,7 @@ typedef struct VideoConfig {
 } VideoConfig;
 
 // Default video config.
-static const VideoConfig kDefaultVideoConfig = {
+YAX86_PUBLIC_HEADER const VideoConfig kDefaultVideoConfig = {
     .context = NULL,
 
     .adapter = kVideoAdapterMDA,

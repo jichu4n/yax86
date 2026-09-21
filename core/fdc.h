@@ -536,11 +536,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -718,7 +718,7 @@ enum {
 };
 
 // Log module for the FDC.
-static const LogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleFDC = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
@@ -736,7 +736,7 @@ typedef struct FDCDiskFormat {
 } FDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-static const FDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const FDCDiskFormat kFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,

@@ -139,11 +139,11 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but

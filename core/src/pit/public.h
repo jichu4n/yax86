@@ -25,7 +25,7 @@ enum {
 };
 
 // Log module for the PIT.
-static const LogModule kLogModulePIT = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePIT = {
     .id = kLogModuleIDPIT,
     .name = "PIT",
 };

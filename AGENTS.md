@@ -181,6 +181,41 @@ and RAM even when idle.
 - Prefix increment and decrement, `++var` and `--var`, not `var++` and `var--`.
 - Annotate unused parameters with `YAX86_UNUSED` from `util/common.h`.
 
+### Visibility
+
+- Every file-scope definition carries a macro from `util/common.h` naming who
+  may reach it, so that what a symbol is part of is answered by the line it is
+  defined on rather than by which header happens to declare it:
+
+  | macro | expands to | for |
+  | --- | --- | --- |
+  | `YAX86_PUBLIC` | nothing | public API, defined in a source file |
+  | `YAX86_PUBLIC_HEADER` | `static` | public API, defined in a header |
+  | `YAX86_MODULE_PRIVATE` | `static` bundled, nothing unbundled | shared between a module's source files |
+  | `YAX86_FILE_PRIVATE` | `static` | used only in the file that defines it |
+
+- **The macro names the tier and nothing else.** `inline`, `const` and the
+  return type are written out after it, exactly as they would be without it:
+  `YAX86_PUBLIC_HEADER inline bool CPUGetFlag(...)`, `YAX86_FILE_PRIVATE const
+  Flag kFlagsForClearAndSetInstructions[]`. Folding a keyword into a macro name
+  needs one macro per tier per declaration shape, and the shapes do not stop at
+  `inline` - a header-defined public function that is not inline has nowhere to
+  go in such a scheme, which `LoggerWrite()` is.
+- A separate macro is warranted where the **expansion** differs, never where a
+  keyword does. That is why `YAX86_PUBLIC` and `YAX86_PUBLIC_HEADER` are two
+  macros: a definition in a header needs internal linkage and one in a source
+  file must not have it.
+- **Public means reachable through the interface, not referenced by a host
+  today.** The eleven `kLogModule*` descriptors are used only inside `core/src`,
+  and are public because `LoggerEnableModule()` is public and takes one - a host
+  turning on the CPU's logging has nothing else to pass. `SNPrintF()` is the
+  other way round: it sits in every module's public half because `log.h` needs
+  it, and nothing outside the core calls it.
+- `static` alone says a symbol has internal linkage, which in the bundled build
+  means internal to the whole bundle rather than to its file. It is the marker
+  that cannot express which of the tiers above was meant, which is why none of
+  them is spelled that way.
+
 ### Placement and inlining marks
 
 - **The visibility macro comes first, then the placement and inlining marks,
