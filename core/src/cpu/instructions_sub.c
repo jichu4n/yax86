@@ -40,7 +40,7 @@ static void SetFlagsAfterDec(
 
 // Set CPU flags after a SUB, SBB, CMP or NEG instruction.
 // This calls SetFlagsAfterDec and then sets the Carry Flag (CF).
-YAX86_PRIVATE void SetFlagsAfterSub(
+YAX86_MODULE_PRIVATE void SetFlagsAfterSub(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_borrow) {
   SetFlagsAfterDec(ctx, op1, op2, result, did_borrow);
@@ -72,7 +72,7 @@ YAX86_HOT static InstructionResult ExecuteSubCommon(
 }
 
 // Common logic for SUB instructions
-YAX86_PRIVATE InstructionResult ExecuteSub(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteSub(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteSubCommon(
       ctx, dest, src_value, /* borrow */ false, SetFlagsAfterSub);
@@ -80,7 +80,7 @@ YAX86_PRIVATE InstructionResult ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -91,7 +91,7 @@ ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -102,7 +102,7 @@ ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
 
 // SUB AL, imm8
 // SUB AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -111,7 +111,7 @@ ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for SBB instructions
-YAX86_PRIVATE InstructionResult ExecuteSubWithBorrow(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteSubWithBorrow(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteSubCommon(
       ctx, dest, src_value, /* borrow */ true, SetFlagsAfterSub);
@@ -119,7 +119,7 @@ YAX86_PRIVATE InstructionResult ExecuteSubWithBorrow(
 
 // SBB r/m8, r8
 // SBB r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
   Operand dest;
@@ -131,7 +131,7 @@ ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
 
 // SBB r8, r/m8
 // SBB r16, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
   Operand dest;
@@ -143,7 +143,7 @@ ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
 
 // SBB AL, imm8
 // SBB AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -152,7 +152,7 @@ ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
 }
 
 // Common logic for DEC instructions
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteDec(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = 1;
   return ExecuteSubCommon(
@@ -160,7 +160,7 @@ ExecuteDec(const InstructionContext* ctx, Operand* dest) {
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteDecRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x48);

@@ -23,7 +23,7 @@ static uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
 }
 
 // AAA
-YAX86_PRIVATE InstructionResult ExecuteAaa(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -42,7 +42,7 @@ YAX86_PRIVATE InstructionResult ExecuteAaa(const InstructionContext* ctx) {
 }
 
 // AAS
-YAX86_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -61,7 +61,7 @@ YAX86_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
 }
 
 // AAM
-YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   OperandValue base = ReadImmediate(ctx);
   uint16_t base_value = FromOperandValue(base);
@@ -85,7 +85,7 @@ YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
 }
 
 // AAD
-YAX86_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   OperandValue base = ReadImmediate(ctx);
@@ -98,7 +98,7 @@ YAX86_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
 }
 
 // DAA
-YAX86_PRIVATE InstructionResult ExecuteDaa(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteDaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   const uint8_t original_al = al;
@@ -124,7 +124,7 @@ YAX86_PRIVATE InstructionResult ExecuteDaa(const InstructionContext* ctx) {
 }
 
 // DAS
-YAX86_PRIVATE InstructionResult ExecuteDas(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteDas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   const uint8_t original_al = al;

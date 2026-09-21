@@ -117,7 +117,7 @@ reason `-Os` is not benchmarked: nothing ships at it.
 
 The library ships as a single bundled translation unit, which is also the only
 configuration CMake builds. The unbundled form — compiling each source file in
-`core/src` independently — is what `YAX86_PRIVATE`'s second arm and the
+`core/src` independently — is what `YAX86_MODULE_PRIVATE`'s second arm and the
 file-local convention both rest on, and nothing else builds it.
 
 `tools/check-unbundled.sh` runs `$CC -std=c99 -fsyntax-only` over every source
@@ -185,7 +185,7 @@ and RAM even when idle.
 
 - `YAX86_HOT`, `YAX86_NOINLINE` and `YAX86_ALWAYS_INLINE` go first in a
   definition, before the linkage macro and the return type: `YAX86_HOT
-  YAX86_PRIVATE InstructionResult ExecuteSub(...)`, `YAX86_HOT static uint8_t
+  YAX86_MODULE_PRIVATE InstructionResult ExecuteSub(...)`, `YAX86_HOT static uint8_t
   ReadByte(...)`. Both orders compile, so the point is only that there be one —
   putting the mark first leaves the declaration after it reading exactly as it
   would without the mark. Only one of the three is ever on a given function.
@@ -193,7 +193,7 @@ and RAM even when idle.
   chooses where to break lines and never reorders tokens, so a mark added to
   the start of a *continuation* line — which is where a wrapped signature's
   declarator lives, below its return type — is already mid-declaration.
-  Reformatting rejoins it as `YAX86_PRIVATE InstructionResult YAX86_HOT`, which
+  Reformatting rejoins it as `YAX86_MODULE_PRIVATE InstructionResult YAX86_HOT`, which
   reads as though the mark belonged to the return type and was put there on
   purpose. Add the mark to the line the declaration *starts* on and
   reformatting keeps it first, however it decides to wrap.

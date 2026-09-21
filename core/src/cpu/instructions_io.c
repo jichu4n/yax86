@@ -43,7 +43,7 @@ static InstructionResult ExecuteIn(
 
 // IN AL, imm8
 // IN AX, imm8
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteIn(ctx, FromOperandValue(port));
@@ -51,7 +51,7 @@ ExecuteInImmediate(const InstructionContext* ctx) {
 
 // IN AL, DX
 // IN AX, DX
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInDX(const InstructionContext* ctx) {
   return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
 }
@@ -90,7 +90,7 @@ static InstructionResult ExecuteOut(
 
 // OUT imm8, AL
 // OUT imm8, AX
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteOutImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteOut(ctx, FromOperandValue(port));
@@ -98,7 +98,7 @@ ExecuteOutImmediate(const InstructionContext* ctx) {
 
 // OUT DX, AL
 // OUT DX, AX
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteOutDX(const InstructionContext* ctx) {
   return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }

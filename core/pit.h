@@ -27,10 +27,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.

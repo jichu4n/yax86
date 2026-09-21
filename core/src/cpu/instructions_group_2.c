@@ -269,7 +269,7 @@ static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
 };
 
 // Group 2 shift / rotate by 1.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -279,7 +279,7 @@ ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 2 shift / rotate by CL.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

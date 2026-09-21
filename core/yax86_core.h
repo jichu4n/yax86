@@ -667,10 +667,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -1957,10 +1957,10 @@ CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -2469,7 +2469,7 @@ enum {
 };
 
 // Cycles to compute the effective address of a ModR/M memory operand.
-YAX86_PRIVATE uint8_t
+YAX86_MODULE_PRIVATE uint8_t
 GetEffectiveAddressCycles(const Instruction* instruction) {
   if (!instruction->has_mod_rm || instruction->mod_rm.mod == 0x03) {
     // A register operand needs no address computed.
@@ -2505,7 +2505,7 @@ GetEffectiveAddressCycles(const Instruction* instruction) {
   return cycles;
 }
 
-YAX86_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
+YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
   cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
 }
 
@@ -2545,18 +2545,18 @@ enum { kUnreachableOperandValue = 0xFF };
 
 // Narrow a computed result to what an operand of the given width holds. A
 // byte keeps a zero high byte, which is what makes widening it again free.
-YAX86_PRIVATE OperandValue ToOperandValue(Width width, uint32_t raw_value) {
+YAX86_MODULE_PRIVATE OperandValue ToOperandValue(Width width, uint32_t raw_value) {
   return (OperandValue)(raw_value & kMaxValue[width]);
 }
 
 // Widen an operand value for arithmetic, which is done in 32 bits so that
 // nothing overflows on the way. A byte value already has a zero high byte, so
 // this is where that invariant is spent rather than a width being consulted.
-YAX86_PRIVATE uint32_t FromOperandValue(OperandValue value) { return value; }
+YAX86_MODULE_PRIVATE uint32_t FromOperandValue(OperandValue value) { return value; }
 
 // The same, sign-extended. This one does need the width, since which bit is
 // the sign bit is exactly what the value no longer says.
-YAX86_PRIVATE int32_t FromSignedOperandValue(Width width, OperandValue value) {
+YAX86_MODULE_PRIVATE int32_t FromSignedOperandValue(Width width, OperandValue value) {
   switch (width) {
     case kByte:
       return (int32_t)((int8_t)value);
@@ -2568,12 +2568,12 @@ YAX86_PRIVATE int32_t FromSignedOperandValue(Width width, OperandValue value) {
 }
 
 // Helper function to extract a zero-extended value from an operand.
-YAX86_PRIVATE uint32_t FromOperand(const Operand* operand) {
+YAX86_MODULE_PRIVATE uint32_t FromOperand(const Operand* operand) {
   return FromOperandValue(operand->value);
 }
 
 // Helper function to extract a sign-extended value from an operand.
-YAX86_PRIVATE int32_t FromSignedOperand(Width width, const Operand* operand) {
+YAX86_MODULE_PRIVATE int32_t FromSignedOperand(Width width, const Operand* operand) {
   return FromSignedOperandValue(width, operand->value);
 }
 
@@ -2585,14 +2585,14 @@ enum {
 };
 
 // Computes the raw address a segment register and an offset address.
-YAX86_PRIVATE uint32_t ToRawAddress(
+YAX86_MODULE_PRIVATE uint32_t ToRawAddress(
     const CPUState* cpu, uint8_t segment_register_index, uint16_t offset) {
   uint16_t segment = cpu->registers[segment_register_index];
   return ((((uint32_t)segment) << 4) + (uint32_t)offset) & kPhysicalAddressMask;
 }
 
 // Read a byte from memory as a uint8_t.
-YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
+YAX86_MODULE_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
   // Guest RAM, where nearly every operand lands, is reached by indexing. The
   // call below ends up indexing an array too, having gone through a function
   // pointer, the host's context and a memory map lookup to arrive at it.
@@ -2605,14 +2605,14 @@ YAX86_PRIVATE uint8_t ReadRawMemoryByte(CPUState* cpu, uint32_t raw_address) {
 }
 
 // Read a word from memory as a uint16_t.
-YAX86_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
+YAX86_MODULE_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_address) {
   uint8_t low_byte_value = ReadRawMemoryByte(cpu, raw_address);
   uint8_t high_byte_value = ReadRawMemoryByte(cpu, raw_address + 1);
   return (((uint16_t)high_byte_value) << 8) | (uint16_t)low_byte_value;
 }
 
 // Read a byte from memory to an OperandValue.
-YAX86_HOT YAX86_PRIVATE OperandValue
+YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
 ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 1);
   return ReadRawMemoryByte(
@@ -2620,7 +2620,7 @@ ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a word from memory to an OperandValue.
-YAX86_HOT YAX86_PRIVATE OperandValue
+YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
 ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 2);
   // The offset is 16 bits wide and wraps within the segment, so the high byte
@@ -2636,7 +2636,7 @@ ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a memory operand of the given width to an OperandValue.
-YAX86_PRIVATE OperandValue ReadMemoryOperandValue(
+YAX86_MODULE_PRIVATE OperandValue ReadMemoryOperandValue(
     CPUState* cpu, const OperandAddress* address, Width width) {
   switch (width) {
     case kByte:
@@ -2649,7 +2649,7 @@ YAX86_PRIVATE OperandValue ReadMemoryOperandValue(
 }
 
 // Read a byte from a register to an OperandValue.
-YAX86_HOT YAX86_PRIVATE OperandValue
+YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
 ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
   // Truncated to a byte, which is the invariant every consumer widens by
   // doing nothing: AH and the high half of a word register live in the bits
@@ -2658,13 +2658,13 @@ ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a word from a register to an OperandValue.
-YAX86_HOT YAX86_PRIVATE OperandValue
+YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
 ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   return cpu->registers[address->register_index];
 }
 
 // Read a register operand of the given width to an OperandValue.
-YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
+YAX86_MODULE_PRIVATE OperandValue ReadRegisterOperandValue(
     CPUState* cpu, const OperandAddress* address, Width width) {
   switch (width) {
     case kByte:
@@ -2677,7 +2677,7 @@ YAX86_PRIVATE OperandValue ReadRegisterOperandValue(
 }
 
 // Write a byte as uint8_t to memory.
-YAX86_PRIVATE void WriteRawMemoryByte(
+YAX86_MODULE_PRIVATE void WriteRawMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
   // Every write the CPU makes comes through here - operands, stack pushes and
   // the interrupt vector alike - which is what lets a host report only the
@@ -2694,7 +2694,7 @@ YAX86_PRIVATE void WriteRawMemoryByte(
 }
 
 // Write a byte to memory.
-YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandByte(
+YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 1);
   WriteRawMemoryByte(
@@ -2703,7 +2703,7 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandByte(
 }
 
 // Write a word to memory.
-YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandWord(
+YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 2);
   // See ReadMemoryOperandWord() for why the high byte's offset wraps within
@@ -2717,7 +2717,7 @@ YAX86_HOT YAX86_PRIVATE void WriteMemoryOperandWord(
 }
 
 // Write a memory operand of the given width.
-YAX86_PRIVATE void WriteMemoryOperand(
+YAX86_MODULE_PRIVATE void WriteMemoryOperand(
     CPUState* cpu, const OperandAddress* address, OperandValue value,
     Width width) {
   switch (width) {
@@ -2732,7 +2732,7 @@ YAX86_PRIVATE void WriteMemoryOperand(
 }
 
 // Write a byte to a register.
-YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
+YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const uint16_t updated_byte = ((uint16_t)(uint8_t)value) << address->offset;
   const uint16_t other_byte = cpu->registers[address->register_index] &
@@ -2741,13 +2741,13 @@ YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandByte(
 }
 
 // Write a word to a register.
-YAX86_HOT YAX86_PRIVATE void WriteRegisterOperandWord(
+YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   cpu->registers[address->register_index] = value;
 }
 
 // Write a register operand of the given width.
-YAX86_PRIVATE void WriteRegisterOperand(
+YAX86_MODULE_PRIVATE void WriteRegisterOperand(
     CPUState* cpu, const OperandAddress* address, OperandValue value,
     Width width) {
   switch (width) {
@@ -2762,7 +2762,7 @@ YAX86_PRIVATE void WriteRegisterOperand(
 }
 
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
-YAX86_PRIVATE uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
+YAX86_MODULE_PRIVATE uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
   // Sign-extend the offset to 32 bits
   int32_t signed_offset = (int32_t)((int8_t)raw_offset);
   // Zero-extend base to 32 bits
@@ -2772,7 +2772,7 @@ YAX86_PRIVATE uint16_t AddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
 }
 
 // Add a 16-bit signed relative offset to a 16-bit unsigned base address.
-YAX86_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
+YAX86_MODULE_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
   // Sign-extend the offset to 32 bits
   int32_t signed_offset = (int32_t)((int16_t)raw_offset);
   // Zero-extend base to 32 bits
@@ -2783,7 +2783,7 @@ YAX86_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
 
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
-YAX86_HOT YAX86_PRIVATE RegisterAddress
+YAX86_HOT YAX86_MODULE_PRIVATE RegisterAddress
 GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
@@ -2800,7 +2800,7 @@ GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
 
 // Get the register operand for a word instruction based on the ModR/M byte's
 // reg or R/M field.
-YAX86_PRIVATE RegisterAddress
+YAX86_MODULE_PRIVATE RegisterAddress
 GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   const RegisterAddress address = {
       .register_index = reg_or_rm, .byte_offset = 0};
@@ -2809,7 +2809,7 @@ GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
 
 // Get the register operand of the given width from the ModR/M byte's reg or
 // R/M field.
-YAX86_PRIVATE RegisterAddress
+YAX86_MODULE_PRIVATE RegisterAddress
 GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
   switch (width) {
     case kByte:
@@ -2825,7 +2825,7 @@ GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
 
 // Replace a segment register index with whatever the instruction's segment
 // override prefix names, if it carries one.
-YAX86_PRIVATE void ApplySegmentOverride(
+YAX86_MODULE_PRIVATE void ApplySegmentOverride(
     const Instruction* instruction, uint8_t* segment_register_index) {
   if (instruction->segment_override != kNoSegmentOverride) {
     *segment_register_index = instruction->segment_override;
@@ -2833,7 +2833,7 @@ YAX86_PRIVATE void ApplySegmentOverride(
 }
 
 // Compute the memory address for an instruction.
-YAX86_HOT YAX86_PRIVATE MemoryAddress
+YAX86_HOT YAX86_MODULE_PRIVATE MemoryAddress
 GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
   MemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
@@ -2922,7 +2922,7 @@ GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
 // Always inlined. With more than one caller, -Os and -O2 emit it out of line,
 // which puts a call and its register shuffling on the hottest path in the
 // emulator - 3.6% at -O2.
-YAX86_ALWAYS_INLINE YAX86_PRIVATE OperandAddress
+YAX86_ALWAYS_INLINE YAX86_MODULE_PRIVATE OperandAddress
 GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
   CPUState* cpu = ctx->cpu;
   const Instruction* instruction = ctx->instruction;
@@ -2948,20 +2948,20 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
 }
 
 // Read an 8-bit immediate value.
-YAX86_HOT YAX86_PRIVATE OperandValue
+YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
 ReadImmediateOperandByte(const Instruction* instruction) {
   return instruction->immediate[0];
 }
 
 // Read a 16-bit immediate value.
-YAX86_HOT YAX86_PRIVATE OperandValue
+YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
 ReadImmediateOperandWord(const Instruction* instruction) {
   return (OperandValue)(((uint16_t)instruction->immediate[0]) |
                         (((uint16_t)instruction->immediate[1]) << 8));
 }
 
 // Read an immediate value of the given width.
-YAX86_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE OperandValue
 ReadImmediateOperand(const Instruction* instruction, Width width) {
   switch (width) {
     case kByte:
@@ -2977,7 +2977,7 @@ ReadImmediateOperand(const Instruction* instruction, Width width) {
 //
 // Always inlined. Left to itself GCC emits this out of line, in flash, and
 // puts a veneer and an XIP fetch on every operand read - 5.4% at -O3.
-YAX86_ALWAYS_INLINE YAX86_PRIVATE OperandValue
+YAX86_ALWAYS_INLINE YAX86_MODULE_PRIVATE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
   // Not a switch, unlike the width dispatch it calls into. OperandAddressType
   // is a plain enum field rather than a bitfield, so most of the values it can
@@ -3002,14 +3002,14 @@ ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
 
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
-YAX86_HOT YAX86_PRIVATE void ReadRegisterOrMemoryOperand(
+YAX86_HOT YAX86_MODULE_PRIVATE void ReadRegisterOrMemoryOperand(
     const InstructionContext* ctx, Operand* operand) {
   operand->address = GetRegisterOrMemoryOperandAddress(ctx);
   operand->value = ReadOperandValue(ctx, &operand->address);
 }
 
 // Get a register operand for an instruction.
-YAX86_HOT YAX86_PRIVATE void ReadRegisterOperandForRegisterIndex(
+YAX86_HOT YAX86_MODULE_PRIVATE void ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index,
     Operand* operand) {
   const Width width = ctx->metadata->width;
@@ -3025,7 +3025,7 @@ YAX86_HOT YAX86_PRIVATE void ReadRegisterOperandForRegisterIndex(
 
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
-YAX86_PRIVATE void ReadRegisterOperand(
+YAX86_MODULE_PRIVATE void ReadRegisterOperand(
     const InstructionContext* ctx, Operand* operand) {
   ReadRegisterOperandForRegisterIndex(
       ctx, (RegisterIndex)ctx->instruction->mod_rm.reg, operand);
@@ -3033,7 +3033,7 @@ YAX86_PRIVATE void ReadRegisterOperand(
 
 // Get a segment register operand for an instruction from the REG field of the
 // Mod/RM byte.
-YAX86_PRIVATE void ReadSegmentRegisterOperand(
+YAX86_MODULE_PRIVATE void ReadSegmentRegisterOperand(
     const InstructionContext* ctx, Operand* operand) {
   // The segment register field is only two bits wide. The 8086/8088 does not
   // decode the third bit at all, so REG 4 through 7 name the same four
@@ -3046,7 +3046,7 @@ YAX86_PRIVATE void ReadSegmentRegisterOperand(
 }
 
 // Write a value to a register or memory operand address.
-YAX86_HOT YAX86_PRIVATE void WriteOperandAddress(
+YAX86_HOT YAX86_MODULE_PRIVATE void WriteOperandAddress(
     const InstructionContext* ctx, const OperandAddress* address,
     uint32_t raw_value) {
   const Width width = ctx->metadata->width;
@@ -3060,13 +3060,13 @@ YAX86_HOT YAX86_PRIVATE void WriteOperandAddress(
 }
 
 // Write a value to a register or memory operand.
-YAX86_PRIVATE void WriteOperand(
+YAX86_MODULE_PRIVATE void WriteOperand(
     const InstructionContext* ctx, const Operand* operand, uint32_t raw_value) {
   WriteOperandAddress(ctx, &operand->address, raw_value);
 }
 
 // Read an immediate value from the instruction.
-YAX86_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE OperandValue ReadImmediate(const InstructionContext* ctx) {
   return ReadImmediateOperand(ctx->instruction, ctx->metadata->width);
 }
 
@@ -3580,7 +3580,7 @@ extern InstructionResult ExecuteGroup5Instruction(
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-YAX86_HOT YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
+YAX86_HOT YAX86_MODULE_PRIVATE void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];
@@ -3597,7 +3597,7 @@ YAX86_HOT YAX86_PRIVATE void SetCommonFlagsAfterInstruction(
   CPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
-YAX86_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
+YAX86_MODULE_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
   return (value | (uint16_t)kFlagsAlwaysSet) & ~(uint16_t)kFlagsAlwaysClear;
 }
 
@@ -3612,12 +3612,12 @@ static void WriteToStackTop(CPUState* cpu, OperandValue value) {
   WriteMemoryOperandWord(cpu, &address, value);
 }
 
-YAX86_PRIVATE void PushValue(CPUState* cpu, OperandValue value) {
+YAX86_MODULE_PRIVATE void PushValue(CPUState* cpu, OperandValue value) {
   cpu->registers[kSP] -= 2;
   WriteToStackTop(cpu, value);
 }
 
-YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
+YAX86_MODULE_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
   cpu->registers[kSP] -= 2;
   // The 8086/8088 moves the stack pointer before it reads the source, so
   // PUSH SP stores the value SP has after the decrement rather than the one it
@@ -3631,7 +3631,7 @@ YAX86_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
   WriteToStackTop(cpu, value);
 }
 
-YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
+YAX86_MODULE_PRIVATE OperandValue Pop(CPUState* cpu) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
@@ -3643,7 +3643,7 @@ YAX86_PRIVATE OperandValue Pop(CPUState* cpu) {
 }
 
 // Dummy instruction for unsupported opcodes.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
   return kInstructionExecuted;
 }
@@ -3654,7 +3654,7 @@ ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
 // from CPUTick(). It exists so that every entry in the opcode table is
 // callable, which is what lets the tick path dispatch without first checking
 // for a null handler.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInvalidOpcode(YAX86_UNUSED const InstructionContext* ctx) {
   return kInstructionInvalid;
 }
@@ -3682,7 +3682,7 @@ ExecuteInvalidOpcode(YAX86_UNUSED const InstructionContext* ctx) {
 
 // MOV r/m8, r8
 // MOV r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   Operand src;
@@ -3693,7 +3693,7 @@ ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // MOV r8, r/m8
 // MOV r16, r/m16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -3704,7 +3704,7 @@ ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 }
 
 // MOV r/m16, sreg
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveSegmentRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   Operand src;
@@ -3714,7 +3714,7 @@ ExecuteMoveSegmentRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 }
 
 // MOV sreg, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveRegisterOrMemoryToSegmentRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadSegmentRegisterOperand(ctx, &dest);
@@ -3726,7 +3726,7 @@ ExecuteMoveRegisterOrMemoryToSegmentRegister(const InstructionContext* ctx) {
 
 // MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
 // MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
   static const uint8_t register_index_opcode_base[kNumWidths] = {
       0xB0,  // kByte
@@ -3744,7 +3744,7 @@ ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
 
 // MOV AL, moffs16
 // MOV AX, moffs16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -3766,7 +3766,7 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
 
 // MOV moffs16, AL
 // MOV moffs16, AX
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
@@ -3787,7 +3787,7 @@ ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
 
 // MOV r/m8, imm8
 // MOV r/m16, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
   OperandAddress dest = GetRegisterOrMemoryOperandAddress(ctx);
   OperandValue src_value = ReadImmediate(ctx);
@@ -3800,7 +3800,7 @@ ExecuteMoveImmediateToRegisterOrMemory(const InstructionContext* ctx) {
 // ============================================================================
 
 // XCHG AX, AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteExchangeRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x90);
@@ -3820,7 +3820,7 @@ ExecuteExchangeRegister(const InstructionContext* ctx) {
 
 // XCHG r/m8, r8
 // XCHG r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteExchangeRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -3837,7 +3837,7 @@ ExecuteExchangeRegisterOrMemory(const InstructionContext* ctx) {
 // ============================================================================
 
 // XLAT
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteTranslateByte(const InstructionContext* ctx) {
   // Read the AL register
   Operand al;
@@ -3877,7 +3877,7 @@ ExecuteTranslateByte(const InstructionContext* ctx) {
 // ============================================================================
 
 // LEA r16, m
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -3922,13 +3922,13 @@ static InstructionResult ExecuteLoadSegmentWithPointer(
 }
 
 // LES r16, m
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteLoadESWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kES);
 }
 
 // LDS r16, m
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kDS);
 }
@@ -4009,7 +4009,7 @@ static InstructionResult ExecuteAddCommon(
 }
 
 // Common logic for ADD instructions
-YAX86_PRIVATE InstructionResult ExecuteAdd(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAdd(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ false, SetFlagsAfterAdd);
@@ -4017,7 +4017,7 @@ YAX86_PRIVATE InstructionResult ExecuteAdd(
 
 // ADD r/m8, r8
 // ADD r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4028,7 +4028,7 @@ ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4039,7 +4039,7 @@ ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // ADD AL, imm8
 // ADD AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4048,7 +4048,7 @@ ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for ADC instructions
-YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteAddWithCarry(
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);
@@ -4056,7 +4056,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteAddWithCarry(
 
 // ADC r/m8, r8
 // ADC r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4066,7 +4066,7 @@ ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4077,7 +4077,7 @@ ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
 
 // ADC AL, imm8
 // ADC AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4086,7 +4086,7 @@ ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
 }
 
 // Common logic for INC instructions
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInc(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = 1;
   return ExecuteAddCommon(
@@ -4094,7 +4094,7 @@ ExecuteInc(const InstructionContext* ctx, Operand* dest) {
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteIncRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x40);
@@ -4155,7 +4155,7 @@ static void SetFlagsAfterDec(
 
 // Set CPU flags after a SUB, SBB, CMP or NEG instruction.
 // This calls SetFlagsAfterDec and then sets the Carry Flag (CF).
-YAX86_PRIVATE void SetFlagsAfterSub(
+YAX86_MODULE_PRIVATE void SetFlagsAfterSub(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_borrow) {
   SetFlagsAfterDec(ctx, op1, op2, result, did_borrow);
@@ -4187,7 +4187,7 @@ YAX86_HOT static InstructionResult ExecuteSubCommon(
 }
 
 // Common logic for SUB instructions
-YAX86_PRIVATE InstructionResult ExecuteSub(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteSub(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteSubCommon(
       ctx, dest, src_value, /* borrow */ false, SetFlagsAfterSub);
@@ -4195,7 +4195,7 @@ YAX86_PRIVATE InstructionResult ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4206,7 +4206,7 @@ ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4217,7 +4217,7 @@ ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
 
 // SUB AL, imm8
 // SUB AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4226,7 +4226,7 @@ ExecuteSubImmediateFromALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for SBB instructions
-YAX86_PRIVATE InstructionResult ExecuteSubWithBorrow(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteSubWithBorrow(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteSubCommon(
       ctx, dest, src_value, /* borrow */ true, SetFlagsAfterSub);
@@ -4234,7 +4234,7 @@ YAX86_PRIVATE InstructionResult ExecuteSubWithBorrow(
 
 // SBB r/m8, r8
 // SBB r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const InstructionContext* ctx) {
   Operand dest;
@@ -4246,7 +4246,7 @@ ExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
 
 // SBB r8, r/m8
 // SBB r16, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const InstructionContext* ctx) {
   Operand dest;
@@ -4258,7 +4258,7 @@ ExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
 
 // SBB AL, imm8
 // SBB AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4267,7 +4267,7 @@ ExecuteSubImmediateFromALOrAXWithBorrow(const InstructionContext* ctx) {
 }
 
 // Common logic for DEC instructions
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteDec(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = 1;
   return ExecuteSubCommon(
@@ -4275,7 +4275,7 @@ ExecuteDec(const InstructionContext* ctx, Operand* dest) {
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteDecRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x48);
@@ -4306,7 +4306,7 @@ ExecuteDecRegister(const InstructionContext* ctx) {
 // ============================================================================
 
 // CBW
-YAX86_PRIVATE InstructionResult ExecuteCbw(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteCbw(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -4314,7 +4314,7 @@ YAX86_PRIVATE InstructionResult ExecuteCbw(const InstructionContext* ctx) {
 }
 
 // CWD
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteCwd(const InstructionContext* ctx) {
   ctx->cpu->registers[kDX] =
       (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
@@ -4343,7 +4343,7 @@ ExecuteCwd(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteCmp(
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteCmp(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -4354,7 +4354,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteCmp(
 
 // CMP r/m8, r8
 // CMP r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4365,7 +4365,7 @@ ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4376,7 +4376,7 @@ ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // CMP AL, imm8
 // CMP AX, imm16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4405,7 +4405,7 @@ ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
 // Boolean AND, OR and XOR instructions
 // ============================================================================
 
-YAX86_PRIVATE void SetFlagsAfterBooleanInstruction(
+YAX86_MODULE_PRIVATE void SetFlagsAfterBooleanInstruction(
     const InstructionContext* ctx, uint32_t result) {
   SetCommonFlagsAfterInstruction(ctx, result);
   // Carry Flag (CF) should be cleared
@@ -4415,7 +4415,7 @@ YAX86_PRIVATE void SetFlagsAfterBooleanInstruction(
 }
 
 // Common logic for AND instructions.
-YAX86_PRIVATE InstructionResult ExecuteBooleanAnd(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteBooleanAnd(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
@@ -4425,7 +4425,7 @@ YAX86_PRIVATE InstructionResult ExecuteBooleanAnd(
 
 // AND r/m8, r8
 // AND r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4436,7 +4436,7 @@ ExecuteBooleanAndRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // AND r8, r/m8
 // AND r16, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4447,7 +4447,7 @@ ExecuteBooleanAndRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // AND AL, imm8
 // AND AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanAndImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4456,7 +4456,7 @@ ExecuteBooleanAndImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for OR instructions.
-YAX86_PRIVATE InstructionResult ExecuteBooleanOr(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteBooleanOr(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) | FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
@@ -4466,7 +4466,7 @@ YAX86_PRIVATE InstructionResult ExecuteBooleanOr(
 
 // OR r/m8, r8
 // OR r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4477,7 +4477,7 @@ ExecuteBooleanOrRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // OR r8, r/m8
 // OR r16, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4488,7 +4488,7 @@ ExecuteBooleanOrRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // OR AL, imm8
 // OR AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanOrImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4497,7 +4497,7 @@ ExecuteBooleanOrImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for XOR instructions.
-YAX86_PRIVATE InstructionResult ExecuteBooleanXor(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteBooleanXor(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) ^ FromOperandValue(src_value);
   WriteOperand(ctx, dest, result);
@@ -4507,7 +4507,7 @@ YAX86_PRIVATE InstructionResult ExecuteBooleanXor(
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4518,7 +4518,7 @@ ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // XOR r8, r/m8
 // XOR r16, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4529,7 +4529,7 @@ ExecuteBooleanXorRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // XOR AL, imm8
 // XOR AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4542,7 +4542,7 @@ ExecuteBooleanXorImmediateToALOrAX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for TEST instructions.
-YAX86_PRIVATE InstructionResult ExecuteTest(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteTest(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t result = FromOperand(dest) & FromOperandValue(src_value);
   SetFlagsAfterBooleanInstruction(ctx, result);
@@ -4551,7 +4551,7 @@ YAX86_PRIVATE InstructionResult ExecuteTest(
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4562,7 +4562,7 @@ ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // TEST AL, imm8
 // TEST AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4623,14 +4623,14 @@ static InstructionResult ExecuteRelativeJump(
 
 // JMP rel8
 // JMP rel16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteShortOrNearJump(const InstructionContext* ctx) {
   OperandValue offset_value = ReadImmediate(ctx);
   return ExecuteRelativeJump(ctx, offset_value);
 }
 
 // Common logic for far jumps.
-YAX86_PRIVATE InstructionResult ExecuteFarJump(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteFarJump(
     const InstructionContext* ctx, OperandValue segment, OperandValue offset) {
   ctx->cpu->registers[kCS] = FromOperandValue(segment);
   ctx->cpu->registers[kIP] = FromOperandValue(offset);
@@ -4638,7 +4638,7 @@ YAX86_PRIVATE InstructionResult ExecuteFarJump(
 }
 
 // JMP ptr16:16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteDirectFarJump(const InstructionContext* ctx) {
   OperandValue new_cs =
       (OperandValue)(((uint16_t)ctx->instruction->immediate[2]) |
@@ -4679,7 +4679,7 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
   // Masking off the high nibble handles both 0x70-0x7F and their undocumented
   // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
@@ -4693,7 +4693,7 @@ ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
 }
 
 // JL/JGNE and JNL/JGE
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
       CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF);
@@ -4702,7 +4702,7 @@ ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
 }
 
 // JLE/JG and JNLE/JG
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
   const bool is_greater =
       !CPUGetFlag(ctx->cpu, kZF) &&
@@ -4716,14 +4716,14 @@ ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
 // ============================================================================
 
 // LOOP rel8
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteLoop(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
 }
 
 // LOOPZ rel8
 // LOOPNZ rel8
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteLoopZOrNZ(const InstructionContext* ctx) {
   bool condition1 = --(ctx->cpu->registers[kCX]) != 0;
   bool condition2 =
@@ -4732,7 +4732,7 @@ ExecuteLoopZOrNZ(const InstructionContext* ctx) {
 }
 
 // JCXZ rel8
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, ctx->cpu->registers[kCX] == 0, true);
 }
@@ -4749,14 +4749,14 @@ static InstructionResult ExecuteNearCall(
 }
 
 // CALL rel16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   return ExecuteNearCall(ctx, offset);
 }
 
 // Common logic for far calls.
-YAX86_PRIVATE InstructionResult ExecuteFarCall(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteFarCall(
     const InstructionContext* ctx, OperandValue segment, OperandValue offset) {
   // Push the current CS and IP onto the stack.
   PushValue(ctx->cpu, ctx->cpu->registers[kCS]);
@@ -4765,7 +4765,7 @@ YAX86_PRIVATE InstructionResult ExecuteFarCall(
 }
 
 // CALL ptr16:16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteDirectFarCall(const InstructionContext* ctx) {
   PushValue(ctx->cpu, ctx->cpu->registers[kCS]);
   PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
@@ -4782,13 +4782,13 @@ static InstructionResult ExecuteNearReturnCommon(
 }
 
 // RET
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteNearReturn(const InstructionContext* ctx) {
   return ExecuteNearReturnCommon(ctx, 0);
 }
 
 // RET imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteNearReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteNearReturnCommon(ctx, FromOperandValue(arg_size_value));
@@ -4806,13 +4806,13 @@ static InstructionResult ExecuteFarReturnCommon(
 }
 
 // RETF
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteFarReturn(const InstructionContext* ctx) {
   return ExecuteFarReturnCommon(ctx, 0);
 }
 
 // RETF imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteFarReturnAndPop(const InstructionContext* ctx) {
   OperandValue arg_size_value = ReadImmediate(ctx);
   return ExecuteFarReturnCommon(ctx, FromOperandValue(arg_size_value));
@@ -4823,7 +4823,7 @@ ExecuteFarReturnAndPop(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for returning from an interrupt.
-YAX86_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
   OperandValue ip_value = Pop(cpu);
   cpu->registers[kIP] = FromOperandValue(ip_value);
   OperandValue cs_value = Pop(cpu);
@@ -4834,18 +4834,18 @@ YAX86_PRIVATE InstructionResult ExecuteReturnFromInterrupt(CPUState* cpu) {
 }
 
 // IRET
-YAX86_PRIVATE InstructionResult ExecuteIret(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteIret(const InstructionContext* ctx) {
   return ExecuteReturnFromInterrupt(ctx->cpu);
 }
 
 // INT 3
-YAX86_PRIVATE InstructionResult ExecuteInt3(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteInt3(const InstructionContext* ctx) {
   CPURaiseInternalInterrupt(ctx->cpu, kInterruptBreakpoint);
   return kInstructionExecuted;
 }
 
 // INTO
-YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kOF)) {
     CPURaiseInternalInterrupt(ctx->cpu, kInterruptOverflow);
   }
@@ -4853,14 +4853,14 @@ YAX86_PRIVATE InstructionResult ExecuteInto(const InstructionContext* ctx) {
 }
 
 // INT n
-YAX86_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteIntN(const InstructionContext* ctx) {
   OperandValue interrupt_number_value = ReadImmediate(ctx);
   CPURaiseInternalInterrupt(ctx->cpu, FromOperandValue(interrupt_number_value));
   return kInstructionExecuted;
 }
 
 // HLT
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteHlt(YAX86_UNUSED const InstructionContext* ctx) {
   // HLT executes successfully - it just leaves the CPU halted until an
   // interrupt wakes it. CPUTick() reports the halted state to its caller.
@@ -4890,7 +4890,7 @@ ExecuteHlt(YAX86_UNUSED const InstructionContext* ctx) {
 // ============================================================================
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
@@ -4901,7 +4901,7 @@ ExecutePushRegister(const InstructionContext* ctx) {
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
@@ -4913,7 +4913,7 @@ ExecutePopRegister(const InstructionContext* ctx) {
 }
 
 // PUSH ES/CS/SS/DS
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
@@ -4924,7 +4924,7 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
 }
 
 // POP ES/CS/SS/DS
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecutePopSegmentRegister(const InstructionContext* ctx) {
   // The segment register field is only two bits wide, which is what makes
   // 0x0F decode as POP CS on the 8086/8088. Popping into CS is legal there -
@@ -4939,21 +4939,21 @@ ExecutePopSegmentRegister(const InstructionContext* ctx) {
 }
 
 // PUSHF
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecutePushFlags(const InstructionContext* ctx) {
   PushValue(ctx->cpu, ctx->cpu->flags);
   return kInstructionExecuted;
 }
 
 // POPF
-YAX86_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecutePopFlags(const InstructionContext* ctx) {
   OperandValue value = Pop(ctx->cpu);
   ctx->cpu->flags = ToFlagsRegisterValue(FromOperandValue(value));
   return kInstructionExecuted;
 }
 
 // POP r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
   // The 8086/8088 does not decode the REG field of 0x8F at all, so every value
   // pops. Only REG 0 is documented.
@@ -4981,7 +4981,7 @@ static const OperandAddress* GetAHRegisterAddress(void) {
 }
 
 // LAHF
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
   WriteRegisterOperandByte(
       ctx->cpu, GetAHRegisterAddress(),
@@ -4990,7 +4990,7 @@ ExecuteLoadAHFromFlags(const InstructionContext* ctx) {
 }
 
 // SAHF
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteStoreAHToFlags(const InstructionContext* ctx) {
   OperandValue value =
       ReadRegisterOperandByte(ctx->cpu, GetAHRegisterAddress());
@@ -5028,7 +5028,7 @@ static const Flag kFlagsForClearAndSetInstructions[] = {
     kDF,  // CLD, STD
 };
 
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteClearOrSetFlag(const InstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
   Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
@@ -5042,7 +5042,7 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
 // ============================================================================
 
 // CMC
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteComplementCarryFlag(const InstructionContext* ctx) {
   CPUSetFlag(ctx->cpu, kCF, !CPUGetFlag(ctx->cpu, kCF));
   return kInstructionExecuted;
@@ -5056,7 +5056,7 @@ ExecuteComplementCarryFlag(const InstructionContext* ctx) {
 //
 // Undocumented on every x86 generation, but consistently implemented: AL
 // becomes 0xFF if CF is set and 0x00 otherwise. No flags are affected.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteSetALFromCarry(const InstructionContext* ctx) {
   const uint8_t value = CPUGetFlag(ctx->cpu, kCF) ? 0xFF : 0x00;
   ctx->cpu->registers[kAX] = (ctx->cpu->registers[kAX] & 0xFF00) | value;
@@ -5118,7 +5118,7 @@ static InstructionResult ExecuteIn(
 
 // IN AL, imm8
 // IN AX, imm8
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteIn(ctx, FromOperandValue(port));
@@ -5126,7 +5126,7 @@ ExecuteInImmediate(const InstructionContext* ctx) {
 
 // IN AL, DX
 // IN AX, DX
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInDX(const InstructionContext* ctx) {
   return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
 }
@@ -5165,7 +5165,7 @@ static InstructionResult ExecuteOut(
 
 // OUT imm8, AL
 // OUT imm8, AX
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteOutImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteOut(ctx, FromOperandValue(port));
@@ -5173,7 +5173,7 @@ ExecuteOutImmediate(const InstructionContext* ctx) {
 
 // OUT DX, AL
 // OUT DX, AX
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteOutDX(const InstructionContext* ctx) {
   return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }
@@ -5480,7 +5480,7 @@ static bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
 }
 
 // MOVS
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteMovs(const InstructionContext* ctx) {
   if (ExecuteMovsBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -5529,7 +5529,7 @@ static bool ExecuteStosBulkRun(const InstructionContext* ctx) {
 }
 
 // STOS
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteStos(const InstructionContext* ctx) {
   if (ExecuteStosBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -5549,7 +5549,7 @@ static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
 }
 
 // LODS
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
@@ -5589,7 +5589,7 @@ YAX86_HOT static InstructionResult ExecuteScasIteration(
 }
 
 // SCAS
-YAX86_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteScasIteration);
 }
@@ -5607,7 +5607,7 @@ static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
 }
 
 // CMPS
-YAX86_PRIVATE InstructionResult ExecuteCmps(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteCmps(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteCmpsIteration);
 }
@@ -5647,7 +5647,7 @@ static uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
 }
 
 // AAA
-YAX86_PRIVATE InstructionResult ExecuteAaa(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -5666,7 +5666,7 @@ YAX86_PRIVATE InstructionResult ExecuteAaa(const InstructionContext* ctx) {
 }
 
 // AAS
-YAX86_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
@@ -5685,7 +5685,7 @@ YAX86_PRIVATE InstructionResult ExecuteAas(const InstructionContext* ctx) {
 }
 
 // AAM
-YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   OperandValue base = ReadImmediate(ctx);
   uint16_t base_value = FromOperandValue(base);
@@ -5709,7 +5709,7 @@ YAX86_PRIVATE InstructionResult ExecuteAam(const InstructionContext* ctx) {
 }
 
 // AAD
-YAX86_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   OperandValue base = ReadImmediate(ctx);
@@ -5722,7 +5722,7 @@ YAX86_PRIVATE InstructionResult ExecuteAad(const InstructionContext* ctx) {
 }
 
 // DAA
-YAX86_PRIVATE InstructionResult ExecuteDaa(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteDaa(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   const uint8_t original_al = al;
@@ -5748,7 +5748,7 @@ YAX86_PRIVATE InstructionResult ExecuteDaa(const InstructionContext* ctx) {
 }
 
 // DAS
-YAX86_PRIVATE InstructionResult ExecuteDas(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE InstructionResult ExecuteDas(const InstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   const uint8_t original_al = al;
@@ -5811,7 +5811,7 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -5822,7 +5822,7 @@ ExecuteGroup1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -6117,7 +6117,7 @@ static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
 };
 
 // Group 2 shift / rotate by 1.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -6127,7 +6127,7 @@ ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 2 shift / rotate by CL.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
   const Group2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -6350,7 +6350,7 @@ static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
 };
 
 // Group 3 instruction handler.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup3Instruction(const InstructionContext* ctx) {
   const Group3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -6396,7 +6396,7 @@ enum {
 };
 
 // Group 4 instruction handler.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup4Instruction(const InstructionContext* ctx) {
   // On real hardware REG 2-7 decode as byte-operand forms of the Group 5
   // instructions rather than being rejected. That behavior is deliberately not
@@ -6500,7 +6500,7 @@ static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
 };
 
 // Group 5 instruction handler.
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteGroup5Instruction(const InstructionContext* ctx) {
   const Group5ExecuteInstructionFn fn =
       kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -6539,7 +6539,7 @@ ExecuteGroup5Instruction(const InstructionContext* ctx) {
 // instruction costs before it runs - cycles.c has the other half and the
 // rules these figures were derived under, which is where to read them
 // against.
-YAX86_PRIVATE const OpcodeMetadata opcode_table[256] = {
+YAX86_MODULE_PRIVATE const OpcodeMetadata opcode_table[256] = {
     // ADD r/m8, r8
     {.base_cycles = 3,
      .has_modrm = true,
@@ -8487,7 +8487,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
 // Cortex-M0+: the execute path wants registers, the core has few, and folding
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
-YAX86_HOT YAX86_NOINLINE YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_NOINLINE YAX86_MODULE_PRIVATE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the instruction handler.
@@ -8825,10 +8825,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -9909,10 +9909,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -11709,10 +11709,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -14075,10 +14075,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -15038,10 +15038,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -16163,10 +16163,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -17435,10 +17435,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -19811,10 +19811,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -20748,10 +20748,10 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_PRIVATE static
+#define YAX86_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_PRIVATE
+#define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Macro to mark a function or parameter as unused.
@@ -22198,11 +22198,11 @@ extern const uint8_t kFontCGA8x8Bitmap[256][8];
 // Read a byte from the emulated video RAM, or 0xFF if no callback is installed.
 // VRAM is aliased throughout the adapter's window, so an address past the end
 // wraps around.
-YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
+YAX86_MODULE_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
 
 // Write a byte to the emulated video RAM, ignored if no callback is installed.
 // The address wraps in the same way as for reads.
-YAX86_PRIVATE void VideoWriteVRAMByte(
+YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value);
 
 // A horizontal run of pixels on its way to the host, buffered so that the
@@ -22256,56 +22256,56 @@ static inline void VideoPixelRunPush(VideoPixelRun* run, RGB rgb) {
 // natural columns; vertical coordinates are dirty rows - a character row in
 // text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
 // modes.
-YAX86_PRIVATE void VideoInvalidateRows(
+YAX86_MODULE_PRIVATE void VideoInvalidateRows(
     VideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row);
 
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.
-YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
 
 // Whether characters carrying the blink attribute are currently visible. This
 // runs at half the cursor's rate, so the two drift in and out of phase.
-YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video);
 
 // Whether the text mode cursor is enabled in the 6845 registers.
-YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
 
 // The first scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor start register. May be out of range for the current
 // character height.
-YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
 
 // The last scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor end register. May be out of range for the current
 // character height.
-YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
 
 // The address of the first displayed character, in character units, from the
 // 6845 start address registers.
-YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
+YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
 
 // The address of the text mode cursor, in character units, from the 6845 cursor
 // address registers.
-YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
+YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
 
 // Whether the text mode cursor is currently drawn, and if so where. The offset
 // is relative to start_address in character cells, and is only written when
 // this returns true. The cursor is not drawn when it is disabled, when its
 // blink phase is off, or when it addresses a cell outside the display.
-YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
     const VideoState* video, const VideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset);
 
 // Render a dirty region of the current MDA text display. Pixels are emitted in
 // row-major order.
-YAX86_PRIVATE void MDARenderRegion(
+YAX86_MODULE_PRIVATE void MDARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
 // Render a dirty region of the current CGA display. Pixels are emitted in
 // row-major order.
-YAX86_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void CGARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
@@ -22332,7 +22332,7 @@ YAX86_PRIVATE void CGARenderRegion(
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-mda-9x14/fontlist.js
-YAX86_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
+YAX86_MODULE_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
      0x00, 0x00},  // [] (0)
     {0x00, 0x00, 0xfc, 0x102, 0x14a, 0x102, 0x102, 0x17a, 0x132, 0x102, 0xfc,
@@ -22851,7 +22851,7 @@ YAX86_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-cga-8x8/fontlist.js
-YAX86_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
+YAX86_MODULE_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},  // [] (0)
     {0x7e, 0x81, 0xa5, 0x81, 0xbd, 0x99, 0x81, 0x7e},  // [☺] (1)
     {0x7e, 0xff, 0xdb, 0xff, 0xc3, 0xe7, 0xff, 0x7e},  // [☻] (2)
@@ -23198,7 +23198,7 @@ static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
 // first makes write_pixels a row-major stream suitable for an SPI window.
-YAX86_PRIVATE void MDARenderRegion(
+YAX86_MODULE_PRIVATE void MDARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly
@@ -23476,7 +23476,7 @@ static void CGARenderGraphics640x200Region(
   }
 }
 
-YAX86_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void CGARenderRegion(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
@@ -23566,7 +23566,7 @@ const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
 // Video RAM
 // ============================================================================
 
-YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
+YAX86_MODULE_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   if (!video->config.vram) {
     return kVideoUnmappedPortValue;
   }
@@ -23582,7 +23582,7 @@ YAX86_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
   return video->config.vram[address & (vram_size - 1)];
 }
 
-YAX86_PRIVATE void VideoWriteVRAMByte(
+YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
     VideoState* video, uint32_t address, uint8_t value) {
   if (!video->config.vram) {
     return;
@@ -23680,38 +23680,38 @@ const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
 // 6845 CRT controller
 // ============================================================================
 
-YAX86_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterStartAddressH] << 8) |
          video->registers[kCRTCRegisterStartAddressL];
 }
 
-YAX86_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterCursorH] << 8) |
          video->registers[kCRTCRegisterCursorL];
 }
 
-YAX86_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
   return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
          kCRTCCursorDisabled;
 }
 
-YAX86_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
 }
 
-YAX86_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
-YAX86_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
   return (video->frames / kVideoFramesPerCursorBlinkPhase) % 2 == 0;
 }
 
-YAX86_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
   return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
-YAX86_PRIVATE bool VideoGetVisibleCursorOffset(
+YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
     const VideoState* video, const VideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset) {
   if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
@@ -23767,7 +23767,7 @@ static VideoDirtyGeometry VideoGetDirtyGeometry(const VideoState* video) {
   return geometry;
 }
 
-YAX86_PRIVATE void VideoInvalidateRows(
+YAX86_MODULE_PRIVATE void VideoInvalidateRows(
     VideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
   if (start_column >= end_column || end_column > kVideoDirtyColumns ||

@@ -64,7 +64,7 @@ static InstructionResult ExecuteAddCommon(
 }
 
 // Common logic for ADD instructions
-YAX86_PRIVATE InstructionResult ExecuteAdd(
+YAX86_MODULE_PRIVATE InstructionResult ExecuteAdd(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ false, SetFlagsAfterAdd);
@@ -72,7 +72,7 @@ YAX86_PRIVATE InstructionResult ExecuteAdd(
 
 // ADD r/m8, r8
 // ADD r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -83,7 +83,7 @@ ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-YAX86_HOT YAX86_PRIVATE InstructionResult
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -94,7 +94,7 @@ ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // ADD AL, imm8
 // ADD AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -103,7 +103,7 @@ ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for ADC instructions
-YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteAddWithCarry(
+YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);
@@ -111,7 +111,7 @@ YAX86_HOT YAX86_PRIVATE InstructionResult ExecuteAddWithCarry(
 
 // ADC r/m8, r8
 // ADC r/m16, r16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -121,7 +121,7 @@ ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -132,7 +132,7 @@ ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
 
 // ADC AL, imm8
 // ADC AX, imm16
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -141,7 +141,7 @@ ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
 }
 
 // Common logic for INC instructions
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteInc(const InstructionContext* ctx, Operand* dest) {
   OperandValue src_value = 1;
   return ExecuteAddCommon(
@@ -149,7 +149,7 @@ ExecuteInc(const InstructionContext* ctx, Operand* dest) {
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE InstructionResult
 ExecuteIncRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x40);
