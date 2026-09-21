@@ -35,10 +35,10 @@ typedef struct PITModeMetadata {
 } PITModeMetadata;
 
 // Metadata for unsupported modes (1, 4, 5).
-static const PITModeMetadata kPITUnsupportedMode = {0};
+YAX86_FILE_PRIVATE const PITModeMetadata kPITUnsupportedMode = {0};
 
 // Handles a channel reaching terminal count.
-static inline void PITChannelSetOutputState(
+YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
     PITState* pit, PITChannelState* channel, int channel_index,
     bool new_output_state) {
   // No-op if the output state is unchanged.
@@ -61,7 +61,7 @@ static inline void PITChannelSetOutputState(
 }
 
 // Tick handler for Mode 0: Interrupt on Terminal Count.
-static void PITMode0HandleTick(
+YAX86_FILE_PRIVATE void PITMode0HandleTick(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // Since this is a one-shot timer, do nothing if the counter is already 0.
   if (channel->counter == 0) {
@@ -80,17 +80,18 @@ static void PITMode0HandleTick(
 // A counter above 1 cannot reach terminal count on the next tick, so every
 // tick down to 1 is uneventful. A counter already at 0 has finished and never
 // changes again, which the caller detects as no event rather than a skip.
-static uint32_t PITMode0SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t PITMode0SkipTicks(const PITChannelState* channel) {
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 0;
 }
 
-static uint32_t PITMode0TicksUntilEvent(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+PITMode0TicksUntilEvent(const PITChannelState* channel) {
   // A one-shot that has already fired is not counting towards anything.
   return channel->counter == 0 ? kPITNoEvent : (uint32_t)channel->counter;
 }
 
 // Metadata for Mode 0: Interrupt on Terminal Count.
-static const PITModeMetadata kPITMode0Metadata = {
+YAX86_FILE_PRIVATE const PITModeMetadata kPITMode0Metadata = {
     .initial_output_state = false,
     .handle_tick = PITMode0HandleTick,
     .counter_step = 1,
@@ -99,7 +100,7 @@ static const PITModeMetadata kPITMode0Metadata = {
 };
 
 // Tick handler for Mode 2: Rate Generator.
-static void PITMode2HandleTick(
+YAX86_FILE_PRIVATE void PITMode2HandleTick(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // Decrement the counter by 1.
   --channel->counter;
@@ -121,11 +122,11 @@ static void PITMode2HandleTick(
 
 // Mode 2 acts when the counter reaches 1 and again when it reaches 0, so every
 // tick down to 2 is uneventful.
-static uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
-static YAX86_HOT uint32_t
+YAX86_FILE_PRIVATE YAX86_HOT uint32_t
 PITMode2TicksUntilEvent(const PITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
@@ -133,7 +134,7 @@ PITMode2TicksUntilEvent(const PITChannelState* channel) {
 }
 
 // Metadata for Mode 2: Rate Generator.
-static const PITModeMetadata kPITMode2Metadata = {
+YAX86_FILE_PRIVATE const PITModeMetadata kPITMode2Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode2HandleTick,
     .counter_step = 1,
@@ -142,7 +143,7 @@ static const PITModeMetadata kPITMode2Metadata = {
 };
 
 // Tick handler for Mode 3: Square Wave Generator.
-static void PITMode3HandleTick(
+YAX86_FILE_PRIVATE void PITMode3HandleTick(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // In Mode 3, the counter decrements by 2 each tick. We reach terminal count
   // when we reach either 0 or wrap around to 0xFFFF.
@@ -165,11 +166,13 @@ static void PITMode3HandleTick(
 // and at 0xFFFF from an odd one. Either way a counter of 4 or more has at
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
-static YAX86_HOT uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE YAX86_HOT uint32_t
+PITMode3SkipTicks(const PITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
-static uint32_t PITMode3TicksUntilEvent(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+PITMode3TicksUntilEvent(const PITChannelState* channel) {
   // Even counters reach 0 after counter/2 steps, odd ones reach 0xFFFF after
   // (counter+1)/2; the rounding covers both.
   const uint32_t ticks = ((uint32_t)channel->counter + 1) / 2;
@@ -177,7 +180,7 @@ static uint32_t PITMode3TicksUntilEvent(const PITChannelState* channel) {
 }
 
 // Metadata for Mode 3: Square Wave Generator.
-static const PITModeMetadata kPITMode3Metadata = {
+YAX86_FILE_PRIVATE const PITModeMetadata kPITMode3Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode3HandleTick,
     .counter_step = 2,
@@ -186,7 +189,7 @@ static const PITModeMetadata kPITMode3Metadata = {
 };
 
 // Array of mode metadata indexed by mode number.
-static const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
+YAX86_FILE_PRIVATE const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITMode0Metadata,    // Mode 0
     &kPITUnsupportedMode,  // Mode 1 (unsupported)
     &kPITMode2Metadata,    // Mode 2
@@ -206,7 +209,7 @@ YAX86_PUBLIC void PITInit(PITState* pit) {
 // Whether a channel in this mode drives its output at the reload frequency.
 // Only modes 2 and 3 oscillate; the others produce a single edge, which a
 // frequency has no way to express.
-static inline bool PITModeOscillates(uint8_t mode) {
+YAX86_FILE_PRIVATE inline bool PITModeOscillates(uint8_t mode) {
   return mode == 2 || mode == 3;
 }
 
@@ -218,7 +221,7 @@ static inline bool PITModeOscillates(uint8_t mode) {
 // The frequency describes only how often the output oscillates. Mode 2's
 // narrow output pulse sounds thinner than mode 3's square wave, which a
 // frequency cannot express.
-static inline void PITNotifySpeakerFrequency(
+YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
     PITState* pit, const PITChannelState* channel, int channel_index,
     bool has_count) {
   if (channel_index != kPITSpeakerChannel ||
@@ -235,7 +238,7 @@ static inline void PITNotifySpeakerFrequency(
 }
 
 // Helper function to load the counter and handle side effects.
-static inline void PITChannelLoadCounter(
+YAX86_FILE_PRIVATE inline void PITChannelLoadCounter(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // A reload value of 0 is treated as 0x10000 by the hardware.
   // This will wrap to 0 when assigned to the 16-bit counter.
@@ -245,7 +248,7 @@ static inline void PITChannelLoadCounter(
 }
 
 // Helper function to handle a write to a channel's data port.
-static inline void PITChannelWritePort(
+YAX86_FILE_PRIVATE inline void PITChannelWritePort(
     PITState* pit, PITChannelState* channel, int channel_index, uint8_t value) {
   switch (channel->access_mode) {
     case kPITAccessLatch:
@@ -336,7 +339,7 @@ YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
 }
 
 // Helper function to handle a read from a channel's data port.
-static inline uint8_t PITChannelReadPort(
+YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
     YAX86_UNUSED PITState* pit, PITChannelState* channel,
     YAX86_UNUSED int channel_index) {
   uint16_t value = channel->latch_active ? channel->latch : channel->counter;
@@ -415,7 +418,7 @@ YAX86_PUBLIC YAX86_HOT void PITTick(PITState* pit) {
 // applied to the counter arithmetically; every tick that could change it still
 // goes through the handler, so there is only one description of what a tick
 // does.
-static void PITAdvanceChannel(
+YAX86_FILE_PRIVATE void PITAdvanceChannel(
     PITState* pit, PITChannelState* channel, int channel_index,
     uint32_t num_ticks) {
   if (channel->mode >= kPITNumModes) {

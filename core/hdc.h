@@ -40,6 +40,9 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
+
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
 #define YAX86_UNUSED __attribute__((unused))
@@ -1803,23 +1806,23 @@ enum {
   kHDCIdentifyNumECCBytes = 4,
 };
 
-static const char* const kHDCModelNumber = "YAX86 HARD DISK";
-static const char* const kHDCSerialNumber = "YAX86-0000001";
-static const char* const kHDCFirmwareRevision = "1.0";
+YAX86_FILE_PRIVATE const char* const kHDCModelNumber = "YAX86 HARD DISK";
+YAX86_FILE_PRIVATE const char* const kHDCSerialNumber = "YAX86-0000001";
+YAX86_FILE_PRIVATE const char* const kHDCFirmwareRevision = "1.0";
 
 // Returns the drive the drive/head register currently selects.
-static HDCDriveState* HDCSelectedDrive(HDCState* hdc) {
+YAX86_FILE_PRIVATE HDCDriveState* HDCSelectedDrive(HDCState* hdc) {
   return &hdc->drives[(hdc->drive_head & kHDCDriveHeadDriveSelect) ? 1 : 0];
 }
 
 // Completes a command successfully.
-static void HDCFinishCommand(HDCState* hdc) {
+YAX86_FILE_PRIVATE void HDCFinishCommand(HDCState* hdc) {
   hdc->error = 0;
   hdc->status = kHDCStatusIdle;
 }
 
 // Fails a command, leaving the given bits in the error register.
-static void HDCFailCommand(HDCState* hdc, uint8_t error) {
+YAX86_FILE_PRIVATE void HDCFailCommand(HDCState* hdc, uint8_t error) {
   hdc->error = error;
   hdc->status = kHDCStatusIdle | kHDCStatusError;
   hdc->transfer = kHDCTransferNone;
@@ -1827,7 +1830,7 @@ static void HDCFailCommand(HDCState* hdc, uint8_t error) {
 }
 
 // Total number of sectors on a drive.
-static uint32_t HDCDriveNumSectors(const HDCDriveState* drive) {
+YAX86_FILE_PRIVATE uint32_t HDCDriveNumSectors(const HDCDriveState* drive) {
   return (uint32_t)drive->geometry.num_cylinders *
          (uint32_t)drive->geometry.num_heads *
          (uint32_t)drive->geometry.num_sectors_per_track;
@@ -1841,7 +1844,7 @@ static uint32_t HDCDriveNumSectors(const HDCDriveState* drive) {
 // the geometry the guest asked for with Initialize Device Parameters rather
 // than the physical geometry, which is what lets a guest address the drive
 // with a geometry of its own choosing.
-static bool HDCComputeSectorNumber(
+YAX86_FILE_PRIVATE bool HDCComputeSectorNumber(
     HDCState* hdc, const HDCDriveState* drive, uint32_t* sector_number) {
   uint32_t lba;
   if (hdc->drive_head & kHDCDriveHeadLBA) {
@@ -1871,7 +1874,7 @@ static bool HDCComputeSectorNumber(
 }
 
 // Writes a 16-bit word into the Identify Device block, which is little endian.
-static void HDCWriteIdentifyWord(
+YAX86_FILE_PRIVATE void HDCWriteIdentifyWord(
     HDCState* hdc, uint16_t word_index, uint16_t value) {
   hdc->sector_buffer[word_index * 2] = (uint8_t)(value & 0xFF);
   hdc->sector_buffer[word_index * 2 + 1] = (uint8_t)(value >> 8);
@@ -1880,7 +1883,7 @@ static void HDCWriteIdentifyWord(
 // Writes a space padded string into the Identify Device block. ATA strings
 // are byte swapped within each word, so the first character of a pair lands in
 // the high byte.
-static void HDCWriteIdentifyString(
+YAX86_FILE_PRIVATE void HDCWriteIdentifyString(
     HDCState* hdc, uint16_t word_index, const char* text, uint16_t num_words) {
   const char* next = text;
   for (uint16_t i = 0; i < num_words; ++i) {
@@ -1893,7 +1896,8 @@ static void HDCWriteIdentifyString(
 }
 
 // Fills the sector buffer with the drive's Identify Device block.
-static void HDCBuildIdentifyBlock(HDCState* hdc, const HDCDriveState* drive) {
+YAX86_FILE_PRIVATE void HDCBuildIdentifyBlock(
+    HDCState* hdc, const HDCDriveState* drive) {
   for (uint16_t i = 0; i < kHDCSectorSize; ++i) {
     hdc->sector_buffer[i] = 0;
   }
@@ -1979,7 +1983,7 @@ static void HDCBuildIdentifyBlock(HDCState* hdc, const HDCDriveState* drive) {
 }
 
 // Opens a transfer through the data register.
-static void HDCStartTransfer(
+YAX86_FILE_PRIVATE void HDCStartTransfer(
     HDCState* hdc, HDCTransfer transfer, uint32_t offset,
     uint16_t num_sectors) {
   hdc->transfer = transfer;
@@ -1993,7 +1997,7 @@ static void HDCStartTransfer(
 
 // Advances past the byte just transferred, moving on to the next sector or
 // ending the transfer as needed.
-static void HDCAdvanceTransfer(HDCState* hdc) {
+YAX86_FILE_PRIVATE void HDCAdvanceTransfer(HDCState* hdc) {
   ++hdc->transfer_byte_index;
   if (hdc->transfer_byte_index < kHDCSectorSize) {
     return;
@@ -2018,7 +2022,8 @@ static void HDCAdvanceTransfer(HDCState* hdc) {
   }
 }
 
-static void HDCHandleIdentifyDevice(HDCState* hdc, HDCDriveState* drive) {
+YAX86_FILE_PRIVATE void HDCHandleIdentifyDevice(
+    HDCState* hdc, HDCDriveState* drive) {
   HDCBuildIdentifyBlock(hdc, drive);
   HDCStartTransfer(hdc, kHDCTransferIdentify, 0, 1);
 }
@@ -2028,7 +2033,7 @@ static void HDCHandleIdentifyDevice(HDCState* hdc, HDCDriveState* drive) {
 // byte callback has no way to refuse an address, so a command that would walk
 // off the end has to fail before it moves anything rather than part way
 // through.
-static bool HDCComputeSectorRange(
+YAX86_FILE_PRIVATE bool HDCComputeSectorRange(
     HDCState* hdc, const HDCDriveState* drive, uint32_t* sector_number,
     uint16_t* num_sectors) {
   if (!HDCComputeSectorNumber(hdc, drive, sector_number)) {
@@ -2042,7 +2047,7 @@ static bool HDCComputeSectorRange(
 // Sets up a read or write of one or more sectors starting at the address in
 // the task file. A sector count of zero means 256 sectors, which is how ATA
 // encodes the largest transfer a single command can make.
-static void HDCHandleReadWriteSectors(
+YAX86_FILE_PRIVATE void HDCHandleReadWriteSectors(
     HDCState* hdc, HDCDriveState* drive, HDCTransfer transfer) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
@@ -2053,7 +2058,7 @@ static void HDCHandleReadWriteSectors(
   HDCStartTransfer(hdc, transfer, sector_number * kHDCSectorSize, num_sectors);
 }
 
-static void HDCHandleInitializeDeviceParameters(
+YAX86_FILE_PRIVATE void HDCHandleInitializeDeviceParameters(
     HDCState* hdc, HDCDriveState* drive) {
   const uint8_t num_heads = (hdc->drive_head & kHDCDriveHeadHeadMask) + 1;
   const uint8_t num_sectors_per_track = hdc->sector_count;
@@ -2073,7 +2078,8 @@ static void HDCHandleInitializeDeviceParameters(
 // Checks that the addressed sectors exist without transferring them. The
 // sector count counts here just as it does for a real transfer, so a verify
 // that runs off the end of the drive fails rather than reporting success.
-static void HDCHandleReadVerifySectors(HDCState* hdc, HDCDriveState* drive) {
+YAX86_FILE_PRIVATE void HDCHandleReadVerifySectors(
+    HDCState* hdc, HDCDriveState* drive) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
   if (!HDCComputeSectorRange(hdc, drive, &sector_number, &num_sectors)) {
@@ -2083,7 +2089,7 @@ static void HDCHandleReadVerifySectors(HDCState* hdc, HDCDriveState* drive) {
   HDCFinishCommand(hdc);
 }
 
-static void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
+YAX86_FILE_PRIVATE void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
   HDCDriveState* drive = HDCSelectedDrive(hdc);
   if (!drive->present) {
     // An absent drive never answers, so the command simply goes unheard. The
@@ -2146,7 +2152,7 @@ static void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
 }
 
 // Returns the byte at the current transfer position, without advancing.
-static uint8_t HDCReadTransferByte(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadTransferByte(HDCState* hdc) {
   switch (hdc->transfer) {
     case kHDCTransferIdentify:
       return hdc->sector_buffer[hdc->transfer_byte_index];
@@ -2170,7 +2176,7 @@ static uint8_t HDCReadTransferByte(HDCState* hdc) {
 // the high half in its latch for the guest to collect from the other port.
 // Reading the two ports is therefore not the same thing, and the card consumes
 // a word per low byte read rather than a byte per read of either port.
-static uint8_t HDCReadDataRegister(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadDataRegister(HDCState* hdc) {
   if (!(hdc->status & kHDCStatusDataRequest)) {
     YAX86_HDC_LOG(kLogLevelWarn, "data register read with no transfer active");
     return 0;
@@ -2196,12 +2202,12 @@ static uint8_t HDCReadDataRegister(HDCState* hdc) {
 // port first returns whatever the previous word left behind. Nothing here
 // touches the transfer, which is what keeps a guest that reads the ports out
 // of order from sliding the transfer out of step.
-static uint8_t HDCReadDataHighRegister(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadDataHighRegister(HDCState* hdc) {
   return hdc->data_high_latch;
 }
 
 // Writes one byte of the drive's image.
-static void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
+YAX86_FILE_PRIVATE void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
   if (hdc->config.write_image_byte) {
     hdc->config.write_image_byte(
         hdc->config.context, hdc->transfer_drive,
@@ -2219,7 +2225,7 @@ static void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
 // the whole word, so the guest writes the high byte to the latch first and the
 // write of the low byte is what commits the pair. Streaming bytes in the order
 // they arrive would put every word on the disk back to front.
-static void HDCWriteDataRegister(
+YAX86_FILE_PRIVATE void HDCWriteDataRegister(
     HDCState* hdc, bool is_high_byte, uint8_t value) {
   if (!(hdc->status & kHDCStatusDataRequest) ||
       hdc->transfer != kHDCTransferWrite) {
@@ -2241,12 +2247,13 @@ static void HDCWriteDataRegister(
 // What the status and alternate status registers read back as. An empty drive
 // slot leaves the bus undriven, which the guest reads as a drive that is never
 // ready.
-static uint8_t HDCReadStatusRegister(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadStatusRegister(HDCState* hdc) {
   return HDCSelectedDrive(hdc)->present ? hdc->status : 0;
 }
 
 // Handles a write to the device control register.
-static void HDCWriteDeviceControlRegister(HDCState* hdc, uint8_t value) {
+YAX86_FILE_PRIVATE void HDCWriteDeviceControlRegister(
+    HDCState* hdc, uint8_t value) {
   // A software reset abandons whatever the drive was doing, which is the point
   // of it: it is how a guest recovers a transfer it cannot finish. Only the
   // assertion matters, not the release - the reset completes inside this port

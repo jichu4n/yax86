@@ -11,7 +11,8 @@ YAX86_PUBLIC void DMAInit(DMAState* dma) {
 }
 
 // Helper to read a 16-bit value byte-by-byte using the flip-flop.
-static inline uint8_t DMAReadRegisterByte(DMAState* dma, uint16_t value) {
+YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
+    DMAState* dma, uint16_t value) {
   uint8_t byte;
   if (dma->rw_byte == kDMARegisterMSB) {
     byte = (value >> 8) & 0xFF;
@@ -57,7 +58,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
 
 // Helper to write a 16-bit value byte-by-byte using the flip-flop.
 // Note: Writes update both the 'base' and 'current' registers.
-static inline void DMAWriteRegisterByte(
+YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
     DMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
   if (dma->rw_byte == kDMARegisterMSB) {
     // Second write sets the high byte.

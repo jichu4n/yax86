@@ -11,13 +11,14 @@
 // ============================================================================
 
 // Get the repetition prefix of a string instruction, if any.
-static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE inline uint8_t GetRepetitionPrefix(
+    const InstructionContext* ctx) {
   return ctx->instruction->repetition_prefix;
 }
 
 // Get the source operand for string instructions. Typically DS:SI but can be
 // overridden by a segment override prefix.
-static void GetStringSourceOperand(
+YAX86_FILE_PRIVATE void GetStringSourceOperand(
     const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
@@ -30,8 +31,8 @@ static void GetStringSourceOperand(
 }
 
 // Get the destination operand address for string instructions. Always ES:DI.
-static OperandAddress GetStringDestinationOperandAddress(
-    const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE OperandAddress
+GetStringDestinationOperandAddress(const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kES,
@@ -41,7 +42,7 @@ static OperandAddress GetStringDestinationOperandAddress(
 }
 
 // Get the destination operand for string instructions. Always ES:DI.
-static void GetStringDestinationOperand(
+YAX86_FILE_PRIVATE void GetStringDestinationOperand(
     const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = GetStringDestinationOperandAddress(ctx);
   operand->address = address;
@@ -49,7 +50,8 @@ static void GetStringDestinationOperand(
 }
 
 // Update the source address register (SI) after a string operation.
-static void UpdateStringSourceAddress(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE void UpdateStringSourceAddress(
+    const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -58,7 +60,8 @@ static void UpdateStringSourceAddress(const InstructionContext* ctx) {
 }
 
 // Update the destination address register (DI) after a string operation.
-static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE void UpdateStringDestinationAddress(
+    const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -116,7 +119,7 @@ typedef struct BulkStringRun {
 // would not reach - the element path recomputes the address from the wrapped
 // offset every iteration. And a run that leaves the window has to go through
 // the memory map for the part outside it.
-static bool IsBulkRunAddressable(
+YAX86_FILE_PRIVATE bool IsBulkRunAddressable(
     uint32_t window_end, uint16_t offset, uint32_t linear, uint16_t count,
     uint8_t element_size, bool backwards) {
   // Distance from the first element to the last, which is one element short of
@@ -134,7 +137,7 @@ static bool IsBulkRunAddressable(
 }
 
 // Works out whether a repeat can run in bulk, and describes it if so.
-static bool PlanBulkStringRun(
+YAX86_FILE_PRIVATE bool PlanBulkStringRun(
     const InstructionContext* ctx, bool has_source, BulkStringRun* run) {
   const uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
@@ -188,7 +191,8 @@ static bool PlanBulkStringRun(
 // to change a particular number of times, so one report per page says the same
 // thing - and leaves the counter coming back round after 256 runs rather than
 // after 256 bytes, which is a flush avoided rather than a flush missed.
-static void NotifyBulkStringWrite(CPUState* cpu, const BulkStringRun* run) {
+YAX86_FILE_PRIVATE void NotifyBulkStringWrite(
+    CPUState* cpu, const BulkStringRun* run) {
   const uint32_t reach = (uint32_t)(run->count - 1) * run->element_size;
   const uint32_t low =
       run->step < 0 ? run->destination - reach : run->destination;
@@ -201,7 +205,7 @@ static void NotifyBulkStringWrite(CPUState* cpu, const BulkStringRun* run) {
 
 // Leaves CX, SI and DI where the element path would have left them, and
 // charges what it would have charged.
-static void FinishBulkStringRun(
+YAX86_FILE_PRIVATE void FinishBulkStringRun(
     CPUState* cpu, const BulkStringRun* run, uint8_t bus_bytes_per_element,
     bool has_source) {
   const int32_t total = run->step * (int32_t)run->count;
@@ -224,7 +228,7 @@ static void FinishBulkStringRun(
 // test and the 8086/8088 does not tell the two prefixes apart here: 0xF2
 // repeats exactly as 0xF3 does, counting CX down to zero. Only the comparison
 // string instructions read the prefix as a condition.
-static InstructionResult ExecuteStringInstructionWithREPPrefix(
+YAX86_FILE_PRIVATE InstructionResult ExecuteStringInstructionWithREPPrefix(
     const InstructionContext* ctx,
     InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -242,7 +246,8 @@ static InstructionResult ExecuteStringInstructionWithREPPrefix(
 }
 
 // Single MOVS iteration.
-static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteMovsIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringSourceOperand(ctx, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
@@ -254,7 +259,7 @@ static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
 
 // A whole repeated MOVS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-static bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
   BulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/true, &run)) {
     return false;
@@ -299,7 +304,8 @@ ExecuteMovs(const InstructionContext* ctx) {
 }
 
 // Single STOS iteration.
-static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteStosIteration(const InstructionContext* ctx) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
@@ -310,7 +316,7 @@ static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
 
 // A whole repeated STOS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-static bool ExecuteStosBulkRun(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE bool ExecuteStosBulkRun(const InstructionContext* ctx) {
   BulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/false, &run)) {
     return false;
@@ -348,7 +354,8 @@ ExecuteStos(const InstructionContext* ctx) {
 }
 
 // Single LODS iteration.
-static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteLodsIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringSourceOperand(ctx, &src);
   Operand dest;
@@ -365,7 +372,8 @@ ExecuteLods(const InstructionContext* ctx) {
 }
 
 // Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteStringInstructionWithREPZOrRepNZPrefix(
     const InstructionContext* ctx,
     InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -387,7 +395,7 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-static YAX86_HOT InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
 ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringDestinationOperand(ctx, &src);
@@ -405,7 +413,8 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx
 }
 
 // Single CMPS iteration.
-static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteCmpsIteration(const InstructionContext* ctx) {
   Operand dest;
   GetStringSourceOperand(ctx, &dest);
   Operand src;

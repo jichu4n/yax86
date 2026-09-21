@@ -40,6 +40,9 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
+
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
 #define YAX86_UNUSED __attribute__((unused))
@@ -856,7 +859,7 @@ YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard) {
 }
 
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
-static inline void KeyboardSendScancode(
+YAX86_FILE_PRIVATE inline void KeyboardSendScancode(
     KeyboardState* keyboard, uint8_t scancode) {
   if (keyboard->config.send_scancode) {
     keyboard->config.send_scancode(keyboard->config.context, scancode);
@@ -868,7 +871,8 @@ static inline void KeyboardSendScancode(
 }
 
 // Helper to send the next scancode in the buffer if available.
-static inline void KeyboardSendNextScancode(KeyboardState* keyboard) {
+YAX86_FILE_PRIVATE inline void KeyboardSendNextScancode(
+    KeyboardState* keyboard) {
   // Can only send in state [0, 1], i.e. enable_clear = false clock_low = true
   if (!(keyboard->enable_clear == false && keyboard->clock_low == true)) {
     return;

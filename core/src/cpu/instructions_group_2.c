@@ -21,7 +21,7 @@ typedef InstructionResult (*Group2ExecuteInstructionFn)(
 // Overflow after a left shift or rotate: the bit shifted out of the top
 // differs from the sign bit left behind, which is to say the last pass changed
 // the sign of the value.
-static void SetOverflowFlagAfterLeftShift(
+YAX86_FILE_PRIVATE void SetOverflowFlagAfterLeftShift(
     const InstructionContext* ctx, uint32_t result, bool carry) {
   const bool result_sign = (result & kSignBit[ctx->metadata->width]) != 0;
   CPUSetFlag(ctx->cpu, kOF, carry != result_sign);
@@ -30,7 +30,7 @@ static void SetOverflowFlagAfterLeftShift(
 // Overflow after a right rotate: the top two bits of the result differ. The
 // bit rotated into the top came from the bottom, so this again says the last
 // pass changed the sign of the value.
-static void SetOverflowFlagAfterRightRotate(
+YAX86_FILE_PRIVATE void SetOverflowFlagAfterRightRotate(
     const InstructionContext* ctx, uint32_t result) {
   const uint32_t sign_bit = kSignBit[ctx->metadata->width];
   const bool result_sign = (result & sign_bit) != 0;
@@ -44,7 +44,8 @@ static void SetOverflowFlagAfterRightRotate(
 // fall out of it, so every larger count behaves alike. Clamping to just past
 // the width keeps that true while holding the shifts below the width of the
 // intermediate they are computed in, where C leaves them undefined.
-static uint8_t ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
+YAX86_FILE_PRIVATE uint8_t
+ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
   const uint8_t limit = kNumBits[ctx->metadata->width] + 1;
   return count > limit ? limit : count;
 }
@@ -53,8 +54,8 @@ static uint8_t ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
 // SHL r/m16, 1
 // SHL r/m8, CL
 // SHL r/m16, CL
-static InstructionResult ExecuteGroup2Shl(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Shl(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -75,7 +76,7 @@ static InstructionResult ExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-static YAX86_HOT InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
 ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -99,8 +100,8 @@ ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // SAR r/m16, 1
 // SAR r/m8, CL
 // SAR r/m16, CL
-static InstructionResult ExecuteGroup2Sar(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Sar(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -122,8 +123,8 @@ static InstructionResult ExecuteGroup2Sar(
 // ROL r/m16, 1
 // ROL r/m8, CL
 // ROL r/m16, CL
-static InstructionResult ExecuteGroup2Rol(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rol(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -146,8 +147,8 @@ static InstructionResult ExecuteGroup2Rol(
 // ROR r/m16, 1
 // ROR r/m8, CL
 // ROR r/m16, CL
-static InstructionResult ExecuteGroup2Ror(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Ror(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -170,8 +171,8 @@ static InstructionResult ExecuteGroup2Ror(
 // RCL r/m16, 1
 // RCL r/m8, CL
 // RCL r/m16, CL
-static InstructionResult ExecuteGroup2Rcl(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rcl(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -202,8 +203,8 @@ static InstructionResult ExecuteGroup2Rcl(
 // RCR r/m16, 1
 // RCR r/m8, CL
 // RCR r/m16, CL
-static InstructionResult ExecuteGroup2Rcr(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rcr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -242,8 +243,8 @@ static InstructionResult ExecuteGroup2Rcr(
 // Nothing an IBM PC/XT runs uses this, but leaving REG 6 aliased to SAL would
 // silently give a different answer than the hardware for the same encoding,
 // and the operation is a single store.
-static InstructionResult ExecuteGroup2Setmo(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Setmo(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -257,15 +258,16 @@ static InstructionResult ExecuteGroup2Setmo(
   return kInstructionExecuted;
 }
 
-static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
-    ExecuteGroup2Rol,    // 0 - ROL
-    ExecuteGroup2Ror,    // 1 - ROR
-    ExecuteGroup2Rcl,    // 2 - RCL
-    ExecuteGroup2Rcr,    // 3 - RCR
-    ExecuteGroup2Shl,    // 4 - SHL
-    ExecuteGroup2Shr,    // 5 - SHR
-    ExecuteGroup2Setmo,  // 6 - SETMO / SETMOC
-    ExecuteGroup2Sar,    // 7 - SAR
+YAX86_FILE_PRIVATE const Group2ExecuteInstructionFn
+    kGroup2ExecuteInstructionFns[] = {
+        ExecuteGroup2Rol,    // 0 - ROL
+        ExecuteGroup2Ror,    // 1 - ROR
+        ExecuteGroup2Rcl,    // 2 - RCL
+        ExecuteGroup2Rcr,    // 3 - RCR
+        ExecuteGroup2Shl,    // 4 - SHL
+        ExecuteGroup2Shr,    // 5 - SHR
+        ExecuteGroup2Setmo,  // 6 - SETMO / SETMOC
+        ExecuteGroup2Sar,    // 7 - SAR
 };
 
 // Group 2 shift / rotate by 1.

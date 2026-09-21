@@ -40,6 +40,9 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
+
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
 #define YAX86_UNUSED __attribute__((unused))
@@ -1073,14 +1076,14 @@ typedef struct FDCCommandMetadata {
 
 // Helper to raise an IRQ6 if the callback is set and interrupts are enabled in
 // DOR.
-static inline void FDCRaiseIRQ6(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCRaiseIRQ6(FDCState* fdc) {
   if (fdc->config.raise_irq6 && (fdc->dor & kFDCDORInterruptEnable)) {
     fdc->config.raise_irq6(fdc->config.context);
   }
 }
 
 // Transition into execution phase.
-static inline void FDCStartCommandExecution(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCStartCommandExecution(FDCState* fdc) {
   YAX86_FDC_LOG(
       kLogLevelDebug, "executing command %02X with %u parameter bytes",
       fdc->current_command ? fdc->current_command->opcode : 0,
@@ -1090,7 +1093,7 @@ static inline void FDCStartCommandExecution(FDCState* fdc) {
 }
 
 // Transition into result phase after command execution.
-static inline void FDCFinishCommandExecution(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCFinishCommandExecution(FDCState* fdc) {
   YAX86_FDC_LOG(
       kLogLevelDebug, "command finished with %u result bytes, st0 %02X",
       (unsigned)FDCResultBufferLength(&fdc->result_buffer),
@@ -1108,7 +1111,7 @@ static inline void FDCFinishCommandExecution(FDCState* fdc) {
 }
 
 // Helper to perform a seek operation (for Seek and Recalibrate).
-static void FDCPerformSeek(
+YAX86_FILE_PRIVATE void FDCPerformSeek(
     FDCState* fdc, uint8_t drive_index, uint8_t target_track) {
   FDCDriveState* drive = &fdc->drives[drive_index];
 
@@ -1146,7 +1149,7 @@ static void FDCPerformSeek(
 // (Head 1, the bottom side) before moving to the next track.
 // In other words, the layout is an array of
 // [num_tracks][num_heads][num_sectors_per_track].
-static inline uint32_t FDCComputeOffset(
+YAX86_FILE_PRIVATE inline uint32_t FDCComputeOffset(
     FDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
     uint16_t sector_offset) {
   if (head >= format.num_heads || track >= format.num_tracks || sector == 0 ||
@@ -1170,7 +1173,7 @@ static inline uint32_t FDCComputeOffset(
 }
 
 // Helper to finish a read/write command.
-static void FDCFinishReadWrite(
+YAX86_FILE_PRIVATE void FDCFinishReadWrite(
     FDCState* fdc, uint8_t st0, uint8_t st1, uint8_t st2) {
   FDCResultBufferAppend(&fdc->result_buffer, &st0);
   FDCResultBufferAppend(&fdc->result_buffer, &st1);
@@ -1185,7 +1188,7 @@ static void FDCFinishReadWrite(
 }
 
 // Handler for Write Data command.
-static void FDCHandleWriteData(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -1325,7 +1328,7 @@ static void FDCHandleWriteData(FDCState* fdc) {
 }
 
 // Handler for Read Data command.
-static YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
+YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -1467,14 +1470,14 @@ static YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
 }
 
 // Handler for Recalibrate command.
-static void FDCHandleRecalibrate(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleRecalibrate(FDCState* fdc) {
   // Recalibrate command has one parameter byte: drive number (0-3).
   uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
   FDCPerformSeek(fdc, drive_index, 0);
 }
 
 // Handler for Seek command.
-static void FDCHandleSeek(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSeek(FDCState* fdc) {
   // Seek command parameters:
   // Byte 1: Drive number (0-3) and Head address (ignored for seek).
   // Byte 2: New Cylinder Number (NCN).
@@ -1484,14 +1487,14 @@ static void FDCHandleSeek(FDCState* fdc) {
 }
 
 // Handler for Specify command.
-static void FDCHandleSpecify(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSpecify(FDCState* fdc) {
   // We don't currently support changing timings or non-DMA mode, so we just
   // ignore the parameters.
   FDCFinishCommandExecution(fdc);
 }
 
 // Handler for Sense Interrupt Status command.
-static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSenseInterruptStatus(FDCState* fdc) {
   // Check for any pending interrupts.
   for (int i = 0; i < kFDCNumDrives; ++i) {
     FDCDriveState* drive = &fdc->drives[i];
@@ -1517,7 +1520,7 @@ static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
 
 // List of supported FDC commands.
 // The opcodes here represent the base 5-bit command.
-static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
+YAX86_FILE_PRIVATE const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Read a Track
     {.opcode = kFDCCmdReadTrack, .num_param_bytes = 8, .handler = NULL},
     // Specify
@@ -1567,7 +1570,8 @@ YAX86_PUBLIC void FDCInit(YAX86_UNUSED FDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
-static const FDCCommandMetadata* FDCFindCommandMetadata(uint8_t opcode) {
+YAX86_FILE_PRIVATE const FDCCommandMetadata* FDCFindCommandMetadata(
+    uint8_t opcode) {
   for (size_t i = 0;
        i < sizeof(kFDCCommandMetadataTable) / sizeof(FDCCommandMetadata); ++i) {
     if (kFDCCommandMetadataTable[i].opcode == opcode) {
@@ -1577,7 +1581,7 @@ static const FDCCommandMetadata* FDCFindCommandMetadata(uint8_t opcode) {
   return NULL;
 }
 
-static uint8_t FDCReadMSRPort(FDCState* fdc) {
+YAX86_FILE_PRIVATE uint8_t FDCReadMSRPort(FDCState* fdc) {
   uint8_t msr = 0;
   switch (fdc->phase) {
     case kFDCPhaseIdle:
@@ -1603,7 +1607,7 @@ static uint8_t FDCReadMSRPort(FDCState* fdc) {
   return msr;
 }
 
-static uint8_t FDCReadDataPort(FDCState* fdc) {
+YAX86_FILE_PRIVATE uint8_t FDCReadDataPort(FDCState* fdc) {
   switch (fdc->phase) {
     case kFDCPhaseExecution:
       // DMA or Polling read during execution.
@@ -1645,7 +1649,7 @@ YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
   }
 }
 
-static void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
+YAX86_FILE_PRIVATE void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
   uint8_t old_dor = fdc->dor;
   fdc->dor = value;
 
@@ -1673,7 +1677,7 @@ static void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
   }
 }
 
-static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
+YAX86_FILE_PRIVATE void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
   switch (fdc->phase) {
     case kFDCPhaseIdle: {
       // This is the first byte of a new command.

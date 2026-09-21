@@ -13,7 +13,7 @@
 // This function sets ZF, SF, PF, OF, AF. It does NOT affect CF.
 // - OF is for the full operation op1 - (op2 + did_borrow).
 // - AF is for the full operation op1 - (op2 + did_borrow).
-static void SetFlagsAfterDec(
+YAX86_FILE_PRIVATE void SetFlagsAfterDec(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_borrow) {
   SetCommonFlagsAfterInstruction(ctx, result);
@@ -58,7 +58,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-static YAX86_HOT InstructionResult ExecuteSubCommon(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);

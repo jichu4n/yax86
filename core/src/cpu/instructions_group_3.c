@@ -14,24 +14,24 @@ typedef InstructionResult (*Group3ExecuteInstructionFn)(
 
 // TEST r/m8, imm8
 // TEST r/m16, imm16
-static InstructionResult ExecuteGroup3Test(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup3Test(const InstructionContext* ctx, Operand* op) {
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, op, src_value);
 }
 
 // NOT r/m8
 // NOT r/m16
-static InstructionResult ExecuteNot(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNot(const InstructionContext* ctx, Operand* op) {
   WriteOperand(ctx, op, ~FromOperand(op));
   return kInstructionExecuted;
 }
 
 // NEG r/m8
 // NEG r/m16
-static InstructionResult ExecuteNeg(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNeg(const InstructionContext* ctx, Operand* op) {
   int32_t op_value = FromSignedOperand(ctx->metadata->width, op);
   int32_t result_value = -op_value;
   WriteOperand(ctx, op, result_value);
@@ -41,14 +41,19 @@ static InstructionResult ExecuteNeg(
 
 // Table of where to store the higher half of the result for
 // MUL, IMUL, DIV, and IDIV instructions, indexed by the data width.
-static const OperandAddress kMulDivResultHighHalfAddress[kNumWidths] = {
-    {.type = kOperandAddressTypeRegister, .register_index = kAX, .offset = 8},
-    {.type = kOperandAddressTypeRegister, .register_index = kDX, .offset = 0},
+YAX86_FILE_PRIVATE const OperandAddress
+    kMulDivResultHighHalfAddress[kNumWidths] = {
+        {.type = kOperandAddressTypeRegister,
+         .register_index = kAX,
+         .offset = 8},
+        {.type = kOperandAddressTypeRegister,
+         .register_index = kDX,
+         .offset = 0},
 };
 
 // Number of bits to shift to extract the high part of the result of MUL, IMUL,
 // DIV, and IDIV instructions, indexed by the data width.
-static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
+YAX86_FILE_PRIVATE const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
     8,   // kByte
     16,  // kWord
 };
@@ -58,7 +63,7 @@ static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
 // a time in microcode - so unlike everything else in the cycle table they are
 // worth charging individually. The published figures are ranges that depend on
 // the operands; these are the low end of each.
-static const uint16_t kMulDivCycles[kNumWidths][2] = {
+YAX86_FILE_PRIVATE const uint16_t kMulDivCycles[kNumWidths][2] = {
     // kByte: unsigned, signed
     {70, 80},
     // kWord: unsigned, signed
@@ -66,7 +71,7 @@ static const uint16_t kMulDivCycles[kNumWidths][2] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-static InstructionResult ExecuteMulCommon(
+YAX86_FILE_PRIVATE InstructionResult ExecuteMulCommon(
     const InstructionContext* ctx, Operand* dest, uint32_t result,
     bool overflow) {
   Width width = ctx->metadata->width;
@@ -87,8 +92,8 @@ static InstructionResult ExecuteMulCommon(
 
 // MUL r/m8
 // MUL r/m16
-static InstructionResult ExecuteMul(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteMul(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -99,8 +104,8 @@ static InstructionResult ExecuteMul(
 
 // IMUL r/m8
 // IMUL r/m16
-static InstructionResult ExecuteImul(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteImul(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -113,7 +118,7 @@ static InstructionResult ExecuteImul(
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-static InstructionResult WriteDivResult(
+YAX86_FILE_PRIVATE InstructionResult WriteDivResult(
     const InstructionContext* ctx, Operand* dest, uint32_t quotient,
     uint32_t remainder) {
   WriteOperand(ctx, dest, quotient);
@@ -124,8 +129,8 @@ static InstructionResult WriteDivResult(
 
 // DIV r/m8
 // DIV r/m16
-static InstructionResult ExecuteDiv(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
@@ -152,8 +157,8 @@ static InstructionResult ExecuteDiv(
 
 // IDIV r/m8
 // IDIV r/m16
-static InstructionResult ExecuteIdiv(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   int32_t divisor = FromSignedOperand(ctx->metadata->width, op);
   if (divisor == 0) {
@@ -185,17 +190,18 @@ static InstructionResult ExecuteIdiv(
 
 // Group 3 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte and data width.
-static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
-    ExecuteGroup3Test,  // 0 - TEST
-    // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not decode
-    // bit 0 of the REG field for this group.
-    ExecuteGroup3Test,  // 1 - TEST
-    ExecuteNot,         // 2 - NOT
-    ExecuteNeg,         // 3 - NEG
-    ExecuteMul,         // 4 - MUL
-    ExecuteImul,        // 5 - IMUL
-    ExecuteDiv,         // 6 - DIV
-    ExecuteIdiv,        // 7 - IDIV
+YAX86_FILE_PRIVATE const Group3ExecuteInstructionFn
+    kGroup3ExecuteInstructionFns[] = {
+        ExecuteGroup3Test,  // 0 - TEST
+        // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not
+        // decode bit 0 of the REG field for this group.
+        ExecuteGroup3Test,  // 1 - TEST
+        ExecuteNot,         // 2 - NOT
+        ExecuteNeg,         // 3 - NEG
+        ExecuteMul,         // 4 - MUL
+        ExecuteImul,        // 5 - IMUL
+        ExecuteDiv,         // 6 - DIV
+        ExecuteIdiv,        // 7 - IDIV
 };
 
 // Group 3 instruction handler.

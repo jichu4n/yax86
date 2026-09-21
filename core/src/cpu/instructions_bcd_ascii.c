@@ -18,7 +18,7 @@
 // entry. That is not what Intel's published pseudocode says, which uses 0x99
 // throughout, but it is what the 8086/8088 does - and with AL between 0x9A and
 // 0x9F it is the difference between adjusting and not.
-static uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
+YAX86_FILE_PRIVATE uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
   return auxiliary_carry ? 0x9F : 0x99;
 }
 

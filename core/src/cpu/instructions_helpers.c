@@ -32,7 +32,7 @@ YAX86_MODULE_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
 
 // Write a word where the stack pointer already points. The caller is
 // responsible for having made room for it.
-static void WriteToStackTop(CPUState* cpu, OperandValue value) {
+YAX86_FILE_PRIVATE void WriteToStackTop(CPUState* cpu, OperandValue value) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,

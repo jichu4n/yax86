@@ -185,15 +185,16 @@ and RAM even when idle.
 
 - **The visibility macro comes first, then the placement and inlining marks,
   then the return type**: `YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
-  ExecuteSub(...)`, `static YAX86_HOT uint8_t ReadByte(...)`. Every definition
-  carries a visibility macro and only 91 carry a mark, so leading with the
-  universal one puts the answer to "is this part of the interface" in the same
-  place on every line, and makes `^YAX86_PUBLIC` an exact count rather than an
-  approximate one. `YAX86_HOT`, `YAX86_NOINLINE` and `YAX86_ALWAYS_INLINE`
+  ExecuteSub(...)`, `YAX86_FILE_PRIVATE YAX86_HOT uint8_t ReadByte(...)`. Every
+  definition carries a visibility macro and only 91 carry a mark, so leading with
+  the universal one puts the answer to "is this part of the interface" in the
+  same place on every line, and makes `^YAX86_PUBLIC` an exact count rather than
+  an approximate one. `YAX86_HOT`, `YAX86_NOINLINE` and `YAX86_ALWAYS_INLINE`
   follow it, in whatever combination applies - `CPUExecuteDecodedInstruction()`
   carries two.
-- Both orders compile, and an attribute behind `static` still takes effect:
-  `static YAX86_HOT`, `static inline YAX86_HOT` and `static YAX86_HOT
+- Both orders compile, and an attribute behind `static` (or `YAX86_FILE_PRIVATE`,
+  which expands to it) still takes effect: `YAX86_FILE_PRIVATE YAX86_HOT`,
+  `YAX86_FILE_PRIVATE inline YAX86_HOT` and `YAX86_MODULE_PRIVATE YAX86_HOT
   YAX86_NOINLINE` all land in the named section under gcc and clang. Check that
   with `objdump -t` at `-O0` rather than at `-O3`, where a small static inlines
   away and its section never appears.

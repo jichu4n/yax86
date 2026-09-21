@@ -9,7 +9,7 @@ YAX86_PUBLIC void PPIInit(PPIState* ppi) {
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
-static inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
+YAX86_FILE_PRIVATE inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
   if (config->num_floppy_drives < 1) return 1;
   if (config->num_floppy_drives > 4) return 4;
   return config->num_floppy_drives;
@@ -57,7 +57,7 @@ YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
          (ppi->port_b & kPPIPortBSpeakerData);
 }
 
-static inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
+YAX86_FILE_PRIVATE inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
   return (
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
