@@ -21,8 +21,11 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit. Write `inline` or `const` after
+// it as the declaration needs, the same as anywhere else - the macro names the
+// tier and nothing more.
+#define YAX86_PUBLIC_HEADER static
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -454,7 +457,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -498,7 +501,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -506,7 +510,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -515,7 +519,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -523,7 +527,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -899,7 +903,7 @@ YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive);
 // is reached at the port offset with bits 0 and 3 swapped - the status
 // register, ATA register 7, is read at port offset 0xE. The mapping is its own
 // inverse.
-YAX86_PUBLIC_INLINE uint8_t HDCPortOffsetToRegister(uint8_t offset) {
+YAX86_PUBLIC_HEADER inline uint8_t HDCPortOffsetToRegister(uint8_t offset) {
   return (uint8_t)((offset & ~0x09) | ((offset & 0x01) << 3) |
                    ((offset >> 3) & 0x01));
 }

@@ -21,8 +21,11 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit. Write `inline` or `const` after
+// it as the declaration needs, the same as anywhere else - the macro names the
+// tier and nothing more.
+#define YAX86_PUBLIC_HEADER static
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not

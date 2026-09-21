@@ -306,7 +306,7 @@ YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive);
 // is reached at the port offset with bits 0 and 3 swapped - the status
 // register, ATA register 7, is read at port offset 0xE. The mapping is its own
 // inverse.
-YAX86_PUBLIC_INLINE uint8_t HDCPortOffsetToRegister(uint8_t offset) {
+YAX86_PUBLIC_HEADER inline uint8_t HDCPortOffsetToRegister(uint8_t offset) {
   return (uint8_t)((offset & ~0x09) | ((offset & 0x01) << 3) |
                    ((offset >> 3) & 0x01));
 }
