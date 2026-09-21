@@ -113,6 +113,34 @@ behavior in the emulator tends to show up as a difference from the hardware
 under one of them and not the others. `MinSizeRel` is not built, for the same
 reason `-Os` is not benchmarked: nothing ships at it.
 
+### The unbundled syntax check
+
+The library ships as a single bundled translation unit, which is also the only
+configuration CMake builds. The unbundled form — compiling each source file in
+`core/src` independently — is what `YAX86_PRIVATE`'s second arm and the
+file-local convention both rest on, and nothing else builds it.
+
+`tools/check-unbundled.sh` runs `$CC -std=c99 -fsyntax-only` over every source
+file with `-Wall -Wextra -Wpedantic -Werror -Icore` to catch missing includes or
+accidental dependencies on earlier files in the bundle before they rot. It runs
+automatically as part of `./tools/run-tests.sh`, which CI invokes with `CC` set
+to the leg's compiler, and it is first in that script because it costs a quarter
+of a second and the hardware test data below it is a 480MB download.
+
+**A cross-file reference to a file-local symbol is what it exists to catch, and
+nothing else can.** `instructions_add.c` precedes `instructions_sub.c` in
+`bundle.json`, so a call from the second to a `static` in the first compiles
+cleanly in the bundle: `static` gives linkage internal to the translation unit,
+and the translation unit is the whole bundle. File locality is a convention held
+up by nothing except this check and the absence of a declaration in a header.
+
+`-Werror` is unconditional here, where the main build carries it only in
+`CMAKE_C_FLAGS_DEBUG`. This is a lint rather than a build, and an implicit
+function declaration is an error by default only on GCC 14 and Clang 16 and
+later, so `-Werror` is what makes the check mean the same thing on every
+compiler that runs it. The cost is that a new warning in a future compiler
+fails every leg of the matrix rather than the `Debug` ones.
+
 ### Debugging the WASM build
 
 Use the Chrome DevTools MCP server against

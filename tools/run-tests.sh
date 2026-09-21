@@ -4,6 +4,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 set -ex
 
+tools/check-unbundled.sh
+
 # Must run before ctest, which enumerates the downloaded opcodes at discovery
 # time.
 tools/download-cpu-hardware-tests.sh

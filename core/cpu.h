@@ -3942,6 +3942,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 #line 1 "./src/cpu/instructions_ctrl_flow.c"
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
+#include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
