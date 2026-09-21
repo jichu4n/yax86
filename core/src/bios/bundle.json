@@ -1,4 +1,4 @@
 {
-  "public": ["public.h"],
+  "public": ["../util/common.h", "public.h"],
   "private": ["bios_rom_data.h", "bios_rom_data.c", "bios.c"]
 }

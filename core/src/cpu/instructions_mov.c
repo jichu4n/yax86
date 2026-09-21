@@ -22,7 +22,7 @@ ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // MOV r8, r/m8
 // MOV r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -55,7 +55,7 @@ ExecuteMoveRegisterOrMemoryToSegmentRegister(const InstructionContext* ctx) {
 
 // MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
 // MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
   static const uint8_t register_index_opcode_base[kNumWidths] = {
       0xB0,  // kByte
@@ -73,7 +73,7 @@ ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
 
 // MOV AL, moffs16
 // MOV AX, moffs16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -95,7 +95,7 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
 
 // MOV moffs16, AL
 // MOV moffs16, AX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);

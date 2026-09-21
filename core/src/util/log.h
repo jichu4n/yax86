@@ -60,7 +60,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -104,7 +104,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -112,7 +112,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -121,14 +121,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);

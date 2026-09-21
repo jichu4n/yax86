@@ -102,7 +102,7 @@ static inline void PICUpdateUnmaskedRequest(PICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-void PICInit(PICState* pic) {
+YAX86_PUBLIC void PICInit(PICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
   PICUpdateUnmaskedRequest(pic);
@@ -112,7 +112,7 @@ void PICInit(PICState* pic) {
 // IRQ line control
 // ============================================================================
 
-void PICRaiseIRQ(PICState* pic, uint8_t irq) {
+YAX86_PUBLIC void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   if (irq > 7) {
     YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
@@ -129,7 +129,7 @@ void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   }
 }
 
-void PICLowerIRQ(PICState* pic, uint8_t irq) {
+YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq) {
   if (irq > 7) {
     return;
   }
@@ -147,7 +147,7 @@ void PICLowerIRQ(PICState* pic, uint8_t irq) {
 // I/O port interface
 // ============================================================================
 
-uint8_t PICReadPort(PICState* pic, uint16_t port) {
+YAX86_PUBLIC uint8_t PICReadPort(PICState* pic, uint16_t port) {
   PICPort pic_port = PICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
@@ -177,7 +177,7 @@ uint8_t PICReadPort(PICState* pic, uint16_t port) {
   }
 }
 
-void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
   PICPort pic_port = PICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
@@ -278,7 +278,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
 // Interrupt handling
 // ============================================================================
 
-YAX86_HOT uint8_t PICGetPendingInterrupt(PICState* pic) {
+YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(PICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {

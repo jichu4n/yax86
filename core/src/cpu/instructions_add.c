@@ -83,7 +83,7 @@ ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -103,7 +103,7 @@ ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for ADC instructions
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteAddWithCarry(
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);

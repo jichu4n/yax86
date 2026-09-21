@@ -128,17 +128,17 @@ typedef struct PITState {
 } PITState;
 
 // Initializes the PIT to its power-on state.
-void PITInit(PITState* pit);
+YAX86_PUBLIC void PITInit(PITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
-uint8_t PITReadPort(PITState* pit, uint16_t port);
+YAX86_PUBLIC uint8_t PITReadPort(PITState* pit, uint16_t port);
 
 // Handles writes to the PIT's I/O ports (0x40-0x43).
-void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
 
 // Simulates a single tick of the PIT's input clock. This method should be
 // invoked at a frequency of 1.193182 MHz for accurate timing.
-void PITTick(PITState* pit);
+YAX86_PUBLIC void PITTick(PITState* pit);
 
 enum {
   // Returned by PITTicksUntilNextEvent() when no channel is counting towards
@@ -153,7 +153,7 @@ enum {
 // change nothing observable, so those stretches are skipped arithmetically and
 // only the ticks that can change a channel's output are simulated one at a
 // time.
-void PITAdvance(PITState* pit, uint32_t num_ticks);
+YAX86_PUBLIC void PITAdvance(PITState* pit, uint32_t num_ticks);
 
 // Returns the number of input clock ticks until the earliest tick that could
 // change any channel's output state, or kPITNoEvent if no channel is counting
@@ -162,6 +162,6 @@ void PITAdvance(PITState* pit, uint32_t num_ticks);
 // This is a lower bound rather than an exact answer. A caller that advances the
 // PIT by this much and finds nothing happened has only done unnecessary work,
 // whereas one that waited longer would miss an edge.
-uint32_t PITTicksUntilNextEvent(const PITState* pit);
+YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const PITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H

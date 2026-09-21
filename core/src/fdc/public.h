@@ -284,25 +284,26 @@ typedef struct FDCState {
 } FDCState;
 
 // Initializes the FDC to its power-on state.
-void FDCInit(FDCState* fdc);
+YAX86_PUBLIC void FDCInit(FDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
-uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
+YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
-void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
 
 // Signals to the FDC that the DMA controller has reached the terminal count.
 // This represents the TC signal.
-void FDCHandleTC(FDCState* fdc);
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
-void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
-void FDCEjectDisk(FDCState* fdc, uint8_t drive);
+YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive);
 
 // Simulates a tick of the FDC, handling any timed operations.
-void FDCTick(FDCState* fdc);
+YAX86_PUBLIC void FDCTick(FDCState* fdc);
 
 #endif  // YAX86_FDC_PUBLIC_H

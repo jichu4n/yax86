@@ -311,7 +311,7 @@ static void FDCHandleWriteData(FDCState* fdc) {
 }
 
 // Handler for Read Data command.
-YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
+static YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -549,7 +549,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
 // Nothing to do: an FDC powers on with every field at zero, and the caller has
 // already zeroed the state. Kept so that every module is brought up the same
 // way, and so that a non-zero default acquired later has somewhere to go.
-void FDCInit(YAX86_UNUSED FDCState* fdc) {}
+YAX86_PUBLIC void FDCInit(YAX86_UNUSED FDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
@@ -619,7 +619,7 @@ static uint8_t FDCReadDataPort(FDCState* fdc) {
   }
 }
 
-uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
+YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
   switch (port) {
     case kFDCPortMSR:  // Main Status Register (MSR)
       return FDCReadMSRPort(fdc);
@@ -724,7 +724,7 @@ static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
   }
 }
 
-void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
     case kFDCPortDOR:  // Digital Output Register
       FDCWriteDORPort(fdc, value);
@@ -741,9 +741,12 @@ void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-void FDCHandleTC(FDCState* fdc) { fdc->transfer.tc_received = true; }
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) {
+  fdc->transfer.tc_received = true;
+}
 
-void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   if (drive >= kFDCNumDrives) {
     return;
   }
@@ -754,7 +757,7 @@ void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   drive_state->track = 0;
 }
 
-void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
+YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
   if (drive >= kFDCNumDrives) {
     return;
   }
@@ -763,7 +766,7 @@ void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
   drive_state->format = NULL;
 }
 
-void FDCTick(FDCState* fdc) {
+YAX86_PUBLIC void FDCTick(FDCState* fdc) {
   if (fdc->phase != kFDCPhaseExecution) {
     return;
   }

@@ -17,6 +17,13 @@ extern "C" {
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
 
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
 // publicly to users of the bundled library.
@@ -444,7 +451,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -488,7 +495,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -496,7 +503,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -505,14 +512,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -990,20 +998,20 @@ typedef struct CPUState {
 // to fill in its config does not want zeroing twice - and it is the only place
 // the config is checked, so a host is told about a mistake here or not at
 // all.
-void CPUInit(CPUState* cpu);
+YAX86_PUBLIC void CPUInit(CPUState* cpu);
 
 // Instructions retired since CPUInit(), as one number.
-static inline uint64_t CPUInstructionsRetired(const CPUState* cpu) {
+YAX86_PUBLIC_INLINE uint64_t CPUInstructionsRetired(const CPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
+YAX86_PUBLIC_INLINE bool CPUGetFlag(const CPUState* cpu, Flag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
+YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -1016,14 +1024,14 @@ static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
-static inline void CPURaiseInternalInterrupt(
+YAX86_PUBLIC_INLINE void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-static inline void CPUClearInternalInterrupt(CPUState* cpu) {
+YAX86_PUBLIC_INLINE void CPUClearInternalInterrupt(CPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -1032,7 +1040,7 @@ static inline void CPUClearInternalInterrupt(CPUState* cpu) {
 // Used by the instructions whose cost is not a property of the opcode alone -
 // a conditional jump that is taken, a shift by a count in CL, a multiply or a
 // divide.
-void CPUAddCycles(CPUState* cpu, uint16_t cycles);
+YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 
 // Hands the CPU guest memory it may read and write by indexing, covering the
 // half-open range of linear addresses [0, end). Optional - a host that
@@ -1051,7 +1059,7 @@ void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // need a call is a change to what an address means: remapping memory, or
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
-static inline void CPUSetDirectDataWindow(
+YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
     CPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
@@ -1059,7 +1067,7 @@ static inline void CPUSetDirectDataWindow(
 
 // Discards the direct data window, so that every access goes back through
 // CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
-static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
+YAX86_PUBLIC_INLINE void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -1069,7 +1077,7 @@ static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
 // A host calls this when it changes what an address means rather than what is
 // stored at it - remapping memory is the case that matters. Ordinary writes
 // are covered by CPUNotifyMemoryWrite() instead.
-void CPUInvalidateDecodeCache(CPUState* cpu);
+YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu);
 
 // Tells the CPU that the byte at a linear address has been written, so that
 // any decode taken from that page stops being used.
@@ -1083,7 +1091,7 @@ void CPUInvalidateDecodeCache(CPUState* cpu);
 // hence the flush. The address is masked rather than range checked: aliasing
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
-static inline void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
+YAX86_PUBLIC_INLINE void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
   const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
   if (++cpu->code_page_generation[page] == 0) {
     CPUInvalidateDecodeCache(cpu);
@@ -1252,12 +1260,12 @@ typedef enum CPUFetchNextInstructionStatus {
 // Since this function is part of the core CPU execution loop, assembling and
 // copying a whole instruction struct would have a measurable impact on
 // performance.
-CPUFetchNextInstructionStatus CPUFetchNextInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC CPUFetchNextInstructionStatus
+CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction);
 
 // Execute a single fetched instruction.
-InstructionResult CPUExecuteInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC InstructionResult
+CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
 
 enum {
   // The most instructions one call to CPUTick() will run back to back.
@@ -1287,7 +1295,7 @@ enum {
 // Zero runs exactly one instruction. That is what a host stepping the machine
 // passes, and what a host that has to see every instruction boundary itself
 // passes, and it is the behaviour this had before there were runs at all.
-CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
+YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 
 #endif  // YAX86_CPU_PUBLIC_H
 
@@ -1306,6 +1314,13 @@ CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -1879,7 +1894,7 @@ YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
   cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
 }
 
-void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
+YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
   cpu->pending_cycles += cycles;
 }
 
@@ -1982,7 +1997,7 @@ YAX86_MODULE_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_addr
 }
 
 // Read a byte from memory to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 1);
   return ReadRawMemoryByte(
@@ -1990,7 +2005,7 @@ ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a word from memory to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 2);
   // The offset is 16 bits wide and wraps within the segment, so the high byte
@@ -2019,7 +2034,7 @@ YAX86_MODULE_PRIVATE OperandValue ReadMemoryOperandValue(
 }
 
 // Read a byte from a register to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
   // Truncated to a byte, which is the invariant every consumer widens by
   // doing nothing: AH and the high half of a word register live in the bits
@@ -2028,7 +2043,7 @@ ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a word from a register to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   return cpu->registers[address->register_index];
 }
@@ -2064,7 +2079,7 @@ YAX86_MODULE_PRIVATE void WriteRawMemoryByte(
 }
 
 // Write a byte to memory.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandByte(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 1);
   WriteRawMemoryByte(
@@ -2073,7 +2088,7 @@ YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandByte(
 }
 
 // Write a word to memory.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandWord(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 2);
   // See ReadMemoryOperandWord() for why the high byte's offset wraps within
@@ -2102,7 +2117,7 @@ YAX86_MODULE_PRIVATE void WriteMemoryOperand(
 }
 
 // Write a byte to a register.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandByte(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const uint16_t updated_byte = ((uint16_t)(uint8_t)value) << address->offset;
   const uint16_t other_byte = cpu->registers[address->register_index] &
@@ -2111,7 +2126,7 @@ YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandByte(
 }
 
 // Write a word to a register.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandWord(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   cpu->registers[address->register_index] = value;
 }
@@ -2153,7 +2168,7 @@ YAX86_MODULE_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_of
 
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
-YAX86_HOT YAX86_MODULE_PRIVATE RegisterAddress
+YAX86_MODULE_PRIVATE YAX86_HOT RegisterAddress
 GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
@@ -2203,7 +2218,7 @@ YAX86_MODULE_PRIVATE void ApplySegmentOverride(
 }
 
 // Compute the memory address for an instruction.
-YAX86_HOT YAX86_MODULE_PRIVATE MemoryAddress
+YAX86_MODULE_PRIVATE YAX86_HOT MemoryAddress
 GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
   MemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
@@ -2292,7 +2307,7 @@ GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
 // Always inlined. With more than one caller, -Os and -O2 emit it out of line,
 // which puts a call and its register shuffling on the hottest path in the
 // emulator - 3.6% at -O2.
-YAX86_ALWAYS_INLINE YAX86_MODULE_PRIVATE OperandAddress
+YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE OperandAddress
 GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
   CPUState* cpu = ctx->cpu;
   const Instruction* instruction = ctx->instruction;
@@ -2318,13 +2333,13 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
 }
 
 // Read an 8-bit immediate value.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadImmediateOperandByte(const Instruction* instruction) {
   return instruction->immediate[0];
 }
 
 // Read a 16-bit immediate value.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadImmediateOperandWord(const Instruction* instruction) {
   return (OperandValue)(((uint16_t)instruction->immediate[0]) |
                         (((uint16_t)instruction->immediate[1]) << 8));
@@ -2347,7 +2362,7 @@ ReadImmediateOperand(const Instruction* instruction, Width width) {
 //
 // Always inlined. Left to itself GCC emits this out of line, in flash, and
 // puts a veneer and an XIP fetch on every operand read - 5.4% at -O3.
-YAX86_ALWAYS_INLINE YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
   // Not a switch, unlike the width dispatch it calls into. OperandAddressType
   // is a plain enum field rather than a bitfield, so most of the values it can
@@ -2372,14 +2387,14 @@ ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
 
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
-YAX86_HOT YAX86_MODULE_PRIVATE void ReadRegisterOrMemoryOperand(
+YAX86_MODULE_PRIVATE YAX86_HOT void ReadRegisterOrMemoryOperand(
     const InstructionContext* ctx, Operand* operand) {
   operand->address = GetRegisterOrMemoryOperandAddress(ctx);
   operand->value = ReadOperandValue(ctx, &operand->address);
 }
 
 // Get a register operand for an instruction.
-YAX86_HOT YAX86_MODULE_PRIVATE void ReadRegisterOperandForRegisterIndex(
+YAX86_MODULE_PRIVATE YAX86_HOT void ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index,
     Operand* operand) {
   const Width width = ctx->metadata->width;
@@ -2416,7 +2431,7 @@ YAX86_MODULE_PRIVATE void ReadSegmentRegisterOperand(
 }
 
 // Write a value to a register or memory operand address.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteOperandAddress(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteOperandAddress(
     const InstructionContext* ctx, const OperandAddress* address,
     uint32_t raw_value) {
   const Width width = ctx->metadata->width;
@@ -3000,7 +3015,7 @@ ExecuteGroup5Instruction(const InstructionContext* ctx);
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-YAX86_HOT YAX86_MODULE_PRIVATE void SetCommonFlagsAfterInstruction(
+YAX86_MODULE_PRIVATE YAX86_HOT void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];
@@ -3113,7 +3128,7 @@ ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // MOV r8, r/m8
 // MOV r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -3146,7 +3161,7 @@ ExecuteMoveRegisterOrMemoryToSegmentRegister(const InstructionContext* ctx) {
 
 // MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
 // MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
   static const uint8_t register_index_opcode_base[kNumWidths] = {
       0xB0,  // kByte
@@ -3164,7 +3179,7 @@ ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
 
 // MOV AL, moffs16
 // MOV AX, moffs16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -3186,7 +3201,7 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
 
 // MOV moffs16, AL
 // MOV moffs16, AX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
@@ -3448,7 +3463,7 @@ ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -3468,7 +3483,7 @@ ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for ADC instructions
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteAddWithCarry(
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);
@@ -3593,7 +3608,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-YAX86_HOT static InstructionResult ExecuteSubCommon(
+static YAX86_HOT InstructionResult ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -3615,7 +3630,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -3626,7 +3641,7 @@ ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -3734,7 +3749,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteCbw(const InstructionContext* ctx)
 }
 
 // CWD
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCwd(const InstructionContext* ctx) {
   ctx->cpu->registers[kDX] =
       (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
@@ -3763,7 +3778,7 @@ ExecuteCwd(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteCmp(
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteCmp(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -3785,7 +3800,7 @@ ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -3796,7 +3811,7 @@ ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // CMP AL, imm8
 // CMP AX, imm16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -3927,7 +3942,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteBooleanXor(
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -3971,7 +3986,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteTest(
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4013,7 +4028,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
+static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4021,7 +4036,7 @@ YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-YAX86_HOT static InstructionResult ExecuteRelativeJumpWord(
+static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4099,7 +4114,7 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
   // Masking off the high nibble handles both 0x70-0x7F and their undocumented
   // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
@@ -4113,7 +4128,7 @@ ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
 }
 
 // JL/JGNE and JNL/JGE
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
       CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF);
@@ -4136,7 +4151,7 @@ ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
 // ============================================================================
 
 // LOOP rel8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteLoop(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
 }
@@ -4169,7 +4184,7 @@ static InstructionResult ExecuteNearCall(
 }
 
 // CALL rel16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   return ExecuteNearCall(ctx, offset);
@@ -4202,7 +4217,7 @@ static InstructionResult ExecuteNearReturnCommon(
 }
 
 // RET
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteNearReturn(const InstructionContext* ctx) {
   return ExecuteNearReturnCommon(ctx, 0);
 }
@@ -4310,7 +4325,7 @@ ExecuteHlt(YAX86_UNUSED const InstructionContext* ctx) {
 // ============================================================================
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
@@ -4321,7 +4336,7 @@ ExecutePushRegister(const InstructionContext* ctx) {
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
@@ -4333,7 +4348,7 @@ ExecutePopRegister(const InstructionContext* ctx) {
 }
 
 // PUSH ES/CS/SS/DS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
@@ -4344,7 +4359,7 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
 }
 
 // POP ES/CS/SS/DS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePopSegmentRegister(const InstructionContext* ctx) {
   // The segment register field is only two bits wide, which is what makes
   // 0x0F decode as POP CS on the 8086/8088. Popping into CS is legal there -
@@ -4505,7 +4520,7 @@ ExecuteSetALFromCarry(const InstructionContext* ctx) {
 // ============================================================================
 
 // Read a byte from an I/O port.
-YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
+static YAX86_HOT OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return (OperandValue)(cpu->config.read_port ? cpu->config.read_port(cpu, port)
                                               : 0xFF);
 }
@@ -4538,7 +4553,7 @@ static InstructionResult ExecuteIn(
 
 // IN AL, imm8
 // IN AX, imm8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteIn(ctx, FromOperandValue(port));
@@ -4546,7 +4561,7 @@ ExecuteInImmediate(const InstructionContext* ctx) {
 
 // IN AL, DX
 // IN AX, DX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteInDX(const InstructionContext* ctx) {
   return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
 }
@@ -4593,7 +4608,7 @@ ExecuteOutImmediate(const InstructionContext* ctx) {
 
 // OUT DX, AL
 // OUT DX, AX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteOutDX(const InstructionContext* ctx) {
   return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }
@@ -4900,7 +4915,7 @@ static bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
 }
 
 // MOVS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMovs(const InstructionContext* ctx) {
   if (ExecuteMovsBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -4949,7 +4964,7 @@ static bool ExecuteStosBulkRun(const InstructionContext* ctx) {
 }
 
 // STOS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteStos(const InstructionContext* ctx) {
   if (ExecuteStosBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -4969,7 +4984,7 @@ static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
 }
 
 // LODS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
@@ -4997,8 +5012,8 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-YAX86_HOT static InstructionResult ExecuteScasIteration(
-    const InstructionContext* ctx) {
+static YAX86_HOT InstructionResult
+ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringDestinationOperand(ctx, &src);
   Operand dest;
@@ -5231,7 +5246,7 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -5242,7 +5257,7 @@ ExecuteGroup1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -5343,8 +5358,8 @@ static InstructionResult ExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-YAX86_HOT static InstructionResult ExecuteGroup2Shr(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+static YAX86_HOT InstructionResult
+ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -7495,7 +7510,7 @@ YAX86_MODULE_PRIVATE const OpcodeMetadata opcode_table[256] = {
 // CPU state
 // ============================================================================
 
-void CPUInit(CPUState* cpu) {
+YAX86_PUBLIC void CPUInit(CPUState* cpu) {
   cpu->flags = kInitialFlags;
 
   // The only place the count is read, so a host gets told here or not at all.
@@ -7626,7 +7641,7 @@ typedef struct CPUInstructionFetchState {
 // executes, so most of that time is already paid for by the instruction being
 // executed - and the published per-instruction figures the cycle table is
 // built from assume the queue is full.
-YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
+static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
     CPUState* cpu, CPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
     --fetch_state->bytes_remaining;
@@ -7638,7 +7653,7 @@ YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
-YAX86_HOT static void CPUInitInstructionFetchState(
+static YAX86_HOT void CPUInitInstructionFetchState(
     CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
   fetch_state->next_byte_offset = ip;
   fetch_state->next_byte = NULL;
@@ -7718,7 +7733,7 @@ static uint8_t GetImmediateSize(
   }
 }
 
-YAX86_HOT CPUFetchNextInstructionStatus
+YAX86_PUBLIC YAX86_HOT CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // The prefix fields, which ApplyPrefixByte() writes only where a prefix is
   // actually present. Every other field a decode could leave behind is settled
@@ -7810,7 +7825,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   return kFetchSuccess;
 }
 
-void CPUInvalidateDecodeCache(CPUState* cpu) {
+YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
@@ -7822,7 +7837,7 @@ void CPUInvalidateDecodeCache(CPUState* cpu) {
 
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
-YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
+static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
     const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
   return entry->valid && entry->address == address &&
          entry->generation == generation;
@@ -7845,7 +7860,7 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // and reload - so the smaller-looking signature is the slower one.
 //
 // A caller must not hold the pointer across another fetch.
-YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+static YAX86_HOT CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
     CPUState* cpu, CPUDecodeCacheEntry* scratch, CPUDecodeCacheEntry** entry) {
   const uint16_t ip = cpu->registers[kIP];
   // NULL covers both having no cache and having asked for an unusable one,
@@ -7907,7 +7922,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
 // Cortex-M0+: the execute path wants registers, the core has few, and folding
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
-YAX86_HOT YAX86_NOINLINE YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the instruction handler.
@@ -7924,7 +7939,7 @@ CPUExecuteDecodedInstruction(
 // For a caller that built the Instruction itself rather than decoding one -
 // CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
 // decode is what produced the encoding these checks would be re-examining.
-YAX86_HOT InstructionResult
+YAX86_PUBLIC YAX86_HOT InstructionResult
 CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
@@ -8033,7 +8048,7 @@ enum {
 };
 
 // Whether an opcode reads or writes an I/O port.
-YAX86_ALWAYS_INLINE static bool IsPortInstruction(uint8_t opcode) {
+static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
   return (opcode & kPortInstructionMask) == kPortInstructionValue;
 }
 
@@ -8041,7 +8056,7 @@ YAX86_ALWAYS_INLINE static bool IsPortInstruction(uint8_t opcode) {
 //
 // Everything here is something the end of a tick would otherwise have dealt
 // with, and which running another instruction first would deal with too late.
-YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
+static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
     const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
   return
       // A budget of zero is how a host asks for one instruction per tick.
@@ -8070,7 +8085,7 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
 //
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
-YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
+static YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return NULL;
@@ -8086,7 +8101,8 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   return entry;
 }
 
-YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
+YAX86_PUBLIC YAX86_HOT CPUTickResult
+CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;

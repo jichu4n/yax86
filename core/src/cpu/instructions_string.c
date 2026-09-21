@@ -290,7 +290,7 @@ static bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
 }
 
 // MOVS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMovs(const InstructionContext* ctx) {
   if (ExecuteMovsBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -339,7 +339,7 @@ static bool ExecuteStosBulkRun(const InstructionContext* ctx) {
 }
 
 // STOS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteStos(const InstructionContext* ctx) {
   if (ExecuteStosBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -359,7 +359,7 @@ static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
 }
 
 // LODS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
@@ -387,8 +387,8 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-YAX86_HOT static InstructionResult ExecuteScasIteration(
-    const InstructionContext* ctx) {
+static YAX86_HOT InstructionResult
+ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringDestinationOperand(ctx, &src);
   Operand dest;

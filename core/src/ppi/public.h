@@ -180,24 +180,25 @@ typedef struct PPIState {
 } PPIState;
 
 // Initializes the PPI to its power-on state.
-void PPIInit(PPIState* ppi);
+YAX86_PUBLIC void PPIInit(PPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
-uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
+YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
 
 // Handles writes to the PPI's I/O ports (0x61, 0x63).
-void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value);
 
 // Returns whether the PC speaker is currently enabled. This is determined by
 // bit 0 and 1 of Port B.
-bool PPIIsPCSpeakerEnabled(PPIState* ppi);
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi);
 
 // Sets the PC speaker frequency from the 8253 timer channel 2 output. This
 // should be wired up to the callback from the PIT emulation module.
-void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz);
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+    PPIState* ppi, uint32_t frequency_hz);
 
 // Sets the scancode byte that will be returned when the CPU reads from Port A.
 // This function should be called by the keyboard emulation module.
-void PPISetScancode(PPIState* ppi, uint8_t scancode);
+YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode);
 
 #endif  // YAX86_PPI_PUBLIC_H

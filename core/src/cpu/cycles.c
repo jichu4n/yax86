@@ -103,6 +103,6 @@ YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
   cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
 }
 
-void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
+YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
   cpu->pending_cycles += cycles;
 }

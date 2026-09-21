@@ -9,7 +9,7 @@ enum {
   kKeyboardSelfTestOK = 0xAA,
 };
 
-void KeyboardInit(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
@@ -53,7 +53,7 @@ static inline void KeyboardSendNextScancode(KeyboardState* keyboard) {
   KeyboardSendScancode(keyboard, scancode);
 }
 
-void KeyboardHandleControl(
+YAX86_PUBLIC void KeyboardHandleControl(
     KeyboardState* keyboard, bool enable_clear, bool clock_low) {
   // Save previous state.
   bool old_clock_low = keyboard->clock_low;
@@ -78,7 +78,8 @@ void KeyboardHandleControl(
   }
 }
 
-void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+YAX86_PUBLIC void KeyboardHandleKeyPress(
+    KeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.
@@ -89,7 +90,7 @@ void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
   KeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
-void KeyboardTickMs(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {

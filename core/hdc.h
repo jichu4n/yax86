@@ -17,6 +17,13 @@ extern "C" {
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
 
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
 // publicly to users of the bundled library.
@@ -444,7 +451,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -488,7 +495,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -496,7 +503,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -505,14 +512,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -859,36 +867,36 @@ typedef struct HDCState {
 } HDCState;
 
 // Initializes the HDC to its power-on state.
-void HDCInit(HDCState* hdc);
+YAX86_PUBLIC void HDCInit(HDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
-uint32_t HDCGetOptionROMSize(void);
+YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void);
 
 // Returns a pointer to the option ROM image, HDCGetOptionROMSize() bytes of
 // it. The image is a constant array compiled into the library, so the platform
 // maps it directly rather than reading it a byte at a time through a callback.
-const uint8_t* HDCGetOptionROMData(void);
+YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void);
 
 // Handles reads from the HDC's I/O ports.
-uint8_t HDCReadPort(HDCState* hdc, uint16_t port);
+YAX86_PUBLIC uint8_t HDCReadPort(HDCState* hdc, uint16_t port);
 
 // Handles writes to the HDC's I/O ports.
-void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value);
 
 // Attaches a drive with the given geometry. Drive 0 is the master and drive 1
 // is the slave.
-void HDCAttachDrive(
+YAX86_PUBLIC void HDCAttachDrive(
     HDCState* hdc, uint8_t drive, const HDCDriveGeometry* geometry);
 
 // Detaches the drive in the given slot.
-void HDCDetachDrive(HDCState* hdc, uint8_t drive);
+YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive);
 
 // Maps an I/O port offset from kHDCPortBase to the task file register it
 // reaches. An XT-IDE rev 2 card crosses address lines A0 and A3, so a register
 // is reached at the port offset with bits 0 and 3 swapped - the status
 // register, ATA register 7, is read at port offset 0xE. The mapping is its own
 // inverse.
-static inline uint8_t HDCPortOffsetToRegister(uint8_t offset) {
+YAX86_PUBLIC_INLINE uint8_t HDCPortOffsetToRegister(uint8_t offset) {
   return (uint8_t)((offset & ~0x09) | ((offset & 0x01) << 3) |
                    ((offset >> 3) & 0x01));
 }
@@ -2256,7 +2264,7 @@ static void HDCWriteDeviceControlRegister(HDCState* hdc, uint8_t value) {
   }
 }
 
-uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
+YAX86_PUBLIC uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
     case kHDCRegisterData:
@@ -2283,7 +2291,7 @@ uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   }
 }
 
-void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
     case kHDCRegisterData:
@@ -2321,7 +2329,7 @@ void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
   }
 }
 
-void HDCAttachDrive(
+YAX86_PUBLIC void HDCAttachDrive(
     HDCState* hdc, uint8_t drive, const HDCDriveGeometry* geometry) {
   if (drive >= kHDCNumDrives) {
     return;
@@ -2336,7 +2344,7 @@ void HDCAttachDrive(
       geometry->num_sectors_per_track;
 }
 
-void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
+YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   if (drive >= kHDCNumDrives) {
     return;
   }
@@ -2344,11 +2352,15 @@ void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   hdc->drives[drive] = empty_drive_state;
 }
 
-void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
+YAX86_PUBLIC void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
-uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
+YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void) {
+  return kHDCOptionROMDataSize;
+}
 
-const uint8_t* HDCGetOptionROMData(void) { return kHDCOptionROMData; }
+YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void) {
+  return kHDCOptionROMData;
+}
 
 
 // ==============================================================================

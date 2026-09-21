@@ -807,26 +807,30 @@ typedef struct VideoState {
 } VideoState;
 
 // Initialize video state with the provided configuration.
-void VideoInit(VideoState* video);
+YAX86_PUBLIC void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
-const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video);
 
 // The current video mode, derived from the mode control register.
-VideoMode VideoGetMode(const VideoState* video);
+YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video);
 
 // Metadata for the current video mode.
-const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video);
 
 // Read a byte from a video I/O port.
-uint8_t VideoReadPort(VideoState* video, uint16_t port);
+YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
-uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
+YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 // Write a byte to video RAM.
-void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
@@ -834,12 +838,12 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 // The cost does not depend on how many cycles are passed, so a caller that
 // advances the beam only when something is about to look at it may pass a
 // whole frame's worth at once.
-void VideoTick(VideoState* video, uint32_t cycles);
+YAX86_PUBLIC void VideoTick(VideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
 // write_pixels in row-major horizontal spans. Does nothing when the display is
 // unchanged.
-void VideoRender(VideoState* video);
+YAX86_PUBLIC void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H

@@ -17,6 +17,13 @@ extern "C" {
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
 
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
 // publicly to users of the bundled library.
@@ -444,7 +451,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -488,7 +495,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -496,7 +503,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -505,14 +512,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -1389,26 +1397,30 @@ typedef struct VideoState {
 } VideoState;
 
 // Initialize video state with the provided configuration.
-void VideoInit(VideoState* video);
+YAX86_PUBLIC void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
-const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video);
 
 // The current video mode, derived from the mode control register.
-VideoMode VideoGetMode(const VideoState* video);
+YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video);
 
 // Metadata for the current video mode.
-const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video);
 
 // Read a byte from a video I/O port.
-uint8_t VideoReadPort(VideoState* video, uint16_t port);
+YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
-uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
+YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 // Write a byte to video RAM.
-void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
@@ -1416,13 +1428,13 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 // The cost does not depend on how many cycles are passed, so a caller that
 // advances the beam only when something is about to look at it may pass a
 // whole frame's worth at once.
-void VideoTick(VideoState* video, uint32_t cycles);
+YAX86_PUBLIC void VideoTick(VideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
 // write_pixels in row-major horizontal spans. Does nothing when the display is
 // unchanged.
-void VideoRender(VideoState* video);
+YAX86_PUBLIC void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H
 
@@ -2837,7 +2849,8 @@ static void VideoInvalidateCursor(VideoState* video);
 static void VideoInvalidateBlinkingText(VideoState* video);
 static void VideoInvalidateAll(VideoState* video);
 
-const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
 }
 
@@ -2878,14 +2891,15 @@ YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
   VideoInvalidateVRAMAddress(video, address);
 }
 
-uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
+YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return kVideoUnmappedPortValue;
   }
   return VideoReadVRAMByte(video, address);
 }
 
-void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return;
   }
@@ -2896,7 +2910,7 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
 // Initialization
 // ============================================================================
 
-void VideoInit(VideoState* video) {
+YAX86_PUBLIC void VideoInit(VideoState* video) {
   video->adapter = video->config.adapter == kVideoAdapterCGA ? kVideoAdapterCGA
                                                              : kVideoAdapterMDA;
 
@@ -2920,7 +2934,7 @@ void VideoInit(VideoState* video) {
 // Video mode
 // ============================================================================
 
-YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
+YAX86_PUBLIC YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
   if (video->adapter == kVideoAdapterMDA) {
     // The MDA has only one mode.
     return kVideoModeMDAText80x25;
@@ -2951,7 +2965,8 @@ YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
              : kVideoModeCGAGraphics320x200;
 }
 
-const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video) {
   return &kVideoModeMetadata[VideoGetMode(video)];
 }
 
@@ -3188,7 +3203,7 @@ static void VideoInvalidateBlinkingText(VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
+YAX86_PUBLIC YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
       adapter->scan_lines_per_frame == 0) {
@@ -3302,7 +3317,7 @@ static VideoPortFunction VideoDecodePort(
   }
 }
 
-uint8_t VideoReadPort(VideoState* video, uint16_t port) {
+YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       return video->selected_register;
@@ -3322,7 +3337,8 @@ uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   }
 }
 
-void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       video->selected_register = value & kCRTCRegisterIndexMask;
@@ -3441,7 +3457,7 @@ static void VideoRenderDirtyRegion(
   }
 }
 
-void VideoRender(VideoState* video) {
+YAX86_PUBLIC void VideoRender(VideoState* video) {
   if (!video->config.write_pixels || video->dirty_state.status == kVideoClean) {
     return;
   }

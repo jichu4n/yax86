@@ -4,10 +4,10 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-uint32_t BIOSGetROMSize(void) {
+YAX86_PUBLIC uint32_t BIOSGetROMSize(void) {
   return kBIOSROMDataSize;
 }
 
-const uint8_t* BIOSGetROMData(void) {
+YAX86_PUBLIC const uint8_t* BIOSGetROMData(void) {
   return kBIOSROMData;
 }

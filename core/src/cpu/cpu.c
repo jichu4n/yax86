@@ -14,7 +14,7 @@
 // CPU state
 // ============================================================================
 
-void CPUInit(CPUState* cpu) {
+YAX86_PUBLIC void CPUInit(CPUState* cpu) {
   cpu->flags = kInitialFlags;
 
   // The only place the count is read, so a host gets told here or not at all.
@@ -145,7 +145,7 @@ typedef struct CPUInstructionFetchState {
 // executes, so most of that time is already paid for by the instruction being
 // executed - and the published per-instruction figures the cycle table is
 // built from assume the queue is full.
-YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
+static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
     CPUState* cpu, CPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
     --fetch_state->bytes_remaining;
@@ -157,7 +157,7 @@ YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
-YAX86_HOT static void CPUInitInstructionFetchState(
+static YAX86_HOT void CPUInitInstructionFetchState(
     CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
   fetch_state->next_byte_offset = ip;
   fetch_state->next_byte = NULL;
@@ -237,7 +237,7 @@ static uint8_t GetImmediateSize(
   }
 }
 
-YAX86_HOT CPUFetchNextInstructionStatus
+YAX86_PUBLIC YAX86_HOT CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // The prefix fields, which ApplyPrefixByte() writes only where a prefix is
   // actually present. Every other field a decode could leave behind is settled
@@ -329,7 +329,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   return kFetchSuccess;
 }
 
-void CPUInvalidateDecodeCache(CPUState* cpu) {
+YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
@@ -341,7 +341,7 @@ void CPUInvalidateDecodeCache(CPUState* cpu) {
 
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
-YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
+static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
     const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
   return entry->valid && entry->address == address &&
          entry->generation == generation;
@@ -364,7 +364,7 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // and reload - so the smaller-looking signature is the slower one.
 //
 // A caller must not hold the pointer across another fetch.
-YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+static YAX86_HOT CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
     CPUState* cpu, CPUDecodeCacheEntry* scratch, CPUDecodeCacheEntry** entry) {
   const uint16_t ip = cpu->registers[kIP];
   // NULL covers both having no cache and having asked for an unusable one,
@@ -426,7 +426,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
 // Cortex-M0+: the execute path wants registers, the core has few, and folding
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
-YAX86_HOT YAX86_NOINLINE YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the instruction handler.
@@ -443,7 +443,7 @@ CPUExecuteDecodedInstruction(
 // For a caller that built the Instruction itself rather than decoding one -
 // CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
 // decode is what produced the encoding these checks would be re-examining.
-YAX86_HOT InstructionResult
+YAX86_PUBLIC YAX86_HOT InstructionResult
 CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
@@ -552,7 +552,7 @@ enum {
 };
 
 // Whether an opcode reads or writes an I/O port.
-YAX86_ALWAYS_INLINE static bool IsPortInstruction(uint8_t opcode) {
+static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
   return (opcode & kPortInstructionMask) == kPortInstructionValue;
 }
 
@@ -560,7 +560,7 @@ YAX86_ALWAYS_INLINE static bool IsPortInstruction(uint8_t opcode) {
 //
 // Everything here is something the end of a tick would otherwise have dealt
 // with, and which running another instruction first would deal with too late.
-YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
+static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
     const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
   return
       // A budget of zero is how a host asks for one instruction per tick.
@@ -589,7 +589,7 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
 //
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
-YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
+static YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return NULL;
@@ -605,7 +605,8 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   return entry;
 }
 
-YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
+YAX86_PUBLIC YAX86_HOT CPUTickResult
+CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;

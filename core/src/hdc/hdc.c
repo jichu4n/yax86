@@ -532,7 +532,7 @@ static void HDCWriteDeviceControlRegister(HDCState* hdc, uint8_t value) {
   }
 }
 
-uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
+YAX86_PUBLIC uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
     case kHDCRegisterData:
@@ -559,7 +559,7 @@ uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   }
 }
 
-void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
     case kHDCRegisterData:
@@ -597,7 +597,7 @@ void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
   }
 }
 
-void HDCAttachDrive(
+YAX86_PUBLIC void HDCAttachDrive(
     HDCState* hdc, uint8_t drive, const HDCDriveGeometry* geometry) {
   if (drive >= kHDCNumDrives) {
     return;
@@ -612,7 +612,7 @@ void HDCAttachDrive(
       geometry->num_sectors_per_track;
 }
 
-void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
+YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   if (drive >= kHDCNumDrives) {
     return;
   }
@@ -620,8 +620,12 @@ void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   hdc->drives[drive] = empty_drive_state;
 }
 
-void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
+YAX86_PUBLIC void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
-uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
+YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void) {
+  return kHDCOptionROMDataSize;
+}
 
-const uint8_t* HDCGetOptionROMData(void) { return kHDCOptionROMData; }
+YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void) {
+  return kHDCOptionROMData;
+}

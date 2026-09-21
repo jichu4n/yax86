@@ -10,6 +10,96 @@ extern "C" {
 #endif  // __cplusplus
 
 // ==============================================================================
+// src/util/common.h start
+// ==============================================================================
+
+#line 1 "./src/util/common.h"
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
+// Macro that expands to `static` when bundled. Use for variables and functions
+// that need to be visible to other files within the same module, but not
+// publicly to users of the bundled library.
+//
+// This enables better IDE integration as it allows each source file to be
+// compiled independently in unbundled form, but still keeps the symbols private
+// when bundled.
+#ifdef YAX86_IMPLEMENTATION
+// When bundled, static linkage so that the symbol is only visible within the
+// implementation file.
+#define YAX86_MODULE_PRIVATE static
+#else
+// When unbundled, use default linkage.
+#define YAX86_MODULE_PRIVATE
+#endif  // YAX86_IMPLEMENTATION
+
+// Macro to mark a function or parameter as unused.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_UNUSED __attribute__((unused))
+#else
+#define YAX86_UNUSED
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function out of line.
+//
+// Only worth reaching for where inlining has been measured to hurt. On a core
+// with few registers, folding a large callee into an already register-hungry
+// caller makes both spill.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_NOINLINE __attribute__((noinline))
+#else
+#define YAX86_NOINLINE
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Macro to keep a function inlined.
+//
+// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// it exists for is a small helper on the hot path that the compiler inlines
+// while it has a single caller and emits out of line once it has several - a
+// change to the hot path that nothing in the source shows.
+#if defined(__GNUC__) || defined(__clang__)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#else
+#define YAX86_ALWAYS_INLINE inline
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+// Marks a function as being on the per-instruction hot path.
+//
+// Empty by default, because on a machine with a normal cache hierarchy there is
+// nothing useful to say. A target whose fastest memory has to be chosen
+// explicitly can define it to whatever placement attribute it needs - on an
+// RP2040, code runs from QSPI flash through a 16KB cache, and putting the hot
+// path in SRAM instead takes that cache out of the picture.
+//
+// Define it before including this header, or on the command line.
+#ifndef YAX86_HOT
+#define YAX86_HOT
+#endif  // YAX86_HOT
+
+// The same, for data rather than code.
+//
+// Separate from YAX86_HOT because a compiler will not put executable code and
+// read-only data in one section, and because a target may well want to place
+// them differently even where it could.
+#ifndef YAX86_HOT_DATA
+#define YAX86_HOT_DATA
+#endif  // YAX86_HOT_DATA
+
+#endif  // YAX86_UTIL_COMMON_H
+
+
+// ==============================================================================
+// src/util/common.h end
+// ==============================================================================
+
+// ==============================================================================
 // src/bios/public.h start
 // ==============================================================================
 
@@ -21,6 +111,10 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef YAX86_BIOS_BUNDLE_H
+#include "../util/common.h"
+#endif  // YAX86_BIOS_BUNDLE_H
+
 // Memory region types.
 enum {
   // BIOS ROM memory map entry type - mapped to 0xF0000 to up to 0xFFFFF (64KB).
@@ -30,12 +124,12 @@ enum {
 };
 
 // Get size of BIOS ROM data.
-uint32_t BIOSGetROMSize(void);
+YAX86_PUBLIC uint32_t BIOSGetROMSize(void);
 
 // Get a pointer to the BIOS ROM image, BIOSGetROMSize() bytes of it. The image
 // is a constant array compiled into the library, so the platform maps it
 // directly rather than reading it a byte at a time through a callback.
-const uint8_t* BIOSGetROMData(void);
+YAX86_PUBLIC const uint8_t* BIOSGetROMData(void);
 
 #endif  // YAX86_BIOS_PUBLIC_H
 
@@ -616,11 +710,11 @@ const uint8_t kBIOSROMData[] = {
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-uint32_t BIOSGetROMSize(void) {
+YAX86_PUBLIC uint32_t BIOSGetROMSize(void) {
   return kBIOSROMDataSize;
 }
 
-const uint8_t* BIOSGetROMData(void) {
+YAX86_PUBLIC const uint8_t* BIOSGetROMData(void) {
   return kBIOSROMData;
 }
 
@@ -656,6 +750,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -1084,7 +1185,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -1128,7 +1229,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -1136,7 +1237,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -1145,14 +1246,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -1630,20 +1732,20 @@ typedef struct CPUState {
 // to fill in its config does not want zeroing twice - and it is the only place
 // the config is checked, so a host is told about a mistake here or not at
 // all.
-void CPUInit(CPUState* cpu);
+YAX86_PUBLIC void CPUInit(CPUState* cpu);
 
 // Instructions retired since CPUInit(), as one number.
-static inline uint64_t CPUInstructionsRetired(const CPUState* cpu) {
+YAX86_PUBLIC_INLINE uint64_t CPUInstructionsRetired(const CPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-static inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
+YAX86_PUBLIC_INLINE bool CPUGetFlag(const CPUState* cpu, Flag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
+YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -1656,14 +1758,14 @@ static inline void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
-static inline void CPURaiseInternalInterrupt(
+YAX86_PUBLIC_INLINE void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-static inline void CPUClearInternalInterrupt(CPUState* cpu) {
+YAX86_PUBLIC_INLINE void CPUClearInternalInterrupt(CPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -1672,7 +1774,7 @@ static inline void CPUClearInternalInterrupt(CPUState* cpu) {
 // Used by the instructions whose cost is not a property of the opcode alone -
 // a conditional jump that is taken, a shift by a count in CL, a multiply or a
 // divide.
-void CPUAddCycles(CPUState* cpu, uint16_t cycles);
+YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 
 // Hands the CPU guest memory it may read and write by indexing, covering the
 // half-open range of linear addresses [0, end). Optional - a host that
@@ -1691,7 +1793,7 @@ void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // need a call is a change to what an address means: remapping memory, or
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
-static inline void CPUSetDirectDataWindow(
+YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
     CPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
@@ -1699,7 +1801,7 @@ static inline void CPUSetDirectDataWindow(
 
 // Discards the direct data window, so that every access goes back through
 // CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
-static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
+YAX86_PUBLIC_INLINE void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -1709,7 +1811,7 @@ static inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
 // A host calls this when it changes what an address means rather than what is
 // stored at it - remapping memory is the case that matters. Ordinary writes
 // are covered by CPUNotifyMemoryWrite() instead.
-void CPUInvalidateDecodeCache(CPUState* cpu);
+YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu);
 
 // Tells the CPU that the byte at a linear address has been written, so that
 // any decode taken from that page stops being used.
@@ -1723,7 +1825,7 @@ void CPUInvalidateDecodeCache(CPUState* cpu);
 // hence the flush. The address is masked rather than range checked: aliasing
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
-static inline void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
+YAX86_PUBLIC_INLINE void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
   const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
   if (++cpu->code_page_generation[page] == 0) {
     CPUInvalidateDecodeCache(cpu);
@@ -1892,12 +1994,12 @@ typedef enum CPUFetchNextInstructionStatus {
 // Since this function is part of the core CPU execution loop, assembling and
 // copying a whole instruction struct would have a measurable impact on
 // performance.
-CPUFetchNextInstructionStatus CPUFetchNextInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC CPUFetchNextInstructionStatus
+CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction);
 
 // Execute a single fetched instruction.
-InstructionResult CPUExecuteInstruction(
-    CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC InstructionResult
+CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
 
 enum {
   // The most instructions one call to CPUTick() will run back to back.
@@ -1927,7 +2029,7 @@ enum {
 // Zero runs exactly one instruction. That is what a host stepping the machine
 // passes, and what a host that has to see every instruction boundary itself
 // passes, and it is the behaviour this had before there were runs at all.
-CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
+YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 
 #endif  // YAX86_CPU_PUBLIC_H
 
@@ -1946,6 +2048,13 @@ CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -2519,7 +2628,7 @@ YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
   cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
 }
 
-void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
+YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
   cpu->pending_cycles += cycles;
 }
 
@@ -2622,7 +2731,7 @@ YAX86_MODULE_PRIVATE uint16_t ReadRawMemoryWord(CPUState* cpu, uint32_t raw_addr
 }
 
 // Read a byte from memory to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 1);
   return ReadRawMemoryByte(
@@ -2630,7 +2739,7 @@ ReadMemoryOperandByte(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a word from memory to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
   AddBusCycles(cpu, 2);
   // The offset is 16 bits wide and wraps within the segment, so the high byte
@@ -2659,7 +2768,7 @@ YAX86_MODULE_PRIVATE OperandValue ReadMemoryOperandValue(
 }
 
 // Read a byte from a register to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
   // Truncated to a byte, which is the invariant every consumer widens by
   // doing nothing: AH and the high half of a word register live in the bits
@@ -2668,7 +2777,7 @@ ReadRegisterOperandByte(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a word from a register to an OperandValue.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
   return cpu->registers[address->register_index];
 }
@@ -2704,7 +2813,7 @@ YAX86_MODULE_PRIVATE void WriteRawMemoryByte(
 }
 
 // Write a byte to memory.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandByte(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteMemoryOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 1);
   WriteRawMemoryByte(
@@ -2713,7 +2822,7 @@ YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandByte(
 }
 
 // Write a word to memory.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteMemoryOperandWord(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteMemoryOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   AddBusCycles(cpu, 2);
   // See ReadMemoryOperandWord() for why the high byte's offset wraps within
@@ -2742,7 +2851,7 @@ YAX86_MODULE_PRIVATE void WriteMemoryOperand(
 }
 
 // Write a byte to a register.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandByte(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteRegisterOperandByte(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   const uint16_t updated_byte = ((uint16_t)(uint8_t)value) << address->offset;
   const uint16_t other_byte = cpu->registers[address->register_index] &
@@ -2751,7 +2860,7 @@ YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandByte(
 }
 
 // Write a word to a register.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteRegisterOperandWord(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteRegisterOperandWord(
     CPUState* cpu, const OperandAddress* address, OperandValue value) {
   cpu->registers[address->register_index] = value;
 }
@@ -2793,7 +2902,7 @@ YAX86_MODULE_PRIVATE uint16_t AddSignedOffsetWord(uint16_t base, uint16_t raw_of
 
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
-YAX86_HOT YAX86_MODULE_PRIVATE RegisterAddress
+YAX86_MODULE_PRIVATE YAX86_HOT RegisterAddress
 GetRegisterAddressByte(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
   RegisterAddress address;
   if (reg_or_rm < 4) {
@@ -2843,7 +2952,7 @@ YAX86_MODULE_PRIVATE void ApplySegmentOverride(
 }
 
 // Compute the memory address for an instruction.
-YAX86_HOT YAX86_MODULE_PRIVATE MemoryAddress
+YAX86_MODULE_PRIVATE YAX86_HOT MemoryAddress
 GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
   MemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
@@ -2932,7 +3041,7 @@ GetMemoryOperandAddress(CPUState* cpu, const Instruction* instruction) {
 // Always inlined. With more than one caller, -Os and -O2 emit it out of line,
 // which puts a call and its register shuffling on the hottest path in the
 // emulator - 3.6% at -O2.
-YAX86_ALWAYS_INLINE YAX86_MODULE_PRIVATE OperandAddress
+YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE OperandAddress
 GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
   CPUState* cpu = ctx->cpu;
   const Instruction* instruction = ctx->instruction;
@@ -2958,13 +3067,13 @@ GetRegisterOrMemoryOperandAddress(const InstructionContext* ctx) {
 }
 
 // Read an 8-bit immediate value.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadImmediateOperandByte(const Instruction* instruction) {
   return instruction->immediate[0];
 }
 
 // Read a 16-bit immediate value.
-YAX86_HOT YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_HOT OperandValue
 ReadImmediateOperandWord(const Instruction* instruction) {
   return (OperandValue)(((uint16_t)instruction->immediate[0]) |
                         (((uint16_t)instruction->immediate[1]) << 8));
@@ -2987,7 +3096,7 @@ ReadImmediateOperand(const Instruction* instruction, Width width) {
 //
 // Always inlined. Left to itself GCC emits this out of line, in flash, and
 // puts a veneer and an XIP fetch on every operand read - 5.4% at -O3.
-YAX86_ALWAYS_INLINE YAX86_MODULE_PRIVATE OperandValue
+YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE OperandValue
 ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
   // Not a switch, unlike the width dispatch it calls into. OperandAddressType
   // is a plain enum field rather than a bitfield, so most of the values it can
@@ -3012,14 +3121,14 @@ ReadOperandValue(const InstructionContext* ctx, const OperandAddress* address) {
 
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
-YAX86_HOT YAX86_MODULE_PRIVATE void ReadRegisterOrMemoryOperand(
+YAX86_MODULE_PRIVATE YAX86_HOT void ReadRegisterOrMemoryOperand(
     const InstructionContext* ctx, Operand* operand) {
   operand->address = GetRegisterOrMemoryOperandAddress(ctx);
   operand->value = ReadOperandValue(ctx, &operand->address);
 }
 
 // Get a register operand for an instruction.
-YAX86_HOT YAX86_MODULE_PRIVATE void ReadRegisterOperandForRegisterIndex(
+YAX86_MODULE_PRIVATE YAX86_HOT void ReadRegisterOperandForRegisterIndex(
     const InstructionContext* ctx, RegisterIndex register_index,
     Operand* operand) {
   const Width width = ctx->metadata->width;
@@ -3056,7 +3165,7 @@ YAX86_MODULE_PRIVATE void ReadSegmentRegisterOperand(
 }
 
 // Write a value to a register or memory operand address.
-YAX86_HOT YAX86_MODULE_PRIVATE void WriteOperandAddress(
+YAX86_MODULE_PRIVATE YAX86_HOT void WriteOperandAddress(
     const InstructionContext* ctx, const OperandAddress* address,
     uint32_t raw_value) {
   const Width width = ctx->metadata->width;
@@ -3640,7 +3749,7 @@ ExecuteGroup5Instruction(const InstructionContext* ctx);
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-YAX86_HOT YAX86_MODULE_PRIVATE void SetCommonFlagsAfterInstruction(
+YAX86_MODULE_PRIVATE YAX86_HOT void SetCommonFlagsAfterInstruction(
     const InstructionContext* ctx, uint32_t result) {
   Width width = ctx->metadata->width;
   result &= kMaxValue[width];
@@ -3753,7 +3862,7 @@ ExecuteMoveRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // MOV r8, r/m8
 // MOV r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -3786,7 +3895,7 @@ ExecuteMoveRegisterOrMemoryToSegmentRegister(const InstructionContext* ctx) {
 
 // MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
 // MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
   static const uint8_t register_index_opcode_base[kNumWidths] = {
       0xB0,  // kByte
@@ -3804,7 +3913,7 @@ ExecuteMoveImmediateToRegister(const InstructionContext* ctx) {
 
 // MOV AL, moffs16
 // MOV AX, moffs16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -3826,7 +3935,7 @@ ExecuteMoveMemoryOffsetToALOrAX(const InstructionContext* ctx) {
 
 // MOV moffs16, AL
 // MOV moffs16, AX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMoveALOrAXToMemoryOffset(const InstructionContext* ctx) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
@@ -4088,7 +4197,7 @@ ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4108,7 +4217,7 @@ ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
 }
 
 // Common logic for ADC instructions
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteAddWithCarry(
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteAddWithCarry(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);
@@ -4233,7 +4342,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-YAX86_HOT static InstructionResult ExecuteSubCommon(
+static YAX86_HOT InstructionResult ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -4255,7 +4364,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4266,7 +4375,7 @@ ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4374,7 +4483,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteCbw(const InstructionContext* ctx)
 }
 
 // CWD
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCwd(const InstructionContext* ctx) {
   ctx->cpu->registers[kDX] =
       (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
@@ -4403,7 +4512,7 @@ ExecuteCwd(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteCmp(
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteCmp(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -4425,7 +4534,7 @@ ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -4436,7 +4545,7 @@ ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // CMP AL, imm8
 // CMP AX, imm16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4567,7 +4676,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteBooleanXor(
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4611,7 +4720,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteTest(
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -4653,7 +4762,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
+static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4661,7 +4770,7 @@ YAX86_HOT static InstructionResult ExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-YAX86_HOT static InstructionResult ExecuteRelativeJumpWord(
+static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4739,7 +4848,7 @@ static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
   // Masking off the high nibble handles both 0x70-0x7F and their undocumented
   // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
@@ -4753,7 +4862,7 @@ ExecuteUnsignedConditionalJump(const InstructionContext* ctx) {
 }
 
 // JL/JGNE and JNL/JGE
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSignedConditionalJumpJLOrJNL(const InstructionContext* ctx) {
   const bool is_greater_or_equal =
       CPUGetFlag(ctx->cpu, kSF) == CPUGetFlag(ctx->cpu, kOF);
@@ -4776,7 +4885,7 @@ ExecuteSignedConditionalJumpJLEOrJNLE(const InstructionContext* ctx) {
 // ============================================================================
 
 // LOOP rel8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteLoop(const InstructionContext* ctx) {
   return ExecuteConditionalJump(ctx, --(ctx->cpu->registers[kCX]) != 0, true);
 }
@@ -4809,7 +4918,7 @@ static InstructionResult ExecuteNearCall(
 }
 
 // CALL rel16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteDirectNearCall(const InstructionContext* ctx) {
   OperandValue offset = ReadImmediate(ctx);
   return ExecuteNearCall(ctx, offset);
@@ -4842,7 +4951,7 @@ static InstructionResult ExecuteNearReturnCommon(
 }
 
 // RET
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteNearReturn(const InstructionContext* ctx) {
   return ExecuteNearReturnCommon(ctx, 0);
 }
@@ -4950,7 +5059,7 @@ ExecuteHlt(YAX86_UNUSED const InstructionContext* ctx) {
 // ============================================================================
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePushRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x50);
@@ -4961,7 +5070,7 @@ ExecutePushRegister(const InstructionContext* ctx) {
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePopRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(ctx->instruction->opcode - 0x58);
@@ -4973,7 +5082,7 @@ ExecutePopRegister(const InstructionContext* ctx) {
 }
 
 // PUSH ES/CS/SS/DS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePushSegmentRegister(const InstructionContext* ctx) {
   RegisterIndex register_index =
       (RegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
@@ -4984,7 +5093,7 @@ ExecutePushSegmentRegister(const InstructionContext* ctx) {
 }
 
 // POP ES/CS/SS/DS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecutePopSegmentRegister(const InstructionContext* ctx) {
   // The segment register field is only two bits wide, which is what makes
   // 0x0F decode as POP CS on the 8086/8088. Popping into CS is legal there -
@@ -5145,7 +5254,7 @@ ExecuteSetALFromCarry(const InstructionContext* ctx) {
 // ============================================================================
 
 // Read a byte from an I/O port.
-YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
+static YAX86_HOT OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return (OperandValue)(cpu->config.read_port ? cpu->config.read_port(cpu, port)
                                               : 0xFF);
 }
@@ -5178,7 +5287,7 @@ static InstructionResult ExecuteIn(
 
 // IN AL, imm8
 // IN AX, imm8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteIn(ctx, FromOperandValue(port));
@@ -5186,7 +5295,7 @@ ExecuteInImmediate(const InstructionContext* ctx) {
 
 // IN AL, DX
 // IN AX, DX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteInDX(const InstructionContext* ctx) {
   return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
 }
@@ -5233,7 +5342,7 @@ ExecuteOutImmediate(const InstructionContext* ctx) {
 
 // OUT DX, AL
 // OUT DX, AX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteOutDX(const InstructionContext* ctx) {
   return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }
@@ -5540,7 +5649,7 @@ static bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
 }
 
 // MOVS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteMovs(const InstructionContext* ctx) {
   if (ExecuteMovsBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -5589,7 +5698,7 @@ static bool ExecuteStosBulkRun(const InstructionContext* ctx) {
 }
 
 // STOS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteStos(const InstructionContext* ctx) {
   if (ExecuteStosBulkRun(ctx)) {
     return kInstructionExecuted;
@@ -5609,7 +5718,7 @@ static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
 }
 
 // LODS
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteLods(const InstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
@@ -5637,8 +5746,8 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-YAX86_HOT static InstructionResult ExecuteScasIteration(
-    const InstructionContext* ctx) {
+static YAX86_HOT InstructionResult
+ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringDestinationOperand(ctx, &src);
   Operand dest;
@@ -5871,7 +5980,7 @@ static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
 };
 
 // Group 1 instruction handler.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteGroup1Instruction(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -5882,7 +5991,7 @@ ExecuteGroup1Instruction(const InstructionContext* ctx) {
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteGroup1InstructionWithSignExtension(const InstructionContext* ctx) {
   const Group1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -5983,8 +6092,8 @@ static InstructionResult ExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-YAX86_HOT static InstructionResult ExecuteGroup2Shr(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+static YAX86_HOT InstructionResult
+ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -8135,7 +8244,7 @@ YAX86_MODULE_PRIVATE const OpcodeMetadata opcode_table[256] = {
 // CPU state
 // ============================================================================
 
-void CPUInit(CPUState* cpu) {
+YAX86_PUBLIC void CPUInit(CPUState* cpu) {
   cpu->flags = kInitialFlags;
 
   // The only place the count is read, so a host gets told here or not at all.
@@ -8266,7 +8375,7 @@ typedef struct CPUInstructionFetchState {
 // executes, so most of that time is already paid for by the instruction being
 // executed - and the published per-instruction figures the cycle table is
 // built from assume the queue is full.
-YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
+static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
     CPUState* cpu, CPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
     --fetch_state->bytes_remaining;
@@ -8278,7 +8387,7 @@ YAX86_HOT static inline uint8_t CPUFetchNextInstructionByte(
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
-YAX86_HOT static void CPUInitInstructionFetchState(
+static YAX86_HOT void CPUInitInstructionFetchState(
     CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
   fetch_state->next_byte_offset = ip;
   fetch_state->next_byte = NULL;
@@ -8358,7 +8467,7 @@ static uint8_t GetImmediateSize(
   }
 }
 
-YAX86_HOT CPUFetchNextInstructionStatus
+YAX86_PUBLIC YAX86_HOT CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // The prefix fields, which ApplyPrefixByte() writes only where a prefix is
   // actually present. Every other field a decode could leave behind is settled
@@ -8450,7 +8559,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   return kFetchSuccess;
 }
 
-void CPUInvalidateDecodeCache(CPUState* cpu) {
+YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
@@ -8462,7 +8571,7 @@ void CPUInvalidateDecodeCache(CPUState* cpu) {
 
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
-YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
+static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
     const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
   return entry->valid && entry->address == address &&
          entry->generation == generation;
@@ -8485,7 +8594,7 @@ YAX86_ALWAYS_INLINE static bool IsDecodeCacheHit(
 // and reload - so the smaller-looking signature is the slower one.
 //
 // A caller must not hold the pointer across another fetch.
-YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+static YAX86_HOT CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
     CPUState* cpu, CPUDecodeCacheEntry* scratch, CPUDecodeCacheEntry** entry) {
   const uint16_t ip = cpu->registers[kIP];
   // NULL covers both having no cache and having asked for an unusable one,
@@ -8547,7 +8656,7 @@ YAX86_HOT static CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
 // Cortex-M0+: the execute path wants registers, the core has few, and folding
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
-YAX86_HOT YAX86_NOINLINE YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the instruction handler.
@@ -8564,7 +8673,7 @@ CPUExecuteDecodedInstruction(
 // For a caller that built the Instruction itself rather than decoding one -
 // CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
 // decode is what produced the encoding these checks would be re-examining.
-YAX86_HOT InstructionResult
+YAX86_PUBLIC YAX86_HOT InstructionResult
 CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
@@ -8673,7 +8782,7 @@ enum {
 };
 
 // Whether an opcode reads or writes an I/O port.
-YAX86_ALWAYS_INLINE static bool IsPortInstruction(uint8_t opcode) {
+static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
   return (opcode & kPortInstructionMask) == kPortInstructionValue;
 }
 
@@ -8681,7 +8790,7 @@ YAX86_ALWAYS_INLINE static bool IsPortInstruction(uint8_t opcode) {
 //
 // Everything here is something the end of a tick would otherwise have dealt
 // with, and which running another instruction first would deal with too late.
-YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
+static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
     const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
   return
       // A budget of zero is how a host asks for one instruction per tick.
@@ -8710,7 +8819,7 @@ YAX86_ALWAYS_INLINE static bool CPUCanContinueRun(
 //
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
-YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
+static YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return NULL;
@@ -8726,7 +8835,8 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   return entry;
 }
 
-YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
+YAX86_PUBLIC YAX86_HOT CPUTickResult
+CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;
@@ -8874,6 +8984,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -9302,7 +9419,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -9346,7 +9463,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -9354,7 +9471,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -9363,14 +9480,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -9649,18 +9767,18 @@ typedef struct DMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-void DMAInit(DMAState* dma);
+YAX86_PUBLIC void DMAInit(DMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
-uint8_t DMAReadPort(DMAState* dma, uint16_t port);
+YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port);
 
 // Handles writes to the DMA's I/O ports.
-void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value);
+YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value);
 
 // Executes a single-byte transfer for the specified channel. This function
 // should be called by the platform in response to a DREQ signal from a
 // peripheral.
-void DMATransferByte(DMAState* dma, uint8_t channel_index);
+YAX86_PUBLIC void DMATransferByte(DMAState* dma, uint8_t channel_index);
 
 #endif  // YAX86_DMA_PUBLIC_H
 
@@ -9684,7 +9802,7 @@ void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #define YAX86_DMA_LOG(level, ...) \
   YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
 
-void DMAInit(DMAState* dma) {
+YAX86_PUBLIC void DMAInit(DMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
@@ -9702,7 +9820,7 @@ static inline uint8_t DMAReadRegisterByte(DMAState* dma, uint16_t value) {
   return byte;
 }
 
-uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
+YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -9751,7 +9869,7 @@ static inline void DMAWriteRegisterByte(
   *current_reg = *base_reg;
 }
 
-void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -9854,7 +9972,8 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_HOT void DMATransferByte(DMAState* dma, uint8_t channel_index) {
+YAX86_PUBLIC YAX86_HOT void DMATransferByte(
+    DMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;
   }
@@ -9958,6 +10077,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -10386,7 +10512,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -10430,7 +10556,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -10438,7 +10564,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -10447,14 +10573,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -10909,26 +11036,27 @@ typedef struct FDCState {
 } FDCState;
 
 // Initializes the FDC to its power-on state.
-void FDCInit(FDCState* fdc);
+YAX86_PUBLIC void FDCInit(FDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
-uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
+YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
-void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
 
 // Signals to the FDC that the DMA controller has reached the terminal count.
 // This represents the TC signal.
-void FDCHandleTC(FDCState* fdc);
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
-void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
-void FDCEjectDisk(FDCState* fdc, uint8_t drive);
+YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive);
 
 // Simulates a tick of the FDC, handling any timed operations.
-void FDCTick(FDCState* fdc);
+YAX86_PUBLIC void FDCTick(FDCState* fdc);
 
 #endif  // YAX86_FDC_PUBLIC_H
 
@@ -11258,7 +11386,7 @@ static void FDCHandleWriteData(FDCState* fdc) {
 }
 
 // Handler for Read Data command.
-YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
+static YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -11496,7 +11624,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
 // Nothing to do: an FDC powers on with every field at zero, and the caller has
 // already zeroed the state. Kept so that every module is brought up the same
 // way, and so that a non-zero default acquired later has somewhere to go.
-void FDCInit(YAX86_UNUSED FDCState* fdc) {}
+YAX86_PUBLIC void FDCInit(YAX86_UNUSED FDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
@@ -11566,7 +11694,7 @@ static uint8_t FDCReadDataPort(FDCState* fdc) {
   }
 }
 
-uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
+YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
   switch (port) {
     case kFDCPortMSR:  // Main Status Register (MSR)
       return FDCReadMSRPort(fdc);
@@ -11671,7 +11799,7 @@ static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
   }
 }
 
-void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
     case kFDCPortDOR:  // Digital Output Register
       FDCWriteDORPort(fdc, value);
@@ -11688,9 +11816,12 @@ void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-void FDCHandleTC(FDCState* fdc) { fdc->transfer.tc_received = true; }
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) {
+  fdc->transfer.tc_received = true;
+}
 
-void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
+YAX86_PUBLIC void FDCInsertDisk(
+    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   if (drive >= kFDCNumDrives) {
     return;
   }
@@ -11701,7 +11832,7 @@ void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   drive_state->track = 0;
 }
 
-void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
+YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
   if (drive >= kFDCNumDrives) {
     return;
   }
@@ -11710,7 +11841,7 @@ void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
   drive_state->format = NULL;
 }
 
-void FDCTick(FDCState* fdc) {
+YAX86_PUBLIC void FDCTick(FDCState* fdc) {
   if (fdc->phase != kFDCPhaseExecution) {
     return;
   }
@@ -11758,6 +11889,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -12186,7 +12324,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -12230,7 +12368,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -12238,7 +12376,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -12247,14 +12385,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -12601,36 +12740,36 @@ typedef struct HDCState {
 } HDCState;
 
 // Initializes the HDC to its power-on state.
-void HDCInit(HDCState* hdc);
+YAX86_PUBLIC void HDCInit(HDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
-uint32_t HDCGetOptionROMSize(void);
+YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void);
 
 // Returns a pointer to the option ROM image, HDCGetOptionROMSize() bytes of
 // it. The image is a constant array compiled into the library, so the platform
 // maps it directly rather than reading it a byte at a time through a callback.
-const uint8_t* HDCGetOptionROMData(void);
+YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void);
 
 // Handles reads from the HDC's I/O ports.
-uint8_t HDCReadPort(HDCState* hdc, uint16_t port);
+YAX86_PUBLIC uint8_t HDCReadPort(HDCState* hdc, uint16_t port);
 
 // Handles writes to the HDC's I/O ports.
-void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value);
 
 // Attaches a drive with the given geometry. Drive 0 is the master and drive 1
 // is the slave.
-void HDCAttachDrive(
+YAX86_PUBLIC void HDCAttachDrive(
     HDCState* hdc, uint8_t drive, const HDCDriveGeometry* geometry);
 
 // Detaches the drive in the given slot.
-void HDCDetachDrive(HDCState* hdc, uint8_t drive);
+YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive);
 
 // Maps an I/O port offset from kHDCPortBase to the task file register it
 // reaches. An XT-IDE rev 2 card crosses address lines A0 and A3, so a register
 // is reached at the port offset with bits 0 and 3 swapped - the status
 // register, ATA register 7, is read at port offset 0xE. The mapping is its own
 // inverse.
-static inline uint8_t HDCPortOffsetToRegister(uint8_t offset) {
+YAX86_PUBLIC_INLINE uint8_t HDCPortOffsetToRegister(uint8_t offset) {
   return (uint8_t)((offset & ~0x09) | ((offset & 0x01) << 3) |
                    ((offset >> 3) & 0x01));
 }
@@ -13998,7 +14137,7 @@ static void HDCWriteDeviceControlRegister(HDCState* hdc, uint8_t value) {
   }
 }
 
-uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
+YAX86_PUBLIC uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
     case kHDCRegisterData:
@@ -14025,7 +14164,7 @@ uint8_t HDCReadPort(HDCState* hdc, uint16_t port) {
   }
 }
 
-void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
   const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
   switch (HDCPortOffsetToRegister(offset)) {
     case kHDCRegisterData:
@@ -14063,7 +14202,7 @@ void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value) {
   }
 }
 
-void HDCAttachDrive(
+YAX86_PUBLIC void HDCAttachDrive(
     HDCState* hdc, uint8_t drive, const HDCDriveGeometry* geometry) {
   if (drive >= kHDCNumDrives) {
     return;
@@ -14078,7 +14217,7 @@ void HDCAttachDrive(
       geometry->num_sectors_per_track;
 }
 
-void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
+YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   if (drive >= kHDCNumDrives) {
     return;
   }
@@ -14086,11 +14225,15 @@ void HDCDetachDrive(HDCState* hdc, uint8_t drive) {
   hdc->drives[drive] = empty_drive_state;
 }
 
-void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
+YAX86_PUBLIC void HDCInit(HDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
-uint32_t HDCGetOptionROMSize(void) { return kHDCOptionROMDataSize; }
+YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void) {
+  return kHDCOptionROMDataSize;
+}
 
-const uint8_t* HDCGetOptionROMData(void) { return kHDCOptionROMData; }
+YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void) {
+  return kHDCOptionROMData;
+}
 
 
 // ==============================================================================
@@ -14124,6 +14267,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -14552,7 +14702,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -14596,7 +14746,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -14604,7 +14754,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -14613,14 +14763,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -14904,18 +15055,19 @@ typedef struct KeyboardState {
 } KeyboardState;
 
 // Initializes the keyboard to its power-on state.
-void KeyboardInit(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
-void KeyboardHandleControl(
+YAX86_PUBLIC void KeyboardHandleControl(
     KeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
-void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode);
+YAX86_PUBLIC void KeyboardHandleKeyPress(
+    KeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
-void KeyboardTickMs(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H
 
@@ -14943,7 +15095,7 @@ enum {
   kKeyboardSelfTestOK = 0xAA,
 };
 
-void KeyboardInit(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
@@ -14987,7 +15139,7 @@ static inline void KeyboardSendNextScancode(KeyboardState* keyboard) {
   KeyboardSendScancode(keyboard, scancode);
 }
 
-void KeyboardHandleControl(
+YAX86_PUBLIC void KeyboardHandleControl(
     KeyboardState* keyboard, bool enable_clear, bool clock_low) {
   // Save previous state.
   bool old_clock_low = keyboard->clock_low;
@@ -15012,7 +15164,8 @@ void KeyboardHandleControl(
   }
 }
 
-void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+YAX86_PUBLIC void KeyboardHandleKeyPress(
+    KeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.
@@ -15023,7 +15176,7 @@ void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
   KeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
-void KeyboardTickMs(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {
@@ -15087,6 +15240,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -15515,7 +15675,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -15559,7 +15719,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -15567,7 +15727,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -15576,14 +15736,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -15801,7 +15962,7 @@ typedef struct PICState {
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-void PICInit(PICState* pic);
+YAX86_PUBLIC void PICInit(PICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -15809,11 +15970,11 @@ void PICInit(PICState* pic);
 
 // Raise an IRQ line (0-7) on this PIC. If this is a slave PIC, also raises
 // the cascade IRQ on the master PIC.
-void PICRaiseIRQ(PICState* pic, uint8_t irq);
+YAX86_PUBLIC void PICRaiseIRQ(PICState* pic, uint8_t irq);
 
 // Lower an IRQ line (0-7) on this PIC. If this is a slave PIC and no interrupts
 // are pending, also lowers the cascade IRQ on the master PIC.
-void PICLowerIRQ(PICState* pic, uint8_t irq);
+YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq);
 
 // ============================================================================
 // I/O port interface
@@ -15822,12 +15983,12 @@ void PICLowerIRQ(PICState* pic, uint8_t irq);
 // Read from a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-uint8_t PICReadPort(PICState* pic, uint16_t port);
+YAX86_PUBLIC uint8_t PICReadPort(PICState* pic, uint16_t port);
 
 // Write to a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
 
 // ============================================================================
 // Interrupt handling
@@ -15836,7 +15997,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
 // PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
-uint8_t PICGetPendingInterrupt(PICState* pic);
+YAX86_PUBLIC uint8_t PICGetPendingInterrupt(PICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H
 
@@ -15957,7 +16118,7 @@ static inline void PICUpdateUnmaskedRequest(PICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-void PICInit(PICState* pic) {
+YAX86_PUBLIC void PICInit(PICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
   PICUpdateUnmaskedRequest(pic);
@@ -15967,7 +16128,7 @@ void PICInit(PICState* pic) {
 // IRQ line control
 // ============================================================================
 
-void PICRaiseIRQ(PICState* pic, uint8_t irq) {
+YAX86_PUBLIC void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   if (irq > 7) {
     YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
@@ -15984,7 +16145,7 @@ void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   }
 }
 
-void PICLowerIRQ(PICState* pic, uint8_t irq) {
+YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq) {
   if (irq > 7) {
     return;
   }
@@ -16002,7 +16163,7 @@ void PICLowerIRQ(PICState* pic, uint8_t irq) {
 // I/O port interface
 // ============================================================================
 
-uint8_t PICReadPort(PICState* pic, uint16_t port) {
+YAX86_PUBLIC uint8_t PICReadPort(PICState* pic, uint16_t port) {
   PICPort pic_port = PICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
@@ -16032,7 +16193,7 @@ uint8_t PICReadPort(PICState* pic, uint16_t port) {
   }
 }
 
-void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
   PICPort pic_port = PICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
@@ -16133,7 +16294,7 @@ void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
 // Interrupt handling
 // ============================================================================
 
-YAX86_HOT uint8_t PICGetPendingInterrupt(PICState* pic) {
+YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(PICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {
@@ -16212,6 +16373,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -16640,7 +16808,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -16684,7 +16852,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -16692,7 +16860,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -16701,14 +16869,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -16906,17 +17075,17 @@ typedef struct PITState {
 } PITState;
 
 // Initializes the PIT to its power-on state.
-void PITInit(PITState* pit);
+YAX86_PUBLIC void PITInit(PITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
-uint8_t PITReadPort(PITState* pit, uint16_t port);
+YAX86_PUBLIC uint8_t PITReadPort(PITState* pit, uint16_t port);
 
 // Handles writes to the PIT's I/O ports (0x40-0x43).
-void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
 
 // Simulates a single tick of the PIT's input clock. This method should be
 // invoked at a frequency of 1.193182 MHz for accurate timing.
-void PITTick(PITState* pit);
+YAX86_PUBLIC void PITTick(PITState* pit);
 
 enum {
   // Returned by PITTicksUntilNextEvent() when no channel is counting towards
@@ -16931,7 +17100,7 @@ enum {
 // change nothing observable, so those stretches are skipped arithmetically and
 // only the ticks that can change a channel's output are simulated one at a
 // time.
-void PITAdvance(PITState* pit, uint32_t num_ticks);
+YAX86_PUBLIC void PITAdvance(PITState* pit, uint32_t num_ticks);
 
 // Returns the number of input clock ticks until the earliest tick that could
 // change any channel's output state, or kPITNoEvent if no channel is counting
@@ -16940,7 +17109,7 @@ void PITAdvance(PITState* pit, uint32_t num_ticks);
 // This is a lower bound rather than an exact answer. A caller that advances the
 // PIT by this much and finds nothing happened has only done unnecessary work,
 // whereas one that waited longer would miss an edge.
-uint32_t PITTicksUntilNextEvent(const PITState* pit);
+YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const PITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H
 
@@ -17084,8 +17253,8 @@ static uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
-YAX86_HOT static uint32_t PITMode2TicksUntilEvent(
-    const PITChannelState* channel) {
+static YAX86_HOT uint32_t
+PITMode2TicksUntilEvent(const PITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
@@ -17124,7 +17293,7 @@ static void PITMode3HandleTick(
 // and at 0xFFFF from an odd one. Either way a counter of 4 or more has at
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
-YAX86_HOT static uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
+static YAX86_HOT uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
@@ -17154,7 +17323,7 @@ static const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
-void PITInit(PITState* pit) {
+YAX86_PUBLIC void PITInit(PITState* pit) {
   // On the IBM PC, the output pins of all three channels are initially pulled
   // high.
   for (int i = 0; i < kPITNumChannels; ++i) {
@@ -17244,7 +17413,7 @@ static inline void PITChannelWritePort(
   }
 }
 
-void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
   switch (port) {
     case kPITPortControl: {
       // Control word.
@@ -17337,7 +17506,7 @@ static inline uint8_t PITChannelReadPort(
   return result;
 }
 
-uint8_t PITReadPort(PITState* pit, uint16_t port) {
+YAX86_PUBLIC uint8_t PITReadPort(PITState* pit, uint16_t port) {
   switch (port) {
     case kPITPortChannel0:
     case kPITPortChannel1:
@@ -17353,7 +17522,7 @@ uint8_t PITReadPort(PITState* pit, uint16_t port) {
   }
 }
 
-YAX86_HOT void PITTick(PITState* pit) {
+YAX86_PUBLIC YAX86_HOT void PITTick(PITState* pit) {
   PITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     if (channel->mode >= kPITNumModes) {
@@ -17411,7 +17580,7 @@ static void PITAdvanceChannel(
   }
 }
 
-YAX86_HOT void PITAdvance(PITState* pit, uint32_t num_ticks) {
+YAX86_PUBLIC YAX86_HOT void PITAdvance(PITState* pit, uint32_t num_ticks) {
   if (num_ticks == 0) {
     return;
   }
@@ -17421,7 +17590,7 @@ YAX86_HOT void PITAdvance(PITState* pit, uint32_t num_ticks) {
   }
 }
 
-uint32_t PITTicksUntilNextEvent(const PITState* pit) {
+YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const PITState* pit) {
   uint32_t earliest = kPITNoEvent;
   const PITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
@@ -17484,6 +17653,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -17912,7 +18088,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -17956,7 +18132,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -17964,7 +18140,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -17973,14 +18149,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -18296,18 +18473,19 @@ typedef struct MemoryMapEntry {
 // that was unmapped at the time and so read as open bus - which no page
 // generation catches, because nothing was written. PlatformInit() registers
 // every region the machine has and updates once at the end.
-bool RegisterMemoryMapEntry(
+YAX86_PUBLIC bool RegisterMemoryMapEntry(
     struct PlatformState* platform, const MemoryMapEntry* entry);
 // Discard what the CPU derives from the memory map: its instruction fetch
 // window, its direct data window and its decode cache.
-void PlatformUpdateAfterMemoryMapChange(struct PlatformState* platform);
+YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(
+    struct PlatformState* platform);
 // Look up the memory map entry corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory map entry.
-MemoryMapEntry* GetMemoryMapEntryForAddress(
+YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryForAddress(
     struct PlatformState* platform, uint32_t address);
 // Look up a memory map entry by type. Returns NULL if no entry found with the
 // specified type.
-MemoryMapEntry* GetMemoryMapEntryByType(
+YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
     struct PlatformState* platform, MemoryMapEntryType entry_type);
 
 // Read a byte from a logical memory address, either directly from the
@@ -18316,18 +18494,20 @@ MemoryMapEntry* GetMemoryMapEntryByType(
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint8_t
+ReadMemoryByte(struct PlatformState* platform, uint32_t address);
 // Read a word from a logical memory address, either directly from the
 // corresponding memory map entry's read_data buffer or via its read_byte_fn
 // callback.
-uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint16_t
+ReadMemoryWord(struct PlatformState* platform, uint32_t address);
 // Write a byte to a logical memory address, either directly to the
 // corresponding memory map entry's write_data buffer or via its
 // write_byte_fn callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-void WriteMemoryByte(
+YAX86_PUBLIC void WriteMemoryByte(
     struct PlatformState* platform, uint32_t address, uint8_t value);
 
 // ============================================================================
@@ -18377,23 +18557,24 @@ typedef struct PortMapEntry {
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-bool RegisterPortMapEntry(
+YAX86_PUBLIC bool RegisterPortMapEntry(
     struct PlatformState* platform, const PortMapEntry* entry);
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-PortMapEntry* GetPortMapEntryForPort(
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
     struct PlatformState* platform, uint16_t port);
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-PortMapEntry* GetPortMapEntryByType(
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
     struct PlatformState* platform, PortMapEntryType entry_type);
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
+YAX86_PUBLIC uint8_t
+ReadPortByte(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-void WritePortByte(
+YAX86_PUBLIC void WritePortByte(
     struct PlatformState* platform, uint16_t port, uint8_t value);
 
 // ============================================================================
@@ -18612,11 +18793,11 @@ typedef struct PlatformState {
 // config first. Nothing here zeroes anything: every module's state is a field
 // of this one, so the caller's single zeroing covers all of them, and each
 // module's init sets only what wants a non-zero value.
-bool PlatformInit(PlatformState* platform);
+YAX86_PUBLIC bool PlatformInit(PlatformState* platform);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.
-bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
+YAX86_PUBLIC bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
 // Execute one instruction, and bring any device whose deadline has come due up
 // to date with the cycles it took.
@@ -18632,7 +18813,7 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 // the CPU itself. PlatformRun() batches instructions into a tick instead.
 //
 // Returns kPlatformRunning if the machine should keep running.
-PlatformRunStatus PlatformTick(PlatformState* platform);
+YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform);
 
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
@@ -18651,7 +18832,8 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // reached, because the difference wraps to zero first. A budget of a display
 // frame or so, which is what a host driving the machine in real time passes,
 // is nowhere near this.
-PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
+YAX86_PUBLIC PlatformRunStatus
+PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Bring every device up to date with the cycles that have run so far.
 //
@@ -18661,7 +18843,7 @@ PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
 // needs it before inspecting a device directly - most usefully before
 // VideoRender(), so that the frame reflects where the CRT beam has actually
 // reached.
-void PlatformSync(PlatformState* platform);
+YAX86_PUBLIC void PlatformSync(PlatformState* platform);
 
 #endif  // YAX86_PLATFORM_PUBLIC_H
 
@@ -18758,7 +18940,7 @@ static void UpdateMemoryPageMapForEntry(
 // changed. What the CPU derives from the map - its two windows and its decode
 // cache - is left to the caller, so that a run of registrations pays for one
 // recompute rather than one each.
-bool RegisterMemoryMapEntry(
+YAX86_PUBLIC bool RegisterMemoryMapEntry(
     PlatformState* platform, const MemoryMapEntry* entry) {
   // The index has a slot per page of the address space and none above it, so
   // an entry reaching past the top could not be recorded in it. Rejecting one
@@ -18787,7 +18969,7 @@ bool RegisterMemoryMapEntry(
   return true;
 }
 
-void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
+YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
   // The data window is whichever entry covers address 0, which a registration
   // may have just become.
   PlatformUpdateDirectDataWindow(platform);
@@ -18815,7 +18997,7 @@ static inline uint8_t GetMemoryPageMapIndex(
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
+YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
     PlatformState* platform, uint32_t address) {
   const uint8_t index = GetMemoryPageMapIndex(platform, address);
   if (index < kMaxMemoryMapEntries) {
@@ -18836,7 +19018,7 @@ YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
 
 // Look up a memory region by type. Returns NULL if no region found with the
 // specified type.
-YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
+YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
     PlatformState* platform, uint8_t entry_type) {
   for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
     MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
@@ -18848,7 +19030,8 @@ YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
 }
 
 // Read a byte from a logical memory address.
-YAX86_HOT uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+YAX86_PUBLIC YAX86_HOT uint8_t
+ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     // Plain storage, which is what every region except video memory is. Going
@@ -18870,14 +19053,15 @@ YAX86_HOT uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
 }
 
 // Read a word from a logical memory address.
-uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
+YAX86_PUBLIC uint16_t
+ReadMemoryWord(PlatformState* platform, uint32_t address) {
   uint8_t low_byte = ReadMemoryByte(platform, address);
   uint8_t high_byte = ReadMemoryByte(platform, address + 1);
   return (high_byte << 8) | low_byte;
 }
 
 // Write a byte to a logical memory address.
-YAX86_HOT void WriteMemoryByte(
+YAX86_PUBLIC YAX86_HOT void WriteMemoryByte(
     PlatformState* platform, uint32_t address, uint8_t value) {
   // Writes that do not come from the CPU arrive here, and can land on bytes it
   // has already decoded. DMA is the one that matters: DOS loads itself over
@@ -18904,7 +19088,8 @@ YAX86_HOT void WriteMemoryByte(
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
+YAX86_PUBLIC bool RegisterPortMapEntry(
+    PlatformState* platform, const PortMapEntry* entry) {
   if (PortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
     return false;
   }
@@ -18923,7 +19108,8 @@ bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
 
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
+    PlatformState* platform, uint16_t port) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
     if (port >= entry->start && port <= entry->end) {
@@ -18934,7 +19120,7 @@ PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
 }
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-YAX86_HOT PortMapEntry* GetPortMapEntryByType(
+YAX86_PUBLIC YAX86_HOT PortMapEntry* GetPortMapEntryByType(
     PlatformState* platform, PortMapEntryType entry_type) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
@@ -18947,7 +19133,8 @@ YAX86_HOT PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_HOT uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
+YAX86_PUBLIC YAX86_HOT uint8_t
+ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
@@ -18960,7 +19147,7 @@ YAX86_HOT uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
 
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-YAX86_HOT void WritePortByte(
+YAX86_PUBLIC YAX86_HOT void WritePortByte(
     PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
@@ -19001,7 +19188,7 @@ static uint8_t PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PICReadPort((PICState*)entry->context, port);
 }
 
-YAX86_HOT static void PICCallbackWritePortByte(
+static YAX86_HOT void PICCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PICWritePort((PICState*)entry->context, port, value);
 }
@@ -19015,8 +19202,8 @@ static void PICCallbackPlatformRaiseIRQ0(void* context) {
 // Callbacks for 8253 PIT module
 // ============================================================================
 
-YAX86_HOT static uint8_t PITCallbackReadPortByte(
-    PortMapEntry* entry, uint16_t port) {
+static YAX86_HOT uint8_t
+PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // A guest timing loop reads the counter expecting it to have moved, so the
   // PIT has to be caught up before it is read.
   PlatformState* platform = (PlatformState*)entry->context;
@@ -19102,7 +19289,7 @@ static void FDCCallbackRaiseIRQ6(void* context) {
   PlatformRaiseIRQ(platform, 6);
 }
 
-YAX86_HOT static void FDCCallbackRequestDMA(void* context) {
+static YAX86_HOT void FDCCallbackRequestDMA(void* context) {
   PlatformState* platform = (PlatformState*)context;
   DMATransferByte(&platform->dma, kPlatformDMAChannelFloppy);
 }
@@ -19184,8 +19371,8 @@ static void DMACallbackWritePortByte(
 // Callbacks for Video module
 // ============================================================================
 
-YAX86_HOT static uint8_t VideoCallbackReadPortByte(
-    PortMapEntry* entry, uint16_t port) {
+static YAX86_HOT uint8_t
+VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // The status port reports where the CRT beam is, which is only meaningful
   // once the beam has been advanced to now. Guests poll this to wait for
   // retrace.
@@ -19263,8 +19450,8 @@ enum {
 //
 // Only installed when the idle skip is enabled, so a machine without it pays
 // nothing per interrupt.
-YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
-    CPUState* cpu, uint8_t interrupt_number) {
+static YAX86_HOT InterruptHandlerResult
+CPUCallbackHandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == kDOSIdleInterrupt) {
     PlatformState* platform = (PlatformState*)cpu->config.context;
     platform->is_guest_idle = true;
@@ -19527,7 +19714,7 @@ static void PlatformInitVideo(PlatformState* platform) {
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
-bool PlatformInit(PlatformState* platform) {
+YAX86_PUBLIC bool PlatformInit(PlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
   LoggerInit(&platform->logger, platform->config.logger_config);
@@ -19589,7 +19776,8 @@ bool PlatformInit(PlatformState* platform) {
   return true;
 }
 
-YAX86_HOT bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
+YAX86_PUBLIC YAX86_HOT bool PlatformRaiseIRQ(
+    PlatformState* platform, uint8_t irq) {
   if (irq >= 8) {
     return false;
   }
@@ -19665,7 +19853,7 @@ static uint32_t PlatformCyclesUntilNextEvent(
 
 // Bring every device up to date with the cycles that have run since the last
 // sync, and schedule the next deadline.
-YAX86_HOT void PlatformSync(PlatformState* platform) {
+YAX86_PUBLIC YAX86_HOT void PlatformSync(PlatformState* platform) {
   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
   platform->last_sync_ticks = platform->ticks;
 
@@ -19714,8 +19902,8 @@ YAX86_HOT void PlatformSync(PlatformState* platform) {
 // The body of both entry points. PlatformTick() promises its caller one
 // instruction; PlatformRun() is driving the machine rather than stepping it.
 // Both pass a constant, so the tests below fold away in each.
-YAX86_HOT static PlatformRunStatus PlatformTickInternal(
-    PlatformState* platform, bool may_batch_instructions) {
+static YAX86_HOT PlatformRunStatus
+PlatformTickInternal(PlatformState* platform, bool may_batch_instructions) {
   // How long the CPU may run before something in the machine needs to see it.
   // A deadline already due leaves no budget: the subtraction would otherwise
   // wrap and let the CPU run on past a device that is already waiting.
@@ -19753,7 +19941,7 @@ YAX86_HOT static PlatformRunStatus PlatformTickInternal(
   return kPlatformRunning;
 }
 
-PlatformRunStatus PlatformTick(PlatformState* platform) {
+YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform) {
   return PlatformTickInternal(platform, false);
 }
 
@@ -19780,7 +19968,7 @@ static void PlatformSkipIdleTime(PlatformState* platform, uint32_t max_cycles) {
   PlatformSync(platform);
 }
 
-YAX86_HOT PlatformRunStatus
+YAX86_PUBLIC YAX86_HOT PlatformRunStatus
 PlatformRun(PlatformState* platform, uint32_t max_cycles) {
   // Instructions are only ever run whole, so the last one of a run generally
   // takes the total a little past the budget. Unsigned subtraction keeps this
@@ -19860,6 +20048,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -20288,7 +20483,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -20332,7 +20527,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -20340,7 +20535,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -20349,14 +20544,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -20606,25 +20802,26 @@ typedef struct PPIState {
 } PPIState;
 
 // Initializes the PPI to its power-on state.
-void PPIInit(PPIState* ppi);
+YAX86_PUBLIC void PPIInit(PPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
-uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
+YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
 
 // Handles writes to the PPI's I/O ports (0x61, 0x63).
-void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value);
 
 // Returns whether the PC speaker is currently enabled. This is determined by
 // bit 0 and 1 of Port B.
-bool PPIIsPCSpeakerEnabled(PPIState* ppi);
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi);
 
 // Sets the PC speaker frequency from the 8253 timer channel 2 output. This
 // should be wired up to the callback from the PIT emulation module.
-void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz);
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+    PPIState* ppi, uint32_t frequency_hz);
 
 // Sets the scancode byte that will be returned when the CPU reads from Port A.
 // This function should be called by the keyboard emulation module.
-void PPISetScancode(PPIState* ppi, uint8_t scancode);
+YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode);
 
 #endif  // YAX86_PPI_PUBLIC_H
 
@@ -20645,7 +20842,7 @@ void PPISetScancode(PPIState* ppi, uint8_t scancode);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-void PPIInit(PPIState* ppi) {
+YAX86_PUBLIC void PPIInit(PPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
@@ -20658,7 +20855,7 @@ static inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
   return config->num_floppy_drives;
 }
 
-uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
+YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
   switch (port) {
     case kPPIPortA:
       // Reading Port A gets the keyboard scancode.
@@ -20695,7 +20892,7 @@ uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
   }
 }
 
-bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
   return (ppi->port_b & kPPIPortBTimer2Gate) &&
          (ppi->port_b & kPPIPortBSpeakerData);
 }
@@ -20705,7 +20902,7 @@ static inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
-void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
     case kPPIPortB: {
       // Save old states in order to check for changes after the write.
@@ -20750,7 +20947,8 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
   }
 }
 
-void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+    PPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
   // Invoke the callback only if the speaker is currently enabled and the
@@ -20761,7 +20959,7 @@ void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   }
 }
 
-void PPISetScancode(PPIState* ppi, uint8_t scancode) {
+YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode) {
   ppi->port_a_latch = scancode;
 }
 
@@ -20797,6 +20995,13 @@ extern "C" {
 #line 1 "./src/util/common.h"
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
+
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
 
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
@@ -21225,7 +21430,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -21269,7 +21474,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -21277,7 +21482,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -21286,14 +21491,15 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(
+    Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -22170,26 +22376,30 @@ typedef struct VideoState {
 } VideoState;
 
 // Initialize video state with the provided configuration.
-void VideoInit(VideoState* video);
+YAX86_PUBLIC void VideoInit(VideoState* video);
 
 // Metadata for the adapter being emulated.
-const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video);
 
 // The current video mode, derived from the mode control register.
-VideoMode VideoGetMode(const VideoState* video);
+YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video);
 
 // Metadata for the current video mode.
-const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video);
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video);
 
 // Read a byte from a video I/O port.
-uint8_t VideoReadPort(VideoState* video, uint16_t port);
+YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-void VideoWritePort(VideoState* video, uint16_t port, uint8_t value);
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
-uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
+YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
 // Write a byte to video RAM.
-void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
@@ -22197,13 +22407,13 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value);
 // The cost does not depend on how many cycles are passed, so a caller that
 // advances the beam only when something is about to look at it may pass a
 // whole frame's worth at once.
-void VideoTick(VideoState* video, uint32_t cycles);
+YAX86_PUBLIC void VideoTick(VideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
 // write_pixels in row-major horizontal spans. Does nothing when the display is
 // unchanged.
-void VideoRender(VideoState* video);
+YAX86_PUBLIC void VideoRender(VideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H
 
@@ -23618,7 +23828,8 @@ static void VideoInvalidateCursor(VideoState* video);
 static void VideoInvalidateBlinkingText(VideoState* video);
 static void VideoInvalidateAll(VideoState* video);
 
-const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
+    const VideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
 }
 
@@ -23659,14 +23870,15 @@ YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
   VideoInvalidateVRAMAddress(video, address);
 }
 
-uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
+YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return kVideoUnmappedPortValue;
   }
   return VideoReadVRAMByte(video, address);
 }
 
-void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
+YAX86_PUBLIC void VideoWriteVRAM(
+    VideoState* video, uint32_t address, uint8_t value) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return;
   }
@@ -23677,7 +23889,7 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
 // Initialization
 // ============================================================================
 
-void VideoInit(VideoState* video) {
+YAX86_PUBLIC void VideoInit(VideoState* video) {
   video->adapter = video->config.adapter == kVideoAdapterCGA ? kVideoAdapterCGA
                                                              : kVideoAdapterMDA;
 
@@ -23701,7 +23913,7 @@ void VideoInit(VideoState* video) {
 // Video mode
 // ============================================================================
 
-YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
+YAX86_PUBLIC YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
   if (video->adapter == kVideoAdapterMDA) {
     // The MDA has only one mode.
     return kVideoModeMDAText80x25;
@@ -23732,7 +23944,8 @@ YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
              : kVideoModeCGAGraphics320x200;
 }
 
-const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
+    const VideoState* video) {
   return &kVideoModeMetadata[VideoGetMode(video)];
 }
 
@@ -23969,7 +24182,7 @@ static void VideoInvalidateBlinkingText(VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
+YAX86_PUBLIC YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
       adapter->scan_lines_per_frame == 0) {
@@ -24083,7 +24296,7 @@ static VideoPortFunction VideoDecodePort(
   }
 }
 
-uint8_t VideoReadPort(VideoState* video, uint16_t port) {
+YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       return video->selected_register;
@@ -24103,7 +24316,8 @@ uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   }
 }
 
-void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void VideoWritePort(
+    VideoState* video, uint16_t port, uint8_t value) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       video->selected_register = value & kCRTCRegisterIndexMask;
@@ -24222,7 +24436,7 @@ static void VideoRenderDirtyRegion(
   }
 }
 
-void VideoRender(VideoState* video) {
+YAX86_PUBLIC void VideoRender(VideoState* video) {
   if (!video->config.write_pixels || video->dirty_state.status == kVideoClean) {
     return;
   }

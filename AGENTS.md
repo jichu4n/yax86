@@ -183,20 +183,29 @@ and RAM even when idle.
 
 ### Placement and inlining marks
 
-- `YAX86_HOT`, `YAX86_NOINLINE` and `YAX86_ALWAYS_INLINE` go first in a
-  definition, before the linkage macro and the return type: `YAX86_HOT
-  YAX86_MODULE_PRIVATE InstructionResult ExecuteSub(...)`, `YAX86_HOT static uint8_t
-  ReadByte(...)`. Both orders compile, so the point is only that there be one —
-  putting the mark first leaves the declaration after it reading exactly as it
-  would without the mark. Only one of the three is ever on a given function.
+- **The visibility macro comes first, then the placement and inlining marks,
+  then the return type**: `YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
+  ExecuteSub(...)`, `static YAX86_HOT uint8_t ReadByte(...)`. Every definition
+  carries a visibility macro and only 91 carry a mark, so leading with the
+  universal one puts the answer to "is this part of the interface" in the same
+  place on every line, and makes `^YAX86_PUBLIC` an exact count rather than an
+  approximate one. `YAX86_HOT`, `YAX86_NOINLINE` and `YAX86_ALWAYS_INLINE`
+  follow it, in whatever combination applies - `CPUExecuteDecodedInstruction()`
+  carries two.
+- Both orders compile, and an attribute behind `static` still takes effect:
+  `static YAX86_HOT`, `static inline YAX86_HOT` and `static YAX86_HOT
+  YAX86_NOINLINE` all land in the named section under gcc and clang. Check that
+  with `objdump -t` at `-O0` rather than at `-O3`, where a small static inlines
+  away and its section never appears.
 - `clang-format` will not fix a misplaced mark, and will disguise one. It
   chooses where to break lines and never reorders tokens, so a mark added to
   the start of a *continuation* line — which is where a wrapped signature's
   declarator lives, below its return type — is already mid-declaration.
-  Reformatting rejoins it as `YAX86_MODULE_PRIVATE InstructionResult YAX86_HOT`, which
-  reads as though the mark belonged to the return type and was put there on
-  purpose. Add the mark to the line the declaration *starts* on and
-  reformatting keeps it first, however it decides to wrap.
+  Reformatting rejoins it as `InstructionResult YAX86_HOT`, which reads as
+  though the mark belonged to the return type and was put there on purpose.
+  Put both macros on the line the declaration *starts* on and reformatting
+  keeps them there, however it decides to wrap. A displaced visibility macro is
+  the worse of the two, since it is what the line is meant to be scannable by.
 
 ### Comments
 
@@ -1417,10 +1426,12 @@ Alongside the table, state:
   through by construction. If the count in the bundle ever drops, something is
   wrong with the bundler:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 163
+  grep -c YAX86_HOT core/yax86_core.h    # 170
   ```
   That is 86 annotations plus the macro block in `util/common.h`, whose seven
-  lines all match on the substring, once per each of the 11 module bundles.
+  lines all match on the substring, once for each of the twelve times a
+  `bundle.json` names it - every module's public list, and the cpu module's
+  private list as well.
 - `YAX86_ALWAYS_INLINE` is not about placement, but exists for the same reason:
   something the compiler was doing for free stops being free and nothing in the
   source says so. The case it was added for is a small helper with one hot
