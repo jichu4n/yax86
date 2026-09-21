@@ -10,7 +10,7 @@
 // ============================================================================
 
 // Read a byte from an I/O port.
-YAX86_HOT static OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
+static YAX86_HOT OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return (OperandValue)(cpu->config.read_port ? cpu->config.read_port(cpu, port)
                                               : 0xFF);
 }
@@ -43,7 +43,7 @@ static InstructionResult ExecuteIn(
 
 // IN AL, imm8
 // IN AX, imm8
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteInImmediate(const InstructionContext* ctx) {
   OperandValue port = ReadImmediateOperandByte(ctx->instruction);
   return ExecuteIn(ctx, FromOperandValue(port));
@@ -51,7 +51,7 @@ ExecuteInImmediate(const InstructionContext* ctx) {
 
 // IN AL, DX
 // IN AX, DX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteInDX(const InstructionContext* ctx) {
   return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
 }
@@ -98,7 +98,7 @@ ExecuteOutImmediate(const InstructionContext* ctx) {
 
 // OUT DX, AL
 // OUT DX, AX
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteOutDX(const InstructionContext* ctx) {
   return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }

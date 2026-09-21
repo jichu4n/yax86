@@ -58,7 +58,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-YAX86_HOT static InstructionResult ExecuteSubCommon(
+static YAX86_HOT InstructionResult ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -80,7 +80,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -91,7 +91,7 @@ ExecuteSubRegisterFromRegisterOrMemory(const InstructionContext* ctx) {
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteSubRegisterOrMemoryFromRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);

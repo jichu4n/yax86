@@ -1360,7 +1360,7 @@ static inline uint8_t GetMemoryPageMapIndex(
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryForAddress(
+YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
     PlatformState* platform, uint32_t address) {
   const uint8_t index = GetMemoryPageMapIndex(platform, address);
   if (index < kMaxMemoryMapEntries) {
@@ -1381,7 +1381,7 @@ YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryForAddress(
 
 // Look up a memory region by type. Returns NULL if no region found with the
 // specified type.
-YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
+YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
     PlatformState* platform, uint8_t entry_type) {
   for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
     MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
@@ -1393,7 +1393,7 @@ YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
 }
 
 // Read a byte from a logical memory address.
-YAX86_HOT YAX86_PUBLIC uint8_t
+YAX86_PUBLIC YAX86_HOT uint8_t
 ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
@@ -1424,7 +1424,7 @@ ReadMemoryWord(PlatformState* platform, uint32_t address) {
 }
 
 // Write a byte to a logical memory address.
-YAX86_HOT YAX86_PUBLIC void WriteMemoryByte(
+YAX86_PUBLIC YAX86_HOT void WriteMemoryByte(
     PlatformState* platform, uint32_t address, uint8_t value) {
   // Writes that do not come from the CPU arrive here, and can land on bytes it
   // has already decoded. DMA is the one that matters: DOS loads itself over
@@ -1483,7 +1483,7 @@ YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
 }
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-YAX86_HOT YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
+YAX86_PUBLIC YAX86_HOT PortMapEntry* GetPortMapEntryByType(
     PlatformState* platform, PortMapEntryType entry_type) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
@@ -1496,7 +1496,7 @@ YAX86_HOT YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_HOT YAX86_PUBLIC uint8_t
+YAX86_PUBLIC YAX86_HOT uint8_t
 ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
@@ -1510,7 +1510,7 @@ ReadPortByte(PlatformState* platform, uint16_t port) {
 
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-YAX86_HOT YAX86_PUBLIC void WritePortByte(
+YAX86_PUBLIC YAX86_HOT void WritePortByte(
     PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
@@ -1551,7 +1551,7 @@ static uint8_t PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PICReadPort((PICState*)entry->context, port);
 }
 
-YAX86_HOT static void PICCallbackWritePortByte(
+static YAX86_HOT void PICCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PICWritePort((PICState*)entry->context, port, value);
 }
@@ -1565,8 +1565,8 @@ static void PICCallbackPlatformRaiseIRQ0(void* context) {
 // Callbacks for 8253 PIT module
 // ============================================================================
 
-YAX86_HOT static uint8_t PITCallbackReadPortByte(
-    PortMapEntry* entry, uint16_t port) {
+static YAX86_HOT uint8_t
+PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // A guest timing loop reads the counter expecting it to have moved, so the
   // PIT has to be caught up before it is read.
   PlatformState* platform = (PlatformState*)entry->context;
@@ -1652,7 +1652,7 @@ static void FDCCallbackRaiseIRQ6(void* context) {
   PlatformRaiseIRQ(platform, 6);
 }
 
-YAX86_HOT static void FDCCallbackRequestDMA(void* context) {
+static YAX86_HOT void FDCCallbackRequestDMA(void* context) {
   PlatformState* platform = (PlatformState*)context;
   DMATransferByte(&platform->dma, kPlatformDMAChannelFloppy);
 }
@@ -1734,8 +1734,8 @@ static void DMACallbackWritePortByte(
 // Callbacks for Video module
 // ============================================================================
 
-YAX86_HOT static uint8_t VideoCallbackReadPortByte(
-    PortMapEntry* entry, uint16_t port) {
+static YAX86_HOT uint8_t
+VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // The status port reports where the CRT beam is, which is only meaningful
   // once the beam has been advanced to now. Guests poll this to wait for
   // retrace.
@@ -1813,8 +1813,8 @@ enum {
 //
 // Only installed when the idle skip is enabled, so a machine without it pays
 // nothing per interrupt.
-YAX86_HOT static InterruptHandlerResult CPUCallbackHandleInterrupt(
-    CPUState* cpu, uint8_t interrupt_number) {
+static YAX86_HOT InterruptHandlerResult
+CPUCallbackHandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == kDOSIdleInterrupt) {
     PlatformState* platform = (PlatformState*)cpu->config.context;
     platform->is_guest_idle = true;
@@ -2139,7 +2139,7 @@ YAX86_PUBLIC bool PlatformInit(PlatformState* platform) {
   return true;
 }
 
-YAX86_HOT YAX86_PUBLIC bool PlatformRaiseIRQ(
+YAX86_PUBLIC YAX86_HOT bool PlatformRaiseIRQ(
     PlatformState* platform, uint8_t irq) {
   if (irq >= 8) {
     return false;
@@ -2216,7 +2216,7 @@ static uint32_t PlatformCyclesUntilNextEvent(
 
 // Bring every device up to date with the cycles that have run since the last
 // sync, and schedule the next deadline.
-YAX86_HOT YAX86_PUBLIC void PlatformSync(PlatformState* platform) {
+YAX86_PUBLIC YAX86_HOT void PlatformSync(PlatformState* platform) {
   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
   platform->last_sync_ticks = platform->ticks;
 
@@ -2265,8 +2265,8 @@ YAX86_HOT YAX86_PUBLIC void PlatformSync(PlatformState* platform) {
 // The body of both entry points. PlatformTick() promises its caller one
 // instruction; PlatformRun() is driving the machine rather than stepping it.
 // Both pass a constant, so the tests below fold away in each.
-YAX86_HOT static PlatformRunStatus PlatformTickInternal(
-    PlatformState* platform, bool may_batch_instructions) {
+static YAX86_HOT PlatformRunStatus
+PlatformTickInternal(PlatformState* platform, bool may_batch_instructions) {
   // How long the CPU may run before something in the machine needs to see it.
   // A deadline already due leaves no budget: the subtraction would otherwise
   // wrap and let the CPU run on past a device that is already waiting.
@@ -2331,7 +2331,7 @@ static void PlatformSkipIdleTime(PlatformState* platform, uint32_t max_cycles) {
   PlatformSync(platform);
 }
 
-YAX86_HOT YAX86_PUBLIC PlatformRunStatus
+YAX86_PUBLIC YAX86_HOT PlatformRunStatus
 PlatformRun(PlatformState* platform, uint32_t max_cycles) {
   // Instructions are only ever run whole, so the last one of a run generally
   // takes the total a little past the budget. Unsigned subtraction keeps this

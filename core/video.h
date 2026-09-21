@@ -2934,7 +2934,7 @@ YAX86_PUBLIC void VideoInit(VideoState* video) {
 // Video mode
 // ============================================================================
 
-YAX86_HOT YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video) {
+YAX86_PUBLIC YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
   if (video->adapter == kVideoAdapterMDA) {
     // The MDA has only one mode.
     return kVideoModeMDAText80x25;
@@ -3203,7 +3203,7 @@ static void VideoInvalidateBlinkingText(VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-YAX86_HOT YAX86_PUBLIC void VideoTick(VideoState* video, uint32_t cycles) {
+YAX86_PUBLIC YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
       adapter->scan_lines_per_frame == 0) {

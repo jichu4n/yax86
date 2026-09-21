@@ -1004,7 +1004,7 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_HOT YAX86_PUBLIC void DMATransferByte(
+YAX86_PUBLIC YAX86_HOT void DMATransferByte(
     DMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;

@@ -111,7 +111,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteBooleanXor(
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteBooleanXorRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
@@ -155,7 +155,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteTest(
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteTestRegisterToRegisterOrMemory(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);

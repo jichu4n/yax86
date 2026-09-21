@@ -311,7 +311,7 @@ static void FDCHandleWriteData(FDCState* fdc) {
 }
 
 // Handler for Read Data command.
-YAX86_HOT static void FDCHandleReadData(FDCState* fdc) {
+static YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);

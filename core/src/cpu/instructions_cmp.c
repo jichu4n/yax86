@@ -10,7 +10,7 @@
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult ExecuteCmp(
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteCmp(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
@@ -32,7 +32,7 @@ ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperand(ctx, &dest);
@@ -43,7 +43,7 @@ ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
 
 // CMP AL, imm8
 // CMP AX, imm16
-YAX86_HOT YAX86_MODULE_PRIVATE InstructionResult
+YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
 ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
