@@ -2,6 +2,7 @@
 #define YAX86_CPU_CYCLES_H
 
 #ifndef YAX86_IMPLEMENTATION
+#include "../util/common.h"
 #include "public.h"
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
@@ -21,14 +22,11 @@ enum {
   kBusCyclesPerByte = 4,
 };
 
-#ifndef YAX86_IMPLEMENTATION
-
 // Cycles to compute the effective address of a ModR/M memory operand.
-extern uint8_t GetEffectiveAddressCycles(const Instruction* instruction);
+YAX86_MODULE_PRIVATE uint8_t
+GetEffectiveAddressCycles(const Instruction* instruction);
 
 // Charge the instruction currently executing for time on the data bus.
-extern void AddBusCycles(CPUState* cpu, uint8_t num_bytes);
-
-#endif  // YAX86_IMPLEMENTATION
+YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes);
 
 #endif  // YAX86_CPU_CYCLES_H
