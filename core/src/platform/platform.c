@@ -78,7 +78,7 @@ static void UpdateMemoryPageMapForEntry(
 // changed. What the CPU derives from the map - its two windows and its decode
 // cache - is left to the caller, so that a run of registrations pays for one
 // recompute rather than one each.
-bool RegisterMemoryMapEntry(
+YAX86_PUBLIC bool RegisterMemoryMapEntry(
     PlatformState* platform, const MemoryMapEntry* entry) {
   // The index has a slot per page of the address space and none above it, so
   // an entry reaching past the top could not be recorded in it. Rejecting one
@@ -107,7 +107,7 @@ bool RegisterMemoryMapEntry(
   return true;
 }
 
-void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
+YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
   // The data window is whichever entry covers address 0, which a registration
   // may have just become.
   PlatformUpdateDirectDataWindow(platform);
@@ -135,7 +135,7 @@ static inline uint8_t GetMemoryPageMapIndex(
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
+YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryForAddress(
     PlatformState* platform, uint32_t address) {
   const uint8_t index = GetMemoryPageMapIndex(platform, address);
   if (index < kMaxMemoryMapEntries) {
@@ -156,7 +156,7 @@ YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
 
 // Look up a memory region by type. Returns NULL if no region found with the
 // specified type.
-YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
+YAX86_HOT YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
     PlatformState* platform, uint8_t entry_type) {
   for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
     MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
@@ -168,7 +168,7 @@ YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
 }
 
 // Read a byte from a logical memory address.
-YAX86_HOT uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
+YAX86_HOT YAX86_PUBLIC uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
   MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     // Plain storage, which is what every region except video memory is. Going
@@ -190,14 +190,14 @@ YAX86_HOT uint8_t ReadMemoryByte(PlatformState* platform, uint32_t address) {
 }
 
 // Read a word from a logical memory address.
-uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
+YAX86_PUBLIC uint16_t ReadMemoryWord(PlatformState* platform, uint32_t address) {
   uint8_t low_byte = ReadMemoryByte(platform, address);
   uint8_t high_byte = ReadMemoryByte(platform, address + 1);
   return (high_byte << 8) | low_byte;
 }
 
 // Write a byte to a logical memory address.
-YAX86_HOT void WriteMemoryByte(
+YAX86_HOT YAX86_PUBLIC void WriteMemoryByte(
     PlatformState* platform, uint32_t address, uint8_t value) {
   // Writes that do not come from the CPU arrive here, and can land on bytes it
   // has already decoded. DMA is the one that matters: DOS loads itself over
@@ -224,7 +224,7 @@ YAX86_HOT void WriteMemoryByte(
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
+YAX86_PUBLIC bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
   if (PortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
     return false;
   }
@@ -243,7 +243,7 @@ bool RegisterPortMapEntry(PlatformState* platform, const PortMapEntry* entry) {
 
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
     if (port >= entry->start && port <= entry->end) {
@@ -254,7 +254,7 @@ PortMapEntry* GetPortMapEntryForPort(PlatformState* platform, uint16_t port) {
 }
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-YAX86_HOT PortMapEntry* GetPortMapEntryByType(
+YAX86_HOT YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
     PlatformState* platform, PortMapEntryType entry_type) {
   for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
     PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
@@ -267,7 +267,7 @@ YAX86_HOT PortMapEntry* GetPortMapEntryByType(
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_HOT uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
+YAX86_HOT YAX86_PUBLIC uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
@@ -280,7 +280,7 @@ YAX86_HOT uint8_t ReadPortByte(PlatformState* platform, uint16_t port) {
 
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-YAX86_HOT void WritePortByte(
+YAX86_HOT YAX86_PUBLIC void WritePortByte(
     PlatformState* platform, uint16_t port, uint8_t value) {
   PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
@@ -847,7 +847,7 @@ static void PlatformInitVideo(PlatformState* platform) {
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
-bool PlatformInit(PlatformState* platform) {
+YAX86_PUBLIC bool PlatformInit(PlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
   LoggerInit(&platform->logger, platform->config.logger_config);
@@ -909,7 +909,7 @@ bool PlatformInit(PlatformState* platform) {
   return true;
 }
 
-YAX86_HOT bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
+YAX86_HOT YAX86_PUBLIC bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq) {
   if (irq >= 8) {
     return false;
   }
@@ -985,7 +985,7 @@ static uint32_t PlatformCyclesUntilNextEvent(
 
 // Bring every device up to date with the cycles that have run since the last
 // sync, and schedule the next deadline.
-YAX86_HOT void PlatformSync(PlatformState* platform) {
+YAX86_HOT YAX86_PUBLIC void PlatformSync(PlatformState* platform) {
   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
   platform->last_sync_ticks = platform->ticks;
 
@@ -1073,7 +1073,7 @@ YAX86_HOT static PlatformRunStatus PlatformTickInternal(
   return kPlatformRunning;
 }
 
-PlatformRunStatus PlatformTick(PlatformState* platform) {
+YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform) {
   return PlatformTickInternal(platform, false);
 }
 
@@ -1100,7 +1100,7 @@ static void PlatformSkipIdleTime(PlatformState* platform, uint32_t max_cycles) {
   PlatformSync(platform);
 }
 
-YAX86_HOT PlatformRunStatus
+YAX86_HOT YAX86_PUBLIC PlatformRunStatus
 PlatformRun(PlatformState* platform, uint32_t max_cycles) {
   // Instructions are only ever run whole, so the last one of a run generally
   // takes the total a little past the budget. Unsigned subtraction keeps this

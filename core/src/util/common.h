@@ -1,6 +1,13 @@
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
 
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
 // publicly to users of the bundled library.

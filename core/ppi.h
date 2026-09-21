@@ -17,6 +17,13 @@ extern "C" {
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
 
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
 // publicly to users of the bundled library.
@@ -444,7 +451,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -488,7 +495,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -496,7 +503,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -505,14 +512,14 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -762,25 +769,25 @@ typedef struct PPIState {
 } PPIState;
 
 // Initializes the PPI to its power-on state.
-void PPIInit(PPIState* ppi);
+YAX86_PUBLIC void PPIInit(PPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
-uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
+YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
 
 // Handles writes to the PPI's I/O ports (0x61, 0x63).
-void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value);
 
 // Returns whether the PC speaker is currently enabled. This is determined by
 // bit 0 and 1 of Port B.
-bool PPIIsPCSpeakerEnabled(PPIState* ppi);
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi);
 
 // Sets the PC speaker frequency from the 8253 timer channel 2 output. This
 // should be wired up to the callback from the PIT emulation module.
-void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz);
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz);
 
 // Sets the scancode byte that will be returned when the CPU reads from Port A.
 // This function should be called by the keyboard emulation module.
-void PPISetScancode(PPIState* ppi, uint8_t scancode);
+YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode);
 
 #endif  // YAX86_PPI_PUBLIC_H
 
@@ -801,7 +808,7 @@ void PPISetScancode(PPIState* ppi, uint8_t scancode);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-void PPIInit(PPIState* ppi) {
+YAX86_PUBLIC void PPIInit(PPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
@@ -814,7 +821,7 @@ static inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
   return config->num_floppy_drives;
 }
 
-uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
+YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
   switch (port) {
     case kPPIPortA:
       // Reading Port A gets the keyboard scancode.
@@ -851,7 +858,7 @@ uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
   }
 }
 
-bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
   return (ppi->port_b & kPPIPortBTimer2Gate) &&
          (ppi->port_b & kPPIPortBSpeakerData);
 }
@@ -861,7 +868,7 @@ static inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
-void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
     case kPPIPortB: {
       // Save old states in order to check for changes after the write.
@@ -906,7 +913,7 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
   }
 }
 
-void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
   // Invoke the callback only if the speaker is currently enabled and the
@@ -917,7 +924,7 @@ void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   }
 }
 
-void PPISetScancode(PPIState* ppi, uint8_t scancode) {
+YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode) {
   ppi->port_a_latch = scancode;
 }
 

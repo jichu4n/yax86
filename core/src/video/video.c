@@ -44,7 +44,7 @@ static void VideoInvalidateCursor(VideoState* video);
 static void VideoInvalidateBlinkingText(VideoState* video);
 static void VideoInvalidateAll(VideoState* video);
 
-const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(const VideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
 }
 
@@ -85,14 +85,14 @@ YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
   VideoInvalidateVRAMAddress(video, address);
 }
 
-uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
+YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return kVideoUnmappedPortValue;
   }
   return VideoReadVRAMByte(video, address);
 }
 
-void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
+YAX86_PUBLIC void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return;
   }
@@ -103,7 +103,7 @@ void VideoWriteVRAM(VideoState* video, uint32_t address, uint8_t value) {
 // Initialization
 // ============================================================================
 
-void VideoInit(VideoState* video) {
+YAX86_PUBLIC void VideoInit(VideoState* video) {
   video->adapter = video->config.adapter == kVideoAdapterCGA ? kVideoAdapterCGA
                                                              : kVideoAdapterMDA;
 
@@ -127,7 +127,7 @@ void VideoInit(VideoState* video) {
 // Video mode
 // ============================================================================
 
-YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
+YAX86_HOT YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video) {
   if (video->adapter == kVideoAdapterMDA) {
     // The MDA has only one mode.
     return kVideoModeMDAText80x25;
@@ -158,7 +158,7 @@ YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
              : kVideoModeCGAGraphics320x200;
 }
 
-const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
+YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(const VideoState* video) {
   return &kVideoModeMetadata[VideoGetMode(video)];
 }
 
@@ -395,7 +395,7 @@ static void VideoInvalidateBlinkingText(VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
+YAX86_HOT YAX86_PUBLIC void VideoTick(VideoState* video, uint32_t cycles) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
       adapter->scan_lines_per_frame == 0) {
@@ -509,7 +509,7 @@ static VideoPortFunction VideoDecodePort(
   }
 }
 
-uint8_t VideoReadPort(VideoState* video, uint16_t port) {
+YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       return video->selected_register;
@@ -529,7 +529,7 @@ uint8_t VideoReadPort(VideoState* video, uint16_t port) {
   }
 }
 
-void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void VideoWritePort(VideoState* video, uint16_t port, uint8_t value) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       video->selected_register = value & kCRTCRegisterIndexMask;
@@ -648,7 +648,7 @@ static void VideoRenderDirtyRegion(
   }
 }
 
-void VideoRender(VideoState* video) {
+YAX86_PUBLIC void VideoRender(VideoState* video) {
   if (!video->config.write_pixels || video->dirty_state.status == kVideoClean) {
     return;
   }

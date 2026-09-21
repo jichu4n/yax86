@@ -17,6 +17,13 @@ extern "C" {
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
 
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
 // publicly to users of the bundled library.
@@ -444,7 +451,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -488,7 +495,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -496,7 +503,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -505,14 +512,14 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -796,18 +803,18 @@ typedef struct KeyboardState {
 } KeyboardState;
 
 // Initializes the keyboard to its power-on state.
-void KeyboardInit(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
-void KeyboardHandleControl(
+YAX86_PUBLIC void KeyboardHandleControl(
     KeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
-void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode);
+YAX86_PUBLIC void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
-void KeyboardTickMs(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H
 
@@ -835,7 +842,7 @@ enum {
   kKeyboardSelfTestOK = 0xAA,
 };
 
-void KeyboardInit(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
@@ -879,7 +886,7 @@ static inline void KeyboardSendNextScancode(KeyboardState* keyboard) {
   KeyboardSendScancode(keyboard, scancode);
 }
 
-void KeyboardHandleControl(
+YAX86_PUBLIC void KeyboardHandleControl(
     KeyboardState* keyboard, bool enable_clear, bool clock_low) {
   // Save previous state.
   bool old_clock_low = keyboard->clock_low;
@@ -904,7 +911,7 @@ void KeyboardHandleControl(
   }
 }
 
-void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
+YAX86_PUBLIC void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.
@@ -915,7 +922,7 @@ void KeyboardHandleKeyPress(KeyboardState* keyboard, uint8_t scancode) {
   KeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
-void KeyboardTickMs(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {

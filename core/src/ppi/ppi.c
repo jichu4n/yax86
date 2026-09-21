@@ -2,7 +2,7 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-void PPIInit(PPIState* ppi) {
+YAX86_PUBLIC void PPIInit(PPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
@@ -15,7 +15,7 @@ static inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
   return config->num_floppy_drives;
 }
 
-uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
+YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
   switch (port) {
     case kPPIPortA:
       // Reading Port A gets the keyboard scancode.
@@ -52,7 +52,7 @@ uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
   }
 }
 
-bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
   return (ppi->port_b & kPPIPortBTimer2Gate) &&
          (ppi->port_b & kPPIPortBSpeakerData);
 }
@@ -62,7 +62,7 @@ static inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
-void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
     case kPPIPortB: {
       // Save old states in order to check for changes after the write.
@@ -107,7 +107,7 @@ void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
   }
 }
 
-void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
+YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
   // Invoke the callback only if the speaker is currently enabled and the
@@ -118,6 +118,6 @@ void PPISetPCSpeakerFrequencyFromPIT(PPIState* ppi, uint32_t frequency_hz) {
   }
 }
 
-void PPISetScancode(PPIState* ppi, uint8_t scancode) {
+YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode) {
   ppi->port_a_latch = scancode;
 }

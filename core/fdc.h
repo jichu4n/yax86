@@ -17,6 +17,13 @@ extern "C" {
 #ifndef YAX86_UTIL_COMMON_H
 #define YAX86_UTIL_COMMON_H
 
+// Part of a module's public interface. Declared in the module's public.h and
+// defined in one of its source files.
+#define YAX86_PUBLIC
+
+// Public interface defined in a header: one copy per translation unit.
+#define YAX86_PUBLIC_INLINE static inline
+
 // Macro that expands to `static` when bundled. Use for variables and functions
 // that need to be visible to other files within the same module, but not
 // publicly to users of the bundled library.
@@ -444,7 +451,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-static inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -488,7 +495,7 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -496,7 +503,7 @@ static inline void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-static inline bool LoggerIsEnabled(
+YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -505,14 +512,14 @@ static inline bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-static inline void LoggerEnableModule(Logger* logger, const LogModule* module) {
+YAX86_PUBLIC_INLINE void LoggerEnableModule(Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-static inline void LoggerDisableModule(
+YAX86_PUBLIC_INLINE void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -967,26 +974,26 @@ typedef struct FDCState {
 } FDCState;
 
 // Initializes the FDC to its power-on state.
-void FDCInit(FDCState* fdc);
+YAX86_PUBLIC void FDCInit(FDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
-uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
+YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
-void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
 
 // Signals to the FDC that the DMA controller has reached the terminal count.
 // This represents the TC signal.
-void FDCHandleTC(FDCState* fdc);
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
-void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
+YAX86_PUBLIC void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
-void FDCEjectDisk(FDCState* fdc, uint8_t drive);
+YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive);
 
 // Simulates a tick of the FDC, handling any timed operations.
-void FDCTick(FDCState* fdc);
+YAX86_PUBLIC void FDCTick(FDCState* fdc);
 
 #endif  // YAX86_FDC_PUBLIC_H
 
@@ -1554,7 +1561,7 @@ static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
 // Nothing to do: an FDC powers on with every field at zero, and the caller has
 // already zeroed the state. Kept so that every module is brought up the same
 // way, and so that a non-zero default acquired later has somewhere to go.
-void FDCInit(YAX86_UNUSED FDCState* fdc) {}
+YAX86_PUBLIC void FDCInit(YAX86_UNUSED FDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
@@ -1624,7 +1631,7 @@ static uint8_t FDCReadDataPort(FDCState* fdc) {
   }
 }
 
-uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
+YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
   switch (port) {
     case kFDCPortMSR:  // Main Status Register (MSR)
       return FDCReadMSRPort(fdc);
@@ -1729,7 +1736,7 @@ static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
   }
 }
 
-void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
     case kFDCPortDOR:  // Digital Output Register
       FDCWriteDORPort(fdc, value);
@@ -1746,9 +1753,9 @@ void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-void FDCHandleTC(FDCState* fdc) { fdc->transfer.tc_received = true; }
+YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) { fdc->transfer.tc_received = true; }
 
-void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
+YAX86_PUBLIC void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   if (drive >= kFDCNumDrives) {
     return;
   }
@@ -1759,7 +1766,7 @@ void FDCInsertDisk(FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
   drive_state->track = 0;
 }
 
-void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
+YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
   if (drive >= kFDCNumDrives) {
     return;
   }
@@ -1768,7 +1775,7 @@ void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
   drive_state->format = NULL;
 }
 
-void FDCTick(FDCState* fdc) {
+YAX86_PUBLIC void FDCTick(FDCState* fdc) {
   if (fdc->phase != kFDCPhaseExecution) {
     return;
   }

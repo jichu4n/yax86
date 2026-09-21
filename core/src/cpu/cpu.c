@@ -14,7 +14,7 @@
 // CPU state
 // ============================================================================
 
-void CPUInit(CPUState* cpu) {
+YAX86_PUBLIC void CPUInit(CPUState* cpu) {
   cpu->flags = kInitialFlags;
 
   // The only place the count is read, so a host gets told here or not at all.
@@ -237,7 +237,7 @@ static uint8_t GetImmediateSize(
   }
 }
 
-YAX86_HOT CPUFetchNextInstructionStatus
+YAX86_HOT YAX86_PUBLIC CPUFetchNextInstructionStatus
 CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   // The prefix fields, which ApplyPrefixByte() writes only where a prefix is
   // actually present. Every other field a decode could leave behind is settled
@@ -329,7 +329,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   return kFetchSuccess;
 }
 
-void CPUInvalidateDecodeCache(CPUState* cpu) {
+YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
@@ -443,7 +443,7 @@ CPUExecuteDecodedInstruction(
 // For a caller that built the Instruction itself rather than decoding one -
 // CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
 // decode is what produced the encoding these checks would be re-examining.
-YAX86_HOT InstructionResult
+YAX86_HOT YAX86_PUBLIC InstructionResult
 CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
   const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
@@ -605,7 +605,7 @@ YAX86_HOT static CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
   return entry;
 }
 
-YAX86_HOT CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
+YAX86_HOT YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;

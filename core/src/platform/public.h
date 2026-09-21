@@ -145,18 +145,18 @@ typedef struct MemoryMapEntry {
 // that was unmapped at the time and so read as open bus - which no page
 // generation catches, because nothing was written. PlatformInit() registers
 // every region the machine has and updates once at the end.
-bool RegisterMemoryMapEntry(
+YAX86_PUBLIC bool RegisterMemoryMapEntry(
     struct PlatformState* platform, const MemoryMapEntry* entry);
 // Discard what the CPU derives from the memory map: its instruction fetch
 // window, its direct data window and its decode cache.
-void PlatformUpdateAfterMemoryMapChange(struct PlatformState* platform);
+YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(struct PlatformState* platform);
 // Look up the memory map entry corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory map entry.
-MemoryMapEntry* GetMemoryMapEntryForAddress(
+YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryForAddress(
     struct PlatformState* platform, uint32_t address);
 // Look up a memory map entry by type. Returns NULL if no entry found with the
 // specified type.
-MemoryMapEntry* GetMemoryMapEntryByType(
+YAX86_PUBLIC MemoryMapEntry* GetMemoryMapEntryByType(
     struct PlatformState* platform, MemoryMapEntryType entry_type);
 
 // Read a byte from a logical memory address, either directly from the
@@ -165,18 +165,18 @@ MemoryMapEntry* GetMemoryMapEntryByType(
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint8_t ReadMemoryByte(struct PlatformState* platform, uint32_t address);
 // Read a word from a logical memory address, either directly from the
 // corresponding memory map entry's read_data buffer or via its read_byte_fn
 // callback.
-uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
+YAX86_PUBLIC uint16_t ReadMemoryWord(struct PlatformState* platform, uint32_t address);
 // Write a byte to a logical memory address, either directly to the
 // corresponding memory map entry's write_data buffer or via its
 // write_byte_fn callback.
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-void WriteMemoryByte(
+YAX86_PUBLIC void WriteMemoryByte(
     struct PlatformState* platform, uint32_t address, uint8_t value);
 
 // ============================================================================
@@ -226,23 +226,23 @@ typedef struct PortMapEntry {
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-bool RegisterPortMapEntry(
+YAX86_PUBLIC bool RegisterPortMapEntry(
     struct PlatformState* platform, const PortMapEntry* entry);
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-PortMapEntry* GetPortMapEntryForPort(
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
     struct PlatformState* platform, uint16_t port);
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-PortMapEntry* GetPortMapEntryByType(
+YAX86_PUBLIC PortMapEntry* GetPortMapEntryByType(
     struct PlatformState* platform, PortMapEntryType entry_type);
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
+YAX86_PUBLIC uint8_t ReadPortByte(struct PlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-void WritePortByte(
+YAX86_PUBLIC void WritePortByte(
     struct PlatformState* platform, uint16_t port, uint8_t value);
 
 // ============================================================================
@@ -461,11 +461,11 @@ typedef struct PlatformState {
 // config first. Nothing here zeroes anything: every module's state is a field
 // of this one, so the caller's single zeroing covers all of them, and each
 // module's init sets only what wants a non-zero value.
-bool PlatformInit(PlatformState* platform);
+YAX86_PUBLIC bool PlatformInit(PlatformState* platform);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.
-bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
+YAX86_PUBLIC bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 
 // Execute one instruction, and bring any device whose deadline has come due up
 // to date with the cycles it took.
@@ -481,7 +481,7 @@ bool PlatformRaiseIRQ(PlatformState* platform, uint8_t irq);
 // the CPU itself. PlatformRun() batches instructions into a tick instead.
 //
 // Returns kPlatformRunning if the machine should keep running.
-PlatformRunStatus PlatformTick(PlatformState* platform);
+YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform);
 
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than kPlatformRunning. Returns the status of the tick that
@@ -500,7 +500,7 @@ PlatformRunStatus PlatformTick(PlatformState* platform);
 // reached, because the difference wraps to zero first. A budget of a display
 // frame or so, which is what a host driving the machine in real time passes,
 // is nowhere near this.
-PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
+YAX86_PUBLIC PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
 
 // Bring every device up to date with the cycles that have run so far.
 //
@@ -510,6 +510,6 @@ PlatformRunStatus PlatformRun(PlatformState* platform, uint32_t max_cycles);
 // needs it before inspecting a device directly - most usefully before
 // VideoRender(), so that the frame reflects where the CRT beam has actually
 // reached.
-void PlatformSync(PlatformState* platform);
+YAX86_PUBLIC void PlatformSync(PlatformState* platform);
 
 #endif  // YAX86_PLATFORM_PUBLIC_H

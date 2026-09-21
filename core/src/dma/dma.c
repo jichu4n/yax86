@@ -5,7 +5,7 @@
 #define YAX86_DMA_LOG(level, ...) \
   YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
 
-void DMAInit(DMAState* dma) {
+YAX86_PUBLIC void DMAInit(DMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
@@ -23,7 +23,7 @@ static inline uint8_t DMAReadRegisterByte(DMAState* dma, uint16_t value) {
   return byte;
 }
 
-uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
+YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -72,7 +72,7 @@ static inline void DMAWriteRegisterByte(
   *current_reg = *base_reg;
 }
 
-void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -175,7 +175,7 @@ void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_HOT void DMATransferByte(DMAState* dma, uint8_t channel_index) {
+YAX86_HOT YAX86_PUBLIC void DMATransferByte(DMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;
   }
