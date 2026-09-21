@@ -11,7 +11,7 @@
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -19,7 +19,7 @@ static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -27,15 +27,15 @@ static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
 }
 
 // Table of relative jump instructions, indexed by width.
-static InstructionResult (*const kRelativeJumpFn[kNumWidths])(
+YAX86_FILE_PRIVATE InstructionResult (*const kRelativeJumpFn[kNumWidths])(
     const InstructionContext* ctx, OperandValue offset_value) = {
-    ExecuteRelativeJumpByte,  // kByte
-    ExecuteRelativeJumpWord,  // kWord
+  ExecuteRelativeJumpByte,  // kByte
+  ExecuteRelativeJumpWord,  // kWord
 };
 
 // Common logic for JMP instructions.
-static InstructionResult ExecuteRelativeJump(
-    const InstructionContext* ctx, OperandValue offset_value) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteRelativeJump(const InstructionContext* ctx, OperandValue offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
@@ -72,7 +72,7 @@ ExecuteDirectFarJump(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for conditional jumps.
-static InstructionResult ExecuteConditionalJump(
+YAX86_FILE_PRIVATE InstructionResult ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     // A taken jump throws away the prefetch queue and has to fill it again.
@@ -87,7 +87,7 @@ static InstructionResult ExecuteConditionalJump(
 // Table of flag register bitmasks for conditional jumps. The index corresponds
 // to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
 // entries of their 0x70-0x7F counterparts.
-static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
+YAX86_FILE_PRIVATE const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
     kOF,        // 0x70 - JO, 0x71 - JNO
     kCF,        // 0x72 - JC, 0x73 - JNC
     kZF,        // 0x74 - JE, 0x75 - JNE
@@ -160,8 +160,8 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for near calls.
-static InstructionResult ExecuteNearCall(
-    const InstructionContext* ctx, OperandValue offset) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNearCall(const InstructionContext* ctx, OperandValue offset) {
   PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteRelativeJump(ctx, offset);
 }
@@ -191,8 +191,8 @@ ExecuteDirectFarCall(const InstructionContext* ctx) {
 }
 
 // Common logic for RET instructions.
-static InstructionResult ExecuteNearReturnCommon(
-    const InstructionContext* ctx, uint16_t arg_size) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNearReturnCommon(const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
   ctx->cpu->registers[kSP] += arg_size;
@@ -213,8 +213,8 @@ ExecuteNearReturnAndPop(const InstructionContext* ctx) {
 }
 
 // Common logic for RETF instructions.
-static InstructionResult ExecuteFarReturnCommon(
-    const InstructionContext* ctx, uint16_t arg_size) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteFarReturnCommon(const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   OperandValue new_cs = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(new_ip);

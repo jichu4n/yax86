@@ -24,6 +24,9 @@
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
+
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
 #define YAX86_UNUSED __attribute__((unused))

@@ -57,7 +57,7 @@ enum {
 
 // Whether a byte is a segment override prefix. The mask pins every bit but the
 // two that select the segment, so it matches those four bytes and nothing else.
-static inline bool IsSegmentOverridePrefix(uint8_t byte) {
+YAX86_FILE_PRIVATE inline bool IsSegmentOverridePrefix(uint8_t byte) {
   return (byte & kSegmentOverridePrefixMask) == kSegmentOverridePrefixValue;
 }
 
@@ -65,7 +65,7 @@ static inline bool IsSegmentOverridePrefix(uint8_t byte) {
 // so this is a range check rather than a mask - which is both clearer and one
 // instruction cheaper, since a compiler folds it into a single subtract and
 // compare.
-static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
+YAX86_FILE_PRIVATE inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
   return byte >= kPrefixLOCK && byte <= kPrefixREP;
 }
 
@@ -76,7 +76,8 @@ static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
 //
 // The cheaper test goes first. A byte that is not a prefix runs both, and that
 // is the common case by far - every instruction ends the loop with one.
-static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
+YAX86_FILE_PRIVATE bool ApplyPrefixByte(
+    Instruction* instruction, uint8_t byte) {
   if (IsLockOrRepetitionPrefix(byte)) {
     // LOCK and its 0xF1 alias advance IP, but nothing acts on them, so only a
     // repetition prefix is worth recording.
@@ -145,7 +146,7 @@ typedef struct CPUInstructionFetchState {
 // executes, so most of that time is already paid for by the instruction being
 // executed - and the published per-instruction figures the cycle table is
 // built from assume the queue is full.
-static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
+YAX86_FILE_PRIVATE inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
     CPUState* cpu, CPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
     --fetch_state->bytes_remaining;
@@ -157,7 +158,7 @@ static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
-static YAX86_HOT void CPUInitInstructionFetchState(
+YAX86_FILE_PRIVATE YAX86_HOT void CPUInitInstructionFetchState(
     CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
   fetch_state->next_byte_offset = ip;
   fetch_state->next_byte = NULL;
@@ -205,7 +206,7 @@ static YAX86_HOT void CPUInitInstructionFetchState(
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.
-static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
+YAX86_FILE_PRIVATE uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
   switch (mod) {
     case 0:
       // Special case: 16-bit displacement
@@ -221,8 +222,8 @@ static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
 }
 
 // Returns the number of immediate bytes in an instruction.
-static uint8_t GetImmediateSize(
-    const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
+YAX86_FILE_PRIVATE uint8_t
+GetImmediateSize(const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
   switch (opcode) {
     // TEST r/m8, imm8
     case 0xF6:
@@ -341,7 +342,7 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
 
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
-static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
     const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
   return entry->valid && entry->address == address &&
          entry->generation == generation;
@@ -364,7 +365,8 @@ static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
 // and reload - so the smaller-looking signature is the slower one.
 //
 // A caller must not hold the pointer across another fetch.
-static YAX86_HOT CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+YAX86_FILE_PRIVATE YAX86_HOT CPUFetchNextInstructionStatus
+CPUFetchNextInstructionCached(
     CPUState* cpu, CPUDecodeCacheEntry* scratch, CPUDecodeCacheEntry** entry) {
   const uint16_t ip = cpu->registers[kIP];
   // NULL covers both having no cache and having asked for an unusable one,
@@ -467,7 +469,8 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 }
 
 // Save state and vector to the handler for an interrupt.
-static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
+YAX86_FILE_PRIVATE void DispatchInterrupt(
+    CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
   PushValue(cpu, cpu->flags);
@@ -499,7 +502,7 @@ static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
 }
 
 // Take a pending interrupt, if any. Returns whether one was dispatched.
-static bool ExecutePendingInterrupt(CPUState* cpu) {
+YAX86_FILE_PRIVATE bool ExecutePendingInterrupt(CPUState* cpu) {
   // An internal interrupt goes first. It was raised by the instruction that
   // just executed, and taking it clears IF, which correctly holds off any
   // external request until the handler re-enables interrupts.
@@ -552,7 +555,7 @@ enum {
 };
 
 // Whether an opcode reads or writes an I/O port.
-static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
   return (opcode & kPortInstructionMask) == kPortInstructionValue;
 }
 
@@ -560,7 +563,7 @@ static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
 //
 // Everything here is something the end of a tick would otherwise have dealt
 // with, and which running another instruction first would deal with too late.
-static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
     const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
   return
       // A budget of zero is how a host asks for one instruction per tick.
@@ -589,7 +592,8 @@ static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
 //
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
-static YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
+YAX86_FILE_PRIVATE YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(
+    CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return NULL;

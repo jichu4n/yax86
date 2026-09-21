@@ -40,6 +40,9 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
+
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
 #define YAX86_UNUSED __attribute__((unused))
@@ -1337,6 +1340,9 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -3038,7 +3044,7 @@ YAX86_MODULE_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
 
 // Write a word where the stack pointer already points. The caller is
 // responsible for having made room for it.
-static void WriteToStackTop(CPUState* cpu, OperandValue value) {
+YAX86_FILE_PRIVATE void WriteToStackTop(CPUState* cpu, OperandValue value) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
@@ -3331,7 +3337,7 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for LES and LDS instructions.
-static InstructionResult ExecuteLoadSegmentWithPointer(
+YAX86_FILE_PRIVATE InstructionResult ExecuteLoadSegmentWithPointer(
     const InstructionContext* ctx, RegisterIndex segment_register_index) {
   Operand destRegister;
   ReadRegisterOperand(ctx, &destRegister);
@@ -3393,7 +3399,7 @@ ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
 // Other than common flags, the INC instruction sets the following flags:
 // - Overflow Flag (OF) - Set when result has wrong sign
 // - Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-static void SetFlagsAfterInc(
+YAX86_FILE_PRIVATE void SetFlagsAfterInc(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_carry) {
   SetCommonFlagsAfterInstruction(ctx, result);
@@ -3416,7 +3422,7 @@ static void SetFlagsAfterInc(
 // Other than the flags set by the INC instruction, the ADD instruction sets the
 // following flags:
 // - Carry Flag (CF) - Set when result overflows the maximum width
-static void SetFlagsAfterAdd(
+YAX86_FILE_PRIVATE void SetFlagsAfterAdd(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_carry) {
   SetFlagsAfterInc(ctx, op1, op2, result, did_carry);
@@ -3430,7 +3436,7 @@ typedef void (*SetFlagsAfterAddFn)(
     bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
-static InstructionResult ExecuteAddCommon(
+YAX86_FILE_PRIVATE InstructionResult ExecuteAddCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -3563,7 +3569,7 @@ ExecuteIncRegister(const InstructionContext* ctx) {
 // This function sets ZF, SF, PF, OF, AF. It does NOT affect CF.
 // - OF is for the full operation op1 - (op2 + did_borrow).
 // - AF is for the full operation op1 - (op2 + did_borrow).
-static void SetFlagsAfterDec(
+YAX86_FILE_PRIVATE void SetFlagsAfterDec(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_borrow) {
   SetCommonFlagsAfterInstruction(ctx, result);
@@ -3608,7 +3614,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-static YAX86_HOT InstructionResult ExecuteSubCommon(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -4028,7 +4034,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4036,7 +4042,7 @@ static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4044,15 +4050,15 @@ static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
 }
 
 // Table of relative jump instructions, indexed by width.
-static InstructionResult (*const kRelativeJumpFn[kNumWidths])(
+YAX86_FILE_PRIVATE InstructionResult (*const kRelativeJumpFn[kNumWidths])(
     const InstructionContext* ctx, OperandValue offset_value) = {
-    ExecuteRelativeJumpByte,  // kByte
-    ExecuteRelativeJumpWord,  // kWord
+  ExecuteRelativeJumpByte,  // kByte
+  ExecuteRelativeJumpWord,  // kWord
 };
 
 // Common logic for JMP instructions.
-static InstructionResult ExecuteRelativeJump(
-    const InstructionContext* ctx, OperandValue offset_value) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteRelativeJump(const InstructionContext* ctx, OperandValue offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
@@ -4089,7 +4095,7 @@ ExecuteDirectFarJump(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for conditional jumps.
-static InstructionResult ExecuteConditionalJump(
+YAX86_FILE_PRIVATE InstructionResult ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     // A taken jump throws away the prefetch queue and has to fill it again.
@@ -4104,7 +4110,7 @@ static InstructionResult ExecuteConditionalJump(
 // Table of flag register bitmasks for conditional jumps. The index corresponds
 // to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
 // entries of their 0x70-0x7F counterparts.
-static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
+YAX86_FILE_PRIVATE const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
     kOF,        // 0x70 - JO, 0x71 - JNO
     kCF,        // 0x72 - JC, 0x73 - JNC
     kZF,        // 0x74 - JE, 0x75 - JNE
@@ -4177,8 +4183,8 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for near calls.
-static InstructionResult ExecuteNearCall(
-    const InstructionContext* ctx, OperandValue offset) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNearCall(const InstructionContext* ctx, OperandValue offset) {
   PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteRelativeJump(ctx, offset);
 }
@@ -4208,8 +4214,8 @@ ExecuteDirectFarCall(const InstructionContext* ctx) {
 }
 
 // Common logic for RET instructions.
-static InstructionResult ExecuteNearReturnCommon(
-    const InstructionContext* ctx, uint16_t arg_size) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNearReturnCommon(const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
   ctx->cpu->registers[kSP] += arg_size;
@@ -4230,8 +4236,8 @@ ExecuteNearReturnAndPop(const InstructionContext* ctx) {
 }
 
 // Common logic for RETF instructions.
-static InstructionResult ExecuteFarReturnCommon(
-    const InstructionContext* ctx, uint16_t arg_size) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteFarReturnCommon(const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   OperandValue new_cs = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
@@ -4406,7 +4412,7 @@ ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
 // ============================================================================
 
 // Returns the AH register address.
-static const OperandAddress* GetAHRegisterAddress(void) {
+YAX86_FILE_PRIVATE const OperandAddress* GetAHRegisterAddress(void) {
   static OperandAddress ah = {
       .type = kOperandAddressTypeRegister,
       .register_index = kAX,
@@ -4457,7 +4463,7 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
 
 // Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
 // instructions, indexed by (opcode - 0xF8) / 2.
-static const Flag kFlagsForClearAndSetInstructions[] = {
+YAX86_FILE_PRIVATE const Flag kFlagsForClearAndSetInstructions[] = {
     kCF,  // CLC, STC
     kIF,  // CLI, STI
     kDF,  // CLD, STD
@@ -4520,7 +4526,8 @@ ExecuteSetALFromCarry(const InstructionContext* ctx) {
 // ============================================================================
 
 // Read a byte from an I/O port.
-static YAX86_HOT OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
+YAX86_FILE_PRIVATE YAX86_HOT OperandValue
+ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return (OperandValue)(cpu->config.read_port ? cpu->config.read_port(cpu, port)
                                               : 0xFF);
 }
@@ -4529,21 +4536,22 @@ static YAX86_HOT OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
 // so a word access is two byte accesses to consecutive ports. Peripherals rely
 // on this: writing a 6845 register index and its data in one OUT DX, AX is the
 // standard idiom, and it is what the BIOS uses.
-static OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
+YAX86_FILE_PRIVATE OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
   uint8_t low = (uint8_t)ReadByteFromPort(cpu, port);
   uint8_t high = (uint8_t)ReadByteFromPort(cpu, (uint16_t)(port + 1));
   return (OperandValue)((high << 8) | low);
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
-static OperandValue (*const kReadFromPortFns[])(CPUState*, uint16_t) = {
-    ReadByteFromPort,  // kByte
-    ReadWordFromPort,  // kWord
+YAX86_FILE_PRIVATE OperandValue (*const kReadFromPortFns[])(
+    CPUState*, uint16_t) = {
+  ReadByteFromPort,  // kByte
+  ReadWordFromPort,  // kWord
 };
 
 // Common logic for IN instructions.
-static InstructionResult ExecuteIn(
-    const InstructionContext* ctx, uint16_t port) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIn(const InstructionContext* ctx, uint16_t port) {
   OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -4567,7 +4575,8 @@ ExecuteInDX(const InstructionContext* ctx) {
 }
 
 // Write a byte to an I/O port.
-static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
+YAX86_FILE_PRIVATE void WriteByteToPort(
+    CPUState* cpu, uint16_t port, OperandValue value) {
   if (!cpu->config.write_port) {
     return;
   }
@@ -4576,7 +4585,8 @@ static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
 // consecutive ports.
-static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
+YAX86_FILE_PRIVATE void WriteWordToPort(
+    CPUState* cpu, uint16_t port, OperandValue value) {
   uint32_t raw_value = FromOperandValue(value);
   WriteByteToPort(cpu, port, (OperandValue)(raw_value & 0xFF));
   WriteByteToPort(
@@ -4584,14 +4594,15 @@ static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
-static void (*const kWriteToPortFns[])(CPUState*, uint16_t, OperandValue) = {
+YAX86_FILE_PRIVATE void (*const kWriteToPortFns[])(
+    CPUState*, uint16_t, OperandValue) = {
     WriteByteToPort,  // kByte
     WriteWordToPort,  // kWord
 };
 
 // Common logic for OUT instructions.
-static InstructionResult ExecuteOut(
-    const InstructionContext* ctx, uint16_t port) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteOut(const InstructionContext* ctx, uint16_t port) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
@@ -4636,13 +4647,14 @@ ExecuteOutDX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Get the repetition prefix of a string instruction, if any.
-static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE inline uint8_t GetRepetitionPrefix(
+    const InstructionContext* ctx) {
   return ctx->instruction->repetition_prefix;
 }
 
 // Get the source operand for string instructions. Typically DS:SI but can be
 // overridden by a segment override prefix.
-static void GetStringSourceOperand(
+YAX86_FILE_PRIVATE void GetStringSourceOperand(
     const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
@@ -4655,8 +4667,8 @@ static void GetStringSourceOperand(
 }
 
 // Get the destination operand address for string instructions. Always ES:DI.
-static OperandAddress GetStringDestinationOperandAddress(
-    const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE OperandAddress
+GetStringDestinationOperandAddress(const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kES,
@@ -4666,7 +4678,7 @@ static OperandAddress GetStringDestinationOperandAddress(
 }
 
 // Get the destination operand for string instructions. Always ES:DI.
-static void GetStringDestinationOperand(
+YAX86_FILE_PRIVATE void GetStringDestinationOperand(
     const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = GetStringDestinationOperandAddress(ctx);
   operand->address = address;
@@ -4674,7 +4686,8 @@ static void GetStringDestinationOperand(
 }
 
 // Update the source address register (SI) after a string operation.
-static void UpdateStringSourceAddress(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE void UpdateStringSourceAddress(
+    const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -4683,7 +4696,8 @@ static void UpdateStringSourceAddress(const InstructionContext* ctx) {
 }
 
 // Update the destination address register (DI) after a string operation.
-static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE void UpdateStringDestinationAddress(
+    const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -4741,7 +4755,7 @@ typedef struct BulkStringRun {
 // would not reach - the element path recomputes the address from the wrapped
 // offset every iteration. And a run that leaves the window has to go through
 // the memory map for the part outside it.
-static bool IsBulkRunAddressable(
+YAX86_FILE_PRIVATE bool IsBulkRunAddressable(
     uint32_t window_end, uint16_t offset, uint32_t linear, uint16_t count,
     uint8_t element_size, bool backwards) {
   // Distance from the first element to the last, which is one element short of
@@ -4759,7 +4773,7 @@ static bool IsBulkRunAddressable(
 }
 
 // Works out whether a repeat can run in bulk, and describes it if so.
-static bool PlanBulkStringRun(
+YAX86_FILE_PRIVATE bool PlanBulkStringRun(
     const InstructionContext* ctx, bool has_source, BulkStringRun* run) {
   const uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
@@ -4813,7 +4827,8 @@ static bool PlanBulkStringRun(
 // to change a particular number of times, so one report per page says the same
 // thing - and leaves the counter coming back round after 256 runs rather than
 // after 256 bytes, which is a flush avoided rather than a flush missed.
-static void NotifyBulkStringWrite(CPUState* cpu, const BulkStringRun* run) {
+YAX86_FILE_PRIVATE void NotifyBulkStringWrite(
+    CPUState* cpu, const BulkStringRun* run) {
   const uint32_t reach = (uint32_t)(run->count - 1) * run->element_size;
   const uint32_t low =
       run->step < 0 ? run->destination - reach : run->destination;
@@ -4826,7 +4841,7 @@ static void NotifyBulkStringWrite(CPUState* cpu, const BulkStringRun* run) {
 
 // Leaves CX, SI and DI where the element path would have left them, and
 // charges what it would have charged.
-static void FinishBulkStringRun(
+YAX86_FILE_PRIVATE void FinishBulkStringRun(
     CPUState* cpu, const BulkStringRun* run, uint8_t bus_bytes_per_element,
     bool has_source) {
   const int32_t total = run->step * (int32_t)run->count;
@@ -4849,7 +4864,7 @@ static void FinishBulkStringRun(
 // test and the 8086/8088 does not tell the two prefixes apart here: 0xF2
 // repeats exactly as 0xF3 does, counting CX down to zero. Only the comparison
 // string instructions read the prefix as a condition.
-static InstructionResult ExecuteStringInstructionWithREPPrefix(
+YAX86_FILE_PRIVATE InstructionResult ExecuteStringInstructionWithREPPrefix(
     const InstructionContext* ctx,
     InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -4867,7 +4882,8 @@ static InstructionResult ExecuteStringInstructionWithREPPrefix(
 }
 
 // Single MOVS iteration.
-static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteMovsIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringSourceOperand(ctx, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
@@ -4879,7 +4895,7 @@ static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
 
 // A whole repeated MOVS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-static bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
   BulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/true, &run)) {
     return false;
@@ -4924,7 +4940,8 @@ ExecuteMovs(const InstructionContext* ctx) {
 }
 
 // Single STOS iteration.
-static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteStosIteration(const InstructionContext* ctx) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
@@ -4935,7 +4952,7 @@ static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
 
 // A whole repeated STOS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-static bool ExecuteStosBulkRun(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE bool ExecuteStosBulkRun(const InstructionContext* ctx) {
   BulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/false, &run)) {
     return false;
@@ -4973,7 +4990,8 @@ ExecuteStos(const InstructionContext* ctx) {
 }
 
 // Single LODS iteration.
-static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteLodsIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringSourceOperand(ctx, &src);
   Operand dest;
@@ -4990,7 +5008,8 @@ ExecuteLods(const InstructionContext* ctx) {
 }
 
 // Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteStringInstructionWithREPZOrRepNZPrefix(
     const InstructionContext* ctx,
     InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -5012,7 +5031,7 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-static YAX86_HOT InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
 ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringDestinationOperand(ctx, &src);
@@ -5030,7 +5049,8 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx
 }
 
 // Single CMPS iteration.
-static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteCmpsIteration(const InstructionContext* ctx) {
   Operand dest;
   GetStringSourceOperand(ctx, &dest);
   Operand src;
@@ -5077,7 +5097,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteCmps(const InstructionContext* ctx
 // entry. That is not what Intel's published pseudocode says, which uses 0x99
 // throughout, but it is what the 8086/8088 does - and with AL between 0x9A and
 // 0x9F it is the difference between adjusting and not.
-static uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
+YAX86_FILE_PRIVATE uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
   return auxiliary_carry ? 0x9F : 0x99;
 }
 
@@ -5234,15 +5254,16 @@ typedef InstructionResult (*Group1ExecuteInstructionFn)(
 
 // Group 1 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte.
-static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
-    ExecuteAdd,            // 0 - ADD
-    ExecuteBooleanOr,      // 1 - OR
-    ExecuteAddWithCarry,   // 2 - ADC
-    ExecuteSubWithBorrow,  // 3 - SBB
-    ExecuteBooleanAnd,     // 4 - AND
-    ExecuteSub,            // 5 - SUB
-    ExecuteBooleanXor,     // 6 - XOR
-    ExecuteCmp,            // 7 - CMP
+YAX86_FILE_PRIVATE const Group1ExecuteInstructionFn
+    kGroup1ExecuteInstructionFns[] = {
+        ExecuteAdd,            // 0 - ADD
+        ExecuteBooleanOr,      // 1 - OR
+        ExecuteAddWithCarry,   // 2 - ADC
+        ExecuteSubWithBorrow,  // 3 - SBB
+        ExecuteBooleanAnd,     // 4 - AND
+        ExecuteSub,            // 5 - SUB
+        ExecuteBooleanXor,     // 6 - XOR
+        ExecuteCmp,            // 7 - CMP
 };
 
 // Group 1 instruction handler.
@@ -5304,7 +5325,7 @@ typedef InstructionResult (*Group2ExecuteInstructionFn)(
 // Overflow after a left shift or rotate: the bit shifted out of the top
 // differs from the sign bit left behind, which is to say the last pass changed
 // the sign of the value.
-static void SetOverflowFlagAfterLeftShift(
+YAX86_FILE_PRIVATE void SetOverflowFlagAfterLeftShift(
     const InstructionContext* ctx, uint32_t result, bool carry) {
   const bool result_sign = (result & kSignBit[ctx->metadata->width]) != 0;
   CPUSetFlag(ctx->cpu, kOF, carry != result_sign);
@@ -5313,7 +5334,7 @@ static void SetOverflowFlagAfterLeftShift(
 // Overflow after a right rotate: the top two bits of the result differ. The
 // bit rotated into the top came from the bottom, so this again says the last
 // pass changed the sign of the value.
-static void SetOverflowFlagAfterRightRotate(
+YAX86_FILE_PRIVATE void SetOverflowFlagAfterRightRotate(
     const InstructionContext* ctx, uint32_t result) {
   const uint32_t sign_bit = kSignBit[ctx->metadata->width];
   const bool result_sign = (result & sign_bit) != 0;
@@ -5327,7 +5348,8 @@ static void SetOverflowFlagAfterRightRotate(
 // fall out of it, so every larger count behaves alike. Clamping to just past
 // the width keeps that true while holding the shifts below the width of the
 // intermediate they are computed in, where C leaves them undefined.
-static uint8_t ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
+YAX86_FILE_PRIVATE uint8_t
+ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
   const uint8_t limit = kNumBits[ctx->metadata->width] + 1;
   return count > limit ? limit : count;
 }
@@ -5336,8 +5358,8 @@ static uint8_t ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
 // SHL r/m16, 1
 // SHL r/m8, CL
 // SHL r/m16, CL
-static InstructionResult ExecuteGroup2Shl(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Shl(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -5358,7 +5380,7 @@ static InstructionResult ExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-static YAX86_HOT InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
 ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -5382,8 +5404,8 @@ ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // SAR r/m16, 1
 // SAR r/m8, CL
 // SAR r/m16, CL
-static InstructionResult ExecuteGroup2Sar(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Sar(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -5405,8 +5427,8 @@ static InstructionResult ExecuteGroup2Sar(
 // ROL r/m16, 1
 // ROL r/m8, CL
 // ROL r/m16, CL
-static InstructionResult ExecuteGroup2Rol(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rol(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -5429,8 +5451,8 @@ static InstructionResult ExecuteGroup2Rol(
 // ROR r/m16, 1
 // ROR r/m8, CL
 // ROR r/m16, CL
-static InstructionResult ExecuteGroup2Ror(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Ror(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -5453,8 +5475,8 @@ static InstructionResult ExecuteGroup2Ror(
 // RCL r/m16, 1
 // RCL r/m8, CL
 // RCL r/m16, CL
-static InstructionResult ExecuteGroup2Rcl(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rcl(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -5485,8 +5507,8 @@ static InstructionResult ExecuteGroup2Rcl(
 // RCR r/m16, 1
 // RCR r/m8, CL
 // RCR r/m16, CL
-static InstructionResult ExecuteGroup2Rcr(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rcr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -5525,8 +5547,8 @@ static InstructionResult ExecuteGroup2Rcr(
 // Nothing an IBM PC/XT runs uses this, but leaving REG 6 aliased to SAL would
 // silently give a different answer than the hardware for the same encoding,
 // and the operation is a single store.
-static InstructionResult ExecuteGroup2Setmo(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Setmo(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -5540,15 +5562,16 @@ static InstructionResult ExecuteGroup2Setmo(
   return kInstructionExecuted;
 }
 
-static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
-    ExecuteGroup2Rol,    // 0 - ROL
-    ExecuteGroup2Ror,    // 1 - ROR
-    ExecuteGroup2Rcl,    // 2 - RCL
-    ExecuteGroup2Rcr,    // 3 - RCR
-    ExecuteGroup2Shl,    // 4 - SHL
-    ExecuteGroup2Shr,    // 5 - SHR
-    ExecuteGroup2Setmo,  // 6 - SETMO / SETMOC
-    ExecuteGroup2Sar,    // 7 - SAR
+YAX86_FILE_PRIVATE const Group2ExecuteInstructionFn
+    kGroup2ExecuteInstructionFns[] = {
+        ExecuteGroup2Rol,    // 0 - ROL
+        ExecuteGroup2Ror,    // 1 - ROR
+        ExecuteGroup2Rcl,    // 2 - RCL
+        ExecuteGroup2Rcr,    // 3 - RCR
+        ExecuteGroup2Shl,    // 4 - SHL
+        ExecuteGroup2Shr,    // 5 - SHR
+        ExecuteGroup2Setmo,  // 6 - SETMO / SETMOC
+        ExecuteGroup2Sar,    // 7 - SAR
 };
 
 // Group 2 shift / rotate by 1.
@@ -5600,24 +5623,24 @@ typedef InstructionResult (*Group3ExecuteInstructionFn)(
 
 // TEST r/m8, imm8
 // TEST r/m16, imm16
-static InstructionResult ExecuteGroup3Test(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup3Test(const InstructionContext* ctx, Operand* op) {
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, op, src_value);
 }
 
 // NOT r/m8
 // NOT r/m16
-static InstructionResult ExecuteNot(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNot(const InstructionContext* ctx, Operand* op) {
   WriteOperand(ctx, op, ~FromOperand(op));
   return kInstructionExecuted;
 }
 
 // NEG r/m8
 // NEG r/m16
-static InstructionResult ExecuteNeg(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNeg(const InstructionContext* ctx, Operand* op) {
   int32_t op_value = FromSignedOperand(ctx->metadata->width, op);
   int32_t result_value = -op_value;
   WriteOperand(ctx, op, result_value);
@@ -5627,14 +5650,19 @@ static InstructionResult ExecuteNeg(
 
 // Table of where to store the higher half of the result for
 // MUL, IMUL, DIV, and IDIV instructions, indexed by the data width.
-static const OperandAddress kMulDivResultHighHalfAddress[kNumWidths] = {
-    {.type = kOperandAddressTypeRegister, .register_index = kAX, .offset = 8},
-    {.type = kOperandAddressTypeRegister, .register_index = kDX, .offset = 0},
+YAX86_FILE_PRIVATE const OperandAddress
+    kMulDivResultHighHalfAddress[kNumWidths] = {
+        {.type = kOperandAddressTypeRegister,
+         .register_index = kAX,
+         .offset = 8},
+        {.type = kOperandAddressTypeRegister,
+         .register_index = kDX,
+         .offset = 0},
 };
 
 // Number of bits to shift to extract the high part of the result of MUL, IMUL,
 // DIV, and IDIV instructions, indexed by the data width.
-static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
+YAX86_FILE_PRIVATE const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
     8,   // kByte
     16,  // kWord
 };
@@ -5644,7 +5672,7 @@ static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
 // a time in microcode - so unlike everything else in the cycle table they are
 // worth charging individually. The published figures are ranges that depend on
 // the operands; these are the low end of each.
-static const uint16_t kMulDivCycles[kNumWidths][2] = {
+YAX86_FILE_PRIVATE const uint16_t kMulDivCycles[kNumWidths][2] = {
     // kByte: unsigned, signed
     {70, 80},
     // kWord: unsigned, signed
@@ -5652,7 +5680,7 @@ static const uint16_t kMulDivCycles[kNumWidths][2] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-static InstructionResult ExecuteMulCommon(
+YAX86_FILE_PRIVATE InstructionResult ExecuteMulCommon(
     const InstructionContext* ctx, Operand* dest, uint32_t result,
     bool overflow) {
   Width width = ctx->metadata->width;
@@ -5673,8 +5701,8 @@ static InstructionResult ExecuteMulCommon(
 
 // MUL r/m8
 // MUL r/m16
-static InstructionResult ExecuteMul(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteMul(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -5685,8 +5713,8 @@ static InstructionResult ExecuteMul(
 
 // IMUL r/m8
 // IMUL r/m16
-static InstructionResult ExecuteImul(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteImul(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -5699,7 +5727,7 @@ static InstructionResult ExecuteImul(
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-static InstructionResult WriteDivResult(
+YAX86_FILE_PRIVATE InstructionResult WriteDivResult(
     const InstructionContext* ctx, Operand* dest, uint32_t quotient,
     uint32_t remainder) {
   WriteOperand(ctx, dest, quotient);
@@ -5710,8 +5738,8 @@ static InstructionResult WriteDivResult(
 
 // DIV r/m8
 // DIV r/m16
-static InstructionResult ExecuteDiv(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
@@ -5738,8 +5766,8 @@ static InstructionResult ExecuteDiv(
 
 // IDIV r/m8
 // IDIV r/m16
-static InstructionResult ExecuteIdiv(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   int32_t divisor = FromSignedOperand(ctx->metadata->width, op);
   if (divisor == 0) {
@@ -5771,17 +5799,18 @@ static InstructionResult ExecuteIdiv(
 
 // Group 3 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte and data width.
-static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
-    ExecuteGroup3Test,  // 0 - TEST
-    // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not decode
-    // bit 0 of the REG field for this group.
-    ExecuteGroup3Test,  // 1 - TEST
-    ExecuteNot,         // 2 - NOT
-    ExecuteNeg,         // 3 - NEG
-    ExecuteMul,         // 4 - MUL
-    ExecuteImul,        // 5 - IMUL
-    ExecuteDiv,         // 6 - DIV
-    ExecuteIdiv,        // 7 - IDIV
+YAX86_FILE_PRIVATE const Group3ExecuteInstructionFn
+    kGroup3ExecuteInstructionFns[] = {
+        ExecuteGroup3Test,  // 0 - TEST
+        // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not
+        // decode bit 0 of the REG field for this group.
+        ExecuteGroup3Test,  // 1 - TEST
+        ExecuteNot,         // 2 - NOT
+        ExecuteNeg,         // 3 - NEG
+        ExecuteMul,         // 4 - MUL
+        ExecuteImul,        // 5 - IMUL
+        ExecuteDiv,         // 6 - DIV
+        ExecuteIdiv,        // 7 - IDIV
 };
 
 // Group 3 instruction handler.
@@ -5820,9 +5849,10 @@ typedef InstructionResult (*Group4ExecuteInstructionFn)(
 
 // Group 4 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte.
-static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
-    ExecuteInc,  // 0 - INC
-    ExecuteDec,  // 1 - DEC
+YAX86_FILE_PRIVATE const Group4ExecuteInstructionFn
+    kGroup4ExecuteInstructionFns[] = {
+        ExecuteInc,  // 0 - INC
+        ExecuteDec,  // 1 - DEC
 };
 
 enum {
@@ -5870,7 +5900,7 @@ ExecuteGroup4Instruction(const InstructionContext* ctx) {
 // ============================================================================
 
 // Helper to get the segment register value for far JMP and CALL instructions.
-static void GetSegmentRegisterOperandForIndirectFarJumpOrCall(
+YAX86_FILE_PRIVATE void GetSegmentRegisterOperandForIndirectFarJumpOrCall(
     const InstructionContext* ctx, const Operand* offset, Operand* operand) {
   OperandAddress segment_address = offset->address;
   segment_address.offset += 2;  // Skip the offset
@@ -5879,38 +5909,38 @@ static void GetSegmentRegisterOperandForIndirectFarJumpOrCall(
 }
 
 // JMP ptr16
-static InstructionResult ExecuteIndirectNearJump(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectNearJump(const InstructionContext* ctx, Operand* dest) {
   ctx->cpu->registers[kIP] = FromOperandValue(dest->value);
   return kInstructionExecuted;
 }
 
 // CALL ptr16
-static InstructionResult ExecuteIndirectNearCall(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectNearCall(const InstructionContext* ctx, Operand* dest) {
   PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
 // CALL ptr16:16
-static InstructionResult ExecuteIndirectFarCall(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectFarCall(const InstructionContext* ctx, Operand* dest) {
   Operand segment;
   GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
   return ExecuteFarCall(ctx, segment.value, dest->value);
 }
 
 // JMP ptr16:16
-static InstructionResult ExecuteIndirectFarJump(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectFarJump(const InstructionContext* ctx, Operand* dest) {
   Operand segment;
   GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
   return ExecuteFarJump(ctx, segment.value, dest->value);
 }
 
 // PUSH r/m16
-static InstructionResult ExecuteIndirectPush(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectPush(const InstructionContext* ctx, Operand* dest) {
   PushSourceOperand(ctx->cpu, dest);
   return kInstructionExecuted;
 }
@@ -5920,18 +5950,19 @@ typedef InstructionResult (*Group5ExecuteInstructionFn)(
 
 // Group 5 instruction implementations, indexed by the corresponding REG
 // field value in the ModRM byte.
-static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
-    ExecuteInc,               // 0 - INC r/m8/r/m16
-    ExecuteDec,               // 1 - DEC r/m8/r/m16
-    ExecuteIndirectNearCall,  // 2 - CALL rel16
-    ExecuteIndirectFarCall,   // 3 - CALL ptr16:16
-    ExecuteIndirectNearJump,  // 4 - JMP ptr16
-    ExecuteIndirectFarJump,   // 5 - JMP ptr16:16
-    ExecuteIndirectPush,      // 6 - PUSH r/m16
-    // REG 7 is an undocumented alias of REG 6. Without this entry the lookup
-    // below would read past the end of the table, since the REG field is three
-    // bits wide.
-    ExecuteIndirectPush,  // 7 - PUSH r/m16
+YAX86_FILE_PRIVATE const Group5ExecuteInstructionFn
+    kGroup5ExecuteInstructionFns[] = {
+        ExecuteInc,               // 0 - INC r/m8/r/m16
+        ExecuteDec,               // 1 - DEC r/m8/r/m16
+        ExecuteIndirectNearCall,  // 2 - CALL rel16
+        ExecuteIndirectFarCall,   // 3 - CALL ptr16:16
+        ExecuteIndirectNearJump,  // 4 - JMP ptr16
+        ExecuteIndirectFarJump,   // 5 - JMP ptr16:16
+        ExecuteIndirectPush,      // 6 - PUSH r/m16
+        // REG 7 is an undocumented alias of REG 6. Without this entry the
+        // lookup below would read past the end of the table, since the REG
+        // field is three bits wide.
+        ExecuteIndirectPush,  // 7 - PUSH r/m16
 };
 
 // Group 5 instruction handler.
@@ -7553,7 +7584,7 @@ enum {
 
 // Whether a byte is a segment override prefix. The mask pins every bit but the
 // two that select the segment, so it matches those four bytes and nothing else.
-static inline bool IsSegmentOverridePrefix(uint8_t byte) {
+YAX86_FILE_PRIVATE inline bool IsSegmentOverridePrefix(uint8_t byte) {
   return (byte & kSegmentOverridePrefixMask) == kSegmentOverridePrefixValue;
 }
 
@@ -7561,7 +7592,7 @@ static inline bool IsSegmentOverridePrefix(uint8_t byte) {
 // so this is a range check rather than a mask - which is both clearer and one
 // instruction cheaper, since a compiler folds it into a single subtract and
 // compare.
-static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
+YAX86_FILE_PRIVATE inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
   return byte >= kPrefixLOCK && byte <= kPrefixREP;
 }
 
@@ -7572,7 +7603,8 @@ static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
 //
 // The cheaper test goes first. A byte that is not a prefix runs both, and that
 // is the common case by far - every instruction ends the loop with one.
-static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
+YAX86_FILE_PRIVATE bool ApplyPrefixByte(
+    Instruction* instruction, uint8_t byte) {
   if (IsLockOrRepetitionPrefix(byte)) {
     // LOCK and its 0xF1 alias advance IP, but nothing acts on them, so only a
     // repetition prefix is worth recording.
@@ -7641,7 +7673,7 @@ typedef struct CPUInstructionFetchState {
 // executes, so most of that time is already paid for by the instruction being
 // executed - and the published per-instruction figures the cycle table is
 // built from assume the queue is full.
-static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
+YAX86_FILE_PRIVATE inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
     CPUState* cpu, CPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
     --fetch_state->bytes_remaining;
@@ -7653,7 +7685,7 @@ static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
-static YAX86_HOT void CPUInitInstructionFetchState(
+YAX86_FILE_PRIVATE YAX86_HOT void CPUInitInstructionFetchState(
     CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
   fetch_state->next_byte_offset = ip;
   fetch_state->next_byte = NULL;
@@ -7701,7 +7733,7 @@ static YAX86_HOT void CPUInitInstructionFetchState(
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.
-static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
+YAX86_FILE_PRIVATE uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
   switch (mod) {
     case 0:
       // Special case: 16-bit displacement
@@ -7717,8 +7749,8 @@ static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
 }
 
 // Returns the number of immediate bytes in an instruction.
-static uint8_t GetImmediateSize(
-    const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
+YAX86_FILE_PRIVATE uint8_t
+GetImmediateSize(const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
   switch (opcode) {
     // TEST r/m8, imm8
     case 0xF6:
@@ -7837,7 +7869,7 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
 
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
-static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
     const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
   return entry->valid && entry->address == address &&
          entry->generation == generation;
@@ -7860,7 +7892,8 @@ static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
 // and reload - so the smaller-looking signature is the slower one.
 //
 // A caller must not hold the pointer across another fetch.
-static YAX86_HOT CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+YAX86_FILE_PRIVATE YAX86_HOT CPUFetchNextInstructionStatus
+CPUFetchNextInstructionCached(
     CPUState* cpu, CPUDecodeCacheEntry* scratch, CPUDecodeCacheEntry** entry) {
   const uint16_t ip = cpu->registers[kIP];
   // NULL covers both having no cache and having asked for an unusable one,
@@ -7963,7 +7996,8 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 }
 
 // Save state and vector to the handler for an interrupt.
-static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
+YAX86_FILE_PRIVATE void DispatchInterrupt(
+    CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
   PushValue(cpu, cpu->flags);
@@ -7995,7 +8029,7 @@ static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
 }
 
 // Take a pending interrupt, if any. Returns whether one was dispatched.
-static bool ExecutePendingInterrupt(CPUState* cpu) {
+YAX86_FILE_PRIVATE bool ExecutePendingInterrupt(CPUState* cpu) {
   // An internal interrupt goes first. It was raised by the instruction that
   // just executed, and taking it clears IF, which correctly holds off any
   // external request until the handler re-enables interrupts.
@@ -8048,7 +8082,7 @@ enum {
 };
 
 // Whether an opcode reads or writes an I/O port.
-static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
   return (opcode & kPortInstructionMask) == kPortInstructionValue;
 }
 
@@ -8056,7 +8090,7 @@ static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
 //
 // Everything here is something the end of a tick would otherwise have dealt
 // with, and which running another instruction first would deal with too late.
-static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
     const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
   return
       // A budget of zero is how a host asks for one instruction per tick.
@@ -8085,7 +8119,8 @@ static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
 //
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
-static YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
+YAX86_FILE_PRIVATE YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(
+    CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return NULL;

@@ -11,7 +11,7 @@
 
 // Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
 // instructions, indexed by (opcode - 0xF8) / 2.
-static const Flag kFlagsForClearAndSetInstructions[] = {
+YAX86_FILE_PRIVATE const Flag kFlagsForClearAndSetInstructions[] = {
     kCF,  // CLC, STC
     kIF,  // CLI, STI
     kDF,  // CLD, STD

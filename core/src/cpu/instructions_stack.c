@@ -91,7 +91,7 @@ ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
 // ============================================================================
 
 // Returns the AH register address.
-static const OperandAddress* GetAHRegisterAddress(void) {
+YAX86_FILE_PRIVATE const OperandAddress* GetAHRegisterAddress(void) {
   static OperandAddress ah = {
       .type = kOperandAddressTypeRegister,
       .register_index = kAX,

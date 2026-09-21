@@ -13,7 +13,7 @@
 // Other than common flags, the INC instruction sets the following flags:
 // - Overflow Flag (OF) - Set when result has wrong sign
 // - Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-static void SetFlagsAfterInc(
+YAX86_FILE_PRIVATE void SetFlagsAfterInc(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_carry) {
   SetCommonFlagsAfterInstruction(ctx, result);
@@ -36,7 +36,7 @@ static void SetFlagsAfterInc(
 // Other than the flags set by the INC instruction, the ADD instruction sets the
 // following flags:
 // - Carry Flag (CF) - Set when result overflows the maximum width
-static void SetFlagsAfterAdd(
+YAX86_FILE_PRIVATE void SetFlagsAfterAdd(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_carry) {
   SetFlagsAfterInc(ctx, op1, op2, result, did_carry);
@@ -50,7 +50,7 @@ typedef void (*SetFlagsAfterAddFn)(
     bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
-static InstructionResult ExecuteAddCommon(
+YAX86_FILE_PRIVATE InstructionResult ExecuteAddCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);

@@ -29,7 +29,7 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for LES and LDS instructions.
-static InstructionResult ExecuteLoadSegmentWithPointer(
+YAX86_FILE_PRIVATE InstructionResult ExecuteLoadSegmentWithPointer(
     const InstructionContext* ctx, RegisterIndex segment_register_index) {
   Operand destRegister;
   ReadRegisterOperand(ctx, &destRegister);

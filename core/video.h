@@ -40,6 +40,9 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
+
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
 #define YAX86_UNUSED __attribute__((unused))
@@ -2435,7 +2438,8 @@ typedef struct MDACellColors {
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
-static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
+YAX86_FILE_PRIVATE MDACellColors
+MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   const VideoConfig* config = &video->config;
   MDACellColors colors = {
       .foreground = &config->foreground,
@@ -2589,7 +2593,7 @@ enum {
 // The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
 // comes from the color select register instead. The palette-select bit chooses
 // the first two, unless black-and-white mode selects the third.
-static const uint8_t kCGAGraphicsPalettes[3][3] = {
+YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
     // Palette 0: green, red, brown.
     {2, 4, 6},
     // Palette 1: cyan, magenta, light gray.
@@ -2598,13 +2602,14 @@ static const uint8_t kCGAGraphicsPalettes[3][3] = {
     {3, 4, 7},
 };
 
-static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
+YAX86_FILE_PRIVATE inline RGB CGAGetColor(
+    const VideoState* video, uint8_t color) {
   return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
-static inline uint32_t CGAGetScanLineAddress(
+YAX86_FILE_PRIVATE inline uint32_t CGAGetScanLineAddress(
     const VideoState* video, uint16_t y) {
   uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
                       (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
@@ -2612,7 +2617,7 @@ static inline uint32_t CGAGetScanLineAddress(
   return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
 }
 
-static void CGARenderTextRegion(
+YAX86_FILE_PRIVATE void CGARenderTextRegion(
     VideoState* video, VideoPixelRun* run, const VideoModeMetadata* metadata,
     uint8_t start_column, uint8_t end_column, uint16_t first_y,
     uint16_t end_y) {
@@ -2694,7 +2699,8 @@ static void CGARenderTextRegion(
   }
 }
 
-static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
+YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
+    VideoState* video, RGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
     palette_colors = kCGAGraphicsPalettes[2];
@@ -2715,7 +2721,7 @@ static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
   }
 }
 
-static void CGARenderGraphics320x200Region(
+YAX86_FILE_PRIVATE void CGARenderGraphics320x200Region(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB palette[4];
@@ -2742,7 +2748,7 @@ static void CGARenderGraphics320x200Region(
   }
 }
 
-static void CGARenderGraphics640x200Region(
+YAX86_FILE_PRIVATE void CGARenderGraphics640x200Region(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB foreground = CGAGetColor(
@@ -2812,14 +2818,14 @@ YAX86_MODULE_PRIVATE void CGARenderRegion(
   YAX86_LOG(video->config.logger, &kLogModuleVideo, level, __VA_ARGS__)
 
 // Power-on 6845 register values for the IBM Monochrome Display.
-static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
+YAX86_FILE_PRIVATE const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
     0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
     0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 // Power-on 6845 register values for the CGA in 80x25 text mode, matching the
 // values GLaBIOS programs for that mode.
-static const uint8_t kDefaultCGARegisters[kNumCRTCRegisters] = {
+YAX86_FILE_PRIVATE const uint8_t kDefaultCGARegisters[kNumCRTCRegisters] = {
     0x71, 0x50, 0x5A, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02,
     0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
@@ -2844,10 +2850,11 @@ enum {
   kVideoText80ColumnScale = 1,
 };
 
-static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address);
-static void VideoInvalidateCursor(VideoState* video);
-static void VideoInvalidateBlinkingText(VideoState* video);
-static void VideoInvalidateAll(VideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
+    VideoState* video, uint32_t address);
+YAX86_FILE_PRIVATE void VideoInvalidateCursor(VideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(VideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateAll(VideoState* video);
 
 YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
     const VideoState* video) {
@@ -3020,7 +3027,7 @@ YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
 // Dirty regions
 // ============================================================================
 
-static void VideoDirtyRangeAdd(
+YAX86_FILE_PRIVATE void VideoDirtyRangeAdd(
     VideoDirtyRange* range, uint8_t start_column, uint8_t end_column) {
   if (range->end_column == 0) {
     range->start_column = start_column;
@@ -3043,7 +3050,8 @@ typedef struct VideoDirtyGeometry {
   uint8_t scan_lines_per_row;
 } VideoDirtyGeometry;
 
-static VideoDirtyGeometry VideoGetDirtyGeometry(const VideoState* video) {
+YAX86_FILE_PRIVATE VideoDirtyGeometry
+VideoGetDirtyGeometry(const VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   VideoDirtyGeometry geometry;
   if (metadata->type == kVideoModeText) {
@@ -3083,11 +3091,11 @@ YAX86_MODULE_PRIVATE void VideoInvalidateRows(
   }
 }
 
-static void VideoInvalidateAll(VideoState* video) {
+YAX86_FILE_PRIVATE void VideoInvalidateAll(VideoState* video) {
   video->dirty_state.status = kVideoFullRedraw;
 }
 
-static void VideoInvalidateTextCell(
+YAX86_FILE_PRIVATE void VideoInvalidateTextCell(
     VideoState* video, const VideoModeMetadata* metadata,
     uint16_t cell_offset) {
   if (cell_offset >= (uint16_t)metadata->columns * metadata->rows) {
@@ -3112,7 +3120,8 @@ static void VideoInvalidateTextCell(
       (uint8_t)(row + 1));
 }
 
-static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
+YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
+    VideoState* video, uint32_t address) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type == kVideoModeText) {
     uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
@@ -3143,7 +3152,7 @@ static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
       video, byte_column, byte_column + 1, dirty_row, (uint8_t)(dirty_row + 1));
 }
 
-static void VideoInvalidateCursor(VideoState* video) {
+YAX86_FILE_PRIVATE void VideoInvalidateCursor(VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText) {
     return;
@@ -3155,7 +3164,7 @@ static void VideoInvalidateCursor(VideoState* video) {
   VideoInvalidateTextCell(video, metadata, cursor_offset);
 }
 
-static void VideoInvalidateBlinkingText(VideoState* video) {
+YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText ||
       !(video->control_register & kVideoControlEnableBlink)) {
@@ -3239,7 +3248,7 @@ YAX86_PUBLIC YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
 
 // The value the status port reads back, computed from where the CRT beam
 // currently is.
-static uint8_t VideoGetStatus(const VideoState* video) {
+YAX86_FILE_PRIVATE uint8_t VideoGetStatus(const VideoState* video) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
   bool in_horizontal_retrace =
@@ -3280,8 +3289,8 @@ typedef enum VideoPortFunction {
 } VideoPortFunction;
 
 // Decode an I/O port within the adapter's range.
-static VideoPortFunction VideoDecodePort(
-    const VideoState* video, uint16_t port) {
+YAX86_FILE_PRIVATE VideoPortFunction
+VideoDecodePort(const VideoState* video, uint16_t port) {
   if (video->adapter == kVideoAdapterMDA) {
     switch (port) {
       case kMDAPortRegisterIndex:
@@ -3389,7 +3398,7 @@ YAX86_PUBLIC void VideoWritePort(
 // Rendering
 // ============================================================================
 
-static void VideoRenderBlankRegion(
+YAX86_FILE_PRIVATE void VideoRenderBlankRegion(
     VideoState* video, VideoPixelRun* run, VideoRegion region) {
   RGB blank = video->adapter == kVideoAdapterCGA ? video->config.cga_palette[0]
                                                  : video->config.background;
@@ -3403,7 +3412,7 @@ static void VideoRenderBlankRegion(
   }
 }
 
-static void VideoRenderDirtyRegion(
+YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
     VideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
   // Every mode divides the frame buffer into kVideoDirtyColumns equal columns,

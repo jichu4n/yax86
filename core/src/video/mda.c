@@ -22,7 +22,8 @@ typedef struct MDACellColors {
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
-static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
+YAX86_FILE_PRIVATE MDACellColors
+MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   const VideoConfig* config = &video->config;
   MDACellColors colors = {
       .foreground = &config->foreground,

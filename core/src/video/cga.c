@@ -29,7 +29,7 @@ enum {
 // The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
 // comes from the color select register instead. The palette-select bit chooses
 // the first two, unless black-and-white mode selects the third.
-static const uint8_t kCGAGraphicsPalettes[3][3] = {
+YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
     // Palette 0: green, red, brown.
     {2, 4, 6},
     // Palette 1: cyan, magenta, light gray.
@@ -38,13 +38,14 @@ static const uint8_t kCGAGraphicsPalettes[3][3] = {
     {3, 4, 7},
 };
 
-static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
+YAX86_FILE_PRIVATE inline RGB CGAGetColor(
+    const VideoState* video, uint8_t color) {
   return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
-static inline uint32_t CGAGetScanLineAddress(
+YAX86_FILE_PRIVATE inline uint32_t CGAGetScanLineAddress(
     const VideoState* video, uint16_t y) {
   uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
                       (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
@@ -52,7 +53,7 @@ static inline uint32_t CGAGetScanLineAddress(
   return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
 }
 
-static void CGARenderTextRegion(
+YAX86_FILE_PRIVATE void CGARenderTextRegion(
     VideoState* video, VideoPixelRun* run, const VideoModeMetadata* metadata,
     uint8_t start_column, uint8_t end_column, uint16_t first_y,
     uint16_t end_y) {
@@ -134,7 +135,8 @@ static void CGARenderTextRegion(
   }
 }
 
-static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
+YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
+    VideoState* video, RGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
     palette_colors = kCGAGraphicsPalettes[2];
@@ -155,7 +157,7 @@ static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
   }
 }
 
-static void CGARenderGraphics320x200Region(
+YAX86_FILE_PRIVATE void CGARenderGraphics320x200Region(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB palette[4];
@@ -182,7 +184,7 @@ static void CGARenderGraphics320x200Region(
   }
 }
 
-static void CGARenderGraphics640x200Region(
+YAX86_FILE_PRIVATE void CGARenderGraphics640x200Region(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB foreground = CGAGetColor(

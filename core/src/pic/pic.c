@@ -39,7 +39,7 @@ typedef enum PICPort {
 } PICPort;
 
 // Map a PIC mode to its base I/O port.
-static const uint16_t kPICBasePorts[kPICNumModes] = {
+YAX86_FILE_PRIVATE const uint16_t kPICBasePorts[kPICNumModes] = {
     0x20,  // kPICSingle
     0x20,  // kPICMaster
     0xA0,  // kPICSlave
@@ -50,7 +50,7 @@ static const uint16_t kPICBasePorts[kPICNumModes] = {
 // ============================================================================
 
 // Returns the mode of a PIC based on its ICWs.
-static inline PICMode PICGetMode(PICState* pic) {
+YAX86_FILE_PRIVATE inline PICMode PICGetMode(PICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
   if (pic->icw1 & kICW1_SNGL) {
     return kPICSingle;
@@ -62,22 +62,22 @@ static inline PICMode PICGetMode(PICState* pic) {
 }
 
 // Returns if the PIC is configured as a single PIC.
-static inline bool PICIsSingle(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsSingle(PICState* pic) {
   return PICGetMode(pic) == kPICSingle;
 }
 
 // Returns if the PIC is a master PIC.
-static inline bool PICIsMaster(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsMaster(PICState* pic) {
   return PICGetMode(pic) == kPICMaster;
 }
 
 // Returns if the PIC is a slave PIC.
-static inline bool PICIsSlave(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsSlave(PICState* pic) {
   return PICGetMode(pic) == kPICSlave;
 }
 
 // Returns the I/O port corresponding to a given port number.
-static inline PICPort PICGetPort(PICState* pic, uint16_t port) {
+YAX86_FILE_PRIVATE inline PICPort PICGetPort(PICState* pic, uint16_t port) {
   uint16_t port_offset = port - kPICBasePorts[PICGetMode(pic)];
   if (port_offset >= kNumPICPorts) {
     return kPICPortInvalid;
@@ -87,7 +87,7 @@ static inline PICPort PICGetPort(PICState* pic, uint16_t port) {
 
 // Returns the IRQ number of the parent PIC connected to a slave PIC.
 // Only valid if pic is a slave PIC.
-static inline uint8_t PICGetCascadeIRQ(PICState* pic) {
+YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(PICState* pic) {
   return pic->icw3 & 0x07;
 }
 
@@ -98,7 +98,7 @@ static inline uint8_t PICGetCascadeIRQ(PICState* pic) {
 // Recomputes PICState.has_unmasked_request. This is its sole writer, and every
 // path that changes irr or imr calls it, so the flag can never disagree with
 // the registers it summarizes.
-static inline void PICUpdateUnmaskedRequest(PICState* pic) {
+YAX86_FILE_PRIVATE inline void PICUpdateUnmaskedRequest(PICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 

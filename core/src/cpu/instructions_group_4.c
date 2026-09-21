@@ -14,9 +14,10 @@ typedef InstructionResult (*Group4ExecuteInstructionFn)(
 
 // Group 4 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte.
-static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
-    ExecuteInc,  // 0 - INC
-    ExecuteDec,  // 1 - DEC
+YAX86_FILE_PRIVATE const Group4ExecuteInstructionFn
+    kGroup4ExecuteInstructionFns[] = {
+        ExecuteInc,  // 0 - INC
+        ExecuteDec,  // 1 - DEC
 };
 
 enum {

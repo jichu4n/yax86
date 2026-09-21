@@ -40,6 +40,9 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
+
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
 #define YAX86_UNUSED __attribute__((unused))
@@ -773,6 +776,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -2071,6 +2077,9 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -3772,7 +3781,7 @@ YAX86_MODULE_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
 
 // Write a word where the stack pointer already points. The caller is
 // responsible for having made room for it.
-static void WriteToStackTop(CPUState* cpu, OperandValue value) {
+YAX86_FILE_PRIVATE void WriteToStackTop(CPUState* cpu, OperandValue value) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
@@ -4065,7 +4074,7 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for LES and LDS instructions.
-static InstructionResult ExecuteLoadSegmentWithPointer(
+YAX86_FILE_PRIVATE InstructionResult ExecuteLoadSegmentWithPointer(
     const InstructionContext* ctx, RegisterIndex segment_register_index) {
   Operand destRegister;
   ReadRegisterOperand(ctx, &destRegister);
@@ -4127,7 +4136,7 @@ ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
 // Other than common flags, the INC instruction sets the following flags:
 // - Overflow Flag (OF) - Set when result has wrong sign
 // - Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
-static void SetFlagsAfterInc(
+YAX86_FILE_PRIVATE void SetFlagsAfterInc(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_carry) {
   SetCommonFlagsAfterInstruction(ctx, result);
@@ -4150,7 +4159,7 @@ static void SetFlagsAfterInc(
 // Other than the flags set by the INC instruction, the ADD instruction sets the
 // following flags:
 // - Carry Flag (CF) - Set when result overflows the maximum width
-static void SetFlagsAfterAdd(
+YAX86_FILE_PRIVATE void SetFlagsAfterAdd(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_carry) {
   SetFlagsAfterInc(ctx, op1, op2, result, did_carry);
@@ -4164,7 +4173,7 @@ typedef void (*SetFlagsAfterAddFn)(
     bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
-static InstructionResult ExecuteAddCommon(
+YAX86_FILE_PRIVATE InstructionResult ExecuteAddCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -4297,7 +4306,7 @@ ExecuteIncRegister(const InstructionContext* ctx) {
 // This function sets ZF, SF, PF, OF, AF. It does NOT affect CF.
 // - OF is for the full operation op1 - (op2 + did_borrow).
 // - AF is for the full operation op1 - (op2 + did_borrow).
-static void SetFlagsAfterDec(
+YAX86_FILE_PRIVATE void SetFlagsAfterDec(
     const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
     bool did_borrow) {
   SetCommonFlagsAfterInstruction(ctx, result);
@@ -4342,7 +4351,7 @@ typedef void (*SetFlagsAfterSubFn)(
     bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-static YAX86_HOT InstructionResult ExecuteSubCommon(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteSubCommon(
     const InstructionContext* ctx, Operand* dest, OperandValue src_value,
     bool borrow, SetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
@@ -4762,7 +4771,7 @@ ExecuteTestImmediateToALOrAX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetByte(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4770,7 +4779,7 @@ static YAX86_HOT InstructionResult ExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
     const InstructionContext* ctx, OperandValue offset_value) {
   ctx->cpu->registers[kIP] = AddSignedOffsetWord(
       ctx->cpu->registers[kIP], FromOperandValue(offset_value));
@@ -4778,15 +4787,15 @@ static YAX86_HOT InstructionResult ExecuteRelativeJumpWord(
 }
 
 // Table of relative jump instructions, indexed by width.
-static InstructionResult (*const kRelativeJumpFn[kNumWidths])(
+YAX86_FILE_PRIVATE InstructionResult (*const kRelativeJumpFn[kNumWidths])(
     const InstructionContext* ctx, OperandValue offset_value) = {
-    ExecuteRelativeJumpByte,  // kByte
-    ExecuteRelativeJumpWord,  // kWord
+  ExecuteRelativeJumpByte,  // kByte
+  ExecuteRelativeJumpWord,  // kWord
 };
 
 // Common logic for JMP instructions.
-static InstructionResult ExecuteRelativeJump(
-    const InstructionContext* ctx, OperandValue offset_value) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteRelativeJump(const InstructionContext* ctx, OperandValue offset_value) {
   return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
@@ -4823,7 +4832,7 @@ ExecuteDirectFarJump(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for conditional jumps.
-static InstructionResult ExecuteConditionalJump(
+YAX86_FILE_PRIVATE InstructionResult ExecuteConditionalJump(
     const InstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     // A taken jump throws away the prefetch queue and has to fill it again.
@@ -4838,7 +4847,7 @@ static InstructionResult ExecuteConditionalJump(
 // Table of flag register bitmasks for conditional jumps. The index corresponds
 // to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
 // entries of their 0x70-0x7F counterparts.
-static const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
+YAX86_FILE_PRIVATE const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
     kOF,        // 0x70 - JO, 0x71 - JNO
     kCF,        // 0x72 - JC, 0x73 - JNC
     kZF,        // 0x74 - JE, 0x75 - JNE
@@ -4911,8 +4920,8 @@ ExecuteJumpIfCXIsZero(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for near calls.
-static InstructionResult ExecuteNearCall(
-    const InstructionContext* ctx, OperandValue offset) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNearCall(const InstructionContext* ctx, OperandValue offset) {
   PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteRelativeJump(ctx, offset);
 }
@@ -4942,8 +4951,8 @@ ExecuteDirectFarCall(const InstructionContext* ctx) {
 }
 
 // Common logic for RET instructions.
-static InstructionResult ExecuteNearReturnCommon(
-    const InstructionContext* ctx, uint16_t arg_size) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNearReturnCommon(const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
   ctx->cpu->registers[kSP] += arg_size;
@@ -4964,8 +4973,8 @@ ExecuteNearReturnAndPop(const InstructionContext* ctx) {
 }
 
 // Common logic for RETF instructions.
-static InstructionResult ExecuteFarReturnCommon(
-    const InstructionContext* ctx, uint16_t arg_size) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteFarReturnCommon(const InstructionContext* ctx, uint16_t arg_size) {
   OperandValue new_ip = Pop(ctx->cpu);
   OperandValue new_cs = Pop(ctx->cpu);
   ctx->cpu->registers[kIP] = FromOperandValue(new_ip);
@@ -5140,7 +5149,7 @@ ExecutePopRegisterOrMemory(const InstructionContext* ctx) {
 // ============================================================================
 
 // Returns the AH register address.
-static const OperandAddress* GetAHRegisterAddress(void) {
+YAX86_FILE_PRIVATE const OperandAddress* GetAHRegisterAddress(void) {
   static OperandAddress ah = {
       .type = kOperandAddressTypeRegister,
       .register_index = kAX,
@@ -5191,7 +5200,7 @@ ExecuteStoreAHToFlags(const InstructionContext* ctx) {
 
 // Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
 // instructions, indexed by (opcode - 0xF8) / 2.
-static const Flag kFlagsForClearAndSetInstructions[] = {
+YAX86_FILE_PRIVATE const Flag kFlagsForClearAndSetInstructions[] = {
     kCF,  // CLC, STC
     kIF,  // CLI, STI
     kDF,  // CLD, STD
@@ -5254,7 +5263,8 @@ ExecuteSetALFromCarry(const InstructionContext* ctx) {
 // ============================================================================
 
 // Read a byte from an I/O port.
-static YAX86_HOT OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
+YAX86_FILE_PRIVATE YAX86_HOT OperandValue
+ReadByteFromPort(CPUState* cpu, uint16_t port) {
   return (OperandValue)(cpu->config.read_port ? cpu->config.read_port(cpu, port)
                                               : 0xFF);
 }
@@ -5263,21 +5273,22 @@ static YAX86_HOT OperandValue ReadByteFromPort(CPUState* cpu, uint16_t port) {
 // so a word access is two byte accesses to consecutive ports. Peripherals rely
 // on this: writing a 6845 register index and its data in one OUT DX, AX is the
 // standard idiom, and it is what the BIOS uses.
-static OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
+YAX86_FILE_PRIVATE OperandValue ReadWordFromPort(CPUState* cpu, uint16_t port) {
   uint8_t low = (uint8_t)ReadByteFromPort(cpu, port);
   uint8_t high = (uint8_t)ReadByteFromPort(cpu, (uint16_t)(port + 1));
   return (OperandValue)((high << 8) | low);
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
-static OperandValue (*const kReadFromPortFns[])(CPUState*, uint16_t) = {
-    ReadByteFromPort,  // kByte
-    ReadWordFromPort,  // kWord
+YAX86_FILE_PRIVATE OperandValue (*const kReadFromPortFns[])(
+    CPUState*, uint16_t) = {
+  ReadByteFromPort,  // kByte
+  ReadWordFromPort,  // kWord
 };
 
 // Common logic for IN instructions.
-static InstructionResult ExecuteIn(
-    const InstructionContext* ctx, uint16_t port) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIn(const InstructionContext* ctx, uint16_t port) {
   OperandValue value = kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -5301,7 +5312,8 @@ ExecuteInDX(const InstructionContext* ctx) {
 }
 
 // Write a byte to an I/O port.
-static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
+YAX86_FILE_PRIVATE void WriteByteToPort(
+    CPUState* cpu, uint16_t port, OperandValue value) {
   if (!cpu->config.write_port) {
     return;
   }
@@ -5310,7 +5322,8 @@ static void WriteByteToPort(CPUState* cpu, uint16_t port, OperandValue value) {
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
 // consecutive ports.
-static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
+YAX86_FILE_PRIVATE void WriteWordToPort(
+    CPUState* cpu, uint16_t port, OperandValue value) {
   uint32_t raw_value = FromOperandValue(value);
   WriteByteToPort(cpu, port, (OperandValue)(raw_value & 0xFF));
   WriteByteToPort(
@@ -5318,14 +5331,15 @@ static void WriteWordToPort(CPUState* cpu, uint16_t port, OperandValue value) {
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
-static void (*const kWriteToPortFns[])(CPUState*, uint16_t, OperandValue) = {
+YAX86_FILE_PRIVATE void (*const kWriteToPortFns[])(
+    CPUState*, uint16_t, OperandValue) = {
     WriteByteToPort,  // kByte
     WriteWordToPort,  // kWord
 };
 
 // Common logic for OUT instructions.
-static InstructionResult ExecuteOut(
-    const InstructionContext* ctx, uint16_t port) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteOut(const InstructionContext* ctx, uint16_t port) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
@@ -5370,13 +5384,14 @@ ExecuteOutDX(const InstructionContext* ctx) {
 // ============================================================================
 
 // Get the repetition prefix of a string instruction, if any.
-static inline uint8_t GetRepetitionPrefix(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE inline uint8_t GetRepetitionPrefix(
+    const InstructionContext* ctx) {
   return ctx->instruction->repetition_prefix;
 }
 
 // Get the source operand for string instructions. Typically DS:SI but can be
 // overridden by a segment override prefix.
-static void GetStringSourceOperand(
+YAX86_FILE_PRIVATE void GetStringSourceOperand(
     const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
@@ -5389,8 +5404,8 @@ static void GetStringSourceOperand(
 }
 
 // Get the destination operand address for string instructions. Always ES:DI.
-static OperandAddress GetStringDestinationOperandAddress(
-    const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE OperandAddress
+GetStringDestinationOperandAddress(const InstructionContext* ctx) {
   OperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kES,
@@ -5400,7 +5415,7 @@ static OperandAddress GetStringDestinationOperandAddress(
 }
 
 // Get the destination operand for string instructions. Always ES:DI.
-static void GetStringDestinationOperand(
+YAX86_FILE_PRIVATE void GetStringDestinationOperand(
     const InstructionContext* ctx, Operand* operand) {
   OperandAddress address = GetStringDestinationOperandAddress(ctx);
   operand->address = address;
@@ -5408,7 +5423,8 @@ static void GetStringDestinationOperand(
 }
 
 // Update the source address register (SI) after a string operation.
-static void UpdateStringSourceAddress(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE void UpdateStringSourceAddress(
+    const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -5417,7 +5433,8 @@ static void UpdateStringSourceAddress(const InstructionContext* ctx) {
 }
 
 // Update the destination address register (DI) after a string operation.
-static void UpdateStringDestinationAddress(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE void UpdateStringDestinationAddress(
+    const InstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -5475,7 +5492,7 @@ typedef struct BulkStringRun {
 // would not reach - the element path recomputes the address from the wrapped
 // offset every iteration. And a run that leaves the window has to go through
 // the memory map for the part outside it.
-static bool IsBulkRunAddressable(
+YAX86_FILE_PRIVATE bool IsBulkRunAddressable(
     uint32_t window_end, uint16_t offset, uint32_t linear, uint16_t count,
     uint8_t element_size, bool backwards) {
   // Distance from the first element to the last, which is one element short of
@@ -5493,7 +5510,7 @@ static bool IsBulkRunAddressable(
 }
 
 // Works out whether a repeat can run in bulk, and describes it if so.
-static bool PlanBulkStringRun(
+YAX86_FILE_PRIVATE bool PlanBulkStringRun(
     const InstructionContext* ctx, bool has_source, BulkStringRun* run) {
   const uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
@@ -5547,7 +5564,8 @@ static bool PlanBulkStringRun(
 // to change a particular number of times, so one report per page says the same
 // thing - and leaves the counter coming back round after 256 runs rather than
 // after 256 bytes, which is a flush avoided rather than a flush missed.
-static void NotifyBulkStringWrite(CPUState* cpu, const BulkStringRun* run) {
+YAX86_FILE_PRIVATE void NotifyBulkStringWrite(
+    CPUState* cpu, const BulkStringRun* run) {
   const uint32_t reach = (uint32_t)(run->count - 1) * run->element_size;
   const uint32_t low =
       run->step < 0 ? run->destination - reach : run->destination;
@@ -5560,7 +5578,7 @@ static void NotifyBulkStringWrite(CPUState* cpu, const BulkStringRun* run) {
 
 // Leaves CX, SI and DI where the element path would have left them, and
 // charges what it would have charged.
-static void FinishBulkStringRun(
+YAX86_FILE_PRIVATE void FinishBulkStringRun(
     CPUState* cpu, const BulkStringRun* run, uint8_t bus_bytes_per_element,
     bool has_source) {
   const int32_t total = run->step * (int32_t)run->count;
@@ -5583,7 +5601,7 @@ static void FinishBulkStringRun(
 // test and the 8086/8088 does not tell the two prefixes apart here: 0xF2
 // repeats exactly as 0xF3 does, counting CX down to zero. Only the comparison
 // string instructions read the prefix as a condition.
-static InstructionResult ExecuteStringInstructionWithREPPrefix(
+YAX86_FILE_PRIVATE InstructionResult ExecuteStringInstructionWithREPPrefix(
     const InstructionContext* ctx,
     InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -5601,7 +5619,8 @@ static InstructionResult ExecuteStringInstructionWithREPPrefix(
 }
 
 // Single MOVS iteration.
-static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteMovsIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringSourceOperand(ctx, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
@@ -5613,7 +5632,7 @@ static InstructionResult ExecuteMovsIteration(const InstructionContext* ctx) {
 
 // A whole repeated MOVS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-static bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
   BulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/true, &run)) {
     return false;
@@ -5658,7 +5677,8 @@ ExecuteMovs(const InstructionContext* ctx) {
 }
 
 // Single STOS iteration.
-static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteStosIteration(const InstructionContext* ctx) {
   Operand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
@@ -5669,7 +5689,7 @@ static InstructionResult ExecuteStosIteration(const InstructionContext* ctx) {
 
 // A whole repeated STOS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-static bool ExecuteStosBulkRun(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE bool ExecuteStosBulkRun(const InstructionContext* ctx) {
   BulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/false, &run)) {
     return false;
@@ -5707,7 +5727,8 @@ ExecuteStos(const InstructionContext* ctx) {
 }
 
 // Single LODS iteration.
-static InstructionResult ExecuteLodsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteLodsIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringSourceOperand(ctx, &src);
   Operand dest;
@@ -5724,7 +5745,8 @@ ExecuteLods(const InstructionContext* ctx) {
 }
 
 // Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteStringInstructionWithREPZOrRepNZPrefix(
     const InstructionContext* ctx,
     InstructionResult (*fn)(const InstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
@@ -5746,7 +5768,7 @@ static InstructionResult ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-static YAX86_HOT InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
 ExecuteScasIteration(const InstructionContext* ctx) {
   Operand src;
   GetStringDestinationOperand(ctx, &src);
@@ -5764,7 +5786,8 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx
 }
 
 // Single CMPS iteration.
-static InstructionResult ExecuteCmpsIteration(const InstructionContext* ctx) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteCmpsIteration(const InstructionContext* ctx) {
   Operand dest;
   GetStringSourceOperand(ctx, &dest);
   Operand src;
@@ -5811,7 +5834,7 @@ YAX86_MODULE_PRIVATE InstructionResult ExecuteCmps(const InstructionContext* ctx
 // entry. That is not what Intel's published pseudocode says, which uses 0x99
 // throughout, but it is what the 8086/8088 does - and with AL between 0x9A and
 // 0x9F it is the difference between adjusting and not.
-static uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
+YAX86_FILE_PRIVATE uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
   return auxiliary_carry ? 0x9F : 0x99;
 }
 
@@ -5968,15 +5991,16 @@ typedef InstructionResult (*Group1ExecuteInstructionFn)(
 
 // Group 1 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte.
-static const Group1ExecuteInstructionFn kGroup1ExecuteInstructionFns[] = {
-    ExecuteAdd,            // 0 - ADD
-    ExecuteBooleanOr,      // 1 - OR
-    ExecuteAddWithCarry,   // 2 - ADC
-    ExecuteSubWithBorrow,  // 3 - SBB
-    ExecuteBooleanAnd,     // 4 - AND
-    ExecuteSub,            // 5 - SUB
-    ExecuteBooleanXor,     // 6 - XOR
-    ExecuteCmp,            // 7 - CMP
+YAX86_FILE_PRIVATE const Group1ExecuteInstructionFn
+    kGroup1ExecuteInstructionFns[] = {
+        ExecuteAdd,            // 0 - ADD
+        ExecuteBooleanOr,      // 1 - OR
+        ExecuteAddWithCarry,   // 2 - ADC
+        ExecuteSubWithBorrow,  // 3 - SBB
+        ExecuteBooleanAnd,     // 4 - AND
+        ExecuteSub,            // 5 - SUB
+        ExecuteBooleanXor,     // 6 - XOR
+        ExecuteCmp,            // 7 - CMP
 };
 
 // Group 1 instruction handler.
@@ -6038,7 +6062,7 @@ typedef InstructionResult (*Group2ExecuteInstructionFn)(
 // Overflow after a left shift or rotate: the bit shifted out of the top
 // differs from the sign bit left behind, which is to say the last pass changed
 // the sign of the value.
-static void SetOverflowFlagAfterLeftShift(
+YAX86_FILE_PRIVATE void SetOverflowFlagAfterLeftShift(
     const InstructionContext* ctx, uint32_t result, bool carry) {
   const bool result_sign = (result & kSignBit[ctx->metadata->width]) != 0;
   CPUSetFlag(ctx->cpu, kOF, carry != result_sign);
@@ -6047,7 +6071,7 @@ static void SetOverflowFlagAfterLeftShift(
 // Overflow after a right rotate: the top two bits of the result differ. The
 // bit rotated into the top came from the bottom, so this again says the last
 // pass changed the sign of the value.
-static void SetOverflowFlagAfterRightRotate(
+YAX86_FILE_PRIVATE void SetOverflowFlagAfterRightRotate(
     const InstructionContext* ctx, uint32_t result) {
   const uint32_t sign_bit = kSignBit[ctx->metadata->width];
   const bool result_sign = (result & sign_bit) != 0;
@@ -6061,7 +6085,8 @@ static void SetOverflowFlagAfterRightRotate(
 // fall out of it, so every larger count behaves alike. Clamping to just past
 // the width keeps that true while holding the shifts below the width of the
 // intermediate they are computed in, where C leaves them undefined.
-static uint8_t ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
+YAX86_FILE_PRIVATE uint8_t
+ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
   const uint8_t limit = kNumBits[ctx->metadata->width] + 1;
   return count > limit ? limit : count;
 }
@@ -6070,8 +6095,8 @@ static uint8_t ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
 // SHL r/m16, 1
 // SHL r/m8, CL
 // SHL r/m16, CL
-static InstructionResult ExecuteGroup2Shl(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Shl(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -6092,7 +6117,7 @@ static InstructionResult ExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-static YAX86_HOT InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
 ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -6116,8 +6141,8 @@ ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // SAR r/m16, 1
 // SAR r/m8, CL
 // SAR r/m16, CL
-static InstructionResult ExecuteGroup2Sar(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Sar(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -6139,8 +6164,8 @@ static InstructionResult ExecuteGroup2Sar(
 // ROL r/m16, 1
 // ROL r/m8, CL
 // ROL r/m16, CL
-static InstructionResult ExecuteGroup2Rol(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rol(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -6163,8 +6188,8 @@ static InstructionResult ExecuteGroup2Rol(
 // ROR r/m16, 1
 // ROR r/m8, CL
 // ROR r/m16, CL
-static InstructionResult ExecuteGroup2Ror(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Ror(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -6187,8 +6212,8 @@ static InstructionResult ExecuteGroup2Ror(
 // RCL r/m16, 1
 // RCL r/m8, CL
 // RCL r/m16, CL
-static InstructionResult ExecuteGroup2Rcl(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rcl(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -6219,8 +6244,8 @@ static InstructionResult ExecuteGroup2Rcl(
 // RCR r/m16, 1
 // RCR r/m8, CL
 // RCR r/m16, CL
-static InstructionResult ExecuteGroup2Rcr(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Rcr(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -6259,8 +6284,8 @@ static InstructionResult ExecuteGroup2Rcr(
 // Nothing an IBM PC/XT runs uses this, but leaving REG 6 aliased to SAL would
 // silently give a different answer than the hardware for the same encoding,
 // and the operation is a single store.
-static InstructionResult ExecuteGroup2Setmo(
-    const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup2Setmo(const InstructionContext* ctx, Operand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -6274,15 +6299,16 @@ static InstructionResult ExecuteGroup2Setmo(
   return kInstructionExecuted;
 }
 
-static const Group2ExecuteInstructionFn kGroup2ExecuteInstructionFns[] = {
-    ExecuteGroup2Rol,    // 0 - ROL
-    ExecuteGroup2Ror,    // 1 - ROR
-    ExecuteGroup2Rcl,    // 2 - RCL
-    ExecuteGroup2Rcr,    // 3 - RCR
-    ExecuteGroup2Shl,    // 4 - SHL
-    ExecuteGroup2Shr,    // 5 - SHR
-    ExecuteGroup2Setmo,  // 6 - SETMO / SETMOC
-    ExecuteGroup2Sar,    // 7 - SAR
+YAX86_FILE_PRIVATE const Group2ExecuteInstructionFn
+    kGroup2ExecuteInstructionFns[] = {
+        ExecuteGroup2Rol,    // 0 - ROL
+        ExecuteGroup2Ror,    // 1 - ROR
+        ExecuteGroup2Rcl,    // 2 - RCL
+        ExecuteGroup2Rcr,    // 3 - RCR
+        ExecuteGroup2Shl,    // 4 - SHL
+        ExecuteGroup2Shr,    // 5 - SHR
+        ExecuteGroup2Setmo,  // 6 - SETMO / SETMOC
+        ExecuteGroup2Sar,    // 7 - SAR
 };
 
 // Group 2 shift / rotate by 1.
@@ -6334,24 +6360,24 @@ typedef InstructionResult (*Group3ExecuteInstructionFn)(
 
 // TEST r/m8, imm8
 // TEST r/m16, imm16
-static InstructionResult ExecuteGroup3Test(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteGroup3Test(const InstructionContext* ctx, Operand* op) {
   OperandValue src_value = ReadImmediate(ctx);
   return ExecuteTest(ctx, op, src_value);
 }
 
 // NOT r/m8
 // NOT r/m16
-static InstructionResult ExecuteNot(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNot(const InstructionContext* ctx, Operand* op) {
   WriteOperand(ctx, op, ~FromOperand(op));
   return kInstructionExecuted;
 }
 
 // NEG r/m8
 // NEG r/m16
-static InstructionResult ExecuteNeg(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteNeg(const InstructionContext* ctx, Operand* op) {
   int32_t op_value = FromSignedOperand(ctx->metadata->width, op);
   int32_t result_value = -op_value;
   WriteOperand(ctx, op, result_value);
@@ -6361,14 +6387,19 @@ static InstructionResult ExecuteNeg(
 
 // Table of where to store the higher half of the result for
 // MUL, IMUL, DIV, and IDIV instructions, indexed by the data width.
-static const OperandAddress kMulDivResultHighHalfAddress[kNumWidths] = {
-    {.type = kOperandAddressTypeRegister, .register_index = kAX, .offset = 8},
-    {.type = kOperandAddressTypeRegister, .register_index = kDX, .offset = 0},
+YAX86_FILE_PRIVATE const OperandAddress
+    kMulDivResultHighHalfAddress[kNumWidths] = {
+        {.type = kOperandAddressTypeRegister,
+         .register_index = kAX,
+         .offset = 8},
+        {.type = kOperandAddressTypeRegister,
+         .register_index = kDX,
+         .offset = 0},
 };
 
 // Number of bits to shift to extract the high part of the result of MUL, IMUL,
 // DIV, and IDIV instructions, indexed by the data width.
-static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
+YAX86_FILE_PRIVATE const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
     8,   // kByte
     16,  // kWord
 };
@@ -6378,7 +6409,7 @@ static const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
 // a time in microcode - so unlike everything else in the cycle table they are
 // worth charging individually. The published figures are ranges that depend on
 // the operands; these are the low end of each.
-static const uint16_t kMulDivCycles[kNumWidths][2] = {
+YAX86_FILE_PRIVATE const uint16_t kMulDivCycles[kNumWidths][2] = {
     // kByte: unsigned, signed
     {70, 80},
     // kWord: unsigned, signed
@@ -6386,7 +6417,7 @@ static const uint16_t kMulDivCycles[kNumWidths][2] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-static InstructionResult ExecuteMulCommon(
+YAX86_FILE_PRIVATE InstructionResult ExecuteMulCommon(
     const InstructionContext* ctx, Operand* dest, uint32_t result,
     bool overflow) {
   Width width = ctx->metadata->width;
@@ -6407,8 +6438,8 @@ static InstructionResult ExecuteMulCommon(
 
 // MUL r/m8
 // MUL r/m16
-static InstructionResult ExecuteMul(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteMul(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -6419,8 +6450,8 @@ static InstructionResult ExecuteMul(
 
 // IMUL r/m8
 // IMUL r/m16
-static InstructionResult ExecuteImul(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteImul(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   Operand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
@@ -6433,7 +6464,7 @@ static InstructionResult ExecuteImul(
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-static InstructionResult WriteDivResult(
+YAX86_FILE_PRIVATE InstructionResult WriteDivResult(
     const InstructionContext* ctx, Operand* dest, uint32_t quotient,
     uint32_t remainder) {
   WriteOperand(ctx, dest, quotient);
@@ -6444,8 +6475,8 @@ static InstructionResult WriteDivResult(
 
 // DIV r/m8
 // DIV r/m16
-static InstructionResult ExecuteDiv(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteDiv(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   uint32_t divisor = FromOperand(op);
   if (divisor == 0) {
@@ -6472,8 +6503,8 @@ static InstructionResult ExecuteDiv(
 
 // IDIV r/m8
 // IDIV r/m16
-static InstructionResult ExecuteIdiv(
-    const InstructionContext* ctx, Operand* op) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIdiv(const InstructionContext* ctx, Operand* op) {
   CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   int32_t divisor = FromSignedOperand(ctx->metadata->width, op);
   if (divisor == 0) {
@@ -6505,17 +6536,18 @@ static InstructionResult ExecuteIdiv(
 
 // Group 3 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte and data width.
-static const Group3ExecuteInstructionFn kGroup3ExecuteInstructionFns[] = {
-    ExecuteGroup3Test,  // 0 - TEST
-    // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not decode
-    // bit 0 of the REG field for this group.
-    ExecuteGroup3Test,  // 1 - TEST
-    ExecuteNot,         // 2 - NOT
-    ExecuteNeg,         // 3 - NEG
-    ExecuteMul,         // 4 - MUL
-    ExecuteImul,        // 5 - IMUL
-    ExecuteDiv,         // 6 - DIV
-    ExecuteIdiv,        // 7 - IDIV
+YAX86_FILE_PRIVATE const Group3ExecuteInstructionFn
+    kGroup3ExecuteInstructionFns[] = {
+        ExecuteGroup3Test,  // 0 - TEST
+        // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not
+        // decode bit 0 of the REG field for this group.
+        ExecuteGroup3Test,  // 1 - TEST
+        ExecuteNot,         // 2 - NOT
+        ExecuteNeg,         // 3 - NEG
+        ExecuteMul,         // 4 - MUL
+        ExecuteImul,        // 5 - IMUL
+        ExecuteDiv,         // 6 - DIV
+        ExecuteIdiv,        // 7 - IDIV
 };
 
 // Group 3 instruction handler.
@@ -6554,9 +6586,10 @@ typedef InstructionResult (*Group4ExecuteInstructionFn)(
 
 // Group 4 instruction implementations, indexed by the corresponding REG field
 // value in the ModRM byte.
-static const Group4ExecuteInstructionFn kGroup4ExecuteInstructionFns[] = {
-    ExecuteInc,  // 0 - INC
-    ExecuteDec,  // 1 - DEC
+YAX86_FILE_PRIVATE const Group4ExecuteInstructionFn
+    kGroup4ExecuteInstructionFns[] = {
+        ExecuteInc,  // 0 - INC
+        ExecuteDec,  // 1 - DEC
 };
 
 enum {
@@ -6604,7 +6637,7 @@ ExecuteGroup4Instruction(const InstructionContext* ctx) {
 // ============================================================================
 
 // Helper to get the segment register value for far JMP and CALL instructions.
-static void GetSegmentRegisterOperandForIndirectFarJumpOrCall(
+YAX86_FILE_PRIVATE void GetSegmentRegisterOperandForIndirectFarJumpOrCall(
     const InstructionContext* ctx, const Operand* offset, Operand* operand) {
   OperandAddress segment_address = offset->address;
   segment_address.offset += 2;  // Skip the offset
@@ -6613,38 +6646,38 @@ static void GetSegmentRegisterOperandForIndirectFarJumpOrCall(
 }
 
 // JMP ptr16
-static InstructionResult ExecuteIndirectNearJump(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectNearJump(const InstructionContext* ctx, Operand* dest) {
   ctx->cpu->registers[kIP] = FromOperandValue(dest->value);
   return kInstructionExecuted;
 }
 
 // CALL ptr16
-static InstructionResult ExecuteIndirectNearCall(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectNearCall(const InstructionContext* ctx, Operand* dest) {
   PushValue(ctx->cpu, ctx->cpu->registers[kIP]);
   return ExecuteIndirectNearJump(ctx, dest);
 }
 
 // CALL ptr16:16
-static InstructionResult ExecuteIndirectFarCall(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectFarCall(const InstructionContext* ctx, Operand* dest) {
   Operand segment;
   GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
   return ExecuteFarCall(ctx, segment.value, dest->value);
 }
 
 // JMP ptr16:16
-static InstructionResult ExecuteIndirectFarJump(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectFarJump(const InstructionContext* ctx, Operand* dest) {
   Operand segment;
   GetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
   return ExecuteFarJump(ctx, segment.value, dest->value);
 }
 
 // PUSH r/m16
-static InstructionResult ExecuteIndirectPush(
-    const InstructionContext* ctx, Operand* dest) {
+YAX86_FILE_PRIVATE InstructionResult
+ExecuteIndirectPush(const InstructionContext* ctx, Operand* dest) {
   PushSourceOperand(ctx->cpu, dest);
   return kInstructionExecuted;
 }
@@ -6654,18 +6687,19 @@ typedef InstructionResult (*Group5ExecuteInstructionFn)(
 
 // Group 5 instruction implementations, indexed by the corresponding REG
 // field value in the ModRM byte.
-static const Group5ExecuteInstructionFn kGroup5ExecuteInstructionFns[] = {
-    ExecuteInc,               // 0 - INC r/m8/r/m16
-    ExecuteDec,               // 1 - DEC r/m8/r/m16
-    ExecuteIndirectNearCall,  // 2 - CALL rel16
-    ExecuteIndirectFarCall,   // 3 - CALL ptr16:16
-    ExecuteIndirectNearJump,  // 4 - JMP ptr16
-    ExecuteIndirectFarJump,   // 5 - JMP ptr16:16
-    ExecuteIndirectPush,      // 6 - PUSH r/m16
-    // REG 7 is an undocumented alias of REG 6. Without this entry the lookup
-    // below would read past the end of the table, since the REG field is three
-    // bits wide.
-    ExecuteIndirectPush,  // 7 - PUSH r/m16
+YAX86_FILE_PRIVATE const Group5ExecuteInstructionFn
+    kGroup5ExecuteInstructionFns[] = {
+        ExecuteInc,               // 0 - INC r/m8/r/m16
+        ExecuteDec,               // 1 - DEC r/m8/r/m16
+        ExecuteIndirectNearCall,  // 2 - CALL rel16
+        ExecuteIndirectFarCall,   // 3 - CALL ptr16:16
+        ExecuteIndirectNearJump,  // 4 - JMP ptr16
+        ExecuteIndirectFarJump,   // 5 - JMP ptr16:16
+        ExecuteIndirectPush,      // 6 - PUSH r/m16
+        // REG 7 is an undocumented alias of REG 6. Without this entry the
+        // lookup below would read past the end of the table, since the REG
+        // field is three bits wide.
+        ExecuteIndirectPush,  // 7 - PUSH r/m16
 };
 
 // Group 5 instruction handler.
@@ -8287,7 +8321,7 @@ enum {
 
 // Whether a byte is a segment override prefix. The mask pins every bit but the
 // two that select the segment, so it matches those four bytes and nothing else.
-static inline bool IsSegmentOverridePrefix(uint8_t byte) {
+YAX86_FILE_PRIVATE inline bool IsSegmentOverridePrefix(uint8_t byte) {
   return (byte & kSegmentOverridePrefixMask) == kSegmentOverridePrefixValue;
 }
 
@@ -8295,7 +8329,7 @@ static inline bool IsSegmentOverridePrefix(uint8_t byte) {
 // so this is a range check rather than a mask - which is both clearer and one
 // instruction cheaper, since a compiler folds it into a single subtract and
 // compare.
-static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
+YAX86_FILE_PRIVATE inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
   return byte >= kPrefixLOCK && byte <= kPrefixREP;
 }
 
@@ -8306,7 +8340,8 @@ static inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
 //
 // The cheaper test goes first. A byte that is not a prefix runs both, and that
 // is the common case by far - every instruction ends the loop with one.
-static bool ApplyPrefixByte(Instruction* instruction, uint8_t byte) {
+YAX86_FILE_PRIVATE bool ApplyPrefixByte(
+    Instruction* instruction, uint8_t byte) {
   if (IsLockOrRepetitionPrefix(byte)) {
     // LOCK and its 0xF1 alias advance IP, but nothing acts on them, so only a
     // repetition prefix is worth recording.
@@ -8375,7 +8410,7 @@ typedef struct CPUInstructionFetchState {
 // executes, so most of that time is already paid for by the instruction being
 // executed - and the published per-instruction figures the cycle table is
 // built from assume the queue is full.
-static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
+YAX86_FILE_PRIVATE inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
     CPUState* cpu, CPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
     --fetch_state->bytes_remaining;
@@ -8387,7 +8422,7 @@ static inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
 }
 
 // Points a fetch at whatever can be read directly from CS:ip.
-static YAX86_HOT void CPUInitInstructionFetchState(
+YAX86_FILE_PRIVATE YAX86_HOT void CPUInitInstructionFetchState(
     CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
   fetch_state->next_byte_offset = ip;
   fetch_state->next_byte = NULL;
@@ -8435,7 +8470,7 @@ static YAX86_HOT void CPUInitInstructionFetchState(
 }
 
 // Returns the number of displacement bytes based on the ModR/M byte.
-static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
+YAX86_FILE_PRIVATE uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
   switch (mod) {
     case 0:
       // Special case: 16-bit displacement
@@ -8451,8 +8486,8 @@ static uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
 }
 
 // Returns the number of immediate bytes in an instruction.
-static uint8_t GetImmediateSize(
-    const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
+YAX86_FILE_PRIVATE uint8_t
+GetImmediateSize(const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
   switch (opcode) {
     // TEST r/m8, imm8
     case 0xF6:
@@ -8571,7 +8606,7 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
 
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
-static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
     const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
   return entry->valid && entry->address == address &&
          entry->generation == generation;
@@ -8594,7 +8629,8 @@ static YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
 // and reload - so the smaller-looking signature is the slower one.
 //
 // A caller must not hold the pointer across another fetch.
-static YAX86_HOT CPUFetchNextInstructionStatus CPUFetchNextInstructionCached(
+YAX86_FILE_PRIVATE YAX86_HOT CPUFetchNextInstructionStatus
+CPUFetchNextInstructionCached(
     CPUState* cpu, CPUDecodeCacheEntry* scratch, CPUDecodeCacheEntry** entry) {
   const uint16_t ip = cpu->registers[kIP];
   // NULL covers both having no cache and having asked for an unusable one,
@@ -8697,7 +8733,8 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 }
 
 // Save state and vector to the handler for an interrupt.
-static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
+YAX86_FILE_PRIVATE void DispatchInterrupt(
+    CPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
   PushValue(cpu, cpu->flags);
@@ -8729,7 +8766,7 @@ static void DispatchInterrupt(CPUState* cpu, uint8_t interrupt_number) {
 }
 
 // Take a pending interrupt, if any. Returns whether one was dispatched.
-static bool ExecutePendingInterrupt(CPUState* cpu) {
+YAX86_FILE_PRIVATE bool ExecutePendingInterrupt(CPUState* cpu) {
   // An internal interrupt goes first. It was raised by the instruction that
   // just executed, and taking it clears IF, which correctly holds off any
   // external request until the handler re-enables interrupts.
@@ -8782,7 +8819,7 @@ enum {
 };
 
 // Whether an opcode reads or writes an I/O port.
-static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
   return (opcode & kPortInstructionMask) == kPortInstructionValue;
 }
 
@@ -8790,7 +8827,7 @@ static YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
 //
 // Everything here is something the end of a tick would otherwise have dealt
 // with, and which running another instruction first would deal with too late.
-static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
+YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
     const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
   return
       // A budget of zero is how a host asks for one instruction per tick.
@@ -8819,7 +8856,8 @@ static YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
 //
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
-static YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(CPUState* cpu) {
+YAX86_FILE_PRIVATE YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(
+    CPUState* cpu) {
   CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return NULL;
@@ -9007,6 +9045,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -9808,7 +9849,8 @@ YAX86_PUBLIC void DMAInit(DMAState* dma) {
 }
 
 // Helper to read a 16-bit value byte-by-byte using the flip-flop.
-static inline uint8_t DMAReadRegisterByte(DMAState* dma, uint16_t value) {
+YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
+    DMAState* dma, uint16_t value) {
   uint8_t byte;
   if (dma->rw_byte == kDMARegisterMSB) {
     byte = (value >> 8) & 0xFF;
@@ -9854,7 +9896,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
 
 // Helper to write a 16-bit value byte-by-byte using the flip-flop.
 // Note: Writes update both the 'base' and 'current' registers.
-static inline void DMAWriteRegisterByte(
+YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
     DMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
   if (dma->rw_byte == kDMARegisterMSB) {
     // Second write sets the high byte.
@@ -10100,6 +10142,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -11134,14 +11179,14 @@ typedef struct FDCCommandMetadata {
 
 // Helper to raise an IRQ6 if the callback is set and interrupts are enabled in
 // DOR.
-static inline void FDCRaiseIRQ6(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCRaiseIRQ6(FDCState* fdc) {
   if (fdc->config.raise_irq6 && (fdc->dor & kFDCDORInterruptEnable)) {
     fdc->config.raise_irq6(fdc->config.context);
   }
 }
 
 // Transition into execution phase.
-static inline void FDCStartCommandExecution(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCStartCommandExecution(FDCState* fdc) {
   YAX86_FDC_LOG(
       kLogLevelDebug, "executing command %02X with %u parameter bytes",
       fdc->current_command ? fdc->current_command->opcode : 0,
@@ -11151,7 +11196,7 @@ static inline void FDCStartCommandExecution(FDCState* fdc) {
 }
 
 // Transition into result phase after command execution.
-static inline void FDCFinishCommandExecution(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCFinishCommandExecution(FDCState* fdc) {
   YAX86_FDC_LOG(
       kLogLevelDebug, "command finished with %u result bytes, st0 %02X",
       (unsigned)FDCResultBufferLength(&fdc->result_buffer),
@@ -11169,7 +11214,7 @@ static inline void FDCFinishCommandExecution(FDCState* fdc) {
 }
 
 // Helper to perform a seek operation (for Seek and Recalibrate).
-static void FDCPerformSeek(
+YAX86_FILE_PRIVATE void FDCPerformSeek(
     FDCState* fdc, uint8_t drive_index, uint8_t target_track) {
   FDCDriveState* drive = &fdc->drives[drive_index];
 
@@ -11207,7 +11252,7 @@ static void FDCPerformSeek(
 // (Head 1, the bottom side) before moving to the next track.
 // In other words, the layout is an array of
 // [num_tracks][num_heads][num_sectors_per_track].
-static inline uint32_t FDCComputeOffset(
+YAX86_FILE_PRIVATE inline uint32_t FDCComputeOffset(
     FDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
     uint16_t sector_offset) {
   if (head >= format.num_heads || track >= format.num_tracks || sector == 0 ||
@@ -11231,7 +11276,7 @@ static inline uint32_t FDCComputeOffset(
 }
 
 // Helper to finish a read/write command.
-static void FDCFinishReadWrite(
+YAX86_FILE_PRIVATE void FDCFinishReadWrite(
     FDCState* fdc, uint8_t st0, uint8_t st1, uint8_t st2) {
   FDCResultBufferAppend(&fdc->result_buffer, &st0);
   FDCResultBufferAppend(&fdc->result_buffer, &st1);
@@ -11246,7 +11291,7 @@ static void FDCFinishReadWrite(
 }
 
 // Handler for Write Data command.
-static void FDCHandleWriteData(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -11386,7 +11431,7 @@ static void FDCHandleWriteData(FDCState* fdc) {
 }
 
 // Handler for Read Data command.
-static YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
+YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -11528,14 +11573,14 @@ static YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
 }
 
 // Handler for Recalibrate command.
-static void FDCHandleRecalibrate(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleRecalibrate(FDCState* fdc) {
   // Recalibrate command has one parameter byte: drive number (0-3).
   uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
   FDCPerformSeek(fdc, drive_index, 0);
 }
 
 // Handler for Seek command.
-static void FDCHandleSeek(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSeek(FDCState* fdc) {
   // Seek command parameters:
   // Byte 1: Drive number (0-3) and Head address (ignored for seek).
   // Byte 2: New Cylinder Number (NCN).
@@ -11545,14 +11590,14 @@ static void FDCHandleSeek(FDCState* fdc) {
 }
 
 // Handler for Specify command.
-static void FDCHandleSpecify(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSpecify(FDCState* fdc) {
   // We don't currently support changing timings or non-DMA mode, so we just
   // ignore the parameters.
   FDCFinishCommandExecution(fdc);
 }
 
 // Handler for Sense Interrupt Status command.
-static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSenseInterruptStatus(FDCState* fdc) {
   // Check for any pending interrupts.
   for (int i = 0; i < kFDCNumDrives; ++i) {
     FDCDriveState* drive = &fdc->drives[i];
@@ -11578,7 +11623,7 @@ static void FDCHandleSenseInterruptStatus(FDCState* fdc) {
 
 // List of supported FDC commands.
 // The opcodes here represent the base 5-bit command.
-static const FDCCommandMetadata kFDCCommandMetadataTable[] = {
+YAX86_FILE_PRIVATE const FDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Read a Track
     {.opcode = kFDCCmdReadTrack, .num_param_bytes = 8, .handler = NULL},
     // Specify
@@ -11628,7 +11673,8 @@ YAX86_PUBLIC void FDCInit(YAX86_UNUSED FDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
-static const FDCCommandMetadata* FDCFindCommandMetadata(uint8_t opcode) {
+YAX86_FILE_PRIVATE const FDCCommandMetadata* FDCFindCommandMetadata(
+    uint8_t opcode) {
   for (size_t i = 0;
        i < sizeof(kFDCCommandMetadataTable) / sizeof(FDCCommandMetadata); ++i) {
     if (kFDCCommandMetadataTable[i].opcode == opcode) {
@@ -11638,7 +11684,7 @@ static const FDCCommandMetadata* FDCFindCommandMetadata(uint8_t opcode) {
   return NULL;
 }
 
-static uint8_t FDCReadMSRPort(FDCState* fdc) {
+YAX86_FILE_PRIVATE uint8_t FDCReadMSRPort(FDCState* fdc) {
   uint8_t msr = 0;
   switch (fdc->phase) {
     case kFDCPhaseIdle:
@@ -11664,7 +11710,7 @@ static uint8_t FDCReadMSRPort(FDCState* fdc) {
   return msr;
 }
 
-static uint8_t FDCReadDataPort(FDCState* fdc) {
+YAX86_FILE_PRIVATE uint8_t FDCReadDataPort(FDCState* fdc) {
   switch (fdc->phase) {
     case kFDCPhaseExecution:
       // DMA or Polling read during execution.
@@ -11706,7 +11752,7 @@ YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
   }
 }
 
-static void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
+YAX86_FILE_PRIVATE void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
   uint8_t old_dor = fdc->dor;
   fdc->dor = value;
 
@@ -11734,7 +11780,7 @@ static void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
   }
 }
 
-static void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
+YAX86_FILE_PRIVATE void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
   switch (fdc->phase) {
     case kFDCPhaseIdle: {
       // This is the first byte of a new command.
@@ -11912,6 +11958,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -13676,23 +13725,23 @@ enum {
   kHDCIdentifyNumECCBytes = 4,
 };
 
-static const char* const kHDCModelNumber = "YAX86 HARD DISK";
-static const char* const kHDCSerialNumber = "YAX86-0000001";
-static const char* const kHDCFirmwareRevision = "1.0";
+YAX86_FILE_PRIVATE const char* const kHDCModelNumber = "YAX86 HARD DISK";
+YAX86_FILE_PRIVATE const char* const kHDCSerialNumber = "YAX86-0000001";
+YAX86_FILE_PRIVATE const char* const kHDCFirmwareRevision = "1.0";
 
 // Returns the drive the drive/head register currently selects.
-static HDCDriveState* HDCSelectedDrive(HDCState* hdc) {
+YAX86_FILE_PRIVATE HDCDriveState* HDCSelectedDrive(HDCState* hdc) {
   return &hdc->drives[(hdc->drive_head & kHDCDriveHeadDriveSelect) ? 1 : 0];
 }
 
 // Completes a command successfully.
-static void HDCFinishCommand(HDCState* hdc) {
+YAX86_FILE_PRIVATE void HDCFinishCommand(HDCState* hdc) {
   hdc->error = 0;
   hdc->status = kHDCStatusIdle;
 }
 
 // Fails a command, leaving the given bits in the error register.
-static void HDCFailCommand(HDCState* hdc, uint8_t error) {
+YAX86_FILE_PRIVATE void HDCFailCommand(HDCState* hdc, uint8_t error) {
   hdc->error = error;
   hdc->status = kHDCStatusIdle | kHDCStatusError;
   hdc->transfer = kHDCTransferNone;
@@ -13700,7 +13749,7 @@ static void HDCFailCommand(HDCState* hdc, uint8_t error) {
 }
 
 // Total number of sectors on a drive.
-static uint32_t HDCDriveNumSectors(const HDCDriveState* drive) {
+YAX86_FILE_PRIVATE uint32_t HDCDriveNumSectors(const HDCDriveState* drive) {
   return (uint32_t)drive->geometry.num_cylinders *
          (uint32_t)drive->geometry.num_heads *
          (uint32_t)drive->geometry.num_sectors_per_track;
@@ -13714,7 +13763,7 @@ static uint32_t HDCDriveNumSectors(const HDCDriveState* drive) {
 // the geometry the guest asked for with Initialize Device Parameters rather
 // than the physical geometry, which is what lets a guest address the drive
 // with a geometry of its own choosing.
-static bool HDCComputeSectorNumber(
+YAX86_FILE_PRIVATE bool HDCComputeSectorNumber(
     HDCState* hdc, const HDCDriveState* drive, uint32_t* sector_number) {
   uint32_t lba;
   if (hdc->drive_head & kHDCDriveHeadLBA) {
@@ -13744,7 +13793,7 @@ static bool HDCComputeSectorNumber(
 }
 
 // Writes a 16-bit word into the Identify Device block, which is little endian.
-static void HDCWriteIdentifyWord(
+YAX86_FILE_PRIVATE void HDCWriteIdentifyWord(
     HDCState* hdc, uint16_t word_index, uint16_t value) {
   hdc->sector_buffer[word_index * 2] = (uint8_t)(value & 0xFF);
   hdc->sector_buffer[word_index * 2 + 1] = (uint8_t)(value >> 8);
@@ -13753,7 +13802,7 @@ static void HDCWriteIdentifyWord(
 // Writes a space padded string into the Identify Device block. ATA strings
 // are byte swapped within each word, so the first character of a pair lands in
 // the high byte.
-static void HDCWriteIdentifyString(
+YAX86_FILE_PRIVATE void HDCWriteIdentifyString(
     HDCState* hdc, uint16_t word_index, const char* text, uint16_t num_words) {
   const char* next = text;
   for (uint16_t i = 0; i < num_words; ++i) {
@@ -13766,7 +13815,8 @@ static void HDCWriteIdentifyString(
 }
 
 // Fills the sector buffer with the drive's Identify Device block.
-static void HDCBuildIdentifyBlock(HDCState* hdc, const HDCDriveState* drive) {
+YAX86_FILE_PRIVATE void HDCBuildIdentifyBlock(
+    HDCState* hdc, const HDCDriveState* drive) {
   for (uint16_t i = 0; i < kHDCSectorSize; ++i) {
     hdc->sector_buffer[i] = 0;
   }
@@ -13852,7 +13902,7 @@ static void HDCBuildIdentifyBlock(HDCState* hdc, const HDCDriveState* drive) {
 }
 
 // Opens a transfer through the data register.
-static void HDCStartTransfer(
+YAX86_FILE_PRIVATE void HDCStartTransfer(
     HDCState* hdc, HDCTransfer transfer, uint32_t offset,
     uint16_t num_sectors) {
   hdc->transfer = transfer;
@@ -13866,7 +13916,7 @@ static void HDCStartTransfer(
 
 // Advances past the byte just transferred, moving on to the next sector or
 // ending the transfer as needed.
-static void HDCAdvanceTransfer(HDCState* hdc) {
+YAX86_FILE_PRIVATE void HDCAdvanceTransfer(HDCState* hdc) {
   ++hdc->transfer_byte_index;
   if (hdc->transfer_byte_index < kHDCSectorSize) {
     return;
@@ -13891,7 +13941,8 @@ static void HDCAdvanceTransfer(HDCState* hdc) {
   }
 }
 
-static void HDCHandleIdentifyDevice(HDCState* hdc, HDCDriveState* drive) {
+YAX86_FILE_PRIVATE void HDCHandleIdentifyDevice(
+    HDCState* hdc, HDCDriveState* drive) {
   HDCBuildIdentifyBlock(hdc, drive);
   HDCStartTransfer(hdc, kHDCTransferIdentify, 0, 1);
 }
@@ -13901,7 +13952,7 @@ static void HDCHandleIdentifyDevice(HDCState* hdc, HDCDriveState* drive) {
 // byte callback has no way to refuse an address, so a command that would walk
 // off the end has to fail before it moves anything rather than part way
 // through.
-static bool HDCComputeSectorRange(
+YAX86_FILE_PRIVATE bool HDCComputeSectorRange(
     HDCState* hdc, const HDCDriveState* drive, uint32_t* sector_number,
     uint16_t* num_sectors) {
   if (!HDCComputeSectorNumber(hdc, drive, sector_number)) {
@@ -13915,7 +13966,7 @@ static bool HDCComputeSectorRange(
 // Sets up a read or write of one or more sectors starting at the address in
 // the task file. A sector count of zero means 256 sectors, which is how ATA
 // encodes the largest transfer a single command can make.
-static void HDCHandleReadWriteSectors(
+YAX86_FILE_PRIVATE void HDCHandleReadWriteSectors(
     HDCState* hdc, HDCDriveState* drive, HDCTransfer transfer) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
@@ -13926,7 +13977,7 @@ static void HDCHandleReadWriteSectors(
   HDCStartTransfer(hdc, transfer, sector_number * kHDCSectorSize, num_sectors);
 }
 
-static void HDCHandleInitializeDeviceParameters(
+YAX86_FILE_PRIVATE void HDCHandleInitializeDeviceParameters(
     HDCState* hdc, HDCDriveState* drive) {
   const uint8_t num_heads = (hdc->drive_head & kHDCDriveHeadHeadMask) + 1;
   const uint8_t num_sectors_per_track = hdc->sector_count;
@@ -13946,7 +13997,8 @@ static void HDCHandleInitializeDeviceParameters(
 // Checks that the addressed sectors exist without transferring them. The
 // sector count counts here just as it does for a real transfer, so a verify
 // that runs off the end of the drive fails rather than reporting success.
-static void HDCHandleReadVerifySectors(HDCState* hdc, HDCDriveState* drive) {
+YAX86_FILE_PRIVATE void HDCHandleReadVerifySectors(
+    HDCState* hdc, HDCDriveState* drive) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
   if (!HDCComputeSectorRange(hdc, drive, &sector_number, &num_sectors)) {
@@ -13956,7 +14008,7 @@ static void HDCHandleReadVerifySectors(HDCState* hdc, HDCDriveState* drive) {
   HDCFinishCommand(hdc);
 }
 
-static void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
+YAX86_FILE_PRIVATE void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
   HDCDriveState* drive = HDCSelectedDrive(hdc);
   if (!drive->present) {
     // An absent drive never answers, so the command simply goes unheard. The
@@ -14019,7 +14071,7 @@ static void HDCExecuteCommand(HDCState* hdc, uint8_t opcode) {
 }
 
 // Returns the byte at the current transfer position, without advancing.
-static uint8_t HDCReadTransferByte(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadTransferByte(HDCState* hdc) {
   switch (hdc->transfer) {
     case kHDCTransferIdentify:
       return hdc->sector_buffer[hdc->transfer_byte_index];
@@ -14043,7 +14095,7 @@ static uint8_t HDCReadTransferByte(HDCState* hdc) {
 // the high half in its latch for the guest to collect from the other port.
 // Reading the two ports is therefore not the same thing, and the card consumes
 // a word per low byte read rather than a byte per read of either port.
-static uint8_t HDCReadDataRegister(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadDataRegister(HDCState* hdc) {
   if (!(hdc->status & kHDCStatusDataRequest)) {
     YAX86_HDC_LOG(kLogLevelWarn, "data register read with no transfer active");
     return 0;
@@ -14069,12 +14121,12 @@ static uint8_t HDCReadDataRegister(HDCState* hdc) {
 // port first returns whatever the previous word left behind. Nothing here
 // touches the transfer, which is what keeps a guest that reads the ports out
 // of order from sliding the transfer out of step.
-static uint8_t HDCReadDataHighRegister(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadDataHighRegister(HDCState* hdc) {
   return hdc->data_high_latch;
 }
 
 // Writes one byte of the drive's image.
-static void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
+YAX86_FILE_PRIVATE void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
   if (hdc->config.write_image_byte) {
     hdc->config.write_image_byte(
         hdc->config.context, hdc->transfer_drive,
@@ -14092,7 +14144,7 @@ static void HDCWriteImageByte(HDCState* hdc, uint8_t value) {
 // the whole word, so the guest writes the high byte to the latch first and the
 // write of the low byte is what commits the pair. Streaming bytes in the order
 // they arrive would put every word on the disk back to front.
-static void HDCWriteDataRegister(
+YAX86_FILE_PRIVATE void HDCWriteDataRegister(
     HDCState* hdc, bool is_high_byte, uint8_t value) {
   if (!(hdc->status & kHDCStatusDataRequest) ||
       hdc->transfer != kHDCTransferWrite) {
@@ -14114,12 +14166,13 @@ static void HDCWriteDataRegister(
 // What the status and alternate status registers read back as. An empty drive
 // slot leaves the bus undriven, which the guest reads as a drive that is never
 // ready.
-static uint8_t HDCReadStatusRegister(HDCState* hdc) {
+YAX86_FILE_PRIVATE uint8_t HDCReadStatusRegister(HDCState* hdc) {
   return HDCSelectedDrive(hdc)->present ? hdc->status : 0;
 }
 
 // Handles a write to the device control register.
-static void HDCWriteDeviceControlRegister(HDCState* hdc, uint8_t value) {
+YAX86_FILE_PRIVATE void HDCWriteDeviceControlRegister(
+    HDCState* hdc, uint8_t value) {
   // A software reset abandons whatever the drive was doing, which is the point
   // of it: it is how a guest recovers a transfer it cannot finish. Only the
   // assertion matters, not the release - the reset completes inside this port
@@ -14290,6 +14343,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -15107,7 +15163,7 @@ YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard) {
 }
 
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
-static inline void KeyboardSendScancode(
+YAX86_FILE_PRIVATE inline void KeyboardSendScancode(
     KeyboardState* keyboard, uint8_t scancode) {
   if (keyboard->config.send_scancode) {
     keyboard->config.send_scancode(keyboard->config.context, scancode);
@@ -15119,7 +15175,8 @@ static inline void KeyboardSendScancode(
 }
 
 // Helper to send the next scancode in the buffer if available.
-static inline void KeyboardSendNextScancode(KeyboardState* keyboard) {
+YAX86_FILE_PRIVATE inline void KeyboardSendNextScancode(
+    KeyboardState* keyboard) {
   // Can only send in state [0, 1], i.e. enable_clear = false clock_low = true
   if (!(keyboard->enable_clear == false && keyboard->clock_low == true)) {
     return;
@@ -15263,6 +15320,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -16055,7 +16115,7 @@ typedef enum PICPort {
 } PICPort;
 
 // Map a PIC mode to its base I/O port.
-static const uint16_t kPICBasePorts[kPICNumModes] = {
+YAX86_FILE_PRIVATE const uint16_t kPICBasePorts[kPICNumModes] = {
     0x20,  // kPICSingle
     0x20,  // kPICMaster
     0xA0,  // kPICSlave
@@ -16066,7 +16126,7 @@ static const uint16_t kPICBasePorts[kPICNumModes] = {
 // ============================================================================
 
 // Returns the mode of a PIC based on its ICWs.
-static inline PICMode PICGetMode(PICState* pic) {
+YAX86_FILE_PRIVATE inline PICMode PICGetMode(PICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
   if (pic->icw1 & kICW1_SNGL) {
     return kPICSingle;
@@ -16078,22 +16138,22 @@ static inline PICMode PICGetMode(PICState* pic) {
 }
 
 // Returns if the PIC is configured as a single PIC.
-static inline bool PICIsSingle(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsSingle(PICState* pic) {
   return PICGetMode(pic) == kPICSingle;
 }
 
 // Returns if the PIC is a master PIC.
-static inline bool PICIsMaster(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsMaster(PICState* pic) {
   return PICGetMode(pic) == kPICMaster;
 }
 
 // Returns if the PIC is a slave PIC.
-static inline bool PICIsSlave(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsSlave(PICState* pic) {
   return PICGetMode(pic) == kPICSlave;
 }
 
 // Returns the I/O port corresponding to a given port number.
-static inline PICPort PICGetPort(PICState* pic, uint16_t port) {
+YAX86_FILE_PRIVATE inline PICPort PICGetPort(PICState* pic, uint16_t port) {
   uint16_t port_offset = port - kPICBasePorts[PICGetMode(pic)];
   if (port_offset >= kNumPICPorts) {
     return kPICPortInvalid;
@@ -16103,7 +16163,7 @@ static inline PICPort PICGetPort(PICState* pic, uint16_t port) {
 
 // Returns the IRQ number of the parent PIC connected to a slave PIC.
 // Only valid if pic is a slave PIC.
-static inline uint8_t PICGetCascadeIRQ(PICState* pic) {
+YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(PICState* pic) {
   return pic->icw3 & 0x07;
 }
 
@@ -16114,7 +16174,7 @@ static inline uint8_t PICGetCascadeIRQ(PICState* pic) {
 // Recomputes PICState.has_unmasked_request. This is its sole writer, and every
 // path that changes irr or imr calls it, so the flag can never disagree with
 // the registers it summarizes.
-static inline void PICUpdateUnmaskedRequest(PICState* pic) {
+YAX86_FILE_PRIVATE inline void PICUpdateUnmaskedRequest(PICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
@@ -16396,6 +16456,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -17163,10 +17226,10 @@ typedef struct PITModeMetadata {
 } PITModeMetadata;
 
 // Metadata for unsupported modes (1, 4, 5).
-static const PITModeMetadata kPITUnsupportedMode = {0};
+YAX86_FILE_PRIVATE const PITModeMetadata kPITUnsupportedMode = {0};
 
 // Handles a channel reaching terminal count.
-static inline void PITChannelSetOutputState(
+YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
     PITState* pit, PITChannelState* channel, int channel_index,
     bool new_output_state) {
   // No-op if the output state is unchanged.
@@ -17189,7 +17252,7 @@ static inline void PITChannelSetOutputState(
 }
 
 // Tick handler for Mode 0: Interrupt on Terminal Count.
-static void PITMode0HandleTick(
+YAX86_FILE_PRIVATE void PITMode0HandleTick(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // Since this is a one-shot timer, do nothing if the counter is already 0.
   if (channel->counter == 0) {
@@ -17208,17 +17271,18 @@ static void PITMode0HandleTick(
 // A counter above 1 cannot reach terminal count on the next tick, so every
 // tick down to 1 is uneventful. A counter already at 0 has finished and never
 // changes again, which the caller detects as no event rather than a skip.
-static uint32_t PITMode0SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t PITMode0SkipTicks(const PITChannelState* channel) {
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 0;
 }
 
-static uint32_t PITMode0TicksUntilEvent(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+PITMode0TicksUntilEvent(const PITChannelState* channel) {
   // A one-shot that has already fired is not counting towards anything.
   return channel->counter == 0 ? kPITNoEvent : (uint32_t)channel->counter;
 }
 
 // Metadata for Mode 0: Interrupt on Terminal Count.
-static const PITModeMetadata kPITMode0Metadata = {
+YAX86_FILE_PRIVATE const PITModeMetadata kPITMode0Metadata = {
     .initial_output_state = false,
     .handle_tick = PITMode0HandleTick,
     .counter_step = 1,
@@ -17227,7 +17291,7 @@ static const PITModeMetadata kPITMode0Metadata = {
 };
 
 // Tick handler for Mode 2: Rate Generator.
-static void PITMode2HandleTick(
+YAX86_FILE_PRIVATE void PITMode2HandleTick(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // Decrement the counter by 1.
   --channel->counter;
@@ -17249,11 +17313,11 @@ static void PITMode2HandleTick(
 
 // Mode 2 acts when the counter reaches 1 and again when it reaches 0, so every
 // tick down to 2 is uneventful.
-static uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
-static YAX86_HOT uint32_t
+YAX86_FILE_PRIVATE YAX86_HOT uint32_t
 PITMode2TicksUntilEvent(const PITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
@@ -17261,7 +17325,7 @@ PITMode2TicksUntilEvent(const PITChannelState* channel) {
 }
 
 // Metadata for Mode 2: Rate Generator.
-static const PITModeMetadata kPITMode2Metadata = {
+YAX86_FILE_PRIVATE const PITModeMetadata kPITMode2Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode2HandleTick,
     .counter_step = 1,
@@ -17270,7 +17334,7 @@ static const PITModeMetadata kPITMode2Metadata = {
 };
 
 // Tick handler for Mode 3: Square Wave Generator.
-static void PITMode3HandleTick(
+YAX86_FILE_PRIVATE void PITMode3HandleTick(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // In Mode 3, the counter decrements by 2 each tick. We reach terminal count
   // when we reach either 0 or wrap around to 0xFFFF.
@@ -17293,11 +17357,13 @@ static void PITMode3HandleTick(
 // and at 0xFFFF from an odd one. Either way a counter of 4 or more has at
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
-static YAX86_HOT uint32_t PITMode3SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE YAX86_HOT uint32_t
+PITMode3SkipTicks(const PITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
-static uint32_t PITMode3TicksUntilEvent(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+PITMode3TicksUntilEvent(const PITChannelState* channel) {
   // Even counters reach 0 after counter/2 steps, odd ones reach 0xFFFF after
   // (counter+1)/2; the rounding covers both.
   const uint32_t ticks = ((uint32_t)channel->counter + 1) / 2;
@@ -17305,7 +17371,7 @@ static uint32_t PITMode3TicksUntilEvent(const PITChannelState* channel) {
 }
 
 // Metadata for Mode 3: Square Wave Generator.
-static const PITModeMetadata kPITMode3Metadata = {
+YAX86_FILE_PRIVATE const PITModeMetadata kPITMode3Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode3HandleTick,
     .counter_step = 2,
@@ -17314,7 +17380,7 @@ static const PITModeMetadata kPITMode3Metadata = {
 };
 
 // Array of mode metadata indexed by mode number.
-static const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
+YAX86_FILE_PRIVATE const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITMode0Metadata,    // Mode 0
     &kPITUnsupportedMode,  // Mode 1 (unsupported)
     &kPITMode2Metadata,    // Mode 2
@@ -17334,7 +17400,7 @@ YAX86_PUBLIC void PITInit(PITState* pit) {
 // Whether a channel in this mode drives its output at the reload frequency.
 // Only modes 2 and 3 oscillate; the others produce a single edge, which a
 // frequency has no way to express.
-static inline bool PITModeOscillates(uint8_t mode) {
+YAX86_FILE_PRIVATE inline bool PITModeOscillates(uint8_t mode) {
   return mode == 2 || mode == 3;
 }
 
@@ -17346,7 +17412,7 @@ static inline bool PITModeOscillates(uint8_t mode) {
 // The frequency describes only how often the output oscillates. Mode 2's
 // narrow output pulse sounds thinner than mode 3's square wave, which a
 // frequency cannot express.
-static inline void PITNotifySpeakerFrequency(
+YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
     PITState* pit, const PITChannelState* channel, int channel_index,
     bool has_count) {
   if (channel_index != kPITSpeakerChannel ||
@@ -17363,7 +17429,7 @@ static inline void PITNotifySpeakerFrequency(
 }
 
 // Helper function to load the counter and handle side effects.
-static inline void PITChannelLoadCounter(
+YAX86_FILE_PRIVATE inline void PITChannelLoadCounter(
     PITState* pit, PITChannelState* channel, int channel_index) {
   // A reload value of 0 is treated as 0x10000 by the hardware.
   // This will wrap to 0 when assigned to the 16-bit counter.
@@ -17373,7 +17439,7 @@ static inline void PITChannelLoadCounter(
 }
 
 // Helper function to handle a write to a channel's data port.
-static inline void PITChannelWritePort(
+YAX86_FILE_PRIVATE inline void PITChannelWritePort(
     PITState* pit, PITChannelState* channel, int channel_index, uint8_t value) {
   switch (channel->access_mode) {
     case kPITAccessLatch:
@@ -17464,7 +17530,7 @@ YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
 }
 
 // Helper function to handle a read from a channel's data port.
-static inline uint8_t PITChannelReadPort(
+YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
     YAX86_UNUSED PITState* pit, PITChannelState* channel,
     YAX86_UNUSED int channel_index) {
   uint16_t value = channel->latch_active ? channel->latch : channel->counter;
@@ -17543,7 +17609,7 @@ YAX86_PUBLIC YAX86_HOT void PITTick(PITState* pit) {
 // applied to the counter arithmetically; every tick that could change it still
 // goes through the handler, so there is only one description of what a tick
 // does.
-static void PITAdvanceChannel(
+YAX86_FILE_PRIVATE void PITAdvanceChannel(
     PITState* pit, PITChannelState* channel, int channel_index,
     uint32_t num_ticks) {
   if (channel->mode >= kPITNumModes) {
@@ -17676,6 +17742,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -18873,11 +18942,11 @@ YAX86_PUBLIC void PlatformSync(PlatformState* platform);
   YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
 
 // How long until the next device needs attention, in CPU cycles from now.
-static uint32_t PlatformCyclesUntilNextEvent(
+YAX86_FILE_PRIVATE uint32_t PlatformCyclesUntilNextEvent(
     const PlatformState* platform, uint32_t max_cycles);
 
 // Hand the CPU conventional memory to index directly, or take it away again.
-static void PlatformUpdateDirectDataWindow(PlatformState* platform);
+YAX86_FILE_PRIVATE void PlatformUpdateDirectDataWindow(PlatformState* platform);
 
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
@@ -18914,7 +18983,7 @@ enum {
 // registration never has to look at the rest of the map. Building the whole
 // index therefore costs one pass over the address space between them, rather
 // than one pass per entry.
-static void UpdateMemoryPageMapForEntry(
+YAX86_FILE_PRIVATE void UpdateMemoryPageMapForEntry(
     PlatformState* platform, uint8_t entry_index) {
   const MemoryMapEntry* entry =
       MemoryMapGet(&platform->memory_map, entry_index);
@@ -18988,7 +19057,7 @@ YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
 // Inline rather than a function of its own: the body is a compare, a shift and
 // a load, where a call on a core with no cheap way to do any of it is a push, a
 // branch, a pop and a return.
-static inline uint8_t GetMemoryPageMapIndex(
+YAX86_FILE_PRIVATE inline uint8_t GetMemoryPageMapIndex(
     const PlatformState* platform, uint32_t address) {
   return address < kMemoryAddressSpaceSize
              ? platform->memory_page_map[address >> kMemoryPageShift]
@@ -19162,20 +19231,22 @@ YAX86_PUBLIC YAX86_HOT void WritePortByte(
 // Callbacks for CPU module
 // ============================================================================
 
-static uint8_t CPUCallbackReadMemoryByte(CPUState* cpu, uint32_t address) {
+YAX86_FILE_PRIVATE uint8_t
+CPUCallbackReadMemoryByte(CPUState* cpu, uint32_t address) {
   return ReadMemoryByte((PlatformState*)cpu->config.context, address);
 }
 
-static void CPUCallbackWriteMemoryByte(
+YAX86_FILE_PRIVATE void CPUCallbackWriteMemoryByte(
     CPUState* cpu, uint32_t address, uint8_t value) {
   WriteMemoryByte((PlatformState*)cpu->config.context, address, value);
 }
 
-static uint8_t CPUCallbackReadPortByte(CPUState* cpu, uint16_t port) {
+YAX86_FILE_PRIVATE uint8_t
+CPUCallbackReadPortByte(CPUState* cpu, uint16_t port) {
   return ReadPortByte((PlatformState*)cpu->config.context, port);
 }
 
-static void CPUCallbackWritePortByte(
+YAX86_FILE_PRIVATE void CPUCallbackWritePortByte(
     CPUState* cpu, uint16_t port, uint8_t value) {
   WritePortByte((PlatformState*)cpu->config.context, port, value);
 }
@@ -19184,16 +19255,17 @@ static void CPUCallbackWritePortByte(
 // Callbacks for 8259 PIC module
 // ============================================================================
 
-static uint8_t PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+YAX86_FILE_PRIVATE uint8_t
+PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PICReadPort((PICState*)entry->context, port);
 }
 
-static YAX86_HOT void PICCallbackWritePortByte(
+YAX86_FILE_PRIVATE YAX86_HOT void PICCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PICWritePort((PICState*)entry->context, port, value);
 }
 
-static void PICCallbackPlatformRaiseIRQ0(void* context) {
+YAX86_FILE_PRIVATE void PICCallbackPlatformRaiseIRQ0(void* context) {
   PlatformState* platform = (PlatformState*)context;
   PlatformRaiseIRQ(platform, 0);
 }
@@ -19202,7 +19274,7 @@ static void PICCallbackPlatformRaiseIRQ0(void* context) {
 // Callbacks for 8253 PIT module
 // ============================================================================
 
-static YAX86_HOT uint8_t
+YAX86_FILE_PRIVATE YAX86_HOT uint8_t
 PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // A guest timing loop reads the counter expecting it to have moved, so the
   // PIT has to be caught up before it is read.
@@ -19211,7 +19283,7 @@ PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return PITReadPort(&platform->pit, port);
 }
 
-static void PITCallbackWritePortByte(
+YAX86_FILE_PRIVATE void PITCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   // Syncing first applies the cycles that ran under the old configuration;
   // syncing again afterwards reschedules against the new one.
@@ -19221,7 +19293,7 @@ static void PITCallbackWritePortByte(
   PlatformSync(platform);
 }
 
-static void PITCallbackSetPCSpeakerFrequency(
+YAX86_FILE_PRIVATE void PITCallbackSetPCSpeakerFrequency(
     void* context, uint32_t frequency_hz) {
   PlatformState* platform = (PlatformState*)context;
   PPISetPCSpeakerFrequencyFromPIT(&platform->ppi, frequency_hz);
@@ -19231,13 +19303,14 @@ static void PITCallbackSetPCSpeakerFrequency(
 // Callbacks for 8255 PPI module
 // ============================================================================
 
-static uint8_t PPICallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+YAX86_FILE_PRIVATE uint8_t
+PPICallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   PlatformState* platform = (PlatformState*)entry->context;
   PlatformSync(platform);
   return PPIReadPort(&platform->ppi, port);
 }
 
-static void PPICallbackWritePortByte(
+YAX86_FILE_PRIVATE void PPICallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   // Port B gates the speaker against PIT channel 2, so what the guest hears
   // depends on the channel's output state being current.
@@ -19247,14 +19320,14 @@ static void PPICallbackWritePortByte(
   PlatformSync(platform);
 }
 
-static void PPICallbackSetKeyboardControl(
+YAX86_FILE_PRIVATE void PPICallbackSetKeyboardControl(
     void* context, bool keyboard_enable_clear, bool keyboard_clock_low) {
   PlatformState* platform = (PlatformState*)context;
   KeyboardHandleControl(
       &platform->keyboard, keyboard_enable_clear, keyboard_clock_low);
 }
 
-static void PPICallbackSetPCSpeakerFrequency(
+YAX86_FILE_PRIVATE void PPICallbackSetPCSpeakerFrequency(
     void* context, uint32_t frequency_hz) {
   PlatformState* platform = (PlatformState*)context;
   if (platform->config.set_pc_speaker_frequency) {
@@ -19266,12 +19339,13 @@ static void PPICallbackSetPCSpeakerFrequency(
 // Callbacks for Keyboard module
 // ============================================================================
 
-static void KeyboardCallbackPlatformRaiseIRQ1(void* context) {
+YAX86_FILE_PRIVATE void KeyboardCallbackPlatformRaiseIRQ1(void* context) {
   PlatformState* platform = (PlatformState*)context;
   PlatformRaiseIRQ(platform, 1);
 }
 
-static void KeyboardCallbackSendScancode(void* context, uint8_t scancode) {
+YAX86_FILE_PRIVATE void KeyboardCallbackSendScancode(
+    void* context, uint8_t scancode) {
   PlatformState* platform = (PlatformState*)context;
   PPISetScancode(&platform->ppi, scancode);
 }
@@ -19284,23 +19358,24 @@ enum {
   kPlatformDMAChannelFloppy = 2,
 };
 
-static void FDCCallbackRaiseIRQ6(void* context) {
+YAX86_FILE_PRIVATE void FDCCallbackRaiseIRQ6(void* context) {
   PlatformState* platform = (PlatformState*)context;
   PlatformRaiseIRQ(platform, 6);
 }
 
-static YAX86_HOT void FDCCallbackRequestDMA(void* context) {
+YAX86_FILE_PRIVATE YAX86_HOT void FDCCallbackRequestDMA(void* context) {
   PlatformState* platform = (PlatformState*)context;
   DMATransferByte(&platform->dma, kPlatformDMAChannelFloppy);
 }
 
-static uint8_t FDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+YAX86_FILE_PRIVATE uint8_t
+FDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   PlatformState* platform = (PlatformState*)entry->context;
   PlatformSync(platform);
   return FDCReadPort(&platform->fdc, port);
 }
 
-static void FDCCallbackWritePortByte(
+YAX86_FILE_PRIVATE void FDCCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   // A write can start a command, which is what puts the controller into the
   // execution phase the scheduler watches for.
@@ -19314,18 +19389,20 @@ static void FDCCallbackWritePortByte(
 // Callbacks for DMA module
 // ============================================================================
 
-static uint8_t DMACallbackReadMemoryByte(void* context, uint32_t address) {
+YAX86_FILE_PRIVATE uint8_t
+DMACallbackReadMemoryByte(void* context, uint32_t address) {
   PlatformState* platform = (PlatformState*)context;
   return ReadMemoryByte(platform, address);
 }
 
-static void DMACallbackWriteMemoryByte(
+YAX86_FILE_PRIVATE void DMACallbackWriteMemoryByte(
     void* context, uint32_t address, uint8_t value) {
   PlatformState* platform = (PlatformState*)context;
   WriteMemoryByte(platform, address, value);
 }
 
-static uint8_t DMACallbackReadDeviceByte(void* context, uint8_t channel) {
+YAX86_FILE_PRIVATE uint8_t
+DMACallbackReadDeviceByte(void* context, uint8_t channel) {
   PlatformState* platform = (PlatformState*)context;
   switch (channel) {
     case kPlatformDMAChannelFloppy:
@@ -19335,7 +19412,7 @@ static uint8_t DMACallbackReadDeviceByte(void* context, uint8_t channel) {
   }
 }
 
-static void DMACallbackWriteDeviceByte(
+YAX86_FILE_PRIVATE void DMACallbackWriteDeviceByte(
     void* context, uint8_t channel, uint8_t value) {
   PlatformState* platform = (PlatformState*)context;
   switch (channel) {
@@ -19347,7 +19424,8 @@ static void DMACallbackWriteDeviceByte(
   }
 }
 
-static void DMACallbackOnTerminalCount(void* context, uint8_t channel) {
+YAX86_FILE_PRIVATE void DMACallbackOnTerminalCount(
+    void* context, uint8_t channel) {
   PlatformState* platform = (PlatformState*)context;
   switch (channel) {
     case kPlatformDMAChannelFloppy:
@@ -19358,11 +19436,12 @@ static void DMACallbackOnTerminalCount(void* context, uint8_t channel) {
   }
 }
 
-static uint8_t DMACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+YAX86_FILE_PRIVATE uint8_t
+DMACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return DMAReadPort((DMAState*)entry->context, port);
 }
 
-static void DMACallbackWritePortByte(
+YAX86_FILE_PRIVATE void DMACallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   DMAWritePort((DMAState*)entry->context, port, value);
 }
@@ -19371,7 +19450,7 @@ static void DMACallbackWritePortByte(
 // Callbacks for Video module
 // ============================================================================
 
-static YAX86_HOT uint8_t
+YAX86_FILE_PRIVATE YAX86_HOT uint8_t
 VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   // The status port reports where the CRT beam is, which is only meaningful
   // once the beam has been advanced to now. Guests poll this to wait for
@@ -19381,14 +19460,14 @@ VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return VideoReadPort(&platform->video, port);
 }
 
-static void VideoCallbackWritePortByte(
+YAX86_FILE_PRIVATE void VideoCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   PlatformState* platform = (PlatformState*)entry->context;
   PlatformSync(platform);
   VideoWritePort(&platform->video, port, value);
 }
 
-static void VideoCallbackWriteVRAMByte(
+YAX86_FILE_PRIVATE void VideoCallbackWriteVRAMByte(
     MemoryMapEntry* entry, uint32_t address, uint8_t value) {
   VideoWriteVRAM((VideoState*)entry->context, address, value);
 }
@@ -19397,11 +19476,12 @@ static void VideoCallbackWriteVRAMByte(
 // Callbacks for HDC module
 // ============================================================================
 
-static uint8_t HDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+YAX86_FILE_PRIVATE uint8_t
+HDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
   return HDCReadPort((HDCState*)entry->context, port);
 }
 
-static void HDCCallbackWritePortByte(
+YAX86_FILE_PRIVATE void HDCCallbackWritePortByte(
     PortMapEntry* entry, uint16_t port, uint8_t value) {
   HDCWritePort((HDCState*)entry->context, port, value);
 }
@@ -19410,7 +19490,7 @@ static void HDCCallbackWritePortByte(
 // Initialization
 // ============================================================================
 
-static void PlatformInitBIOS(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitBIOS(PlatformState* platform) {
   uint32_t bios_size = BIOSGetROMSize();
   MemoryMapEntry bios_rom = {
       .context = NULL,
@@ -19428,7 +19508,8 @@ static void PlatformInitBIOS(PlatformState* platform) {
 // only path by which an external interrupt reaches the CPU, and the PIC marks
 // the interrupt in service as part of it - so a vector is never produced
 // unless the CPU is taking it right now.
-static bool CPUCallbackAcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
+YAX86_FILE_PRIVATE bool CPUCallbackAcknowledgeInterrupt(
+    CPUState* cpu, uint8_t* vector) {
   PlatformState* platform = (PlatformState*)cpu->config.context;
   const uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector == kPICNoPendingInterrupt) {
@@ -19450,7 +19531,7 @@ enum {
 //
 // Only installed when the idle skip is enabled, so a machine without it pays
 // nothing per interrupt.
-static YAX86_HOT InterruptHandlerResult
+YAX86_FILE_PRIVATE YAX86_HOT InterruptHandlerResult
 CPUCallbackHandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == kDOSIdleInterrupt) {
     PlatformState* platform = (PlatformState*)cpu->config.context;
@@ -19463,7 +19544,7 @@ CPUCallbackHandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
 //
 // Declines wherever a read has to be observed or computed rather than loaded:
 // a device region, unmapped memory, or a page shared by two entries.
-static void CPUCallbackGetInstructionFetchWindow(
+YAX86_FILE_PRIVATE void CPUCallbackGetInstructionFetchWindow(
     CPUState* cpu, uint32_t address) {
   CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
   window->data = NULL;
@@ -19485,7 +19566,7 @@ static void CPUCallbackGetInstructionFetchWindow(
   window->end = entry->end + 1;
 }
 
-static void PlatformInitCPU(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitCPU(PlatformState* platform) {
   platform->cpu.config.context = platform;
   platform->cpu.config.logger = &platform->logger;
   platform->cpu.config.read_memory_byte = CPUCallbackReadMemoryByte;
@@ -19517,7 +19598,7 @@ static void PlatformInitCPU(PlatformState* platform) {
   platform->cpu.registers[kSP] = 0xFFFE;
 }
 
-static void PlatformInitMemoryMap(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitMemoryMap(PlatformState* platform) {
   MemoryMapInit(&platform->memory_map);
   for (uint32_t page = 0; page < kNumMemoryPages; ++page) {
     platform->memory_page_map[page] = kMemoryPageUnmapped;
@@ -19533,7 +19614,7 @@ static void PlatformInitMemoryMap(PlatformState* platform) {
   RegisterMemoryMapEntry(platform, &conventional_memory);
 }
 
-static void PlatformInitPIC(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitPIC(PlatformState* platform) {
   platform->pic.config.sp = false;
   platform->pic.config.logger = &platform->logger;
   PICInit(&platform->pic);
@@ -19548,7 +19629,7 @@ static void PlatformInitPIC(PlatformState* platform) {
   RegisterPortMapEntry(platform, &pic_entry);
 }
 
-static void PlatformInitPIT(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitPIT(PlatformState* platform) {
   platform->pit.config.context = platform;
   platform->pit.config.logger = &platform->logger;
   platform->pit.config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
@@ -19566,7 +19647,7 @@ static void PlatformInitPIT(PlatformState* platform) {
   RegisterPortMapEntry(platform, &pit_entry);
 }
 
-static void PlatformInitPPI(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitPPI(PlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
   platform->ppi.config.num_floppy_drives = 1;
@@ -19592,7 +19673,7 @@ static void PlatformInitPPI(PlatformState* platform) {
   RegisterPortMapEntry(platform, &ppi_entry);
 }
 
-static void PlatformInitKeyboard(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitKeyboard(PlatformState* platform) {
   platform->keyboard.config.context = platform;
   platform->keyboard.config.logger = &platform->logger;
   platform->keyboard.config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
@@ -19600,7 +19681,7 @@ static void PlatformInitKeyboard(PlatformState* platform) {
   KeyboardInit(&platform->keyboard);
 }
 
-static void PlatformInitFDC(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitFDC(PlatformState* platform) {
   platform->fdc.config.context = platform;
   platform->fdc.config.logger = &platform->logger;
   platform->fdc.config.raise_irq6 = FDCCallbackRaiseIRQ6;
@@ -19619,7 +19700,7 @@ static void PlatformInitFDC(PlatformState* platform) {
   RegisterPortMapEntry(platform, &fdc_entry);
 }
 
-static void PlatformInitHDC(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitHDC(PlatformState* platform) {
   platform->hdc.config.context = platform;
   platform->hdc.config.logger = &platform->logger;
   HDCInit(&platform->hdc);
@@ -19647,7 +19728,7 @@ static void PlatformInitHDC(PlatformState* platform) {
   RegisterPortMapEntry(platform, &port_entry);
 }
 
-static void PlatformInitDMA(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitDMA(PlatformState* platform) {
   platform->dma.config.context = platform;
   platform->dma.config.logger = &platform->logger;
   platform->dma.config.read_memory_byte = DMACallbackReadMemoryByte;
@@ -19676,7 +19757,7 @@ static void PlatformInitDMA(PlatformState* platform) {
   RegisterPortMapEntry(platform, &dma_page_entry);
 }
 
-static void PlatformInitVideo(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitVideo(PlatformState* platform) {
   platform->video.config = kDefaultVideoConfig;
   platform->video.config.context = platform;
   platform->video.config.logger = &platform->logger;
@@ -19805,12 +19886,13 @@ YAX86_PUBLIC YAX86_HOT bool PlatformRaiseIRQ(
 //
 // Shifted rather than written out, and shifted from a uint32_t rather than an
 // int, because shifting a 1 into an int's sign bit is undefined.
-static const uint32_t kTickCounterHalfRange = (uint32_t)1 << 31;
+YAX86_FILE_PRIVATE const uint32_t kTickCounterHalfRange = (uint32_t)1 << 31;
 
 // Whether the earliest device deadline has come due. Compared as a difference
 // so that a deadline stays in the future across the point where the 32-bit
 // cycle counter wraps.
-static inline bool PlatformIsEventDue(const PlatformState* platform) {
+YAX86_FILE_PRIVATE inline bool PlatformIsEventDue(
+    const PlatformState* platform) {
   // An unsigned comparison against half the range rather than a cast of the
   // difference to int32_t, because converting an out-of-range unsigned value is
   // only defined from C23 on and this is C99.
@@ -19823,7 +19905,7 @@ static inline bool PlatformIsEventDue(const PlatformState* platform) {
 // passes what is left of the budget it was given, because there the answer is
 // how far the clock may be moved rather than how long until it is checked
 // again.
-static uint32_t PlatformCyclesUntilNextEvent(
+YAX86_FILE_PRIVATE uint32_t PlatformCyclesUntilNextEvent(
     const PlatformState* platform, uint32_t max_cycles) {
   uint32_t cycles = max_cycles;
 
@@ -19902,7 +19984,7 @@ YAX86_PUBLIC YAX86_HOT void PlatformSync(PlatformState* platform) {
 // The body of both entry points. PlatformTick() promises its caller one
 // instruction; PlatformRun() is driving the machine rather than stepping it.
 // Both pass a constant, so the tests below fold away in each.
-static YAX86_HOT PlatformRunStatus
+YAX86_FILE_PRIVATE YAX86_HOT PlatformRunStatus
 PlatformTickInternal(PlatformState* platform, bool may_batch_instructions) {
   // How long the CPU may run before something in the machine needs to see it.
   // A deadline already due leaves no budget: the subtraction would otherwise
@@ -19956,7 +20038,8 @@ YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform) {
 // and would run its clock fast. kMaxIdleSkipCycles bounds it a second time, in
 // case the caller's budget is itself large enough to overflow the catch-up
 // arithmetic.
-static void PlatformSkipIdleTime(PlatformState* platform, uint32_t max_cycles) {
+YAX86_FILE_PRIVATE void PlatformSkipIdleTime(
+    PlatformState* platform, uint32_t max_cycles) {
   if (max_cycles > kMaxIdleSkipCycles) {
     max_cycles = kMaxIdleSkipCycles;
   }
@@ -19999,7 +20082,8 @@ PlatformRun(PlatformState* platform, uint32_t max_cycles) {
 // The CPU's view of guest memory
 // ============================================================================
 
-static void PlatformUpdateDirectDataWindow(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformUpdateDirectDataWindow(
+    PlatformState* platform) {
   CPUInvalidateDirectDataWindow(&platform->cpu);
   // The window is a prefix of the address space, so it is whichever region
   // covers address 0 and only while that region is plain storage reached
@@ -20071,6 +20155,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -20849,7 +20936,7 @@ YAX86_PUBLIC void PPIInit(PPIState* ppi) {
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
-static inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
+YAX86_FILE_PRIVATE inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
   if (config->num_floppy_drives < 1) return 1;
   if (config->num_floppy_drives > 4) return 4;
   return config->num_floppy_drives;
@@ -20897,7 +20984,7 @@ YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
          (ppi->port_b & kPPIPortBSpeakerData);
 }
 
-static inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
+YAX86_FILE_PRIVATE inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
   return (
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
@@ -21018,6 +21105,9 @@ extern "C" {
 // When unbundled, use default linkage.
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
+
+// Used only within the source file that defines it.
+#define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
@@ -23414,7 +23504,8 @@ typedef struct MDACellColors {
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
-static MDACellColors MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
+YAX86_FILE_PRIVATE MDACellColors
+MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
   const VideoConfig* config = &video->config;
   MDACellColors colors = {
       .foreground = &config->foreground,
@@ -23568,7 +23659,7 @@ enum {
 // The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
 // comes from the color select register instead. The palette-select bit chooses
 // the first two, unless black-and-white mode selects the third.
-static const uint8_t kCGAGraphicsPalettes[3][3] = {
+YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
     // Palette 0: green, red, brown.
     {2, 4, 6},
     // Palette 1: cyan, magenta, light gray.
@@ -23577,13 +23668,14 @@ static const uint8_t kCGAGraphicsPalettes[3][3] = {
     {3, 4, 7},
 };
 
-static inline RGB CGAGetColor(const VideoState* video, uint8_t color) {
+YAX86_FILE_PRIVATE inline RGB CGAGetColor(
+    const VideoState* video, uint8_t color) {
   return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
-static inline uint32_t CGAGetScanLineAddress(
+YAX86_FILE_PRIVATE inline uint32_t CGAGetScanLineAddress(
     const VideoState* video, uint16_t y) {
   uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
                       (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
@@ -23591,7 +23683,7 @@ static inline uint32_t CGAGetScanLineAddress(
   return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
 }
 
-static void CGARenderTextRegion(
+YAX86_FILE_PRIVATE void CGARenderTextRegion(
     VideoState* video, VideoPixelRun* run, const VideoModeMetadata* metadata,
     uint8_t start_column, uint8_t end_column, uint16_t first_y,
     uint16_t end_y) {
@@ -23673,7 +23765,8 @@ static void CGARenderTextRegion(
   }
 }
 
-static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
+YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
+    VideoState* video, RGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
     palette_colors = kCGAGraphicsPalettes[2];
@@ -23694,7 +23787,7 @@ static void CGAResolve320x200Palette(VideoState* video, RGB palette[4]) {
   }
 }
 
-static void CGARenderGraphics320x200Region(
+YAX86_FILE_PRIVATE void CGARenderGraphics320x200Region(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB palette[4];
@@ -23721,7 +23814,7 @@ static void CGARenderGraphics320x200Region(
   }
 }
 
-static void CGARenderGraphics640x200Region(
+YAX86_FILE_PRIVATE void CGARenderGraphics640x200Region(
     VideoState* video, VideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   RGB foreground = CGAGetColor(
@@ -23791,14 +23884,14 @@ YAX86_MODULE_PRIVATE void CGARenderRegion(
   YAX86_LOG(video->config.logger, &kLogModuleVideo, level, __VA_ARGS__)
 
 // Power-on 6845 register values for the IBM Monochrome Display.
-static const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
+YAX86_FILE_PRIVATE const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
     0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
     0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 // Power-on 6845 register values for the CGA in 80x25 text mode, matching the
 // values GLaBIOS programs for that mode.
-static const uint8_t kDefaultCGARegisters[kNumCRTCRegisters] = {
+YAX86_FILE_PRIVATE const uint8_t kDefaultCGARegisters[kNumCRTCRegisters] = {
     0x71, 0x50, 0x5A, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02,
     0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
@@ -23823,10 +23916,11 @@ enum {
   kVideoText80ColumnScale = 1,
 };
 
-static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address);
-static void VideoInvalidateCursor(VideoState* video);
-static void VideoInvalidateBlinkingText(VideoState* video);
-static void VideoInvalidateAll(VideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
+    VideoState* video, uint32_t address);
+YAX86_FILE_PRIVATE void VideoInvalidateCursor(VideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(VideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateAll(VideoState* video);
 
 YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
     const VideoState* video) {
@@ -23999,7 +24093,7 @@ YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
 // Dirty regions
 // ============================================================================
 
-static void VideoDirtyRangeAdd(
+YAX86_FILE_PRIVATE void VideoDirtyRangeAdd(
     VideoDirtyRange* range, uint8_t start_column, uint8_t end_column) {
   if (range->end_column == 0) {
     range->start_column = start_column;
@@ -24022,7 +24116,8 @@ typedef struct VideoDirtyGeometry {
   uint8_t scan_lines_per_row;
 } VideoDirtyGeometry;
 
-static VideoDirtyGeometry VideoGetDirtyGeometry(const VideoState* video) {
+YAX86_FILE_PRIVATE VideoDirtyGeometry
+VideoGetDirtyGeometry(const VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   VideoDirtyGeometry geometry;
   if (metadata->type == kVideoModeText) {
@@ -24062,11 +24157,11 @@ YAX86_MODULE_PRIVATE void VideoInvalidateRows(
   }
 }
 
-static void VideoInvalidateAll(VideoState* video) {
+YAX86_FILE_PRIVATE void VideoInvalidateAll(VideoState* video) {
   video->dirty_state.status = kVideoFullRedraw;
 }
 
-static void VideoInvalidateTextCell(
+YAX86_FILE_PRIVATE void VideoInvalidateTextCell(
     VideoState* video, const VideoModeMetadata* metadata,
     uint16_t cell_offset) {
   if (cell_offset >= (uint16_t)metadata->columns * metadata->rows) {
@@ -24091,7 +24186,8 @@ static void VideoInvalidateTextCell(
       (uint8_t)(row + 1));
 }
 
-static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
+YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
+    VideoState* video, uint32_t address) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type == kVideoModeText) {
     uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
@@ -24122,7 +24218,7 @@ static void VideoInvalidateVRAMAddress(VideoState* video, uint32_t address) {
       video, byte_column, byte_column + 1, dirty_row, (uint8_t)(dirty_row + 1));
 }
 
-static void VideoInvalidateCursor(VideoState* video) {
+YAX86_FILE_PRIVATE void VideoInvalidateCursor(VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText) {
     return;
@@ -24134,7 +24230,7 @@ static void VideoInvalidateCursor(VideoState* video) {
   VideoInvalidateTextCell(video, metadata, cursor_offset);
 }
 
-static void VideoInvalidateBlinkingText(VideoState* video) {
+YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(VideoState* video) {
   const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText ||
       !(video->control_register & kVideoControlEnableBlink)) {
@@ -24218,7 +24314,7 @@ YAX86_PUBLIC YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
 
 // The value the status port reads back, computed from where the CRT beam
 // currently is.
-static uint8_t VideoGetStatus(const VideoState* video) {
+YAX86_FILE_PRIVATE uint8_t VideoGetStatus(const VideoState* video) {
   const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
   bool in_horizontal_retrace =
@@ -24259,8 +24355,8 @@ typedef enum VideoPortFunction {
 } VideoPortFunction;
 
 // Decode an I/O port within the adapter's range.
-static VideoPortFunction VideoDecodePort(
-    const VideoState* video, uint16_t port) {
+YAX86_FILE_PRIVATE VideoPortFunction
+VideoDecodePort(const VideoState* video, uint16_t port) {
   if (video->adapter == kVideoAdapterMDA) {
     switch (port) {
       case kMDAPortRegisterIndex:
@@ -24368,7 +24464,7 @@ YAX86_PUBLIC void VideoWritePort(
 // Rendering
 // ============================================================================
 
-static void VideoRenderBlankRegion(
+YAX86_FILE_PRIVATE void VideoRenderBlankRegion(
     VideoState* video, VideoPixelRun* run, VideoRegion region) {
   RGB blank = video->adapter == kVideoAdapterCGA ? video->config.cga_palette[0]
                                                  : video->config.background;
@@ -24382,7 +24478,7 @@ static void VideoRenderBlankRegion(
   }
 }
 
-static void VideoRenderDirtyRegion(
+YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
     VideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
   // Every mode divides the frame buffer into kVideoDirtyColumns equal columns,
