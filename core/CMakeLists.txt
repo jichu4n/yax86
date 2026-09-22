@@ -56,7 +56,7 @@ function(generate_rom_data module rom_file_name output_name symbol)
     set(prefix "${CMAKE_CURRENT_SOURCE_DIR}/src/${module}/${output_name}")
     add_custom_command(
         OUTPUT "${prefix}.c" "${prefix}.h"
-        COMMAND ${generate_rom_data_files} ARGS ${rom_file} ${prefix} ${symbol} ${module}
+        COMMAND ${generate_rom_data_files} ARGS ${rom_file} ${prefix} ${symbol} --module ${module}
         DEPENDS ${generate_rom_data_files} ${rom_file}
         COMMENT "Generating ROM data files ${rom_file} => ${prefix}.c and ${prefix}.h"
     )

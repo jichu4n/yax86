@@ -8,10 +8,16 @@ const path = require('path');
 // like the Raspberry Pi Pico have no file system to read one from.
 //
 // The symbol argument names the generated array, so BIOSROMData produces
-// kBIOSROMData and kBIOSROMDataSize. If module is supplied (e.g. "bios"),
-// the array is marked YAX86_MODULE_PRIVATE and guarded by the module's
-// bundle guard (e.g. YAX86_BIOS_BUNDLE_H); otherwise, it is generated as
-// a standalone data file with plain external linkage (used by the Pico bench).
+// kBIOSROMData and kBIOSROMDataSize.
+//
+// --module names the module whose bundle the array is compiled into, and is
+// what selects its linkage. With it, the array is YAX86_MODULE_PRIVATE and its
+// declaration is guarded by that module's bundle guard (YAX86_BIOS_BUNDLE_H
+// for bios), because bundled it shares a translation unit with its users and
+// unbundled it does not. Without it, the array is a translation unit of its
+// own that something links against, so it keeps external linkage and its
+// declaration is unguarded - which is what pico/bench needs for the floppy
+// image its main.c reads.
 async function generateRomDataFiles(romFilePath, outputFilePath, symbol, moduleName) {
   const romContent = await fs.readFile(romFilePath);
 
@@ -90,15 +96,40 @@ async function generateRomDataFiles(romFilePath, outputFilePath, symbol, moduleN
   await fs.writeFile(`${outputFilePath}.c`, cContent, 'utf8');
 }
 
+const usage = [
+  'Usage: generate-rom-data-files.js XXX.rom output_file_prefix symbol',
+  '                                  [--module <name>]',
+  '',
+  '  --module <name>  The module whose bundle the array is compiled into.',
+  '                   Gives it internal linkage there and guards its',
+  '                   declaration with that module\'s bundle guard. Omit it',
+  '                   for an array that is a translation unit of its own and',
+  '                   is linked against, which needs external linkage.',
+].join('\n');
+
 if (require.main === module) {
   const args = process.argv.slice(2);
-  if (args.length < 3) {
-    console.error(
-      'Usage: generate-rom-data-files.js XXX.rom output_file_prefix symbol [module]'
-    );
+  const positional = [];
+  let moduleName;
+  for (let i = 0; i < args.length; ++i) {
+    if (args[i] === '--module') {
+      moduleName = args[++i];
+      if (!moduleName) {
+        console.error('--module needs a module name\n\n' + usage);
+        process.exit(1);
+      }
+    } else if (args[i].startsWith('--')) {
+      console.error(`Unknown option ${args[i]}\n\n` + usage);
+      process.exit(1);
+    } else {
+      positional.push(args[i]);
+    }
+  }
+  if (positional.length !== 3) {
+    console.error(usage);
     process.exit(1);
   }
-  const [romFilePath, outputFilePath, symbol, moduleName] = args;
+  const [romFilePath, outputFilePath, symbol] = positional;
 
   (async () => {
     await generateRomDataFiles(romFilePath, outputFilePath, symbol, moduleName);
