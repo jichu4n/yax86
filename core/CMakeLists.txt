@@ -60,10 +60,10 @@ function(generate_rom_data module rom_file_name output_name symbol)
         DEPENDS ${generate_rom_data_files} ${rom_file}
         COMMENT "Generating ROM data files ${rom_file} => ${prefix}.c and ${prefix}.h"
     )
-    # Listed as a source of the library so that the generator runs when the ROM
-    # changes, but marked HEADER_FILE_ONLY so it is not compiled on its own: the
-    # array is part of the bundle, and a second translation unit defining it
-    # would put a copy in the archive that no link can ever pull in.
+    # Include the generated source in the library target so CMake tracks ROM
+    # dependencies and regenerates on change. Mark HEADER_FILE_ONLY so CMake
+    # does not compile it into a standalone object file; the array is already
+    # compiled into the library via the module bundle.
     set_source_files_properties("${prefix}.c" PROPERTIES HEADER_FILE_ONLY TRUE)
     list(APPEND ALL_ROM_DATA_SOURCES "${prefix}.c")
     set(ALL_ROM_DATA_SOURCES ${ALL_ROM_DATA_SOURCES} PARENT_SCOPE)

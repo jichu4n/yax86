@@ -403,21 +403,18 @@ Alongside the table, state:
   `*_rom_data.{c,h}` are committed and CI runs `git diff --exit-code`, so
   regenerate and commit them when a ROM changes.
 - **A ROM array is module-private, and its source reaches the library only
-  through the bundle.** The generated `.c` is a source of `yax86_core` so that
-  changing a ROM reruns the generator, and carries `HEADER_FILE_ONLY` so that
-  nothing compiles it a second time: the array is already in the bundle, and a
-  separate translation unit defining it puts a copy in the archive that no link
-  can pull in, since the bundle's definition satisfies every reference first.
-  The declaration in the generated header is guarded by the bundle's own
-  include guard, for the reason any cross-file data declaration is - see
-  `opcode_table` in `cpu/instructions.h`.
-- **That shape is opt-in, because the generator has a second caller that needs
-  the opposite.** `generate_rom_data` passes the module name, which is what
-  selects the module-private array and the bundle guard; `pico/bench` calls the
-  same script without one, for a floppy image that is a translation unit of its
-  own and is linked against by `main.c`, so its array keeps external linkage and
-  its header declares it unguarded. A change to the generator has to be built
-  both ways.
+  through the bundle.** The generated `.c` file is listed as a source of
+  `yax86_core` so that changing a ROM file reruns the generator. It carries
+  `HEADER_FILE_ONLY` so CMake does not compile it into a separate object file:
+  the array is already defined in the bundle, so a standalone object in the
+  archive would be dead weight that is never linked. The header's `extern`
+  declaration is guarded by the module's bundle include guard, preventing
+  linkage conflicts with the bundle's `static` definition.
+- **Module-private generation is opt-in via `--module`.** `core/CMakeLists.txt`
+  passes `--module <name>`, which marks the array `YAX86_MODULE_PRIVATE` and
+  adds bundle guards. In contrast, `pico/bench` invokes the generator without
+  `--module` for its boot floppy image, producing a standalone translation unit
+  with external linkage that `pico/bench/src/main.c` can link against.
 
 ### cpu — state and config
 
@@ -1599,12 +1596,12 @@ Alongside the table, state:
   small desktop — see the performance section above for why that matters.
 - It is a consumer of the core, not part of it. Nothing under `core` knows the
   harness exists, and `pico/bench/src/main.c` uses only the public interface.
-- **CI does not build it**, because the RP2040 toolchain and the Pico SDK are
-  not installed there. What the two builds share is
-  `core/tools/generate-rom-data-files.js`, so a change to that script passes CI
-  whatever it does to this harness - build it locally, and from a fresh
-  `build-pico`, since the generated floppy source is regenerated only when the
-  script or the image changes and a stale one hides the breakage.
+- **CI does not build it**, because the RP2040 toolchain and Pico SDK are not
+  installed in GitHub Actions runners. Because `pico/bench` shares
+  `core/tools/generate-rom-data-files.js` with the core build, changes to that
+  generator script can pass CI while breaking this harness. Always test generator
+  changes locally with `pico/bench/build.sh O3` against a fresh `build-pico`
+  directory (to ensure the floppy source is regenerated rather than reused).
 - The build is a standalone CMake project rather than a subdirectory of the top
   level one, because that build produces a native library, the tests and the
   SDL runtime, none of which cross-compile, and the Pico SDK has to own the

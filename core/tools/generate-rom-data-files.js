@@ -3,21 +3,15 @@
 const fs = require('fs/promises');
 const path = require('path');
 
-// Embeds a ROM image in a C source file and its header, so that ROMs are
-// compiled into the library rather than read from a file at run time. Targets
-// like the Raspberry Pi Pico have no file system to read one from.
+// Embeds a binary image in a C array and header.
 //
-// The symbol argument names the generated array, so BIOSROMData produces
-// kBIOSROMData and kBIOSROMDataSize.
-//
-// --module names the module whose bundle the array is compiled into, and is
-// what selects its linkage. With it, the array is YAX86_MODULE_PRIVATE and its
-// declaration is guarded by that module's bundle guard (YAX86_BIOS_BUNDLE_H
-// for bios), because bundled it shares a translation unit with its users and
-// unbundled it does not. Without it, the array is a translation unit of its
-// own that something links against, so it keeps external linkage and its
-// declaration is unguarded - which is what pico/bench needs for the floppy
-// image its main.c reads.
+// Arguments:
+// - symbol: Base name for identifiers (e.g. BIOSROMData -> kBIOSROMData, kBIOSROMDataSize).
+// - moduleName (optional): Target core module (e.g. "bios").
+//   - If provided: The array is marked YAX86_MODULE_PRIVATE (static in bundled
+//     builds) and the header's extern declaration is suppressed inside the bundle.
+//   - If omitted: Generated as a standalone translation unit with external
+//     linkage (e.g. for the pico/bench boot floppy image).
 async function generateRomDataFiles(romFilePath, outputFilePath, symbol, moduleName) {
   const romContent = await fs.readFile(romFilePath);
 
@@ -37,11 +31,10 @@ async function generateRomDataFiles(romFilePath, outputFilePath, symbol, moduleN
   if (moduleName) {
     const bundleGuard = `YAX86_${moduleName.toUpperCase()}_BUNDLE_H`;
     headerDeclaration = [
-      '// A data declaration has no spelling that works in both configurations,',
-      '// so this one is visible only when unbundled. `extern` is what an',
-      '// unbundled caller needs, and conflicts with the static definition once',
-      '// bundled. The bundled build reaches the array by position instead, so',
-      '// the generated source precedes its users in bundle.json.',
+      '// In unbundled builds, external callers within the module need an extern',
+      '// declaration. In bundled builds, the array is static and defined earlier in',
+      '// the same translation unit (via bundle.json), so an extern declaration',
+      '// would conflict and is omitted.',
       `#ifndef ${bundleGuard}`,
       `extern const uint8_t ${dataSymbol}[${sizeSymbol}];`,
       `#endif // ${bundleGuard}`,
@@ -97,14 +90,13 @@ async function generateRomDataFiles(romFilePath, outputFilePath, symbol, moduleN
 }
 
 const usage = [
-  'Usage: generate-rom-data-files.js XXX.rom output_file_prefix symbol',
+  'Usage: generate-rom-data-files.js <input.rom> <output_prefix> <symbol>',
   '                                  [--module <name>]',
   '',
-  '  --module <name>  The module whose bundle the array is compiled into.',
-  '                   Gives it internal linkage there and guards its',
-  '                   declaration with that module\'s bundle guard. Omit it',
-  '                   for an array that is a translation unit of its own and',
-  '                   is linked against, which needs external linkage.',
+  'Options:',
+  '  --module <name>  Target core module (e.g. "bios"). Generates a module-private',
+  '                   array for header bundles. Omit for standalone objects with',
+  '                   external linkage (e.g. pico/bench boot floppy).',
 ].join('\n');
 
 if (require.main === module) {
