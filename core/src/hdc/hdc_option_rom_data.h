@@ -10,8 +10,13 @@ enum {
   kHDCOptionROMDataSize = 12288,
 };
 
-#ifndef YAX86_HDC_BUNDLE
+// A data declaration has no spelling that works in both configurations,
+// so this one is visible only when unbundled. `extern` is what an
+// unbundled caller needs, and conflicts with the static definition once
+// bundled. The bundled build reaches the array by position instead, so
+// the generated source precedes its users in bundle.json.
+#ifndef YAX86_HDC_BUNDLE_H
 extern const uint8_t kHDCOptionROMData[kHDCOptionROMDataSize];
-#endif // YAX86_HDC_BUNDLE
+#endif // YAX86_HDC_BUNDLE_H
 
 #endif // YAX86_HDC_OPTION_ROM_DATA_H

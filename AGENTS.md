@@ -122,8 +122,10 @@ file-local convention both rest on, and nothing else builds it.
 
 `tools/check-unbundled.sh` runs `$CC -std=c99 -fsyntax-only` over every source
 file with `-Wall -Wextra -Wpedantic -Werror -Icore` to catch missing includes or
-accidental dependencies on earlier files in the bundle before they rot. It runs
-automatically as part of `./tools/run-tests.sh`, which CI invokes with `CC` set
+accidental dependencies on earlier files in the bundle before they rot. The
+generated ROM sources are included, which is what keeps them self-contained
+even though nothing compiles them on their own. It runs automatically as part
+of `./tools/run-tests.sh`, which CI invokes with `CC` set
 to the leg's compiler, and it is first in that script because it costs a quarter
 of a second and the hardware test data below it is a 480MB download.
 
@@ -400,6 +402,15 @@ Alongside the table, state:
   name the module, ROM file, output name and symbol. The generated
   `*_rom_data.{c,h}` are committed and CI runs `git diff --exit-code`, so
   regenerate and commit them when a ROM changes.
+- **A ROM array is module-private, and its source reaches the library only
+  through the bundle.** The generated `.c` is a source of `yax86_core` so that
+  changing a ROM reruns the generator, and carries `HEADER_FILE_ONLY` so that
+  nothing compiles it a second time: the array is already in the bundle, and a
+  separate translation unit defining it puts a copy in the archive that no link
+  can pull in, since the bundle's definition satisfies every reference first.
+  The declaration in the generated header is guarded by the bundle's own
+  include guard, for the reason any cross-file data declaration is - see
+  `opcode_table` in `cpu/instructions.h`.
 
 ### cpu — state and config
 
