@@ -22,14 +22,11 @@ extern "C" {
 #define YAX86_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
-// source file: one copy per translation unit. Write `inline` or `const` after
-// it as the declaration needs, the same as anywhere else - the macro names the
-// tier and nothing more.
+// source file: one copy per translation unit.
 #define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -43,7 +40,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -1330,14 +1327,11 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #define YAX86_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
-// source file: one copy per translation unit. Write `inline` or `const` after
-// it as the declaration needs, the same as anywhere else - the macro names the
-// tier and nothing more.
+// source file: one copy per translation unit.
 #define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -1351,7 +1345,7 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
