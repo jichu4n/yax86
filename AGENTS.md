@@ -234,7 +234,7 @@ and RAM even when idle.
   carries two.
 - Both orders compile, and an attribute behind `static` (or `YAX86_FILE_PRIVATE`,
   which expands to it) still takes effect: `YAX86_FILE_PRIVATE YAX86_HOT`,
-  `YAX86_FILE_PRIVATE inline YAX86_HOT` and `YAX86_MODULE_PRIVATE YAX86_HOT
+  `YAX86_FILE_PRIVATE inline YAX86_HOT` and `YAX86_FILE_PRIVATE YAX86_HOT
   YAX86_NOINLINE` all land in the named section under gcc and clang. Check that
   with `objdump -t` at `-O0` rather than at `-O3`, where a small static inlines
   away and its section never appears.

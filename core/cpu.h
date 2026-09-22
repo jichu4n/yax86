@@ -73,7 +73,11 @@ extern "C" {
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
+#if !defined(YAX86_IMPLEMENTATION)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#else
 #define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
 #else
 #define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
@@ -1385,7 +1389,11 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
+#if !defined(YAX86_IMPLEMENTATION)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#else
 #define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
 #else
 #define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
@@ -2043,7 +2051,7 @@ ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a memory operand of the given width to an OperandValue.
-YAX86_MODULE_PRIVATE OperandValue ReadMemoryOperandValue(
+YAX86_FILE_PRIVATE OperandValue ReadMemoryOperandValue(
     CPUState* cpu, const OperandAddress* address, Width width) {
   switch (width) {
     case kByte:
@@ -2071,7 +2079,7 @@ ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a register operand of the given width to an OperandValue.
-YAX86_MODULE_PRIVATE OperandValue ReadRegisterOperandValue(
+YAX86_FILE_PRIVATE OperandValue ReadRegisterOperandValue(
     CPUState* cpu, const OperandAddress* address, Width width) {
   switch (width) {
     case kByte:
@@ -2124,7 +2132,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void WriteMemoryOperandWord(
 }
 
 // Write a memory operand of the given width.
-YAX86_MODULE_PRIVATE void WriteMemoryOperand(
+YAX86_FILE_PRIVATE void WriteMemoryOperand(
     CPUState* cpu, const OperandAddress* address, OperandValue value,
     Width width) {
   switch (width) {
@@ -2154,7 +2162,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void WriteRegisterOperandWord(
 }
 
 // Write a register operand of the given width.
-YAX86_MODULE_PRIVATE void WriteRegisterOperand(
+YAX86_FILE_PRIVATE void WriteRegisterOperand(
     CPUState* cpu, const OperandAddress* address, OperandValue value,
     Width width) {
   switch (width) {
@@ -2216,7 +2224,7 @@ GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
 
 // Get the register operand of the given width from the ModR/M byte's reg or
 // R/M field.
-YAX86_MODULE_PRIVATE RegisterAddress
+YAX86_FILE_PRIVATE RegisterAddress
 GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
   switch (width) {
     case kByte:
@@ -2368,7 +2376,7 @@ ReadImmediateOperandWord(const Instruction* instruction) {
 }
 
 // Read an immediate value of the given width.
-YAX86_MODULE_PRIVATE OperandValue
+YAX86_FILE_PRIVATE OperandValue
 ReadImmediateOperand(const Instruction* instruction, Width width) {
   switch (width) {
     case kByte:
@@ -7971,7 +7979,7 @@ CPUFetchNextInstructionCached(
 // Cortex-M0+: the execute path wants registers, the core has few, and folding
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
-YAX86_MODULE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the instruction handler.
