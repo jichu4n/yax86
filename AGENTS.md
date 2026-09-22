@@ -143,6 +143,35 @@ later, so `-Werror` is what makes the check mean the same thing on every
 compiler that runs it. The cost is that a new warning in a future compiler
 fails every leg of the matrix rather than the `Debug` ones.
 
+### The public symbols allowlist check
+
+Where the unbundled syntax check inspects source code,
+`tools/check-public-symbols.sh` inspects the compiled static library
+(`build-native/core/libyax86_core.a`) using `nm -g`. It compares the exported
+symbols against `core/public_symbols.txt`.
+
+**An unannotated definition that leaks into the public namespace is what it
+exists to catch.** In C, a file-scope function or variable defined without
+`static` has external linkage by default. Because the library is compiled as a
+single bundle, a helper defined without `YAX86_FILE_PRIVATE` or
+`YAX86_MODULE_PRIVATE` compiles cleanly and passes all tests, but silently
+pollutes the symbol table of any host application linking against
+`libyax86_core.a`.
+
+The allowlist records each exported symbol with its `nm` symbol type letter,
+as in `T BIOSGetROMData`, so it pins both which symbols are exported and that
+every one of them is a function. The library exports no data at all, and a
+const table that gained external linkage would show up as an `R` rather than
+only as a new name. The file is the record of what the public surface is -
+nothing restates its length, which would be a second place to keep true.
+
+The check runs automatically in `./tools/run-tests.sh`. When public API is
+intentionally added, removed, or renamed, update the allowlist:
+
+```sh
+./tools/check-public-symbols.sh --update
+```
+
 ### Debugging the WASM build
 
 Use the Chrome DevTools MCP server against
