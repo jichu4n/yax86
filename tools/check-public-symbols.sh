@@ -33,12 +33,15 @@ fi
 get_symbols() {
   "$NM" -g "$LIB" \
     | awk '{
+        # Every symbol class a linker treats as defined and exported, not just
+        # the ones the library produces today: a weak or common symbol would
+        # be just as reachable from a host and just as invisible here.
         type = "";
         name = "";
-        if ($2 ~ /^[TDBRG]$/) {
+        if ($2 ~ /^[TDBRGWVC]$/) {
           type = $2;
           name = $3;
-        } else if ($1 ~ /^[TDBRG]$/) {
+        } else if ($1 ~ /^[TDBRGWVC]$/) {
           type = $1;
           name = $2;
         }

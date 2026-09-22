@@ -158,10 +158,12 @@ single bundle, a helper defined without `YAX86_FILE_PRIVATE` or
 pollutes the symbol table of any host application linking against
 `libyax86_core.a`.
 
-The allowlist records each exported symbol with its `nm` symbol type letter (e.g.
-`T BIOSGetROMData`), asserting both the exact set of public symbols (currently
-75) and that all exported symbols are functions (`T`), with zero exported data
-symbols.
+The allowlist records each exported symbol with its `nm` symbol type letter,
+as in `T BIOSGetROMData`, so it pins both which symbols are exported and that
+every one of them is a function. The library exports no data at all, and a
+const table that gained external linkage would show up as an `R` rather than
+only as a new name. The file is the record of what the public surface is -
+nothing restates its length, which would be a second place to keep true.
 
 The check runs automatically in `./tools/run-tests.sh`. When public API is
 intentionally added, removed, or renamed, update the allowlist:
