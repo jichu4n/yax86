@@ -1481,6 +1481,16 @@ Alongside the table, state:
   grows a call it never had. That measured **3.6% at `-O2`**. Marking the
   helper `YAX86_HOT` instead recovers nothing, which is the tell that the cost
   is the call itself rather than where it landed.
+- **The macro omits `inline` when unbundled**, and that is load-bearing rather
+  than an oversight. `YAX86_MODULE_PRIVATE` is empty in that configuration, so
+  a function carrying both has external linkage, and C99 6.7.4p3 forbids an
+  `inline` definition with external linkage from referencing an identifier with
+  internal linkage - which `GetRegisterOrMemoryOperandAddress()` does, in
+  `GetRegisterAddress()`. Only clang diagnoses it, as `-Wstatic-in-inline`, so
+  `tools/check-unbundled.sh` catches it on the clang legs of the matrix and not
+  the gcc ones. The unbundled form is only ever syntax-checked, never linked or
+  shipped, so dropping the keyword there costs nothing the emulator runs - which
+  is also why removing the condition looks safe and is not.
 - **Forcing one inlining decision moves others, and not always in your favour.**
   Pinning that helper inline made GCC stop inlining the larger
   `GetMemoryOperandAddress()` into `ReadRegisterOrMemoryOperand()` at `-O3`,
