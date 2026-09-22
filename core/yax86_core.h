@@ -21,12 +21,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -40,7 +40,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -758,12 +758,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -777,7 +777,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -1191,7 +1191,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -1235,7 +1235,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -1243,7 +1244,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -1252,7 +1253,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -1260,7 +1261,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -1269,11 +1270,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -1345,7 +1346,7 @@ enum {
 };
 
 // Log module for the CPU.
-static const LogModule kLogModuleCPU = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleCPU = {
     .id = kLogModuleIDCPU,
     .name = "CPU",
 };
@@ -1741,17 +1742,19 @@ typedef struct CPUState {
 YAX86_PUBLIC void CPUInit(CPUState* cpu);
 
 // Instructions retired since CPUInit(), as one number.
-YAX86_PUBLIC_INLINE uint64_t CPUInstructionsRetired(const CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline uint64_t CPUInstructionsRetired(
+    const CPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-YAX86_PUBLIC_INLINE bool CPUGetFlag(const CPUState* cpu, Flag flag) {
+YAX86_PUBLIC_HEADER inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
+YAX86_PUBLIC_HEADER inline void CPUSetFlag(
+    CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -1764,14 +1767,14 @@ YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
-YAX86_PUBLIC_INLINE void CPURaiseInternalInterrupt(
+YAX86_PUBLIC_HEADER inline void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-YAX86_PUBLIC_INLINE void CPUClearInternalInterrupt(CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(CPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -1799,7 +1802,7 @@ YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // need a call is a change to what an address means: remapping memory, or
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
-YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
+YAX86_PUBLIC_HEADER inline void CPUSetDirectDataWindow(
     CPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
@@ -1807,7 +1810,7 @@ YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
 
 // Discards the direct data window, so that every access goes back through
 // CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
-YAX86_PUBLIC_INLINE void CPUInvalidateDirectDataWindow(CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -1831,7 +1834,8 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu);
 // hence the flush. The address is masked rather than range checked: aliasing
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
-YAX86_PUBLIC_INLINE void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
+YAX86_PUBLIC_HEADER inline void CPUNotifyMemoryWrite(
+    CPUState* cpu, uint32_t address) {
   const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
   if (++cpu->code_page_generation[page] == 0) {
     CPUInvalidateDecodeCache(cpu);
@@ -2059,12 +2063,12 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -2078,7 +2082,7 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -9027,12 +9031,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -9046,7 +9050,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -9460,7 +9464,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -9504,7 +9508,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -9512,7 +9517,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -9521,7 +9526,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -9529,7 +9534,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -9538,11 +9543,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -9634,7 +9639,7 @@ enum {
 };
 
 // Log module for the DMA.
-static const LogModule kLogModuleDMA = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleDMA = {
     .id = kLogModuleIDDMA,
     .name = "DMA",
 };
@@ -10124,12 +10129,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -10143,7 +10148,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -10557,7 +10562,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -10601,7 +10606,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -10609,7 +10615,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -10618,7 +10624,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -10626,7 +10632,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -10635,11 +10641,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -10817,7 +10823,7 @@ enum {
 };
 
 // Log module for the FDC.
-static const LogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleFDC = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
@@ -10835,7 +10841,7 @@ typedef struct FDCDiskFormat {
 } FDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-static const FDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const FDCDiskFormat kFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,
@@ -11940,12 +11946,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -11959,7 +11965,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -12373,7 +12379,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -12417,7 +12423,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -12425,7 +12432,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -12434,7 +12441,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -12442,7 +12449,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -12451,11 +12458,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -12540,7 +12547,7 @@ enum {
 };
 
 // Log module for the HDC.
-static const LogModule kLogModuleHDC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleHDC = {
     .id = kLogModuleIDHDC,
     .name = "HDC",
 };
@@ -12694,7 +12701,7 @@ enum {
       kHDCGeometry10MBNumCylinders * kHDCGeometry10MBNumHeads *
       kHDCGeometry10MBNumSectorsPerTrack * kHDCSectorSize,
 };
-static const HDCDriveGeometry kHDCGeometry10MB = {
+YAX86_PUBLIC_HEADER const HDCDriveGeometry kHDCGeometry10MB = {
     .num_cylinders = kHDCGeometry10MBNumCylinders,
     .num_heads = kHDCGeometry10MBNumHeads,
     .num_sectors_per_track = kHDCGeometry10MBNumSectorsPerTrack,
@@ -12818,7 +12825,7 @@ YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive);
 // is reached at the port offset with bits 0 and 3 swapped - the status
 // register, ATA register 7, is read at port offset 0xE. The mapping is its own
 // inverse.
-YAX86_PUBLIC_INLINE uint8_t HDCPortOffsetToRegister(uint8_t offset) {
+YAX86_PUBLIC_HEADER inline uint8_t HDCPortOffsetToRegister(uint8_t offset) {
   return (uint8_t)((offset & ~0x09) | ((offset & 0x01) << 3) |
                    ((offset >> 3) & 0x01));
 }
@@ -14325,12 +14332,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -14344,7 +14351,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -14758,7 +14765,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -14802,7 +14809,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -14810,7 +14818,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -14819,7 +14827,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -14827,7 +14835,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -14836,11 +14844,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -15050,7 +15058,7 @@ enum {
 };
 
 // Log module for the Keyboard.
-static const LogModule kLogModuleKeyboard = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleKeyboard = {
     .id = kLogModuleIDKeyboard,
     .name = "KEYBOARD",
 };
@@ -15302,12 +15310,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -15321,7 +15329,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -15735,7 +15743,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -15779,7 +15787,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -15787,7 +15796,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -15796,7 +15805,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -15804,7 +15813,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -15813,11 +15822,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -15906,7 +15915,7 @@ enum {
 };
 
 // Log module for the PIC.
-static const LogModule kLogModulePIC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePIC = {
     .id = kLogModuleIDPIC,
     .name = "PIC",
 };
@@ -16438,12 +16447,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -16457,7 +16466,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -16871,7 +16880,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -16915,7 +16924,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -16923,7 +16933,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -16932,7 +16942,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -16940,7 +16950,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -16949,11 +16959,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -17035,7 +17045,7 @@ enum {
 };
 
 // Log module for the PIT.
-static const LogModule kLogModulePIT = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePIT = {
     .id = kLogModuleIDPIT,
     .name = "PIT",
 };
@@ -17724,12 +17734,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -17743,7 +17753,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -18157,7 +18167,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -18201,7 +18211,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -18209,7 +18220,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -18218,7 +18229,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -18226,7 +18237,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -18235,11 +18246,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -18414,7 +18425,7 @@ enum {
 };
 
 // Log module for the Platform.
-static const LogModule kLogModulePlatform = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePlatform = {
     .id = kLogModuleIDPlatform,
     .name = "PLATFORM",
 };
@@ -20137,12 +20148,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -20156,7 +20167,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -20570,7 +20581,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -20614,7 +20625,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -20622,7 +20634,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -20631,7 +20643,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -20639,7 +20651,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -20648,11 +20660,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -20775,7 +20787,7 @@ enum {
 };
 
 // Log module for the PPI.
-static const LogModule kLogModulePPI = {
+YAX86_PUBLIC_HEADER const LogModule kLogModulePPI = {
     .id = kLogModuleIDPPI,
     .name = "PPI",
 };
@@ -21087,12 +21099,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -21106,7 +21118,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -21520,7 +21532,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -21564,7 +21576,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -21572,7 +21585,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -21581,7 +21594,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -21589,7 +21602,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -21598,11 +21611,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -21676,7 +21689,7 @@ enum {
 };
 
 // Log module for the Video.
-static const LogModule kLogModuleVideo = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleVideo = {
     .id = kLogModuleIDVideo,
     .name = "VIDEO",
 };
@@ -22082,107 +22095,108 @@ enum {
 // ============================================================================
 
 // Metadata for each video mode, indexed by mode number.
-static const VideoModeMetadata kVideoModeMetadata[kNumVideoModes] = {
-    // 0x00: CGA text, 40x25, color burst off
-    {
-        .mode = kVideoModeCGAText40x25Mono,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 8,
-        .columns = 40,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x01: CGA text, 40x25, 16 colors
-    {
-        .mode = kVideoModeCGAText40x25Color,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 8,
-        .columns = 40,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x02: CGA text, 80x25, color burst off
-    {
-        .mode = kVideoModeCGAText80x25Mono,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 640,
-        .height = 200,
-        .num_pages = 4,
-        .columns = 80,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x03: CGA text, 80x25, 16 colors
-    {
-        .mode = kVideoModeCGAText80x25Color,
-        .type = kVideoModeText,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 640,
-        .height = 200,
-        .num_pages = 4,
-        .columns = 80,
-        .rows = 25,
-        .char_width = 8,
-        .char_height = 8,
-    },
-    // 0x04: CGA graphics, 320x200, 4 colors
-    {
-        .mode = kVideoModeCGAGraphics320x200,
-        .type = kVideoModeGraphics,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 1,
-    },
-    // 0x05: CGA graphics, 320x200, 4 colors, alternate palette
-    {
-        .mode = kVideoModeCGAGraphics320x200Alt,
-        .type = kVideoModeGraphics,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 320,
-        .height = 200,
-        .num_pages = 1,
-    },
-    // 0x06: CGA graphics, 640x200, 2 colors
-    {
-        .mode = kVideoModeCGAGraphics640x200,
-        .type = kVideoModeGraphics,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .width = 640,
-        .height = 200,
-        .num_pages = 1,
-    },
-    // 0x07: MDA text, 80x25, monochrome
-    {
-        .mode = kVideoModeMDAText80x25,
-        .type = kVideoModeText,
-        .vram_address = kMDAVRAMAddress,
-        .vram_size = kMDAVRAMSize,
-        .width = 720,
-        .height = 350,
-        .num_pages = 1,
-        .columns = 80,
-        .rows = 25,
-        .char_width = 9,
-        .char_height = 14,
-    },
+YAX86_PUBLIC_HEADER const VideoModeMetadata
+    kVideoModeMetadata[kNumVideoModes] = {
+        // 0x00: CGA text, 40x25, color burst off
+        {
+            .mode = kVideoModeCGAText40x25Mono,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 8,
+            .columns = 40,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x01: CGA text, 40x25, 16 colors
+        {
+            .mode = kVideoModeCGAText40x25Color,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 8,
+            .columns = 40,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x02: CGA text, 80x25, color burst off
+        {
+            .mode = kVideoModeCGAText80x25Mono,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 640,
+            .height = 200,
+            .num_pages = 4,
+            .columns = 80,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x03: CGA text, 80x25, 16 colors
+        {
+            .mode = kVideoModeCGAText80x25Color,
+            .type = kVideoModeText,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 640,
+            .height = 200,
+            .num_pages = 4,
+            .columns = 80,
+            .rows = 25,
+            .char_width = 8,
+            .char_height = 8,
+        },
+        // 0x04: CGA graphics, 320x200, 4 colors
+        {
+            .mode = kVideoModeCGAGraphics320x200,
+            .type = kVideoModeGraphics,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 1,
+        },
+        // 0x05: CGA graphics, 320x200, 4 colors, alternate palette
+        {
+            .mode = kVideoModeCGAGraphics320x200Alt,
+            .type = kVideoModeGraphics,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 320,
+            .height = 200,
+            .num_pages = 1,
+        },
+        // 0x06: CGA graphics, 640x200, 2 colors
+        {
+            .mode = kVideoModeCGAGraphics640x200,
+            .type = kVideoModeGraphics,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .width = 640,
+            .height = 200,
+            .num_pages = 1,
+        },
+        // 0x07: MDA text, 80x25, monochrome
+        {
+            .mode = kVideoModeMDAText80x25,
+            .type = kVideoModeText,
+            .vram_address = kMDAVRAMAddress,
+            .vram_size = kMDAVRAMSize,
+            .width = 720,
+            .height = 350,
+            .num_pages = 1,
+            .columns = 80,
+            .rows = 25,
+            .char_width = 9,
+            .char_height = 14,
+        },
 };
 
 // Metadata for a video adapter - the facts about an adapter that do not depend
@@ -22232,39 +22246,40 @@ typedef struct VideoAdapterMetadata {
 // line at 16.257MHz over 370 lines, which is 259 cycles per line and just under
 // 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
 // 304 cycles per line and just under 60Hz.
-static const VideoAdapterMetadata kVideoAdapterMetadata[kNumVideoAdapters] = {
-    // MDA
-    {
-        .adapter = kVideoAdapterMDA,
-        .frame_buffer_width = 720,
-        .frame_buffer_height = 350,
-        .vram_address = kMDAVRAMAddress,
-        .vram_size = kMDAVRAMSize,
-        .port_start = kMDAPortStart,
-        .port_end = kMDAPortEnd,
-        // High resolution mode, video enable, blink enable.
-        .default_control_register = 0x29,
-        .cycles_per_scan_line = 259,
-        .display_cycles_per_scan_line = 211,
-        .scan_lines_per_frame = 370,
-        .displayed_scan_lines = 350,
-    },
-    // CGA
-    {
-        .adapter = kVideoAdapterCGA,
-        .frame_buffer_width = 640,
-        .frame_buffer_height = 200,
-        .vram_address = kCGAVRAMAddress,
-        .vram_size = kCGAVRAMSize,
-        .port_start = kCGAPortStart,
-        .port_end = kCGAPortEnd,
-        // 80x25 text mode, video enable, blink enable.
-        .default_control_register = 0x29,
-        .cycles_per_scan_line = 304,
-        .display_cycles_per_scan_line = 213,
-        .scan_lines_per_frame = 262,
-        .displayed_scan_lines = 200,
-    },
+YAX86_PUBLIC_HEADER const VideoAdapterMetadata
+    kVideoAdapterMetadata[kNumVideoAdapters] = {
+        // MDA
+        {
+            .adapter = kVideoAdapterMDA,
+            .frame_buffer_width = 720,
+            .frame_buffer_height = 350,
+            .vram_address = kMDAVRAMAddress,
+            .vram_size = kMDAVRAMSize,
+            .port_start = kMDAPortStart,
+            .port_end = kMDAPortEnd,
+            // High resolution mode, video enable, blink enable.
+            .default_control_register = 0x29,
+            .cycles_per_scan_line = 259,
+            .display_cycles_per_scan_line = 211,
+            .scan_lines_per_frame = 370,
+            .displayed_scan_lines = 350,
+        },
+        // CGA
+        {
+            .adapter = kVideoAdapterCGA,
+            .frame_buffer_width = 640,
+            .frame_buffer_height = 200,
+            .vram_address = kCGAVRAMAddress,
+            .vram_size = kCGAVRAMSize,
+            .port_start = kCGAPortStart,
+            .port_end = kCGAPortEnd,
+            // 80x25 text mode, video enable, blink enable.
+            .default_control_register = 0x29,
+            .cycles_per_scan_line = 304,
+            .display_cycles_per_scan_line = 213,
+            .scan_lines_per_frame = 262,
+            .displayed_scan_lines = 200,
+        },
 };
 
 enum {
@@ -22396,7 +22411,7 @@ typedef struct VideoConfig {
 } VideoConfig;
 
 // Default video config.
-static const VideoConfig kDefaultVideoConfig = {
+YAX86_PUBLIC_HEADER const VideoConfig kDefaultVideoConfig = {
     .context = NULL,
 
     .adapter = kVideoAdapterMDA,

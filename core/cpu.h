@@ -21,12 +21,12 @@ extern "C" {
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -40,7 +40,7 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
@@ -454,7 +454,7 @@ typedef struct LogModule {
 } LogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_INLINE uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -498,7 +498,8 @@ typedef struct Logger {
 } Logger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
+YAX86_PUBLIC_HEADER inline void LoggerInit(
+    Logger* logger, LoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -506,7 +507,7 @@ YAX86_PUBLIC_INLINE void LoggerInit(Logger* logger, LoggerConfig* config) {
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
     const Logger* logger, const LogModule* module, LogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -515,7 +516,7 @@ YAX86_PUBLIC_INLINE bool LoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
@@ -523,7 +524,7 @@ YAX86_PUBLIC_INLINE void LoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_INLINE void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
     Logger* logger, const LogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
@@ -532,11 +533,11 @@ YAX86_PUBLIC_INLINE void LoggerDisableModule(
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) YAX86_UNUSED;
 
-static void LoggerWrite(
+YAX86_PUBLIC_HEADER void LoggerWrite(
     Logger* logger, const LogModule* module, LogLevel level, const char* format,
     ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
@@ -608,7 +609,7 @@ enum {
 };
 
 // Log module for the CPU.
-static const LogModule kLogModuleCPU = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleCPU = {
     .id = kLogModuleIDCPU,
     .name = "CPU",
 };
@@ -1004,17 +1005,19 @@ typedef struct CPUState {
 YAX86_PUBLIC void CPUInit(CPUState* cpu);
 
 // Instructions retired since CPUInit(), as one number.
-YAX86_PUBLIC_INLINE uint64_t CPUInstructionsRetired(const CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline uint64_t CPUInstructionsRetired(
+    const CPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-YAX86_PUBLIC_INLINE bool CPUGetFlag(const CPUState* cpu, Flag flag) {
+YAX86_PUBLIC_HEADER inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
+YAX86_PUBLIC_HEADER inline void CPUSetFlag(
+    CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -1027,14 +1030,14 @@ YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
-YAX86_PUBLIC_INLINE void CPURaiseInternalInterrupt(
+YAX86_PUBLIC_HEADER inline void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-YAX86_PUBLIC_INLINE void CPUClearInternalInterrupt(CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(CPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -1062,7 +1065,7 @@ YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // need a call is a change to what an address means: remapping memory, or
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
-YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
+YAX86_PUBLIC_HEADER inline void CPUSetDirectDataWindow(
     CPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
@@ -1070,7 +1073,7 @@ YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
 
 // Discards the direct data window, so that every access goes back through
 // CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
-YAX86_PUBLIC_INLINE void CPUInvalidateDirectDataWindow(CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -1094,7 +1097,8 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu);
 // hence the flush. The address is masked rather than range checked: aliasing
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
-YAX86_PUBLIC_INLINE void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
+YAX86_PUBLIC_HEADER inline void CPUNotifyMemoryWrite(
+    CPUState* cpu, uint32_t address) {
   const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
   if (++cpu->code_page_generation[page] == 0) {
     CPUInvalidateDecodeCache(cpu);
@@ -1322,12 +1326,12 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 // defined in one of its source files.
 #define YAX86_PUBLIC
 
-// Public interface defined in a header: one copy per translation unit.
-#define YAX86_PUBLIC_INLINE static inline
+// Part of a module's public interface, defined in a header rather than in a
+// source file: one copy per translation unit.
+#define YAX86_PUBLIC_HEADER static
 
-// Macro that expands to `static` when bundled. Use for variables and functions
-// that need to be visible to other files within the same module, but not
-// publicly to users of the bundled library.
+// Visible to other files within the same module, but not publicly to users of
+// the bundled library.
 //
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
@@ -1341,7 +1345,7 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
-// Used only within the source file that defines it.
+// Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.

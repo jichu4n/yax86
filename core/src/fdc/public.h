@@ -20,7 +20,7 @@ enum {
 };
 
 // Log module for the FDC.
-static const LogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleFDC = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
@@ -38,7 +38,7 @@ typedef struct FDCDiskFormat {
 } FDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-static const FDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const FDCDiskFormat kFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,

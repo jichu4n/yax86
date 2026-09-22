@@ -15,7 +15,7 @@ enum {
 };
 
 // Log module for the CPU.
-static const LogModule kLogModuleCPU = {
+YAX86_PUBLIC_HEADER const LogModule kLogModuleCPU = {
     .id = kLogModuleIDCPU,
     .name = "CPU",
 };
@@ -411,17 +411,19 @@ typedef struct CPUState {
 YAX86_PUBLIC void CPUInit(CPUState* cpu);
 
 // Instructions retired since CPUInit(), as one number.
-YAX86_PUBLIC_INLINE uint64_t CPUInstructionsRetired(const CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline uint64_t CPUInstructionsRetired(
+    const CPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-YAX86_PUBLIC_INLINE bool CPUGetFlag(const CPUState* cpu, Flag flag) {
+YAX86_PUBLIC_HEADER inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
+YAX86_PUBLIC_HEADER inline void CPUSetFlag(
+    CPUState* cpu, Flag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -434,14 +436,14 @@ YAX86_PUBLIC_INLINE void CPUSetFlag(CPUState* cpu, Flag flag, bool value) {
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
-YAX86_PUBLIC_INLINE void CPURaiseInternalInterrupt(
+YAX86_PUBLIC_HEADER inline void CPURaiseInternalInterrupt(
     CPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-YAX86_PUBLIC_INLINE void CPUClearInternalInterrupt(CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(CPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -469,7 +471,7 @@ YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // need a call is a change to what an address means: remapping memory, or
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
-YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
+YAX86_PUBLIC_HEADER inline void CPUSetDirectDataWindow(
     CPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
@@ -477,7 +479,7 @@ YAX86_PUBLIC_INLINE void CPUSetDirectDataWindow(
 
 // Discards the direct data window, so that every access goes back through
 // CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
-YAX86_PUBLIC_INLINE void CPUInvalidateDirectDataWindow(CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -501,7 +503,8 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu);
 // hence the flush. The address is masked rather than range checked: aliasing
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
-YAX86_PUBLIC_INLINE void CPUNotifyMemoryWrite(CPUState* cpu, uint32_t address) {
+YAX86_PUBLIC_HEADER inline void CPUNotifyMemoryWrite(
+    CPUState* cpu, uint32_t address) {
   const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
   if (++cpu->code_page_generation[page] == 0) {
     CPUInvalidateDecodeCache(cpu);
