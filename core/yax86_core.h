@@ -1466,7 +1466,7 @@ typedef enum InterruptNumber {
   kInterruptNMI = 2,
   kInterruptBreakpoint = 3,
   kInterruptOverflow = 4,
-} InterruptNumer;
+} InterruptNumber;
 
 // Result of executing a single instruction.
 typedef enum InstructionResult {
