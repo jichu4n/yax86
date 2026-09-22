@@ -122,8 +122,10 @@ file-local convention both rest on, and nothing else builds it.
 
 `tools/check-unbundled.sh` runs `$CC -std=c99 -fsyntax-only` over every source
 file with `-Wall -Wextra -Wpedantic -Werror -Icore` to catch missing includes or
-accidental dependencies on earlier files in the bundle before they rot. It runs
-automatically as part of `./tools/run-tests.sh`, which CI invokes with `CC` set
+accidental dependencies on earlier files in the bundle before they rot. The
+generated ROM sources are included, which is what keeps them self-contained
+even though nothing compiles them on their own. It runs automatically as part
+of `./tools/run-tests.sh`, which CI invokes with `CC` set
 to the leg's compiler, and it is first in that script because it costs a quarter
 of a second and the hardware test data below it is a 480MB download.
 
@@ -400,6 +402,19 @@ Alongside the table, state:
   name the module, ROM file, output name and symbol. The generated
   `*_rom_data.{c,h}` are committed and CI runs `git diff --exit-code`, so
   regenerate and commit them when a ROM changes.
+- **A ROM array is module-private, and its source reaches the library only
+  through the bundle.** The generated `.c` file is listed as a source of
+  `yax86_core` so that changing a ROM file reruns the generator. It carries
+  `HEADER_FILE_ONLY` so CMake does not compile it into a separate object file:
+  the array is already defined in the bundle, so a standalone object in the
+  archive would be dead weight that is never linked. The header's `extern`
+  declaration is guarded by the module's bundle include guard, preventing
+  linkage conflicts with the bundle's `static` definition.
+- **Module-private generation is opt-in via `--module`.** `core/CMakeLists.txt`
+  passes `--module <name>`, which marks the array `YAX86_MODULE_PRIVATE` and
+  adds bundle guards. In contrast, `pico/bench` invokes the generator without
+  `--module` for its boot floppy image, producing a standalone translation unit
+  with external linkage that `pico/bench/src/main.c` can link against.
 
 ### cpu — state and config
 
@@ -1581,6 +1596,12 @@ Alongside the table, state:
   small desktop — see the performance section above for why that matters.
 - It is a consumer of the core, not part of it. Nothing under `core` knows the
   harness exists, and `pico/bench/src/main.c` uses only the public interface.
+- **CI does not build it**, because the RP2040 toolchain and Pico SDK are not
+  installed in GitHub Actions runners. Because `pico/bench` shares
+  `core/tools/generate-rom-data-files.js` with the core build, changes to that
+  generator script can pass CI while breaking this harness. Always test generator
+  changes locally with `pico/bench/build.sh O3` against a fresh `build-pico`
+  directory (to ensure the floppy source is regenerated rather than reused).
 - The build is a standalone CMake project rather than a subdirectory of the top
   level one, because that build produces a native library, the tests and the
   SDL runtime, none of which cross-compile, and the Pico SDK has to own the

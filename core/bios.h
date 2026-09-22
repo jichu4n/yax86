@@ -170,9 +170,13 @@ enum {
   kBIOSROMDataSize = 8192,
 };
 
-#ifndef YAX86_BIOS_BUNDLE
+// In unbundled builds, external callers within the module need an extern
+// declaration. In bundled builds, the array is static and defined earlier in
+// the same translation unit (via bundle.json), so an extern declaration
+// would conflict and is omitted.
+#ifndef YAX86_BIOS_BUNDLE_H
 extern const uint8_t kBIOSROMData[kBIOSROMDataSize];
-#endif // YAX86_BIOS_BUNDLE
+#endif // YAX86_BIOS_BUNDLE_H
 
 #endif // YAX86_BIOS_ROM_DATA_H
 
@@ -191,7 +195,11 @@ extern const uint8_t kBIOSROMData[kBIOSROMDataSize];
 
 #include <stdint.h>
 
-const uint8_t kBIOSROMData[] = {
+#ifndef YAX86_BIOS_BUNDLE_H
+#include "../util/common.h"
+#endif // YAX86_BIOS_BUNDLE_H
+
+YAX86_MODULE_PRIVATE const uint8_t kBIOSROMData[] = {
 0x0a,0x47,0x4c,0x61,0x42,0x49,0x4f,0x53,0x20,0x5b,0x03,0x5d,0x20,0x00,0x54,0x68,
 0x65,0x20,0x68,0x65,0x72,0x6f,0x20,0x77,0x65,0x20,0x6e,0x65,0x65,0x64,0x20,0x62,
 0x75,0x74,0x20,0x64,0x6f,0x6e,0x27,0x74,0x20,0x64,0x65,0x73,0x65,0x72,0x76,0x65,

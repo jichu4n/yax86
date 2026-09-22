@@ -943,9 +943,13 @@ enum {
   kHDCOptionROMDataSize = 12288,
 };
 
-#ifndef YAX86_HDC_BUNDLE
+// In unbundled builds, external callers within the module need an extern
+// declaration. In bundled builds, the array is static and defined earlier in
+// the same translation unit (via bundle.json), so an extern declaration
+// would conflict and is omitted.
+#ifndef YAX86_HDC_BUNDLE_H
 extern const uint8_t kHDCOptionROMData[kHDCOptionROMDataSize];
-#endif // YAX86_HDC_BUNDLE
+#endif // YAX86_HDC_BUNDLE_H
 
 #endif // YAX86_HDC_OPTION_ROM_DATA_H
 
@@ -964,7 +968,11 @@ extern const uint8_t kHDCOptionROMData[kHDCOptionROMDataSize];
 
 #include <stdint.h>
 
-const uint8_t kHDCOptionROMData[] = {
+#ifndef YAX86_HDC_BUNDLE_H
+#include "../util/common.h"
+#endif // YAX86_HDC_BUNDLE_H
+
+YAX86_MODULE_PRIVATE const uint8_t kHDCOptionROMData[] = {
 0x55,0xaa,0x18,0xe9,0xe4,0x0a,0x58,0x55,0x42,0x32,0x31,0x30,0x2d,0x3d,0x58,0x54,
 0x49,0x44,0x45,0x20,0x55,0x6e,0x69,0x76,0x65,0x72,0x73,0x61,0x6c,0x20,0x42,0x49,
 0x4f,0x53,0x20,0x28,0x58,0x54,0x29,0x3d,0x2d,0x00,0x00,0x00,0x72,0x36,0x33,0x31,
