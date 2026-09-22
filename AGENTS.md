@@ -192,6 +192,7 @@ and RAM even when idle.
   | `YAX86_PUBLIC` | nothing | public API, defined in a source file |
   | `YAX86_PUBLIC_HEADER` | `static` | public API, defined in a header |
   | `YAX86_MODULE_PRIVATE` | `static` bundled, nothing unbundled | shared between a module's source files |
+  | `YAX86_MODULE_PRIVATE_HEADER` | `static` | module-private, defined in a header |
   | `YAX86_FILE_PRIVATE` | `static` | used only in the file that defines it |
 
 - **The macro names the tier and nothing else.** `inline`, `const` and the
@@ -215,6 +216,10 @@ and RAM even when idle.
   means internal to the whole bundle rather than to its file. It is the marker
   that cannot express which of the tiers above was meant, which is why none of
   them is spelled that way.
+- The one deliberate exception is the macro body of `STATIC_VECTOR_TYPE` in
+  `util/static_vector.h`, which generates `static` helper functions into
+  whichever header or source file instantiates it. Its tier depends on the
+  instantiation site, so its functions remain plain `static`.
 
 ### Placement and inlining marks
 

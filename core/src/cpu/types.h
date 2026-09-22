@@ -26,37 +26,37 @@ enum {
 };
 
 // Bitmask to extract the sign bit of a value.
-static const uint32_t kSignBit[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t kSignBit[kNumWidths] = {
     1 << 7,   // kByte
     1 << 15,  // kWord
 };
 
 // Maximum unsigned value for each data width.
-static const uint32_t kMaxValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t kMaxValue[kNumWidths] = {
     0xFF,   // kByte
     0xFFFF  // kWord
 };
 
 // Maximum signed value for each data width.
-static const int32_t kMaxSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t kMaxSignedValue[kNumWidths] = {
     0x7F,   // kByte
     0x7FFF  // kWord
 };
 
 // Minimum signed value for each data width.
-static const int32_t kMinSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t kMinSignedValue[kNumWidths] = {
     -0x80,   // kByte
     -0x8000  // kWord
 };
 
 // Number of bytes in each data width.
-static const uint8_t kNumBytes[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBytes[kNumWidths] = {
     1,  // kByte
     2,  // kWord
 };
 
 // Number of bits in each data width.
-static const uint8_t kNumBits[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBits[kNumWidths] = {
     8,   // kByte
     16,  // kWord
 };

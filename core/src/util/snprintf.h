@@ -23,15 +23,16 @@
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -39,8 +40,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -60,9 +61,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -112,8 +113,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -263,7 +264,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);

@@ -40,6 +40,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -777,6 +782,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -869,15 +879,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -885,8 +896,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -906,9 +917,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -958,8 +969,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -1109,7 +1120,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -2082,6 +2094,11 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -2177,37 +2194,37 @@ enum {
 };
 
 // Bitmask to extract the sign bit of a value.
-static const uint32_t kSignBit[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t kSignBit[kNumWidths] = {
     1 << 7,   // kByte
     1 << 15,  // kWord
 };
 
 // Maximum unsigned value for each data width.
-static const uint32_t kMaxValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t kMaxValue[kNumWidths] = {
     0xFF,   // kByte
     0xFFFF  // kWord
 };
 
 // Maximum signed value for each data width.
-static const int32_t kMaxSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t kMaxSignedValue[kNumWidths] = {
     0x7F,   // kByte
     0x7FFF  // kWord
 };
 
 // Minimum signed value for each data width.
-static const int32_t kMinSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t kMinSignedValue[kNumWidths] = {
     -0x80,   // kByte
     -0x8000  // kWord
 };
 
 // Number of bytes in each data width.
-static const uint8_t kNumBytes[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBytes[kNumWidths] = {
     1,  // kByte
     2,  // kWord
 };
 
 // Number of bits in each data width.
-static const uint8_t kNumBits[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBits[kNumWidths] = {
     8,   // kByte
     16,  // kWord
 };
@@ -9050,6 +9067,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -9142,15 +9164,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -9158,8 +9181,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -9179,9 +9202,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -9231,8 +9254,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -9382,7 +9405,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -10148,6 +10172,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -10240,15 +10269,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -10256,8 +10286,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -10277,9 +10307,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -10329,8 +10359,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -10480,7 +10510,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -10723,6 +10754,11 @@ typedef struct StaticVectorHeader {
 } StaticVectorHeader;
 
 // Define a static vector type with an element type.
+//
+// The generated helper functions use plain `static` rather than a visibility
+// macro because this macro is instantiated across different headers and tiers
+// (both public headers and internal source files); its output's tier depends
+// on the instantiation site.
 #define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
   typedef struct name {                                                   \
     StaticVectorHeader header;                                            \
@@ -11965,6 +12001,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -12057,15 +12098,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -12073,8 +12115,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -12094,9 +12136,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -12146,8 +12188,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -12297,7 +12339,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -14351,6 +14394,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -14443,15 +14491,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -14459,8 +14508,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -14480,9 +14529,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -14532,8 +14581,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -14683,7 +14732,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -14926,6 +14976,11 @@ typedef struct StaticVectorHeader {
 } StaticVectorHeader;
 
 // Define a static vector type with an element type.
+//
+// The generated helper functions use plain `static` rather than a visibility
+// macro because this macro is instantiated across different headers and tiers
+// (both public headers and internal source files); its output's tier depends
+// on the instantiation site.
 #define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
   typedef struct name {                                                   \
     StaticVectorHeader header;                                            \
@@ -15329,6 +15384,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -15421,15 +15481,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -15437,8 +15498,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -15458,9 +15519,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -15510,8 +15571,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -15661,7 +15722,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -16466,6 +16528,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -16558,15 +16625,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -16574,8 +16642,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -16595,9 +16663,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -16647,8 +16715,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -16798,7 +16866,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -17753,6 +17822,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -17845,15 +17919,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -17861,8 +17936,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -17882,9 +17957,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -17934,8 +18009,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -18085,7 +18160,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -18328,6 +18404,11 @@ typedef struct StaticVectorHeader {
 } StaticVectorHeader;
 
 // Define a static vector type with an element type.
+//
+// The generated helper functions use plain `static` rather than a visibility
+// macro because this macro is instantiated across different headers and tiers
+// (both public headers and internal source files); its output's tier depends
+// on the instantiation site.
 #define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
   typedef struct name {                                                   \
     StaticVectorHeader header;                                            \
@@ -20167,6 +20248,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -20259,15 +20345,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -20275,8 +20362,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -20296,9 +20383,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -20348,8 +20435,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -20499,7 +20586,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -21118,6 +21206,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -21210,15 +21303,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -21226,8 +21320,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -21247,9 +21341,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -21299,8 +21393,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -21450,7 +21544,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -22597,7 +22692,7 @@ typedef struct VideoPixelRun {
 } VideoPixelRun;
 
 // Hand over what has been buffered and continue the run after it.
-static inline void VideoPixelRunFlush(VideoPixelRun* run) {
+YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunFlush(VideoPixelRun* run) {
   if (run->count == 0) {
     return;
   }
@@ -22612,14 +22707,15 @@ static inline void VideoPixelRunFlush(VideoPixelRun* run) {
 
 // Open a run at the leftmost pixel of a row. Any partial batch is handed over
 // first, so one call both ends the previous row and begins the next.
-static inline void VideoPixelRunBegin(
+YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunBegin(
     VideoPixelRun* run, uint16_t x, uint16_t y) {
   VideoPixelRunFlush(run);
   run->origin.x = x;
   run->origin.y = y;
 }
 
-static inline void VideoPixelRunPush(VideoPixelRun* run, RGB rgb) {
+YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunPush(
+    VideoPixelRun* run, RGB rgb) {
   run->pixels[run->count] = rgb;
   ++run->count;
   if (run->count == kVideoPixelBatchSize) {
