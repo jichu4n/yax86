@@ -411,6 +411,13 @@ Alongside the table, state:
   The declaration in the generated header is guarded by the bundle's own
   include guard, for the reason any cross-file data declaration is - see
   `opcode_table` in `cpu/instructions.h`.
+- **That shape is opt-in, because the generator has a second caller that needs
+  the opposite.** `generate_rom_data` passes the module name, which is what
+  selects the module-private array and the bundle guard; `pico/bench` calls the
+  same script without one, for a floppy image that is a translation unit of its
+  own and is linked against by `main.c`, so its array keeps external linkage and
+  its header declares it unguarded. A change to the generator has to be built
+  both ways.
 
 ### cpu — state and config
 
@@ -1592,6 +1599,12 @@ Alongside the table, state:
   small desktop — see the performance section above for why that matters.
 - It is a consumer of the core, not part of it. Nothing under `core` knows the
   harness exists, and `pico/bench/src/main.c` uses only the public interface.
+- **CI does not build it**, because the RP2040 toolchain and the Pico SDK are
+  not installed there. What the two builds share is
+  `core/tools/generate-rom-data-files.js`, so a change to that script passes CI
+  whatever it does to this harness - build it locally, and from a fresh
+  `build-pico`, since the generated floppy source is regenerated only when the
+  script or the image changes and a stale one hides the breakage.
 - The build is a standalone CMake project rather than a subdirectory of the top
   level one, because that build produces a native library, the tests and the
   SDL runtime, none of which cross-compile, and the Pico SDK has to own the
