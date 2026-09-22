@@ -24,6 +24,11 @@
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -52,7 +57,11 @@
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
+#if !defined(YAX86_IMPLEMENTATION)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#else
 #define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
 #else
 #define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)

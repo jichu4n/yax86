@@ -21,6 +21,11 @@ typedef struct StaticVectorHeader {
 } StaticVectorHeader;
 
 // Define a static vector type with an element type.
+//
+// The generated helper functions use plain `static` rather than a visibility
+// macro because this macro is instantiated across different headers and tiers
+// (both public headers and internal source files); its output's tier depends
+// on the instantiation site.
 #define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
   typedef struct name {                                                   \
     StaticVectorHeader header;                                            \

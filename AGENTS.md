@@ -192,6 +192,7 @@ and RAM even when idle.
   | `YAX86_PUBLIC` | nothing | public API, defined in a source file |
   | `YAX86_PUBLIC_HEADER` | `static` | public API, defined in a header |
   | `YAX86_MODULE_PRIVATE` | `static` bundled, nothing unbundled | shared between a module's source files |
+  | `YAX86_MODULE_PRIVATE_HEADER` | `static` | module-private, defined in a header |
   | `YAX86_FILE_PRIVATE` | `static` | used only in the file that defines it |
 
 - **The macro names the tier and nothing else.** `inline`, `const` and the
@@ -215,6 +216,10 @@ and RAM even when idle.
   means internal to the whole bundle rather than to its file. It is the marker
   that cannot express which of the tiers above was meant, which is why none of
   them is spelled that way.
+- The one deliberate exception is the macro body of `STATIC_VECTOR_TYPE` in
+  `util/static_vector.h`, which generates `static` helper functions into
+  whichever header or source file instantiates it. Its tier depends on the
+  instantiation site, so its functions remain plain `static`.
 
 ### Placement and inlining marks
 
@@ -229,7 +234,7 @@ and RAM even when idle.
   carries two.
 - Both orders compile, and an attribute behind `static` (or `YAX86_FILE_PRIVATE`,
   which expands to it) still takes effect: `YAX86_FILE_PRIVATE YAX86_HOT`,
-  `YAX86_FILE_PRIVATE inline YAX86_HOT` and `YAX86_MODULE_PRIVATE YAX86_HOT
+  `YAX86_FILE_PRIVATE inline YAX86_HOT` and `YAX86_FILE_PRIVATE YAX86_HOT
   YAX86_NOINLINE` all land in the named section under gcc and clang. Check that
   with `objdump -t` at `-O0` rather than at `-O3`, where a small static inlines
   away and its section never appears.
@@ -1476,6 +1481,16 @@ Alongside the table, state:
   grows a call it never had. That measured **3.6% at `-O2`**. Marking the
   helper `YAX86_HOT` instead recovers nothing, which is the tell that the cost
   is the call itself rather than where it landed.
+- **The macro omits `inline` when unbundled**, and that is load-bearing rather
+  than an oversight. `YAX86_MODULE_PRIVATE` is empty in that configuration, so
+  a function carrying both has external linkage, and C99 6.7.4p3 forbids an
+  `inline` definition with external linkage from referencing an identifier with
+  internal linkage - which `GetRegisterOrMemoryOperandAddress()` does, in
+  `GetRegisterAddress()`. Only clang diagnoses it, as `-Wstatic-in-inline`, so
+  `tools/check-unbundled.sh` catches it on the clang legs of the matrix and not
+  the gcc ones. The unbundled form is only ever syntax-checked, never linked or
+  shipped, so dropping the keyword there costs nothing the emulator runs - which
+  is also why removing the condition looks safe and is not.
 - **Forcing one inlining decision moves others, and not always in your favour.**
   Pinning that helper inline made GCC stop inlining the larger
   `GetMemoryOperandAddress()` into `ReadRegisterOrMemoryOperand()` at `-O3`,

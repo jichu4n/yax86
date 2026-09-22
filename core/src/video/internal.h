@@ -34,7 +34,7 @@ typedef struct VideoPixelRun {
 } VideoPixelRun;
 
 // Hand over what has been buffered and continue the run after it.
-static inline void VideoPixelRunFlush(VideoPixelRun* run) {
+YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunFlush(VideoPixelRun* run) {
   if (run->count == 0) {
     return;
   }
@@ -49,14 +49,15 @@ static inline void VideoPixelRunFlush(VideoPixelRun* run) {
 
 // Open a run at the leftmost pixel of a row. Any partial batch is handed over
 // first, so one call both ends the previous row and begins the next.
-static inline void VideoPixelRunBegin(
+YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunBegin(
     VideoPixelRun* run, uint16_t x, uint16_t y) {
   VideoPixelRunFlush(run);
   run->origin.x = x;
   run->origin.y = y;
 }
 
-static inline void VideoPixelRunPush(VideoPixelRun* run, RGB rgb) {
+YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunPush(
+    VideoPixelRun* run, RGB rgb) {
   run->pixels[run->count] = rgb;
   ++run->count;
   if (run->count == kVideoPixelBatchSize) {

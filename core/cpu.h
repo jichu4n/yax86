@@ -40,6 +40,11 @@ extern "C" {
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -68,7 +73,11 @@ extern "C" {
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
+#if !defined(YAX86_IMPLEMENTATION)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#else
 #define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
 #else
 #define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
@@ -132,15 +141,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...)
-    YAX86_UNUSED;
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
+    char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -148,8 +158,8 @@ static size_t SNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
-                           const char* s, int width) {
+YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+    char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
   const char* tmp = s;
@@ -169,9 +179,9 @@ static size_t SNPrintFPutS(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
-                            unsigned long long value, int base, int uppercase,
-                            int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
+              int base, int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -221,8 +231,8 @@ static size_t SNPrintFPutUI(char* buffer, size_t size, size_t* pos,
   return count;
 }
 
-static int VSNPrintF(char* buffer, size_t size, const char* format,
-                     va_list args) {
+YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
@@ -372,7 +382,8 @@ static int VSNPrintF(char* buffer, size_t size, const char* format,
   return (int)pos;
 }
 
-static int SNPrintF(char* buffer, size_t size, const char* format, ...) {
+YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+    char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
   int ret = VSNPrintF(buffer, size, format, args);
@@ -1345,6 +1356,11 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 #define YAX86_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
+// Shared between a module's source files, but defined in a header rather than
+// in a source file: one copy per translation unit. Also used for internal
+// utilities (like snprintf) that are included into multiple module bundles.
+#define YAX86_MODULE_PRIVATE_HEADER static
+
 // Visible only within the source file that defines it.
 #define YAX86_FILE_PRIVATE static
 
@@ -1373,7 +1389,11 @@ YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
+#if !defined(YAX86_IMPLEMENTATION)
+#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#else
 #define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
 #else
 #define YAX86_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
@@ -1440,37 +1460,37 @@ enum {
 };
 
 // Bitmask to extract the sign bit of a value.
-static const uint32_t kSignBit[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t kSignBit[kNumWidths] = {
     1 << 7,   // kByte
     1 << 15,  // kWord
 };
 
 // Maximum unsigned value for each data width.
-static const uint32_t kMaxValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t kMaxValue[kNumWidths] = {
     0xFF,   // kByte
     0xFFFF  // kWord
 };
 
 // Maximum signed value for each data width.
-static const int32_t kMaxSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t kMaxSignedValue[kNumWidths] = {
     0x7F,   // kByte
     0x7FFF  // kWord
 };
 
 // Minimum signed value for each data width.
-static const int32_t kMinSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t kMinSignedValue[kNumWidths] = {
     -0x80,   // kByte
     -0x8000  // kWord
 };
 
 // Number of bytes in each data width.
-static const uint8_t kNumBytes[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBytes[kNumWidths] = {
     1,  // kByte
     2,  // kWord
 };
 
 // Number of bits in each data width.
-static const uint8_t kNumBits[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBits[kNumWidths] = {
     8,   // kByte
     16,  // kWord
 };
@@ -2031,7 +2051,7 @@ ReadMemoryOperandWord(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a memory operand of the given width to an OperandValue.
-YAX86_MODULE_PRIVATE OperandValue ReadMemoryOperandValue(
+YAX86_FILE_PRIVATE OperandValue ReadMemoryOperandValue(
     CPUState* cpu, const OperandAddress* address, Width width) {
   switch (width) {
     case kByte:
@@ -2059,7 +2079,7 @@ ReadRegisterOperandWord(CPUState* cpu, const OperandAddress* address) {
 }
 
 // Read a register operand of the given width to an OperandValue.
-YAX86_MODULE_PRIVATE OperandValue ReadRegisterOperandValue(
+YAX86_FILE_PRIVATE OperandValue ReadRegisterOperandValue(
     CPUState* cpu, const OperandAddress* address, Width width) {
   switch (width) {
     case kByte:
@@ -2112,7 +2132,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void WriteMemoryOperandWord(
 }
 
 // Write a memory operand of the given width.
-YAX86_MODULE_PRIVATE void WriteMemoryOperand(
+YAX86_FILE_PRIVATE void WriteMemoryOperand(
     CPUState* cpu, const OperandAddress* address, OperandValue value,
     Width width) {
   switch (width) {
@@ -2142,7 +2162,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void WriteRegisterOperandWord(
 }
 
 // Write a register operand of the given width.
-YAX86_MODULE_PRIVATE void WriteRegisterOperand(
+YAX86_FILE_PRIVATE void WriteRegisterOperand(
     CPUState* cpu, const OperandAddress* address, OperandValue value,
     Width width) {
   switch (width) {
@@ -2204,7 +2224,7 @@ GetRegisterAddressWord(YAX86_UNUSED CPUState* cpu, uint8_t reg_or_rm) {
 
 // Get the register operand of the given width from the ModR/M byte's reg or
 // R/M field.
-YAX86_MODULE_PRIVATE RegisterAddress
+YAX86_FILE_PRIVATE RegisterAddress
 GetRegisterAddress(CPUState* cpu, uint8_t reg_or_rm, Width width) {
   switch (width) {
     case kByte:
@@ -2356,7 +2376,7 @@ ReadImmediateOperandWord(const Instruction* instruction) {
 }
 
 // Read an immediate value of the given width.
-YAX86_MODULE_PRIVATE OperandValue
+YAX86_FILE_PRIVATE OperandValue
 ReadImmediateOperand(const Instruction* instruction, Width width) {
   switch (width) {
     case kByte:
@@ -7959,7 +7979,7 @@ CPUFetchNextInstructionCached(
 // Cortex-M0+: the execute path wants registers, the core has few, and folding
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
-YAX86_MODULE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
 CPUExecuteDecodedInstruction(
     CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
   // Run the instruction handler.
