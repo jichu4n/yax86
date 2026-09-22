@@ -5,6 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 set -ex
 
 tools/check-unbundled.sh
+tools/check-public-symbols.sh
 
 # Must run before ctest, which enumerates the downloaded opcodes at discovery
 # time.
