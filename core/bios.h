@@ -127,10 +127,7 @@ extern "C" {
 #include "../util/common.h"
 #endif  // YAX86_BIOS_BUNDLE_H
 
-// Memory region types.
 enum {
-  // BIOS ROM memory map entry type - mapped to 0xF0000 to up to 0xFFFFF (64KB).
-  kMemoryMapEntryBIOSROM = 0x01,
   // Start address of the BIOS ROM.
   kBIOSROMStartAddress = 0xFE000,
 };
