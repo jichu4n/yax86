@@ -46,8 +46,8 @@ class DecodeCacheTest : public ::testing::Test {
     memory_.assign(kMemorySize, 0);
     cpu_ = CPUState{};
     cpu_.config.context = this;
-    cpu_.config.read_memory_byte = ReadMemoryByte;
-    cpu_.config.write_memory_byte = WriteMemoryByte;
+    cpu_.config.read_memory_byte = TestReadMemoryByte;
+    cpu_.config.write_memory_byte = TestWriteMemoryByte;
     cpu_.config.get_instruction_fetch_window = GetInstructionFetchWindow;
     cpu_.config.decode_cache = entries;
     cpu_.config.decode_cache_num_entries = num_entries;
@@ -83,12 +83,13 @@ class DecodeCacheTest : public ::testing::Test {
     ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
   }
 
-  static uint8_t ReadMemoryByte(CPUState* cpu, uint32_t address) {
+  static uint8_t TestReadMemoryByte(CPUState* cpu, uint32_t address) {
     DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     return address < kMemorySize ? self->memory_[address] : 0xFF;
   }
 
-  static void WriteMemoryByte(CPUState* cpu, uint32_t address, uint8_t value) {
+  static void TestWriteMemoryByte(
+      CPUState* cpu, uint32_t address, uint8_t value) {
     DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     if (address < kMemorySize) {
       self->memory_[address] = value;
