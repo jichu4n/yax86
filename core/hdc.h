@@ -638,11 +638,7 @@ YAX86_PUBLIC_HEADER const LogModule kLogModuleHDC = {
     .name = "HDC",
 };
 
-// Memory region types.
 enum {
-  // Option ROM memory map entry type.
-  kMemoryMapEntryHDCOptionROM = 0x0C,
-
   // Start address of the option ROM. GLaBIOS scans for option ROMs starting
   // here, on 2KB boundaries.
   kHDCOptionROMStartAddress = 0xC8000,

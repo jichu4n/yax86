@@ -4,7 +4,7 @@
 #include "platform.h"
 
 // Frequency of the PIT tick in Hz.
-static const int kPITTickFrequencyHz = 1193182;
+static const int kTestPITTickFrequencyHz = 1193182;
 
 // Last frequency set by the speaker callback.
 static uint32_t g_last_speaker_frequency = 0;
@@ -43,7 +43,7 @@ class PCSpeakerTest : public ::testing::Test {
   void SetPITFrequency(uint32_t freq_hz) {
     uint16_t reload_value = 0;
     if (freq_hz > 0) {
-      reload_value = kPITTickFrequencyHz / freq_hz;
+      reload_value = kTestPITTickFrequencyHz / freq_hz;
     }
 
     // Command to PIT: Channel 2, LSB then MSB, Mode 3 (Square Wave).
@@ -79,11 +79,11 @@ class PCSpeakerTest : public ::testing::Test {
     if (target_freq_hz == 0) {
       return 0;
     }
-    uint16_t reload_value = kPITTickFrequencyHz / target_freq_hz;
+    uint16_t reload_value = kTestPITTickFrequencyHz / target_freq_hz;
     if (reload_value == 0) {
-      return kPITTickFrequencyHz / 0x10000;
+      return kTestPITTickFrequencyHz / 0x10000;
     }
-    return kPITTickFrequencyHz / reload_value;
+    return kTestPITTickFrequencyHz / reload_value;
   }
 };
 

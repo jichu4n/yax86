@@ -756,6 +756,12 @@ enum {
   // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
   // 0x9FFFF (640KB).
   kMemoryMapEntryConventional = 0,
+  // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
+  kMemoryMapEntryBIOSROM = 0x01,
+  // HDC option ROM - mapped starting at 0xC8000.
+  kMemoryMapEntryHDCOptionROM = 0x0C,
+  // Video RAM - mapped to 0xB0000 (MDA) or 0xB8000 (CGA).
+  kMemoryMapEntryVRAM = 0x10,
 
   // Maximum number of memory map entries.
   kMaxMemoryMapEntries = 16,
@@ -909,6 +915,9 @@ enum {
   kPortMapEntryPIT = 0x40,
   // I/O port map entry for the PPI (ports 0x60-0x63).
   kPortMapEntryPPI = 0x60,
+  // I/O port map entry for the video adapter (ports 0x3B0-0x3BF or
+  // 0x3D0-0x3DF).
+  kPortMapEntryVideo = 0x10,
   // I/O port map entry for the FDC (ports 0x3F0-0x3F7).
   kPortMapEntryFDC = 0x3F0,
   // I/O port map entry for the HDC (ports 0x300-0x30F).

@@ -59,8 +59,8 @@ class InstructionsPerTickTest : public ::testing::Test {
     memory_.assign(kMemorySize, 0);
     cpu_ = CPUState{};
     cpu_.config.context = this;
-    cpu_.config.read_memory_byte = ReadMemoryByte;
-    cpu_.config.write_memory_byte = WriteMemoryByte;
+    cpu_.config.read_memory_byte = TestReadMemoryByte;
+    cpu_.config.write_memory_byte = TestWriteMemoryByte;
     cpu_.config.get_instruction_fetch_window = GetInstructionFetchWindow;
     cpu_.config.acknowledge_interrupt = AcknowledgeInterrupt;
     cpu_.config.interrupt_request_hint = &interrupt_requested_;
@@ -112,13 +112,14 @@ class InstructionsPerTickTest : public ::testing::Test {
     return CPUInstructionsRetired(&cpu_) - before;
   }
 
-  static uint8_t ReadMemoryByte(CPUState* cpu, uint32_t address) {
+  static uint8_t TestReadMemoryByte(CPUState* cpu, uint32_t address) {
     InstructionsPerTickTest* self =
         static_cast<InstructionsPerTickTest*>(cpu->config.context);
     return address < kMemorySize ? self->memory_[address] : 0xFF;
   }
 
-  static void WriteMemoryByte(CPUState* cpu, uint32_t address, uint8_t value) {
+  static void TestWriteMemoryByte(
+      CPUState* cpu, uint32_t address, uint8_t value) {
     InstructionsPerTickTest* self =
         static_cast<InstructionsPerTickTest*>(cpu->config.context);
     if (address < kMemorySize) {

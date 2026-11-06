@@ -623,13 +623,6 @@ enum {
 };
 
 enum {
-  // Video memory map entry type.
-  kMemoryMapEntryVRAM = 0x10,
-  // Video port map entry type.
-  kPortMapEntryVideo = 0x10,
-};
-
-enum {
   // Every supported mode divides horizontally into 80 natural rendering
   // units: text columns on the MDA and 80-column CGA, half-character cells in
   // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.

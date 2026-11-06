@@ -240,11 +240,11 @@ bool LoadMooFile(const std::string& path, std::vector<MooTest>* tests) {
 
 uint8_t g_memory[kMemorySize];
 
-uint8_t ReadMemoryByte(YAX86_UNUSED CPUState* cpu, uint32_t address) {
+uint8_t TestReadMemoryByte(YAX86_UNUSED CPUState* cpu, uint32_t address) {
   return address < kMemorySize ? g_memory[address] : 0xFF;
 }
 
-void WriteMemoryByte(
+void TestWriteMemoryByte(
     YAX86_UNUSED CPUState* cpu, uint32_t address, uint8_t value) {
   if (address < kMemorySize) {
     g_memory[address] = value;
@@ -395,8 +395,8 @@ std::string RunMooTest(
   memset(g_memory, 0, sizeof(g_memory));
 
   CPUState cpu = {};
-  cpu.config.read_memory_byte = ReadMemoryByte;
-  cpu.config.write_memory_byte = WriteMemoryByte;
+  cpu.config.read_memory_byte = TestReadMemoryByte;
+  cpu.config.write_memory_byte = TestWriteMemoryByte;
   cpu.config.get_instruction_fetch_window = GetInstructionFetchWindow;
   // A decode cache, for the same reason the window below is supplied: a
   // capability the host provides is unreachable here unless this suite

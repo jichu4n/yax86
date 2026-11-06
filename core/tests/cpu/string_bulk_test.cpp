@@ -227,8 +227,8 @@ class SplitMemoryHost {
   SplitMemoryHost() {
     cpu_ = CPUState{};
     cpu_.config.context = this;
-    cpu_.config.read_memory_byte = ReadMemoryByte;
-    cpu_.config.write_memory_byte = WriteMemoryByte;
+    cpu_.config.read_memory_byte = TestReadMemoryByte;
+    cpu_.config.write_memory_byte = TestWriteMemoryByte;
     CPUInit(&cpu_);
     CPUSetDirectDataWindow(&cpu_, ram_, kWindowEnd);
   }
@@ -245,10 +245,11 @@ class SplitMemoryHost {
     return nowhere_;
   }
 
-  static uint8_t ReadMemoryByte(CPUState* cpu, uint32_t address) {
+  static uint8_t TestReadMemoryByte(CPUState* cpu, uint32_t address) {
     return static_cast<SplitMemoryHost*>(cpu->config.context)->At(address);
   }
-  static void WriteMemoryByte(CPUState* cpu, uint32_t address, uint8_t value) {
+  static void TestWriteMemoryByte(
+      CPUState* cpu, uint32_t address, uint8_t value) {
     static_cast<SplitMemoryHost*>(cpu->config.context)->At(address) = value;
   }
 
