@@ -172,6 +172,44 @@ intentionally added, removed, or renamed, update the allowlist:
 ./tools/check-public-symbols.sh --update
 ```
 
+### The namespace check
+
+`tools/check-namespace.js` checks that every file-scope name
+`core/yax86_core.h` brings into a host's translation unit follows the naming
+rule under "Naming" below, and that the owner it names is the module that
+defines it.
+
+**Types, enum values and macros are what it exists to catch**, because the
+public symbols allowlist cannot see them: `nm` reads a linker symbol table, and
+none of those three ever reaches one. They are also where most of a header's
+exposure is - a host with a type of its own called Position, or one that
+includes another library with an enum value called kAX, fails to compile
+against the core however clean its symbol table is.
+
+It reads names from the compiler rather than from tokens: the top-level
+declarations in a clang JSON AST dump of the bundle, so that block scope is
+excluded by construction, and the macros from `clang -E -dM` less those the
+system headers define. clang's JSON reports physical locations, so the owner is
+recovered from the bundle's `#line` directives. It needs `clang` whatever `CC`
+is, since only clang dumps an AST, and fails saying so rather than skipping
+when there is none.
+
+While `core/rename_map.txt` exists, the names in its second column are exempt.
+That file is the list of names that predate the rule, and shrinks as they are
+renamed:
+
+```sh
+tools/apply-rename-map.js <kind>    # apply one kind of the map, and delete it
+tools/generate-rename-map.js        # regenerate the map from the bundle
+tools/generate-rename-map.js --check
+```
+
+`generate-rename-map.js` is where every naming decision the rule cannot make
+is written down, with its reason, and it refuses to write a map that maps two
+names to one, produces a name the repository already uses, repeats an owner
+without saying it means to, or renames a name a test or a host also defines for
+itself. It reads its names through the same code as the check.
+
 ### Debugging the WASM build
 
 Use the Chrome DevTools MCP server against
@@ -191,7 +229,8 @@ and RAM even when idle.
 
 - Core emulator code is portable C99. Tests are C++14 and use Google Test.
 - All C/C++ code conforms to the Google C++ style guide, formatted with
-  `clang-format`.
+  `clang-format`, except for how file-scope names in the core are spelled -
+  see "Naming" below.
 - No dependencies on libc functions like `printf` or `memset`. Standard library
   headers are fine for types like `uint8_t` and for constants and macros like
   `NULL`.
@@ -203,7 +242,8 @@ and RAM even when idle.
 ### Declarations
 
 - Prefer enums over `#define` for constants, and over numeric literals in
-  logic: define `enum { kFoo = 0xF8 };` rather than writing `0xF8` inline.
+  logic: define `enum { Y_FDC_FOO = 0xF8 };` rather than writing `0xF8`
+  inline.
 - Prefer `static inline` functions over macros.
 - Prefer specific types like `uint8_t` over generic ones like `int` in
   interfaces — function signatures and struct members.
@@ -211,6 +251,69 @@ and RAM even when idle.
   `typedef enum Name { ... } Name;`.
 - Prefix increment and decrement, `++var` and `--var`, not `var++` and `var--`.
 - Annotate unused parameters with `YAX86_UNUSED` from `util/common.h`.
+
+### Naming
+
+`core/yax86_core.h` is the only file a host includes, so every name it defines
+at file scope is a name the host can no longer use. Every one of them is in a
+`Y` namespace, spelled the way SDL, SQLite and Vulkan spell theirs - a prefixed
+CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
+
+> **Anything with a type or storage** — function, typedef, struct or enum tag,
+> file-scope variable, `const` object — is `Y` + owner + CamelCase.
+>
+> **Anything that is a compile-time value** — enum value or macro — is `Y_` +
+> OWNER + `_` + ALL_CAPS.
+
+| kind | example |
+| --- | --- |
+| function | `YCPUTick`, `YCPUReadRegisterOperandByte` |
+| type | `YCPUState`, `YVideoPosition`, `YVideoRGB` |
+| `const` object | `YCPULogModule`, `YVideoDefaultConfig`, `YCPUOpcodeTable` |
+| enum value | `Y_CPU_AX`, `Y_CPU_BYTE`, `Y_FDC_MSR_BUSY`, `Y_PIC_ICW1_INIT` |
+| macro | `Y_HOT`, `Y_CPU_LOG`, `Y_STATIC_VECTOR_TYPE` |
+
+- **The line between the two forms is storage.** An enum value or a macro has
+  no address; a `const` object does, and `&YCPULogModule` reads as taking the
+  address of an object where `&Y_CPU_LOG_MODULE` would read as taking the
+  address of a macro.
+- **The owner is the module whose directory defines the name**: `CPU`,
+  `Platform`, `Video`, `FDC`, `HDC`, `PIT`, `PIC`, `DMA`, `PPI`, `Keyboard`,
+  `BIOS`. A sub-component follows its module - CGA, MDA and the CRTC are part of
+  video and the memory and port maps part of platform, so
+  `YVideoCGARenderRegion`, `Y_VIDEO_CRTC_REGISTER_CURSOR_START` and
+  `YPlatformMemoryMapEntry`. The module prefixes are what keep the modules
+  apart from each other in the one translation unit they compile into, where
+  eleven init functions would otherwise all be called Init.
+- **util is not a module**, and each of its headers is its own owner: `Log`
+  (whose state and config are `YLogger` and `YLoggerConfig`), `StaticVector`,
+  and `SNPrintF`, whose `va_list` form keeps C's prefix at the front as
+  `YVSNPrintF`. There is no `YUtil`. The macros in `util/common.h` are the
+  project's own infrastructure and have no owner: `Y_PUBLIC`, `Y_HOT`,
+  `Y_UNUSED`, and `Y_IMPLEMENTATION`, which a host defines.
+- **A name that already says its owner does not say it twice.** The owner
+  leads, and a repeat elsewhere in the name goes: `YVideoDefaultConfig`,
+  `Y_VIDEO_NUM_MODES`, `YCPULogModule`. A second occurrence that is part of
+  what the name means stays - `Y_VIDEO_CONTROL_VIDEO_ENABLE` is the CGA
+  control register's video enable bit.
+- **ALL_CAPS is split at every CamelCase word boundary, and a digit group stays
+  with the word it qualifies**: `Y_FDC_ST0_NOT_READY`,
+  `Y_FDC_DOR_MOTOR0_ENABLE`, `Y_VIDEO_CRTC_REGISTER_RESERVED16`, and
+  `Y_PPI_MEMORY_SIZE_128KB`, where the number quantifies the unit after it. A
+  resolution is a word of its own, as in `Y_VIDEO_CGA_PIXEL_MASK_320X200`.
+- **Block scope is not affected.** Locals, parameters and struct members are
+  snake_case, and a block-scope constant keeps Google's `kName`. Only file
+  scope is shared with a host, and the namespace check reads only top-level
+  declarations.
+- **This departs from the Google style guide**, which names enumerators
+  `kEnumName`. The guide's own reason for that is that macro-style enumerators
+  collided with macros; with every enumerator and every macro under `Y_`, a
+  collision can only be with a name this project owns. The guide is also
+  written for C++, where `enum class` and namespaces scope an enumerator, and C
+  has neither.
+- Names that predate the rule are listed in `core/rename_map.txt` with what each
+  becomes, and are exempt from the namespace check until they are renamed. A
+  new name follows the rule; see "The namespace check" above for the tools.
 
 ### Visibility
 

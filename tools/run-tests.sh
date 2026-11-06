@@ -6,6 +6,7 @@ set -ex
 
 tools/check-unbundled.sh
 tools/check-public-symbols.sh
+tools/check-namespace.js
 
 # Must run before ctest, which enumerates the downloaded opcodes at discovery
 # time.
