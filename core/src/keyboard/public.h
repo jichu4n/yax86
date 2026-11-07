@@ -1,6 +1,6 @@
 // Public interface for the Keyboard module.
-#ifndef Y_KEYBOARD_PUBLIC_H
-#define Y_KEYBOARD_PUBLIC_H
+#ifndef YAX86_KEYBOARD_PUBLIC_H
+#define YAX86_KEYBOARD_PUBLIC_H
 
 // This module emulates a PC/XT keyboard and its interface to the 8255 PPI.
 //
@@ -41,10 +41,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_KEYBOARD_BUNDLE_H
+#ifndef YAX86_KEYBOARD_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // Y_KEYBOARD_BUNDLE_H
+#endif  // YAX86_KEYBOARD_BUNDLE_H
 
 enum {
   // Log module ID for the Keyboard.
@@ -127,4 +127,4 @@ Y_PUBLIC void YKeyboardHandleKeyPress(
 // send buffered scancodes.
 Y_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard);
 
-#endif  // Y_KEYBOARD_PUBLIC_H
+#endif  // YAX86_KEYBOARD_PUBLIC_H

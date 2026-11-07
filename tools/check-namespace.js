@@ -8,7 +8,13 @@
 // - an enum value is Y_, its owner, _, then ALL_CAPS;
 // - a macro is Y_ then ALL_CAPS.
 //
-// YAX86_IMPLEMENTATION, which a host defines, is outside the rule.
+// YAX86_IMPLEMENTATION, which a host defines, and the include guards are not
+// names the header gives a host: each decides what the header compiles to, so
+// both keep the project's full name. YAX86_IMPLEMENTATION is not checked, and
+// an include guard must be YAX86_ then ALL_CAPS. An include guard is a macro
+// ending in _H that the bundle defines on the line after testing it with
+// #ifndef; the suffix is what tells one from a default such as Y_HOT, which has
+// the same shape.
 //
 // Names come from the compiler rather than from a grep: the top-level
 // declarations in a clang AST dump of the bundle, and the macros it defines.
@@ -283,8 +289,14 @@ function collectMacros() {
 }
 
 // Why a name breaks the rule for its kind and owner, or null if it does not.
-// kind is type, function, object, enum or macro; owner is ignored for a macro.
+// kind is type, function, object, enum, macro or guard; owner is ignored for
+// the last two.
 function ruleBroken(name, kind, owner) {
+  if (kind === 'guard') {
+    return /^YAX86_[A-Z0-9_]+$/.test(name)
+      ? null
+      : 'an include guard is YAX86_ then ALL_CAPS';
+  }
   if (kind === 'macro') {
     return /^Y_[A-Z0-9_]+$/.test(name) ? null : 'a macro is Y_ then ALL_CAPS';
   }
@@ -299,6 +311,18 @@ function ruleBroken(name, kind, owner) {
     : `a ${kind} of ${owner} is Y${owner} then CamelCase`;
 }
 
+// The macros the bundle uses as include guards.
+function collectGuards() {
+  const text = fs.readFileSync(path.join(ROOT, BUNDLE), 'utf8');
+  const guards = new Set();
+  const re = /^#ifndef (\w+_H)\n#define \1$/gm;
+  let match;
+  while ((match = re.exec(text))) {
+    guards.add(match[1]);
+  }
+  return guards;
+}
+
 function main() {
   const failures = [];
   for (const {name, kind, owner} of collectDeclarations()) {
@@ -307,10 +331,12 @@ function main() {
       failures.push(`${kind} ${name}: ${broken}`);
     }
   }
+  const guards = collectGuards();
   for (const name of collectMacros()) {
-    const broken = ruleBroken(name, 'macro', null);
+    const kind = guards.has(name) ? 'guard' : 'macro';
+    const broken = ruleBroken(name, kind, null);
     if (broken) {
-      failures.push(`macro ${name}: ${broken}`);
+      failures.push(`${kind} ${name}: ${broken}`);
     }
   }
   if (failures.length > 0) {

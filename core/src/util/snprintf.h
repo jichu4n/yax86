@@ -1,14 +1,14 @@
-#ifndef Y_UTIL_SNPRINTF_H
-#define Y_UTIL_SNPRINTF_H
+#ifndef YAX86_UTIL_SNPRINTF_H
+#define YAX86_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -273,4 +273,4 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H

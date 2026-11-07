@@ -1,5 +1,5 @@
-#ifndef Y_CPU_TYPES_H
-#define Y_CPU_TYPES_H
+#ifndef YAX86_CPU_TYPES_H
+#define YAX86_CPU_TYPES_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "public.h"
@@ -166,4 +166,4 @@ typedef struct YCPUOpcodeMetadata {
   YCPUOpcodeHandler handler;
 } YCPUOpcodeMetadata;
 
-#endif  // Y_CPU_TYPES_H
+#endif  // YAX86_CPU_TYPES_H

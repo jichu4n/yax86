@@ -1,6 +1,6 @@
 // Public interface for the PIC (Programmable Interrupt Controller) module.
-#ifndef Y_PIC_PUBLIC_H
-#define Y_PIC_PUBLIC_H
+#ifndef YAX86_PIC_PUBLIC_H
+#define YAX86_PIC_PUBLIC_H
 
 // This module emulates the Intel 8259 PIC(s) on the IBM PC series. There are
 // two possible configurations:
@@ -22,9 +22,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_PIC_BUNDLE_H
+#ifndef YAX86_PIC_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_PIC_BUNDLE_H
+#endif  // YAX86_PIC_BUNDLE_H
 
 enum {
   // Log module ID for the PIC.
@@ -186,4 +186,4 @@ Y_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 // Y_PIC_NO_PENDING_INTERRUPT.
 Y_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 
-#endif  // Y_PIC_PUBLIC_H
+#endif  // YAX86_PIC_PUBLIC_H

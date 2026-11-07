@@ -1,6 +1,6 @@
 // Public interface for the DMA (Direct Memory Access) module.
-#ifndef Y_DMA_PUBLIC_H
-#define Y_DMA_PUBLIC_H
+#ifndef YAX86_DMA_PUBLIC_H
+#define YAX86_DMA_PUBLIC_H
 
 // This module emulates the Intel 8237 DMA controller used in the IBM PC/XT.
 // The DMA controller allows peripherals to transfer data directly to and from
@@ -25,9 +25,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_DMA_BUNDLE_H
+#ifndef YAX86_DMA_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_DMA_BUNDLE_H
+#endif  // YAX86_DMA_BUNDLE_H
 
 enum {
   // Log module ID for the DMA.
@@ -222,4 +222,4 @@ Y_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
 // peripheral.
 Y_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
 
-#endif  // Y_DMA_PUBLIC_H
+#endif  // YAX86_DMA_PUBLIC_H

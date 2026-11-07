@@ -2,8 +2,8 @@
 // YAX86 PPI MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef Y_PPI_BUNDLE_H
-#define Y_PPI_BUNDLE_H
+#ifndef YAX86_PPI_BUNDLE_H
+#define YAX86_PPI_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,8 +14,8 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef Y_UTIL_COMMON_H
-#define Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
@@ -104,7 +104,7 @@ extern "C" {
 #define Y_HOT_DATA
 #endif  // Y_HOT_DATA
 
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -116,17 +116,17 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/snprintf.h"
-#ifndef Y_UTIL_SNPRINTF_H
-#define Y_UTIL_SNPRINTF_H
+#ifndef YAX86_UTIL_SNPRINTF_H
+#define YAX86_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -391,7 +391,7 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 
 // ==============================================================================
@@ -410,8 +410,8 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef Y_UTIL_LOG_H
-#define Y_UTIL_LOG_H
+#ifndef YAX86_UTIL_LOG_H
+#define YAX86_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -421,12 +421,12 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // Sibling includes are guarded by the target's own include guard rather than
 // by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
-#ifndef Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_COMMON_H
+#ifndef YAX86_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -592,7 +592,7 @@ Y_PUBLIC_HEADER void YLoggerWrite(
     }                                                         \
   } while (0)
 
-#endif  // Y_UTIL_LOG_H
+#endif  // YAX86_UTIL_LOG_H
 
 
 // ==============================================================================
@@ -605,8 +605,8 @@ Y_PUBLIC_HEADER void YLoggerWrite(
 
 #line 1 "./src/ppi/public.h"
 // Public interface for the PPI (Programmable Peripheral Interface) module.
-#ifndef Y_PPI_PUBLIC_H
-#define Y_PPI_PUBLIC_H
+#ifndef YAX86_PPI_PUBLIC_H
+#define YAX86_PPI_PUBLIC_H
 
 // This module emulates the Intel 8255 PPI chip as used in the IBM PC and
 // PC/XT. Note that we don't implement all features of the 8255, only those
@@ -662,9 +662,9 @@ Y_PUBLIC_HEADER void YLoggerWrite(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_PPI_BUNDLE_H
+#ifndef YAX86_PPI_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_PPI_BUNDLE_H
+#endif  // YAX86_PPI_BUNDLE_H
 
 enum {
   // Log module ID for the PPI.
@@ -807,7 +807,7 @@ Y_PUBLIC void YPPISetPCSpeakerFrequencyFromPIT(
 // This function should be called by the keyboard emulation module.
 Y_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode);
 
-#endif  // Y_PPI_PUBLIC_H
+#endif  // YAX86_PPI_PUBLIC_H
 
 
 // ==============================================================================
@@ -961,5 +961,5 @@ Y_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode) {
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // Y_PPI_BUNDLE_H
+#endif  // YAX86_PPI_BUNDLE_H
 

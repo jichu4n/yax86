@@ -48,7 +48,7 @@ async function generateHeaderBundle({
   rootDirPath,
   moduleDir,
 }) {
-  const includeGuard = `Y_${moduleName.toUpperCase()}_BUNDLE_H`;
+  const includeGuard = `YAX86_${moduleName.toUpperCase()}_BUNDLE_H`;
   const publicContent = await readAndWrapFileContent({
     fileNames: public,
     rootDirPath,

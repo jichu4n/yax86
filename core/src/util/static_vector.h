@@ -4,8 +4,8 @@
 // a vector, but whose underlying storage is statically allocated and does not
 // rely on dynamic memory allocation.
 
-#ifndef Y_UTIL_STATIC_VECTOR_H
-#define Y_UTIL_STATIC_VECTOR_H
+#ifndef YAX86_UTIL_STATIC_VECTOR_H
+#define YAX86_UTIL_STATIC_VECTOR_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -92,4 +92,4 @@ typedef struct YStaticVectorHeader {
   static void name##Clear(name* vector) __attribute__((unused));          \
   static void name##Clear(name* vector) { vector->header.length = 0; }
 
-#endif  // Y_UTIL_STATIC_VECTOR_H
+#endif  // YAX86_UTIL_STATIC_VECTOR_H

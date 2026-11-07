@@ -1,5 +1,5 @@
-#ifndef Y_CPU_INSTRUCTIONS_H
-#define Y_CPU_INSTRUCTIONS_H
+#ifndef YAX86_CPU_INSTRUCTIONS_H
+#define YAX86_CPU_INSTRUCTIONS_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -551,4 +551,4 @@ YCPUExecuteGroup4Instruction(const YCPUInstructionContext* ctx);
 Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx);
 
-#endif  // Y_CPU_INSTRUCTIONS_H
+#endif  // YAX86_CPU_INSTRUCTIONS_H

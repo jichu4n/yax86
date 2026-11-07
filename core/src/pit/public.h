@@ -1,6 +1,6 @@
 // Public interface for the PIT module.
-#ifndef Y_PIT_PUBLIC_H
-#define Y_PIT_PUBLIC_H
+#ifndef YAX86_PIT_PUBLIC_H
+#define YAX86_PIT_PUBLIC_H
 
 // This module emulates the Intel 8253/8254 PIT on the IBM PC series.
 //
@@ -15,9 +15,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_PIT_BUNDLE_H
+#ifndef YAX86_PIT_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_PIT_BUNDLE_H
+#endif  // YAX86_PIT_BUNDLE_H
 
 enum {
   // Log module ID for the PIT.
@@ -164,4 +164,4 @@ Y_PUBLIC void YPITAdvance(YPITState* pit, uint32_t num_ticks);
 // whereas one that waited longer would miss an edge.
 Y_PUBLIC uint32_t YPITTicksUntilNextEvent(const YPITState* pit);
 
-#endif  // Y_PIT_PUBLIC_H
+#endif  // YAX86_PIT_PUBLIC_H

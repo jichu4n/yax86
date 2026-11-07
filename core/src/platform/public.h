@@ -1,15 +1,15 @@
 // Public interface for the Platform module.
-#ifndef Y_PLATFORM_PUBLIC_H
-#define Y_PLATFORM_PUBLIC_H
+#ifndef YAX86_PLATFORM_PUBLIC_H
+#define YAX86_PLATFORM_PUBLIC_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef Y_PLATFORM_BUNDLE_H
+#ifndef YAX86_PLATFORM_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // Y_PLATFORM_BUNDLE_H
+#endif  // YAX86_PLATFORM_BUNDLE_H
 
 enum {
   // Log module ID for the Platform.
@@ -535,4 +535,4 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
 // reached.
 Y_PUBLIC void YPlatformSync(YPlatformState* platform);
 
-#endif  // Y_PLATFORM_PUBLIC_H
+#endif  // YAX86_PLATFORM_PUBLIC_H

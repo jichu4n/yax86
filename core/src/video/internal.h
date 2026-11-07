@@ -1,6 +1,6 @@
 // Internal interface shared between the video module's source files.
-#ifndef Y_VIDEO_INTERNAL_H
-#define Y_VIDEO_INTERNAL_H
+#ifndef YAX86_VIDEO_INTERNAL_H
+#define YAX86_VIDEO_INTERNAL_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -123,4 +123,4 @@ Y_MODULE_PRIVATE void YVideoCGARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
-#endif  // Y_VIDEO_INTERNAL_H
+#endif  // YAX86_VIDEO_INTERNAL_H

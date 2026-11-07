@@ -1,6 +1,6 @@
 // Public interface for the Floppy Disk Controller (FDC) module.
-#ifndef Y_FDC_PUBLIC_H
-#define Y_FDC_PUBLIC_H
+#ifndef YAX86_FDC_PUBLIC_H
+#define YAX86_FDC_PUBLIC_H
 
 // This module emulates the NEC uPD765 Floppy Disk Controller. It handles I/O
 // port communication and DMA transfers for floppy operations. Actual disk
@@ -9,10 +9,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_FDC_BUNDLE_H
+#ifndef YAX86_FDC_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // Y_FDC_BUNDLE_H
+#endif  // YAX86_FDC_BUNDLE_H
 
 enum {
   // Log module ID for the FDC.
@@ -306,4 +306,4 @@ Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive);
 // Simulates a tick of the FDC, handling any timed operations.
 Y_PUBLIC void YFDCTick(YFDCState* fdc);
 
-#endif  // Y_FDC_PUBLIC_H
+#endif  // YAX86_FDC_PUBLIC_H

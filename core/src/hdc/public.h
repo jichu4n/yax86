@@ -1,6 +1,6 @@
 // Public interface for the Hard Disk Controller (HDC) module.
-#ifndef Y_HDC_PUBLIC_H
-#define Y_HDC_PUBLIC_H
+#ifndef YAX86_HDC_PUBLIC_H
+#define YAX86_HDC_PUBLIC_H
 
 // This module emulates an XT-IDE rev 2 hard disk controller - an 8-bit ATA
 // task file operated in PIO mode, with no DMA and no interrupt line.
@@ -18,9 +18,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_HDC_BUNDLE_H
+#ifndef YAX86_HDC_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_HDC_BUNDLE_H
+#endif  // YAX86_HDC_BUNDLE_H
 
 enum {
   // Log module ID for the HDC.
@@ -307,4 +307,4 @@ Y_PUBLIC_HEADER inline uint8_t YHDCPortOffsetToRegister(uint8_t offset) {
                    ((offset >> 3) & 0x01));
 }
 
-#endif  // Y_HDC_PUBLIC_H
+#endif  // YAX86_HDC_PUBLIC_H

@@ -1,5 +1,5 @@
-#ifndef Y_VIDEO_FONTS_H
-#define Y_VIDEO_FONTS_H
+#ifndef YAX86_VIDEO_FONTS_H
+#define YAX86_VIDEO_FONTS_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -12,4 +12,4 @@ extern const uint8_t YVideoFontCGA8x8Bitmap[256][8];
 
 #endif  // YAX86_IMPLEMENTATION
 
-#endif  // Y_VIDEO_FONTS_H
+#endif  // YAX86_VIDEO_FONTS_H

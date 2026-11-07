@@ -5,8 +5,8 @@
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef Y_UTIL_LOG_H
-#define Y_UTIL_LOG_H
+#ifndef YAX86_UTIL_LOG_H
+#define YAX86_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -16,12 +16,12 @@
 // Sibling includes are guarded by the target's own include guard rather than
 // by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
-#ifndef Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_COMMON_H
+#ifndef YAX86_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -187,4 +187,4 @@ Y_PUBLIC_HEADER void YLoggerWrite(
     }                                                         \
   } while (0)
 
-#endif  // Y_UTIL_LOG_H
+#endif  // YAX86_UTIL_LOG_H

@@ -1,5 +1,5 @@
-#ifndef Y_CPU_OPERANDS_H
-#define Y_CPU_OPERANDS_H
+#ifndef YAX86_CPU_OPERANDS_H
+#define YAX86_CPU_OPERANDS_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -153,4 +153,4 @@ Y_MODULE_PRIVATE void YCPUWriteOperand(
 Y_MODULE_PRIVATE YCPUOperandValue
 YCPUReadImmediate(const YCPUInstructionContext* ctx);
 
-#endif  // Y_CPU_OPERANDS_H
+#endif  // YAX86_CPU_OPERANDS_H

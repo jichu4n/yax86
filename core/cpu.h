@@ -2,8 +2,8 @@
 // YAX86 CPU MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef Y_CPU_BUNDLE_H
-#define Y_CPU_BUNDLE_H
+#ifndef YAX86_CPU_BUNDLE_H
+#define YAX86_CPU_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,8 +14,8 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef Y_UTIL_COMMON_H
-#define Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
@@ -104,7 +104,7 @@ extern "C" {
 #define Y_HOT_DATA
 #endif  // Y_HOT_DATA
 
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -116,17 +116,17 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/snprintf.h"
-#ifndef Y_UTIL_SNPRINTF_H
-#define Y_UTIL_SNPRINTF_H
+#ifndef YAX86_UTIL_SNPRINTF_H
+#define YAX86_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -391,7 +391,7 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 
 // ==============================================================================
@@ -410,8 +410,8 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef Y_UTIL_LOG_H
-#define Y_UTIL_LOG_H
+#ifndef YAX86_UTIL_LOG_H
+#define YAX86_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -421,12 +421,12 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // Sibling includes are guarded by the target's own include guard rather than
 // by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
-#ifndef Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_COMMON_H
+#ifndef YAX86_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -592,7 +592,7 @@ Y_PUBLIC_HEADER void YLoggerWrite(
     }                                                         \
   } while (0)
 
-#endif  // Y_UTIL_LOG_H
+#endif  // YAX86_UTIL_LOG_H
 
 
 // ==============================================================================
@@ -605,15 +605,15 @@ Y_PUBLIC_HEADER void YLoggerWrite(
 
 #line 1 "./src/cpu/public.h"
 // Public interface for the CPU emulator module.
-#ifndef Y_CPU_PUBLIC_H
-#define Y_CPU_PUBLIC_H
+#ifndef YAX86_CPU_PUBLIC_H
+#define YAX86_CPU_PUBLIC_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_CPU_BUNDLE_H
+#ifndef YAX86_CPU_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_CPU_BUNDLE_H
+#endif  // YAX86_CPU_BUNDLE_H
 
 enum {
   // Log module ID for the CPU.
@@ -1319,7 +1319,7 @@ enum {
 // passes, and it is the behaviour this had before there were runs at all.
 Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 
-#endif  // Y_CPU_PUBLIC_H
+#endif  // YAX86_CPU_PUBLIC_H
 
 
 // ==============================================================================
@@ -1334,8 +1334,8 @@ Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef Y_UTIL_COMMON_H
-#define Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
@@ -1424,7 +1424,7 @@ Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 #define Y_HOT_DATA
 #endif  // Y_HOT_DATA
 
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -1436,8 +1436,8 @@ Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 // ==============================================================================
 
 #line 1 "./src/cpu/types.h"
-#ifndef Y_CPU_TYPES_H
-#define Y_CPU_TYPES_H
+#ifndef YAX86_CPU_TYPES_H
+#define YAX86_CPU_TYPES_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "public.h"
@@ -1604,7 +1604,7 @@ typedef struct YCPUOpcodeMetadata {
   YCPUOpcodeHandler handler;
 } YCPUOpcodeMetadata;
 
-#endif  // Y_CPU_TYPES_H
+#endif  // YAX86_CPU_TYPES_H
 
 
 // ==============================================================================
@@ -1616,8 +1616,8 @@ typedef struct YCPUOpcodeMetadata {
 // ==============================================================================
 
 #line 1 "./src/cpu/cycles.h"
-#ifndef Y_CPU_CYCLES_H
-#define Y_CPU_CYCLES_H
+#ifndef YAX86_CPU_CYCLES_H
+#define YAX86_CPU_CYCLES_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -1647,7 +1647,7 @@ YCPUGetEffectiveAddressCycles(const YCPUInstruction* instruction);
 // Charge the instruction currently executing for time on the data bus.
 Y_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes);
 
-#endif  // Y_CPU_CYCLES_H
+#endif  // YAX86_CPU_CYCLES_H
 
 
 // ==============================================================================
@@ -1659,8 +1659,8 @@ Y_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes);
 // ==============================================================================
 
 #line 1 "./src/cpu/operands.h"
-#ifndef Y_CPU_OPERANDS_H
-#define Y_CPU_OPERANDS_H
+#ifndef YAX86_CPU_OPERANDS_H
+#define YAX86_CPU_OPERANDS_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -1814,7 +1814,7 @@ Y_MODULE_PRIVATE void YCPUWriteOperand(
 Y_MODULE_PRIVATE YCPUOperandValue
 YCPUReadImmediate(const YCPUInstructionContext* ctx);
 
-#endif  // Y_CPU_OPERANDS_H
+#endif  // YAX86_CPU_OPERANDS_H
 
 
 // ==============================================================================
@@ -2518,8 +2518,8 @@ YCPUReadImmediate(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions.h"
-#ifndef Y_CPU_INSTRUCTIONS_H
-#define Y_CPU_INSTRUCTIONS_H
+#ifndef YAX86_CPU_INSTRUCTIONS_H
+#define YAX86_CPU_INSTRUCTIONS_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -3071,7 +3071,7 @@ YCPUExecuteGroup4Instruction(const YCPUInstructionContext* ctx);
 Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx);
 
-#endif  // Y_CPU_INSTRUCTIONS_H
+#endif  // YAX86_CPU_INSTRUCTIONS_H
 
 
 // ==============================================================================
@@ -8421,5 +8421,5 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // Y_CPU_BUNDLE_H
+#endif  // YAX86_CPU_BUNDLE_H
 

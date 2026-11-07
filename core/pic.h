@@ -2,8 +2,8 @@
 // YAX86 PIC MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef Y_PIC_BUNDLE_H
-#define Y_PIC_BUNDLE_H
+#ifndef YAX86_PIC_BUNDLE_H
+#define YAX86_PIC_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,8 +14,8 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef Y_UTIL_COMMON_H
-#define Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
@@ -104,7 +104,7 @@ extern "C" {
 #define Y_HOT_DATA
 #endif  // Y_HOT_DATA
 
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -116,17 +116,17 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/snprintf.h"
-#ifndef Y_UTIL_SNPRINTF_H
-#define Y_UTIL_SNPRINTF_H
+#ifndef YAX86_UTIL_SNPRINTF_H
+#define YAX86_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -391,7 +391,7 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 
 // ==============================================================================
@@ -410,8 +410,8 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef Y_UTIL_LOG_H
-#define Y_UTIL_LOG_H
+#ifndef YAX86_UTIL_LOG_H
+#define YAX86_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -421,12 +421,12 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // Sibling includes are guarded by the target's own include guard rather than
 // by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
-#ifndef Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_COMMON_H
+#ifndef YAX86_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -592,7 +592,7 @@ Y_PUBLIC_HEADER void YLoggerWrite(
     }                                                         \
   } while (0)
 
-#endif  // Y_UTIL_LOG_H
+#endif  // YAX86_UTIL_LOG_H
 
 
 // ==============================================================================
@@ -605,8 +605,8 @@ Y_PUBLIC_HEADER void YLoggerWrite(
 
 #line 1 "./src/pic/public.h"
 // Public interface for the PIC (Programmable Interrupt Controller) module.
-#ifndef Y_PIC_PUBLIC_H
-#define Y_PIC_PUBLIC_H
+#ifndef YAX86_PIC_PUBLIC_H
+#define YAX86_PIC_PUBLIC_H
 
 // This module emulates the Intel 8259 PIC(s) on the IBM PC series. There are
 // two possible configurations:
@@ -628,9 +628,9 @@ Y_PUBLIC_HEADER void YLoggerWrite(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_PIC_BUNDLE_H
+#ifndef YAX86_PIC_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_PIC_BUNDLE_H
+#endif  // YAX86_PIC_BUNDLE_H
 
 enum {
   // Log module ID for the PIC.
@@ -792,7 +792,7 @@ Y_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 // Y_PIC_NO_PENDING_INTERRUPT.
 Y_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 
-#endif  // Y_PIC_PUBLIC_H
+#endif  // YAX86_PIC_PUBLIC_H
 
 
 // ==============================================================================
@@ -1148,5 +1148,5 @@ Y_PUBLIC Y_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // Y_PIC_BUNDLE_H
+#endif  // YAX86_PIC_BUNDLE_H
 

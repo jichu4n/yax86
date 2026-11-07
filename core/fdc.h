@@ -2,8 +2,8 @@
 // YAX86 FDC MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef Y_FDC_BUNDLE_H
-#define Y_FDC_BUNDLE_H
+#ifndef YAX86_FDC_BUNDLE_H
+#define YAX86_FDC_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,8 +14,8 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef Y_UTIL_COMMON_H
-#define Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
@@ -104,7 +104,7 @@ extern "C" {
 #define Y_HOT_DATA
 #endif  // Y_HOT_DATA
 
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -116,17 +116,17 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/snprintf.h"
-#ifndef Y_UTIL_SNPRINTF_H
-#define Y_UTIL_SNPRINTF_H
+#ifndef YAX86_UTIL_SNPRINTF_H
+#define YAX86_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -391,7 +391,7 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 
 // ==============================================================================
@@ -410,8 +410,8 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef Y_UTIL_LOG_H
-#define Y_UTIL_LOG_H
+#ifndef YAX86_UTIL_LOG_H
+#define YAX86_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -421,12 +421,12 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 // Sibling includes are guarded by the target's own include guard rather than
 // by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
 #include "common.h"
-#endif  // Y_UTIL_COMMON_H
-#ifndef Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_COMMON_H
+#ifndef YAX86_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // Y_UTIL_SNPRINTF_H
+#endif  // YAX86_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -592,7 +592,7 @@ Y_PUBLIC_HEADER void YLoggerWrite(
     }                                                         \
   } while (0)
 
-#endif  // Y_UTIL_LOG_H
+#endif  // YAX86_UTIL_LOG_H
 
 
 // ==============================================================================
@@ -610,8 +610,8 @@ Y_PUBLIC_HEADER void YLoggerWrite(
 // a vector, but whose underlying storage is statically allocated and does not
 // rely on dynamic memory allocation.
 
-#ifndef Y_UTIL_STATIC_VECTOR_H
-#define Y_UTIL_STATIC_VECTOR_H
+#ifndef YAX86_UTIL_STATIC_VECTOR_H
+#define YAX86_UTIL_STATIC_VECTOR_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -698,7 +698,7 @@ typedef struct YStaticVectorHeader {
   static void name##Clear(name* vector) __attribute__((unused));          \
   static void name##Clear(name* vector) { vector->header.length = 0; }
 
-#endif  // Y_UTIL_STATIC_VECTOR_H
+#endif  // YAX86_UTIL_STATIC_VECTOR_H
 
 
 // ==============================================================================
@@ -711,8 +711,8 @@ typedef struct YStaticVectorHeader {
 
 #line 1 "./src/fdc/public.h"
 // Public interface for the Floppy Disk Controller (FDC) module.
-#ifndef Y_FDC_PUBLIC_H
-#define Y_FDC_PUBLIC_H
+#ifndef YAX86_FDC_PUBLIC_H
+#define YAX86_FDC_PUBLIC_H
 
 // This module emulates the NEC uPD765 Floppy Disk Controller. It handles I/O
 // port communication and DMA transfers for floppy operations. Actual disk
@@ -721,10 +721,10 @@ typedef struct YStaticVectorHeader {
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_FDC_BUNDLE_H
+#ifndef YAX86_FDC_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // Y_FDC_BUNDLE_H
+#endif  // YAX86_FDC_BUNDLE_H
 
 enum {
   // Log module ID for the FDC.
@@ -1018,7 +1018,7 @@ Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive);
 // Simulates a tick of the FDC, handling any timed operations.
 Y_PUBLIC void YFDCTick(YFDCState* fdc);
 
-#endif  // Y_FDC_PUBLIC_H
+#endif  // YAX86_FDC_PUBLIC_H
 
 
 // ==============================================================================
@@ -1842,5 +1842,5 @@ Y_PUBLIC void YFDCTick(YFDCState* fdc) {
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // Y_FDC_BUNDLE_H
+#endif  // YAX86_FDC_BUNDLE_H
 

@@ -1,6 +1,6 @@
 // Public interface for the PPI (Programmable Peripheral Interface) module.
-#ifndef Y_PPI_PUBLIC_H
-#define Y_PPI_PUBLIC_H
+#ifndef YAX86_PPI_PUBLIC_H
+#define YAX86_PPI_PUBLIC_H
 
 // This module emulates the Intel 8255 PPI chip as used in the IBM PC and
 // PC/XT. Note that we don't implement all features of the 8255, only those
@@ -56,9 +56,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_PPI_BUNDLE_H
+#ifndef YAX86_PPI_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_PPI_BUNDLE_H
+#endif  // YAX86_PPI_BUNDLE_H
 
 enum {
   // Log module ID for the PPI.
@@ -201,4 +201,4 @@ Y_PUBLIC void YPPISetPCSpeakerFrequencyFromPIT(
 // This function should be called by the keyboard emulation module.
 Y_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode);
 
-#endif  // Y_PPI_PUBLIC_H
+#endif  // YAX86_PPI_PUBLIC_H

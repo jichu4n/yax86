@@ -1,13 +1,13 @@
 // Public interface for the CPU emulator module.
-#ifndef Y_CPU_PUBLIC_H
-#define Y_CPU_PUBLIC_H
+#ifndef YAX86_CPU_PUBLIC_H
+#define YAX86_CPU_PUBLIC_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef Y_CPU_BUNDLE_H
+#ifndef YAX86_CPU_BUNDLE_H
 #include "../util/log.h"
-#endif  // Y_CPU_BUNDLE_H
+#endif  // YAX86_CPU_BUNDLE_H
 
 enum {
   // Log module ID for the CPU.
@@ -713,4 +713,4 @@ enum {
 // passes, and it is the behaviour this had before there were runs at all.
 Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 
-#endif  // Y_CPU_PUBLIC_H
+#endif  // YAX86_CPU_PUBLIC_H

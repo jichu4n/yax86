@@ -1,15 +1,15 @@
 // Public interface for the Video module.
-#ifndef Y_VIDEO_PUBLIC_H
-#define Y_VIDEO_PUBLIC_H
+#ifndef YAX86_VIDEO_PUBLIC_H
+#define YAX86_VIDEO_PUBLIC_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef Y_VIDEO_BUNDLE_H
+#ifndef YAX86_VIDEO_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // Y_VIDEO_BUNDLE_H
+#endif  // YAX86_VIDEO_BUNDLE_H
 
 enum {
   // Log module ID for the Video.
@@ -841,4 +841,4 @@ Y_PUBLIC void YVideoTick(YVideoState* video, uint32_t cycles);
 // unchanged.
 Y_PUBLIC void YVideoRender(YVideoState* video);
 
-#endif  // Y_VIDEO_PUBLIC_H
+#endif  // YAX86_VIDEO_PUBLIC_H

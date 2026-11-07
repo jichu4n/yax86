@@ -1,5 +1,5 @@
-#ifndef Y_CPU_CYCLES_H
-#define Y_CPU_CYCLES_H
+#ifndef YAX86_CPU_CYCLES_H
+#define YAX86_CPU_CYCLES_H
 
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
@@ -29,4 +29,4 @@ YCPUGetEffectiveAddressCycles(const YCPUInstruction* instruction);
 // Charge the instruction currently executing for time on the data bus.
 Y_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes);
 
-#endif  // Y_CPU_CYCLES_H
+#endif  // YAX86_CPU_CYCLES_H

@@ -1,5 +1,5 @@
-#ifndef Y_UTIL_COMMON_H
-#define Y_UTIL_COMMON_H
+#ifndef YAX86_UTIL_COMMON_H
+#define YAX86_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
@@ -88,4 +88,4 @@
 #define Y_HOT_DATA
 #endif  // Y_HOT_DATA
 
-#endif  // Y_UTIL_COMMON_H
+#endif  // YAX86_UTIL_COMMON_H
