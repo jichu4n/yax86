@@ -1,11 +1,11 @@
 #ifndef Y_CPU_OPERANDS_H
 #define Y_CPU_OPERANDS_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Narrow a computed result to what an operand of the given width holds.
 Y_MODULE_PRIVATE YCPUOperandValue

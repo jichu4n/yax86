@@ -1,9 +1,9 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "operands.h"
 
 #include "../util/common.h"
 #include "cycles.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // What the unreachable arm of a width dispatch returns.
 //

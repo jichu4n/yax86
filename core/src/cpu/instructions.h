@@ -1,11 +1,11 @@
 #ifndef Y_CPU_INSTRUCTIONS_H
 #define Y_CPU_INSTRUCTIONS_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Helpers - instructions_helpers.h
@@ -47,9 +47,9 @@ YCPUExecuteInvalidOpcode(const YCPUInstructionContext* ctx);
 // ============================================================================
 
 // Global opcode metadata lookup table.
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 extern const YCPUOpcodeMetadata YCPUOpcodeTable[256];
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Move instructions - instructions_mov.h

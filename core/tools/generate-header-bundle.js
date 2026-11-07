@@ -3,7 +3,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 
-const IMPLEMENTATION_MACRO = 'Y_IMPLEMENTATION';
+const IMPLEMENTATION_MACRO = 'YAX86_IMPLEMENTATION';
 
 function wrapFileContent({relFilePath, fileContent}) {
   return [

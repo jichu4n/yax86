@@ -1,9 +1,9 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // CLC, STC, CLI, STI, CLD, STD instructions

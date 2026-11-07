@@ -14,7 +14,7 @@
 #include <stdint.h>
 
 // Sibling includes are guarded by the target's own include guard rather than
-// by Y_IMPLEMENTATION, so that this header works both on its own and when
+// by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
 #ifndef Y_UTIL_COMMON_H
 #include "common.h"

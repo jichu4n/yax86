@@ -15,14 +15,14 @@
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef Y_IMPLEMENTATION
+#ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
 #define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
 #define Y_MODULE_PRIVATE
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
@@ -57,7 +57,7 @@
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(Y_IMPLEMENTATION)
+#if !defined(YAX86_IMPLEMENTATION)
 #define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
 #define Y_ALWAYS_INLINE __attribute__((always_inline)) inline

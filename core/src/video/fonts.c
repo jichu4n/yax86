@@ -1,8 +1,8 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "fonts.h"
 
 #include "../util/common.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // MDA 9x14 font bitmaps. Each character is actually 8x14, with the rightmost
 // column left blank except for block characters.

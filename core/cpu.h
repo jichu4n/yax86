@@ -31,14 +31,14 @@ extern "C" {
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef Y_IMPLEMENTATION
+#ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
 #define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
 #define Y_MODULE_PRIVATE
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
@@ -73,7 +73,7 @@ extern "C" {
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(Y_IMPLEMENTATION)
+#if !defined(YAX86_IMPLEMENTATION)
 #define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
 #define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
@@ -419,7 +419,7 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 #include <stdint.h>
 
 // Sibling includes are guarded by the target's own include guard rather than
-// by Y_IMPLEMENTATION, so that this header works both on its own and when
+// by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
 #ifndef Y_UTIL_COMMON_H
 #include "common.h"
@@ -1327,7 +1327,7 @@ Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 // ==============================================================================
 
 
-#ifdef Y_IMPLEMENTATION
+#ifdef YAX86_IMPLEMENTATION
 
 // ==============================================================================
 // src/util/common.h start
@@ -1351,14 +1351,14 @@ Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef Y_IMPLEMENTATION
+#ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
 #define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
 #define Y_MODULE_PRIVATE
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
@@ -1393,7 +1393,7 @@ Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(Y_IMPLEMENTATION)
+#if !defined(YAX86_IMPLEMENTATION)
 #define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
 #define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
@@ -1439,9 +1439,9 @@ Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 #ifndef Y_CPU_TYPES_H
 #define Y_CPU_TYPES_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Data width helpers.
 
@@ -1619,11 +1619,11 @@ typedef struct YCPUOpcodeMetadata {
 #ifndef Y_CPU_CYCLES_H
 #define Y_CPU_CYCLES_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 enum {
   // What a tick costs while the CPU is halted. It is waiting for an interrupt
@@ -1662,11 +1662,11 @@ Y_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes);
 #ifndef Y_CPU_OPERANDS_H
 #define Y_CPU_OPERANDS_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Narrow a computed result to what an operand of the given width holds.
 Y_MODULE_PRIVATE YCPUOperandValue
@@ -1826,12 +1826,12 @@ YCPUReadImmediate(const YCPUInstructionContext* ctx);
 // ==============================================================================
 
 #line 1 "./src/cpu/cycles.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "cycles.h"
 
 #include "../util/common.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Instruction timing
@@ -1945,12 +1945,12 @@ Y_PUBLIC void YCPUAddCycles(YCPUState* cpu, uint16_t cycles) {
 // ==============================================================================
 
 #line 1 "./src/cpu/operands.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "operands.h"
 
 #include "../util/common.h"
 #include "cycles.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // What the unreachable arm of a width dispatch returns.
 //
@@ -2521,11 +2521,11 @@ YCPUReadImmediate(const YCPUInstructionContext* ctx) {
 #ifndef Y_CPU_INSTRUCTIONS_H
 #define Y_CPU_INSTRUCTIONS_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Helpers - instructions_helpers.h
@@ -2567,9 +2567,9 @@ YCPUExecuteInvalidOpcode(const YCPUInstructionContext* ctx);
 // ============================================================================
 
 // Global opcode metadata lookup table.
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 extern const YCPUOpcodeMetadata YCPUOpcodeTable[256];
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Move instructions - instructions_mov.h
@@ -3083,12 +3083,12 @@ YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx);
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_helpers.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Set common CPU flags after an instruction. This includes:
 // - Zero flag (ZF)
@@ -3186,12 +3186,12 @@ YCPUExecuteInvalidOpcode(Y_UNUSED const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_mov.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // MOV instructions
@@ -3388,12 +3388,12 @@ YCPUExecuteTranslateByte(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_lea.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // LEA instruction
@@ -3469,12 +3469,12 @@ YCPUExecuteLoadDSWithPointer(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_add.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // ADD, ADC, and INC instructions
@@ -3645,12 +3645,12 @@ YCPUExecuteIncRegister(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_sub.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // SUB, SBB, and DEC instructions
@@ -3830,12 +3830,12 @@ YCPUExecuteDecRegister(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_sign_ext.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Sign extension instructions
@@ -3869,12 +3869,12 @@ YCPUExecuteCwd(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_cmp.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // CMP instructions
@@ -3933,12 +3933,12 @@ YCPUExecuteCmpImmediateToALOrAX(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_bool.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Boolean AND, OR and XOR instructions
@@ -4129,13 +4129,13 @@ YCPUExecuteTestImmediateToALOrAX(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_ctrl_flow.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // JMP instructions
@@ -4438,12 +4438,12 @@ YCPUExecuteHlt(Y_UNUSED const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_stack.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // PUSH and POP instructions
@@ -4571,12 +4571,12 @@ YCPUExecuteStoreAHToFlags(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_flags.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // CLC, STC, CLI, STI, CLD, STD instructions
@@ -4636,12 +4636,12 @@ YCPUExecuteSetALFromCarry(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_io.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // IN and OUT instructions
@@ -4759,13 +4759,13 @@ YCPUExecuteOutDX(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_string.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // String instructions
@@ -5213,12 +5213,12 @@ YCPUExecuteCmps(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_bcd_ascii.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // BCD and ASCII arithmetic instructions
@@ -5380,12 +5380,12 @@ YCPUExecuteDas(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_group_1.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 1 - ADD, OR, ADC, SBB, AND, SUB, XOR, CMP
@@ -5445,13 +5445,13 @@ YCPUExecuteGroup1InstructionWithSignExtension(
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_group_2.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 2 - ROL, ROR, RCL, RCR, SHL, SHR, SAL, SAR
@@ -5752,12 +5752,12 @@ YCPUExecuteGroup2ShiftOrRotateByCLInstruction(
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_group_3.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 3 - TEST, NOT, NEG, MUL, IMUL, DIV, IDIV
@@ -5980,12 +5980,12 @@ YCPUExecuteGroup3Instruction(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_group_4.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 4 - INC, DEC
@@ -6035,12 +6035,12 @@ YCPUExecuteGroup4Instruction(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/instructions_group_5.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Group 5 - INC, DEC, CALL, JMP, PUSH
@@ -6133,12 +6133,12 @@ YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx) {
 // ==============================================================================
 
 #line 1 "./src/cpu/opcode_table.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
 // Opcode table
@@ -7673,14 +7673,14 @@ Y_MODULE_PRIVATE const YCPUOpcodeMetadata YCPUOpcodeTable[256] = {
 // ==============================================================================
 
 #line 1 "./src/cpu/cpu.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_CPU_LOG(level, ...) \
   Y_LOG(cpu->config.logger, &YCPULogModule, level, __VA_ARGS__)
@@ -8415,7 +8415,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
 // ==============================================================================
 
 
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #ifdef __cplusplus
 }  // extern "C"

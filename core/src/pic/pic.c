@@ -1,6 +1,6 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_PIC_LOG(level, ...) \
   Y_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)

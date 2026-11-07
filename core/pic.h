@@ -31,14 +31,14 @@ extern "C" {
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef Y_IMPLEMENTATION
+#ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
 #define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
 #define Y_MODULE_PRIVATE
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
@@ -73,7 +73,7 @@ extern "C" {
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(Y_IMPLEMENTATION)
+#if !defined(YAX86_IMPLEMENTATION)
 #define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
 #define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
@@ -419,7 +419,7 @@ Y_MODULE_PRIVATE_HEADER int YSNPrintF(
 #include <stdint.h>
 
 // Sibling includes are guarded by the target's own include guard rather than
-// by Y_IMPLEMENTATION, so that this header works both on its own and when
+// by YAX86_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
 #ifndef Y_UTIL_COMMON_H
 #include "common.h"
@@ -800,16 +800,16 @@ Y_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 // ==============================================================================
 
 
-#ifdef Y_IMPLEMENTATION
+#ifdef YAX86_IMPLEMENTATION
 
 // ==============================================================================
 // src/pic/pic.c start
 // ==============================================================================
 
 #line 1 "./src/pic/pic.c"
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_PIC_LOG(level, ...) \
   Y_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)
@@ -1142,7 +1142,7 @@ Y_PUBLIC Y_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
 // ==============================================================================
 
 
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #ifdef __cplusplus
 }  // extern "C"

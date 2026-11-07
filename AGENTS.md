@@ -273,8 +273,14 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
   (whose state and config are `YLogger` and `YLoggerConfig`), `StaticVector`,
   and `YSNPrintF`, whose `va_list` form keeps C's prefix at the front as
   `YVSNPrintF`. There is no `YUtil`. The macros in `util/common.h` are the
-  project's own infrastructure and have no owner: `Y_PUBLIC`, `Y_HOT`,
-  `Y_UNUSED`, and `Y_IMPLEMENTATION`, which a host defines.
+  project's own infrastructure and have no owner: `Y_PUBLIC`, `Y_HOT` and
+  `Y_UNUSED`.
+- **`YAX86_IMPLEMENTATION` is outside the rule.** A host defines it, before
+  including the header, to choose whether the header compiles to declarations
+  or to the implementation as well. That makes it a switch on what the header
+  includes, like an include guard, rather than a name the header gives the
+  host, so it keeps the project's full name and the namespace check does not
+  look at it.
 - **A name that already says its owner does not say it twice.** The owner
   leads, and a repeat elsewhere in the name goes: `YVideoDefaultConfig`,
   `Y_VIDEO_NUM_MODES`, `YCPULogModule`. A second occurrence that is part of

@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#define Y_IMPLEMENTATION
+#define YAX86_IMPLEMENTATION
 #include "cpu.h"
 
 using namespace std;

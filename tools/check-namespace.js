@@ -8,6 +8,8 @@
 // - an enum value is Y_, its owner, _, then ALL_CAPS;
 // - a macro is Y_ then ALL_CAPS.
 //
+// YAX86_IMPLEMENTATION, which a host defines, is outside the rule.
+//
 // Names come from the compiler rather than from a grep: the top-level
 // declarations in a clang AST dump of the bundle, and the macros it defines.
 // A name's owner is the module directory of the file that defines it, read
@@ -183,7 +185,7 @@ function collectDeclarations() {
     clang([
       '-std=c99',
       '-fsyntax-only',
-      '-DY_IMPLEMENTATION',
+      '-DYAX86_IMPLEMENTATION',
       '-Xclang',
       '-ast-dump=json',
       '-x',
@@ -263,7 +265,7 @@ function collectMacros() {
         .filter(Boolean)
         .map((match) => match[1]),
     );
-  const args = ['-std=c99', '-E', '-dM', '-DY_IMPLEMENTATION', '-x', 'c'];
+  const args = ['-std=c99', '-E', '-dM', '-DYAX86_IMPLEMENTATION', '-x', 'c'];
   const bundle = defined(clang([...args, BUNDLE]));
   const system = defined(
     clang(
@@ -273,10 +275,11 @@ function collectMacros() {
         .join(''),
     ),
   );
-  // Defined by a host rather than by the header, and so by both dumps.
-  return [...bundle]
-    .filter((name) => !system.has(name))
-    .concat('Y_IMPLEMENTATION');
+  // YAX86_IMPLEMENTATION is defined on both command lines and so drops out
+  // here, which is what it should do: the header defines it nowhere, and like
+  // an include guard it selects what the header compiles to rather than being
+  // a name the header hands the host. See "Naming" in AGENTS.md.
+  return [...bundle].filter((name) => !system.has(name));
 }
 
 // Why a name breaks the rule for its kind and owner, or null if it does not.

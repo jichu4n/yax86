@@ -1,7 +1,7 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "internal.h"
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_VIDEO_LOG(level, ...) \
   Y_LOG(video->config.logger, &YVideoLogModule, level, __VA_ARGS__)

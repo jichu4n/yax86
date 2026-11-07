@@ -2,10 +2,10 @@
 #ifndef Y_VIDEO_INTERNAL_H
 #define Y_VIDEO_INTERNAL_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 // Read a byte from the emulated video RAM, or 0xFF if no callback is installed.
 // VRAM is aliased throughout the adapter's window, so an address past the end

@@ -1,7 +1,7 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_FDC_LOG(level, ...) \
   Y_LOG(fdc->config.logger, &YFDCLogModule, level, __VA_ARGS__)

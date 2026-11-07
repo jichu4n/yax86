@@ -2,10 +2,10 @@
 #include "pic.h"
 #include "ppi.h"
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_PLATFORM_LOG(level, ...) \
   Y_LOG(&platform->logger, &YPlatformLogModule, level, __VA_ARGS__)

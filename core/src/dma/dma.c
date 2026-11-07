@@ -1,6 +1,6 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_DMA_LOG(level, ...) \
   Y_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)

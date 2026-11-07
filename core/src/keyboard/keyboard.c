@@ -1,6 +1,6 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 enum {
   // Value for clock_low_ms indicating that a reset has already been triggered.

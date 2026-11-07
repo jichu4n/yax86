@@ -1,11 +1,11 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "cycles.h"
 #include "instructions.h"
 #include "operands.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_CPU_LOG(level, ...) \
   Y_LOG(cpu->config.logger, &YCPULogModule, level, __VA_ARGS__)

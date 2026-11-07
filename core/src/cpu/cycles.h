@@ -1,11 +1,11 @@
 #ifndef Y_CPU_CYCLES_H
 #define Y_CPU_CYCLES_H
 
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 #include "types.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 enum {
   // What a tick costs while the CPU is halted. It is waiting for an interrupt

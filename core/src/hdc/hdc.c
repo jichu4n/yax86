@@ -1,7 +1,7 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "hdc_option_rom_data.h"
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 #define Y_HDC_LOG(level, ...) \
   Y_LOG(hdc->config.logger, &YHDCLogModule, level, __VA_ARGS__)

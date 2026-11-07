@@ -1,8 +1,8 @@
-#ifndef Y_IMPLEMENTATION
+#ifndef YAX86_IMPLEMENTATION
 #include "fonts.h"
 #include "internal.h"
 #include "public.h"
-#endif  // Y_IMPLEMENTATION
+#endif  // YAX86_IMPLEMENTATION
 
 enum {
   Y_VIDEO_CGA_CHAR_HEIGHT = 8,
