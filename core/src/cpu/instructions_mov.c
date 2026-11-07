@@ -17,7 +17,7 @@ YCPUExecuteMoveRegisterToRegisterOrMemory(const YCPUInstructionContext* ctx) {
   YCPUOperand src;
   YCPUReadRegisterOperand(ctx, &src);
   YCPUWriteOperandAddress(ctx, &dest, YCPUFromOperand(&src));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // MOV r8, r/m8
@@ -29,7 +29,7 @@ YCPUExecuteMoveRegisterOrMemoryToRegister(const YCPUInstructionContext* ctx) {
   YCPUOperand src;
   YCPUReadRegisterOrMemoryOperand(ctx, &src);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperand(&src));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // MOV r/m16, sreg
@@ -40,7 +40,7 @@ YCPUExecuteMoveSegmentRegisterToRegisterOrMemory(
   YCPUOperand src;
   YCPUReadSegmentRegisterOperand(ctx, &src);
   YCPUWriteOperandAddress(ctx, &dest, YCPUFromOperand(&src));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // MOV sreg, r/m16
@@ -52,16 +52,16 @@ YCPUExecuteMoveRegisterOrMemoryToSegmentRegister(
   YCPUOperand src;
   YCPUReadRegisterOrMemoryOperand(ctx, &src);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperand(&src));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // MOV AX/CX/DX/BX/SP/BP/SI/DI, imm16
 // MOV AH/AL/CH/CL/DH/DL/BH/BL, imm8
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteMoveImmediateToRegister(const YCPUInstructionContext* ctx) {
-  static const uint8_t register_index_opcode_base[kNumWidths] = {
-      0xB0,  // kByte
-      0xB8,  // kWord
+  static const uint8_t register_index_opcode_base[Y_CPU_NUM_WIDTHS] = {
+      0xB0,  // Y_CPU_BYTE
+      0xB8,  // Y_CPU_WORD
   };
   YCPURegisterIndex register_index =
       (YCPURegisterIndex)(ctx->instruction->opcode -
@@ -70,7 +70,7 @@ YCPUExecuteMoveImmediateToRegister(const YCPUInstructionContext* ctx) {
   YCPUReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperandValue(src_value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // MOV AL, moffs16
@@ -78,7 +78,7 @@ YCPUExecuteMoveImmediateToRegister(const YCPUInstructionContext* ctx) {
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteMoveMemoryOffsetToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
   YCPUOperandValue src_offset_value =
@@ -86,14 +86,14 @@ YCPUExecuteMoveMemoryOffsetToALOrAX(const YCPUInstructionContext* ctx) {
   // The source is DS:offset by default, but can be overridden by a segment
   // override prefix.
   YCPUOperandAddress src_address = {
-      .type = kOperandAddressTypeMemory,
-      .register_index = kDS,
+      .type = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY,
+      .register_index = Y_CPU_DS,
       .offset = (uint16_t)YCPUFromOperandValue(src_offset_value),
   };
   YCPUApplySegmentOverride(ctx->instruction, &src_address.register_index);
   YCPUOperandValue src_value = YCPUReadOperandValue(ctx, &src_address);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperandValue(src_value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // MOV moffs16, AL
@@ -101,7 +101,7 @@ YCPUExecuteMoveMemoryOffsetToALOrAX(const YCPUInstructionContext* ctx) {
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteMoveALOrAXToMemoryOffset(const YCPUInstructionContext* ctx) {
   YCPUOperand src;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &src);
   // Offset is always 16 bits, even though the data width of the operation may
   // be 8 bits.
   YCPUOperandValue dest_offset_value =
@@ -109,13 +109,13 @@ YCPUExecuteMoveALOrAXToMemoryOffset(const YCPUInstructionContext* ctx) {
   // The destination is DS:offset by default, but can be overridden by a segment
   // override prefix.
   YCPUOperandAddress dest_address = {
-      .type = kOperandAddressTypeMemory,
-      .register_index = kDS,
+      .type = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY,
+      .register_index = Y_CPU_DS,
       .offset = (uint16_t)YCPUFromOperandValue(dest_offset_value),
   };
   YCPUApplySegmentOverride(ctx->instruction, &dest_address.register_index);
   YCPUWriteOperandAddress(ctx, &dest_address, YCPUFromOperand(&src));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // MOV r/m8, imm8
@@ -125,7 +125,7 @@ YCPUExecuteMoveImmediateToRegisterOrMemory(const YCPUInstructionContext* ctx) {
   YCPUOperandAddress dest = YCPUGetRegisterOrMemoryOperandAddress(ctx);
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
   YCPUWriteOperandAddress(ctx, &dest, YCPUFromOperandValue(src_value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // ============================================================================
@@ -137,18 +137,18 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteExchangeRegister(const YCPUInstructionContext* ctx) {
   YCPURegisterIndex register_index =
       (YCPURegisterIndex)(ctx->instruction->opcode - 0x90);
-  if (register_index == kAX) {
+  if (register_index == Y_CPU_AX) {
     // No-op
-    return kInstructionExecuted;
+    return Y_CPU_INSTRUCTION_EXECUTED;
   }
   YCPUOperand src;
   YCPUReadRegisterOperandForRegisterIndex(ctx, register_index, &src);
   YCPUOperand dest;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
   uint32_t temp = YCPUFromOperand(&dest);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperand(&src));
   YCPUWriteOperand(ctx, &src, temp);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // XCHG r/m8, r8
@@ -162,7 +162,7 @@ YCPUExecuteExchangeRegisterOrMemory(const YCPUInstructionContext* ctx) {
   uint32_t temp = YCPUFromOperand(&dest);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperand(&src));
   YCPUWriteOperand(ctx, &src, temp);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // ============================================================================
@@ -174,17 +174,18 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteTranslateByte(const YCPUInstructionContext* ctx) {
   // Read the AL register
   YCPUOperand al;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &al);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &al);
   // The translation table is at DS:BX by default, but can be overridden by a
   // segment override prefix.
   YCPUOperandAddress src_address = {
-      .type = kOperandAddressTypeMemory,
-      .register_index = kDS,
-      .offset = (uint16_t)(ctx->cpu->registers[kBX] + YCPUFromOperand(&al)),
+      .type = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY,
+      .register_index = Y_CPU_DS,
+      .offset =
+          (uint16_t)(ctx->cpu->registers[Y_CPU_BX] + YCPUFromOperand(&al)),
   };
   YCPUApplySegmentOverride(ctx->instruction, &src_address.register_index);
   YCPUOperandValue src_value =
       YCPUReadMemoryOperandByte(ctx->cpu, &src_address);
   YCPUWriteOperandAddress(ctx, &al.address, YCPUFromOperandValue(src_value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }

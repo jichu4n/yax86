@@ -22,7 +22,7 @@ YAX86_FILE_PRIVATE const YCPUGroup4ExecuteInstructionFn
 
 enum {
   // Number of documented REG field values for this group.
-  kNumGroup4Instructions = 2,
+  Y_CPU_NUM_GROUP4_INSTRUCTIONS = 2,
 };
 
 // Group 4 instruction handler.
@@ -33,8 +33,8 @@ YCPUExecuteGroup4Instruction(const YCPUInstructionContext* ctx) {
   // emulated: it is unverifiable without hardware, and no assembler emits
   // these encodings. The bounds check matters regardless, because the REG
   // field is three bits wide and this table has only two entries.
-  if (ctx->instruction->mod_rm.reg >= kNumGroup4Instructions) {
-    return kInstructionInvalid;
+  if (ctx->instruction->mod_rm.reg >= Y_CPU_NUM_GROUP4_INSTRUCTIONS) {
+    return Y_CPU_INSTRUCTION_INVALID;
   }
   const YCPUGroup4ExecuteInstructionFn fn =
       YCPUGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

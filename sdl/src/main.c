@@ -36,11 +36,11 @@ static YLoggerConfig g_logger_config;
 
 static const char* MainLogLevelName(YLogLevel level) {
   switch (level) {
-    case kLogLevelError:
+    case Y_LOG_LEVEL_ERROR:
       return "ERROR";
-    case kLogLevelWarn:
+    case Y_LOG_LEVEL_WARN:
       return "WARN";
-    case kLogLevelDebug:
+    case Y_LOG_LEVEL_DEBUG:
       return "DEBUG";
     default:
       return "?";
@@ -87,7 +87,7 @@ enum {
 };
 
 // The video adapter installed in the emulated machine, and its metadata.
-static YVideoAdapter g_video_adapter = kVideoAdapterCGA;
+static YVideoAdapter g_video_adapter = Y_VIDEO_ADAPTER_CGA;
 static const YVideoAdapterMetadata* g_video_adapter_metadata = NULL;
 
 static void MainWritePixels(
@@ -154,7 +154,8 @@ void MainTick(void) {
     elapsed_ns = kMaxCatchUpNs;
   }
   uint32_t remaining_ticks =
-      (uint32_t)(elapsed_ns * kCPUCyclesPerSecond / kNanosecondsPerSecond);
+      (uint32_t)(elapsed_ns * Y_PLATFORM_CPU_CYCLES_PER_SECOND /
+                 kNanosecondsPerSecond);
   while (!g_cpu_stopped && remaining_ticks > 0) {
     const uint32_t start_tick = g_platform.ticks;
     const YPlatformRunStatus status =
@@ -164,11 +165,11 @@ void MainTick(void) {
     remaining_ticks -=
         consumed_ticks < remaining_ticks ? consumed_ticks : remaining_ticks;
 
-    if (status == kPlatformRunning) {
+    if (status == Y_PLATFORM_RUNNING) {
       // Ran the frame's full budget without stopping.
       break;
     }
-    if (status == kPlatformInvalid) {
+    if (status == Y_PLATFORM_INVALID) {
       // Not fatal here. The 8088 has no invalid opcode exception, so a real
       // machine would keep going, and YCPUTick() has already logged it. The
       // offending tick was counted, so resuming makes progress.
@@ -177,9 +178,9 @@ void MainTick(void) {
     // Anything else means the machine cannot make progress. Stop ticking it,
     // but keep rendering so the final screen stays up.
     YAX86_LOG(
-        &g_platform.logger, &kLogModuleApp, kLogLevelError,
+        &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
         "execution stopped at %04X:%04X with status %d",
-        g_platform.cpu.registers[kCS], g_platform.cpu.registers[kIP],
+        g_platform.cpu.registers[Y_CPU_CS], g_platform.cpu.registers[Y_CPU_IP],
         (int)status);
     g_cpu_stopped = true;
   }
@@ -203,9 +204,9 @@ int main(int argc, char* argv[]) {
   const char* hard_disk_path = NULL;
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--cga") == 0) {
-      g_video_adapter = kVideoAdapterCGA;
+      g_video_adapter = Y_VIDEO_ADAPTER_CGA;
     } else if (strcmp(argv[i], "--mda") == 0) {
-      g_video_adapter = kVideoAdapterMDA;
+      g_video_adapter = Y_VIDEO_ADAPTER_MDA;
     } else if (strcmp(argv[i], "--hdd") == 0) {
       attach_hard_disk = true;
       // An image path may follow, but --hdd on its own is a blank disk.
@@ -242,12 +243,12 @@ int main(int argc, char* argv[]) {
   memset(g_memory, 0, INTERNAL_RAM_SIZE);
 
   // Initialize logging. All modules are enabled, but only errors are shown
-  // by default - raise min_level to kLogLevelWarn or kLogLevelDebug to see
-  // more, or narrow enabled_modules to a specific module.
+  // by default - raise min_level to Y_LOG_LEVEL_WARN or Y_LOG_LEVEL_DEBUG to
+  // see more, or narrow enabled_modules to a specific module.
   g_logger_config.write_line = MainWriteLogLine;
   g_logger_config.get_tick = MainGetTick;
   g_logger_config.enabled_modules = 0xFFFFFFFF;
-  g_logger_config.min_level = kLogLevelError;
+  g_logger_config.min_level = Y_LOG_LEVEL_ERROR;
 
   // Initialize Platform. The caller zeroes the state and fills in its config;
   // nothing inside zeroes anything, because every module's state is a field of
@@ -279,7 +280,7 @@ int main(int argc, char* argv[]) {
   }
 
   YAX86_LOG(
-      &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
+      &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
       "yax86 started with %u KB of conventional memory",
       config->physical_memory_size / 1024);
 
@@ -287,24 +288,24 @@ int main(int argc, char* argv[]) {
   // is reported but not fatal.
   if (FloppyMount(&g_platform, floppy_path)) {
     YAX86_LOG(
-        &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
+        &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
         "mounted %s in floppy drive A", floppy_path);
   } else {
     YAX86_LOG(
-        &g_platform.logger, &kLogModuleApp, kLogLevelError,
+        &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
         "floppy drive A is empty - could not mount %s", floppy_path);
   }
 
   if (attach_hard_disk) {
     if (HardDiskAttach(&g_platform, hard_disk_path)) {
       YAX86_LOG(
-          &g_platform.logger, &kLogModuleApp, kLogLevelDebug,
+          &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
           "attached a %u MB hard disk (%s)",
-          (unsigned)(kHDCGeometry10MBImageSize / (1024 * 1024)),
+          (unsigned)(Y_HDC_GEOMETRY_10MB_IMAGE_SIZE / (1024 * 1024)),
           hard_disk_path ? hard_disk_path : "blank");
     } else {
       YAX86_LOG(
-          &g_platform.logger, &kLogModuleApp, kLogLevelError,
+          &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
           "no hard disk attached - could not mount %s",
           hard_disk_path ? hard_disk_path : "blank disk");
     }

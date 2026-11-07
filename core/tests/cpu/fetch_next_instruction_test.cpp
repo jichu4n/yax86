@@ -20,7 +20,7 @@ vector<YCPUInstruction> TestFetchInstructions(
   size_t machine_code_size =
       cpu_test_helper.AssembleAndLoadProgram(name, asm_code);
   YCPUState* cpu = &cpu_test_helper.cpu_;
-  uint16_t* ip = &cpu->registers[kIP];
+  uint16_t* ip = &cpu->registers[Y_CPU_IP];
 
   // Fetch instructions until we reach the end of the machine code
   cout << ">> Reading encoded instructions:" << endl;
@@ -28,7 +28,7 @@ vector<YCPUInstruction> TestFetchInstructions(
   while (*ip < kCOMFileLoadOffset + machine_code_size) {
     YCPUInstruction instruction;
     auto status = YCPUFetchNextInstruction(cpu, &instruction);
-    if (status != kFetchSuccess) {
+    if (status != Y_CPU_FETCH_SUCCESS) {
       throw runtime_error(
           "Failed to fetch instruction at IP: " + to_string(*ip) +
           ", status: " + to_string(status));
@@ -156,21 +156,24 @@ TEST_F(FetchNextInstructionTest, FetchInstructionsWithPrefixes) {
   };
 
   // REP prefix - f3 a4
-  VerifyPrefixes(instructions[0], 2, kNoSegmentOverride, kPrefixREP);
+  VerifyPrefixes(
+      instructions[0], 2, Y_CPU_NO_SEGMENT_OVERRIDE, Y_CPU_PREFIX_REP);
   // REPNE prefix - f2 a4
-  VerifyPrefixes(instructions[1], 2, kNoSegmentOverride, kPrefixREPNZ);
+  VerifyPrefixes(
+      instructions[1], 2, Y_CPU_NO_SEGMENT_OVERRIDE, Y_CPU_PREFIX_REPNZ);
   // LOCK prefix - f0 01 07 - consumed, but selects nothing
-  VerifyPrefixes(instructions[2], 3, kNoSegmentOverride, 0);
+  VerifyPrefixes(instructions[2], 3, Y_CPU_NO_SEGMENT_OVERRIDE, 0);
   // Multiple prefixes (LOCK + REP) - f0 f3 8e 1f
-  VerifyPrefixes(instructions[3], 4, kNoSegmentOverride, kPrefixREP);
+  VerifyPrefixes(
+      instructions[3], 4, Y_CPU_NO_SEGMENT_OVERRIDE, Y_CPU_PREFIX_REP);
   // CS segment override prefix - 2e 8b 07
-  VerifyPrefixes(instructions[4], 3, kCS, 0);
+  VerifyPrefixes(instructions[4], 3, Y_CPU_CS, 0);
   // ES segment override prefix with REP - 26 f3 8b 07
-  VerifyPrefixes(instructions[5], 4, kES, kPrefixREP);
+  VerifyPrefixes(instructions[5], 4, Y_CPU_ES, Y_CPU_PREFIX_REP);
   // SS segment override prefix with REPNE - 36 f2 8b 07
-  VerifyPrefixes(instructions[6], 4, kSS, kPrefixREPNZ);
+  VerifyPrefixes(instructions[6], 4, Y_CPU_SS, Y_CPU_PREFIX_REPNZ);
   // DS segment override prefix with LOCK - 3e f0 8b 07
-  VerifyPrefixes(instructions[7], 4, kDS, 0);
+  VerifyPrefixes(instructions[7], 4, Y_CPU_DS, 0);
 }
 
 // The 8086 accepts any number of prefixes, so more than the two a compiler
@@ -179,15 +182,18 @@ TEST_F(FetchNextInstructionTest, FetchInstructionsWithPrefixes) {
 TEST_F(FetchNextInstructionTest, FetchAcceptsMoreThanTwoPrefixes) {
   CPUTestHelper helper;
   // LOCK ES: SS: REP MOVSB - four prefixes, two of them segment overrides.
-  helper.LoadCOM({kPrefixLOCK, kPrefixES, kPrefixSS, kPrefixREP, 0xA4, 0x90});
+  helper.LoadCOM(
+      {Y_CPU_PREFIX_LOCK, Y_CPU_PREFIX_ES, Y_CPU_PREFIX_SS, Y_CPU_PREFIX_REP,
+       0xA4, 0x90});
   YCPUInstruction instruction;
   ASSERT_EQ(
-      YCPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper.cpu_, &instruction),
+      Y_CPU_FETCH_SUCCESS);
   EXPECT_EQ(instruction.opcode, 0xA4);
   EXPECT_EQ(instruction.size, 5);
   // SS came after ES, so it is the override that took effect.
-  EXPECT_EQ(instruction.segment_override, kSS);
-  EXPECT_EQ(instruction.repetition_prefix, kPrefixREP);
+  EXPECT_EQ(instruction.segment_override, Y_CPU_SS);
+  EXPECT_EQ(instruction.repetition_prefix, Y_CPU_PREFIX_REP);
 }
 
 // A run of prefix bytes must not fetch forever. The bound is whatever still
@@ -197,25 +203,26 @@ TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
   // rather than appended to, which keeps gcc from mis-analyzing the
   // reallocation and warning about the write.
   auto PrefixRun = [](size_t n) {
-    vector<uint8_t> code(n + 1, kPrefixES);
+    vector<uint8_t> code(n + 1, Y_CPU_PREFIX_ES);
     code.back() = 0x90;  // NOP
     return code;
   };
 
   CPUTestHelper at_limit;
-  at_limit.LoadCOM(PrefixRun(kMaxPrefixBytes));
+  at_limit.LoadCOM(PrefixRun(Y_CPU_MAX_PREFIX_BYTES));
   YCPUInstruction instruction;
   ASSERT_EQ(
-      YCPUFetchNextInstruction(&at_limit.cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&at_limit.cpu_, &instruction),
+      Y_CPU_FETCH_SUCCESS);
   EXPECT_EQ(instruction.opcode, 0x90);
-  EXPECT_EQ(instruction.segment_override, kES);
-  EXPECT_EQ(instruction.size, kMaxPrefixBytes + 1);
+  EXPECT_EQ(instruction.segment_override, Y_CPU_ES);
+  EXPECT_EQ(instruction.size, Y_CPU_MAX_PREFIX_BYTES + 1);
 
   CPUTestHelper over_limit;
-  over_limit.LoadCOM(PrefixRun(kMaxPrefixBytes + 1));
+  over_limit.LoadCOM(PrefixRun(Y_CPU_MAX_PREFIX_BYTES + 1));
   ASSERT_EQ(
       YCPUFetchNextInstruction(&over_limit.cpu_, &instruction),
-      kFetchPrefixTooLong);
+      Y_CPU_FETCH_PREFIX_TOO_LONG);
 }
 
 // A decode writes the fields it needs rather than zeroing the struct, so a
@@ -226,13 +233,13 @@ TEST_F(FetchNextInstructionTest, ADecodeKeepsNothingOfThePreviousInstruction) {
   CPUTestHelper helper;
   helper.LoadCOM({
       // ES: MOV AX, [BX] - a segment override and a ModR/M byte.
-      kPrefixES,
+      Y_CPU_PREFIX_ES,
       0x8B,
       0x07,
       // NOP - neither.
       0x90,
       // REP MOVSW - a repetition prefix and no ModR/M byte.
-      kPrefixREP,
+      Y_CPU_PREFIX_REP,
       0xA5,
       // MOV word [BX+SI+0x1234], 0x5678 - a ModR/M byte, a two byte
       // displacement and a two byte immediate.
@@ -250,22 +257,23 @@ TEST_F(FetchNextInstructionTest, ADecodeKeepsNothingOfThePreviousInstruction) {
   YCPUInstruction instruction = {0};
   auto Fetch = [&]() {
     ASSERT_EQ(
-        YCPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
-    helper.cpu_.registers[kIP] += instruction.size;
+        YCPUFetchNextInstruction(&helper.cpu_, &instruction),
+        Y_CPU_FETCH_SUCCESS);
+    helper.cpu_.registers[Y_CPU_IP] += instruction.size;
   };
 
   Fetch();
-  EXPECT_EQ(instruction.segment_override, kES);
+  EXPECT_EQ(instruction.segment_override, Y_CPU_ES);
   EXPECT_EQ(instruction.has_mod_rm, true);
 
   Fetch();
   EXPECT_EQ(instruction.opcode, 0x90);
-  EXPECT_EQ(instruction.segment_override, kNoSegmentOverride);
+  EXPECT_EQ(instruction.segment_override, Y_CPU_NO_SEGMENT_OVERRIDE);
   EXPECT_EQ(instruction.has_mod_rm, false);
 
   Fetch();
   EXPECT_EQ(instruction.opcode, 0xA5);
-  EXPECT_EQ(instruction.repetition_prefix, kPrefixREP);
+  EXPECT_EQ(instruction.repetition_prefix, Y_CPU_PREFIX_REP);
 
   Fetch();
   EXPECT_EQ(instruction.repetition_prefix, 0);

@@ -16,120 +16,120 @@ TEST_F(LeaLesLdsTest, LEA) {
       "lea sp, [bx+0100h]\n"   // Effective address with 16-bit displacement
       "lea bp, [si-5]\n");     // Effective address with negative 8-bit
                                // displacement (0FBh)
-  helper->cpu_.registers[kDS] =
+  helper->cpu_.registers[Y_CPU_DS] =
       0;  // LEA calculates offset, DS doesn't affect result unless overridden
 
   // Set various flags to verify LEA instructions don't affect them
-  YCPUSetFlag(&helper->cpu_, kCF, true);
-  YCPUSetFlag(&helper->cpu_, kZF, true);
-  YCPUSetFlag(&helper->cpu_, kSF, true);
-  YCPUSetFlag(&helper->cpu_, kPF, true);
-  YCPUSetFlag(&helper->cpu_, kOF, true);
-  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_ZF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_SF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_PF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_OF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_AF, true);
 
   // Test 1: lea ax, [bx+si]
   // Set up: BX=0x1000, SI=0x0200. Expected AX = 0x1000 + 0x0200 = 0x1200
-  helper->cpu_.registers[kBX] = 0x1000;
-  helper->cpu_.registers[kSI] = 0x0200;
+  helper->cpu_.registers[Y_CPU_BX] = 0x1000;
+  helper->cpu_.registers[Y_CPU_SI] = 0x0200;
   // Put some data in memory to ensure LEA doesn't read it
   helper->memory_[0x1200] = 0xAA;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1200);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x1200);
   EXPECT_EQ(helper->memory_[0x1200], 0xAA);  // Memory should be unchanged
   // Verify flags are still set after LEA instruction
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true}});
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true}});
 
   // Test 2: lea cx, [bp+di+10h]
   // Set up: BP=0x2000, DI=0x0300. Expected CX = 0x2000 + 0x0300 + 0x0010 =
   // 0x2310
-  helper->cpu_.registers[kBP] = 0x2000;
-  helper->cpu_.registers[kDI] = 0x0300;
+  helper->cpu_.registers[Y_CPU_BP] = 0x2000;
+  helper->cpu_.registers[Y_CPU_DI] = 0x0300;
   helper->memory_[0x2310] = 0xBB;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0x2310);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0x2310);
   EXPECT_EQ(helper->memory_[0x2310], 0xBB);  // Memory should be unchanged
   // Verify flags are still set
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true}});
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true}});
 
   // Test 3: lea dx, [0200h]
   // Expected DX = 0x0200. Note: DS is 0, so segment override is not tested
   // here. For LEA, [0200h] means the offset 0200h itself, not DS:0200h.
   helper->memory_[0x0200] = 0xCC;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0200);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DX], 0x0200);
   EXPECT_EQ(helper->memory_[0x0200], 0xCC);  // Memory should be unchanged
   // Verify flags are still set
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true}});
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true}});
 
   // Test 4: lea sp, [bx+0100h]
   // Set up: BX=0x1000 (from Test 1). Expected SP = 0x1000 + 0x0100 = 0x1100
   // SI is still 0x0200 from Test 1, but not used here.
   helper->memory_[0x1100] = 0xDD;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kSP], 0x1100);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SP], 0x1100);
   EXPECT_EQ(helper->memory_[0x1100], 0xDD);  // Memory should be unchanged
   // Verify flags are still set
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true}});
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true}});
 
   // Test 5: lea bp, [si-5] (equivalent to lea bp, [si+0FBh] for 8-bit
   // displacement) Set up: SI=0x0200 (from Test 1). Expected BP = 0x0200 - 5 =
   // 0x01FB BX is still 0x1000, BP is 0x2000 (will be overwritten), DI is 0x0300
   helper->memory_[0x01FB] = 0xEE;
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kBP], 0x01FB);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_BP], 0x01FB);
   EXPECT_EQ(helper->memory_[0x01FB], 0xEE);  // Memory should be unchanged
   // Verify flags are still set
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true}});
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true}});
 }
 
 TEST_F(LeaLesLdsTest, LES) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-les-test", "les di, [bx]\n");
-  helper->cpu_.registers[kDS] = 0;  // Use DS=0 for memory addressing
+  helper->cpu_.registers[Y_CPU_DS] = 0;  // Use DS=0 for memory addressing
 
   // Set various flags to verify LES instructions don't affect them
-  YCPUSetFlag(&helper->cpu_, kCF, true);
-  YCPUSetFlag(&helper->cpu_, kZF, true);
-  YCPUSetFlag(&helper->cpu_, kSF, true);
-  YCPUSetFlag(&helper->cpu_, kPF, true);
-  YCPUSetFlag(&helper->cpu_, kOF, true);
-  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_ZF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_SF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_PF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_OF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_AF, true);
 
   // Test: les di, [bx]
   // Set up: BX=0x0400. Memory at [0x0400] should contain a 32-bit pointer.
   // Offset part: 0xABCD at [0x0400]
   // Segment part: 0x1234 at [0x0402]
-  helper->cpu_.registers[kBX] = 0x0400;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0400;
   helper->memory_[0x0400] = 0xCD;  // Low byte of offset
   helper->memory_[0x0401] = 0xAB;  // High byte of offset
   helper->memory_[0x0402] = 0x34;  // Low byte of segment
@@ -137,31 +137,31 @@ TEST_F(LeaLesLdsTest, LES) {
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0xABCD);
-  EXPECT_EQ(helper->cpu_.registers[kES], 0x1234);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0xABCD);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_ES], 0x1234);
 
   // Verify flags are still set after LES instruction
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true}});
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true}});
 }
 
 TEST_F(LeaLesLdsTest, LDS) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-lds-test", "lds si, [0200h]\n");
-  helper->cpu_.registers[kDS] = 0;  // Use DS=0 for memory addressing
+  helper->cpu_.registers[Y_CPU_DS] = 0;  // Use DS=0 for memory addressing
 
   // Set various flags to verify LDS instructions don't affect them
-  YCPUSetFlag(&helper->cpu_, kCF, true);
-  YCPUSetFlag(&helper->cpu_, kZF, true);
-  YCPUSetFlag(&helper->cpu_, kSF, true);
-  YCPUSetFlag(&helper->cpu_, kPF, true);
-  YCPUSetFlag(&helper->cpu_, kOF, true);
-  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_ZF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_SF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_PF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_OF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_AF, true);
 
   // Test: lds si, [0200h]
   // Memory at [0x0200] should contain a 32-bit pointer.
@@ -173,7 +173,7 @@ TEST_F(LeaLesLdsTest, LDS) {
   helper->memory_[0x0203] = 0x9A;  // High byte of segment
 
   // Clear SI and DS before test to ensure they are loaded by LDS
-  helper->cpu_.registers[kSI] = 0;
+  helper->cpu_.registers[Y_CPU_SI] = 0;
   // Note: LDS will change DS. The helper's DS is set to 0 for locating the
   // pointer itself.
   // The original DS value before LDS is not relevant for the instruction's
@@ -181,17 +181,17 @@ TEST_F(LeaLesLdsTest, LDS) {
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x5678);
-  EXPECT_EQ(helper->cpu_.registers[kDS], 0x9ABC);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x5678);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DS], 0x9ABC);
 
   // Verify flags are still set after LDS instruction
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true}});
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true}});
 }
 
 // LEA yields the offset within the segment, so a non-zero segment register
@@ -205,19 +205,19 @@ TEST_F(LeaLesLdsTest, LEAIgnoresSegmentBase) {
       "lea dx, [0200h]\n"       // direct offset
       "lea di, es:[bx+si]\n");  // explicit segment override
 
-  helper->cpu_.registers[kDS] = 0x1234;
-  helper->cpu_.registers[kSS] = 0x5678;
-  helper->cpu_.registers[kES] = 0x9ABC;
-  helper->cpu_.registers[kBX] = 0x0100;
-  helper->cpu_.registers[kSI] = 0x0020;
-  helper->cpu_.registers[kBP] = 0x0300;
+  helper->cpu_.registers[Y_CPU_DS] = 0x1234;
+  helper->cpu_.registers[Y_CPU_SS] = 0x5678;
+  helper->cpu_.registers[Y_CPU_ES] = 0x9ABC;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0100;
+  helper->cpu_.registers[Y_CPU_SI] = 0x0020;
+  helper->cpu_.registers[Y_CPU_BP] = 0x0300;
 
   helper->ExecuteInstructions(4);
 
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x0120);
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0x0310);
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0x0200);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0120);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x0120);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0x0310);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DX], 0x0200);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0120);
 }
 
 // The exact shape of the instruction that broke the MS-DOS boot: IO.SYS uses
@@ -226,11 +226,11 @@ TEST_F(LeaLesLdsTest, LEAAdvancesPointerWithNonZeroSegment) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "test-lea-advance", "lea di, [di+2Dh]\n");
 
-  helper->cpu_.registers[kDS] = 0x0070;
-  helper->cpu_.registers[kES] = 0x0070;
-  helper->cpu_.registers[kDI] = 0x0482;
+  helper->cpu_.registers[Y_CPU_DS] = 0x0070;
+  helper->cpu_.registers[Y_CPU_ES] = 0x0070;
+  helper->cpu_.registers[Y_CPU_DI] = 0x0482;
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x04AF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x04AF);
 }

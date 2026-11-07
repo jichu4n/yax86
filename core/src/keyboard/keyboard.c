@@ -4,9 +4,9 @@
 
 enum {
   // Value for clock_low_ms indicating that a reset has already been triggered.
-  kKeyboardResetTriggered = 0xFF,
+  Y_KEYBOARD_RESET_TRIGGERED = 0xFF,
   // Scan code indicating successful self-test.
-  kKeyboardSelfTestOK = 0xAA,
+  Y_KEYBOARD_SELF_TEST_OK = 0xAA,
 };
 
 YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard) {
@@ -85,7 +85,7 @@ YAX86_PUBLIC void YKeyboardHandleKeyPress(
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.
   if (!keyboard->clock_low &&
-      keyboard->clock_low_ms == kKeyboardResetTriggered) {
+      keyboard->clock_low_ms == Y_KEYBOARD_RESET_TRIGGERED) {
     return;
   }
   YKeyboardBufferAppend(&keyboard->buffer, &scancode);
@@ -95,7 +95,7 @@ YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {
-    if (keyboard->clock_low_ms == kKeyboardResetTriggered) {
+    if (keyboard->clock_low_ms == Y_KEYBOARD_RESET_TRIGGERED) {
       // Reset already triggered, nothing to do.
       return;
     }
@@ -104,7 +104,7 @@ YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
     ++keyboard->clock_low_ms;
 
     // Haven't reached threshold yet, nothing to do.
-    if (keyboard->clock_low_ms < kKeyboardResetThresholdMs) {
+    if (keyboard->clock_low_ms < Y_KEYBOARD_RESET_THRESHOLD_MS) {
       return;
     }
 
@@ -112,9 +112,9 @@ YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
     YKeyboardBufferClear(&keyboard->buffer);
     keyboard->waiting_for_ack = false;
     // Set to special value indicating reset has been triggered.
-    keyboard->clock_low_ms = kKeyboardResetTriggered;
+    keyboard->clock_low_ms = Y_KEYBOARD_RESET_TRIGGERED;
     // Send self-test passed scancode on next falling edge of enable_clear.
-    uint8_t scancode = kKeyboardSelfTestOK;
+    uint8_t scancode = Y_KEYBOARD_SELF_TEST_OK;
     YKeyboardBufferAppend(&keyboard->buffer, &scancode);
     return;
   }

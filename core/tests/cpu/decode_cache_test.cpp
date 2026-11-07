@@ -51,11 +51,11 @@ class DecodeCacheTest : public ::testing::Test {
     cpu_.config.decode_cache_num_entries = num_entries;
     YCPUInit(&cpu_);
     YCPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
-    cpu_.registers[kCS] = 0;
-    cpu_.registers[kDS] = 0;
-    cpu_.registers[kSS] = 0;
-    cpu_.registers[kSP] = 0xFFFE;
-    cpu_.registers[kIP] = kProgramAddress;
+    cpu_.registers[Y_CPU_CS] = 0;
+    cpu_.registers[Y_CPU_DS] = 0;
+    cpu_.registers[Y_CPU_SS] = 0;
+    cpu_.registers[Y_CPU_SP] = 0xFFFE;
+    cpu_.registers[Y_CPU_IP] = kProgramAddress;
   }
 
   // Writes the way a host is supposed to, so anything decoded from those bytes
@@ -77,8 +77,8 @@ class DecodeCacheTest : public ::testing::Test {
   }
 
   void RunAt(uint16_t ip) {
-    cpu_.registers[kIP] = ip;
-    ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickExecuted);
+    cpu_.registers[Y_CPU_IP] = ip;
+    ASSERT_EQ(YCPUTick(&cpu_, 0), Y_CPU_TICK_EXECUTED);
   }
 
   static uint8_t TestReadMemoryByte(YCPUState* cpu, uint32_t address) {
@@ -124,21 +124,21 @@ class DecodeCacheTest : public ::testing::Test {
 TEST_F(DecodeCacheTest, ARepeatedInstructionIsAnsweredFromTheCache) {
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 }
 
 TEST_F(DecodeCacheTest, AReportedWriteDiscardsTheDecode) {
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 
   Write(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 // The case the page generations exist for: the write is one the CPU makes
@@ -155,21 +155,21 @@ TEST_F(DecodeCacheTest, SelfModifyingCodeIsSeen) {
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
 
   RunAt(kProgramAddress);
-  ASSERT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  ASSERT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 
   RunAt(patcher);
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 TEST_F(DecodeCacheTest, AWriteToAnotherPageKeepsTheDecode) {
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
   RunAt(kProgramAddress);
 
-  YCPUNotifyMemoryWrite(&cpu_, kProgramAddress + kCodePageSize);
+  YCPUNotifyMemoryWrite(&cpu_, kProgramAddress + Y_CPU_CODE_PAGE_SIZE);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 }
 
 // A page generation is a byte, so 256 writes bring it back to what a decode
@@ -184,38 +184,38 @@ TEST_F(DecodeCacheTest, AGenerationComingBackRoundDiscardsEverything) {
   }
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 // An instruction is keyed on the page its first byte is on, which says nothing
 // about later bytes on the next page - so it is not kept.
 TEST_F(DecodeCacheTest, AnInstructionStraddlingAPageBoundaryIsNotCached) {
-  const uint32_t straddling = kCodePageSize - 1;
+  const uint32_t straddling = Y_CPU_CODE_PAGE_SIZE - 1;
   Write(straddling, {kOpMovAlImm8, 0x11});
   RunAt(straddling);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 
   PokeBehindTheCPUsBack(straddling, {kOpMovAlImm8, 0x22});
   RunAt(straddling);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 // The other boundary an instruction can cross. IP wraps within the segment
 // where the linear address does not, so the second byte here comes from 64KB
 // below the first.
 TEST_F(DecodeCacheTest, AnInstructionWrappingTheSegmentIsNotCached) {
-  cpu_.registers[kCS] = 0x1000;
+  cpu_.registers[Y_CPU_CS] = 0x1000;
   const uint16_t last_offset = 0xFFFF;
   const uint32_t opcode_address = 0x1FFFF;
   const uint32_t immediate_address = 0x10000;
   Write(opcode_address, {kOpMovAlImm8});
   Write(immediate_address, {0x11});
   RunAt(last_offset);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 
   PokeBehindTheCPUsBack(immediate_address, {0x22});
   RunAt(last_offset);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 // Two addresses a whole cache apart land in the same entry.
@@ -228,8 +228,8 @@ TEST_F(DecodeCacheTest, CollidingAddressesDoNotAliasOntoEachOther) {
   RunAt(first);
   RunAt(second);
   RunAt(first);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
-  EXPECT_EQ(cpu_.registers[kBX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_BX] & 0xFF, 0x22);
 }
 
 // A hit skips the decode, not the accounting - otherwise the emulated clock
@@ -238,11 +238,11 @@ TEST_F(DecodeCacheTest, AHitAdvancesIPAndChargesCyclesAsTheDecodeDid) {
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
 
   RunAt(kProgramAddress);
-  const uint16_t ip_after_miss = cpu_.registers[kIP];
+  const uint16_t ip_after_miss = cpu_.registers[Y_CPU_IP];
   const uint16_t cycles_after_miss = cpu_.cycles_this_tick;
 
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kIP], ip_after_miss);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], ip_after_miss);
   EXPECT_EQ(cpu_.cycles_this_tick, cycles_after_miss);
 }
 
@@ -255,7 +255,7 @@ TEST_F(DecodeCacheTest, AHitChargesForTheAddressItComputes) {
   // A whole cache further on, so the two land in the same entry.
   const uint32_t overridden = kProgramAddress + kNumCacheEntries;
   Write(plain, {kOpMovR8Rm8, kModRmAlFromBx});
-  Write(overridden, {kPrefixES, kOpMovR8Rm8, kModRmAlFromBx});
+  Write(overridden, {Y_CPU_PREFIX_ES, kOpMovR8Rm8, kModRmAlFromBx});
 
   RunAt(plain);
   const uint16_t plain_cycles = cpu_.cycles_this_tick;
@@ -284,7 +284,7 @@ TEST_F(DecodeCacheTest, AFailedDecodeLeavesNothingBehindInItsEntry) {
   // The cached instruction reads through DS, so an ES override left behind in
   // its entry is visible in AL. The prefix fields are exactly what a failed
   // decode writes and an undisowned entry would keep.
-  cpu_.registers[kES] = 0x0100;
+  cpu_.registers[Y_CPU_ES] = 0x0100;
   const uint32_t through_ds = 0x0200;
   const uint32_t through_es = 0x1200;
   Write(through_ds, {0x11});
@@ -295,19 +295,19 @@ TEST_F(DecodeCacheTest, AFailedDecodeLeavesNothingBehindInItsEntry) {
   Write(good, {kOpMovAlMoffs8, through_ds & 0xFF, through_ds >> 8});
 
   // One prefix longer than a decode will follow.
-  const uint32_t too_many_prefixes = kProgramAddress + kCodePageSize;
-  std::vector<uint8_t> prefixes(kMaxPrefixBytes + 1, kPrefixES);
+  const uint32_t too_many_prefixes = kProgramAddress + Y_CPU_CODE_PAGE_SIZE;
+  std::vector<uint8_t> prefixes(Y_CPU_MAX_PREFIX_BYTES + 1, Y_CPU_PREFIX_ES);
   prefixes.push_back(kOpIncBx);
   Write(too_many_prefixes, prefixes);
 
   RunAt(good);
-  ASSERT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  ASSERT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 
-  cpu_.registers[kIP] = too_many_prefixes;
-  ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickInvalid);
+  cpu_.registers[Y_CPU_IP] = too_many_prefixes;
+  ASSERT_EQ(YCPUTick(&cpu_, 0), Y_CPU_TICK_INVALID);
 
   RunAt(good);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 }
 
 TEST_F(DecodeCacheTest, InvalidatingDiscardsEveryDecode) {
@@ -317,7 +317,7 @@ TEST_F(DecodeCacheTest, InvalidatingDiscardsEveryDecode) {
   YCPUInvalidateDecodeCache(&cpu_);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 TEST_F(DecodeCacheTest, WithoutACacheEveryInstructionIsDecoded) {
@@ -327,7 +327,7 @@ TEST_F(DecodeCacheTest, WithoutACacheEveryInstructionIsDecoded) {
 
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 // An index is a mask rather than a remainder, so a count that is not a power
@@ -341,7 +341,7 @@ TEST_F(DecodeCacheTest, ACountThatIsNotAPowerOfTwoIsRefused) {
   RunAt(kProgramAddress);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
 }
 
 // One entry is a legal power of two: every address maps to it, so it holds the
@@ -354,7 +354,7 @@ TEST_F(DecodeCacheTest, ACountOfOneIsAccepted) {
   RunAt(kProgramAddress);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
-  EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 }
 
 // A host about to run 10% slower than it asked to should be told why.
@@ -363,7 +363,7 @@ TEST_F(DecodeCacheTest, ABadCountIsLogged) {
   logger_config.context = this;
   logger_config.write_line = RecordLogLine;
   logger_config.enabled_modules = 0xFFFFFFFF;
-  logger_config.min_level = kLogLevelError;
+  logger_config.min_level = Y_LOG_LEVEL_ERROR;
   YLogger logger;
   YLoggerInit(&logger, &logger_config);
 
@@ -385,12 +385,12 @@ TEST_F(DecodeCacheTest, ABadCountIsLogged) {
 TEST_F(DecodeCacheTest, ALoopRunsTheSameWayEveryTimeRound) {
   // INC BX; JMP -3
   Write(kProgramAddress, {kOpIncBx, 0xEB, 0xFD});
-  cpu_.registers[kIP] = kProgramAddress;
+  cpu_.registers[Y_CPU_IP] = kProgramAddress;
   for (int i = 0; i < 16; ++i) {
-    ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickExecuted);
-    ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickExecuted);
-    ASSERT_EQ(cpu_.registers[kIP], kProgramAddress);
-    ASSERT_EQ(cpu_.registers[kBX], i + 1);
+    ASSERT_EQ(YCPUTick(&cpu_, 0), Y_CPU_TICK_EXECUTED);
+    ASSERT_EQ(YCPUTick(&cpu_, 0), Y_CPU_TICK_EXECUTED);
+    ASSERT_EQ(cpu_.registers[Y_CPU_IP], kProgramAddress);
+    ASSERT_EQ(cpu_.registers[Y_CPU_BX], i + 1);
   }
 }
 

@@ -436,20 +436,20 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
-  kLogLevelError = 0,
+  Y_LOG_LEVEL_ERROR = 0,
   // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
+  Y_LOG_LEVEL_WARN,
   // Diagnostic detail.
-  kLogLevelDebug,
+  Y_LOG_LEVEL_DEBUG,
 } YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
+  Y_LOG_MAX_LINE_LENGTH = 256,
   // Maximum number of distinct log modules, bounded by the width of
   // YLoggerConfig.enabled_modules.
-  kLogMaxModules = 32,
+  Y_LOG_MAX_MODULES = 32,
 };
 
 // Identifies the module a log message originated from.
@@ -458,7 +458,8 @@ enum {
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
 typedef struct YLogModule {
-  // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
+  // Bit index used for mask-based filtering. Must be less than
+  // Y_LOG_MAX_MODULES.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
@@ -505,7 +506,7 @@ typedef struct YLogger {
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
+  char buffer[Y_LOG_MAX_LINE_LENGTH];
 } YLogger;
 
 // Initialize a logger with the provided configuration.
@@ -560,16 +561,16 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
   va_list args;
   va_start(args, format);
   int formatted_length =
-      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, Y_LOG_MAX_LINE_LENGTH, format, args);
   va_end(args);
 
   // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
-    length = (size_t)formatted_length < kLogMaxLineLength
+    length = (size_t)formatted_length < Y_LOG_MAX_LINE_LENGTH
                  ? (size_t)formatted_length
-                 : kLogMaxLineLength - 1;
+                 : Y_LOG_MAX_LINE_LENGTH - 1;
   }
 
   uint64_t tick = logger->config->get_tick != NULL
@@ -667,45 +668,45 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 
 enum {
   // Log module ID for the PPI.
-  kLogModuleIDPPI = 4,
+  Y_PPI_LOG_MODULE_ID = 4,
 };
 
 // Log module for the PPI.
 YAX86_PUBLIC_HEADER const YLogModule YPPILogModule = {
-    .id = kLogModuleIDPPI,
+    .id = Y_PPI_LOG_MODULE_ID,
     .name = "PPI",
 };
 
 // I/O ports exposed by the PPI.
 typedef enum YPPIPort {
   // Keyboard scancode
-  kPPIPortA = 0x60,
+  Y_PPI_PORT_A = 0x60,
   // System control
-  kPPIPortB = 0x61,
+  Y_PPI_PORT_B = 0x61,
   // DIP switches
-  kPPIPortC = 0x62,
+  Y_PPI_PORT_C = 0x62,
   // Control word
-  kPPIPortControl = 0x63,
+  Y_PPI_PORT_CONTROL = 0x63,
 } YPPIPort;
 
-// Bit definitions for PPI Port B (kPPIPortB).
+// Bit definitions for PPI Port B (Y_PPI_PORT_B).
 enum {
   // Bit 0: Timer 2 signal gate (0 = disable, 1 = enable).
-  kPPIPortBTimer2Gate = (1 << 0),
+  Y_PPI_PORT_B_TIMER2_GATE = (1 << 0),
   // Bit 1: PC speaker enable/disable.
-  kPPIPortBSpeakerData = (1 << 1),
+  Y_PPI_PORT_B_SPEAKER_DATA = (1 << 1),
   // Bit 2: Turbo mode (0 = turbo, 1 = normal). Not supported.
-  kPPIPortBTurboMode = (1 << 2),
+  Y_PPI_PORT_B_TURBO_MODE = (1 << 2),
   // Bit 3: DIP switch select (0 = SW1-4, 1 = SW5-8).
-  kPPIPortBDipSwitchSelect = (1 << 3),
+  Y_PPI_PORT_B_DIP_SWITCH_SELECT = (1 << 3),
   // Bit 4: Memory parity check enable/disable. Not supported.
-  kPPIPortBMemoryParityCheck = (1 << 4),
+  Y_PPI_PORT_B_MEMORY_PARITY_CHECK = (1 << 4),
   // Bit 5: I/O channel check enable/disable. Not supported.
-  kPPIPortBIoChannelCheck = (1 << 5),
+  Y_PPI_PORT_B_IO_CHANNEL_CHECK = (1 << 5),
   // Bit 6: Keyboard clock control (0 = hold low, 1 = enable).
-  kPPIPortBKeyboardClockLow = (1 << 6),
+  Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW = (1 << 6),
   // Bit 7: Keyboard enable/clear (0 = enable read, 1 = clear).
-  kPPIPortBKeyboardEnableClear = (1 << 7),
+  Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR = (1 << 7),
 };
 
 // Memory sizes defined by DIP switches, corresponding to Port A bits 2-3.
@@ -713,25 +714,25 @@ enum {
 // and instead performs its own memory detection based on the video card type.
 typedef enum YPPIMemorySize {
   // 00 = 64KB
-  kPPIMemorySize64KB = 0,
+  Y_PPI_MEMORY_SIZE_64KB = 0,
   // 01 = 128KB
-  kPPIMemorySize128KB = 1,
+  Y_PPI_MEMORY_SIZE_128KB = 1,
   // 10 = 192KB
-  kPPIMemorySize192KB = 2,
+  Y_PPI_MEMORY_SIZE_192KB = 2,
   // 11 = 256KB
-  kPPIMemorySize256KB = 3,
+  Y_PPI_MEMORY_SIZE_256KB = 3,
 } YPPIMemorySize;
 
 // Display mode at boot time, corresponding to Port A bits 4-5.
 typedef enum YPPIDisplayMode {
   // 00 = EGA/VGA (ROM)
-  kPPIDisplayEGA = 0,
+  Y_PPI_DISPLAY_EGA = 0,
   // 01 = CGA 40x25
-  kPPIDisplayCGA40x25 = 1,
+  Y_PPI_DISPLAY_CGA_40X25 = 1,
   // 10 = CGA 80x25
-  kPPIDisplayCGA80x25 = 2,
+  Y_PPI_DISPLAY_CGA_80X25 = 2,
   // 11 = MDA 80x25
-  kPPIDisplayMDA = 3,
+  Y_PPI_DISPLAY_MDA = 3,
 } YPPIDisplayMode;
 
 struct YPPIState;
@@ -828,7 +829,7 @@ YAX86_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode);
 YAX86_PUBLIC void YPPIInit(YPPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
-  ppi->port_b = kPPIPortBKeyboardClockLow;
+  ppi->port_b = Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW;
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
@@ -841,14 +842,14 @@ YAX86_FILE_PRIVATE inline uint8_t YPPIGetNumFloppyDrives(
 
 YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port) {
   switch (port) {
-    case kPPIPortA:
+    case Y_PPI_PORT_A:
       // Reading Port A gets the keyboard scancode.
       return ppi->port_a_latch;
-    case kPPIPortB:
+    case Y_PPI_PORT_B:
       // Reading Port B returns its last written value.
       return ppi->port_b;
-    case kPPIPortC:
-      if ((ppi->port_b & kPPIPortBDipSwitchSelect) == 0) {
+    case Y_PPI_PORT_C:
+      if ((ppi->port_b & Y_PPI_PORT_B_DIP_SWITCH_SELECT) == 0) {
         // Read from SW1-4.
         uint8_t port_c = 0;
         // Bit 0: Floppy drive (IPL) installed
@@ -877,18 +878,19 @@ YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port) {
 }
 
 YAX86_PUBLIC bool YPPIIsPCSpeakerEnabled(YPPIState* ppi) {
-  return (ppi->port_b & kPPIPortBTimer2Gate) &&
-         (ppi->port_b & kPPIPortBSpeakerData);
+  return (ppi->port_b & Y_PPI_PORT_B_TIMER2_GATE) &&
+         (ppi->port_b & Y_PPI_PORT_B_SPEAKER_DATA);
 }
 
 YAX86_FILE_PRIVATE inline uint8_t YPPIGetKeyboardControl(const YPPIState* ppi) {
   return (
-      ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
+      ppi->port_b &
+      (Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR | Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW));
 }
 
 YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
-    case kPPIPortB: {
+    case Y_PPI_PORT_B: {
       // Save old states in order to check for changes after the write.
       bool old_speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
       uint8_t old_keyboard_control = YPPIGetKeyboardControl(ppi);
@@ -896,7 +898,7 @@ YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
       ppi->port_b = value;
 
       // Bit 7: Keyboard enable/clear (0 = enable read, 1 = clear).
-      if (value & kPPIPortBKeyboardEnableClear) {
+      if (value & Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR) {
         ppi->port_a_latch = 0;
       }
 
@@ -916,12 +918,12 @@ YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
           ppi->config.set_keyboard_control) {
         ppi->config.set_keyboard_control(
             ppi->config.context,
-            (ppi->port_b & kPPIPortBKeyboardEnableClear) != 0,
-            (ppi->port_b & kPPIPortBKeyboardClockLow) != 0);
+            (ppi->port_b & Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR) != 0,
+            (ppi->port_b & Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW) != 0);
       }
       break;
     }
-    case kPPIPortControl:
+    case Y_PPI_PORT_CONTROL:
       // The BIOS always writes 0x99 (0b10011001) to set up the PPI. We can
       // ignore it since our emulation is hardcoded to behave accordingly.
       break;

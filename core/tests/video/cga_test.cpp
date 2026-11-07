@@ -43,18 +43,18 @@ enum {
 class CGATest : public VideoTestBase {
  protected:
   void SetUp() override {
-    Init(kVideoAdapterCGA);
+    Init(Y_VIDEO_ADAPTER_CGA);
     // The cursor sits over the first character cell by default, which is the
     // cell most of these tests inspect.
     DisableCursor();
   }
 
   void SetControl(uint8_t value) {
-    YVideoWritePort(&video_, kCGAPortControl, value);
+    YVideoWritePort(&video_, Y_VIDEO_CGA_PORT_CONTROL, value);
   }
 
   void SetColorSelect(uint8_t value) {
-    YVideoWritePort(&video_, kCGAPortColorSelect, value);
+    YVideoWritePort(&video_, Y_VIDEO_CGA_PORT_COLOR_SELECT, value);
   }
 
   YVideoRGB Color(uint8_t index) const {
@@ -64,8 +64,9 @@ class CGATest : public VideoTestBase {
   // Write a byte of graphics mode VRAM. Even scan lines live in the first half
   // of VRAM and odd scan lines in the second.
   void WriteGraphicsByte(int y, int x_byte, uint8_t value) {
-    uint32_t address = (y % 2 ? kCGAGraphicsOddScanLineOffset : 0) +
-                       (y / 2) * kCGAGraphicsBytesPerScanLine + x_byte;
+    uint32_t address = (y % 2 ? Y_VIDEO_CGA_GRAPHICS_ODD_SCAN_LINE_OFFSET : 0) +
+                       (y / 2) * Y_VIDEO_CGA_GRAPHICS_BYTES_PER_SCAN_LINE +
+                       x_byte;
     YVideoWriteVRAM(&video_, address, value);
   }
 };
@@ -75,25 +76,26 @@ class CGATest : public VideoTestBase {
 // ============================================================================
 
 TEST_F(CGATest, Initialization) {
-  EXPECT_EQ(video_.adapter, kVideoAdapterCGA);
-  EXPECT_EQ(YVideoGetMode(&video_), kVideoModeCGAText80x25Color);
+  EXPECT_EQ(video_.adapter, Y_VIDEO_ADAPTER_CGA);
+  EXPECT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_CGA_TEXT_80X25_COLOR);
   EXPECT_EQ(video_.control_register, 0x29);
-  EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x71);
+  EXPECT_EQ(video_.registers[Y_VIDEO_CRTC_REGISTER_HORIZONTAL_TOTAL], 0x71);
   EXPECT_EQ(mock_vram[0], ' ');
   EXPECT_EQ(mock_vram[1], 0x07);
-  EXPECT_EQ(mock_vram[kCGAVRAMSize - 2], ' ');
-  EXPECT_EQ(mock_vram[kCGAVRAMSize - 1], 0x07);
+  EXPECT_EQ(mock_vram[Y_VIDEO_CGA_VRAM_SIZE - 2], ' ');
+  EXPECT_EQ(mock_vram[Y_VIDEO_CGA_VRAM_SIZE - 1], 0x07);
 }
 
 TEST_F(CGATest, AdapterMetadata) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
-  EXPECT_EQ(adapter->adapter, kVideoAdapterCGA);
+  EXPECT_EQ(adapter->adapter, Y_VIDEO_ADAPTER_CGA);
   EXPECT_EQ(adapter->frame_buffer_width, kFrameBufferWidth);
   EXPECT_EQ(adapter->frame_buffer_height, kFrameBufferHeight);
-  EXPECT_EQ(adapter->vram_address, static_cast<uint32_t>(kCGAVRAMAddress));
-  EXPECT_EQ(adapter->vram_size, static_cast<uint32_t>(kCGAVRAMSize));
-  EXPECT_EQ(adapter->port_start, kCGAPortStart);
-  EXPECT_EQ(adapter->port_end, kCGAPortEnd);
+  EXPECT_EQ(
+      adapter->vram_address, static_cast<uint32_t>(Y_VIDEO_CGA_VRAM_ADDRESS));
+  EXPECT_EQ(adapter->vram_size, static_cast<uint32_t>(Y_VIDEO_CGA_VRAM_SIZE));
+  EXPECT_EQ(adapter->port_start, Y_VIDEO_CGA_PORT_START);
+  EXPECT_EQ(adapter->port_end, Y_VIDEO_CGA_PORT_END);
 }
 
 TEST_F(CGATest, ModeSelection) {
@@ -102,13 +104,13 @@ TEST_F(CGATest, ModeSelection) {
     YVideoMode mode;
   };
   const ModeCase cases[] = {
-      {kControlMode0, kVideoModeCGAText40x25Mono},
-      {kControlMode1, kVideoModeCGAText40x25Color},
-      {kControlMode2, kVideoModeCGAText80x25Mono},
-      {kControlMode3, kVideoModeCGAText80x25Color},
-      {kControlMode4, kVideoModeCGAGraphics320x200},
-      {kControlMode5, kVideoModeCGAGraphics320x200Alt},
-      {kControlMode6, kVideoModeCGAGraphics640x200},
+      {kControlMode0, Y_VIDEO_MODE_CGA_TEXT_40X25_MONO},
+      {kControlMode1, Y_VIDEO_MODE_CGA_TEXT_40X25_COLOR},
+      {kControlMode2, Y_VIDEO_MODE_CGA_TEXT_80X25_MONO},
+      {kControlMode3, Y_VIDEO_MODE_CGA_TEXT_80X25_COLOR},
+      {kControlMode4, Y_VIDEO_MODE_CGA_GRAPHICS_320X200},
+      {kControlMode5, Y_VIDEO_MODE_CGA_GRAPHICS_320X200_ALT},
+      {kControlMode6, Y_VIDEO_MODE_CGA_GRAPHICS_640X200},
   };
   for (const ModeCase& mode_case : cases) {
     SetControl(mode_case.control);
@@ -122,15 +124,15 @@ TEST_F(CGATest, ModeControlBitsAreResolvedInHardwareOrder) {
   // The BIOS never writes these combinations, but software that ORs a bit into
   // a saved mode byte can. A real card resolves the high resolution bit before
   // the graphics bits, so 80x25 text wins over graphics.
-  SetControl(kControlMode3 | kVideoControlGraphics);
-  EXPECT_EQ(YVideoGetMode(&video_), kVideoModeCGAText80x25Color);
-  SetControl(kControlMode3 | kVideoControlHighResolutionGraphics);
-  EXPECT_EQ(YVideoGetMode(&video_), kVideoModeCGAText80x25Color);
+  SetControl(kControlMode3 | Y_VIDEO_CONTROL_GRAPHICS);
+  EXPECT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_CGA_TEXT_80X25_COLOR);
+  SetControl(kControlMode3 | Y_VIDEO_CONTROL_HIGH_RESOLUTION_GRAPHICS);
+  EXPECT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_CGA_TEXT_80X25_COLOR);
 
   // And the graphics bit before the high resolution graphics bit, so a set high
   // resolution graphics bit means nothing on its own.
-  SetControl(kControlMode1 | kVideoControlHighResolutionGraphics);
-  EXPECT_EQ(YVideoGetMode(&video_), kVideoModeCGAText40x25Color);
+  SetControl(kControlMode1 | Y_VIDEO_CONTROL_HIGH_RESOLUTION_GRAPHICS);
+  EXPECT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_CGA_TEXT_40X25_COLOR);
 }
 
 // ============================================================================
@@ -138,36 +140,38 @@ TEST_F(CGATest, ModeControlBitsAreResolvedInHardwareOrder) {
 // ============================================================================
 
 TEST_F(CGATest, PortReadWrite) {
-  YVideoWritePort(&video_, kCGAPortRegisterIndex, kCRTCRegisterCursorL);
-  EXPECT_EQ(video_.selected_register, kCRTCRegisterCursorL);
-  YVideoWritePort(&video_, kCGAPortRegisterData, 0x42);
-  EXPECT_EQ(video_.registers[kCRTCRegisterCursorL], 0x42);
-  EXPECT_EQ(YVideoReadPort(&video_, kCGAPortRegisterData), 0x42);
+  YVideoWritePort(
+      &video_, Y_VIDEO_CGA_PORT_REGISTER_INDEX, Y_VIDEO_CRTC_REGISTER_CURSOR_L);
+  EXPECT_EQ(video_.selected_register, Y_VIDEO_CRTC_REGISTER_CURSOR_L);
+  YVideoWritePort(&video_, Y_VIDEO_CGA_PORT_REGISTER_DATA, 0x42);
+  EXPECT_EQ(video_.registers[Y_VIDEO_CRTC_REGISTER_CURSOR_L], 0x42);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_CGA_PORT_REGISTER_DATA), 0x42);
 
   SetColorSelect(0x3F);
   EXPECT_EQ(video_.color_select_register, 0x3F);
-  EXPECT_EQ(YVideoReadPort(&video_, kCGAPortColorSelect), 0x3F);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_CGA_PORT_COLOR_SELECT), 0x3F);
 }
 
 TEST_F(CGATest, RegisterPortsAreAliased) {
   // The CGA decodes only the low address bits, so 3D0 to 3D7 all reach the
   // 6845's index and data registers.
-  YVideoWritePort(&video_, kCGAPortStart, kCRTCRegisterCursorH);
-  EXPECT_EQ(video_.selected_register, kCRTCRegisterCursorH);
-  YVideoWritePort(&video_, kCGAPortStart + 3, 0x07);
-  EXPECT_EQ(video_.registers[kCRTCRegisterCursorH], 0x07);
-  EXPECT_EQ(YVideoReadPort(&video_, kCGAPortStart + 7), 0x07);
+  YVideoWritePort(
+      &video_, Y_VIDEO_CGA_PORT_START, Y_VIDEO_CRTC_REGISTER_CURSOR_H);
+  EXPECT_EQ(video_.selected_register, Y_VIDEO_CRTC_REGISTER_CURSOR_H);
+  YVideoWritePort(&video_, Y_VIDEO_CGA_PORT_START + 3, 0x07);
+  EXPECT_EQ(video_.registers[Y_VIDEO_CRTC_REGISTER_CURSOR_H], 0x07);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_CGA_PORT_START + 7), 0x07);
 }
 
 TEST_F(CGATest, RegisterIndexIsMaskedToFiveBits) {
-  YVideoWritePort(&video_, kCGAPortRegisterIndex, 0xE1);
+  YVideoWritePort(&video_, Y_VIDEO_CGA_PORT_REGISTER_INDEX, 0xE1);
   EXPECT_EQ(video_.selected_register, 0x01);
 }
 
 TEST_F(CGATest, LightPenPortsAreInert) {
-  YVideoWritePort(&video_, kCGAPortClearLightPen, 0xFF);
-  YVideoWritePort(&video_, kCGAPortPresetLightPen, 0xFF);
-  EXPECT_EQ(YVideoReadPort(&video_, kCGAPortClearLightPen), 0xFF);
+  YVideoWritePort(&video_, Y_VIDEO_CGA_PORT_CLEAR_LIGHT_PEN, 0xFF);
+  YVideoWritePort(&video_, Y_VIDEO_CGA_PORT_PRESET_LIGHT_PEN, 0xFF);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_CGA_PORT_CLEAR_LIGHT_PEN), 0xFF);
 }
 
 // ============================================================================
@@ -191,13 +195,13 @@ TEST_F(CGATest, RenderText80x25) {
   EXPECT_EQ(mock_pixel_write_count, kFrameBufferWidth * kFrameBufferHeight);
   EXPECT_EQ(
       mock_pixel_span_count,
-      (kFrameBufferWidth / kVideoPixelBatchSize) * kFrameBufferHeight);
+      (kFrameBufferWidth / Y_VIDEO_PIXEL_BATCH_SIZE) * kFrameBufferHeight);
 }
 
 TEST_F(CGATest, RenderText40x25IsPixelDoubled) {
   SetControl(kControlMode1);
   DisableCursor();
-  ASSERT_EQ(YVideoGetMode(&video_), kVideoModeCGAText40x25Color);
+  ASSERT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_CGA_TEXT_40X25_COLOR);
 
   // A solid block character in white on black.
   WriteChar(0, 0xDB, kColorWhite);
@@ -251,7 +255,7 @@ TEST_F(CGATest, DirtyRangeSplittingA40ColumnCellIsReported) {
 
   video_.dirty_state.ranges[1].start_column = 5;
   video_.dirty_state.ranges[1].end_column = 8;
-  video_.dirty_state.status = kVideoDirty;
+  video_.dirty_state.status = Y_VIDEO_DIRTY;
   Render();
 
   ASSERT_EQ(mock_region_count, 1);
@@ -285,7 +289,7 @@ TEST_F(CGATest, BlinkingAttributeLimitsBackgroundColors) {
       CountPixels(0, 0, kCharWidth, kCharHeight, Color(kColorBlue + 8)), 0);
 
   // In the opposite blink phase the character disappears into its background.
-  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
+  AdvanceFrames(Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE);
   Render();
   EXPECT_EQ(
       CountPixels(0, 0, kCharWidth, kCharHeight, Color(kColorBlue)),
@@ -293,7 +297,7 @@ TEST_F(CGATest, BlinkingAttributeLimitsBackgroundColors) {
 }
 
 TEST_F(CGATest, IntenseBackgroundWhenBlinkIsDisabled) {
-  SetControl(kControlMode3 & ~kVideoControlEnableBlink);
+  SetControl(kControlMode3 & ~Y_VIDEO_CONTROL_ENABLE_BLINK);
   DisableCursor();
   // With blink disabled, attribute bit 7 is the background intensity, giving
   // all sixteen background colors.
@@ -307,12 +311,12 @@ TEST_F(CGATest, IntenseBackgroundWhenBlinkIsDisabled) {
 
 TEST_F(CGATest, RenderCursor) {
   SetControl(kControlMode3);
-  WriteRegister(kCRTCRegisterCursorStart, 0x06);
-  WriteRegister(kCRTCRegisterCursorEnd, 0x07);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_START, 0x06);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_END, 0x07);
   // Put the cursor on the third cell of the first row, in light green.
   WriteChar(2, ' ', kColorLightGreen);
-  WriteRegister(kCRTCRegisterCursorH, 0);
-  WriteRegister(kCRTCRegisterCursorL, 2);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_H, 0);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_L, 2);
   Render();
 
   int cursor_x = 2 * kCharWidth;
@@ -326,14 +330,14 @@ TEST_F(CGATest, RenderCursor) {
 
 TEST_F(CGATest, CursorKeepsItsColorWhenBlinkingCharacterIsHidden) {
   SetControl(kControlMode3);
-  WriteRegister(kCRTCRegisterCursorStart, 0x06);
-  WriteRegister(kCRTCRegisterCursorEnd, 0x07);
-  WriteRegister(kCRTCRegisterCursorH, 0);
-  WriteRegister(kCRTCRegisterCursorL, 0);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_START, 0x06);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_END, 0x07);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_H, 0);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_L, 0);
   WriteChar(0, ' ', 0x80 | (kColorBlue << 4) | kColorWhite);
   Render();
 
-  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
+  AdvanceFrames(Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE);
   Render();
 
   EXPECT_EQ(
@@ -352,8 +356,8 @@ TEST_F(CGATest, StartAddressSelectsThePage) {
   Render();
   EXPECT_EQ(Pixel(0, 0), Color(kColorBlack));
 
-  WriteRegister(kCRTCRegisterStartAddressH, kPageSize >> 8);
-  WriteRegister(kCRTCRegisterStartAddressL, kPageSize & 0xFF);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_START_ADDRESS_H, kPageSize >> 8);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_START_ADDRESS_L, kPageSize & 0xFF);
   Render();
   EXPECT_EQ(Pixel(0, 0), Color(kColorWhite));
 }
@@ -364,7 +368,7 @@ TEST_F(CGATest, StartAddressSelectsThePage) {
 
 TEST_F(CGATest, RenderGraphics320x200) {
   SetControl(kControlMode4);
-  ASSERT_EQ(YVideoGetMode(&video_), kVideoModeCGAGraphics320x200);
+  ASSERT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_CGA_GRAPHICS_320X200);
   // One byte holds four pixels, most significant bits leftmost.
   WriteGraphicsByte(0, 0, 0x1B);  // 00 01 10 11
   Render();
@@ -392,7 +396,7 @@ TEST_F(CGATest, Graphics320x200ScanLinesAreInterleaved) {
   EXPECT_EQ(Pixel(0, 0), Color(kColorBlack));
   EXPECT_EQ(Pixel(0, 1), Color(kColorBrown));
   // And the raw address it used really is in the second half.
-  EXPECT_EQ(mock_vram[kCGAGraphicsOddScanLineOffset], 0xFF);
+  EXPECT_EQ(mock_vram[Y_VIDEO_CGA_GRAPHICS_ODD_SCAN_LINE_OFFSET], 0xFF);
 }
 
 TEST_F(CGATest, Graphics320x200Palettes) {
@@ -411,15 +415,19 @@ TEST_F(CGATest, Graphics320x200Palettes) {
       // Palette 0, low intensity: green, red, brown.
       {kControlMode4, 0x00, kColorGreen, kColorBrown},
       // Palette 1, low intensity: cyan, magenta, light gray.
-      {kControlMode4, kCGAColorSelectPalette, kColorCyan, kColorLightGray},
+      {kControlMode4, Y_VIDEO_CGA_COLOR_SELECT_PALETTE, kColorCyan,
+       kColorLightGray},
       // Palette 1, high intensity.
-      {kControlMode4, kCGAColorSelectPalette | kCGAColorSelectPaletteIntensity,
+      {kControlMode4,
+       Y_VIDEO_CGA_COLOR_SELECT_PALETTE |
+           Y_VIDEO_CGA_COLOR_SELECT_PALETTE_INTENSITY,
        kColorLightCyan, kColorWhite},
       // Black and white overrides the palette bit: cyan, red, light gray.
-      {kControlMode5, kCGAColorSelectPalette, kColorCyan, kColorLightGray},
+      {kControlMode5, Y_VIDEO_CGA_COLOR_SELECT_PALETTE, kColorCyan,
+       kColorLightGray},
       // Black and white at high intensity.
-      {kControlMode5, kCGAColorSelectPaletteIntensity, kColorLightCyan,
-       kColorWhite},
+      {kControlMode5, Y_VIDEO_CGA_COLOR_SELECT_PALETTE_INTENSITY,
+       kColorLightCyan, kColorWhite},
   };
   for (const PaletteCase& palette_case : cases) {
     SetControl(palette_case.control);
@@ -441,7 +449,7 @@ TEST_F(CGATest, Graphics320x200BackgroundColor) {
   Render();
   EXPECT_EQ(Pixel(0, 0), Color(kColorMagenta));
 
-  SetColorSelect(kColorMagenta | kCGAColorSelectIntensity);
+  SetColorSelect(kColorMagenta | Y_VIDEO_CGA_COLOR_SELECT_INTENSITY);
   Render();
   EXPECT_EQ(Pixel(0, 0), Color(kColorLightMagenta));
 }
@@ -452,7 +460,7 @@ TEST_F(CGATest, Graphics320x200BackgroundColor) {
 
 TEST_F(CGATest, RenderGraphics640x200) {
   SetControl(kControlMode6);
-  ASSERT_EQ(YVideoGetMode(&video_), kVideoModeCGAGraphics640x200);
+  ASSERT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_CGA_GRAPHICS_640X200);
   // One byte holds eight pixels, most significant bit leftmost. The BIOS leaves
   // the color select register at white for this mode.
   SetColorSelect(kColorWhite);
@@ -534,8 +542,8 @@ TEST_F(CGATest, GraphicsStartAddressScrollsTheDisplay) {
   // The 6845 counts in character units and a graphics mode fetches two bytes
   // per unit, so a start address of 40 moves the display on by 80 bytes - which
   // is exactly the row that was scan line 2.
-  WriteRegister(kCRTCRegisterStartAddressH, 0);
-  WriteRegister(kCRTCRegisterStartAddressL, 40);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_START_ADDRESS_H, 0);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_START_ADDRESS_L, 40);
   Render();
   EXPECT_EQ(Pixel(0, 0), Color(kColorWhite));
 }
@@ -543,7 +551,7 @@ TEST_F(CGATest, GraphicsStartAddressScrollsTheDisplay) {
 TEST_F(CGATest, VideoEnableBlanksTheDisplay) {
   SetControl(kControlMode3);
   WriteChar(0, 0xDB, kColorWhite);
-  SetControl(kControlMode3 & ~kVideoControlVideoEnable);
+  SetControl(kControlMode3 & ~Y_VIDEO_CONTROL_VIDEO_ENABLE);
   Render();
 
   EXPECT_EQ(

@@ -33,7 +33,7 @@ class PlatformFDCIntegrationTest : public ::testing::Test {
 
   YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 };
 
 TEST_F(PlatformFDCIntegrationTest, ReadSectorViaDMA) {

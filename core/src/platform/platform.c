@@ -27,8 +27,8 @@ enum {
   // instruction retires as a single tick charging thousands of cycles, so a
   // sync interval routinely runs past it - measured at 27,844 cycles, or
   // 5.8ms, over a DOS boot. Anything relying on a bound has to impose its own;
-  // see kMaxIdleSkipCycles.
-  kMaxEventInterval = kCyclesPerMillisecond,
+  // see Y_PLATFORM_MAX_IDLE_SKIP_CYCLES.
+  Y_PLATFORM_MAX_EVENT_INTERVAL = Y_PLATFORM_CYCLES_PER_MILLISECOND,
 
   // The furthest an idle skip may move the clock in one go.
   //
@@ -39,7 +39,7 @@ enum {
   // is caught up a millisecond per iteration, so it would also spend ~900,000
   // of them in a single call. A tenth of a second is far more than any sane
   // budget and far less than either limit.
-  kMaxIdleSkipCycles = kCPUCyclesPerSecond / 10,
+  Y_PLATFORM_MAX_IDLE_SKIP_CYCLES = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 10,
 };
 
 // Record a newly registered entry in the page index.
@@ -57,15 +57,15 @@ YAX86_FILE_PRIVATE void YPlatformUpdateMemoryPageMapForEntry(
     YPlatformState* platform, uint8_t entry_index) {
   const YPlatformMemoryMapEntry* entry =
       YPlatformMemoryMapGet(&platform->memory_map, entry_index);
-  for (uint32_t page = entry->start >> kMemoryPageShift,
-                last_page = entry->end >> kMemoryPageShift;
+  for (uint32_t page = entry->start >> Y_PLATFORM_MEMORY_PAGE_SHIFT,
+                last_page = entry->end >> Y_PLATFORM_MEMORY_PAGE_SHIFT;
        page <= last_page; ++page) {
-    const uint32_t page_start = page << kMemoryPageShift;
-    const uint32_t page_end = page_start + kMemoryPageSize - 1;
+    const uint32_t page_start = page << Y_PLATFORM_MEMORY_PAGE_SHIFT;
+    const uint32_t page_end = page_start + Y_PLATFORM_MEMORY_PAGE_SIZE - 1;
     platform->memory_page_map[page] =
         entry->start <= page_start && entry->end >= page_end
             ? entry_index
-            : kMemoryPageStraddled;
+            : Y_PLATFORM_MEMORY_PAGE_STRADDLED;
   }
 }
 
@@ -74,7 +74,8 @@ YAX86_FILE_PRIVATE void YPlatformUpdateMemoryPageMapForEntry(
 //   - The entry's memory region does not lie within the address space.
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
-//   - The number of memory map entries would exceed kMaxMemoryMapEntries.
+//   - The number of memory map entries would exceed
+//   Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES.
 // Records a memory map entry without telling anything that the map has
 // changed. What the CPU derives from the map - its two windows and its decode
 // cache - is left to the caller, so that a run of registrations pays for one
@@ -84,10 +85,12 @@ YAX86_PUBLIC bool YPlatformRegisterMemoryMapEntry(
   // The index has a slot per page of the address space and none above it, so
   // an entry reaching past the top could not be recorded in it. Rejecting one
   // here is what lets the lookup treat the index as the whole answer.
-  if (entry->end >= kMemoryAddressSpaceSize || entry->start > entry->end) {
+  if (entry->end >= Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE ||
+      entry->start > entry->end) {
     return false;
   }
-  if (YPlatformMemoryMapLength(&platform->memory_map) >= kMaxMemoryMapEntries) {
+  if (YPlatformMemoryMapLength(&platform->memory_map) >=
+      Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES) {
     return false;
   }
   for (uint8_t i = 0; i < YPlatformMemoryMapLength(&platform->memory_map);
@@ -122,19 +125,20 @@ YAX86_PUBLIC void YPlatformUpdateAfterMemoryMapChange(
 }
 
 // What the page index has to say about an address: the entry covering the whole
-// of its page, kMemoryPageUnmapped where no entry covers it, or
-// kMemoryPageStraddled where more than one entry has a share of the page and
-// the caller has to walk the map. An address above the address space has no
-// page, and no entry may reach it, so it is unmapped by definition.
+// of its page, Y_PLATFORM_MEMORY_PAGE_UNMAPPED where no entry covers it, or
+// Y_PLATFORM_MEMORY_PAGE_STRADDLED where more than one entry has a share of the
+// page and the caller has to walk the map. An address above the address space
+// has no page, and no entry may reach it, so it is unmapped by definition.
 //
 // Inline rather than a function of its own: the body is a compare, a shift and
 // a load, where a call on a core with no cheap way to do any of it is a push, a
 // branch, a pop and a return.
 YAX86_FILE_PRIVATE inline uint8_t YPlatformGetMemoryPageMapIndex(
     const YPlatformState* platform, uint32_t address) {
-  return address < kMemoryAddressSpaceSize
-             ? platform->memory_page_map[address >> kMemoryPageShift]
-             : kMemoryPageUnmapped;
+  return address < Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE
+             ? platform
+                   ->memory_page_map[address >> Y_PLATFORM_MEMORY_PAGE_SHIFT]
+             : Y_PLATFORM_MEMORY_PAGE_UNMAPPED;
 }
 
 // Look up the memory region corresponding to an address. Returns NULL if the
@@ -143,10 +147,10 @@ YAX86_PUBLIC YAX86_HOT YPlatformMemoryMapEntry*
 YPlatformGetMemoryMapEntryForAddress(
     YPlatformState* platform, uint32_t address) {
   const uint8_t index = YPlatformGetMemoryPageMapIndex(platform, address);
-  if (index < kMaxMemoryMapEntries) {
+  if (index < Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES) {
     return YPlatformMemoryMapGet(&platform->memory_map, index);
   }
-  if (index == kMemoryPageUnmapped) {
+  if (index == Y_PLATFORM_MEMORY_PAGE_UNMAPPED) {
     return NULL;
   }
   // A page more than one entry has a share of, which the index cannot answer.
@@ -196,7 +200,7 @@ YPlatformReadMemoryByte(YPlatformState* platform, uint32_t address) {
   // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
   // for option ROMs, for instance.
   YAX86_PLATFORM_LOG(
-      kLogLevelDebug, "read from unmapped address %05X", address);
+      Y_LOG_LEVEL_DEBUG, "read from unmapped address %05X", address);
   return 0xFF;
 }
 
@@ -230,7 +234,8 @@ YAX86_PUBLIC YAX86_HOT void YPlatformWriteMemoryByte(
   // Either unmapped, or a read-only region such as a ROM. Both discard the
   // write, and both are logged, as they were before there was a direct path.
   YAX86_PLATFORM_LOG(
-      kLogLevelDebug, "write of %02X to unmapped address %05X", value, address);
+      Y_LOG_LEVEL_DEBUG, "write of %02X to unmapped address %05X", value,
+      address);
 }
 
 // Register an I/O port map entry in the platform state. Returns true if the
@@ -239,7 +244,8 @@ YAX86_PUBLIC YAX86_HOT void YPlatformWriteMemoryByte(
 //   - The new entry's I/O port range overlaps with an existing entry.
 YAX86_PUBLIC bool YPlatformRegisterPortMapEntry(
     YPlatformState* platform, const YPlatformPortMapEntry* entry) {
-  if (YPlatformPortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
+  if (YPlatformPortMapLength(&platform->io_port_map) >=
+      Y_PLATFORM_MAX_PORT_MAP_ENTRIES) {
     return false;
   }
   for (uint8_t i = 0; i < YPlatformPortMapLength(&platform->io_port_map); ++i) {
@@ -292,7 +298,7 @@ YPlatformReadPortByte(YPlatformState* platform, uint16_t port) {
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
     // missing from the port map, so this stays at warning level.
-    YAX86_PLATFORM_LOG(kLogLevelWarn, "read from unmapped port %04X", port);
+    YAX86_PLATFORM_LOG(Y_LOG_LEVEL_WARN, "read from unmapped port %04X", port);
     return 0xFF;
   }
   return entry->read_byte(entry, port);
@@ -306,7 +312,7 @@ YAX86_PUBLIC YAX86_HOT void YPlatformWritePortByte(
       YPlatformGetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
     YAX86_PLATFORM_LOG(
-        kLogLevelWarn, "write of %02X to unmapped port %04X", value, port);
+        Y_LOG_LEVEL_WARN, "write of %02X to unmapped port %04X", value, port);
     return;
   }
   entry->write_byte(entry, port, value);
@@ -441,7 +447,7 @@ YAX86_FILE_PRIVATE void YPlatformKeyboardCallbackSendScancode(
 // ============================================================================
 
 enum {
-  kPlatformDMAChannelFloppy = 2,
+  Y_PLATFORM_DMA_CHANNEL_FLOPPY = 2,
 };
 
 YAX86_FILE_PRIVATE void YPlatformFDCCallbackRaiseIRQ6(void* context) {
@@ -452,7 +458,7 @@ YAX86_FILE_PRIVATE void YPlatformFDCCallbackRaiseIRQ6(void* context) {
 YAX86_FILE_PRIVATE YAX86_HOT void YPlatformFDCCallbackRequestDMA(
     void* context) {
   YPlatformState* platform = (YPlatformState*)context;
-  YDMATransferByte(&platform->dma, kPlatformDMAChannelFloppy);
+  YDMATransferByte(&platform->dma, Y_PLATFORM_DMA_CHANNEL_FLOPPY);
 }
 
 YAX86_FILE_PRIVATE uint8_t
@@ -492,8 +498,8 @@ YAX86_FILE_PRIVATE uint8_t
 YPlatformDMACallbackReadDeviceByte(void* context, uint8_t channel) {
   YPlatformState* platform = (YPlatformState*)context;
   switch (channel) {
-    case kPlatformDMAChannelFloppy:
-      return YFDCReadPort(&platform->fdc, kFDCPortData);
+    case Y_PLATFORM_DMA_CHANNEL_FLOPPY:
+      return YFDCReadPort(&platform->fdc, Y_FDC_PORT_DATA);
     default:
       return 0xFF;
   }
@@ -503,8 +509,8 @@ YAX86_FILE_PRIVATE void YPlatformDMACallbackWriteDeviceByte(
     void* context, uint8_t channel, uint8_t value) {
   YPlatformState* platform = (YPlatformState*)context;
   switch (channel) {
-    case kPlatformDMAChannelFloppy:
-      YFDCWritePort(&platform->fdc, kFDCPortData, value);
+    case Y_PLATFORM_DMA_CHANNEL_FLOPPY:
+      YFDCWritePort(&platform->fdc, Y_FDC_PORT_DATA, value);
       break;
     default:
       break;
@@ -515,7 +521,7 @@ YAX86_FILE_PRIVATE void YPlatformDMACallbackOnTerminalCount(
     void* context, uint8_t channel) {
   YPlatformState* platform = (YPlatformState*)context;
   switch (channel) {
-    case kPlatformDMAChannelFloppy:
+    case Y_PLATFORM_DMA_CHANNEL_FLOPPY:
       YFDCHandleTC(&platform->fdc);
       break;
     default:
@@ -581,9 +587,9 @@ YAX86_FILE_PRIVATE void YPlatformInitBIOS(YPlatformState* platform) {
   uint32_t bios_size = YBIOSGetROMSize();
   YPlatformMemoryMapEntry bios_rom = {
       .context = NULL,
-      .entry_type = kMemoryMapEntryBIOSROM,
-      .start = kBIOSROMStartAddress,
-      .end = kBIOSROMStartAddress + bios_size - 1,
+      .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM,
+      .start = Y_BIOS_ROM_START_ADDRESS,
+      .end = Y_BIOS_ROM_START_ADDRESS + bios_size - 1,
       // The ROM image is a constant array in the library, so it is read
       // directly. write_data is left NULL because the BIOS ROM is read-only.
       .read_data = YBIOSGetROMData(),
@@ -599,7 +605,7 @@ YAX86_FILE_PRIVATE bool YPlatformCPUCallbackAcknowledgeInterrupt(
     YCPUState* cpu, uint8_t* vector) {
   YPlatformState* platform = (YPlatformState*)cpu->config.context;
   const uint8_t interrupt_vector = YPICGetPendingInterrupt(&platform->pic);
-  if (interrupt_vector == kPICNoPendingInterrupt) {
+  if (interrupt_vector == Y_PIC_NO_PENDING_INTERRUPT) {
     return false;
   } else {
     *vector = interrupt_vector;
@@ -610,7 +616,7 @@ YAX86_FILE_PRIVATE bool YPlatformCPUCallbackAcknowledgeInterrupt(
 enum {
   // The DOS idle interrupt. MS-DOS issues it from the loops in which it waits
   // for input, to tell anything listening that the machine has nothing to do.
-  kDOSIdleInterrupt = 0x28,
+  Y_PLATFORM_DOS_IDLE_INTERRUPT = 0x28,
 };
 
 // Notes the guest declaring itself idle. Nothing is serviced here - the guest's
@@ -620,11 +626,11 @@ enum {
 // nothing per interrupt.
 YAX86_FILE_PRIVATE YAX86_HOT YCPUInterruptHandlerResult
 YPlatformCPUCallbackHandleInterrupt(YCPUState* cpu, uint8_t interrupt_number) {
-  if (interrupt_number == kDOSIdleInterrupt) {
+  if (interrupt_number == Y_PLATFORM_DOS_IDLE_INTERRUPT) {
     YPlatformState* platform = (YPlatformState*)cpu->config.context;
     platform->is_guest_idle = true;
   }
-  return kInterruptHandlerUnhandled;
+  return Y_CPU_INTERRUPT_HANDLER_UNHANDLED;
 }
 
 // Hands the CPU a direct window for instruction fetch.
@@ -639,7 +645,7 @@ YAX86_FILE_PRIVATE void YPlatformCPUCallbackGetInstructionFetchWindow(
   // Anything that is not a single entry's page - unmapped, or shared by more
   // than one entry - has no window to hand out.
   const uint8_t index = YPlatformGetMemoryPageMapIndex(platform, address);
-  if (index >= kMaxMemoryMapEntries) {
+  if (index >= Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES) {
     return;
   }
   YPlatformMemoryMapEntry* entry =
@@ -669,7 +675,8 @@ YAX86_FILE_PRIVATE void YPlatformInitCPU(YPlatformState* platform) {
   platform->cpu.config.interrupt_request_hint =
       &platform->pic.has_unmasked_request;
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
-  platform->cpu.config.decode_cache_num_entries = kDecodeCacheEntries;
+  platform->cpu.config.decode_cache_num_entries =
+      Y_PLATFORM_DECODE_CACHE_ENTRIES;
   if (platform->config.enable_dos_idle_skip) {
     platform->cpu.config.handle_interrupt = YPlatformCPUCallbackHandleInterrupt;
   }
@@ -679,22 +686,22 @@ YAX86_FILE_PRIVATE void YPlatformInitCPU(YPlatformState* platform) {
 
   // Initialize CPU registers.
   // CS:IP points to the BIOS entry point at 0xFFFF0.
-  platform->cpu.registers[kCS] = 0xF000;
-  platform->cpu.registers[kIP] = 0xFFF0;
-  platform->cpu.registers[kDS] = 0x0000;
-  platform->cpu.registers[kSS] = 0x0000;
-  platform->cpu.registers[kES] = 0x0000;
-  platform->cpu.registers[kSP] = 0xFFFE;
+  platform->cpu.registers[Y_CPU_CS] = 0xF000;
+  platform->cpu.registers[Y_CPU_IP] = 0xFFF0;
+  platform->cpu.registers[Y_CPU_DS] = 0x0000;
+  platform->cpu.registers[Y_CPU_SS] = 0x0000;
+  platform->cpu.registers[Y_CPU_ES] = 0x0000;
+  platform->cpu.registers[Y_CPU_SP] = 0xFFFE;
 }
 
 YAX86_FILE_PRIVATE void YPlatformInitMemoryMap(YPlatformState* platform) {
   YPlatformMemoryMapInit(&platform->memory_map);
-  for (uint32_t page = 0; page < kNumMemoryPages; ++page) {
-    platform->memory_page_map[page] = kMemoryPageUnmapped;
+  for (uint32_t page = 0; page < Y_PLATFORM_NUM_MEMORY_PAGES; ++page) {
+    platform->memory_page_map[page] = Y_PLATFORM_MEMORY_PAGE_UNMAPPED;
   }
   YPlatformMemoryMapEntry conventional_memory = {
       .context = platform,
-      .entry_type = kMemoryMapEntryConventional,
+      .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL,
       .start = 0x0000,
       .end = platform->config.physical_memory_size - 1,
       // Conventional memory is the caller's buffer, accessed directly.
@@ -708,7 +715,7 @@ YAX86_FILE_PRIVATE void YPlatformInitPIC(YPlatformState* platform) {
   platform->pic.config.logger = &platform->logger;
   YPICInit(&platform->pic);
   YPlatformPortMapEntry pic_entry = {
-      .entry_type = kPortMapEntryPIC,
+      .entry_type = Y_PLATFORM_PORT_MAP_ENTRY_PIC,
       .start = 0x20,
       .end = 0x21,
       .read_byte = YPlatformPICCallbackReadPortByte,
@@ -726,7 +733,7 @@ YAX86_FILE_PRIVATE void YPlatformInitPIT(YPlatformState* platform) {
       YPlatformPITCallbackSetPCSpeakerFrequency;
   YPITInit(&platform->pit);
   YPlatformPortMapEntry pit_entry = {
-      .entry_type = kPortMapEntryPIT,
+      .entry_type = Y_PLATFORM_PORT_MAP_ENTRY_PIT,
       .start = 0x40,
       .end = 0x43,
       .read_byte = YPlatformPITCallbackReadPortByte,
@@ -740,12 +747,13 @@ YAX86_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
   platform->ppi.config.num_floppy_drives = 1;
-  platform->ppi.config.memory_size = kPPIMemorySize256KB;
+  platform->ppi.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
   platform->ppi.config.display_mode =
-      platform->config.video_adapter == kVideoAdapterCGA ? kPPIDisplayCGA80x25
-                                                         : kPPIDisplayMDA;
+      platform->config.video_adapter == Y_VIDEO_ADAPTER_CGA
+          ? Y_PPI_DISPLAY_CGA_80X25
+          : Y_PPI_DISPLAY_MDA;
   platform->ppi.config.fpu_installed = false;
   platform->ppi.config.set_pc_speaker_frequency =
       YPlatformPPICallbackSetPCSpeakerFrequency;
@@ -753,7 +761,7 @@ YAX86_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
       YPlatformPPICallbackSetKeyboardControl;
   YPPIInit(&platform->ppi);
   YPlatformPortMapEntry ppi_entry = {
-      .entry_type = kPortMapEntryPPI,
+      .entry_type = Y_PLATFORM_PORT_MAP_ENTRY_PPI,
       .start = 0x60,
       .end = 0x63,
       .read_byte = YPlatformPPICallbackReadPortByte,
@@ -781,7 +789,7 @@ YAX86_FILE_PRIVATE void YPlatformInitFDC(YPlatformState* platform) {
   platform->fdc.config.write_image_byte = NULL;
   YFDCInit(&platform->fdc);
   YPlatformPortMapEntry fdc_entry = {
-      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryFDC,
+      .entry_type = (YPlatformPortMapEntryType)Y_PLATFORM_PORT_MAP_ENTRY_FDC,
       .start = 0x3F0,
       .end = 0x3F7,
       .read_byte = YPlatformFDCCallbackReadPortByte,
@@ -799,9 +807,9 @@ YAX86_FILE_PRIVATE void YPlatformInitHDC(YPlatformState* platform) {
   const uint32_t option_rom_size = YHDCGetOptionROMSize();
   YPlatformMemoryMapEntry option_rom_entry = {
       .context = &platform->hdc,
-      .entry_type = kMemoryMapEntryHDCOptionROM,
-      .start = kHDCOptionROMStartAddress,
-      .end = kHDCOptionROMStartAddress + option_rom_size - 1,
+      .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM,
+      .start = Y_HDC_OPTION_ROM_START_ADDRESS,
+      .end = Y_HDC_OPTION_ROM_START_ADDRESS + option_rom_size - 1,
       // As with the BIOS ROM, a constant array read directly. write_data is
       // left NULL because the option ROM is read-only.
       .read_data = YHDCGetOptionROMData(),
@@ -810,9 +818,9 @@ YAX86_FILE_PRIVATE void YPlatformInitHDC(YPlatformState* platform) {
 
   YPlatformPortMapEntry port_entry = {
       .context = &platform->hdc,
-      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryHDC,
-      .start = kHDCPortBase,
-      .end = kHDCPortBase + kHDCNumPorts - 1,
+      .entry_type = (YPlatformPortMapEntryType)Y_PLATFORM_PORT_MAP_ENTRY_HDC,
+      .start = Y_HDC_PORT_BASE,
+      .end = Y_HDC_PORT_BASE + Y_HDC_NUM_PORTS - 1,
       .read_byte = YPlatformHDCCallbackReadPortByte,
       .write_byte = YPlatformHDCCallbackWritePortByte,
   };
@@ -829,7 +837,7 @@ YAX86_FILE_PRIVATE void YPlatformInitDMA(YPlatformState* platform) {
   platform->dma.config.on_terminal_count = YPlatformDMACallbackOnTerminalCount;
   YDMAInit(&platform->dma);
   YPlatformPortMapEntry dma_entry = {
-      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryDMA,
+      .entry_type = (YPlatformPortMapEntryType)Y_PLATFORM_PORT_MAP_ENTRY_DMA,
       .start = 0x00,
       .end = 0x0F,
       .read_byte = YPlatformDMACallbackReadPortByte,
@@ -838,7 +846,8 @@ YAX86_FILE_PRIVATE void YPlatformInitDMA(YPlatformState* platform) {
   };
   YPlatformRegisterPortMapEntry(platform, &dma_entry);
   YPlatformPortMapEntry dma_page_entry = {
-      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryDMAPage,
+      .entry_type =
+          (YPlatformPortMapEntryType)Y_PLATFORM_PORT_MAP_ENTRY_DMA_PAGE,
       .start = 0x80,
       .end = 0x8F,
       .read_byte = YPlatformDMACallbackReadPortByte,
@@ -861,7 +870,7 @@ YAX86_FILE_PRIVATE void YPlatformInitVideo(YPlatformState* platform) {
 
   YPlatformMemoryMapEntry vram_entry = {
       .context = &platform->video,
-      .entry_type = kMemoryMapEntryVRAM,
+      .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM,
       .start = adapter->vram_address,
       .end = adapter->vram_address + adapter->vram_size - 1,
       // Reads go straight to the buffer: nothing observes them, and the guest
@@ -874,7 +883,7 @@ YAX86_FILE_PRIVATE void YPlatformInitVideo(YPlatformState* platform) {
 
   YPlatformPortMapEntry port_entry = {
       .context = platform,
-      .entry_type = kPortMapEntryVideo,
+      .entry_type = Y_PLATFORM_PORT_MAP_ENTRY_VIDEO,
       .start = adapter->port_start,
       .end = adapter->port_end,
       .read_byte = YPlatformVideoCallbackReadPortByte,
@@ -891,13 +900,16 @@ YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // still be logged.
   YLoggerInit(&platform->logger, platform->config.logger_config);
 
-  if (platform->config.physical_memory_size < kMinPhysicalMemorySize ||
-      platform->config.physical_memory_size > kMaxPhysicalMemorySize) {
+  if (platform->config.physical_memory_size <
+          Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE ||
+      platform->config.physical_memory_size >
+          Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE) {
     YAX86_LOG(
-        &platform->logger, &YPlatformLogModule, kLogLevelError,
+        &platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_ERROR,
         "physical_memory_size %u is not between %u and %u bytes",
         (unsigned)platform->config.physical_memory_size,
-        (unsigned)kMinPhysicalMemorySize, (unsigned)kMaxPhysicalMemorySize);
+        (unsigned)Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE,
+        (unsigned)Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE);
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
@@ -905,7 +917,7 @@ YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // obscurely later.
   if (platform->config.physical_memory == NULL) {
     YAX86_LOG(
-        &platform->logger, &YPlatformLogModule, kLogLevelError,
+        &platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_ERROR,
         "no physical_memory buffer was provided");
     return false;
   }
@@ -913,7 +925,7 @@ YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // would leave the screen permanently blank with nothing to say why.
   if (platform->config.vram == NULL) {
     YAX86_LOG(
-        &platform->logger, &YPlatformLogModule, kLogLevelError,
+        &platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_ERROR,
         "no vram buffer was provided");
     return false;
   }
@@ -938,7 +950,7 @@ YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // Schedule the first deadline from the devices' power-on state, so that the
   // first instruction is not treated as already overdue.
   platform->next_event_ticks =
-      YPlatformCyclesUntilNextEvent(platform, kMaxEventInterval);
+      YPlatformCyclesUntilNextEvent(platform, Y_PLATFORM_MAX_EVENT_INTERVAL);
 
   // Set before the two calls below, because each of them recomputes the
   // enabled flags and one of those is derived from this.
@@ -993,10 +1005,10 @@ YAX86_FILE_PRIVATE inline bool YPlatformIsEventDue(
 }
 
 // Work out when the next device needs attention, in cycles from now, up to
-// max_cycles. The instruction path passes kMaxEventInterval; the idle skip
-// passes what is left of the budget it was given, because there the answer is
-// how far the clock may be moved rather than how long until it is checked
-// again.
+// max_cycles. The instruction path passes Y_PLATFORM_MAX_EVENT_INTERVAL; the
+// idle skip passes what is left of the budget it was given, because there the
+// answer is how far the clock may be moved rather than how long until it is
+// checked again.
 YAX86_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
     const YPlatformState* platform, uint32_t max_cycles) {
   uint32_t cycles = max_cycles;
@@ -1004,9 +1016,9 @@ YAX86_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
   // The PIT's next output change, converted from its own 1.19MHz clock and
   // offset by the cycles already credited towards its next tick.
   const uint32_t pit_ticks = YPITTicksUntilNextEvent(&platform->pit);
-  if (pit_ticks != kPITNoEvent) {
+  if (pit_ticks != Y_PIT_NO_EVENT) {
     const uint32_t pit_cycles =
-        pit_ticks * kCyclesPerPITTick - platform->pit_cycles;
+        pit_ticks * Y_PLATFORM_CYCLES_PER_PIT_TICK - platform->pit_cycles;
     if (pit_cycles < cycles) {
       cycles = pit_cycles;
     }
@@ -1014,8 +1026,9 @@ YAX86_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
 
   // The floppy controller only advances a command that is executing; when no
   // command is in flight there is nothing for a tick to do.
-  if (platform->fdc.phase == kFDCPhaseExecution) {
-    const uint32_t fdc_cycles = kCyclesPerFDCTick - platform->fdc_cycles;
+  if (platform->fdc.phase == Y_FDC_PHASE_EXECUTION) {
+    const uint32_t fdc_cycles =
+        Y_PLATFORM_CYCLES_PER_FDC_TICK - platform->fdc_cycles;
     if (fdc_cycles < cycles) {
       cycles = fdc_cycles;
     }
@@ -1033,20 +1046,22 @@ YAX86_PUBLIC YAX86_HOT void YPlatformSync(YPlatformState* platform) {
 
   if (elapsed > 0) {
     platform->pit_cycles += elapsed;
-    const uint32_t pit_ticks = platform->pit_cycles / kCyclesPerPITTick;
+    const uint32_t pit_ticks =
+        platform->pit_cycles / Y_PLATFORM_CYCLES_PER_PIT_TICK;
     if (pit_ticks > 0) {
-      platform->pit_cycles -= pit_ticks * kCyclesPerPITTick;
+      platform->pit_cycles -= pit_ticks * Y_PLATFORM_CYCLES_PER_PIT_TICK;
       YPITAdvance(&platform->pit, pit_ticks);
     }
 
     platform->fdc_cycles += elapsed;
-    const uint32_t fdc_ticks = platform->fdc_cycles / kCyclesPerFDCTick;
+    const uint32_t fdc_ticks =
+        platform->fdc_cycles / Y_PLATFORM_CYCLES_PER_FDC_TICK;
     if (fdc_ticks > 0) {
-      platform->fdc_cycles -= fdc_ticks * kCyclesPerFDCTick;
+      platform->fdc_cycles -= fdc_ticks * Y_PLATFORM_CYCLES_PER_FDC_TICK;
       // YFDCTick() does nothing unless a command is executing, so an idle
       // controller does not need catching up at all - which matters because
       // an idle stretch is not bounded by an FDC deadline.
-      if (platform->fdc.phase == kFDCPhaseExecution) {
+      if (platform->fdc.phase == Y_FDC_PHASE_EXECUTION) {
         for (uint32_t i = 0; i < fdc_ticks; ++i) {
           YFDCTick(&platform->fdc);
         }
@@ -1055,9 +1070,10 @@ YAX86_PUBLIC YAX86_HOT void YPlatformSync(YPlatformState* platform) {
 
     platform->keyboard_cycles += elapsed;
     const uint32_t keyboard_ticks =
-        platform->keyboard_cycles / kCyclesPerMillisecond;
+        platform->keyboard_cycles / Y_PLATFORM_CYCLES_PER_MILLISECOND;
     if (keyboard_ticks > 0) {
-      platform->keyboard_cycles -= keyboard_ticks * kCyclesPerMillisecond;
+      platform->keyboard_cycles -=
+          keyboard_ticks * Y_PLATFORM_CYCLES_PER_MILLISECOND;
       for (uint32_t i = 0; i < keyboard_ticks; ++i) {
         YKeyboardTickMs(&platform->keyboard);
       }
@@ -1070,7 +1086,7 @@ YAX86_PUBLIC YAX86_HOT void YPlatformSync(YPlatformState* platform) {
 
   platform->next_event_ticks =
       platform->ticks +
-      YPlatformCyclesUntilNextEvent(platform, kMaxEventInterval);
+      YPlatformCyclesUntilNextEvent(platform, Y_PLATFORM_MAX_EVENT_INTERVAL);
 }
 
 // The body of both entry points. YPlatformTick() promises its caller one
@@ -1099,20 +1115,20 @@ YPlatformTickInternal(YPlatformState* platform, bool may_batch_instructions) {
     YPlatformSync(platform);
   }
 
-  if (cpu_result == kCPUTickInvalid) {
-    return kPlatformInvalid;
+  if (cpu_result == Y_CPU_TICK_INVALID) {
+    return Y_PLATFORM_INVALID;
   }
 
   // A halted CPU with interrupts disabled and nothing pending can never be
   // woken. Note that an ordinary halt is not reported as a stop: the PIT and
   // the rest of the machine must keep ticking so that an interrupt can wake
   // the CPU back up.
-  if (platform->cpu.is_halted && !YCPUGetFlag(&platform->cpu, kIF) &&
+  if (platform->cpu.is_halted && !YCPUGetFlag(&platform->cpu, Y_CPU_IF) &&
       !platform->cpu.has_pending_internal_interrupt) {
-    return kPlatformHung;
+    return Y_PLATFORM_HUNG;
   }
 
-  return kPlatformRunning;
+  return Y_PLATFORM_RUNNING;
 }
 
 YAX86_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform) {
@@ -1127,13 +1143,13 @@ YAX86_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform) {
 //
 // The bound matters as much as the skip: without it a machine idling at a DOS
 // prompt would be handed more emulated time per call than the caller asked for,
-// and would run its clock fast. kMaxIdleSkipCycles bounds it a second time, in
-// case the caller's budget is itself large enough to overflow the catch-up
-// arithmetic.
+// and would run its clock fast. Y_PLATFORM_MAX_IDLE_SKIP_CYCLES bounds it a
+// second time, in case the caller's budget is itself large enough to overflow
+// the catch-up arithmetic.
 YAX86_FILE_PRIVATE void YPlatformSkipIdleTime(
     YPlatformState* platform, uint32_t max_cycles) {
-  if (max_cycles > kMaxIdleSkipCycles) {
-    max_cycles = kMaxIdleSkipCycles;
+  if (max_cycles > Y_PLATFORM_MAX_IDLE_SKIP_CYCLES) {
+    max_cycles = Y_PLATFORM_MAX_IDLE_SKIP_CYCLES;
   }
   const uint32_t cycles = YPlatformCyclesUntilNextEvent(platform, max_cycles);
   if (cycles == 0) {
@@ -1152,7 +1168,7 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles) {
   uint32_t elapsed = 0;
   while (elapsed < max_cycles) {
     YPlatformRunStatus status = YPlatformTickInternal(platform, true);
-    if (status != kPlatformRunning) {
+    if (status != Y_PLATFORM_RUNNING) {
       return status;
     }
     elapsed = platform->ticks - start;
@@ -1167,7 +1183,7 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles) {
       }
     }
   }
-  return kPlatformRunning;
+  return Y_PLATFORM_RUNNING;
 }
 
 // ============================================================================

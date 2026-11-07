@@ -107,12 +107,12 @@ TEST_F(KeyboardTest, KeyPressAndAck) {
 
 TEST_F(KeyboardTest, BufferOverflow) {
   // Buffer more keys than the buffer can hold.
-  for (int i = 0; i < kKeyboardBufferSize + 5; ++i) {
+  for (int i = 0; i < Y_KEYBOARD_BUFFER_SIZE + 5; ++i) {
     YKeyboardHandleKeyPress(&keyboard_, i);
   }
 
   // Verify the buffer is full but not over-full.
-  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), kKeyboardBufferSize);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), Y_KEYBOARD_BUFFER_SIZE);
 }
 
 TEST_F(KeyboardTest, KeysPressedDuringResetAreDropped) {
@@ -121,7 +121,7 @@ TEST_F(KeyboardTest, KeysPressedDuringResetAreDropped) {
   // code - and must not resurface once the reset ends, which is where the
   // BIOS's stuck key test would see it and report a stuck key.
   YKeyboardHandleControl(&keyboard_, false, false);
-  for (int i = 0; i < kKeyboardResetThresholdMs; ++i) {
+  for (int i = 0; i < Y_KEYBOARD_RESET_THRESHOLD_MS; ++i) {
     YKeyboardTickMs(&keyboard_);
   }
   ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);  // the 0xAA self test
@@ -149,7 +149,7 @@ TEST_F(KeyboardTest, KeysPressedAfterAResetAreKept) {
   // typing works normally - getting this wrong silently eats every keystroke
   // for the rest of the session, since a machine resets its keyboard at boot.
   YKeyboardHandleControl(&keyboard_, false, false);
-  for (int i = 0; i < kKeyboardResetThresholdMs; ++i) {
+  for (int i = 0; i < Y_KEYBOARD_RESET_THRESHOLD_MS; ++i) {
     YKeyboardTickMs(&keyboard_);
   }
   YKeyboardHandleControl(&keyboard_, false, true);
@@ -169,7 +169,7 @@ TEST_F(KeyboardTest, KeysPressedDuringAShortClockLowAreKept) {
   // Holding the clock line low briefly only stops the keyboard talking. It is
   // not a reset, so the keyboard keeps scanning and buffers what it sees.
   YKeyboardHandleControl(&keyboard_, false, false);
-  for (int i = 0; i < kKeyboardResetThresholdMs - 1; ++i) {
+  for (int i = 0; i < Y_KEYBOARD_RESET_THRESHOLD_MS - 1; ++i) {
     YKeyboardTickMs(&keyboard_);
   }
 
@@ -218,7 +218,7 @@ TEST_F(KeyboardTest, ShortClockLowDoesNotReset) {
 
   // 2. Hold clock low for less than the reset threshold.
   YKeyboardHandleControl(&keyboard_, false, false);
-  for (int i = 0; i < kKeyboardResetThresholdMs - 1; ++i) {
+  for (int i = 0; i < Y_KEYBOARD_RESET_THRESHOLD_MS - 1; ++i) {
     YKeyboardTickMs(&keyboard_);
   }
 

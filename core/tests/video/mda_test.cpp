@@ -17,7 +17,7 @@ enum {
 class MDATest : public VideoTestBase {
  protected:
   void SetUp() override {
-    Init(kVideoAdapterMDA);
+    Init(Y_VIDEO_ADAPTER_MDA);
     // The cursor sits over the first character cell by default, which is the
     // cell most of these tests inspect.
     DisableCursor();
@@ -30,59 +30,62 @@ class MDATest : public VideoTestBase {
 };
 
 TEST_F(MDATest, Initialization) {
-  EXPECT_EQ(video_.adapter, kVideoAdapterMDA);
-  EXPECT_EQ(YVideoGetMode(&video_), kVideoModeMDAText80x25);
+  EXPECT_EQ(video_.adapter, Y_VIDEO_ADAPTER_MDA);
+  EXPECT_EQ(YVideoGetMode(&video_), Y_VIDEO_MODE_MDA_TEXT_80X25);
   EXPECT_EQ(video_.control_register, 0x29);
   EXPECT_EQ(video_.selected_register, 0);
-  EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x61);
+  EXPECT_EQ(video_.registers[Y_VIDEO_CRTC_REGISTER_HORIZONTAL_TOTAL], 0x61);
   // Verify VRAM was cleared to spaces with the default attribute.
   EXPECT_EQ(mock_vram[0], ' ');
   EXPECT_EQ(mock_vram[1], 0x07);
-  EXPECT_EQ(mock_vram[kMDAVRAMSize - 2], ' ');
-  EXPECT_EQ(mock_vram[kMDAVRAMSize - 1], 0x07);
+  EXPECT_EQ(mock_vram[Y_VIDEO_MDA_VRAM_SIZE - 2], ' ');
+  EXPECT_EQ(mock_vram[Y_VIDEO_MDA_VRAM_SIZE - 1], 0x07);
 }
 
 TEST_F(MDATest, AdapterMetadata) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
-  EXPECT_EQ(adapter->adapter, kVideoAdapterMDA);
+  EXPECT_EQ(adapter->adapter, Y_VIDEO_ADAPTER_MDA);
   EXPECT_EQ(adapter->frame_buffer_width, 720);
   EXPECT_EQ(adapter->frame_buffer_height, 350);
-  EXPECT_EQ(adapter->vram_address, static_cast<uint32_t>(kMDAVRAMAddress));
-  EXPECT_EQ(adapter->vram_size, static_cast<uint32_t>(kMDAVRAMSize));
-  EXPECT_EQ(adapter->port_start, kMDAPortStart);
-  EXPECT_EQ(adapter->port_end, kMDAPortEnd);
+  EXPECT_EQ(
+      adapter->vram_address, static_cast<uint32_t>(Y_VIDEO_MDA_VRAM_ADDRESS));
+  EXPECT_EQ(adapter->vram_size, static_cast<uint32_t>(Y_VIDEO_MDA_VRAM_SIZE));
+  EXPECT_EQ(adapter->port_start, Y_VIDEO_MDA_PORT_START);
+  EXPECT_EQ(adapter->port_end, Y_VIDEO_MDA_PORT_END);
 }
 
 TEST_F(MDATest, PortReadWrite) {
   // Index register.
-  YVideoWritePort(&video_, kMDAPortRegisterIndex, kCRTCRegisterHorizontalTotal);
-  EXPECT_EQ(video_.selected_register, kCRTCRegisterHorizontalTotal);
+  YVideoWritePort(
+      &video_, Y_VIDEO_MDA_PORT_REGISTER_INDEX,
+      Y_VIDEO_CRTC_REGISTER_HORIZONTAL_TOTAL);
+  EXPECT_EQ(video_.selected_register, Y_VIDEO_CRTC_REGISTER_HORIZONTAL_TOTAL);
   EXPECT_EQ(
-      YVideoReadPort(&video_, kMDAPortRegisterIndex),
-      kCRTCRegisterHorizontalTotal);
+      YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_REGISTER_INDEX),
+      Y_VIDEO_CRTC_REGISTER_HORIZONTAL_TOTAL);
 
   // Data register. Horizontal Total defaults to 0x61.
-  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortRegisterData), 0x61);
-  YVideoWritePort(&video_, kMDAPortRegisterData, 0x62);
-  EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x62);
-  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortRegisterData), 0x62);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_REGISTER_DATA), 0x61);
+  YVideoWritePort(&video_, Y_VIDEO_MDA_PORT_REGISTER_DATA, 0x62);
+  EXPECT_EQ(video_.registers[Y_VIDEO_CRTC_REGISTER_HORIZONTAL_TOTAL], 0x62);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_REGISTER_DATA), 0x62);
 
   // Mode control register.
-  YVideoWritePort(&video_, kMDAPortControl, 0xAB);
+  YVideoWritePort(&video_, Y_VIDEO_MDA_PORT_CONTROL, 0xAB);
   EXPECT_EQ(video_.control_register, 0xAB);
-  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortControl), 0xAB);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_CONTROL), 0xAB);
 }
 
 TEST_F(MDATest, StatusPortIsReadOnly) {
-  uint8_t status = YVideoReadPort(&video_, kMDAPortStatus);
-  YVideoWritePort(&video_, kMDAPortStatus, 0xCD);
-  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortStatus), status);
+  uint8_t status = YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_STATUS);
+  YVideoWritePort(&video_, Y_VIDEO_MDA_PORT_STATUS, 0xCD);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_STATUS), status);
 }
 
 TEST_F(MDATest, PrinterPortsAreNotDecoded) {
-  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortPrinterData), 0xFF);
-  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortPrinterStatus), 0xFF);
-  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortPrinterControl), 0xFF);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_PRINTER_DATA), 0xFF);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_PRINTER_STATUS), 0xFF);
+  EXPECT_EQ(YVideoReadPort(&video_, Y_VIDEO_MDA_PORT_PRINTER_CONTROL), 0xFF);
 }
 
 TEST_F(MDATest, VRAMAccess) {
@@ -95,9 +98,9 @@ TEST_F(MDATest, VRAMAccess) {
   EXPECT_EQ(YVideoReadVRAM(&video_, 0x200), 0xAA);
 
   // Out of range accesses are ignored.
-  YVideoWriteVRAM(&video_, kMDAVRAMSize, 0x11);
-  EXPECT_EQ(mock_vram[kMDAVRAMSize], 0);
-  EXPECT_EQ(YVideoReadVRAM(&video_, kMDAVRAMSize), 0xFF);
+  YVideoWriteVRAM(&video_, Y_VIDEO_MDA_VRAM_SIZE, 0x11);
+  EXPECT_EQ(mock_vram[Y_VIDEO_MDA_VRAM_SIZE], 0);
+  EXPECT_EQ(YVideoReadVRAM(&video_, Y_VIDEO_MDA_VRAM_SIZE), 0xFF);
 }
 
 TEST_F(MDATest, RenderCharacterNormal) {
@@ -195,14 +198,14 @@ TEST_F(MDATest, RenderBlinkingCharacter) {
   EXPECT_GT(visible_pixels, 0);
 
   // Advance to the opposite blink phase - the character disappears.
-  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
+  AdvanceFrames(Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE);
   Render();
   EXPECT_EQ(
       CountPixelsInFirstCell(video_.config.background),
       kCharWidth * kCharHeight);
 
   // And comes back in the phase after that.
-  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
+  AdvanceFrames(Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE);
   Render();
   EXPECT_EQ(CountPixelsInFirstCell(video_.config.foreground), visible_pixels);
 }
@@ -214,10 +217,10 @@ TEST_F(MDATest, RenderBlinkingCharacter) {
 TEST_F(MDATest, CharactersBlinkAtHalfTheCursorRate) {
   // Put a full-height cursor on the first cell and a blinking character on the
   // second, so the two can be counted independently.
-  WriteRegister(kCRTCRegisterCursorStart, 0x00);
-  WriteRegister(kCRTCRegisterCursorEnd, kCharHeight - 1);
-  WriteRegister(kCRTCRegisterCursorH, 0);
-  WriteRegister(kCRTCRegisterCursorL, 0);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_START, 0x00);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_END, kCharHeight - 1);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_H, 0);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_L, 0);
   WriteChar(1, 'A', 0x87);
 
   auto cursor_pixels = [&] {
@@ -235,13 +238,13 @@ TEST_F(MDATest, CharactersBlinkAtHalfTheCursorRate) {
 
   // After one cursor phase the cursor has gone, but the character has not: it
   // is only halfway through its own phase.
-  AdvanceFrames(kVideoFramesPerCursorBlinkPhase);
+  AdvanceFrames(Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE);
   Render();
   EXPECT_EQ(cursor_pixels(), 0);
   EXPECT_EQ(char_pixels(), visible_pixels);
 
   // A second cursor phase brings the cursor back and blanks the character.
-  AdvanceFrames(kVideoFramesPerCursorBlinkPhase);
+  AdvanceFrames(Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE);
   Render();
   EXPECT_EQ(cursor_pixels(), kCharWidth * kCharHeight);
   EXPECT_EQ(char_pixels(), 0);
@@ -249,25 +252,25 @@ TEST_F(MDATest, CharactersBlinkAtHalfTheCursorRate) {
 
 TEST_F(MDATest, BlinkIsIgnoredWhenDisabledInControlRegister) {
   YVideoWritePort(
-      &video_, kMDAPortControl,
-      video_.control_register & ~kVideoControlEnableBlink);
+      &video_, Y_VIDEO_MDA_PORT_CONTROL,
+      video_.control_register & ~Y_VIDEO_CONTROL_ENABLE_BLINK);
   WriteChar(0, 'A', 0x87);
   Render();
   int visible_pixels = CountPixelsInFirstCell(video_.config.foreground);
 
-  AdvanceFrames(kVideoFramesPerTextBlinkPhase);
+  AdvanceFrames(Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE);
   Render();
   EXPECT_EQ(CountPixelsInFirstCell(video_.config.foreground), visible_pixels);
 }
 
 TEST_F(MDATest, RenderCursor) {
   // The default cursor occupies scan lines 11 to 12 of the cell it is on.
-  WriteRegister(kCRTCRegisterCursorStart, 0x0B);
-  WriteRegister(kCRTCRegisterCursorEnd, 0x0C);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_START, 0x0B);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_END, 0x0C);
   // Put the cursor on the second cell of the second row.
   uint16_t cursor_cell = 80 + 1;
-  WriteRegister(kCRTCRegisterCursorH, cursor_cell >> 8);
-  WriteRegister(kCRTCRegisterCursorL, cursor_cell & 0xFF);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_H, cursor_cell >> 8);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_L, cursor_cell & 0xFF);
   Render();
 
   int cursor_x = kCharWidth;
@@ -283,8 +286,8 @@ TEST_F(MDATest, RenderCursor) {
 }
 
 TEST_F(MDATest, CursorCanBeDisabled) {
-  WriteRegister(kCRTCRegisterCursorEnd, 0x0C);
-  WriteRegister(kCRTCRegisterCursorStart, 0x20);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_END, 0x0C);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_START, 0x20);
   Render();
 
   EXPECT_EQ(
@@ -301,8 +304,8 @@ TEST_F(MDATest, StartAddressScrollsTheDisplay) {
       CountPixelsInFirstCell(video_.config.background),
       kCharWidth * kCharHeight);
 
-  WriteRegister(kCRTCRegisterStartAddressH, 80 >> 8);
-  WriteRegister(kCRTCRegisterStartAddressL, 80 & 0xFF);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_START_ADDRESS_H, 80 >> 8);
+  WriteRegister(Y_VIDEO_CRTC_REGISTER_START_ADDRESS_L, 80 & 0xFF);
   Render();
   EXPECT_GT(CountPixelsInFirstCell(video_.config.foreground), 0);
 }
@@ -310,8 +313,8 @@ TEST_F(MDATest, StartAddressScrollsTheDisplay) {
 TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
   WriteChar(0, 'A', 0x07);
   YVideoWritePort(
-      &video_, kMDAPortControl,
-      video_.control_register & ~kVideoControlVideoEnable);
+      &video_, Y_VIDEO_MDA_PORT_CONTROL,
+      video_.control_register & ~Y_VIDEO_CONTROL_VIDEO_ENABLE);
   Render();
 
   EXPECT_EQ(
@@ -321,7 +324,7 @@ TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
   EXPECT_EQ(mock_pixel_write_count, 720 * 350);
   EXPECT_EQ(
       mock_pixel_span_count,
-      ((720 + kVideoPixelBatchSize - 1) / kVideoPixelBatchSize) * 350);
+      ((720 + Y_VIDEO_PIXEL_BATCH_SIZE - 1) / Y_VIDEO_PIXEL_BATCH_SIZE) * 350);
 }
 
 }  // namespace

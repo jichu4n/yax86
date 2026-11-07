@@ -28,9 +28,9 @@ enum : uint16_t {
 // Assembles a single instruction, runs it, and returns what it cost.
 uint16_t CycleCost(const string& name, const string& asm_code) {
   auto helper = CPUTestHelper::CreateWithProgram(name, asm_code);
-  helper->cpu_.registers[kBX] = kOperandAddress;
-  helper->cpu_.registers[kSP] = kStackPointer;
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  helper->cpu_.registers[Y_CPU_BX] = kOperandAddress;
+  helper->cpu_.registers[Y_CPU_SP] = kStackPointer;
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
   return helper->cpu_.cycles_this_tick;
 }
 

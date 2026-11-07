@@ -37,13 +37,13 @@ class AdvanceTest : public ::testing::Test {
   // Programs a channel with the given mode and reload value.
   void Program(YPITState* pit, int channel, uint8_t mode, uint16_t reload) {
     const uint8_t control = static_cast<uint8_t>(
-        (channel << 6) | (kPITAccessLSBThenMSB << 4) | (mode << 1));
-    YPITWritePort(pit, kPITPortControl, control);
+        (channel << 6) | (Y_PIT_ACCESS_LSB_THEN_MSB << 4) | (mode << 1));
+    YPITWritePort(pit, Y_PIT_PORT_CONTROL, control);
     YPITWritePort(
-        pit, static_cast<uint16_t>(kPITPortChannel0 + channel),
+        pit, static_cast<uint16_t>(Y_PIT_PORT_CHANNEL0 + channel),
         static_cast<uint8_t>(reload & 0xFF));
     YPITWritePort(
-        pit, static_cast<uint16_t>(kPITPortChannel0 + channel),
+        pit, static_cast<uint16_t>(Y_PIT_PORT_CHANNEL0 + channel),
         static_cast<uint8_t>(reload >> 8));
   }
 
@@ -131,7 +131,7 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
       Program(&pit, 0, mode, reload);
 
       const uint32_t predicted = YPITTicksUntilNextEvent(&pit);
-      if (predicted == kPITNoEvent) {
+      if (predicted == Y_PIT_NO_EVENT) {
         continue;
       }
 
@@ -153,7 +153,7 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
 // being woken for - and asking for wake-ups on behalf of the other two is not
 // free, because it truncates how far an idle machine may skip ahead.
 TEST_F(AdvanceTest, OnlyChannelZeroSchedulesADeadline) {
-  for (int channel = 1; channel < kPITNumChannels; ++channel) {
+  for (int channel = 1; channel < Y_PIT_NUM_CHANNELS; ++channel) {
     YPITConfig config = {0};
     YPITState pit = {0};
     InitPIT(&pit, &config);
@@ -161,7 +161,7 @@ TEST_F(AdvanceTest, OnlyChannelZeroSchedulesADeadline) {
     // after the POST beep, and would otherwise ask to be woken constantly.
     Program(&pit, channel, 3, 1356);
 
-    EXPECT_EQ(YPITTicksUntilNextEvent(&pit), kPITNoEvent)
+    EXPECT_EQ(YPITTicksUntilNextEvent(&pit), Y_PIT_NO_EVENT)
         << "channel " << channel << " asked to be woken, but nothing outside "
         << "the PIT can observe its output";
   }
@@ -176,7 +176,7 @@ TEST_F(AdvanceTest, ChannelZeroStillSchedulesADeadline) {
   Program(&pit, 0, 3, 1356);
 
   const uint32_t ticks = YPITTicksUntilNextEvent(&pit);
-  ASSERT_NE(ticks, kPITNoEvent);
+  ASSERT_NE(ticks, Y_PIT_NO_EVENT);
   EXPECT_LE(ticks, 1356u);
 }
 

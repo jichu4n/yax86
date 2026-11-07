@@ -28,12 +28,12 @@
 
 enum {
   // Log module ID for the PIC.
-  kLogModuleIDPIC = 2,
+  Y_PIC_LOG_MODULE_ID = 2,
 };
 
 // Log module for the PIC.
 YAX86_PUBLIC_HEADER const YLogModule YPICLogModule = {
-    .id = kLogModuleIDPIC,
+    .id = Y_PIC_LOG_MODULE_ID,
     .name = "PIC",
 };
 
@@ -44,34 +44,34 @@ YAX86_PUBLIC_HEADER const YLogModule YPICLogModule = {
 // The mode of a PIC - single, master, or slave.
 typedef enum YPICMode {
   // Single PIC on IBM PC and PC/XT
-  kPICSingle = 0,
+  Y_PIC_SINGLE = 0,
   // Master PIC on IBM PC/AT and PS/2
-  kPICMaster,
+  Y_PIC_MASTER,
   // Slave PIC on IBM PC/AT and PS/2
-  kPICSlave,
+  Y_PIC_SLAVE,
   // Number of PIC modes
-  kPICNumModes,
+  Y_PIC_NUM_MODES,
 } YPICMode;
 
 // Initialization state of a PIC.
 typedef enum YPICInitState {
   // Uninitialized - waiting for ICW1.
-  kPICExpectICW1 = 0,
+  Y_PIC_EXPECT_ICW1 = 0,
   // ICW1 received - waiting for ICW2.
-  kPICExpectICW2,
+  Y_PIC_EXPECT_ICW2,
   // ICW2 received - waiting for ICW3 (if needed).
-  kPICExpectICW3,
+  Y_PIC_EXPECT_ICW3,
   // ICW3 received - waiting for ICW4 (if needed) or fully initialized.
-  kPICExpectICW4,
+  Y_PIC_EXPECT_ICW4,
   // Fully initialized.
-  kPICReady,
+  Y_PIC_READY,
 } YPICInitState;
 
 enum {
   // Indicates no pending interrupt. In normal operation, valid ranges of
   // interrupt vectors are 0x08-0x0F for a single PIC or master PIC, and
   // 0x70-0x77 for a slave PIC.
-  kPICNoPendingInterrupt = 0xFF,
+  Y_PIC_NO_PENDING_INTERRUPT = 0xFF,
 };
 
 struct YPICState;
@@ -90,9 +90,9 @@ typedef struct YPICConfig {
 
 // The register to read on the next read from the data port.
 typedef enum YPICReadRegister {
-  kPICReadIMR = 0,  // Default: read Interrupt Mask Register
-  kPICReadIRR = 1,  // Read Interrupt Request Register on next read
-  kPICReadISR = 2,  // Read In-Service Register on next read
+  Y_PIC_READ_IMR = 0,  // Default: read Interrupt Mask Register
+  Y_PIC_READ_IRR = 1,  // Read Interrupt Request Register on next read
+  Y_PIC_READ_ISR = 2,  // Read In-Service Register on next read
 } YPICReadRegister;
 
 // State of a single 8259 PIC chip.
@@ -182,7 +182,8 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
-// PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
+// PIC as well. If no interrupts are pending, returns
+// Y_PIC_NO_PENDING_INTERRUPT.
 YAX86_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H

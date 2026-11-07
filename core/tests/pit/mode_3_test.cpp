@@ -31,11 +31,11 @@ class Mode3Test : public ::testing::Test {
 TEST_F(Mode3Test, SystemTimerSquareWave) {
   // Configure Channel 0 for Mode 3, LSB/MSB access, with a reload value of
   // 10000. Control word: 0b00110110
-  YPITWritePort(&pit_, kPITPortControl, 0x36);
+  YPITWritePort(&pit_, Y_PIT_PORT_CONTROL, 0x36);
 
   // Write the 16-bit reload value.
-  YPITWritePort(&pit_, kPITPortChannel0, 0x10);  // LSB of 10000 (0x2710)
-  YPITWritePort(&pit_, kPITPortChannel0, 0x27);  // MSB
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL0, 0x10);  // LSB of 10000 (0x2710)
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL0, 0x27);  // MSB
 
   // Initial state should be high output, no IRQ.
   EXPECT_TRUE(pit_.channels[0].output_state);
@@ -76,57 +76,57 @@ TEST_F(Mode3Test, SystemTimerSquareWave) {
 TEST_F(Mode3Test, PCSpeakerFrequency) {
   // Configure Channel 2 for Mode 3, LSB/MSB access.
   // Control word: 0b10110110
-  YPITWritePort(&pit_, kPITPortControl, 0xB6);
+  YPITWritePort(&pit_, Y_PIT_PORT_CONTROL, 0xB6);
 
   // Write a reload value of 1193, which should result in ~1000 Hz.
-  YPITWritePort(&pit_, kPITPortChannel2, 0xA9);  // LSB of 1193 (0x04A9)
-  YPITWritePort(&pit_, kPITPortChannel2, 0x04);  // MSB
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL2, 0xA9);  // LSB of 1193 (0x04A9)
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL2, 0x04);  // MSB
 
   // The frequency callback should have been called with the correct frequency.
   // 1193182 / 1193 = 1000.15...
   EXPECT_EQ(speaker_frequency_hz, 1000);
 
   // Write a new reload value of 2386 (~500 Hz).
-  YPITWritePort(&pit_, kPITPortChannel2, 0x52);  // LSB of 2386 (0x0952)
-  YPITWritePort(&pit_, kPITPortChannel2, 0x09);  // MSB
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL2, 0x52);  // LSB of 2386 (0x0952)
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL2, 0x09);  // MSB
   // 1193182 / 2386 = 500.07...
   EXPECT_EQ(speaker_frequency_hz, 500);
 }
 
 TEST_F(Mode3Test, LSBThenMSBReadWrite) {
   // Configure Channel 0 for Mode 3, LSB/MSB access.
-  YPITWritePort(&pit_, kPITPortControl, 0x36);
+  YPITWritePort(&pit_, Y_PIT_PORT_CONTROL, 0x36);
 
   // --- Test Write ---
   // Write LSB
-  YPITWritePort(&pit_, kPITPortChannel0, 0x12);
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL0, 0x12);
   EXPECT_EQ(pit_.channels[0].reload_value, 0x0012);
-  EXPECT_EQ(pit_.channels[0].rw_byte, kPITByteMSB);
+  EXPECT_EQ(pit_.channels[0].rw_byte, Y_PIT_BYTE_MSB);
 
   // Write MSB
-  YPITWritePort(&pit_, kPITPortChannel0, 0x34);
+  YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL0, 0x34);
   EXPECT_EQ(pit_.channels[0].reload_value, 0x3412);
-  EXPECT_EQ(pit_.channels[0].rw_byte, kPITByteLSB);
+  EXPECT_EQ(pit_.channels[0].rw_byte, Y_PIT_BYTE_LSB);
 
   // --- Test Read ---
   // Set a known counter value internally for testing the latch.
   pit_.channels[0].counter = 0x5678;
 
   // Issue latch command for Channel 0.
-  YPITWritePort(&pit_, kPITPortControl, 0x00);
+  YPITWritePort(&pit_, Y_PIT_PORT_CONTROL, 0x00);
   EXPECT_TRUE(pit_.channels[0].latch_active);
   EXPECT_EQ(pit_.channels[0].latch, 0x5678);
 
   // Read LSB
-  uint8_t lsb = YPITReadPort(&pit_, kPITPortChannel0);
+  uint8_t lsb = YPITReadPort(&pit_, Y_PIT_PORT_CHANNEL0);
   EXPECT_EQ(lsb, 0x78);
-  EXPECT_EQ(pit_.channels[0].rw_byte, kPITByteMSB);
+  EXPECT_EQ(pit_.channels[0].rw_byte, Y_PIT_BYTE_MSB);
   EXPECT_TRUE(pit_.channels[0].latch_active);  // Latch remains active.
 
   // Read MSB
-  uint8_t msb = YPITReadPort(&pit_, kPITPortChannel0);
+  uint8_t msb = YPITReadPort(&pit_, Y_PIT_PORT_CHANNEL0);
   EXPECT_EQ(msb, 0x56);
-  EXPECT_EQ(pit_.channels[0].rw_byte, kPITByteLSB);
+  EXPECT_EQ(pit_.channels[0].rw_byte, Y_PIT_BYTE_LSB);
   EXPECT_FALSE(pit_.channels[0].latch_active);  // Now latch is cleared.
 }
 

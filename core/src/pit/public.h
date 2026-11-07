@@ -21,57 +21,57 @@
 
 enum {
   // Log module ID for the PIT.
-  kLogModuleIDPIT = 3,
+  Y_PIT_LOG_MODULE_ID = 3,
 };
 
 // Log module for the PIT.
 YAX86_PUBLIC_HEADER const YLogModule YPITLogModule = {
-    .id = kLogModuleIDPIT,
+    .id = Y_PIT_LOG_MODULE_ID,
     .name = "PIT",
 };
 
 enum {
   // Number of PIT channels.
-  kPITNumChannels = 3,
+  Y_PIT_NUM_CHANNELS = 3,
 
   // Channel 0 drives IRQ 0. Channel 1 was DRAM refresh on a real machine and
   // channel 2 the PC speaker; neither has an effect here beyond its recorded
   // output state.
-  kPITChannelTimer = 0,
+  Y_PIT_CHANNEL_TIMER = 0,
   // Total number of operating modes (0-5).
   // We only implement modes 0, 2, and 3.
-  kPITNumModes = 6,
+  Y_PIT_NUM_MODES = 6,
 };
 
 // I/O ports exposed by the PIT.
 typedef enum YPITPort {
   // Data port for PIT channel 0
-  kPITPortChannel0 = 0x40,
+  Y_PIT_PORT_CHANNEL0 = 0x40,
   // Data port for PIT channel 1
-  kPITPortChannel1 = 0x41,
+  Y_PIT_PORT_CHANNEL1 = 0x41,
   // Data port for PIT channel 2
-  kPITPortChannel2 = 0x42,
+  Y_PIT_PORT_CHANNEL2 = 0x42,
   // Control word port
-  kPITPortControl = 0x43,
+  Y_PIT_PORT_CONTROL = 0x43,
 } YPITPort;
 
 // Channel read/write access modes. This corresponds to bits 4-5 of the control
 // word written to port 0x43.
 typedef enum YPITAccessMode {
   // Latch count value command
-  kPITAccessLatch = 0,
+  Y_PIT_ACCESS_LATCH = 0,
   // Read/write lower byte only
-  kPITAccessLSBOnly = 1,
+  Y_PIT_ACCESS_LSB_ONLY = 1,
   // Read/write upper byte only
-  kPITAccessMSBOnly = 2,
+  Y_PIT_ACCESS_MSB_ONLY = 2,
   // Read/write lower byte then upper byte
-  kPITAccessLSBThenMSB = 3,
+  Y_PIT_ACCESS_LSB_THEN_MSB = 3,
 } YPITAccessMode;
 
-// Which byte to read/write next when in mode kPITAccessLSBThenMSB.
+// Which byte to read/write next when in mode Y_PIT_ACCESS_LSB_THEN_MSB.
 typedef enum YPITByte {
-  kPITByteLSB = 0,
-  kPITByteMSB = 1,
+  Y_PIT_BYTE_LSB = 0,
+  Y_PIT_BYTE_MSB = 1,
 } YPITByte;
 
 struct YPITState;
@@ -112,7 +112,7 @@ typedef struct YPITChannelState {
   YPITAccessMode access_mode;
   // The current output state of the channel.
   bool output_state;
-  // Which byte to read/write next when in mode kPITAccessLSBThenMSB.
+  // Which byte to read/write next when in mode Y_PIT_ACCESS_LSB_THEN_MSB.
   YPITByte rw_byte;
   // Whether a latch command is active.
   bool latch_active;
@@ -124,7 +124,7 @@ typedef struct YPITState {
   YPITConfig config;
 
   // The three timer channels.
-  YPITChannelState channels[kPITNumChannels];
+  YPITChannelState channels[Y_PIT_NUM_CHANNELS];
 } YPITState;
 
 // Initializes the PIT to its power-on state.
@@ -143,7 +143,7 @@ YAX86_PUBLIC void YPITTick(YPITState* pit);
 enum {
   // Returned by YPITTicksUntilNextEvent() when no channel is counting towards
   // anything, so there is nothing to schedule.
-  kPITNoEvent = 0x7FFFFFFF,
+  Y_PIT_NO_EVENT = 0x7FFFFFFF,
 };
 
 // Advances the PIT by num_ticks of its input clock. Equivalent to calling
@@ -156,8 +156,8 @@ enum {
 YAX86_PUBLIC void YPITAdvance(YPITState* pit, uint32_t num_ticks);
 
 // Returns the number of input clock ticks until the earliest tick that could
-// change any channel's output state, or kPITNoEvent if no channel is counting
-// towards one.
+// change any channel's output state, or Y_PIT_NO_EVENT if no channel is
+// counting towards one.
 //
 // This is a lower bound rather than an exact answer. A caller that advances the
 // PIT by this much and finds nothing happened has only done unnecessary work,

@@ -17,7 +17,7 @@ YCPUExecutePushRegister(const YCPUInstructionContext* ctx) {
   YCPUOperand src;
   YCPUReadRegisterOperandForRegisterIndex(ctx, register_index, &src);
   YCPUPushSourceOperand(ctx->cpu, &src);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
@@ -29,7 +29,7 @@ YCPUExecutePopRegister(const YCPUInstructionContext* ctx) {
   YCPUReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   YCPUOperandValue value = YCPUPop(ctx->cpu);
   YCPUWriteOperandAddress(ctx, &dest.address, YCPUFromOperandValue(value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // PUSH ES/CS/SS/DS
@@ -40,7 +40,7 @@ YCPUExecutePushSegmentRegister(const YCPUInstructionContext* ctx) {
   YCPUOperand src;
   YCPUReadRegisterOperandForRegisterIndex(ctx, register_index, &src);
   YCPUPushValue(ctx->cpu, src.value);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // POP ES/CS/SS/DS
@@ -55,14 +55,14 @@ YCPUExecutePopSegmentRegister(const YCPUInstructionContext* ctx) {
   YCPUReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   YCPUOperandValue value = YCPUPop(ctx->cpu);
   YCPUWriteOperandAddress(ctx, &dest.address, YCPUFromOperandValue(value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // PUSHF
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecutePushFlags(const YCPUInstructionContext* ctx) {
   YCPUPushValue(ctx->cpu, ctx->cpu->flags);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // POPF
@@ -70,7 +70,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecutePopFlags(const YCPUInstructionContext* ctx) {
   YCPUOperandValue value = YCPUPop(ctx->cpu);
   ctx->cpu->flags = YCPUToFlagsRegisterValue(YCPUFromOperandValue(value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // POP r/m16
@@ -84,7 +84,7 @@ YCPUExecutePopRegisterOrMemory(const YCPUInstructionContext* ctx) {
   YCPUOperandAddress dest = YCPUGetRegisterOrMemoryOperandAddress(ctx);
   YCPUOperandValue value = YCPUPop(ctx->cpu);
   YCPUWriteOperandAddress(ctx, &dest, YCPUFromOperandValue(value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // ============================================================================
@@ -94,8 +94,8 @@ YCPUExecutePopRegisterOrMemory(const YCPUInstructionContext* ctx) {
 // Returns the AH register address.
 YAX86_FILE_PRIVATE const YCPUOperandAddress* YCPUGetAHRegisterAddress(void) {
   static YCPUOperandAddress ah = {
-      .type = kOperandAddressTypeRegister,
-      .register_index = kAX,
+      .type = Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER,
+      .register_index = Y_CPU_AX,
       .offset = 8,
   };
   return &ah;
@@ -107,7 +107,7 @@ YCPUExecuteLoadAHFromFlags(const YCPUInstructionContext* ctx) {
   YCPUWriteRegisterOperandByte(
       ctx->cpu, YCPUGetAHRegisterAddress(),
       (YCPUOperandValue)(ctx->cpu->flags & 0x00FF));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // SAHF
@@ -118,5 +118,5 @@ YCPUExecuteStoreAHToFlags(const YCPUInstructionContext* ctx) {
   // Clear the lower byte of flags and set it to the value in AH
   ctx->cpu->flags =
       YCPUToFlagsRegisterValue((ctx->cpu->flags & 0xFF00) | value);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }

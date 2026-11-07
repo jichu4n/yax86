@@ -5,7 +5,7 @@
 YAX86_PUBLIC void YPPIInit(YPPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
-  ppi->port_b = kPPIPortBKeyboardClockLow;
+  ppi->port_b = Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW;
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
@@ -18,14 +18,14 @@ YAX86_FILE_PRIVATE inline uint8_t YPPIGetNumFloppyDrives(
 
 YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port) {
   switch (port) {
-    case kPPIPortA:
+    case Y_PPI_PORT_A:
       // Reading Port A gets the keyboard scancode.
       return ppi->port_a_latch;
-    case kPPIPortB:
+    case Y_PPI_PORT_B:
       // Reading Port B returns its last written value.
       return ppi->port_b;
-    case kPPIPortC:
-      if ((ppi->port_b & kPPIPortBDipSwitchSelect) == 0) {
+    case Y_PPI_PORT_C:
+      if ((ppi->port_b & Y_PPI_PORT_B_DIP_SWITCH_SELECT) == 0) {
         // Read from SW1-4.
         uint8_t port_c = 0;
         // Bit 0: Floppy drive (IPL) installed
@@ -54,18 +54,19 @@ YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port) {
 }
 
 YAX86_PUBLIC bool YPPIIsPCSpeakerEnabled(YPPIState* ppi) {
-  return (ppi->port_b & kPPIPortBTimer2Gate) &&
-         (ppi->port_b & kPPIPortBSpeakerData);
+  return (ppi->port_b & Y_PPI_PORT_B_TIMER2_GATE) &&
+         (ppi->port_b & Y_PPI_PORT_B_SPEAKER_DATA);
 }
 
 YAX86_FILE_PRIVATE inline uint8_t YPPIGetKeyboardControl(const YPPIState* ppi) {
   return (
-      ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
+      ppi->port_b &
+      (Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR | Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW));
 }
 
 YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
-    case kPPIPortB: {
+    case Y_PPI_PORT_B: {
       // Save old states in order to check for changes after the write.
       bool old_speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
       uint8_t old_keyboard_control = YPPIGetKeyboardControl(ppi);
@@ -73,7 +74,7 @@ YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
       ppi->port_b = value;
 
       // Bit 7: Keyboard enable/clear (0 = enable read, 1 = clear).
-      if (value & kPPIPortBKeyboardEnableClear) {
+      if (value & Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR) {
         ppi->port_a_latch = 0;
       }
 
@@ -93,12 +94,12 @@ YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
           ppi->config.set_keyboard_control) {
         ppi->config.set_keyboard_control(
             ppi->config.context,
-            (ppi->port_b & kPPIPortBKeyboardEnableClear) != 0,
-            (ppi->port_b & kPPIPortBKeyboardClockLow) != 0);
+            (ppi->port_b & Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR) != 0,
+            (ppi->port_b & Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW) != 0);
       }
       break;
     }
-    case kPPIPortControl:
+    case Y_PPI_PORT_CONTROL:
       // The BIOS always writes 0x99 (0b10011001) to set up the PPI. We can
       // ignore it since our emulation is hardcoded to behave accordingly.
       break;

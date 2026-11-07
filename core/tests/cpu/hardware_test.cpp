@@ -39,8 +39,13 @@ constexpr size_t kMemorySize = 1024 * 1024;
 // YCPURegisterIndex, so it gets a sentinel.
 constexpr int kFlagsPseudoRegister = -1;
 constexpr int kMooRegisterOrder[] = {
-    kAX, kBX, kCX, kDX, kCS, kSS, kDS,
-    kES, kSP, kBP, kSI, kDI, kIP, kFlagsPseudoRegister,
+    Y_CPU_AX, Y_CPU_BX,
+    Y_CPU_CX, Y_CPU_DX,
+    Y_CPU_CS, Y_CPU_SS,
+    Y_CPU_DS, Y_CPU_ES,
+    Y_CPU_SP, Y_CPU_BP,
+    Y_CPU_SI, Y_CPU_DI,
+    Y_CPU_IP, kFlagsPseudoRegister,
 };
 constexpr int kNumMooRegisters =
     sizeof(kMooRegisterOrder) / sizeof(kMooRegisterOrder[0]);
@@ -473,7 +478,7 @@ std::string RunMooTest(
       actual_value = cpu.registers[reg];
     }
     if (actual_value != expected_value) {
-      if (reg == kAX &&
+      if (reg == Y_CPU_AX &&
           IsQuotientSignDivergence(divergences, expected_value, actual_value)) {
         ++*num_divergences;
         continue;
@@ -484,17 +489,17 @@ std::string RunMooTest(
           "-> %04X, CS %04X)",
           test.name.c_str(), MooRegisterName(i), expected_value, actual_value,
           DescribeBytes(test.bytes).c_str(), test.initial.registers.value[13],
-          test.initial.registers.value[12], cpu.registers[kIP],
-          cpu.registers[kCS]);
+          test.initial.registers.value[12], cpu.registers[Y_CPU_IP],
+          cpu.registers[Y_CPU_CS]);
       return message;
     }
   }
   // A divide error pushes flags, CS and IP, so afterwards the flags word sits
   // two words above where the stack pointer came to rest.
-  const uint32_t pushed_flags_low =
-      ToLinearAddress(cpu.registers[kSS], (uint16_t)(cpu.registers[kSP] + 4));
-  const uint32_t pushed_flags_high =
-      ToLinearAddress(cpu.registers[kSS], (uint16_t)(cpu.registers[kSP] + 5));
+  const uint32_t pushed_flags_low = ToLinearAddress(
+      cpu.registers[Y_CPU_SS], (uint16_t)(cpu.registers[Y_CPU_SP] + 4));
+  const uint32_t pushed_flags_high = ToLinearAddress(
+      cpu.registers[Y_CPU_SS], (uint16_t)(cpu.registers[Y_CPU_SP] + 5));
   for (const auto& entry : expected_ram) {
     if (entry.first >= kMemorySize) {
       continue;

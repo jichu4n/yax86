@@ -37,7 +37,7 @@ TEST_F(LogModuleIDTest, IDsAreUnique) {
 
 TEST_F(LogModuleIDTest, IDsFitInModuleMask) {
   for (const YLogModule* module : kAllModules) {
-    EXPECT_LT(module->id, kLogMaxModules) << "module " << module->name;
+    EXPECT_LT(module->id, Y_LOG_MAX_MODULES) << "module " << module->name;
   }
 }
 

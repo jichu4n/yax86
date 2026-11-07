@@ -11,15 +11,15 @@ enum {
   // What a tick costs while the CPU is halted. It is waiting for an interrupt
   // rather than stopped, so time still passes - and the timer that will wake
   // it is driven from that time.
-  kHaltedCycles = 4,
+  Y_CPU_HALTED_CYCLES = 4,
   // Extra cycles a taken jump costs, for the prefetch queue it throws away.
-  kJumpTakenCycles = 12,
+  Y_CPU_JUMP_TAKEN_CYCLES = 12,
   // Extra cycles a shift or rotate costs for each bit it moves, when the count
   // comes from CL rather than being 1.
-  kShiftCyclesPerBit = 4,
+  Y_CPU_SHIFT_CYCLES_PER_BIT = 4,
   // Cycles per byte transferred over the data bus. The 8088's bus is 8 bits
   // wide, so a word costs twice a byte.
-  kBusCyclesPerByte = 4,
+  Y_CPU_BUS_CYCLES_PER_BYTE = 4,
 };
 
 // Cycles to compute the effective address of a ModR/M memory operand.

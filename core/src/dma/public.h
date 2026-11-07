@@ -31,12 +31,12 @@
 
 enum {
   // Log module ID for the DMA.
-  kLogModuleIDDMA = 6,
+  Y_DMA_LOG_MODULE_ID = 6,
 };
 
 // Log module for the DMA.
 YAX86_PUBLIC_HEADER const YLogModule YDMALogModule = {
-    .id = kLogModuleIDDMA,
+    .id = Y_DMA_LOG_MODULE_ID,
     .name = "DMA",
 };
 
@@ -44,89 +44,89 @@ YAX86_PUBLIC_HEADER const YLogModule YDMALogModule = {
 typedef enum YDMAPort {
   // --- 8237 DMA Controller ---
   // Channel 0 base and current address
-  kDMAPortChannel0Address = 0x00,
+  Y_DMA_PORT_CHANNEL0_ADDRESS = 0x00,
   // Channel 0 base and current word count
-  kDMAPortChannel0Count = 0x01,
+  Y_DMA_PORT_CHANNEL0_COUNT = 0x01,
   // Channel 1 base and current address
-  kDMAPortChannel1Address = 0x02,
+  Y_DMA_PORT_CHANNEL1_ADDRESS = 0x02,
   // Channel 1 base and current word count
-  kDMAPortChannel1Count = 0x03,
+  Y_DMA_PORT_CHANNEL1_COUNT = 0x03,
   // Channel 2 base and current address
-  kDMAPortChannel2Address = 0x04,
+  Y_DMA_PORT_CHANNEL2_ADDRESS = 0x04,
   // Channel 2 base and current word count
-  kDMAPortChannel2Count = 0x05,
+  Y_DMA_PORT_CHANNEL2_COUNT = 0x05,
   // Channel 3 base and current address
-  kDMAPortChannel3Address = 0x06,
+  Y_DMA_PORT_CHANNEL3_ADDRESS = 0x06,
   // Channel 3 base and current word count
-  kDMAPortChannel3Count = 0x07,
+  Y_DMA_PORT_CHANNEL3_COUNT = 0x07,
   // Read: Status Register / Write: Command Register
-  kDMAPortCommandStatus = 0x08,
+  Y_DMA_PORT_COMMAND_STATUS = 0x08,
   // Write: Request Register
-  kDMAPortRequest = 0x09,
+  Y_DMA_PORT_REQUEST = 0x09,
   // Write: Set/Clear a single channel's mask bit
-  kDMAPortSingleMask = 0x0A,
+  Y_DMA_PORT_SINGLE_MASK = 0x0A,
   // Write: Mode Register
-  kDMAPortMode = 0x0B,
+  Y_DMA_PORT_MODE = 0x0B,
   // Write: Clear Byte Pointer Flip-Flop
-  kDMAPortFlipFlopReset = 0x0C,
+  Y_DMA_PORT_FLIP_FLOP_RESET = 0x0C,
   // Write: Master Reset
-  kDMAPortMasterReset = 0x0D,
+  Y_DMA_PORT_MASTER_RESET = 0x0D,
   // Write: Mask Register (for all channels)
-  kDMAPortAllMask = 0x0F,
+  Y_DMA_PORT_ALL_MASK = 0x0F,
 
   // --- 74LS670 Page Registers ---
   // Page register for Channel 2 (Floppy)
-  kDMAPortPageChannel2 = 0x81,
+  Y_DMA_PORT_PAGE_CHANNEL2 = 0x81,
   // Page register for Channel 3 (Hard Drive)
-  kDMAPortPageChannel3 = 0x82,
+  Y_DMA_PORT_PAGE_CHANNEL3 = 0x82,
   // Page register for Channel 1
-  kDMAPortPageChannel1 = 0x83,
+  Y_DMA_PORT_PAGE_CHANNEL1 = 0x83,
   // Page register for Channel 0
-  kDMAPortPageChannel0 = 0x87,
+  Y_DMA_PORT_PAGE_CHANNEL0 = 0x87,
 } YDMAPort;
 
 // Bit definitions for the Mode Register (Port 0x0B)
 enum {
   // --- Channel Select (bits 0-1) ---
   // Select channel 0
-  kDMAModeSelectChannel0 = 0x00,
+  Y_DMA_MODE_SELECT_CHANNEL0 = 0x00,
   // Select channel 1
-  kDMAModeSelectChannel1 = 0x01,
+  Y_DMA_MODE_SELECT_CHANNEL1 = 0x01,
   // Select channel 2
-  kDMAModeSelectChannel2 = 0x02,
+  Y_DMA_MODE_SELECT_CHANNEL2 = 0x02,
   // Select channel 3
-  kDMAModeSelectChannel3 = 0x03,
+  Y_DMA_MODE_SELECT_CHANNEL3 = 0x03,
 
   // --- Transfer Type (bits 2-3) ---
   // Verify transfer (no data is moved)
-  kDMAModeTransferTypeVerify = 0x00,
+  Y_DMA_MODE_TRANSFER_TYPE_VERIFY = 0x00,
   // Write to memory (device -> memory)
-  kDMAModeTransferTypeWrite = 0x04,
+  Y_DMA_MODE_TRANSFER_TYPE_WRITE = 0x04,
   // Read from memory (memory -> device)
-  kDMAModeTransferTypeRead = 0x08,
+  Y_DMA_MODE_TRANSFER_TYPE_READ = 0x08,
 
   // --- Auto-initialization (bit 4) ---
   // If set, the channel reloads its base address and count after a transfer.
-  kDMAModeAutoInitialize = 0x10,
+  Y_DMA_MODE_AUTO_INITIALIZE = 0x10,
 
   // --- Address Direction (bit 5) ---
   // If set, the memory address is decremented; otherwise, it is incremented.
-  kDMAModeAddressDecrement = 0x20,
+  Y_DMA_MODE_ADDRESS_DECREMENT = 0x20,
 
   // --- Transfer Mode (bits 6-7) ---
   // Demand mode: transfer bytes until the DREQ line becomes inactive.
-  kDMAModeDemand = 0x00,
+  Y_DMA_MODE_DEMAND = 0x00,
   // Single mode: transfer one byte for each DREQ signal.
-  kDMAModeSingle = 0x40,
+  Y_DMA_MODE_SINGLE = 0x40,
   // Block mode: transfer an entire block of data in response to a single DREQ.
-  kDMAModeBlock = 0x80,
+  Y_DMA_MODE_BLOCK = 0x80,
   // Cascade mode: used for chaining multiple DMA controllers (not supported).
-  kDMAModeCascade = 0xC0,
+  Y_DMA_MODE_CASCADE = 0xC0,
 };
 
 enum {
   // Number of DMA channels in the controller.
-  kDMANumChannels = 4,
+  Y_DMA_NUM_CHANNELS = 4,
 };
 
 // ============================================================================
@@ -178,9 +178,9 @@ typedef struct YDMAChannelState {
 // Which register byte to read/write next.
 typedef enum YDMARegisterByte {
   // Read or write the lower byte next.
-  kDMARegisterLSB = 0,
+  Y_DMA_REGISTER_LSB = 0,
   // Read or write the upper byte next.
-  kDMARegisterMSB = 1,
+  Y_DMA_REGISTER_MSB = 1,
 } YDMARegisterByte;
 
 // State for the entire 8237 DMA controller.
@@ -189,7 +189,7 @@ typedef struct YDMAState {
   YDMAConfig config;
 
   // The four DMA channels.
-  YDMAChannelState channels[kDMANumChannels];
+  YDMAChannelState channels[Y_DMA_NUM_CHANNELS];
 
   // Command register for the controller.
   uint8_t command_register;

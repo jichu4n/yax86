@@ -31,8 +31,8 @@ YCPUReadWordFromPort(YCPUState* cpu, uint16_t port) {
 // Table of functions to read from an I/O port, indexed by data width.
 YAX86_FILE_PRIVATE YCPUOperandValue (*const YCPUReadFromPortFns[])(
     YCPUState*, uint16_t) = {
-  YCPUReadByteFromPort,  // kByte
-  YCPUReadWordFromPort,  // kWord
+  YCPUReadByteFromPort,  // Y_CPU_BYTE
+  YCPUReadWordFromPort,  // Y_CPU_WORD
 };
 
 // Common logic for IN instructions.
@@ -41,9 +41,9 @@ YCPUExecuteIn(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperandValue value =
       YCPUReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   YCPUOperand dest;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperandValue(value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // IN AL, imm8
@@ -58,7 +58,7 @@ YCPUExecuteInImmediate(const YCPUInstructionContext* ctx) {
 // IN AX, DX
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteInDX(const YCPUInstructionContext* ctx) {
-  return YCPUExecuteIn(ctx, ctx->cpu->registers[kDX]);
+  return YCPUExecuteIn(ctx, ctx->cpu->registers[Y_CPU_DX]);
 }
 
 // Write a byte to an I/O port.
@@ -83,17 +83,17 @@ YAX86_FILE_PRIVATE void YCPUWriteWordToPort(
 // Table of functions to write to an I/O port, indexed by data width.
 YAX86_FILE_PRIVATE void (*const YCPUWriteToPortFns[])(
     YCPUState*, uint16_t, YCPUOperandValue) = {
-    YCPUWriteByteToPort,  // kByte
-    YCPUWriteWordToPort,  // kWord
+    YCPUWriteByteToPort,  // Y_CPU_BYTE
+    YCPUWriteWordToPort,  // Y_CPU_WORD
 };
 
 // Common logic for OUT instructions.
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperand src;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &src);
   YCPUWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // OUT imm8, AL
@@ -108,5 +108,5 @@ YCPUExecuteOutImmediate(const YCPUInstructionContext* ctx) {
 // OUT DX, AX
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteOutDX(const YCPUInstructionContext* ctx) {
-  return YCPUExecuteOut(ctx, ctx->cpu->registers[kDX]);
+  return YCPUExecuteOut(ctx, ctx->cpu->registers[Y_CPU_DX]);
 }

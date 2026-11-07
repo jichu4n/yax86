@@ -37,8 +37,8 @@ class PlatformMemoryMapTest : public ::testing::Test {
 
   YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
-  uint8_t region_[3 * kMemoryPageSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
+  uint8_t region_[3 * Y_PLATFORM_MEMORY_PAGE_SIZE] = {0};
 };
 
 TEST_F(PlatformMemoryMapTest, ResolvesConventionalMemory) {
@@ -47,7 +47,7 @@ TEST_F(PlatformMemoryMapTest, ResolvesConventionalMemory) {
   ASSERT_NE(entry, nullptr);
   EXPECT_EQ(
       entry->entry_type,
-      (YPlatformMemoryMapEntryType)kMemoryMapEntryConventional);
+      (YPlatformMemoryMapEntryType)Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL);
   EXPECT_EQ(
       YPlatformGetMemoryMapEntryForAddress(&platform_, sizeof(ram_) - 1),
       entry);
@@ -63,7 +63,8 @@ TEST_F(PlatformMemoryMapTest, AddressAboveTheAddressSpaceResolvesToNothing) {
   // No entry may reach above the first megabyte, so an address there is
   // unmapped by definition rather than something the map has to be walked for.
   EXPECT_EQ(
-      YPlatformGetMemoryMapEntryForAddress(&platform_, kMemoryAddressSpaceSize),
+      YPlatformGetMemoryMapEntryForAddress(
+          &platform_, Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE),
       nullptr);
   EXPECT_EQ(
       YPlatformGetMemoryMapEntryForAddress(&platform_, 0xFFFFFFFF), nullptr);
@@ -74,10 +75,11 @@ TEST_F(PlatformMemoryMapTest, AddressAboveTheAddressSpaceResolvesToNothing) {
 // registered at all is what lets a lookup treat the index as the whole answer.
 TEST_F(PlatformMemoryMapTest, RegionReachingPastTheAddressSpaceIsRejected) {
   EXPECT_FALSE(RegisterTestRegion(
-      kMemoryAddressSpaceSize - kMemoryPageSize,
-      kMemoryAddressSpaceSize + kMemoryPageSize - 1));
+      Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE - Y_PLATFORM_MEMORY_PAGE_SIZE,
+      Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE + Y_PLATFORM_MEMORY_PAGE_SIZE - 1));
   EXPECT_FALSE(RegisterTestRegion(
-      kMemoryAddressSpaceSize, kMemoryAddressSpaceSize + kMemoryPageSize - 1));
+      Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE,
+      Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE + Y_PLATFORM_MEMORY_PAGE_SIZE - 1));
   EXPECT_EQ(
       YPlatformGetMemoryMapEntryByType(
           &platform_, (YPlatformMemoryMapEntryType)kMemoryMapEntryTest),
@@ -107,7 +109,8 @@ TEST_F(PlatformMemoryMapTest, PageAlignedRegionResolvesThroughout) {
 // this needs a test of its own: the fallback would otherwise never run.
 TEST_F(PlatformMemoryMapTest, RegionStraddlingPageBoundariesResolvesExactly) {
   const uint32_t start = 0xD0000 + 0x800;
-  const uint32_t end = start + kMemoryPageSize;  // Spans three pages, partly.
+  const uint32_t end =
+      start + Y_PLATFORM_MEMORY_PAGE_SIZE;  // Spans three pages, partly.
   ASSERT_TRUE(RegisterTestRegion(start, end));
 
   YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
@@ -135,20 +138,23 @@ TEST_F(PlatformMemoryMapTest, RegionStraddlingPageBoundariesResolvesExactly) {
 
 TEST_F(PlatformMemoryMapTest, StraddlingRegionReadsAndWritesTheRightBytes) {
   const uint32_t start = 0xD0000 + 0x800;
-  const uint32_t end = start + kMemoryPageSize;
+  const uint32_t end = start + Y_PLATFORM_MEMORY_PAGE_SIZE;
   ASSERT_TRUE(RegisterTestRegion(start, end));
 
   YPlatformWriteMemoryByte(&platform_, start, 0x11);
-  YPlatformWriteMemoryByte(&platform_, start + kMemoryPageSize / 2, 0x22);
+  YPlatformWriteMemoryByte(
+      &platform_, start + Y_PLATFORM_MEMORY_PAGE_SIZE / 2, 0x22);
   YPlatformWriteMemoryByte(&platform_, end, 0x33);
 
   EXPECT_EQ(region_[0], 0x11);
-  EXPECT_EQ(region_[kMemoryPageSize / 2], 0x22);
-  EXPECT_EQ(region_[kMemoryPageSize], 0x33);
+  EXPECT_EQ(region_[Y_PLATFORM_MEMORY_PAGE_SIZE / 2], 0x22);
+  EXPECT_EQ(region_[Y_PLATFORM_MEMORY_PAGE_SIZE], 0x33);
 
   EXPECT_EQ(YPlatformReadMemoryByte(&platform_, start), 0x11);
   EXPECT_EQ(
-      YPlatformReadMemoryByte(&platform_, start + kMemoryPageSize / 2), 0x22);
+      YPlatformReadMemoryByte(
+          &platform_, start + Y_PLATFORM_MEMORY_PAGE_SIZE / 2),
+      0x22);
   EXPECT_EQ(YPlatformReadMemoryByte(&platform_, end), 0x33);
 }
 
@@ -164,7 +170,7 @@ TEST_F(PlatformMemoryMapTest, IndexTracksRegistrationsAfterInit) {
 // the index has. The BIOS ROM is that entry on every machine the platform
 // builds.
 TEST_F(PlatformMemoryMapTest, TopPageOfTheAddressSpaceIsIndexed) {
-  const uint32_t top = kMemoryAddressSpaceSize - 1;
+  const uint32_t top = Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE - 1;
   YPlatformMemoryMapEntry* entry =
       YPlatformGetMemoryMapEntryForAddress(&platform_, top);
   ASSERT_NE(entry, nullptr);
@@ -173,7 +179,7 @@ TEST_F(PlatformMemoryMapTest, TopPageOfTheAddressSpaceIsIndexed) {
   // The whole of that last page resolves to it, and nothing above it does.
   EXPECT_EQ(
       YPlatformGetMemoryMapEntryForAddress(
-          &platform_, top - kMemoryPageSize + 1),
+          &platform_, top - Y_PLATFORM_MEMORY_PAGE_SIZE + 1),
       entry);
   EXPECT_EQ(YPlatformGetMemoryMapEntryForAddress(&platform_, top + 1), nullptr);
 }
@@ -188,8 +194,8 @@ TEST_F(PlatformMemoryMapTest, OverlappingRegistrationIsRejected) {
   entry.write_data = region_;
   EXPECT_FALSE(YPlatformRegisterMemoryMapEntry(&platform_, &entry));
 
-  YPlatformMemoryMapEntry* conventional =
-      YPlatformGetMemoryMapEntryByType(&platform_, kMemoryMapEntryConventional);
+  YPlatformMemoryMapEntry* conventional = YPlatformGetMemoryMapEntryByType(
+      &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL);
   EXPECT_EQ(
       YPlatformGetMemoryMapEntryForAddress(&platform_, 0x00000), conventional);
 }

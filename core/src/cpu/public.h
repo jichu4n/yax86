@@ -11,12 +11,12 @@
 
 enum {
   // Log module ID for the CPU.
-  kLogModuleIDCPU = 1,
+  Y_CPU_LOG_MODULE_ID = 1,
 };
 
 // Log module for the CPU.
 YAX86_PUBLIC_HEADER const YLogModule YCPULogModule = {
-    .id = kLogModuleIDCPU,
+    .id = Y_CPU_LOG_MODULE_ID,
     .name = "CPU",
 };
 
@@ -31,106 +31,106 @@ typedef enum YCPURegisterIndex {
   // General-purpose and index registers.
 
   // Accumulator Register
-  kAX = 0,
+  Y_CPU_AX = 0,
   // Counter Register
-  kCX = 1,
+  Y_CPU_CX = 1,
   // Data Register
-  kDX = 2,
+  Y_CPU_DX = 2,
   // Base Register
-  kBX = 3,
+  Y_CPU_BX = 3,
   // Stack Pointer Register
-  kSP = 4,
+  Y_CPU_SP = 4,
   // Base Pointer Register
-  kBP = 5,
+  Y_CPU_BP = 5,
   // Source Index Register
-  kSI = 6,
+  Y_CPU_SI = 6,
   // Destination Index Register
-  kDI = 7,
+  Y_CPU_DI = 7,
 
   // Segment registers.
 
   // Extra Segment Register
-  kES = 8,
+  Y_CPU_ES = 8,
   // Code Segment Register
-  kCS = 9,
+  Y_CPU_CS = 9,
   // Stack Segment Register
-  kSS = 10,
+  Y_CPU_SS = 10,
   // Data Segment Register
-  kDS = 11,
+  Y_CPU_DS = 11,
 
   // Instruction Pointer Register
-  kIP,
+  Y_CPU_IP,
 } YCPURegisterIndex;
 
 enum {
   // Number of registers.
-  kNumRegisters = kIP + 1,
+  Y_CPU_NUM_REGISTERS = Y_CPU_IP + 1,
 };
 
 // CPU flag masks.
 typedef enum YCPUFlag {
   // Carry Flag
-  kCF = (1 << 0),
+  Y_CPU_CF = (1 << 0),
   // Parity Flag
-  kPF = (1 << 2),
+  Y_CPU_PF = (1 << 2),
   // Auxiliary Carry Flag
-  kAF = (1 << 4),
+  Y_CPU_AF = (1 << 4),
   // Zero Flag
-  kZF = (1 << 6),
+  Y_CPU_ZF = (1 << 6),
   // Sign Flag
-  kSF = (1 << 7),
+  Y_CPU_SF = (1 << 7),
   // Trap Flag
-  kTF = (1 << 8),
+  Y_CPU_TF = (1 << 8),
   // Interrupt Enable Flag
-  kIF = (1 << 9),
+  Y_CPU_IF = (1 << 9),
   // Direction Flag
-  kDF = (1 << 10),
+  Y_CPU_DF = (1 << 10),
   // Overflow Flag
-  kOF = (1 << 11),
+  Y_CPU_OF = (1 << 11),
 } YCPUFlag;
 
 enum {
   // Bits of the flags register that are not flags. The 8086/8088 does not
   // store them: bit 1 and bits 12 through 15 always read as one, and bits 3
   // and 5 always read as zero, whatever gets written over them.
-  kFlagsAlwaysSet = 0xF002,
-  kFlagsAlwaysClear = 0x0028,
+  Y_CPU_FLAGS_ALWAYS_SET = 0xF002,
+  Y_CPU_FLAGS_ALWAYS_CLEAR = 0x0028,
   // CPU flags value on reset - no flags set, and the bits that are not flags
   // reading the only way they can.
-  kInitialFlags = kFlagsAlwaysSet,
+  Y_CPU_INITIAL_FLAGS = Y_CPU_FLAGS_ALWAYS_SET,
 };
 
 // Standard interrupts.
 typedef enum YCPUInterruptNumber {
-  kInterruptDivideError = 0,
-  kInterruptSingleStep = 1,
-  kInterruptNMI = 2,
-  kInterruptBreakpoint = 3,
-  kInterruptOverflow = 4,
+  Y_CPU_INTERRUPT_DIVIDE_ERROR = 0,
+  Y_CPU_INTERRUPT_SINGLE_STEP = 1,
+  Y_CPU_INTERRUPT_NMI = 2,
+  Y_CPU_INTERRUPT_BREAKPOINT = 3,
+  Y_CPU_INTERRUPT_OVERFLOW = 4,
 } YCPUInterruptNumber;
 
 // Result of executing a single instruction.
 typedef enum YCPUInstructionResult {
   // The instruction was executed.
-  kInstructionExecuted = 0,
+  Y_CPU_INSTRUCTION_EXECUTED = 0,
   // The instruction could not be executed, because its opcode has no handler or
   // because its encoding does not match the expected format for its opcode.
-  kInstructionInvalid,
+  Y_CPU_INSTRUCTION_INVALID,
 } YCPUInstructionResult;
 
 // Result of a single CPU tick.
 typedef enum YCPUTickResult {
   // An instruction was executed. This includes HLT: the tick that halts the
   // CPU still ran an instruction.
-  kCPUTickExecuted = 0,
+  Y_CPU_TICK_EXECUTED = 0,
   // The instruction at CS:IP could not be fetched or executed. The CPU is left
   // pointing past the offending instruction; it is up to the caller to decide
   // whether to continue.
-  kCPUTickInvalid,
+  Y_CPU_TICK_INVALID,
   // The CPU was already halted and executed no instruction this tick. It stays
   // halted until an interrupt wakes it, so the caller must keep ticking the
   // rest of the machine.
-  kCPUTickHalted,
+  Y_CPU_TICK_HALTED,
 } YCPUTickResult;
 
 // Result of the handle_interrupt callback, directing how the CPU should
@@ -138,10 +138,10 @@ typedef enum YCPUTickResult {
 typedef enum YCPUInterruptHandlerResult {
   // The callback serviced the interrupt itself. The CPU restores the state
   // saved on entry and resumes at the interrupted instruction.
-  kInterruptHandlerHandled = 0,
+  Y_CPU_INTERRUPT_HANDLER_HANDLED = 0,
   // The callback did not service the interrupt. The CPU dispatches it through
   // the Interrupt Vector Table instead.
-  kInterruptHandlerUnhandled,
+  Y_CPU_INTERRUPT_HANDLER_UNHANDLED,
 } YCPUInterruptHandlerResult;
 
 struct YCPUState;
@@ -297,10 +297,10 @@ enum {
   // instructions: 4KB pages over the 8086's 1MB, which is 256 counters. It is
   // the coarsest page that still separates the code a program is running from
   // the data it is writing, and a finer one would only cost more memory.
-  kCodePageShift = 12,
-  kCodePageSize = 1 << kCodePageShift,
-  kCodePageOffsetMask = kCodePageSize - 1,
-  kNumCodePages = 0x100000 >> kCodePageShift,
+  Y_CPU_CODE_PAGE_SHIFT = 12,
+  Y_CPU_CODE_PAGE_SIZE = 1 << Y_CPU_CODE_PAGE_SHIFT,
+  Y_CPU_CODE_PAGE_OFFSET_MASK = Y_CPU_CODE_PAGE_SIZE - 1,
+  Y_CPU_NUM_CODE_PAGES = 0x100000 >> Y_CPU_CODE_PAGE_SHIFT,
 };
 
 // State of the emulated CPU.
@@ -311,7 +311,7 @@ enum {
 // another field depends on has a setter, which is its sole writer.
 typedef struct YCPUState {
   // Register values
-  uint16_t registers[kNumRegisters];
+  uint16_t registers[Y_CPU_NUM_REGISTERS];
   // Flag values
   uint16_t flags;
 
@@ -390,7 +390,7 @@ typedef struct YCPUState {
   // Maintained whether or not a decode cache exists: a write cannot cheaply
   // tell whether anything holds a decode of the page it lands on, and the test
   // to find out would cost about what the counter does.
-  uint8_t code_page_generation[kNumCodePages];
+  uint8_t code_page_generation[Y_CPU_NUM_CODE_PAGES];
 
   // Caller-provided runtime configuration. Filled in before YCPUInit(), which
   // is where it is checked, and read-only afterwards.
@@ -506,7 +506,8 @@ YAX86_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 // would corrupt whatever follows it.
 YAX86_PUBLIC_HEADER inline void YCPUNotifyMemoryWrite(
     YCPUState* cpu, uint32_t address) {
-  const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
+  const uint32_t page =
+      (address >> Y_CPU_CODE_PAGE_SHIFT) & (Y_CPU_NUM_CODE_PAGES - 1);
   if (++cpu->code_page_generation[page] == 0) {
     YCPUInvalidateDecodeCache(cpu);
   }
@@ -518,12 +519,13 @@ YAX86_PUBLIC_HEADER inline void YCPUNotifyMemoryWrite(
 
 enum {
   // Maximum number of displacement bytes in an 8086 instruction.
-  kMaxDisplacementBytes = 2,
+  Y_CPU_MAX_DISPLACEMENT_BYTES = 2,
   // Maximum number of immediate data bytes in an 8086 instruction.
-  kMaxImmediateBytes = 4,
+  Y_CPU_MAX_IMMEDIATE_BYTES = 4,
   // Bytes an instruction carries besides its prefixes: the opcode, a ModR/M
   // byte, displacement, and immediate data.
-  kMaxNonPrefixBytes = 2 + kMaxDisplacementBytes + kMaxImmediateBytes,
+  Y_CPU_MAX_NON_PREFIX_BYTES = 2 + Y_CPU_MAX_DISPLACEMENT_BYTES +
+      Y_CPU_MAX_IMMEDIATE_BYTES,
   // Maximum number of prefix bytes accepted.
   //
   // The 8086 puts no limit on this. A real one fetches prefixes for as long as
@@ -535,28 +537,29 @@ enum {
   // YCPUTick adds to IP. Accepting as many prefixes as still leave the whole
   // encoding addressable by size satisfies both, and is far past anything an
   // assembler emits.
-  kMaxPrefixBytes = 0xFF - kMaxNonPrefixBytes,
+  Y_CPU_MAX_PREFIX_BYTES = 0xFF - Y_CPU_MAX_NON_PREFIX_BYTES,
 };
 
 // Instruction prefixes.
 typedef enum {
-  kPrefixES = 0x26,    // ES segment override
-  kPrefixCS = 0x2E,    // CS segment override
-  kPrefixSS = 0x36,    // SS segment override
-  kPrefixDS = 0x3E,    // DS segment override
-  kPrefixLOCK = 0xF0,  // LOCK
+  Y_CPU_PREFIX_ES = 0x26,    // ES segment override
+  Y_CPU_PREFIX_CS = 0x2E,    // CS segment override
+  Y_CPU_PREFIX_SS = 0x36,    // SS segment override
+  Y_CPU_PREFIX_DS = 0x3E,    // DS segment override
+  Y_CPU_PREFIX_LOCK = 0xF0,  // LOCK
   // Undocumented alias of LOCK on the 8086/8088, which does not decode bit 0
   // of this opcode.
-  kPrefixLOCKAlt = 0xF1,
-  kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
-  kPrefixREP = 0xF3,    // REP/REPE/REPZ
+  Y_CPU_PREFIX_LOCK_ALT = 0xF1,
+  Y_CPU_PREFIX_REPNZ = 0xF2,  // REPNE/REPNZ
+  Y_CPU_PREFIX_REP = 0xF3,    // REP/REPE/REPZ
 } YCPUInstructionPrefix;
 
 enum {
   // Value of YCPUInstruction.segment_override when an instruction carries no
-  // segment override prefix. Zero is kAX, which is never a segment register,
+  // segment override prefix. Zero is Y_CPU_AX, which is never a segment
+  // register,
   // so a zero-initialized YCPUInstruction correctly has no override.
-  kNoSegmentOverride = 0,
+  Y_CPU_NO_SEGMENT_OVERRIDE = 0,
 };
 
 // The Mod R/M byte.
@@ -592,12 +595,12 @@ typedef struct YCPUModRM {
 // in a given amount of memory rather than for what a fetch costs.
 typedef struct YCPUInstruction {
   // The segment register selected by a segment override prefix, as a
-  // YCPURegisterIndex, or kNoSegmentOverride if the instruction carries none. A
-  // later override wins over an earlier one, as on hardware.
+  // YCPURegisterIndex, or Y_CPU_NO_SEGMENT_OVERRIDE if the instruction carries
+  // none. A later override wins over an earlier one, as on hardware.
   uint8_t segment_override;
 
-  // The repetition prefix present - kPrefixREP or kPrefixREPNZ - or 0 if the
-  // instruction carries neither. A later one wins over an earlier one.
+  // The repetition prefix present - Y_CPU_PREFIX_REP or Y_CPU_PREFIX_REPNZ - or
+  // 0 if the instruction carries neither. A later one wins over an earlier one.
   uint8_t repetition_prefix;
 
   // The primary opcode byte.
@@ -610,10 +613,10 @@ typedef struct YCPUInstruction {
   // Raw displacement bytes. If displacement_size is 1, only disp_bytes[0] is
   // valid (value is typically sign-extended). If displacement_size is 2,
   // disp_bytes[0] is the low byte, disp_bytes[1] is the high byte.
-  uint8_t displacement[kMaxDisplacementBytes];
+  uint8_t displacement[Y_CPU_MAX_DISPLACEMENT_BYTES];
 
   // Raw immediate data bytes.
-  uint8_t immediate[kMaxImmediateBytes];
+  uint8_t immediate[Y_CPU_MAX_IMMEDIATE_BYTES];
 
   // Flags
 
@@ -663,9 +666,9 @@ typedef struct YCPUDecodeCacheEntry {
 
 // Result status from fetching the next instruction.
 typedef enum YCPUFetchNextInstructionStatus {
-  kFetchSuccess = 0,
+  Y_CPU_FETCH_SUCCESS = 0,
   // Prefix exceeds maximum allowed size.
-  kFetchPrefixTooLong = -1,
+  Y_CPU_FETCH_PREFIX_TOO_LONG = -1,
 } YCPUFetchNextInstructionStatus;
 
 // Fetch the next instruction from CS:IP.
@@ -694,7 +697,7 @@ enum {
   // On dos-boot, raising it from 4 to 16 is worth 2.9% and 32 only 0.5% beyond
   // that, while doubling the overshoot - so this is where the curve stops
   // paying rather than where it flattens.
-  kMaxInstructionsPerTick = 16,
+  Y_CPU_MAX_INSTRUCTIONS_PER_TICK = 16,
 };
 
 // Run a single instruction cycle, including fetching and executing the next

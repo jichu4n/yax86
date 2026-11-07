@@ -17,21 +17,21 @@ TEST_F(AddressWrapTest, ReadPastTopOfMemoryWrapsToBottom) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "address-wrap-read-test", "mov ax, [bx]\n", kFullMemorySize);
   // 0xFFFF0 + 0x0010 is 0x100000, which wraps to 0x00000.
-  helper->cpu_.registers[kDS] = 0xFFFF;
-  helper->cpu_.registers[kBX] = 0x0010;
+  helper->cpu_.registers[Y_CPU_DS] = 0xFFFF;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0010;
   helper->memory_[0x00000] = 0xCD;
   helper->memory_[0x00001] = 0xAB;
 
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xABCD);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0xABCD);
 }
 
 TEST_F(AddressWrapTest, WritePastTopOfMemoryWrapsToBottom) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "address-wrap-write-test", "mov [bx], ax\n", kFullMemorySize);
-  helper->cpu_.registers[kDS] = 0xFFFF;
-  helper->cpu_.registers[kBX] = 0x0010;
-  helper->cpu_.registers[kAX] = 0xABCD;
+  helper->cpu_.registers[Y_CPU_DS] = 0xFFFF;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0010;
+  helper->cpu_.registers[Y_CPU_AX] = 0xABCD;
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x00000], 0xCD);
@@ -44,8 +44,8 @@ TEST_F(AddressWrapTest, WritePastTopOfMemoryWrapsToBottom) {
 TEST_F(AddressWrapTest, ReadWordAtEndOfSegmentWrapsWithinSegment) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "address-wrap-read-word-test", "mov ax, [bx]\n", kFullMemorySize);
-  helper->cpu_.registers[kDS] = 0x1000;
-  helper->cpu_.registers[kBX] = 0xFFFF;
+  helper->cpu_.registers[Y_CPU_DS] = 0x1000;
+  helper->cpu_.registers[Y_CPU_BX] = 0xFFFF;
   // Low byte at 0x1000:0xFFFF, high byte back at 0x1000:0x0000.
   helper->memory_[0x1FFFF] = 0xCD;
   helper->memory_[0x10000] = 0xAB;
@@ -53,15 +53,15 @@ TEST_F(AddressWrapTest, ReadWordAtEndOfSegmentWrapsWithinSegment) {
   helper->memory_[0x20000] = 0x11;
 
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0xABCD);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0xABCD);
 }
 
 TEST_F(AddressWrapTest, WriteWordAtEndOfSegmentWrapsWithinSegment) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "address-wrap-write-word-test", "mov [bx], ax\n", kFullMemorySize);
-  helper->cpu_.registers[kDS] = 0x1000;
-  helper->cpu_.registers[kBX] = 0xFFFF;
-  helper->cpu_.registers[kAX] = 0xABCD;
+  helper->cpu_.registers[Y_CPU_DS] = 0x1000;
+  helper->cpu_.registers[Y_CPU_BX] = 0xFFFF;
+  helper->cpu_.registers[Y_CPU_AX] = 0xABCD;
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x1FFFF], 0xCD);

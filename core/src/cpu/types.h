@@ -9,56 +9,58 @@
 
 // Data widths supported by the 8086 CPU.
 typedef enum YCPUWidth {
-  kByte = 0,
-  kWord,
+  Y_CPU_BYTE = 0,
+  Y_CPU_WORD,
 } YCPUWidth;
 
 enum {
   // Number of data width types.
-  kNumWidths = kWord + 1,
+  Y_CPU_NUM_WIDTHS = Y_CPU_WORD + 1,
 };
 
 enum {
   // How many bytes a segment addresses. An offset is 16 bits and wraps within
   // its segment where a linear address does not, so this is where anything
   // walking memory through an offset has to stop.
-  kSegmentSize = 0x10000,
+  Y_CPU_SEGMENT_SIZE = 0x10000,
 };
 
 // Bitmask to extract the sign bit of a value.
-YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUSignBit[kNumWidths] = {
-    1 << 7,   // kByte
-    1 << 15,  // kWord
+YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUSignBit[Y_CPU_NUM_WIDTHS] = {
+    1 << 7,   // Y_CPU_BYTE
+    1 << 15,  // Y_CPU_WORD
 };
 
 // Maximum unsigned value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUMaxValue[kNumWidths] = {
-    0xFF,   // kByte
-    0xFFFF  // kWord
+YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUMaxValue[Y_CPU_NUM_WIDTHS] = {
+    0xFF,   // Y_CPU_BYTE
+    0xFFFF  // Y_CPU_WORD
 };
 
 // Maximum signed value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const int32_t YCPUMaxSignedValue[kNumWidths] = {
-    0x7F,   // kByte
-    0x7FFF  // kWord
+YAX86_MODULE_PRIVATE_HEADER const int32_t
+    YCPUMaxSignedValue[Y_CPU_NUM_WIDTHS] = {
+        0x7F,   // Y_CPU_BYTE
+        0x7FFF  // Y_CPU_WORD
 };
 
 // Minimum signed value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const int32_t YCPUMinSignedValue[kNumWidths] = {
-    -0x80,   // kByte
-    -0x8000  // kWord
+YAX86_MODULE_PRIVATE_HEADER const int32_t
+    YCPUMinSignedValue[Y_CPU_NUM_WIDTHS] = {
+        -0x80,   // Y_CPU_BYTE
+        -0x8000  // Y_CPU_WORD
 };
 
 // Number of bytes in each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBytes[kNumWidths] = {
-    1,  // kByte
-    2,  // kWord
+YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBytes[Y_CPU_NUM_WIDTHS] = {
+    1,  // Y_CPU_BYTE
+    2,  // Y_CPU_WORD
 };
 
 // Number of bits in each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBits[kNumWidths] = {
-    8,   // kByte
-    16,  // kWord
+YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBits[Y_CPU_NUM_WIDTHS] = {
+    8,   // Y_CPU_BYTE
+    16,  // Y_CPU_WORD
 };
 
 // Operand types.
@@ -85,13 +87,13 @@ typedef struct YCPUMemoryAddress {
 
 // Whether the operand is a register or memory operand.
 typedef enum YCPUOperandAddressType {
-  kOperandAddressTypeRegister = 0,
-  kOperandAddressTypeMemory,
+  Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER = 0,
+  Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY,
 } YCPUOperandAddressType;
 
 enum {
   // Number of operand address types.
-  kNumOperandAddressTypes = kOperandAddressTypeMemory + 1,
+  Y_CPU_NUM_OPERAND_ADDRESS_TYPES = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY + 1,
 };
 
 // Where an operand lives.
@@ -99,8 +101,8 @@ enum {
 // Four bytes, which is the largest a composite AAPCS returns in a register
 // rather than through memory.
 typedef struct YCPUOperandAddress {
-  // kOperandAddressTypeRegister or kOperandAddressTypeMemory. A uint8_t rather
-  // than the enum to ensure the four byte layout.
+  // Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER or Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY. A
+  // uint8_t rather than the enum to ensure the four byte layout.
   uint8_t type;
   // The register the operand is in, or the segment register it is addressed
   // through.

@@ -129,7 +129,7 @@ extern "C" {
 
 enum {
   // Start address of the BIOS ROM.
-  kBIOSROMStartAddress = 0xFE000,
+  Y_BIOS_ROM_START_ADDRESS = 0xFE000,
 };
 
 // Get size of BIOS ROM data.

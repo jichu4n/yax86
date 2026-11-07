@@ -87,7 +87,7 @@ enum {
   kEnterScancode = 0x1C,
   // Emulated cycles between screen polls, at 20 a second. Frequent enough to
   // answer DOS promptly and far too rare to affect the timing.
-  kBootPollCycles = kCPUCyclesPerSecond / 20,
+  kBootPollCycles = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 20,
   // How much of the machine's life to simulate before giving up on the boot.
   // Reaching the prompt takes under six emulated seconds, so anything close to
   // this bound means it went wrong rather than slowly.
@@ -109,7 +109,7 @@ enum {
 // rather than allocated: this target has no heap worth the name, and these two
 // arrays are most of what the machine costs in RAM.
 static uint8_t g_guest_ram[kGuestRAMSize];
-static uint8_t g_vram[kCGAVRAMSize];
+static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
 // Held for the platform's lifetime, which is why it is not a local.
 static YLoggerConfig g_logger_config;
@@ -164,7 +164,7 @@ static bool ResetMachine(void) {
   for (uint32_t i = 0; i < kGuestRAMSize; ++i) {
     g_guest_ram[i] = 0;
   }
-  for (uint32_t i = 0; i < kCGAVRAMSize; ++i) {
+  for (uint32_t i = 0; i < Y_VIDEO_CGA_VRAM_SIZE; ++i) {
     g_vram[i] = 0;
   }
   static const YPlatformState kEmptyPlatform = {0};
@@ -175,7 +175,7 @@ static bool ResetMachine(void) {
   config->physical_memory_size = kGuestRAMSize;
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
-  config->video_adapter = kVideoAdapterCGA;
+  config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   // enable_dos_idle_skip is left off. The run stops at the command prompt,
   // which is where DOS starts idling, so the skip would have nothing to skip -
   // and leaving it off keeps the workload a measurement of how fast guest
@@ -380,14 +380,14 @@ static void ProfilePrint(void) {
 static BenchResult RunBenchmark(void) {
   BenchResult result = {0};
   if (!ResetMachine()) {
-    result.status = kPlatformHung;
+    result.status = Y_PLATFORM_HUNG;
     return result;
   }
   g_boot_prompt_state = kBootPromptWaitingForDate;
 
   // A boot never ends by itself, so it is bounded by emulated time.
   const uint64_t max_cycles =
-      (uint64_t)kBootMaxEmulatedSeconds * kCPUCyclesPerSecond;
+      (uint64_t)kBootMaxEmulatedSeconds * Y_PLATFORM_CPU_CYCLES_PER_SECOND;
   uint64_t next_poll_cycles = kBootPollCycles;
 
   // The platform's own cycle counter is 32 bits and wraps after about fifteen
@@ -412,13 +412,13 @@ static BenchResult RunBenchmark(void) {
     // exception, so a real machine would carry on. Anything else means the
     // machine can no longer make progress.
     const uint64_t retired_before = YCPUInstructionsRetired(&g_platform.cpu);
-    YPlatformRunStatus status = kPlatformRunning;
+    YPlatformRunStatus status = Y_PLATFORM_RUNNING;
     for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
       const uint32_t batch_start = g_platform.ticks;
       status = YPlatformRun(&g_platform, remaining);
       const uint32_t consumed = g_platform.ticks - batch_start;
       remaining -= consumed < remaining ? consumed : remaining;
-      if (status != kPlatformInvalid) {
+      if (status != Y_PLATFORM_INVALID) {
         break;
       }
     }
@@ -426,7 +426,7 @@ static BenchResult RunBenchmark(void) {
         YCPUInstructionsRetired(&g_platform.cpu) - retired_before;
     result.cycles += (uint32_t)(g_platform.ticks - last_ticks);
     last_ticks = g_platform.ticks;
-    if (status != kPlatformRunning && status != kPlatformInvalid) {
+    if (status != Y_PLATFORM_RUNNING && status != Y_PLATFORM_INVALID) {
       result.status = status;
       break;
     }
@@ -632,7 +632,7 @@ int main(void) {
 
   g_logger_config.write_line = BenchWriteLogLine;
   g_logger_config.enabled_modules = 0xFFFFFFFF;
-  g_logger_config.min_level = kLogLevelError;
+  g_logger_config.min_level = Y_LOG_LEVEL_ERROR;
 
 #if YAX86_PICO_PROFILE
   // Armed before the clock changes so that the alarm is programmed once, from

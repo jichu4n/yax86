@@ -6,23 +6,23 @@ class DMATransferTest : public DMATest {
  protected:
   void SetUpChannel2ForTransfer(uint8_t mode, uint16_t count) {
     // Set mode for channel 2.
-    YDMAWritePort(&dma_, kDMAPortMode, kDMAModeSelectChannel2 | mode);
+    YDMAWritePort(&dma_, Y_DMA_PORT_MODE, Y_DMA_MODE_SELECT_CHANNEL2 | mode);
 
     // Set page, address, and count.
-    YDMAWritePort(&dma_, kDMAPortPageChannel2, 0x01);
-    YDMAWritePort(&dma_, kDMAPortChannel2Address, 0x34);
-    YDMAWritePort(&dma_, kDMAPortChannel2Address, 0x12);
-    YDMAWritePort(&dma_, kDMAPortChannel2Count, (count - 1) & 0xFF);
-    YDMAWritePort(&dma_, kDMAPortChannel2Count, ((count - 1) >> 8) & 0xFF);
+    YDMAWritePort(&dma_, Y_DMA_PORT_PAGE_CHANNEL2, 0x01);
+    YDMAWritePort(&dma_, Y_DMA_PORT_CHANNEL2_ADDRESS, 0x34);
+    YDMAWritePort(&dma_, Y_DMA_PORT_CHANNEL2_ADDRESS, 0x12);
+    YDMAWritePort(&dma_, Y_DMA_PORT_CHANNEL2_COUNT, (count - 1) & 0xFF);
+    YDMAWritePort(&dma_, Y_DMA_PORT_CHANNEL2_COUNT, ((count - 1) >> 8) & 0xFF);
 
     // Unmask channel 2.
-    YDMAWritePort(&dma_, kDMAPortSingleMask, kDMAModeSelectChannel2);
+    YDMAWritePort(&dma_, Y_DMA_PORT_SINGLE_MASK, Y_DMA_MODE_SELECT_CHANNEL2);
   }
 };
 
 TEST_F(DMATransferTest, MemoryWriteTransfer) {
   // Arrange: Configure Ch 2 for a memory write of 1 byte.
-  SetUpChannel2ForTransfer(kDMAModeTransferTypeWrite, 1);
+  SetUpChannel2ForTransfer(Y_DMA_MODE_TRANSFER_TYPE_WRITE, 1);
   g_data_from_device = 0xAB;
 
   // Act: Perform the transfer.
@@ -35,7 +35,7 @@ TEST_F(DMATransferTest, MemoryWriteTransfer) {
 
 TEST_F(DMATransferTest, MemoryReadTransfer) {
   // Arrange: Configure Ch 2 for a memory read of 1 byte.
-  SetUpChannel2ForTransfer(kDMAModeTransferTypeRead, 1);
+  SetUpChannel2ForTransfer(Y_DMA_MODE_TRANSFER_TYPE_READ, 1);
   const uint32_t expected_address = 0x011234;
   g_mock_memory[expected_address] = 0xCD;
 
@@ -48,7 +48,8 @@ TEST_F(DMATransferTest, MemoryReadTransfer) {
 
 TEST_F(DMATransferTest, AddressDecrement) {
   // Arrange: Configure Ch 2 for a memory write with address decrement.
-  SetUpChannel2ForTransfer(kDMAModeTransferTypeWrite | kDMAModeAddressDecrement, 1);
+  SetUpChannel2ForTransfer(
+      Y_DMA_MODE_TRANSFER_TYPE_WRITE | Y_DMA_MODE_ADDRESS_DECREMENT, 1);
 
   // Act: Perform the transfer.
   YDMATransferByte(&dma_, 2);
@@ -59,7 +60,7 @@ TEST_F(DMATransferTest, AddressDecrement) {
 
 TEST_F(DMATransferTest, TerminalCount) {
   // Arrange: Configure for a 1-byte transfer.
-  SetUpChannel2ForTransfer(kDMAModeTransferTypeWrite, 1);
+  SetUpChannel2ForTransfer(Y_DMA_MODE_TRANSFER_TYPE_WRITE, 1);
 
   // Act: Perform the transfer. Count is now 0xFFFF.
   YDMATransferByte(&dma_, 2);
@@ -72,7 +73,8 @@ TEST_F(DMATransferTest, TerminalCount) {
 
 TEST_F(DMATransferTest, AutoInitialize) {
   // Arrange: Configure for a 1-byte transfer with auto-initialize.
-  SetUpChannel2ForTransfer(kDMAModeTransferTypeWrite | kDMAModeAutoInitialize, 1);
+  SetUpChannel2ForTransfer(
+      Y_DMA_MODE_TRANSFER_TYPE_WRITE | Y_DMA_MODE_AUTO_INITIALIZE, 1);
 
   // Act: Perform the transfer.
   YDMATransferByte(&dma_, 2);
@@ -88,8 +90,9 @@ TEST_F(DMATransferTest, AutoInitialize) {
 
 TEST_F(DMATransferTest, MaskedChannelBlocksTransfer) {
   // Arrange: Configure for a transfer but keep the channel masked.
-  SetUpChannel2ForTransfer(kDMAModeTransferTypeWrite, 1);
-  YDMAWritePort(&dma_, kDMAPortSingleMask, kDMAModeSelectChannel2 | (1 << 2));
+  SetUpChannel2ForTransfer(Y_DMA_MODE_TRANSFER_TYPE_WRITE, 1);
+  YDMAWritePort(
+      &dma_, Y_DMA_PORT_SINGLE_MASK, Y_DMA_MODE_SELECT_CHANNEL2 | (1 << 2));
   g_data_from_device = 0xAB;
 
   // Act: Attempt the transfer.

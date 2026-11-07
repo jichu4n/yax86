@@ -47,19 +47,19 @@
 // for each component it has to add together.
 enum {
   // A displacement on its own.
-  kEACyclesDisplacementOnly = 6,
+  Y_CPU_EA_CYCLES_DISPLACEMENT_ONLY = 6,
   // A single base or index register.
-  kEACyclesBaseOrIndex = 5,
+  Y_CPU_EA_CYCLES_BASE_OR_INDEX = 5,
   // A base or index register plus a displacement.
-  kEACyclesBaseOrIndexAndDisplacement = 9,
+  Y_CPU_EA_CYCLES_BASE_OR_INDEX_AND_DISPLACEMENT = 9,
   // Base plus index. BP+DI and BX+SI cost one cycle less than the other two
   // pairings, which this does not distinguish.
-  kEACyclesBaseAndIndex = 8,
+  Y_CPU_EA_CYCLES_BASE_AND_INDEX = 8,
   // Base plus index plus a displacement.
-  kEACyclesBaseAndIndexAndDisplacement = 12,
+  Y_CPU_EA_CYCLES_BASE_AND_INDEX_AND_DISPLACEMENT = 12,
   // A segment override prefix costs two more, since the address has to be
   // formed against a different segment base.
-  kEACyclesSegmentOverride = 2,
+  Y_CPU_EA_CYCLES_SEGMENT_OVERRIDE = 2,
 };
 
 // Cycles to compute the effective address of a ModR/M memory operand.
@@ -81,26 +81,26 @@ YCPUGetEffectiveAddressCycles(const YCPUInstruction* instruction) {
 
   uint8_t cycles;
   if (is_direct_address) {
-    cycles = kEACyclesDisplacementOnly;
+    cycles = Y_CPU_EA_CYCLES_DISPLACEMENT_ONLY;
   } else if (has_base_and_index) {
-    cycles = has_displacement ? kEACyclesBaseAndIndexAndDisplacement
-                              : kEACyclesBaseAndIndex;
+    cycles = has_displacement ? Y_CPU_EA_CYCLES_BASE_AND_INDEX_AND_DISPLACEMENT
+                              : Y_CPU_EA_CYCLES_BASE_AND_INDEX;
   } else {
-    cycles = has_displacement ? kEACyclesBaseOrIndexAndDisplacement
-                              : kEACyclesBaseOrIndex;
+    cycles = has_displacement ? Y_CPU_EA_CYCLES_BASE_OR_INDEX_AND_DISPLACEMENT
+                              : Y_CPU_EA_CYCLES_BASE_OR_INDEX;
   }
 
   // Charged once for an instruction that carries a segment override, rather
   // than per override prefix. Only one can take effect, and real code never
   // emits more than one.
-  if (instruction->segment_override != kNoSegmentOverride) {
-    cycles += kEACyclesSegmentOverride;
+  if (instruction->segment_override != Y_CPU_NO_SEGMENT_OVERRIDE) {
+    cycles += Y_CPU_EA_CYCLES_SEGMENT_OVERRIDE;
   }
   return cycles;
 }
 
 YAX86_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes) {
-  cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
+  cpu->pending_cycles += (uint16_t)num_bytes * Y_CPU_BUS_CYCLES_PER_BYTE;
 }
 
 YAX86_PUBLIC void YCPUAddCycles(YCPUState* cpu, uint16_t cycles) {

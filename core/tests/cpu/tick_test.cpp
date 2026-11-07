@@ -40,14 +40,14 @@ void SetVector(
 
 // Whether the CPU is sitting in the single-step handler.
 bool InSingleStepHandler(const CPUTestHelper* helper) {
-  return helper->cpu_.registers[kCS] == kSingleStepHandlerSegment &&
-         helper->cpu_.registers[kIP] == kSingleStepHandlerOffset;
+  return helper->cpu_.registers[Y_CPU_CS] == kSingleStepHandlerSegment &&
+         helper->cpu_.registers[Y_CPU_IP] == kSingleStepHandlerOffset;
 }
 
 // Pushes a flags word for POPF to pop.
 void PushFlags(CPUTestHelper* helper, uint16_t flags) {
-  helper->cpu_.registers[kSP] -= 2;
-  const uint16_t sp = helper->cpu_.registers[kSP];
+  helper->cpu_.registers[Y_CPU_SP] -= 2;
+  const uint16_t sp = helper->cpu_.registers[Y_CPU_SP];
   helper->memory_[sp] = flags & 0xFF;
   helper->memory_[sp + 1] = flags >> 8;
 }
@@ -86,8 +86,8 @@ unique_ptr<CPUTestHelper> WithCode(const vector<uint8_t>& code) {
   helper->cpu_.config.handle_interrupt = nullptr;
   g_controller = FakeController();
   helper->cpu_.config.acknowledge_interrupt = AcknowledgeInterrupt;
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = 0x0800;
   return helper;
 }
 
@@ -101,27 +101,27 @@ TEST_F(TickTest, HaltingInstructionReportsExecuted) {
   auto helper = WithCode({kOpHlt, kOpNop});
 
   // The tick that runs HLT executed an instruction, even though the CPU ends
-  // it halted. Reporting kCPUTickHalted here would hide the instruction from
+  // it halted. Reporting Y_CPU_TICK_HALTED here would hide the instruction from
   // anything counting or single-stepping them.
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
   EXPECT_TRUE(helper->cpu_.is_halted);
 
   // Subsequent ticks run nothing.
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickHalted);
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickHalted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_HALTED);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_HALTED);
   EXPECT_TRUE(helper->cpu_.is_halted);
 }
 
 TEST_F(TickTest, HaltedCPUDoesNotAdvanceIP) {
   auto helper = WithCode({kOpHlt, kOpNop});
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
-  const uint16_t ip_after_halt = helper->cpu_.registers[kIP];
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
+  const uint16_t ip_after_halt = helper->cpu_.registers[Y_CPU_IP];
 
   for (int i = 0; i < 4; ++i) {
-    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickHalted);
+    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_HALTED);
   }
 
-  EXPECT_EQ(helper->cpu_.registers[kIP], ip_after_halt);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], ip_after_halt);
 }
 
 // ============================================================================
@@ -140,22 +140,22 @@ TEST_F(TickTest, PendingInterruptWakesHaltedCPU) {
   helper->memory_[kVectorOffset + 3] = 0x00;
   helper->memory_[0x200] = kOpNop;
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
   ASSERT_TRUE(helper->cpu_.is_halted);
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickHalted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_HALTED);
 
   // A hardware interrupt arrives, as the platform would inject it.
   YCPURaiseInternalInterrupt(&helper->cpu_, 0x20);
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickHalted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_HALTED);
 
   // The interrupt cleared the halted state and vectored to the handler, even
   // though no instruction ran on that tick.
   EXPECT_FALSE(helper->cpu_.is_halted);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0010);
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0010);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0x0100);
 
   // Execution resumes normally afterwards.
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
 }
 
 // ============================================================================
@@ -165,24 +165,24 @@ TEST_F(TickTest, PendingInterruptWakesHaltedCPU) {
 TEST_F(TickTest, TrapFlagRaisesSingleStepAfterAnInstruction) {
   auto helper = WithCode({kOpNop, kOpNop});
   // Point the single-step vector at 1111:2222.
-  const uint16_t kVectorOffset = kInterruptSingleStep * 4;
+  const uint16_t kVectorOffset = Y_CPU_INTERRUPT_SINGLE_STEP * 4;
   helper->memory_[kVectorOffset + 0] = 0x22;
   helper->memory_[kVectorOffset + 1] = 0x22;
   helper->memory_[kVectorOffset + 2] = 0x11;
   helper->memory_[kVectorOffset + 3] = 0x11;
-  YCPUSetFlag(&helper->cpu_, kTF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_TF, true);
 
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
 
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x1111);
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0x2222);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x1111);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0x2222);
   // Entering the handler clears TF.
-  EXPECT_FALSE(YCPUGetFlag(&helper->cpu_, kTF));
+  EXPECT_FALSE(YCPUGetFlag(&helper->cpu_, Y_CPU_TF));
 }
 
 TEST_F(TickTest, HaltedCPUDoesNotTrapOnTrapFlag) {
   auto helper = WithCode({kOpHlt, kOpNop});
-  const uint16_t kVectorOffset = kInterruptSingleStep * 4;
+  const uint16_t kVectorOffset = Y_CPU_INTERRUPT_SINGLE_STEP * 4;
   helper->memory_[kVectorOffset + 0] = 0x22;
   helper->memory_[kVectorOffset + 1] = 0x22;
   helper->memory_[kVectorOffset + 2] = 0x11;
@@ -190,39 +190,39 @@ TEST_F(TickTest, HaltedCPUDoesNotTrapOnTrapFlag) {
 
   // Halt first, then set TF, so that the trap flag is set while the CPU is
   // already halted.
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
   ASSERT_TRUE(helper->cpu_.is_halted);
-  YCPUSetFlag(&helper->cpu_, kTF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_TF, true);
 
   // The trap flag traps after an instruction executes. A halted CPU executes
   // none, so it must stay halted rather than waking itself up and then
   // trapping again on every tick.
   for (int i = 0; i < 8; ++i) {
-    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickHalted) << "tick " << i;
+    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_HALTED) << "tick " << i;
     ASSERT_TRUE(helper->cpu_.is_halted) << "tick " << i;
-    ASSERT_NE(helper->cpu_.registers[kCS], 0x1111) << "tick " << i;
+    ASSERT_NE(helper->cpu_.registers[Y_CPU_CS], 0x1111) << "tick " << i;
   }
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kTF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_TF));
 }
 
 TEST_F(TickTest, HaltWithTrapFlagTrapsOnceForTheHaltItself) {
   auto helper = WithCode({kOpSti, kOpHlt});
-  const uint16_t kVectorOffset = kInterruptSingleStep * 4;
+  const uint16_t kVectorOffset = Y_CPU_INTERRUPT_SINGLE_STEP * 4;
   helper->memory_[kVectorOffset + 0] = 0x22;
   helper->memory_[kVectorOffset + 1] = 0x22;
   helper->memory_[kVectorOffset + 2] = 0x11;
   helper->memory_[kVectorOffset + 3] = 0x11;
 
   // STI executes and traps, clearing TF. Re-arm it, then run HLT.
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
-  helper->cpu_.registers[kCS] = 0;
-  helper->cpu_.registers[kIP] = kCOMFileLoadOffset + 1;
-  YCPUSetFlag(&helper->cpu_, kTF, true);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
+  helper->cpu_.registers[Y_CPU_CS] = 0;
+  helper->cpu_.registers[Y_CPU_IP] = kCOMFileLoadOffset + 1;
+  YCPUSetFlag(&helper->cpu_, Y_CPU_TF, true);
 
   // HLT is an instruction, so the trap does fire for it - and dispatching the
   // interrupt clears the halted state, which is what real hardware does.
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x1111);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x1111);
   EXPECT_FALSE(helper->cpu_.is_halted);
 }
 
@@ -237,37 +237,37 @@ TEST_F(TickTest, HaltWithTrapFlagTrapsOnceForTheHaltItself) {
 TEST_F(TickTest, PopfSettingTrapFlagDoesNotTrapOnItself) {
   auto helper = WithCode({kOpPopf, kOpNop, kOpNop});
   SetVector(
-      helper.get(), kInterruptSingleStep, kSingleStepHandlerSegment,
+      helper.get(), Y_CPU_INTERRUPT_SINGLE_STEP, kSingleStepHandlerSegment,
       kSingleStepHandlerOffset);
   helper->memory_[(kSingleStepHandlerSegment << 4) + kSingleStepHandlerOffset] =
       kOpNop;
 
   // POPF loads a flags word with TF set, starting from TF clear.
-  YCPUSetFlag(&helper->cpu_, kTF, false);
-  PushFlags(helper.get(), kInitialFlags | kTF);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_TF, false);
+  PushFlags(helper.get(), Y_CPU_INITIAL_FLAGS | Y_CPU_TF);
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
 
   // TF is now set, but the instruction that set it must not trap on itself.
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kTF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_TF));
   EXPECT_FALSE(InSingleStepHandler(helper.get()));
 
   // The following instruction does trap.
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
   EXPECT_TRUE(InSingleStepHandler(helper.get()));
 }
 
 TEST_F(TickTest, PopfClearingTrapFlagStillTrapsOnce) {
   auto helper = WithCode({kOpPopf, kOpNop});
   SetVector(
-      helper.get(), kInterruptSingleStep, kSingleStepHandlerSegment,
+      helper.get(), Y_CPU_INTERRUPT_SINGLE_STEP, kSingleStepHandlerSegment,
       kSingleStepHandlerOffset);
 
   // POPF loads a flags word with TF clear, starting from TF set.
-  YCPUSetFlag(&helper->cpu_, kTF, true);
-  PushFlags(helper.get(), kInitialFlags);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_TF, true);
+  PushFlags(helper.get(), Y_CPU_INITIAL_FLAGS);
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
 
   // The trap still fires for the instruction TF was set during, even though
   // that instruction cleared it.
@@ -277,21 +277,21 @@ TEST_F(TickTest, PopfClearingTrapFlagStillTrapsOnce) {
 TEST_F(TickTest, DispatchedInterruptTakesPrecedenceOverSingleStep) {
   auto helper = WithCode({kOpNop, kOpNop});
   SetVector(
-      helper.get(), kInterruptSingleStep, kSingleStepHandlerSegment,
+      helper.get(), Y_CPU_INTERRUPT_SINGLE_STEP, kSingleStepHandlerSegment,
       kSingleStepHandlerOffset);
   // A hardware interrupt vectoring somewhere else entirely.
   SetVector(helper.get(), 0x20, 0x0010, 0x0100);
 
-  YCPUSetFlag(&helper->cpu_, kTF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_TF, true);
   YCPURaiseInternalInterrupt(&helper->cpu_, 0x20);
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
 
   // Single-stepping is the lowest priority interrupt source at an instruction
   // boundary, so the hardware interrupt takes its place rather than both
   // firing in one tick.
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0010);
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0010);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0x0100);
   EXPECT_FALSE(InSingleStepHandler(helper.get()));
 }
 
@@ -314,26 +314,26 @@ TEST_F(TickTest, SoftwareInterruptDoesNotDeassertINTR) {
   // IRQ0 handler at 0060:0100 (linear 0x700).
   SetVector(helper.get(), 0x08, 0x0060, 0x0100);
   helper->memory_[0x700] = kOpNop;
-  YCPUSetFlag(&helper->cpu_, kTF, false);
-  YCPUSetFlag(&helper->cpu_, kIF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_TF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_IF, true);
 
   // The controller asserts IRQ0 just before the INT instruction executes.
   RaiseINTR(0x08);
 
   // The INT instruction is taken first, since it was raised by the instruction
   // that just executed.
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0050);
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0050);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0x0100);
   // The external request must survive it: no acknowledge cycle has run, so the
   // controller is still requesting and no vector has been produced.
   EXPECT_TRUE(g_controller.requesting);
   EXPECT_EQ(g_controller.acknowledge_count, 0);
 
   // IRET restores IF, and the request is then taken.
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0x0100);
   EXPECT_FALSE(g_controller.requesting);
   // Acknowledged exactly once, at the moment it was taken.
   EXPECT_EQ(g_controller.acknowledge_count, 1);
@@ -344,22 +344,22 @@ TEST_F(TickTest, AssertedINTRWaitsForInterruptsToBeEnabled) {
   SetVector(helper.get(), 0x08, 0x0060, 0x0100);
   helper->memory_[0x700] = kOpNop;
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // CLI
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // CLI
   RaiseINTR(0x08);
 
   // Not taken while interrupts are disabled - and not thrown away either.
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // NOP
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // NOP
   EXPECT_TRUE(g_controller.requesting);
-  EXPECT_NE(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_NE(helper->cpu_.registers[Y_CPU_CS], 0x0060);
 
   // Once interrupts are enabled again the request is taken.
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // STI
   for (int i = 0; i < 2 && g_controller.requesting; ++i) {
-    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
   }
   EXPECT_FALSE(g_controller.requesting);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0x0100);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0x0100);
 }
 
 // ============================================================================
@@ -377,12 +377,12 @@ TEST_F(TickTest, HintReadingTrueTakesTheInterrupt) {
   bool hint = true;
   helper->cpu_.config.interrupt_request_hint = &hint;
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // STI
   RaiseINTR(0x08);
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // NOP
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // NOP
 
   EXPECT_EQ(g_controller.acknowledge_count, 1);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0060);
 }
 
 // A hint reading false is taken at its word: the acknowledge cycle does not
@@ -398,21 +398,21 @@ TEST_F(TickTest, HintReadingFalseSuppressesTheAcknowledgeCycle) {
   bool hint = false;
   helper->cpu_.config.interrupt_request_hint = &hint;
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // STI
   RaiseINTR(0x08);
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // NOP
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // NOP
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // NOP
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // NOP
 
   EXPECT_EQ(g_controller.acknowledge_count, 0);
   EXPECT_TRUE(g_controller.requesting);
-  EXPECT_NE(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_NE(helper->cpu_.registers[Y_CPU_CS], 0x0060);
 
   // Nothing is lost by the wait - the request is still there to be taken once
   // the hint reports it, exactly as a real controller keeps driving INTR.
   hint = true;
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
   EXPECT_EQ(g_controller.acknowledge_count, 1);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0060);
 }
 
 // A host that supplies no hint is asked at every boundary, as one always was.
@@ -425,12 +425,12 @@ TEST_F(TickTest, NoHintAsksTheControllerEveryTime) {
 
   ASSERT_EQ(helper->cpu_.config.interrupt_request_hint, nullptr);
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // STI
   RaiseINTR(0x08);
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // NOP
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // NOP
 
   EXPECT_EQ(g_controller.acknowledge_count, 1);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0060);
 }
 
 TEST_F(TickTest, AssertedINTRWakesHaltedCPU) {
@@ -438,13 +438,13 @@ TEST_F(TickTest, AssertedINTRWakesHaltedCPU) {
   SetVector(helper.get(), 0x08, 0x0060, 0x0100);
   helper->memory_[0x700] = kOpNop;
 
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // STI
-  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);  // HLT
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // STI
+  ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);  // HLT
   ASSERT_TRUE(helper->cpu_.is_halted);
 
   RaiseINTR(0x08);
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickHalted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_HALTED);
 
   EXPECT_FALSE(helper->cpu_.is_halted);
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x0060);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x0060);
 }

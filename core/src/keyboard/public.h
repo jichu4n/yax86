@@ -48,12 +48,12 @@
 
 enum {
   // Log module ID for the Keyboard.
-  kLogModuleIDKeyboard = 7,
+  Y_KEYBOARD_LOG_MODULE_ID = 7,
 };
 
 // Log module for the Keyboard.
 YAX86_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
-    .id = kLogModuleIDKeyboard,
+    .id = Y_KEYBOARD_LOG_MODULE_ID,
     .name = "KEYBOARD",
 };
 
@@ -75,11 +75,11 @@ typedef struct YKeyboardConfig {
 
 enum {
   // Maximum number of keys to buffer. Additional key presses will be dropped.
-  kKeyboardBufferSize = 16,
+  Y_KEYBOARD_BUFFER_SIZE = 16,
   // Threshold required to trigger keyboard reset when clock line is held low.
-  kKeyboardResetThresholdMs = 20,
+  Y_KEYBOARD_RESET_THRESHOLD_MS = 20,
 };
-STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, kKeyboardBufferSize)
+STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, Y_KEYBOARD_BUFFER_SIZE)
 
 // State of the Keyboard.
 typedef struct YKeyboardState {

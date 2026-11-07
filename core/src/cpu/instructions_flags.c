@@ -12,9 +12,9 @@
 // Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
 // instructions, indexed by (opcode - 0xF8) / 2.
 YAX86_FILE_PRIVATE const YCPUFlag YCPUFlagsForClearAndSetInstructions[] = {
-    kCF,  // CLC, STC
-    kIF,  // CLI, STI
-    kDF,  // CLD, STD
+    Y_CPU_CF,  // CLC, STC
+    Y_CPU_IF,  // CLI, STI
+    Y_CPU_DF,  // CLD, STD
 };
 
 YAX86_MODULE_PRIVATE YCPUInstructionResult
@@ -23,7 +23,7 @@ YCPUExecuteClearOrSetFlag(const YCPUInstructionContext* ctx) {
   YCPUFlag flag = YCPUFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
   YCPUSetFlag(ctx->cpu, flag, value);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // ============================================================================
@@ -33,8 +33,8 @@ YCPUExecuteClearOrSetFlag(const YCPUInstructionContext* ctx) {
 // CMC
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteComplementCarryFlag(const YCPUInstructionContext* ctx) {
-  YCPUSetFlag(ctx->cpu, kCF, !YCPUGetFlag(ctx->cpu, kCF));
-  return kInstructionExecuted;
+  YCPUSetFlag(ctx->cpu, Y_CPU_CF, !YCPUGetFlag(ctx->cpu, Y_CPU_CF));
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // ============================================================================
@@ -47,7 +47,8 @@ YCPUExecuteComplementCarryFlag(const YCPUInstructionContext* ctx) {
 // becomes 0xFF if CF is set and 0x00 otherwise. No flags are affected.
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteSetALFromCarry(const YCPUInstructionContext* ctx) {
-  const uint8_t value = YCPUGetFlag(ctx->cpu, kCF) ? 0xFF : 0x00;
-  ctx->cpu->registers[kAX] = (ctx->cpu->registers[kAX] & 0xFF00) | value;
-  return kInstructionExecuted;
+  const uint8_t value = YCPUGetFlag(ctx->cpu, Y_CPU_CF) ? 0xFF : 0x00;
+  ctx->cpu->registers[Y_CPU_AX] =
+      (ctx->cpu->registers[Y_CPU_AX] & 0xFF00) | value;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }

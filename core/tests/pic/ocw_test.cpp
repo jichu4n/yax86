@@ -31,7 +31,7 @@ class OCWTest : public ::testing::Test {
     // ICW2: interrupt vector base 0x08.
     YPICWritePort(&pic_, 0x21, 0x08);
 
-    ASSERT_EQ(pic_.init_state, kPICReady);
+    ASSERT_EQ(pic_.init_state, Y_PIC_READY);
   }
   YPICState pic_ = {0};
 };

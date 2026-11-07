@@ -46,14 +46,15 @@ class PlatformPCSpeakerTest : public ::testing::Test {
 
   // Programs PIT channel 2 for a square wave at the given reload value.
   void SetTone(uint16_t reload_value) {
-    YPlatformWritePortByte(&platform_, kPITPortControl, kChannel2Mode3);
-    YPlatformWritePortByte(&platform_, kPITPortChannel2, reload_value & 0xFF);
-    YPlatformWritePortByte(&platform_, kPITPortChannel2, reload_value >> 8);
+    YPlatformWritePortByte(&platform_, Y_PIT_PORT_CONTROL, kChannel2Mode3);
+    YPlatformWritePortByte(
+        &platform_, Y_PIT_PORT_CHANNEL2, reload_value & 0xFF);
+    YPlatformWritePortByte(&platform_, Y_PIT_PORT_CHANNEL2, reload_value >> 8);
   }
 
   // Writes PPI port B, which is where the speaker's two gating bits live.
   void WritePortB(uint8_t value) {
-    YPlatformWritePortByte(&platform_, kPPIPortB, value);
+    YPlatformWritePortByte(&platform_, Y_PPI_PORT_B, value);
   }
 
   // The most recently reported frequency, or 0 if nothing was reported.
@@ -63,7 +64,7 @@ class PlatformPCSpeakerTest : public ::testing::Test {
 
   YPlatformState platform_ = {0};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
   // Every frequency reported to the host, in order.
   std::vector<uint32_t> frequencies_;
 };

@@ -22,14 +22,14 @@ YAX86_FILE_PRIVATE void YCPUGetSegmentRegisterOperandForIndirectFarJumpOrCall(
 // JMP ptr16
 YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectNearJump(
     const YCPUInstructionContext* ctx, YCPUOperand* dest) {
-  ctx->cpu->registers[kIP] = YCPUFromOperandValue(dest->value);
-  return kInstructionExecuted;
+  ctx->cpu->registers[Y_CPU_IP] = YCPUFromOperandValue(dest->value);
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // CALL ptr16
 YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectNearCall(
     const YCPUInstructionContext* ctx, YCPUOperand* dest) {
-  YCPUPushValue(ctx->cpu, ctx->cpu->registers[kIP]);
+  YCPUPushValue(ctx->cpu, ctx->cpu->registers[Y_CPU_IP]);
   return YCPUExecuteIndirectNearJump(ctx, dest);
 }
 
@@ -53,7 +53,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectFarJump(
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteIndirectPush(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUPushSourceOperand(ctx->cpu, dest);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 typedef YCPUInstructionResult (*YCPUGroup5ExecuteInstructionFn)(

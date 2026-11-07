@@ -41,7 +41,7 @@ TEST_F(HDCOptionROMTest, ChecksumIsValid) {
 TEST_F(HDCOptionROMTest, StartsOnAScanBoundary) {
   // GLaBIOS scans for option ROMs on 2KB boundaries, so a ROM anywhere else
   // would never be found.
-  EXPECT_EQ(kHDCOptionROMStartAddress % 2048, 0u);
+  EXPECT_EQ(Y_HDC_OPTION_ROM_START_ADDRESS % 2048, 0u);
 }
 
 }  // namespace

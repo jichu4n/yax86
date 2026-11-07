@@ -25,7 +25,7 @@ class IRQTest : public ::testing::Test {
     // ICW2: interrupt vector base 0x08.
     YPICWritePort(&master_, 0x21, kICW2_BASE_XT);
 
-    ASSERT_EQ(master_.init_state, kPICReady);
+    ASSERT_EQ(master_.init_state, Y_PIC_READY);
     // Unmask all interrupts for testing. Written as an OCW1 rather than
     // assigned, so that the mask goes through the path a guest uses and
     // has_unmasked_request is recomputed with it.
@@ -39,7 +39,7 @@ class IRQTest : public ::testing::Test {
     YPICWritePort(&master_, 0x20, kTestICW1_INIT);  // Cascaded, ICW4 not needed
     YPICWritePort(&master_, 0x21, kICW2_BASE_AT_M);
     YPICWritePort(&master_, 0x21, 1 << 2);  // Slave is on IRQ 2
-    ASSERT_EQ(master_.init_state, kPICReady);
+    ASSERT_EQ(master_.init_state, Y_PIC_READY);
 
     // Slave PIC setup
     slave_.config.sp = true;
@@ -47,7 +47,7 @@ class IRQTest : public ::testing::Test {
     YPICWritePort(&slave_, 0xA0, kTestICW1_INIT);  // Cascaded, ICW4 not needed
     YPICWritePort(&slave_, 0xA1, kICW2_BASE_AT_S);
     YPICWritePort(&slave_, 0xA1, 2);  // Slave ID is 2
-    ASSERT_EQ(slave_.init_state, kPICReady);
+    ASSERT_EQ(slave_.init_state, Y_PIC_READY);
 
     // Link them
     master_.cascade_pic = &slave_;
@@ -89,7 +89,7 @@ TEST_F(IRQTest, SinglePIC_Masking) {
   // Mask IRQ 4.
   YPICWritePort(&master_, 0x21, 1 << 4);
   EXPECT_FALSE(master_.has_unmasked_request);
-  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), Y_PIC_NO_PENDING_INTERRUPT);
 
   // Unmask IRQ 4.
   YPICWritePort(&master_, 0x21, 0x00);
@@ -107,7 +107,7 @@ TEST_F(IRQTest, SinglePIC_InServicePriority) {
 
   // Raise a lower-priority interrupt (IRQ 7). It should not be serviced.
   YPICRaiseIRQ(&master_, 7);
-  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), Y_PIC_NO_PENDING_INTERRUPT);
 
   // Raise a higher-priority interrupt (IRQ 3). It should be serviced.
   YPICRaiseIRQ(&master_, 3);
@@ -124,7 +124,7 @@ TEST_F(IRQTest, SinglePIC_EOIInteraction) {
 
   // Raise IRQ 5. It shouldn't be serviced yet.
   YPICRaiseIRQ(&master_, 5);
-  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), Y_PIC_NO_PENDING_INTERRUPT);
 
   // Issue an EOI for IRQ 4.
   YPICWritePort(&master_, 0x20, kTestOCW2_EOI);

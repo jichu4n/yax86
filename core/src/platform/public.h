@@ -13,12 +13,12 @@
 
 enum {
   // Log module ID for the Platform.
-  kLogModuleIDPlatform = 0,
+  Y_PLATFORM_LOG_MODULE_ID = 0,
 };
 
 // Log module for the Platform.
 YAX86_PUBLIC_HEADER const YLogModule YPlatformLogModule = {
-    .id = kLogModuleIDPlatform,
+    .id = Y_PLATFORM_LOG_MODULE_ID,
     .name = "PLATFORM",
 };
 
@@ -44,16 +44,16 @@ typedef uint8_t YPlatformMemoryMapEntryType;
 enum {
   // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
   // 0x9FFFF (640KB).
-  kMemoryMapEntryConventional = 0,
+  Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL = 0,
   // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
-  kMemoryMapEntryBIOSROM = 0x01,
+  Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
-  kMemoryMapEntryHDCOptionROM = 0x0C,
+  Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
   // Video RAM - mapped to 0xB0000 (MDA) or 0xB8000 (CGA).
-  kMemoryMapEntryVRAM = 0x10,
+  Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM = 0x10,
 
   // Maximum number of memory map entries.
-  kMaxMemoryMapEntries = 16,
+  Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES = 16,
 
   // How many decoded instructions the CPU is given room to keep. 256 entries
   // is 6KB, and skips the decode on roughly two thirds of the instructions the
@@ -62,29 +62,30 @@ enum {
   // Not the fastest size measured: 512 is 0.11% faster, 1024 is 0.04% slower
   // and 128 is 0.83% slower. 0.11% does not buy another 6KB on a 256KB part
   // where that memory is otherwise guest RAM.
-  kDecodeCacheEntries = 256,
+  Y_PLATFORM_DECODE_CACHE_ENTRIES = 256,
 
   // The memory map is indexed by page so that a lookup is a load rather than a
   // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
   // index - small enough to keep in the platform state, and coarse enough that
   // every region the machine registers is page aligned.
-  kMemoryPageShift = 12,
-  kMemoryPageSize = 1 << kMemoryPageShift,
-  kMemoryAddressSpaceSize = 0x100000,
-  kNumMemoryPages = kMemoryAddressSpaceSize >> kMemoryPageShift,
+  Y_PLATFORM_MEMORY_PAGE_SHIFT = 12,
+  Y_PLATFORM_MEMORY_PAGE_SIZE = 1 << Y_PLATFORM_MEMORY_PAGE_SHIFT,
+  Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE = 0x100000,
+  Y_PLATFORM_NUM_MEMORY_PAGES = Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE >>
+      Y_PLATFORM_MEMORY_PAGE_SHIFT,
   // A page no entry covers.
-  kMemoryPageUnmapped = 0xFF,
+  Y_PLATFORM_MEMORY_PAGE_UNMAPPED = 0xFF,
   // A page more than one entry has a share of, which has to be resolved by
   // address. Nothing registers such a region today - every one of them is page
   // aligned - but the index must not quietly answer the wrong entry if one
   // ever does. Note that this is never the answer for an address above the
   // address space: no entry may reach one, so it is unmapped instead.
-  kMemoryPageStraddled = 0xFE,
+  Y_PLATFORM_MEMORY_PAGE_STRADDLED = 0xFE,
 
   // Maximum size of physical memory in bytes.
-  kMaxPhysicalMemorySize = 640 * 1024,
+  Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE = 640 * 1024,
   // Minimum size of physical memory in bytes.
-  kMinPhysicalMemorySize = 64 * 1024,
+  Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE = 64 * 1024,
 };
 
 // A memory map entry for a region in logical address space. Memory regions
@@ -93,7 +94,8 @@ typedef struct YPlatformMemoryMapEntry {
   // Custom data passed through to callbacks.
   void* context;
 
-  // The memory map entry type, such as kMemoryMapEntryConventional.
+  // The memory map entry type, such as
+  // Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL.
   YPlatformMemoryMapEntryType entry_type;
   // Start address of the memory region.
   uint32_t start;
@@ -144,7 +146,8 @@ typedef struct YPlatformMemoryMapEntry {
 //   - The entry's memory region does not lie within the address space.
 //   - There already exists a memory map entry with the same type.
 //   - The new entry's memory region overlaps with an existing entry.
-//   - The number of memory map entries would exceed kMaxMemoryMapEntries.
+//   - The number of memory map entries would exceed
+//   Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES.
 //
 // This does not tell the CPU that the map has changed. Follow a registration,
 // or a run of them, with YPlatformUpdateAfterMemoryMapChange(). Skipping it
@@ -198,24 +201,24 @@ typedef uint16_t YPlatformPortMapEntryType;
 
 enum {
   // Maximum number of I/O port mapping entries.
-  kMaxPortMapEntries = 16,
+  Y_PLATFORM_MAX_PORT_MAP_ENTRIES = 16,
   // I/O port map entry for the master PIC (ports 0x20-0x21).
-  kPortMapEntryPIC = 0x20,
+  Y_PLATFORM_PORT_MAP_ENTRY_PIC = 0x20,
   // I/O port map entry for the PIT (ports 0x40-0x43).
-  kPortMapEntryPIT = 0x40,
+  Y_PLATFORM_PORT_MAP_ENTRY_PIT = 0x40,
   // I/O port map entry for the PPI (ports 0x60-0x63).
-  kPortMapEntryPPI = 0x60,
+  Y_PLATFORM_PORT_MAP_ENTRY_PPI = 0x60,
   // I/O port map entry for the video adapter (ports 0x3B0-0x3BF or
   // 0x3D0-0x3DF).
-  kPortMapEntryVideo = 0x10,
+  Y_PLATFORM_PORT_MAP_ENTRY_VIDEO = 0x10,
   // I/O port map entry for the FDC (ports 0x3F0-0x3F7).
-  kPortMapEntryFDC = 0x3F0,
+  Y_PLATFORM_PORT_MAP_ENTRY_FDC = 0x3F0,
   // I/O port map entry for the HDC (ports 0x300-0x30F).
-  kPortMapEntryHDC = 0x300,
+  Y_PLATFORM_PORT_MAP_ENTRY_HDC = 0x300,
   // I/O port map entry for the DMA controller (ports 0x00-0x0F).
-  kPortMapEntryDMA = 0x00,
+  Y_PLATFORM_PORT_MAP_ENTRY_DMA = 0x00,
   // I/O port map entry for the DMA Page Registers (ports 0x80-0x8F).
-  kPortMapEntryDMAPage = 0x80,
+  Y_PLATFORM_PORT_MAP_ENTRY_DMA_PAGE = 0x80,
 };
 
 // An I/O port map entry. Entries should not overlap.
@@ -268,12 +271,12 @@ YAX86_PUBLIC void YPlatformWritePortByte(
 typedef enum YPlatformRunStatus {
   // The machine is running normally. Also returned by YPlatformRun() when it
   // exhausts its tick budget without stopping.
-  kPlatformRunning = 0,
+  Y_PLATFORM_RUNNING = 0,
   // The instruction at CS:IP could not be fetched or executed.
-  kPlatformInvalid,
+  Y_PLATFORM_INVALID,
   // The CPU halted with interrupts disabled and no interrupt pending, so
   // nothing can ever wake it. This is how GLaBIOS signals a fatal error.
-  kPlatformHung,
+  Y_PLATFORM_HUNG,
 } YPlatformRunStatus;
 
 // ============================================================================
@@ -365,24 +368,26 @@ typedef struct YPlatformConfig {
 } YPlatformConfig;
 
 STATIC_VECTOR_TYPE(
-    YPlatformMemoryMap, YPlatformMemoryMapEntry, kMaxMemoryMapEntries)
-STATIC_VECTOR_TYPE(YPlatformPortMap, YPlatformPortMapEntry, kMaxPortMapEntries)
+    YPlatformMemoryMap, YPlatformMemoryMapEntry,
+    Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES)
+STATIC_VECTOR_TYPE(
+    YPlatformPortMap, YPlatformPortMapEntry, Y_PLATFORM_MAX_PORT_MAP_ENTRIES)
 
 // State of the platform.
 enum {
   // The CPU clock, in cycles per second. 4.77MHz is the IBM PC/XT's 14.318MHz
   // crystal divided by three.
-  kCPUCyclesPerSecond = 4772727,
+  Y_PLATFORM_CPU_CYCLES_PER_SECOND = 4772727,
   // Cycles per millisecond, near enough for the devices that want one.
-  kCyclesPerMillisecond = kCPUCyclesPerSecond / 1000,
+  Y_PLATFORM_CYCLES_PER_MILLISECOND = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 1000,
   // The PIT is clocked at 1.193MHz, the same crystal divided by twelve, which
   // is a quarter of the CPU clock.
-  kCyclesPerPITTick = 4,
+  Y_PLATFORM_CYCLES_PER_PIT_TICK = 4,
   // How often to step the floppy controller's state machine. This is not a
   // clock ratio - the controller is a state machine here rather than a
   // modelled device - so it keeps the rate it had before cycles were counted,
   // to leave floppy timing where it was.
-  kCyclesPerFDCTick = 20,
+  Y_PLATFORM_CYCLES_PER_FDC_TICK = 20,
 };
 
 typedef struct YPlatformState {
@@ -397,7 +402,7 @@ typedef struct YPlatformState {
   YCPUState cpu;
   // Storage for the CPU's decode cache, handed to it through
   // YCPUConfig.decode_cache.
-  YCPUDecodeCacheEntry cpu_decode_cache[kDecodeCacheEntries];
+  YCPUDecodeCacheEntry cpu_decode_cache[Y_PLATFORM_DECODE_CACHE_ENTRIES];
 
   // PIC state.
   YPICState pic;
@@ -427,9 +432,10 @@ typedef struct YPlatformState {
   // Memory map.
   YPlatformMemoryMap memory_map;
   // Which memory map entry owns each page of the address space, or
-  // kMemoryPageUnmapped / kMemoryPageStraddled. Extended by each registration,
-  // which only happens while the machine is being set up.
-  uint8_t memory_page_map[kNumMemoryPages];
+  // Y_PLATFORM_MEMORY_PAGE_UNMAPPED / Y_PLATFORM_MEMORY_PAGE_STRADDLED.
+  // Extended by each registration, which only happens while the machine is
+  // being set up.
+  uint8_t memory_page_map[Y_PLATFORM_NUM_MEMORY_PAGES];
   // I/O port map.
   YPlatformPortMap io_port_map;
 
@@ -496,12 +502,12 @@ YAX86_PUBLIC bool YPlatformRaiseIRQ(YPlatformState* platform, uint8_t irq);
 // with: a host that wants to stop somewhere drives this in a loop and inspects
 // the CPU itself. YPlatformRun() batches instructions into a tick instead.
 //
-// Returns kPlatformRunning if the machine should keep running.
+// Returns Y_PLATFORM_RUNNING if the machine should keep running.
 YAX86_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
-// anything other than kPlatformRunning. Returns the status of the tick that
-// stopped the run, or kPlatformRunning if the full budget was consumed.
+// anything other than Y_PLATFORM_RUNNING. Returns the status of the tick that
+// stopped the run, or Y_PLATFORM_RUNNING if the full budget was consumed.
 //
 // Unlike YPlatformTick(), a tick here may run several instructions back to
 // back, never past the point where a device is due to be serviced or something

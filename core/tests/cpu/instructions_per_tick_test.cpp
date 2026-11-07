@@ -68,11 +68,11 @@ class InstructionsPerTickTest : public ::testing::Test {
     cpu_.config.decode_cache_num_entries = kNumCacheEntries;
     YCPUInit(&cpu_);
     YCPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
-    cpu_.registers[kCS] = 0;
-    cpu_.registers[kDS] = 0;
-    cpu_.registers[kSS] = 0;
-    cpu_.registers[kSP] = 0xFFFE;
-    cpu_.registers[kIP] = kProgramAddress;
+    cpu_.registers[Y_CPU_CS] = 0;
+    cpu_.registers[Y_CPU_DS] = 0;
+    cpu_.registers[Y_CPU_SS] = 0;
+    cpu_.registers[Y_CPU_SP] = 0xFFFE;
+    cpu_.registers[Y_CPU_IP] = kProgramAddress;
   }
 
   void Load(uint16_t address, const std::vector<uint8_t>& bytes) {
@@ -87,7 +87,7 @@ class InstructionsPerTickTest : public ::testing::Test {
   // instruction per tick however warm the cache gets.
   void WarmCache(int num_instructions) {
     for (int i = 0; i < num_instructions; ++i) {
-      ASSERT_NE(YCPUTick(&cpu_, 0), kCPUTickInvalid);
+      ASSERT_NE(YCPUTick(&cpu_, 0), Y_CPU_TICK_INVALID);
     }
     Reset();
   }
@@ -95,11 +95,11 @@ class InstructionsPerTickTest : public ::testing::Test {
   // Puts the CPU back at the start of the program with its registers clear,
   // leaving the decode cache as it is.
   void Reset() {
-    cpu_.registers[kIP] = kProgramAddress;
-    cpu_.registers[kAX] = 0;
-    cpu_.registers[kSP] = 0xFFFE;
+    cpu_.registers[Y_CPU_IP] = kProgramAddress;
+    cpu_.registers[Y_CPU_AX] = 0;
+    cpu_.registers[Y_CPU_SP] = 0xFFFE;
     cpu_.is_halted = false;
-    cpu_.flags = kInitialFlags;
+    cpu_.flags = Y_CPU_INITIAL_FLAGS;
     cpu_.instructions_retired_low = 0;
     cpu_.instructions_retired_high = 0;
   }
@@ -163,8 +163,8 @@ TEST_F(InstructionsPerTickTest, ARunRetiresSeveralInstructionsInOneTick) {
   WarmCache(3);
 
   EXPECT_EQ(RunOneTick(), 3u);
-  EXPECT_EQ(cpu_.registers[kAX], 3u);
-  EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 3);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX], 3u);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kProgramAddress + 3);
 }
 
 // The carry into the high half is unreachable in any run a test could make -
@@ -195,23 +195,23 @@ TEST_F(
   }
   Reset();
 
-  EXPECT_EQ(YCPUTick(&cpu_, UINT16_MAX), kCPUTickInvalid);
+  EXPECT_EQ(YCPUTick(&cpu_, UINT16_MAX), Y_CPU_TICK_INVALID);
   EXPECT_EQ(YCPUInstructionsRetired(&cpu_), 2u);
-  EXPECT_EQ(cpu_.registers[kAX], 2u);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX], 2u);
 }
 
 // The bound is on the tick rather than on the budget: there are twice as many
 // cached instructions here as a run may take, and cycles to spare for all of
 // them.
 TEST_F(InstructionsPerTickTest, ARunIsBoundedToAMaximumNumberOfInstructions) {
-  const int available = 2 * kMaxInstructionsPerTick;
+  const int available = 2 * Y_CPU_MAX_INSTRUCTIONS_PER_TICK;
   std::vector<uint8_t> program(available, kOpIncAx);
   program.push_back(kOpHlt);
   Load(kProgramAddress, program);
   WarmCache(available);
 
-  EXPECT_EQ(RunOneTick(), (uint64_t)kMaxInstructionsPerTick);
-  EXPECT_EQ(cpu_.registers[kAX], kMaxInstructionsPerTick);
+  EXPECT_EQ(RunOneTick(), (uint64_t)Y_CPU_MAX_INSTRUCTIONS_PER_TICK);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX], Y_CPU_MAX_INSTRUCTIONS_PER_TICK);
 }
 
 // A run is entered only from the decode cache, so a CPU that has not run the
@@ -221,7 +221,7 @@ TEST_F(InstructionsPerTickTest, AColdCacheRunsOneInstructionPerTick) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
 
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kAX], 1u);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX], 1u);
 }
 
 TEST_F(InstructionsPerTickTest, NoDecodeCacheRunsOneInstructionPerTick) {
@@ -272,7 +272,7 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtHLT) {
   EXPECT_EQ(RunOneTick(), 2u);
   EXPECT_TRUE(cpu_.is_halted);
   // The INC AX instructions after the HLT did not run.
-  EXPECT_EQ(cpu_.registers[kAX], 1u);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX], 1u);
 }
 
 // An instruction can raise an interrupt on itself, and that interrupt is
@@ -287,8 +287,8 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtASoftwareInterrupt) {
 
   EXPECT_EQ(RunOneTick(), 2u);
   // The tick ended in the handler rather than after the INT.
-  EXPECT_EQ(cpu_.registers[kIP], kHandlerAddress);
-  EXPECT_EQ(cpu_.registers[kAX], 1u);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kHandlerAddress);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX], 1u);
 }
 
 // A divide error is the same case reached without an explicit INT.
@@ -298,10 +298,10 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtADivideError) {
   Load(kHandlerAddress, {kOpIret});
   WarmCache(1);
   // BL is zero, so DIV BL raises interrupt 0.
-  cpu_.registers[kBX] = 0;
+  cpu_.registers[Y_CPU_BX] = 0;
 
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kIP], kHandlerAddress);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kHandlerAddress);
 }
 
 // A port access is the one instruction whose handler looks at the clock, and
@@ -316,10 +316,10 @@ TEST_F(InstructionsPerTickTest, APortReadGetsATickToItself) {
   // The run ends before the IN rather than taking it as its second
   // instruction.
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 1);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kProgramAddress + 1);
   // The IN runs on its own, and the run does not carry on past it either.
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 3);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kProgramAddress + 3);
   // Ordinary instructions batch again afterwards.
   EXPECT_EQ(RunOneTick(), 2u);
 }
@@ -329,9 +329,9 @@ TEST_F(InstructionsPerTickTest, APortWriteGetsATickToItself) {
   WarmCache(4);
 
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 1);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kProgramAddress + 1);
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 3);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kProgramAddress + 3);
   EXPECT_EQ(RunOneTick(), 2u);
 }
 
@@ -343,15 +343,15 @@ TEST_F(InstructionsPerTickTest, TheTrapFlagRunsOneInstructionPerTick) {
   Load(kHandlerAddress, {kOpIret});
   WarmCache(3);
 
-  YCPUSetFlag(&cpu_, kTF, true);
+  YCPUSetFlag(&cpu_, Y_CPU_TF, true);
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kIP], kHandlerAddress);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kHandlerAddress);
 }
 
 // The other half of the same rule: an instruction that turns TF on must be the
 // last of its run, or the instruction after it runs without trapping.
 TEST_F(InstructionsPerTickTest, AnInstructionThatSetsTheTrapFlagEndsTheRun) {
-  const uint16_t flags_with_tf = kInitialFlags | kTF;
+  const uint16_t flags_with_tf = Y_CPU_INITIAL_FLAGS | Y_CPU_TF;
   Load(
       kProgramAddress,
       {kOpMovAxImm16, (uint8_t)(flags_with_tf & 0xFF),
@@ -365,12 +365,12 @@ TEST_F(InstructionsPerTickTest, AnInstructionThatSetsTheTrapFlagEndsTheRun) {
   // after it did not run inside this tick, because the tick it does run in is
   // the one that owes the trap.
   EXPECT_EQ(RunOneTick(), 3u);
-  EXPECT_TRUE(YCPUGetFlag(&cpu_, kTF));
-  EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 5);
+  EXPECT_TRUE(YCPUGetFlag(&cpu_, Y_CPU_TF));
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kProgramAddress + 5);
 
   // That next tick runs the one instruction and takes the trap.
   EXPECT_EQ(RunOneTick(), 1u);
-  EXPECT_EQ(cpu_.registers[kIP], kHandlerAddress);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kHandlerAddress);
 }
 
 // An external request is only recognized at the end of a tick, so a run ends
@@ -381,12 +381,12 @@ TEST_F(InstructionsPerTickTest, ARunStopsWhenAnInterruptIsRequested) {
   Load(kHandlerAddress, {kOpIret});
   WarmCache(3);
 
-  YCPUSetFlag(&cpu_, kIF, true);
+  YCPUSetFlag(&cpu_, Y_CPU_IF, true);
   interrupt_requested_ = true;
 
   EXPECT_EQ(RunOneTick(), 1u);
   EXPECT_EQ(interrupts_acknowledged_, 1);
-  EXPECT_EQ(cpu_.registers[kIP], kHandlerAddress);
+  EXPECT_EQ(cpu_.registers[Y_CPU_IP], kHandlerAddress);
 }
 
 // A host that supplies no hint cannot be asked whether a request is waiting
@@ -411,7 +411,7 @@ TEST_F(InstructionsPerTickTest, ARunFollowsATakenBranch) {
 
   EXPECT_EQ(RunOneTick(), 3u);
   // The INC AX that the jump went over did not run.
-  EXPECT_EQ(cpu_.registers[kAX], 2u);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX], 2u);
 }
 
 // A run takes its second instruction and every one after it from the cache, so
