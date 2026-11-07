@@ -31,7 +31,7 @@ class MDATest : public VideoTestBase {
 
 TEST_F(MDATest, Initialization) {
   EXPECT_EQ(video_.adapter, kVideoAdapterMDA);
-  EXPECT_EQ(VideoGetMode(&video_), kVideoModeMDAText80x25);
+  EXPECT_EQ(YVideoGetMode(&video_), kVideoModeMDAText80x25);
   EXPECT_EQ(video_.control_register, 0x29);
   EXPECT_EQ(video_.selected_register, 0);
   EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x61);
@@ -43,7 +43,7 @@ TEST_F(MDATest, Initialization) {
 }
 
 TEST_F(MDATest, AdapterMetadata) {
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
   EXPECT_EQ(adapter->adapter, kVideoAdapterMDA);
   EXPECT_EQ(adapter->frame_buffer_width, 720);
   EXPECT_EQ(adapter->frame_buffer_height, 350);
@@ -55,49 +55,49 @@ TEST_F(MDATest, AdapterMetadata) {
 
 TEST_F(MDATest, PortReadWrite) {
   // Index register.
-  VideoWritePort(&video_, kMDAPortRegisterIndex, kCRTCRegisterHorizontalTotal);
+  YVideoWritePort(&video_, kMDAPortRegisterIndex, kCRTCRegisterHorizontalTotal);
   EXPECT_EQ(video_.selected_register, kCRTCRegisterHorizontalTotal);
   EXPECT_EQ(
-      VideoReadPort(&video_, kMDAPortRegisterIndex),
+      YVideoReadPort(&video_, kMDAPortRegisterIndex),
       kCRTCRegisterHorizontalTotal);
 
   // Data register. Horizontal Total defaults to 0x61.
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0x61);
-  VideoWritePort(&video_, kMDAPortRegisterData, 0x62);
+  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortRegisterData), 0x61);
+  YVideoWritePort(&video_, kMDAPortRegisterData, 0x62);
   EXPECT_EQ(video_.registers[kCRTCRegisterHorizontalTotal], 0x62);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortRegisterData), 0x62);
+  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortRegisterData), 0x62);
 
   // Mode control register.
-  VideoWritePort(&video_, kMDAPortControl, 0xAB);
+  YVideoWritePort(&video_, kMDAPortControl, 0xAB);
   EXPECT_EQ(video_.control_register, 0xAB);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortControl), 0xAB);
+  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortControl), 0xAB);
 }
 
 TEST_F(MDATest, StatusPortIsReadOnly) {
-  uint8_t status = VideoReadPort(&video_, kMDAPortStatus);
-  VideoWritePort(&video_, kMDAPortStatus, 0xCD);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortStatus), status);
+  uint8_t status = YVideoReadPort(&video_, kMDAPortStatus);
+  YVideoWritePort(&video_, kMDAPortStatus, 0xCD);
+  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortStatus), status);
 }
 
 TEST_F(MDATest, PrinterPortsAreNotDecoded) {
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterData), 0xFF);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterStatus), 0xFF);
-  EXPECT_EQ(VideoReadPort(&video_, kMDAPortPrinterControl), 0xFF);
+  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortPrinterData), 0xFF);
+  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortPrinterStatus), 0xFF);
+  EXPECT_EQ(YVideoReadPort(&video_, kMDAPortPrinterControl), 0xFF);
 }
 
 TEST_F(MDATest, VRAMAccess) {
-  VideoWriteVRAM(&video_, 0x100, 0x55);
+  YVideoWriteVRAM(&video_, 0x100, 0x55);
   EXPECT_EQ(mock_vram[0x100], 0x55);
-  EXPECT_EQ(VideoReadVRAM(&video_, 0x100), 0x55);
+  EXPECT_EQ(YVideoReadVRAM(&video_, 0x100), 0x55);
 
-  VideoWriteVRAM(&video_, 0x200, 0xAA);
+  YVideoWriteVRAM(&video_, 0x200, 0xAA);
   EXPECT_EQ(mock_vram[0x200], 0xAA);
-  EXPECT_EQ(VideoReadVRAM(&video_, 0x200), 0xAA);
+  EXPECT_EQ(YVideoReadVRAM(&video_, 0x200), 0xAA);
 
   // Out of range accesses are ignored.
-  VideoWriteVRAM(&video_, kMDAVRAMSize, 0x11);
+  YVideoWriteVRAM(&video_, kMDAVRAMSize, 0x11);
   EXPECT_EQ(mock_vram[kMDAVRAMSize], 0);
-  EXPECT_EQ(VideoReadVRAM(&video_, kMDAVRAMSize), 0xFF);
+  EXPECT_EQ(YVideoReadVRAM(&video_, kMDAVRAMSize), 0xFF);
 }
 
 TEST_F(MDATest, RenderCharacterNormal) {
@@ -248,7 +248,7 @@ TEST_F(MDATest, CharactersBlinkAtHalfTheCursorRate) {
 }
 
 TEST_F(MDATest, BlinkIsIgnoredWhenDisabledInControlRegister) {
-  VideoWritePort(
+  YVideoWritePort(
       &video_, kMDAPortControl,
       video_.control_register & ~kVideoControlEnableBlink);
   WriteChar(0, 'A', 0x87);
@@ -309,7 +309,7 @@ TEST_F(MDATest, StartAddressScrollsTheDisplay) {
 
 TEST_F(MDATest, VideoEnableBlanksTheDisplay) {
   WriteChar(0, 'A', 0x07);
-  VideoWritePort(
+  YVideoWritePort(
       &video_, kMDAPortControl,
       video_.control_register & ~kVideoControlVideoEnable);
   Render();

@@ -209,17 +209,17 @@ typedef struct YDMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-YAX86_PUBLIC void DMAInit(YDMAState* dma);
+YAX86_PUBLIC void YDMAInit(YDMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
-YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port);
+YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port);
 
 // Handles writes to the DMA's I/O ports.
-YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
 
 // Executes a single-byte transfer for the specified channel. This function
 // should be called by the platform in response to a DREQ signal from a
 // peripheral.
-YAX86_PUBLIC void DMATransferByte(YDMAState* dma, uint8_t channel_index);
+YAX86_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
 
 #endif  // YAX86_DMA_PUBLIC_H

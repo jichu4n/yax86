@@ -1,4 +1,4 @@
-// PITAdvance() exists so that the platform can skip over the long uneventful
+// YPITAdvance() exists so that the platform can skip over the long uneventful
 // stretches of a countdown instead of simulating every one of the 1.19 million
 // ticks the PIT takes per second. That is only safe if it is
 // indistinguishable from ticking one at a time, so these tests compare the two
@@ -31,18 +31,18 @@ class AdvanceTest : public ::testing::Test {
     config->context = nullptr;
     config->raise_irq_0 = MockRaiseIRQ0;
     config->set_pc_speaker_frequency = nullptr;
-    PITInit(pit);
+    YPITInit(pit);
   }
 
   // Programs a channel with the given mode and reload value.
   void Program(YPITState* pit, int channel, uint8_t mode, uint16_t reload) {
     const uint8_t control = static_cast<uint8_t>(
         (channel << 6) | (kPITAccessLSBThenMSB << 4) | (mode << 1));
-    PITWritePort(pit, kPITPortControl, control);
-    PITWritePort(
+    YPITWritePort(pit, kPITPortControl, control);
+    YPITWritePort(
         pit, static_cast<uint16_t>(kPITPortChannel0 + channel),
         static_cast<uint8_t>(reload & 0xFF));
-    PITWritePort(
+    YPITWritePort(
         pit, static_cast<uint16_t>(kPITPortChannel0 + channel),
         static_cast<uint8_t>(reload >> 8));
   }
@@ -64,12 +64,12 @@ class AdvanceTest : public ::testing::Test {
     g_trace = &stepped_trace;
     for (uint32_t i = 0; i < ticks; ++i) {
       stepped_trace.tick = static_cast<int>(i);
-      PITTick(&stepped);
+      YPITTick(&stepped);
     }
 
     Trace advanced_trace;
     g_trace = &advanced_trace;
-    PITAdvance(&advanced, ticks);
+    YPITAdvance(&advanced, ticks);
     g_trace = nullptr;
 
     const std::string context = "mode " + std::to_string(mode) + ", reload " +
@@ -130,7 +130,7 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
       InitPIT(&pit, &config);
       Program(&pit, 0, mode, reload);
 
-      const uint32_t predicted = PITTicksUntilNextEvent(&pit);
+      const uint32_t predicted = YPITTicksUntilNextEvent(&pit);
       if (predicted == kPITNoEvent) {
         continue;
       }
@@ -138,7 +138,7 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
       // Nothing may change before the predicted tick.
       const bool initial_output = pit.channels[0].output_state;
       for (uint32_t i = 0; i + 1 < predicted; ++i) {
-        PITTick(&pit);
+        YPITTick(&pit);
         ASSERT_EQ(pit.channels[0].output_state, initial_output)
             << "mode " << static_cast<int>(mode) << ", reload " << reload
             << " changed output at tick " << i << " but " << predicted
@@ -161,7 +161,7 @@ TEST_F(AdvanceTest, OnlyChannelZeroSchedulesADeadline) {
     // after the POST beep, and would otherwise ask to be woken constantly.
     Program(&pit, channel, 3, 1356);
 
-    EXPECT_EQ(PITTicksUntilNextEvent(&pit), kPITNoEvent)
+    EXPECT_EQ(YPITTicksUntilNextEvent(&pit), kPITNoEvent)
         << "channel " << channel << " asked to be woken, but nothing outside "
         << "the PIT can observe its output";
   }
@@ -175,7 +175,7 @@ TEST_F(AdvanceTest, ChannelZeroStillSchedulesADeadline) {
   InitPIT(&pit, &config);
   Program(&pit, 0, 3, 1356);
 
-  const uint32_t ticks = PITTicksUntilNextEvent(&pit);
+  const uint32_t ticks = YPITTicksUntilNextEvent(&pit);
   ASSERT_NE(ticks, kPITNoEvent);
   EXPECT_LE(ticks, 1356u);
 }
@@ -196,9 +196,9 @@ TEST_F(AdvanceTest, UnscheduledChannelsStillAdvance) {
 
   constexpr uint32_t kTicks = 5000;
   for (uint32_t i = 0; i < kTicks; ++i) {
-    PITTick(&stepped);
+    YPITTick(&stepped);
   }
-  PITAdvance(&advanced, kTicks);
+  YPITAdvance(&advanced, kTicks);
 
   EXPECT_EQ(advanced.channels[2].counter, stepped.channels[2].counter);
   EXPECT_EQ(

@@ -41,7 +41,7 @@ class PlatformDirectDataWindowTest : public ::testing::Test {
     // of vram_ both depend on which adapter is mapped.
     platform_.config.video_adapter = kVideoAdapterCGA;
 
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
     platform_.cpu.registers[kCS] = 0;
     platform_.cpu.registers[kIP] = kProgramOffset;
     platform_.cpu.registers[kDS] = 0;
@@ -58,7 +58,7 @@ class PlatformDirectDataWindowTest : public ::testing::Test {
   YPlatformRunStatus RunInstructions(int num_instructions) {
     YPlatformRunStatus status = kPlatformRunning;
     for (int i = 0; i < num_instructions; ++i) {
-      status = PlatformTick(&platform_);
+      status = YPlatformTick(&platform_);
       if (status != kPlatformRunning) {
         return status;
       }
@@ -140,8 +140,8 @@ TEST_F(
   entry.end = 0xD0000 + sizeof(region) - 1;
   entry.read_data = region;
   entry.write_data = region;
-  ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &entry));
-  PlatformUpdateAfterMemoryMapChange(&platform_);
+  ASSERT_TRUE(YPlatformRegisterMemoryMapEntry(&platform_, &entry));
+  YPlatformUpdateAfterMemoryMapChange(&platform_);
 
   EXPECT_EQ(platform_.cpu.direct_data_window.data, ram_);
   EXPECT_EQ(platform_.cpu.direct_data_window.end, sizeof(ram_));

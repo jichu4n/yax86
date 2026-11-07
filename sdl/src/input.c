@@ -210,7 +210,7 @@ void InputHandleEvent(const SDL_Event* event, YPlatformState* platform) {
           "Key %s: SDL keycode=%d, scancode=0x%02X\n",
           event->type == SDL_EVENT_KEY_DOWN ? "DOWN" : "UP", event->key.key,
           scancode);
-      KeyboardHandleKeyPress(&platform->keyboard, scancode);
+      YKeyboardHandleKeyPress(&platform->keyboard, scancode);
     }
   }
 }

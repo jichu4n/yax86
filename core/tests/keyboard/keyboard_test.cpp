@@ -29,7 +29,7 @@ class KeyboardTest : public ::testing::Test {
         nullptr;  // Context not used by these simple mocks
     keyboard_.config.send_scancode = MockSendScancode;
     keyboard_.config.raise_irq1 = MockRaiseIrq1;
-    KeyboardInit(&keyboard_);
+    YKeyboardInit(&keyboard_);
   }
 
   // Member variables for the module's state
@@ -47,9 +47,9 @@ TEST_F(KeyboardTest, Initialization) {
 
 TEST_F(KeyboardTest, ResetSequence) {
   // 1. Hold clock low to trigger reset detection.
-  KeyboardHandleControl(&keyboard_, false, false);
+  YKeyboardHandleControl(&keyboard_, false, false);
   for (int i = 0; i < 20; ++i) {
-    KeyboardTickMs(&keyboard_);
+    YKeyboardTickMs(&keyboard_);
   }
 
   // Verify 0xAA is buffered but not sent yet.
@@ -58,12 +58,12 @@ TEST_F(KeyboardTest, ResetSequence) {
   ASSERT_TRUE(g_sent_scancodes.empty());
 
   // 2. Release clock and pulse enable_clear to signal ack.
-  KeyboardHandleControl(&keyboard_, false, true);  // Release clock
-  KeyboardHandleControl(&keyboard_, true, true);   // Pulse high
-  KeyboardHandleControl(&keyboard_, false, true);  // Pulse low (ack)
+  YKeyboardHandleControl(&keyboard_, false, true);  // Release clock
+  YKeyboardHandleControl(&keyboard_, true, true);   // Pulse high
+  YKeyboardHandleControl(&keyboard_, false, true);  // Pulse low (ack)
 
   // 3. Tick to allow the keyboard to send the scancode.
-  KeyboardTickMs(&keyboard_);
+  YKeyboardTickMs(&keyboard_);
 
   // 4. Verify the 0xAA scancode was sent and an IRQ was raised.
   ASSERT_EQ(g_sent_scancodes.size(), 1);
@@ -74,30 +74,30 @@ TEST_F(KeyboardTest, ResetSequence) {
 
 TEST_F(KeyboardTest, KeyPressAndAck) {
   // 1. Buffer a key press.
-  KeyboardHandleKeyPress(&keyboard_, 0x1E);  // 'A' key
+  YKeyboardHandleKeyPress(&keyboard_, 0x1E);  // 'A' key
 
   // 2. Tick to send the scancode.
-  KeyboardTickMs(&keyboard_);
+  YKeyboardTickMs(&keyboard_);
   ASSERT_EQ(g_sent_scancodes.size(), 1);
   ASSERT_EQ(g_sent_scancodes[0], 0x1E);
   ASSERT_EQ(g_irq1_count, 1);
   ASSERT_TRUE(keyboard_.waiting_for_ack);
 
   // 3. Buffer another key press and tick again.
-  KeyboardHandleKeyPress(&keyboard_, 0x1F);  // 'S' key
-  KeyboardTickMs(&keyboard_);
+  YKeyboardHandleKeyPress(&keyboard_, 0x1F);  // 'S' key
+  YKeyboardTickMs(&keyboard_);
 
   // Verify the second scancode is NOT sent because we're waiting for an ack.
   ASSERT_EQ(g_sent_scancodes.size(), 1);
   ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   // 4. Simulate BIOS acknowledgement pulse.
-  KeyboardHandleControl(&keyboard_, true, true);   // Pulse high
-  KeyboardHandleControl(&keyboard_, false, true);  // Pulse low (ack)
+  YKeyboardHandleControl(&keyboard_, true, true);   // Pulse high
+  YKeyboardHandleControl(&keyboard_, false, true);  // Pulse low (ack)
   ASSERT_FALSE(keyboard_.waiting_for_ack);
 
   // 5. Tick again.
-  KeyboardTickMs(&keyboard_);
+  YKeyboardTickMs(&keyboard_);
 
   // Verify the second scancode is now sent.
   ASSERT_EQ(g_sent_scancodes.size(), 2);
@@ -108,7 +108,7 @@ TEST_F(KeyboardTest, KeyPressAndAck) {
 TEST_F(KeyboardTest, BufferOverflow) {
   // Buffer more keys than the buffer can hold.
   for (int i = 0; i < kKeyboardBufferSize + 5; ++i) {
-    KeyboardHandleKeyPress(&keyboard_, i);
+    YKeyboardHandleKeyPress(&keyboard_, i);
   }
 
   // Verify the buffer is full but not over-full.
@@ -120,27 +120,27 @@ TEST_F(KeyboardTest, KeysPressedDuringResetAreDropped) {
   // held in reset is not scanning, so a key pressed now never becomes a scan
   // code - and must not resurface once the reset ends, which is where the
   // BIOS's stuck key test would see it and report a stuck key.
-  KeyboardHandleControl(&keyboard_, false, false);
+  YKeyboardHandleControl(&keyboard_, false, false);
   for (int i = 0; i < kKeyboardResetThresholdMs; ++i) {
-    KeyboardTickMs(&keyboard_);
+    YKeyboardTickMs(&keyboard_);
   }
   ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);  // the 0xAA self test
 
-  KeyboardHandleKeyPress(&keyboard_, 0x1C);
+  YKeyboardHandleKeyPress(&keyboard_, 0x1C);
   EXPECT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   // Coming out of reset, the self test code is the only thing sent.
-  KeyboardHandleControl(&keyboard_, false, true);
-  KeyboardHandleControl(&keyboard_, true, true);
-  KeyboardHandleControl(&keyboard_, false, true);
-  KeyboardTickMs(&keyboard_);
+  YKeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardHandleControl(&keyboard_, true, true);
+  YKeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardTickMs(&keyboard_);
   ASSERT_EQ(g_sent_scancodes.size(), 1);
   EXPECT_EQ(g_sent_scancodes[0], 0xAA);
 
   // And nothing follows it once that is acknowledged.
-  KeyboardHandleControl(&keyboard_, true, true);
-  KeyboardHandleControl(&keyboard_, false, true);
-  KeyboardTickMs(&keyboard_);
+  YKeyboardHandleControl(&keyboard_, true, true);
+  YKeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardTickMs(&keyboard_);
   EXPECT_EQ(g_sent_scancodes.size(), 1);
 }
 
@@ -148,19 +148,19 @@ TEST_F(KeyboardTest, KeysPressedAfterAResetAreKept) {
   // Only the reset itself swallows keys. Once the keyboard is running again,
   // typing works normally - getting this wrong silently eats every keystroke
   // for the rest of the session, since a machine resets its keyboard at boot.
-  KeyboardHandleControl(&keyboard_, false, false);
+  YKeyboardHandleControl(&keyboard_, false, false);
   for (int i = 0; i < kKeyboardResetThresholdMs; ++i) {
-    KeyboardTickMs(&keyboard_);
+    YKeyboardTickMs(&keyboard_);
   }
-  KeyboardHandleControl(&keyboard_, false, true);
-  KeyboardHandleControl(&keyboard_, true, true);
-  KeyboardHandleControl(&keyboard_, false, true);
-  KeyboardTickMs(&keyboard_);  // sends the 0xAA self test code
-  KeyboardHandleControl(&keyboard_, true, true);
-  KeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardHandleControl(&keyboard_, true, true);
+  YKeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardTickMs(&keyboard_);  // sends the 0xAA self test code
+  YKeyboardHandleControl(&keyboard_, true, true);
+  YKeyboardHandleControl(&keyboard_, false, true);
 
-  KeyboardHandleKeyPress(&keyboard_, 0x1E);
-  KeyboardTickMs(&keyboard_);
+  YKeyboardHandleKeyPress(&keyboard_, 0x1E);
+  YKeyboardTickMs(&keyboard_);
   ASSERT_EQ(g_sent_scancodes.size(), 2);
   EXPECT_EQ(g_sent_scancodes[1], 0x1E);
 }
@@ -168,16 +168,16 @@ TEST_F(KeyboardTest, KeysPressedAfterAResetAreKept) {
 TEST_F(KeyboardTest, KeysPressedDuringAShortClockLowAreKept) {
   // Holding the clock line low briefly only stops the keyboard talking. It is
   // not a reset, so the keyboard keeps scanning and buffers what it sees.
-  KeyboardHandleControl(&keyboard_, false, false);
+  YKeyboardHandleControl(&keyboard_, false, false);
   for (int i = 0; i < kKeyboardResetThresholdMs - 1; ++i) {
-    KeyboardTickMs(&keyboard_);
+    YKeyboardTickMs(&keyboard_);
   }
 
-  KeyboardHandleKeyPress(&keyboard_, 0x1E);
+  YKeyboardHandleKeyPress(&keyboard_, 0x1E);
   EXPECT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
-  KeyboardHandleControl(&keyboard_, false, true);
-  KeyboardTickMs(&keyboard_);
+  YKeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardTickMs(&keyboard_);
   ASSERT_EQ(g_sent_scancodes.size(), 1);
   EXPECT_EQ(g_sent_scancodes[0], 0x1E);
 }
@@ -186,25 +186,25 @@ TEST_F(KeyboardTest, KeysPressedWhileMerelyInhibitedAreKept) {
   // Being inhibited is not the same as being reset. The BIOS inhibits the
   // keyboard for most of POST with the clock line still enabled, and a key
   // pressed then is held until the keyboard is enabled again rather than lost.
-  KeyboardHandleControl(&keyboard_, true, true);
-  KeyboardHandleKeyPress(&keyboard_, 0x1E);
+  YKeyboardHandleControl(&keyboard_, true, true);
+  YKeyboardHandleKeyPress(&keyboard_, 0x1E);
   EXPECT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
-  KeyboardHandleControl(&keyboard_, false, true);
-  KeyboardTickMs(&keyboard_);
+  YKeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardTickMs(&keyboard_);
   ASSERT_EQ(g_sent_scancodes.size(), 1);
   EXPECT_EQ(g_sent_scancodes[0], 0x1E);
 }
 
 TEST_F(KeyboardTest, InhibitedState) {
   // Buffer a key press.
-  KeyboardHandleKeyPress(&keyboard_, 0x20);
+  YKeyboardHandleKeyPress(&keyboard_, 0x20);
 
   // Inhibit the keyboard by setting enable_clear to true.
-  KeyboardHandleControl(&keyboard_, true, true);
+  YKeyboardHandleControl(&keyboard_, true, true);
 
   // Tick.
-  KeyboardTickMs(&keyboard_);
+  YKeyboardTickMs(&keyboard_);
 
   // Verify no scancode was sent.
   ASSERT_TRUE(g_sent_scancodes.empty());
@@ -213,13 +213,13 @@ TEST_F(KeyboardTest, InhibitedState) {
 
 TEST_F(KeyboardTest, ShortClockLowDoesNotReset) {
   // 1. Buffer a key to ensure it's preserved.
-  KeyboardHandleKeyPress(&keyboard_, 0x1E);  // 'A' key
+  YKeyboardHandleKeyPress(&keyboard_, 0x1E);  // 'A' key
   ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   // 2. Hold clock low for less than the reset threshold.
-  KeyboardHandleControl(&keyboard_, false, false);
+  YKeyboardHandleControl(&keyboard_, false, false);
   for (int i = 0; i < kKeyboardResetThresholdMs - 1; ++i) {
-    KeyboardTickMs(&keyboard_);
+    YKeyboardTickMs(&keyboard_);
   }
 
   // 3. Verify that no reset was triggered and the buffer is intact.
@@ -228,10 +228,10 @@ TEST_F(KeyboardTest, ShortClockLowDoesNotReset) {
   ASSERT_TRUE(g_sent_scancodes.empty());  // Nothing should have been sent.
 
   // 4. Release the clock.
-  KeyboardHandleControl(&keyboard_, false, true);
+  YKeyboardHandleControl(&keyboard_, false, true);
 
   // 5. Tick to allow the keyboard to send the buffered scancode.
-  KeyboardTickMs(&keyboard_);
+  YKeyboardTickMs(&keyboard_);
 
   // 6. Verify the original scancode is sent, not the reset code.
   ASSERT_EQ(g_sent_scancodes.size(), 1);

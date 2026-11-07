@@ -113,18 +113,18 @@ typedef struct YKeyboardState {
 } YKeyboardState;
 
 // Initializes the keyboard to its power-on state.
-YAX86_PUBLIC void KeyboardInit(YKeyboardState* keyboard);
+YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
-YAX86_PUBLIC void KeyboardHandleControl(
+YAX86_PUBLIC void YKeyboardHandleControl(
     YKeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
-YAX86_PUBLIC void KeyboardHandleKeyPress(
+YAX86_PUBLIC void YKeyboardHandleKeyPress(
     YKeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
-YAX86_PUBLIC void KeyboardTickMs(YKeyboardState* keyboard);
+YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H

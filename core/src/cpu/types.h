@@ -75,7 +75,7 @@ typedef struct YCPURegisterAddress {
 
 // The address of a memory operand.
 typedef struct YCPUMemoryAddress {
-  // Segment register. A uint8_t because ApplySegmentOverride() writes it
+  // Segment register. A uint8_t because YCPUApplySegmentOverride() writes it
   // through a pointer, and an enum's width is the target's business - one byte
   // under -fshort-enums and four otherwise.
   uint8_t segment_register_index;

@@ -41,19 +41,19 @@ class PlatformPCSpeakerTest : public ::testing::Test {
       test->frequencies_.push_back(frequency_hz);
     };
 
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
   }
 
   // Programs PIT channel 2 for a square wave at the given reload value.
   void SetTone(uint16_t reload_value) {
-    WritePortByte(&platform_, kPITPortControl, kChannel2Mode3);
-    WritePortByte(&platform_, kPITPortChannel2, reload_value & 0xFF);
-    WritePortByte(&platform_, kPITPortChannel2, reload_value >> 8);
+    YPlatformWritePortByte(&platform_, kPITPortControl, kChannel2Mode3);
+    YPlatformWritePortByte(&platform_, kPITPortChannel2, reload_value & 0xFF);
+    YPlatformWritePortByte(&platform_, kPITPortChannel2, reload_value >> 8);
   }
 
   // Writes PPI port B, which is where the speaker's two gating bits live.
   void WritePortB(uint8_t value) {
-    WritePortByte(&platform_, kPPIPortB, value);
+    YPlatformWritePortByte(&platform_, kPPIPortB, value);
   }
 
   // The most recently reported frequency, or 0 if nothing was reported.

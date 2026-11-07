@@ -16,7 +16,7 @@ class PlatformMemoryMapTest : public ::testing::Test {
     platform_.config.physical_memory = ram_;
     platform_.config.vram = vram_;
 
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
   }
 
   // Registers a region backed by region_ over [start, end].
@@ -28,10 +28,10 @@ class PlatformMemoryMapTest : public ::testing::Test {
     entry.end = end;
     entry.read_data = region_;
     entry.write_data = region_;
-    if (!RegisterMemoryMapEntry(&platform_, &entry)) {
+    if (!YPlatformRegisterMemoryMapEntry(&platform_, &entry)) {
       return false;
     }
-    PlatformUpdateAfterMemoryMapChange(&platform_);
+    YPlatformUpdateAfterMemoryMapChange(&platform_);
     return true;
   }
 
@@ -43,26 +43,30 @@ class PlatformMemoryMapTest : public ::testing::Test {
 
 TEST_F(PlatformMemoryMapTest, ResolvesConventionalMemory) {
   YPlatformMemoryMapEntry* entry =
-      GetMemoryMapEntryForAddress(&platform_, 0x00400);
+      YPlatformGetMemoryMapEntryForAddress(&platform_, 0x00400);
   ASSERT_NE(entry, nullptr);
   EXPECT_EQ(
       entry->entry_type,
       (YPlatformMemoryMapEntryType)kMemoryMapEntryConventional);
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, sizeof(ram_) - 1), entry);
+  EXPECT_EQ(
+      YPlatformGetMemoryMapEntryForAddress(&platform_, sizeof(ram_) - 1),
+      entry);
 }
 
 TEST_F(PlatformMemoryMapTest, UnmappedAddressResolvesToNothing) {
   // Just past the 64KB of RAM this machine has, and well below the BIOS.
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, sizeof(ram_)), nullptr);
+  EXPECT_EQ(
+      YPlatformGetMemoryMapEntryForAddress(&platform_, sizeof(ram_)), nullptr);
 }
 
 TEST_F(PlatformMemoryMapTest, AddressAboveTheAddressSpaceResolvesToNothing) {
   // No entry may reach above the first megabyte, so an address there is
   // unmapped by definition rather than something the map has to be walked for.
   EXPECT_EQ(
-      GetMemoryMapEntryForAddress(&platform_, kMemoryAddressSpaceSize),
+      YPlatformGetMemoryMapEntryForAddress(&platform_, kMemoryAddressSpaceSize),
       nullptr);
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, 0xFFFFFFFF), nullptr);
+  EXPECT_EQ(
+      YPlatformGetMemoryMapEntryForAddress(&platform_, 0xFFFFFFFF), nullptr);
 }
 
 // The index has a slot per page of the address space and none above it, so an
@@ -75,7 +79,7 @@ TEST_F(PlatformMemoryMapTest, RegionReachingPastTheAddressSpaceIsRejected) {
   EXPECT_FALSE(RegisterTestRegion(
       kMemoryAddressSpaceSize, kMemoryAddressSpaceSize + kMemoryPageSize - 1));
   EXPECT_EQ(
-      GetMemoryMapEntryByType(
+      YPlatformGetMemoryMapEntryByType(
           &platform_, (YPlatformMemoryMapEntryType)kMemoryMapEntryTest),
       nullptr);
 }
@@ -85,15 +89,16 @@ TEST_F(PlatformMemoryMapTest, PageAlignedRegionResolvesThroughout) {
   const uint32_t end = start + sizeof(region_) - 1;
   ASSERT_TRUE(RegisterTestRegion(start, end));
 
-  YPlatformMemoryMapEntry* entry = GetMemoryMapEntryByType(
+  YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
       &platform_, (YPlatformMemoryMapEntryType)kMemoryMapEntryTest);
   ASSERT_NE(entry, nullptr);
   for (uint32_t address = start; address <= end; address += 256) {
-    ASSERT_EQ(GetMemoryMapEntryForAddress(&platform_, address), entry)
+    ASSERT_EQ(YPlatformGetMemoryMapEntryForAddress(&platform_, address), entry)
         << "at " << std::hex << address;
   }
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, start - 1), nullptr);
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, end + 1), nullptr);
+  EXPECT_EQ(
+      YPlatformGetMemoryMapEntryForAddress(&platform_, start - 1), nullptr);
+  EXPECT_EQ(YPlatformGetMemoryMapEntryForAddress(&platform_, end + 1), nullptr);
 }
 
 // The page index cannot answer for a page more than one entry has a share of,
@@ -105,23 +110,25 @@ TEST_F(PlatformMemoryMapTest, RegionStraddlingPageBoundariesResolvesExactly) {
   const uint32_t end = start + kMemoryPageSize;  // Spans three pages, partly.
   ASSERT_TRUE(RegisterTestRegion(start, end));
 
-  YPlatformMemoryMapEntry* entry = GetMemoryMapEntryByType(
+  YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
       &platform_, (YPlatformMemoryMapEntryType)kMemoryMapEntryTest);
   ASSERT_NE(entry, nullptr);
 
   // Every byte inside resolves to the region, including the two partial pages
   // at either end.
   for (uint32_t address = start; address <= end; ++address) {
-    ASSERT_EQ(GetMemoryMapEntryForAddress(&platform_, address), entry)
+    ASSERT_EQ(YPlatformGetMemoryMapEntryForAddress(&platform_, address), entry)
         << "at " << std::hex << address;
   }
   // And nothing outside it does, including the rest of those same pages.
   for (uint32_t address = start - 0x800; address < start; ++address) {
-    ASSERT_EQ(GetMemoryMapEntryForAddress(&platform_, address), nullptr)
+    ASSERT_EQ(
+        YPlatformGetMemoryMapEntryForAddress(&platform_, address), nullptr)
         << "at " << std::hex << address;
   }
   for (uint32_t address = end + 1; address < end + 0x800; ++address) {
-    ASSERT_EQ(GetMemoryMapEntryForAddress(&platform_, address), nullptr)
+    ASSERT_EQ(
+        YPlatformGetMemoryMapEntryForAddress(&platform_, address), nullptr)
         << "at " << std::hex << address;
   }
 }
@@ -131,25 +138,26 @@ TEST_F(PlatformMemoryMapTest, StraddlingRegionReadsAndWritesTheRightBytes) {
   const uint32_t end = start + kMemoryPageSize;
   ASSERT_TRUE(RegisterTestRegion(start, end));
 
-  WriteMemoryByte(&platform_, start, 0x11);
-  WriteMemoryByte(&platform_, start + kMemoryPageSize / 2, 0x22);
-  WriteMemoryByte(&platform_, end, 0x33);
+  YPlatformWriteMemoryByte(&platform_, start, 0x11);
+  YPlatformWriteMemoryByte(&platform_, start + kMemoryPageSize / 2, 0x22);
+  YPlatformWriteMemoryByte(&platform_, end, 0x33);
 
   EXPECT_EQ(region_[0], 0x11);
   EXPECT_EQ(region_[kMemoryPageSize / 2], 0x22);
   EXPECT_EQ(region_[kMemoryPageSize], 0x33);
 
-  EXPECT_EQ(ReadMemoryByte(&platform_, start), 0x11);
-  EXPECT_EQ(ReadMemoryByte(&platform_, start + kMemoryPageSize / 2), 0x22);
-  EXPECT_EQ(ReadMemoryByte(&platform_, end), 0x33);
+  EXPECT_EQ(YPlatformReadMemoryByte(&platform_, start), 0x11);
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(&platform_, start + kMemoryPageSize / 2), 0x22);
+  EXPECT_EQ(YPlatformReadMemoryByte(&platform_, end), 0x33);
 }
 
 // A later registration must be reflected in the index, not just in the map.
 TEST_F(PlatformMemoryMapTest, IndexTracksRegistrationsAfterInit) {
   const uint32_t start = 0xD0000;
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, start), nullptr);
+  EXPECT_EQ(YPlatformGetMemoryMapEntryForAddress(&platform_, start), nullptr);
   ASSERT_TRUE(RegisterTestRegion(start, start + sizeof(region_) - 1));
-  EXPECT_NE(GetMemoryMapEntryForAddress(&platform_, start), nullptr);
+  EXPECT_NE(YPlatformGetMemoryMapEntryForAddress(&platform_, start), nullptr);
 }
 
 // An entry may end at the very top of the address space, which is the last slot
@@ -157,15 +165,17 @@ TEST_F(PlatformMemoryMapTest, IndexTracksRegistrationsAfterInit) {
 // builds.
 TEST_F(PlatformMemoryMapTest, TopPageOfTheAddressSpaceIsIndexed) {
   const uint32_t top = kMemoryAddressSpaceSize - 1;
-  YPlatformMemoryMapEntry* entry = GetMemoryMapEntryForAddress(&platform_, top);
+  YPlatformMemoryMapEntry* entry =
+      YPlatformGetMemoryMapEntryForAddress(&platform_, top);
   ASSERT_NE(entry, nullptr);
   ASSERT_EQ(entry->end, top);
 
   // The whole of that last page resolves to it, and nothing above it does.
   EXPECT_EQ(
-      GetMemoryMapEntryForAddress(&platform_, top - kMemoryPageSize + 1),
+      YPlatformGetMemoryMapEntryForAddress(
+          &platform_, top - kMemoryPageSize + 1),
       entry);
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, top + 1), nullptr);
+  EXPECT_EQ(YPlatformGetMemoryMapEntryForAddress(&platform_, top + 1), nullptr);
 }
 
 TEST_F(PlatformMemoryMapTest, OverlappingRegistrationIsRejected) {
@@ -176,11 +186,12 @@ TEST_F(PlatformMemoryMapTest, OverlappingRegistrationIsRejected) {
   entry.end = 0x00FFF;
   entry.read_data = region_;
   entry.write_data = region_;
-  EXPECT_FALSE(RegisterMemoryMapEntry(&platform_, &entry));
+  EXPECT_FALSE(YPlatformRegisterMemoryMapEntry(&platform_, &entry));
 
   YPlatformMemoryMapEntry* conventional =
-      GetMemoryMapEntryByType(&platform_, kMemoryMapEntryConventional);
-  EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, 0x00000), conventional);
+      YPlatformGetMemoryMapEntryByType(&platform_, kMemoryMapEntryConventional);
+  EXPECT_EQ(
+      YPlatformGetMemoryMapEntryForAddress(&platform_, 0x00000), conventional);
 }
 
 }  // namespace

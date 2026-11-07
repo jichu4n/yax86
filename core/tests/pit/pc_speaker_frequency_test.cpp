@@ -30,20 +30,20 @@ class PCSpeakerFrequencyTest : public ::testing::Test {
   void SetUp() override {
     pit_.config.context = nullptr;
     pit_.config.set_pc_speaker_frequency = MockSetSpeakerFrequency;
-    PITInit(&pit_);
+    YPITInit(&pit_);
     reported_frequencies.clear();
   }
 
   // Programs channel 2 for the given mode. This reports silence, since the
   // channel has no count yet.
   void ProgramChannel2(uint8_t mode) {
-    PITWritePort(&pit_, kPITPortControl, Channel2ControlWord(mode));
+    YPITWritePort(&pit_, kPITPortControl, Channel2ControlWord(mode));
   }
 
   // Writes a 16-bit reload value to channel 2.
   void WriteChannel2Count(uint16_t count) {
-    PITWritePort(&pit_, kPITPortChannel2, count & 0xFF);
-    PITWritePort(&pit_, kPITPortChannel2, count >> 8);
+    YPITWritePort(&pit_, kPITPortChannel2, count & 0xFF);
+    YPITWritePort(&pit_, kPITPortChannel2, count >> 8);
   }
 
   // The most recently reported frequency.
@@ -104,10 +104,10 @@ TEST_F(PCSpeakerFrequencyTest, LSBThenMSBReportsOnlyOnceTheCountIsComplete) {
   reported_frequencies.clear();
 
   // A half-written count must not be reported as an intermediate frequency.
-  PITWritePort(&pit_, kPITPortChannel2, 0xA9);
+  YPITWritePort(&pit_, kPITPortChannel2, 0xA9);
   EXPECT_TRUE(reported_frequencies.empty());
 
-  PITWritePort(&pit_, kPITPortChannel2, 0x04);
+  YPITWritePort(&pit_, kPITPortChannel2, 0x04);
   EXPECT_EQ(reported_frequencies, std::vector<uint32_t>{1000u});
 }
 
@@ -122,9 +122,9 @@ TEST_F(PCSpeakerFrequencyTest, ZeroReloadValueMeansTheLongestPeriod) {
 
 TEST_F(PCSpeakerFrequencyTest, OtherChannelsAreNotReported) {
   // Channel 0 drives IRQ 0, not the speaker.
-  PITWritePort(&pit_, kPITPortControl, 0x36);
-  PITWritePort(&pit_, kPITPortChannel0, 0xA9);
-  PITWritePort(&pit_, kPITPortChannel0, 0x04);
+  YPITWritePort(&pit_, kPITPortControl, 0x36);
+  YPITWritePort(&pit_, kPITPortChannel0, 0xA9);
+  YPITWritePort(&pit_, kPITPortChannel0, 0x04);
   EXPECT_TRUE(reported_frequencies.empty());
 }
 
@@ -134,7 +134,7 @@ TEST_F(PCSpeakerFrequencyTest, LatchCommandDoesNotReport) {
   reported_frequencies.clear();
 
   // Latching the count to read it back does not change what the speaker does.
-  PITWritePort(&pit_, kPITPortControl, kSelectChannel2);
+  YPITWritePort(&pit_, kPITPortControl, kSelectChannel2);
   EXPECT_TRUE(reported_frequencies.empty());
 }
 

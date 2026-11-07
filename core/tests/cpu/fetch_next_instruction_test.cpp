@@ -27,7 +27,7 @@ vector<YCPUInstruction> TestFetchInstructions(
   vector<YCPUInstruction> instructions;
   while (*ip < kCOMFileLoadOffset + machine_code_size) {
     YCPUInstruction instruction;
-    auto status = CPUFetchNextInstruction(cpu, &instruction);
+    auto status = YCPUFetchNextInstruction(cpu, &instruction);
     if (status != kFetchSuccess) {
       throw runtime_error(
           "Failed to fetch instruction at IP: " + to_string(*ip) +
@@ -181,7 +181,8 @@ TEST_F(FetchNextInstructionTest, FetchAcceptsMoreThanTwoPrefixes) {
   // LOCK ES: SS: REP MOVSB - four prefixes, two of them segment overrides.
   helper.LoadCOM({kPrefixLOCK, kPrefixES, kPrefixSS, kPrefixREP, 0xA4, 0x90});
   YCPUInstruction instruction;
-  ASSERT_EQ(CPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
+  ASSERT_EQ(
+      YCPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.opcode, 0xA4);
   EXPECT_EQ(instruction.size, 5);
   // SS came after ES, so it is the override that took effect.
@@ -205,7 +206,7 @@ TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
   at_limit.LoadCOM(PrefixRun(kMaxPrefixBytes));
   YCPUInstruction instruction;
   ASSERT_EQ(
-      CPUFetchNextInstruction(&at_limit.cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&at_limit.cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.opcode, 0x90);
   EXPECT_EQ(instruction.segment_override, kES);
   EXPECT_EQ(instruction.size, kMaxPrefixBytes + 1);
@@ -213,13 +214,13 @@ TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
   CPUTestHelper over_limit;
   over_limit.LoadCOM(PrefixRun(kMaxPrefixBytes + 1));
   ASSERT_EQ(
-      CPUFetchNextInstruction(&over_limit.cpu_, &instruction),
+      YCPUFetchNextInstruction(&over_limit.cpu_, &instruction),
       kFetchPrefixTooLong);
 }
 
 // A decode writes the fields it needs rather than zeroing the struct, so a
 // destination reused across decodes must keep nothing of the instruction
-// before it. Reuse is the ordinary case rather than an unusual one: CPUTick()
+// before it. Reuse is the ordinary case rather than an unusual one: YCPUTick()
 // holds a single YCPUInstruction for the life of the CPU.
 TEST_F(FetchNextInstructionTest, ADecodeKeepsNothingOfThePreviousInstruction) {
   CPUTestHelper helper;
@@ -245,11 +246,11 @@ TEST_F(FetchNextInstructionTest, ADecodeKeepsNothingOfThePreviousInstruction) {
       0x90,
   });
 
-  // One destination for every decode, as CPUTick() has.
+  // One destination for every decode, as YCPUTick() has.
   YCPUInstruction instruction = {0};
   auto Fetch = [&]() {
     ASSERT_EQ(
-        CPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
+        YCPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
     helper.cpu_.registers[kIP] += instruction.size;
   };
 

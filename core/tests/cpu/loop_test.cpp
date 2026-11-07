@@ -53,52 +53,52 @@ TEST_F(LoopTest, LOOPE) {  // Also tests LOOPZ
 
   // Test 1: CX > 1, ZF = 1. Should jump.
   helper->cpu_.registers[kCX] = 5;
-  CPUSetFlag(&helper->cpu_, kZF, true);
+  YCPUSetFlag(&helper->cpu_, kZF, true);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 4);
   EXPECT_EQ(helper->cpu_.registers[kAX], 2);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);  // ZF Unchanged
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), true);  // ZF Unchanged
 
   // Test 2: CX = 1, ZF = 1. Should not jump (CX becomes 0).
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 1;
-  CPUSetFlag(&helper->cpu_, kZF, true);
+  YCPUSetFlag(&helper->cpu_, kZF, true);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), true);
 
   // Test 3: CX > 1, ZF = 0. Should not jump.
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 5;
-  CPUSetFlag(&helper->cpu_, kZF, false);
+  YCPUSetFlag(&helper->cpu_, kZF, false);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 4);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), false);
 
   // Test 4: CX = 0, ZF = 1. Should jump (CX wraps, ZF=1).
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 0;
-  CPUSetFlag(&helper->cpu_, kZF, true);
+  YCPUSetFlag(&helper->cpu_, kZF, true);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
   EXPECT_EQ(helper->cpu_.registers[kAX], 2);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), true);
 
   // Test 5: CX = 0, ZF = 0. Should not jump (ZF=0).
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 0;
-  CPUSetFlag(&helper->cpu_, kZF, false);
+  YCPUSetFlag(&helper->cpu_, kZF, false);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), false);
 }
 
 TEST_F(LoopTest, LOOPNE) {  // Also tests LOOPNZ
@@ -112,52 +112,52 @@ TEST_F(LoopTest, LOOPNE) {  // Also tests LOOPNZ
 
   // Test 1: CX > 1, ZF = 0. Should jump.
   helper->cpu_.registers[kCX] = 5;
-  CPUSetFlag(&helper->cpu_, kZF, false);
+  YCPUSetFlag(&helper->cpu_, kZF, false);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 4);
   EXPECT_EQ(helper->cpu_.registers[kAX], 2);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);  // ZF Unchanged
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), false);  // ZF Unchanged
 
   // Test 2: CX = 1, ZF = 0. Should not jump (CX becomes 0).
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 1;
-  CPUSetFlag(&helper->cpu_, kZF, false);
+  YCPUSetFlag(&helper->cpu_, kZF, false);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), false);
 
   // Test 3: CX > 1, ZF = 1. Should not jump.
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 5;
-  CPUSetFlag(&helper->cpu_, kZF, true);
+  YCPUSetFlag(&helper->cpu_, kZF, true);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 4);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), true);
 
   // Test 4: CX = 0, ZF = 0. Should jump (CX wraps, ZF=0).
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 0;
-  CPUSetFlag(&helper->cpu_, kZF, false);
+  YCPUSetFlag(&helper->cpu_, kZF, false);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
   EXPECT_EQ(helper->cpu_.registers[kAX], 2);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), false);
 
   // Test 5: CX = 0, ZF = 1. Should not jump (ZF=1).
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 0;
-  CPUSetFlag(&helper->cpu_, kZF, true);
+  YCPUSetFlag(&helper->cpu_, kZF, true);
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), true);
 }
 
 TEST_F(LoopTest, JCXZ) {
@@ -170,31 +170,31 @@ TEST_F(LoopTest, JCXZ) {
       "end_label: nop\n");
 
   // Test 1: CX = 0. Should jump.
-  CPUSetFlag(&helper->cpu_, kZF, true);
+  YCPUSetFlag(&helper->cpu_, kZF, true);
   helper->cpu_.registers[kCX] = 0;
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0);  // JCXZ does not change CX
   EXPECT_EQ(helper->cpu_.registers[kAX], 2);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), true);
 
   // Test 2: CX > 0 (e.g., 1). Should not jump.
-  CPUSetFlag(&helper->cpu_, kZF, true);
+  YCPUSetFlag(&helper->cpu_, kZF, true);
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 1;
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 1);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), true);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), true);
 
   // Test 3: CX > 0 (e.g., 0xFFFF). Should not jump.
-  CPUSetFlag(&helper->cpu_, kZF, false);
+  YCPUSetFlag(&helper->cpu_, kZF, false);
   helper->cpu_.registers[kIP] = kCOMFileLoadOffset;
   helper->cpu_.registers[kCX] = 0xFFFF;
   helper->cpu_.registers[kAX] = 0;
   helper->ExecuteInstructions(2);
   EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(CPUGetFlag(&helper->cpu_, kZF), false);
+  EXPECT_EQ(YCPUGetFlag(&helper->cpu_, kZF), false);
 }

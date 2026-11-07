@@ -230,7 +230,7 @@ typedef struct YCPUConfig {
   // runs more than once be decoded once. NULL means every instruction is
   // decoded.
   //
-  // Read only by CPUInit(), which checks the count and clears its own copy of
+  // Read only by YCPUInit(), which checks the count and clears its own copy of
   // the pointer if it does not pass.
   struct YCPUDecodeCacheEntry* decode_cache;
   // Must be a power of two of at least two. See decode_cache_index_mask.
@@ -286,7 +286,7 @@ typedef struct YCPUInstructionFetchWindow {
 //
 // end is 0 exactly when data is NULL, which is what lets that compare stand
 // alone rather than needing a null check beside it.
-// CPUSetDirectDataWindow() is what keeps the two in step.
+// YCPUSetDirectDataWindow() is what keeps the two in step.
 typedef struct YCPUDirectDataWindow {
   uint8_t* data;
   uint32_t end;
@@ -306,7 +306,7 @@ enum {
 // State of the emulated CPU.
 //
 // A caller zero-initializes one of these, fills in the fields of config, and
-// calls CPUInit(). Everything outside config is the CPU's own. A register or
+// calls YCPUInit(). Everything outside config is the CPU's own. A register or
 // flag may be written directly, since nothing is derived from one; a field
 // another field depends on has a setter, which is its sole writer.
 typedef struct YCPUState {
@@ -323,16 +323,16 @@ typedef struct YCPUState {
   // Interrupt number of the pending internal interrupt.
   uint8_t pending_internal_interrupt_number;
 
-  // Whether the CPU is in halted state. When true, CPUTick() will not fetch
+  // Whether the CPU is in halted state. When true, YCPUTick() will not fetch
   // or execute any instructions until an external event (e.g., an interrupt)
   // clears this state.
   bool is_halted;
 
-  // Instructions retired since CPUInit(), as the two halves of a 64-bit count.
+  // Instructions retired since YCPUInit(), as the two halves of a 64-bit count.
   // A halted tick retires none. Read them as one number with
-  // CPUInstructionsRetired().
+  // YCPUInstructionsRetired().
   //
-  // Counted here rather than left to the caller because CPUTick() already
+  // Counted here rather than left to the caller because YCPUTick() already
   // knows whether it ran an instruction, while a caller can only find out by
   // sampling is_halted before every tick - which is what every benchmark
   // harness did, at the cost of giving up batching.
@@ -349,11 +349,11 @@ typedef struct YCPUState {
 
   // Cycles charged by the instruction currently executing on top of its base
   // cost: its time on the data bus, and whatever it adds for itself when its
-  // cost depends on its operands. CPUTick clears this before each instruction
+  // cost depends on its operands. YCPUTick clears this before each instruction
   // and folds it into cycles_this_tick afterwards.
   uint16_t pending_cycles;
 
-  // Cycles the last call to CPUTick consumed, at the 4.77MHz CPU clock. The
+  // Cycles the last call to YCPUTick consumed, at the 4.77MHz CPU clock. The
   // caller drives the rest of the machine from this, so that everything timed
   // against the CPU keeps the ratio real hardware has.
   //
@@ -370,7 +370,7 @@ typedef struct YCPUState {
   YCPUInstructionFetchWindow instruction_fetch_window;
 
   // Guest memory the CPU reads and writes by indexing, as handed over by
-  // CPUSetDirectDataWindow(). Unlike the fetch window this is not asked for
+  // YCPUSetDirectDataWindow(). Unlike the fetch window this is not asked for
   // per access: data accesses are scattered rather than sequential, so there
   // is no locality for a per-access callback to exploit and the host sets it
   // once instead.
@@ -379,7 +379,7 @@ typedef struct YCPUState {
   // One less than YCPUConfig.decode_cache_num_entries, so that an address
   // becomes an index with a mask rather than a remainder - a remainder by a
   // runtime value is a division, which this target has no instruction for.
-  // Derived by CPUInit().
+  // Derived by YCPUInit().
   uint32_t decode_cache_index_mask;
 
   // How many times each 4KB page has been written, as a wrapping byte. A
@@ -392,7 +392,7 @@ typedef struct YCPUState {
   // to find out would cost about what the counter does.
   uint8_t code_page_generation[kNumCodePages];
 
-  // Caller-provided runtime configuration. Filled in before CPUInit(), which
+  // Caller-provided runtime configuration. Filled in before YCPUInit(), which
   // is where it is checked, and read-only afterwards.
   //
   // Held by value rather than by pointer: a pointer cost 3.37% at -O2 on a
@@ -408,22 +408,22 @@ typedef struct YCPUState {
 // to fill in its config does not want zeroing twice - and it is the only place
 // the config is checked, so a host is told about a mistake here or not at
 // all.
-YAX86_PUBLIC void CPUInit(YCPUState* cpu);
+YAX86_PUBLIC void YCPUInit(YCPUState* cpu);
 
-// Instructions retired since CPUInit(), as one number.
-YAX86_PUBLIC_HEADER inline uint64_t CPUInstructionsRetired(
+// Instructions retired since YCPUInit(), as one number.
+YAX86_PUBLIC_HEADER inline uint64_t YCPUInstructionsRetired(
     const YCPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-YAX86_PUBLIC_HEADER inline bool CPUGetFlag(
+YAX86_PUBLIC_HEADER inline bool YCPUGetFlag(
     const YCPUState* cpu, YCPUFlag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-YAX86_PUBLIC_HEADER inline void CPUSetFlag(
+YAX86_PUBLIC_HEADER inline void YCPUSetFlag(
     YCPUState* cpu, YCPUFlag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
@@ -437,14 +437,14 @@ YAX86_PUBLIC_HEADER inline void CPUSetFlag(
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
-YAX86_PUBLIC_HEADER inline void CPURaiseInternalInterrupt(
+YAX86_PUBLIC_HEADER inline void YCPURaiseInternalInterrupt(
     YCPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(YCPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void YCPUClearInternalInterrupt(YCPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -453,7 +453,7 @@ YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(YCPUState* cpu) {
 // Used by the instructions whose cost is not a property of the opcode alone -
 // a conditional jump that is taken, a shift by a count in CL, a multiply or a
 // divide.
-YAX86_PUBLIC void CPUAddCycles(YCPUState* cpu, uint16_t cycles);
+YAX86_PUBLIC void YCPUAddCycles(YCPUState* cpu, uint16_t cycles);
 
 // Hands the CPU guest memory it may read and write by indexing, covering the
 // half-open range of linear addresses [0, end). Optional - a host that
@@ -471,8 +471,8 @@ YAX86_PUBLIC void CPUAddCycles(YCPUState* cpu, uint16_t cycles);
 // memory itself, or by DMA, stays coherent with the CPU for free. What does
 // need a call is a change to what an address means: remapping memory, or
 // enabling something that has to observe accesses, calls
-// CPUInvalidateDirectDataWindow().
-YAX86_PUBLIC_HEADER inline void CPUSetDirectDataWindow(
+// YCPUInvalidateDirectDataWindow().
+YAX86_PUBLIC_HEADER inline void YCPUSetDirectDataWindow(
     YCPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
@@ -480,7 +480,7 @@ YAX86_PUBLIC_HEADER inline void CPUSetDirectDataWindow(
 
 // Discards the direct data window, so that every access goes back through
 // YCPUConfig.read_memory_byte and YCPUConfig.write_memory_byte.
-YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(YCPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -489,8 +489,8 @@ YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(YCPUState* cpu) {
 //
 // A host calls this when it changes what an address means rather than what is
 // stored at it - remapping memory is the case that matters. Ordinary writes
-// are covered by CPUNotifyMemoryWrite() instead.
-YAX86_PUBLIC void CPUInvalidateDecodeCache(YCPUState* cpu);
+// are covered by YCPUNotifyMemoryWrite() instead.
+YAX86_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 
 // Tells the CPU that the byte at a linear address has been written, so that
 // any decode taken from that page stops being used.
@@ -504,11 +504,11 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(YCPUState* cpu);
 // hence the flush. The address is masked rather than range checked: aliasing
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
-YAX86_PUBLIC_HEADER inline void CPUNotifyMemoryWrite(
+YAX86_PUBLIC_HEADER inline void YCPUNotifyMemoryWrite(
     YCPUState* cpu, uint32_t address) {
   const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
   if (++cpu->code_page_generation[page] == 0) {
-    CPUInvalidateDecodeCache(cpu);
+    YCPUInvalidateDecodeCache(cpu);
   }
 }
 
@@ -532,7 +532,7 @@ enum {
   // recognized. Two things here cannot follow it that far: the fetch loop has
   // to hand control back to its caller, and YCPUInstruction.size is a uint8_t
   // that
-  // CPUTick adds to IP. Accepting as many prefixes as still leave the whole
+  // YCPUTick adds to IP. Accepting as many prefixes as still leave the whole
   // encoding addressable by size satisfies both, and is far past anything an
   // assembler emits.
   kMaxPrefixBytes = 0xFF - kMaxNonPrefixBytes,
@@ -563,9 +563,9 @@ enum {
 // The fields are stored a byte each rather than packed back into the bit
 // positions they were decoded from. Every read of one would otherwise be a
 // load, a shift and a mask, and mod and rm are read on the hottest path in the
-// emulator - GetMemoryOperandAddress() takes them for every memory operand and
-// GetEffectiveAddressCycles() for every instruction - while reg selects the
-// handler for all five instruction groups.
+// emulator - YCPUGetMemoryOperandAddress() takes them for every memory operand
+// and YCPUGetEffectiveAddressCycles() for every instruction - while reg selects
+// the handler for all five instruction groups.
 typedef struct YCPUModRM {
   // Mod field - bits 6 and 7 of the ModR/M byte.
   uint8_t mod;
@@ -676,19 +676,19 @@ typedef enum YCPUFetchNextInstructionStatus {
 // copying a whole instruction struct would have a measurable impact on
 // performance.
 YAX86_PUBLIC YCPUFetchNextInstructionStatus
-CPUFetchNextInstruction(YCPUState* cpu, YCPUInstruction* instruction);
+YCPUFetchNextInstruction(YCPUState* cpu, YCPUInstruction* instruction);
 
 // Execute a single fetched instruction.
 YAX86_PUBLIC YCPUInstructionResult
-CPUExecuteInstruction(YCPUState* cpu, YCPUInstruction* instruction);
+YCPUExecuteInstruction(YCPUState* cpu, YCPUInstruction* instruction);
 
 enum {
-  // The most instructions one call to CPUTick() will run back to back.
+  // The most instructions one call to YCPUTick() will run back to back.
   //
   // This is a bound on how coarse a tick can be, not on how long a run should
   // be - what governs that is max_run_cycles, which is what keeps a device
   // from being serviced late. This only caps the case where the next deadline
-  // is far away, and its cost is that PlatformRun() overshoots the budget it
+  // is far away, and its cost is that YPlatformRun() overshoots the budget it
   // was given by up to one run.
   //
   // On dos-boot, raising it from 4 to 16 is worth 2.9% and 32 only 0.5% beyond
@@ -710,6 +710,6 @@ enum {
 // Zero runs exactly one instruction. That is what a host stepping the machine
 // passes, and what a host that has to see every instruction boundary itself
 // passes, and it is the behaviour this had before there were runs at all.
-YAX86_PUBLIC YCPUTickResult CPUTick(YCPUState* cpu, uint16_t max_run_cycles);
+YAX86_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 
 #endif  // YAX86_CPU_PUBLIC_H

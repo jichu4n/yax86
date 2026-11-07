@@ -712,20 +712,20 @@ typedef struct YVideoConfig {
   //
   // Rendering is the heaviest reader of video RAM, so a callback per byte
   // would cost an indirect call in its inner loops. Writes still go through
-  // VideoWriteVRAM(), which marks the corresponding display region dirty.
+  // YVideoWriteVRAM(), which marks the corresponding display region dirty.
   //
   // The caller owns the buffer and it must outlive the video state.
   uint8_t* vram;
 
   // Callback to write a horizontal span of RGB pixels to the real display,
-  // invoked from VideoRender(). The pixels begin at origin, remain on one scan
+  // invoked from YVideoRender(). The pixels begin at origin, remain on one scan
   // line, and are valid only for the duration of the synchronous callback.
   // count is between 1 and kVideoPixelBatchSize, inclusive.
   void (*write_pixels)(
       struct YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
       uint8_t count);
   // Optional callbacks surrounding each dirty rectangular region emitted by
-  // VideoRender(). A retained display can use them to set a transfer window
+  // YVideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
   void (*begin_render_region)(struct YVideoState* video, YVideoRegion region);
   void (*end_render_region)(struct YVideoState* video);
@@ -802,29 +802,29 @@ typedef struct YVideoState {
 } YVideoState;
 
 // Initialize video state with the provided configuration.
-YAX86_PUBLIC void VideoInit(YVideoState* video);
+YAX86_PUBLIC void YVideoInit(YVideoState* video);
 
 // Metadata for the adapter being emulated.
-YAX86_PUBLIC const YVideoAdapterMetadata* VideoGetAdapterMetadata(
+YAX86_PUBLIC const YVideoAdapterMetadata* YVideoGetAdapterMetadata(
     const YVideoState* video);
 
 // The current video mode, derived from the mode control register.
-YAX86_PUBLIC YVideoMode VideoGetMode(const YVideoState* video);
+YAX86_PUBLIC YVideoMode YVideoGetMode(const YVideoState* video);
 
 // Metadata for the current video mode.
-YAX86_PUBLIC const YVideoModeMetadata* VideoGetModeMetadata(
+YAX86_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video);
 
 // Read a byte from a video I/O port.
-YAX86_PUBLIC uint8_t VideoReadPort(YVideoState* video, uint16_t port);
+YAX86_PUBLIC uint8_t YVideoReadPort(YVideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-YAX86_PUBLIC void VideoWritePort(
+YAX86_PUBLIC void YVideoWritePort(
     YVideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
-YAX86_PUBLIC uint8_t VideoReadVRAM(YVideoState* video, uint32_t address);
+YAX86_PUBLIC uint8_t YVideoReadVRAM(YVideoState* video, uint32_t address);
 // Write a byte to video RAM.
-YAX86_PUBLIC void VideoWriteVRAM(
+YAX86_PUBLIC void YVideoWriteVRAM(
     YVideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
@@ -833,12 +833,12 @@ YAX86_PUBLIC void VideoWriteVRAM(
 // The cost does not depend on how many cycles are passed, so a caller that
 // advances the beam only when something is about to look at it may pass a
 // whole frame's worth at once.
-YAX86_PUBLIC void VideoTick(YVideoState* video, uint32_t cycles);
+YAX86_PUBLIC void YVideoTick(YVideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
 // write_pixels in row-major horizontal spans. Does nothing when the display is
 // unchanged.
-YAX86_PUBLIC void VideoRender(YVideoState* video);
+YAX86_PUBLIC void YVideoRender(YVideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H

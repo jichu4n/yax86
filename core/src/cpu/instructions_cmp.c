@@ -10,44 +10,44 @@
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult ExecuteCmp(
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteCmp(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
-  uint32_t raw_dest_value = FromOperand(dest);
-  uint32_t raw_src_value = FromOperandValue(src_value);
+  uint32_t raw_dest_value = YCPUFromOperand(dest);
+  uint32_t raw_src_value = YCPUFromOperandValue(src_value);
   uint32_t result = raw_dest_value - raw_src_value;
-  SetFlagsAfterSub(ctx, raw_dest_value, raw_src_value, result, false);
+  YCPUSetFlagsAfterSub(ctx, raw_dest_value, raw_src_value, result, false);
   return kInstructionExecuted;
 }
 
 // CMP r/m8, r8
 // CMP r/m16, r16
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteCmpRegisterToRegisterOrMemory(const YCPUInstructionContext* ctx) {
+YCPUExecuteCmpRegisterToRegisterOrMemory(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
-  ReadRegisterOrMemoryOperand(ctx, &dest);
+  YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   YCPUOperand src;
-  ReadRegisterOperand(ctx, &src);
-  return ExecuteCmp(ctx, &dest, src.value);
+  YCPUReadRegisterOperand(ctx, &src);
+  return YCPUExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP r8, r/m8
 // CMP r16, r/m16
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-ExecuteCmpRegisterOrMemoryToRegister(const YCPUInstructionContext* ctx) {
+YCPUExecuteCmpRegisterOrMemoryToRegister(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
-  ReadRegisterOperand(ctx, &dest);
+  YCPUReadRegisterOperand(ctx, &dest);
   YCPUOperand src;
-  ReadRegisterOrMemoryOperand(ctx, &src);
-  return ExecuteCmp(ctx, &dest, src.value);
+  YCPUReadRegisterOrMemoryOperand(ctx, &src);
+  return YCPUExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP AL, imm8
 // CMP AX, imm16
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-ExecuteCmpImmediateToALOrAX(const YCPUInstructionContext* ctx) {
+YCPUExecuteCmpImmediateToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
-  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
-  YCPUOperandValue src_value = ReadImmediate(ctx);
-  return ExecuteCmp(ctx, &dest, src_value);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUOperandValue src_value = YCPUReadImmediate(ctx);
+  return YCPUExecuteCmp(ctx, &dest, src_value);
 }

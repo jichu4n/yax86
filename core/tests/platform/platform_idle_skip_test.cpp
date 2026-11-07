@@ -57,7 +57,7 @@ struct IdleMachine {
     platform.config.physical_memory = ram;
     platform.config.vram = vram;
     platform.config.enable_dos_idle_skip = enable_idle_skip;
-    if (!PlatformInit(&platform)) {
+    if (!YPlatformInit(&platform)) {
       return false;
     }
 
@@ -104,9 +104,9 @@ struct IdleMachine {
 
   // Programs PIT channel 0 to produce an event reload_value ticks from now.
   void SetTimer(uint16_t reload_value) {
-    WritePortByte(&platform, kPITPortControl, kChannel0Mode2);
-    WritePortByte(&platform, kPITPortChannel0, reload_value & 0xFF);
-    WritePortByte(&platform, kPITPortChannel0, reload_value >> 8);
+    YPlatformWritePortByte(&platform, kPITPortControl, kChannel0Mode2);
+    YPlatformWritePortByte(&platform, kPITPortChannel0, reload_value & 0xFF);
+    YPlatformWritePortByte(&platform, kPITPortChannel0, reload_value >> 8);
   }
 
   // How many times the guest has been round its polling loop.
@@ -119,13 +119,13 @@ struct IdleMachine {
   // that actually took, which should be the budget and not much more.
   uint32_t RunOneFrame() {
     const uint32_t start = platform.ticks;
-    EXPECT_EQ(PlatformRun(&platform, kCyclesPerFrame), kPlatformRunning);
+    EXPECT_EQ(YPlatformRun(&platform, kCyclesPerFrame), kPlatformRunning);
     return platform.ticks - start;
   }
 };
 
 // With the skip off the guest runs the whole budget, which is what every
-// existing caller of PlatformRun depends on.
+// existing caller of YPlatformRun depends on.
 TEST(PlatformIdleSkipTest, DisabledRunsTheLoopForTheWholeBudget) {
   IdleMachine machine;
   ASSERT_TRUE(machine.Init(/*enable_idle_skip=*/false));
@@ -240,7 +240,7 @@ TEST(PlatformIdleSkipTest, DevicesAreSyncedAcrossASkip) {
 // A budget far larger than a display frame is delivered in bounded steps
 // rather than in one jump. Nothing in the tree passes one - the SDL runtime
 // passes a frame - but a skip is otherwise limited only by whatever the caller
-// asked for, and the catch-up arithmetic in PlatformSync() is 32-bit.
+// asked for, and the catch-up arithmetic in YPlatformSync() is 32-bit.
 //
 // The PIT is left unprogrammed so that no device deadline is scheduled, which
 // is the only case where the skip's own ceiling is what decides how far it
@@ -253,11 +253,11 @@ TEST(PlatformIdleSkipTest, LargeBudgetIsDeliveredInBoundedSteps) {
   IdleMachine machine;
   ASSERT_TRUE(machine.Init(
       /*enable_idle_skip=*/true, kDOSIdleVector, /*program_timer=*/false));
-  ASSERT_EQ(PITTicksUntilNextEvent(&machine.platform.pit), kPITNoEvent)
+  ASSERT_EQ(YPITTicksUntilNextEvent(&machine.platform.pit), kPITNoEvent)
       << "an unprogrammed PIT should schedule nothing";
 
   const uint32_t start = machine.platform.ticks;
-  ASSERT_EQ(PlatformRun(&machine.platform, kBudget), kPlatformRunning);
+  ASSERT_EQ(YPlatformRun(&machine.platform, kBudget), kPlatformRunning);
   const uint32_t elapsed = machine.platform.ticks - start;
 
   // Delivered in full, and not overshot.

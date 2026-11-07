@@ -50,7 +50,7 @@ YAX86_FILE_PRIVATE const uint16_t kPICBasePorts[kPICNumModes] = {
 // ============================================================================
 
 // Returns the mode of a PIC based on its ICWs.
-YAX86_FILE_PRIVATE inline YPICMode PICGetMode(YPICState* pic) {
+YAX86_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
   if (pic->icw1 & kICW1_SNGL) {
     return kPICSingle;
@@ -62,23 +62,23 @@ YAX86_FILE_PRIVATE inline YPICMode PICGetMode(YPICState* pic) {
 }
 
 // Returns if the PIC is configured as a single PIC.
-YAX86_FILE_PRIVATE inline bool PICIsSingle(YPICState* pic) {
-  return PICGetMode(pic) == kPICSingle;
+YAX86_FILE_PRIVATE inline bool YPICIsSingle(YPICState* pic) {
+  return YPICGetMode(pic) == kPICSingle;
 }
 
 // Returns if the PIC is a master PIC.
-YAX86_FILE_PRIVATE inline bool PICIsMaster(YPICState* pic) {
-  return PICGetMode(pic) == kPICMaster;
+YAX86_FILE_PRIVATE inline bool YPICIsMaster(YPICState* pic) {
+  return YPICGetMode(pic) == kPICMaster;
 }
 
 // Returns if the PIC is a slave PIC.
-YAX86_FILE_PRIVATE inline bool PICIsSlave(YPICState* pic) {
-  return PICGetMode(pic) == kPICSlave;
+YAX86_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
+  return YPICGetMode(pic) == kPICSlave;
 }
 
 // Returns the I/O port corresponding to a given port number.
-YAX86_FILE_PRIVATE inline YPICPort PICGetPort(YPICState* pic, uint16_t port) {
-  uint16_t port_offset = port - kPICBasePorts[PICGetMode(pic)];
+YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
+  uint16_t port_offset = port - kPICBasePorts[YPICGetMode(pic)];
   if (port_offset >= kNumPICPorts) {
     return kPICPortInvalid;
   }
@@ -87,7 +87,7 @@ YAX86_FILE_PRIVATE inline YPICPort PICGetPort(YPICState* pic, uint16_t port) {
 
 // Returns the IRQ number of the parent PIC connected to a slave PIC.
 // Only valid if pic is a slave PIC.
-YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(YPICState* pic) {
+YAX86_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
   return pic->icw3 & 0x07;
 }
 
@@ -98,21 +98,21 @@ YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(YPICState* pic) {
 // Recomputes YPICState.has_unmasked_request. This is its sole writer, and every
 // path that changes irr or imr calls it, so the flag can never disagree with
 // the registers it summarizes.
-YAX86_FILE_PRIVATE inline void PICUpdateUnmaskedRequest(YPICState* pic) {
+YAX86_FILE_PRIVATE inline void YPICUpdateUnmaskedRequest(YPICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-YAX86_PUBLIC void PICInit(YPICState* pic) {
+YAX86_PUBLIC void YPICInit(YPICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 }
 
 // ============================================================================
 // IRQ line control
 // ============================================================================
 
-YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq) {
+YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
@@ -121,25 +121,25 @@ YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq) {
       kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC, also raise the cascade IRQ on the master.
-  if (PICIsSlave(pic) && pic->cascade_pic) {
-    PICRaiseIRQ(pic->cascade_pic, PICGetCascadeIRQ(pic));
+  if (YPICIsSlave(pic) && pic->cascade_pic) {
+    YPICRaiseIRQ(pic->cascade_pic, YPICGetCascadeIRQ(pic));
   }
 }
 
-YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq) {
+YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     return;
   }
   pic->irr &= ~(1 << irq);
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC and no interrupts are pending, lower the cascade
   // IRQ on the master.
-  if (PICIsSlave(pic) && pic->irr == 0 && pic->cascade_pic) {
-    PICLowerIRQ(pic->cascade_pic, PICGetCascadeIRQ(pic));
+  if (YPICIsSlave(pic) && pic->irr == 0 && pic->cascade_pic) {
+    YPICLowerIRQ(pic->cascade_pic, YPICGetCascadeIRQ(pic));
   }
 }
 
@@ -147,8 +147,8 @@ YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq) {
 // I/O port interface
 // ============================================================================
 
-YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port) {
-  YPICPort pic_port = PICGetPort(pic, port);
+YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
+  YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
       // Reading from the command port is not a defined operation.
@@ -177,8 +177,8 @@ YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
-  YPICPort pic_port = PICGetPort(pic, port);
+YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
+  YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
       if (value & kICW1_INIT) {
@@ -188,7 +188,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
         pic->isr = 0x00;
         // All interrupts masked by default.
         pic->imr = 0xFF;
-        PICUpdateUnmaskedRequest(pic);
+        YPICUpdateUnmaskedRequest(pic);
 
         // The next write to the data port will be ICW2.
         pic->init_state = kPICExpectICW2;
@@ -236,7 +236,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
           // This is ICW2. It sets the interrupt vector base.
           // The PIC uses the upper 5 bits of this value.
           pic->icw2 = value;
-          if (PICIsSingle(pic)) {
+          if (YPICIsSingle(pic)) {
             // Single mode -> no ICW3, ICW4 optional depending on ICW1.
             pic->init_state =
                 pic->icw1 & kICW1_IC4 ? kPICExpectICW4 : kPICReady;
@@ -263,7 +263,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
         default:
           // This is an OCW1, which sets the IMR.
           pic->imr = value;
-          PICUpdateUnmaskedRequest(pic);
+          YPICUpdateUnmaskedRequest(pic);
           break;
       }
       break;
@@ -278,7 +278,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
 // Interrupt handling
 // ============================================================================
 
-YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(YPICState* pic) {
+YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {
@@ -308,9 +308,9 @@ YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(YPICState* pic) {
 
   // If this is the master PIC and the interrupt is from the slave, return the
   // slave PIC's interrupt vector.
-  if (PICIsMaster(pic) && pending_irq == kMasterCascadeIRQ &&
+  if (YPICIsMaster(pic) && pending_irq == kMasterCascadeIRQ &&
       pic->cascade_pic) {
-    uint8_t slave_vector = PICGetPendingInterrupt(pic->cascade_pic);
+    uint8_t slave_vector = YPICGetPendingInterrupt(pic->cascade_pic);
     if (slave_vector != kPICNoPendingInterrupt) {
       pic->isr |= pending_irq_mask;
     }
@@ -320,7 +320,7 @@ YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(YPICState* pic) {
   // This is a normal interrupt on this PIC (or it's a slave reporting up).
   pic->isr |= pending_irq_mask;
   pic->irr &= ~pending_irq_mask;
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 
   return (pic->icw2 & kICW2_BASE) + pending_irq;
 }

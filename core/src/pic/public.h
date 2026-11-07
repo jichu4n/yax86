@@ -120,7 +120,7 @@ typedef struct YPICState {
   uint8_t imr;
 
   // Whether any requested interrupt is unmasked - that is, whether irr & ~imr
-  // is non-zero. Recomputed by PICUpdateUnmaskedRequest(), which is the sole
+  // is non-zero. Recomputed by YPICUpdateUnmaskedRequest(), which is the sole
   // writer, wherever irr or imr changes.
   //
   // This exists so that a CPU can tell in a load whether asking for an
@@ -129,7 +129,7 @@ typedef struct YPICState {
   // always no.
   //
   // It is deliberately conservative rather than exact: it ignores priority and
-  // the in-service register, so it can be true where PICGetPendingInterrupt()
+  // the in-service register, so it can be true where YPICGetPendingInterrupt()
   // would still decline. That costs only a call that reports nothing. What it
   // may never be is falsely false, because a reader takes it as permission not
   // to ask at all.
@@ -148,7 +148,7 @@ typedef struct YPICState {
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-YAX86_PUBLIC void PICInit(YPICState* pic);
+YAX86_PUBLIC void YPICInit(YPICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -156,11 +156,11 @@ YAX86_PUBLIC void PICInit(YPICState* pic);
 
 // Raise an IRQ line (0-7) on this PIC. If this is a slave PIC, also raises
 // the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq);
+YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq);
 
 // Lower an IRQ line (0-7) on this PIC. If this is a slave PIC and no interrupts
 // are pending, also lowers the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq);
+YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
 
 // ============================================================================
 // I/O port interface
@@ -169,12 +169,12 @@ YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq);
 // Read from a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port);
+YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port);
 
 // Write to a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 
 // ============================================================================
 // Interrupt handling
@@ -183,6 +183,6 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
 // PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
-YAX86_PUBLIC uint8_t PICGetPendingInterrupt(YPICState* pic);
+YAX86_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H

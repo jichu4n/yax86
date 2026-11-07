@@ -121,9 +121,9 @@ class VideoTestBase : public ::testing::Test {
 
     logger_config_ = YLoggerConfig{};
     logger_config_.write_line = MockWriteLogLine;
-    logger_config_.enabled_modules = LogModuleMask(&kLogModuleVideo);
+    logger_config_.enabled_modules = YLogModuleMask(&kLogModuleVideo);
     logger_config_.min_level = kLogLevelError;
-    LoggerInit(&logger_, &logger_config_);
+    YLoggerInit(&logger_, &logger_config_);
 
     video_.config = kDefaultVideoConfig;
     video_.config.adapter = adapter;
@@ -133,7 +133,7 @@ class VideoTestBase : public ::testing::Test {
     video_.config.begin_render_region = MockBeginRenderRegion;
     video_.config.end_render_region = MockEndRenderRegion;
 
-    VideoInit(&video_);
+    YVideoInit(&video_);
   }
 
   // Every rendered region must emit exactly the pixels it declared, or a
@@ -173,7 +173,7 @@ class VideoTestBase : public ::testing::Test {
   // Render into the retained frame buffer, resetting only activity counters.
   void Render() {
     ResetRenderStats();
-    VideoRender(&video_);
+    YVideoRender(&video_);
   }
 
   YVideoRGB Pixel(int x, int y) const { return mock_frame_buffer[y][x]; }
@@ -193,8 +193,8 @@ class VideoTestBase : public ::testing::Test {
 
   // Write a character and its attribute at a character cell offset.
   void WriteChar(uint32_t cell, uint8_t character, uint8_t attribute) {
-    VideoWriteVRAM(&video_, cell * 2, character);
-    VideoWriteVRAM(&video_, cell * 2 + 1, attribute);
+    YVideoWriteVRAM(&video_, cell * 2, character);
+    YVideoWriteVRAM(&video_, cell * 2 + 1, attribute);
   }
 
   // Set a 6845 register through the I/O ports.
@@ -205,8 +205,8 @@ class VideoTestBase : public ::testing::Test {
     uint16_t data_port = video_.adapter == kVideoAdapterCGA
                              ? uint16_t{kCGAPortRegisterData}
                              : uint16_t{kMDAPortRegisterData};
-    VideoWritePort(&video_, index_port, index);
-    VideoWritePort(&video_, data_port, value);
+    YVideoWritePort(&video_, index_port, index);
+    YVideoWritePort(&video_, data_port, value);
   }
 
   // Turn the text mode cursor off, so that it does not overdraw the character
@@ -217,14 +217,14 @@ class VideoTestBase : public ::testing::Test {
     video_.selected_register = selected_register;
   }
 
-  // Advance the CRT beam by whole frames. VideoTick takes a single
+  // Advance the CRT beam by whole frames. YVideoTick takes a single
   // instruction's worth of cycles, which is far less than a frame, so this
   // steps a scan line at a time.
   void AdvanceFrames(int frames) {
-    const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+    const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
     for (int frame = 0; frame < frames; ++frame) {
       for (uint16_t i = 0; i < adapter->scan_lines_per_frame; ++i) {
-        VideoTick(&video_, adapter->cycles_per_scan_line);
+        YVideoTick(&video_, adapter->cycles_per_scan_line);
       }
     }
   }

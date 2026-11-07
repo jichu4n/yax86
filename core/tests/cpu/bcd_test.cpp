@@ -14,8 +14,8 @@ TEST_F(BcdTest, AAA_NoAdjustmentNeeded) {
   // Test case 1: AL = 05, AH = 02, AF = 0
   // Should not adjust since (AL & 0x0F) = 5 <= 9 and AF = 0
   helper->cpu_.registers[kAX] = 0x0205;  // AH = 02, AL = 05
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -27,8 +27,8 @@ TEST_F(BcdTest, AAA_NoAdjustmentNeeded) {
   // Should not adjust since (AL & 0x0F) = 9 <= 9 and AF = 0
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x0009;  // AH = 00, AL = 09
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -44,8 +44,8 @@ TEST_F(BcdTest, AAA_AdjustmentNeededLowNibbleGreaterThan9) {
   // Test case 1: AL = 0A, AH = 00, AF = 0
   // Should adjust since (AL & 0x0F) = 10 > 9
   helper->cpu_.registers[kAX] = 0x000A;  // AH = 00, AL = 0A
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -57,8 +57,8 @@ TEST_F(BcdTest, AAA_AdjustmentNeededLowNibbleGreaterThan9) {
   // Should adjust since (AL & 0x0F) = 15 > 9
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x031F;  // AH = 03, AL = 1F
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -74,8 +74,8 @@ TEST_F(BcdTest, AAA_AdjustmentNeededAFSet) {
   // Test case 1: AL = 02, AH = 01, AF = 1
   // Should adjust since AF = 1, even though (AL & 0x0F) = 2 <= 9
   helper->cpu_.registers[kAX] = 0x0102;  // AH = 01, AL = 02
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -87,8 +87,8 @@ TEST_F(BcdTest, AAA_AdjustmentNeededAFSet) {
   // Should adjust since AF = 1, even though (AL & 0x0F) = 7 <= 9
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x0007;  // AH = 00, AL = 07
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -105,8 +105,8 @@ TEST_F(BcdTest, AAA_AdjustmentWithUpperNibbleClearing) {
   // Should adjust since (AL & 0x0F) = 15 > 9
   // Upper nibble of AL should be cleared regardless
   helper->cpu_.registers[kAX] = 0x025F;  // AH = 02, AL = 5F
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -118,8 +118,8 @@ TEST_F(BcdTest, AAA_AdjustmentWithUpperNibbleClearing) {
   // cleared)
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x01A5;  // AH = 01, AL = A5
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -136,8 +136,8 @@ TEST_F(BcdTest, AAA_EdgeCases) {
   // Test case 1: AL = FF, AH = FF, AF = 0
   // Should adjust since (AL & 0x0F) = 15 > 9
   helper->cpu_.registers[kAX] = 0xFFFF;  // AH = FF, AL = FF
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -150,8 +150,8 @@ TEST_F(BcdTest, AAA_EdgeCases) {
   // Should not adjust since (AL & 0x0F) = 0 <= 9 and AF = 0
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x0000;  // AH = 00, AL = 00
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -167,8 +167,8 @@ TEST_F(BcdTest, AAA_BothConditionsTrue) {
   // Test case: AL = 3E, AH = 01, AF = 1
   // Should adjust since both (AL & 0x0F) = 14 > 9 AND AF = 1
   helper->cpu_.registers[kAX] = 0x013E;  // AH = 01, AL = 3E
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -187,8 +187,8 @@ TEST_F(BcdTest, AAA_TypicalBCDUsage) {
   // This should result in AL = 0D, then AAA should adjust it
   helper->cpu_.registers[kAX] = 0x0007;  // AL = 07
   helper->cpu_.registers[kBX] = 0x0006;  // BL = 06
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   // Execute ADD AL, BL
   helper->ExecuteInstructions(1);
@@ -210,8 +210,8 @@ TEST_F(BcdTest, AAS_NoAdjustmentNeeded) {
   // Test case 1: AL = 05, AH = 02, AF = 0
   // Should not adjust since (AL & 0x0F) = 5 <= 9 and AF = 0
   helper->cpu_.registers[kAX] = 0x0205;  // AH = 02, AL = 05
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -223,8 +223,8 @@ TEST_F(BcdTest, AAS_NoAdjustmentNeeded) {
   // Should not adjust since (AL & 0x0F) = 9 <= 9 and AF = 0
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x0009;  // AH = 00, AL = 09
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -240,8 +240,8 @@ TEST_F(BcdTest, AAS_AdjustmentNeededLowNibbleGreaterThan9) {
   // Test case 1: AL = 0A, AH = 02, AF = 0
   // Should adjust since (AL & 0x0F) = 10 > 9
   helper->cpu_.registers[kAX] = 0x020A;  // AH = 02, AL = 0A
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -253,8 +253,8 @@ TEST_F(BcdTest, AAS_AdjustmentNeededLowNibbleGreaterThan9) {
   // Should adjust since (AL & 0x0F) = 15 > 9
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x031F;  // AH = 03, AL = 1F
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -270,8 +270,8 @@ TEST_F(BcdTest, AAS_AdjustmentNeededAFSet) {
   // Test case 1: AL = 02, AH = 01, AF = 1
   // Should adjust since AF = 1, even though (AL & 0x0F) = 2 <= 9
   helper->cpu_.registers[kAX] = 0x0102;  // AH = 01, AL = 02
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -284,8 +284,8 @@ TEST_F(BcdTest, AAS_AdjustmentNeededAFSet) {
   // Should adjust since AF = 1, even though (AL & 0x0F) = 7 <= 9
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x0207;  // AH = 02, AL = 07
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -302,8 +302,8 @@ TEST_F(BcdTest, AAS_AdjustmentWithUpperNibbleClearing) {
   // Should adjust since (AL & 0x0F) = 15 > 9
   // Upper nibble of AL should be cleared regardless
   helper->cpu_.registers[kAX] = 0x025F;  // AH = 02, AL = 5F
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -315,8 +315,8 @@ TEST_F(BcdTest, AAS_AdjustmentWithUpperNibbleClearing) {
   // cleared)
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x01A5;  // AH = 01, AL = A5
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -333,8 +333,8 @@ TEST_F(BcdTest, AAS_EdgeCases) {
   // Test case 1: AL = FF, AH = FF, AF = 0
   // Should adjust since (AL & 0x0F) = 15 > 9
   helper->cpu_.registers[kAX] = 0xFFFF;  // AH = FF, AL = FF
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -346,8 +346,8 @@ TEST_F(BcdTest, AAS_EdgeCases) {
   // Should not adjust since (AL & 0x0F) = 0 <= 9 and AF = 0
   helper->cpu_.registers[kIP] -= 1;      // Rewind IP
   helper->cpu_.registers[kAX] = 0x0000;  // AH = 00, AL = 00
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -363,8 +363,8 @@ TEST_F(BcdTest, AAS_BothConditionsTrue) {
   // Test case: AL = 3E, AH = 01, AF = 1
   // Should adjust since both (AL & 0x0F) = 14 > 9 AND AF = 1
   helper->cpu_.registers[kAX] = 0x013E;  // AH = 01, AL = 3E
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -383,8 +383,8 @@ TEST_F(BcdTest, AAS_TypicalBCDUsage) {
   // This should result in AL with borrow, then AAS should adjust it
   helper->cpu_.registers[kAX] = 0x0003;  // AL = 03
   helper->cpu_.registers[kBX] = 0x0006;  // BL = 06
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   // Execute SUB AL, BL
   helper->ExecuteInstructions(1);
@@ -408,9 +408,9 @@ TEST_F(BcdTest, AAM_StandardDecimalBase) {
   // Test case 1: AL = 0x17 (23 decimal), base = 10
   // Should result in AH = 2, AL = 3 (23 / 10 = 2 remainder 3)
   helper->cpu_.registers[kAX] = 0x0017;  // AH = 00, AL = 17
-  CPUSetFlag(
+  YCPUSetFlag(
       &helper->cpu_, kCF, true);  // Set some flags to test they're changed
-  CPUSetFlag(&helper->cpu_, kOF, true);
+  YCPUSetFlag(&helper->cpu_, kOF, true);
 
   helper->ExecuteInstructions(1);
 
@@ -604,8 +604,8 @@ TEST_F(BcdTest, AAM_TypicalBCDUsage) {
   // MUL BL will put result in AX, then AAM converts to BCD
   helper->cpu_.registers[kAX] = 0x0007;  // AL = 07
   helper->cpu_.registers[kBX] = 0x0008;  // BL = 08
-  CPUSetFlag(&helper->cpu_, kCF, false);
-  CPUSetFlag(&helper->cpu_, kOF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kOF, false);
 
   // Execute MUL BL
   helper->ExecuteInstructions(1);
@@ -675,9 +675,9 @@ TEST_F(BcdTest, AAD_StandardDecimalBase) {
   // Test case 1: AH = 5, AL = 6, base = 10
   // Should result in AL = 6 + 5 * 10 = 56, AH = 0
   helper->cpu_.registers[kAX] = 0x0506;  // AH = 05, AL = 06
-  CPUSetFlag(
+  YCPUSetFlag(
       &helper->cpu_, kCF, true);  // Set some flags to test they're changed
-  CPUSetFlag(&helper->cpu_, kOF, true);
+  YCPUSetFlag(&helper->cpu_, kOF, true);
 
   helper->ExecuteInstructions(1);
 
@@ -859,8 +859,8 @@ TEST_F(BcdTest, AAD_TypicalBCDUsage) {
   // AH = 5, AL = 6 (representing BCD 56)
   helper->cpu_.registers[kAX] = 0x0506;  // AH = 05, AL = 06 (BCD 56)
   helper->cpu_.registers[kBX] = 0x0007;  // BL = 07 (divisor)
-  CPUSetFlag(&helper->cpu_, kCF, false);
-  CPUSetFlag(&helper->cpu_, kOF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kOF, false);
 
   // Execute AAD - converts BCD 56 to binary 56
   helper->ExecuteInstructions(1);
@@ -964,8 +964,8 @@ TEST_F(BcdTest, DAS_NoAdjustmentNeeded) {
   // Test case 1: AL = 42, AF = 0, CF = 0
   // No adjustment needed since low nibble = 2 <= 9 and high nibble = 4 <= 9
   helper->cpu_.registers[kAX] = 0x0042;  // AH = 00, AL = 42
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -977,8 +977,8 @@ TEST_F(BcdTest, DAS_NoAdjustmentNeeded) {
   auto helper2 =
       CPUTestHelper::CreateWithProgram("test-das-no-adjustment-2", "das\n");
   helper2->cpu_.registers[kAX] = 0x0009;  // AH = 00, AL = 09
-  CPUSetFlag(&helper2->cpu_, kAF, false);
-  CPUSetFlag(&helper2->cpu_, kCF, false);
+  YCPUSetFlag(&helper2->cpu_, kAF, false);
+  YCPUSetFlag(&helper2->cpu_, kCF, false);
 
   helper2->ExecuteInstructions(1);
 
@@ -990,8 +990,8 @@ TEST_F(BcdTest, DAS_NoAdjustmentNeeded) {
   auto helper3 =
       CPUTestHelper::CreateWithProgram("test-das-no-adjustment-3", "das\n");
   helper3->cpu_.registers[kAX] = 0x0090;  // AH = 00, AL = 90
-  CPUSetFlag(&helper3->cpu_, kAF, false);
-  CPUSetFlag(&helper3->cpu_, kCF, false);
+  YCPUSetFlag(&helper3->cpu_, kAF, false);
+  YCPUSetFlag(&helper3->cpu_, kCF, false);
 
   helper3->ExecuteInstructions(1);
 
@@ -1005,8 +1005,8 @@ TEST_F(BcdTest, DAS_LowNibbleAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-low-nibble-1", "das\n");
 
   helper1->cpu_.registers[kAX] = 0x004F;  // AH = 00, AL = 4F
-  CPUSetFlag(&helper1->cpu_, kAF, false);
-  CPUSetFlag(&helper1->cpu_, kCF, false);
+  YCPUSetFlag(&helper1->cpu_, kAF, false);
+  YCPUSetFlag(&helper1->cpu_, kCF, false);
 
   helper1->ExecuteInstructions(1);
 
@@ -1019,8 +1019,8 @@ TEST_F(BcdTest, DAS_LowNibbleAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-low-nibble-2", "das\n");
 
   helper2->cpu_.registers[kAX] = 0x0033;  // AH = 00, AL = 33
-  CPUSetFlag(&helper2->cpu_, kAF, true);
-  CPUSetFlag(&helper2->cpu_, kCF, false);
+  YCPUSetFlag(&helper2->cpu_, kAF, true);
+  YCPUSetFlag(&helper2->cpu_, kCF, false);
 
   helper2->ExecuteInstructions(1);
 
@@ -1033,8 +1033,8 @@ TEST_F(BcdTest, DAS_LowNibbleAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-low-nibble-3", "das\n");
 
   helper3->cpu_.registers[kAX] = 0x000A;  // AH = 00, AL = 0A
-  CPUSetFlag(&helper3->cpu_, kAF, false);
-  CPUSetFlag(&helper3->cpu_, kCF, false);
+  YCPUSetFlag(&helper3->cpu_, kAF, false);
+  YCPUSetFlag(&helper3->cpu_, kCF, false);
 
   helper3->ExecuteInstructions(1);
 
@@ -1048,8 +1048,8 @@ TEST_F(BcdTest, DAS_HighNibbleAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-high-nibble-1", "das\n");
 
   helper1->cpu_.registers[kAX] = 0x00A2;  // AH = 00, AL = A2
-  CPUSetFlag(&helper1->cpu_, kAF, false);
-  CPUSetFlag(&helper1->cpu_, kCF, false);
+  YCPUSetFlag(&helper1->cpu_, kAF, false);
+  YCPUSetFlag(&helper1->cpu_, kCF, false);
 
   helper1->ExecuteInstructions(1);
 
@@ -1062,8 +1062,8 @@ TEST_F(BcdTest, DAS_HighNibbleAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-high-nibble-2", "das\n");
 
   helper2->cpu_.registers[kAX] = 0x0025;  // AH = 00, AL = 25
-  CPUSetFlag(&helper2->cpu_, kAF, false);
-  CPUSetFlag(&helper2->cpu_, kCF, true);
+  YCPUSetFlag(&helper2->cpu_, kAF, false);
+  YCPUSetFlag(&helper2->cpu_, kCF, true);
 
   helper2->ExecuteInstructions(1);
 
@@ -1077,8 +1077,8 @@ TEST_F(BcdTest, DAS_HighNibbleAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-high-nibble-3", "das\n");
 
   helper3->cpu_.registers[kAX] = 0x00F0;  // AH = 00, AL = F0
-  CPUSetFlag(&helper3->cpu_, kAF, false);
-  CPUSetFlag(&helper3->cpu_, kCF, false);
+  YCPUSetFlag(&helper3->cpu_, kAF, false);
+  YCPUSetFlag(&helper3->cpu_, kCF, false);
 
   helper3->ExecuteInstructions(1);
 
@@ -1092,8 +1092,8 @@ TEST_F(BcdTest, DAS_BothNibblesAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-both-nibbles-1", "das\n");
 
   helper1->cpu_.registers[kAX] = 0x00AB;  // AH = 00, AL = AB
-  CPUSetFlag(&helper1->cpu_, kAF, false);
-  CPUSetFlag(&helper1->cpu_, kCF, false);
+  YCPUSetFlag(&helper1->cpu_, kAF, false);
+  YCPUSetFlag(&helper1->cpu_, kCF, false);
 
   helper1->ExecuteInstructions(1);
 
@@ -1105,8 +1105,8 @@ TEST_F(BcdTest, DAS_BothNibblesAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-both-nibbles-2", "das\n");
 
   helper2->cpu_.registers[kAX] = 0x00FF;  // AH = 00, AL = FF
-  CPUSetFlag(&helper2->cpu_, kAF, false);
-  CPUSetFlag(&helper2->cpu_, kCF, false);
+  YCPUSetFlag(&helper2->cpu_, kAF, false);
+  YCPUSetFlag(&helper2->cpu_, kCF, false);
 
   helper2->ExecuteInstructions(1);
 
@@ -1119,8 +1119,8 @@ TEST_F(BcdTest, DAS_BothNibblesAdjustment) {
       CPUTestHelper::CreateWithProgram("test-das-both-nibbles-3", "das\n");
 
   helper3->cpu_.registers[kAX] = 0x0043;  // AH = 00, AL = 43
-  CPUSetFlag(&helper3->cpu_, kAF, true);
-  CPUSetFlag(&helper3->cpu_, kCF, true);
+  YCPUSetFlag(&helper3->cpu_, kAF, true);
+  YCPUSetFlag(&helper3->cpu_, kCF, true);
 
   helper3->ExecuteInstructions(1);
 
@@ -1139,8 +1139,8 @@ TEST_F(BcdTest, DAS_TypicalBCDUsage) {
 
   helper1->cpu_.registers[kAX] = 0x0042;  // AL = 42 (BCD)
   helper1->cpu_.registers[kBX] = 0x0017;  // BL = 17 (BCD)
-  CPUSetFlag(&helper1->cpu_, kAF, false);
-  CPUSetFlag(&helper1->cpu_, kCF, false);
+  YCPUSetFlag(&helper1->cpu_, kAF, false);
+  YCPUSetFlag(&helper1->cpu_, kCF, false);
 
   // Execute SUB AL, BL
   helper1->ExecuteInstructions(1);
@@ -1164,8 +1164,8 @@ TEST_F(BcdTest, DAS_TypicalBCDUsage) {
 
   helper2->cpu_.registers[kAX] = 0x0025;  // AL = 25 (BCD)
   helper2->cpu_.registers[kBX] = 0x0037;  // BL = 37 (BCD)
-  CPUSetFlag(&helper2->cpu_, kAF, false);
-  CPUSetFlag(&helper2->cpu_, kCF, false);
+  YCPUSetFlag(&helper2->cpu_, kAF, false);
+  YCPUSetFlag(&helper2->cpu_, kCF, false);
 
   // Execute SUB AL, BL
   helper2->ExecuteInstructions(1);
@@ -1187,8 +1187,8 @@ TEST_F(BcdTest, DAS_TypicalBCDUsage) {
 
   helper3->cpu_.registers[kAX] = 0x0099;  // AL = 99 (BCD)
   helper3->cpu_.registers[kBX] = 0x0001;  // BL = 01 (BCD)
-  CPUSetFlag(&helper3->cpu_, kAF, false);
-  CPUSetFlag(&helper3->cpu_, kCF, false);
+  YCPUSetFlag(&helper3->cpu_, kAF, false);
+  YCPUSetFlag(&helper3->cpu_, kCF, false);
 
   // Execute SUB AL, BL
   helper3->ExecuteInstructions(1);
@@ -1210,8 +1210,8 @@ TEST_F(BcdTest, DAS_EdgeCases) {
 
   // Test case 1: AL = 00, check zero flag
   helper->cpu_.registers[kAX] = 0x0000;  // AH = 00, AL = 00
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -1222,8 +1222,8 @@ TEST_F(BcdTest, DAS_EdgeCases) {
   auto helper2 =
       CPUTestHelper::CreateWithProgram("test-das-edge-cases-2", "das\n");
   helper2->cpu_.registers[kAX] = 0x0006;  // AH = 00, AL = 06
-  CPUSetFlag(&helper2->cpu_, kAF, true);
-  CPUSetFlag(&helper2->cpu_, kCF, false);
+  YCPUSetFlag(&helper2->cpu_, kAF, true);
+  YCPUSetFlag(&helper2->cpu_, kCF, false);
 
   helper2->ExecuteInstructions(1);
 
@@ -1234,8 +1234,8 @@ TEST_F(BcdTest, DAS_EdgeCases) {
   auto helper3 =
       CPUTestHelper::CreateWithProgram("test-das-edge-cases-3", "das\n");
   helper3->cpu_.registers[kAX] = 0x0060;  // AH = 00, AL = 60
-  CPUSetFlag(&helper3->cpu_, kAF, false);
-  CPUSetFlag(&helper3->cpu_, kCF, true);
+  YCPUSetFlag(&helper3->cpu_, kAF, false);
+  YCPUSetFlag(&helper3->cpu_, kCF, true);
 
   helper3->ExecuteInstructions(1);
 
@@ -1257,8 +1257,8 @@ TEST_F(BcdTest, DAS_PreservesOtherRegisters) {
   helper->cpu_.registers[kDI] = 0x9753;
 
   helper->cpu_.registers[kAX] = 0x0ABC;  // AH = 0A, AL = BC (will be adjusted)
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -1286,8 +1286,8 @@ TEST_F(BcdTest, DAA_HighDigitLimitIsRaisedWhenAuxiliaryCarryIsSet) {
   auto helper =
       CPUTestHelper::CreateWithProgram("test-daa-af-set-high-limit", "daa\n");
   helper->cpu_.registers[kAX] = 0x369E;
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -1303,8 +1303,8 @@ TEST_F(BcdTest, DAA_HighDigitLimitIsLowerWhenAuxiliaryCarryIsClear) {
   // The same AL, but with no auxiliary carry the limit is 0x99, which 0x9E
   // does exceed.
   helper->cpu_.registers[kAX] = 0x369E;
-  CPUSetFlag(&helper->cpu_, kAF, false);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -1316,8 +1316,8 @@ TEST_F(BcdTest, DAS_HighDigitLimitIsRaisedWhenAuxiliaryCarryIsSet) {
   auto helper =
       CPUTestHelper::CreateWithProgram("test-das-af-set-high-limit", "das\n");
   helper->cpu_.registers[kAX] = 0x369E;
-  CPUSetFlag(&helper->cpu_, kAF, true);
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -1334,7 +1334,7 @@ TEST_F(BcdTest, AAM_BaseZeroSetsFlagsAsThoughTheResultWereZero) {
   helper->cpu_.registers[kSS] = 0;
   helper->cpu_.registers[kSP] = 0x0800;
   helper->cpu_.registers[kAX] = 0x00FF;
-  CPUSetFlag(&helper->cpu_, kSF, true);
+  YCPUSetFlag(&helper->cpu_, kSF, true);
 
   helper->ExecuteInstructions(1);
 

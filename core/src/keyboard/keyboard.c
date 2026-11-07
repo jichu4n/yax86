@@ -9,7 +9,7 @@ enum {
   kKeyboardSelfTestOK = 0xAA,
 };
 
-YAX86_PUBLIC void KeyboardInit(YKeyboardState* keyboard) {
+YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
@@ -21,7 +21,7 @@ YAX86_PUBLIC void KeyboardInit(YKeyboardState* keyboard) {
 }
 
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
-YAX86_FILE_PRIVATE inline void KeyboardSendScancode(
+YAX86_FILE_PRIVATE inline void YKeyboardSendScancode(
     YKeyboardState* keyboard, uint8_t scancode) {
   if (keyboard->config.send_scancode) {
     keyboard->config.send_scancode(keyboard->config.context, scancode);
@@ -33,7 +33,7 @@ YAX86_FILE_PRIVATE inline void KeyboardSendScancode(
 }
 
 // Helper to send the next scancode in the buffer if available.
-YAX86_FILE_PRIVATE inline void KeyboardSendNextScancode(
+YAX86_FILE_PRIVATE inline void YKeyboardSendNextScancode(
     YKeyboardState* keyboard) {
   // Can only send in state [0, 1], i.e. enable_clear = false clock_low = true
   if (!(keyboard->enable_clear == false && keyboard->clock_low == true)) {
@@ -51,10 +51,10 @@ YAX86_FILE_PRIVATE inline void KeyboardSendNextScancode(
   // Send the next scancode in the buffer.
   uint8_t scancode = *YKeyboardBufferGet(&keyboard->buffer, 0);
   YKeyboardBufferRemove(&keyboard->buffer, 0);
-  KeyboardSendScancode(keyboard, scancode);
+  YKeyboardSendScancode(keyboard, scancode);
 }
 
-YAX86_PUBLIC void KeyboardHandleControl(
+YAX86_PUBLIC void YKeyboardHandleControl(
     YKeyboardState* keyboard, bool enable_clear, bool clock_low) {
   // Save previous state.
   bool old_clock_low = keyboard->clock_low;
@@ -79,7 +79,7 @@ YAX86_PUBLIC void KeyboardHandleControl(
   }
 }
 
-YAX86_PUBLIC void KeyboardHandleKeyPress(
+YAX86_PUBLIC void YKeyboardHandleKeyPress(
     YKeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
@@ -91,7 +91,7 @@ YAX86_PUBLIC void KeyboardHandleKeyPress(
   YKeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
-YAX86_PUBLIC void KeyboardTickMs(YKeyboardState* keyboard) {
+YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {
@@ -120,5 +120,5 @@ YAX86_PUBLIC void KeyboardTickMs(YKeyboardState* keyboard) {
   }
 
   // Normal operation.
-  KeyboardSendNextScancode(keyboard);
+  YKeyboardSendNextScancode(keyboard);
 }

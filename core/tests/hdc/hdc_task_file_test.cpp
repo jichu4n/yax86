@@ -17,20 +17,20 @@ class HDCTaskFileTest : public ::testing::Test {
  protected:
   void SetUp() override {
     hdc_.config.context = this;
-    HDCInit(&hdc_);
-    HDCAttachDrive(&hdc_, 0, &kTestGeometry);
+    YHDCInit(&hdc_);
+    YHDCAttachDrive(&hdc_, 0, &kTestGeometry);
   }
 
   // Reads and writes go through the physical port, so every test exercises the
   // card's address line swap rather than assuming it.
   uint8_t Read(YHDCRegister reg) {
-    return HDCReadPort(
-        &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg));
+    return YHDCReadPort(
+        &hdc_, kHDCPortBase + YHDCPortOffsetToRegister((uint8_t)reg));
   }
 
   void Write(YHDCRegister reg, uint8_t value) {
-    HDCWritePort(
-        &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg), value);
+    YHDCWritePort(
+        &hdc_, kHDCPortBase + YHDCPortOffsetToRegister((uint8_t)reg), value);
   }
 
   void SelectDrive(uint8_t drive) {
@@ -77,20 +77,21 @@ class HDCTaskFileTest : public ::testing::Test {
 TEST_F(HDCTaskFileTest, PortOffsetToRegisterMatchesTheCardWiring) {
   // The values the option ROM was observed to drive: it selects a drive at
   // port offset 6 and polls status at port offset 0xE.
-  EXPECT_EQ(HDCPortOffsetToRegister(0x6), kHDCRegisterDriveHead);
-  EXPECT_EQ(HDCPortOffsetToRegister(0xE), kHDCRegisterStatus);
-  EXPECT_EQ(HDCPortOffsetToRegister(0x8), kHDCRegisterError);
-  EXPECT_EQ(HDCPortOffsetToRegister(0x0), kHDCRegisterData);
-  EXPECT_EQ(HDCPortOffsetToRegister(0x1), kHDCRegisterDataHigh);
-  EXPECT_EQ(HDCPortOffsetToRegister(0x2), kHDCRegisterSectorCount);
-  EXPECT_EQ(HDCPortOffsetToRegister(0xA), kHDCRegisterSectorNumber);
-  EXPECT_EQ(HDCPortOffsetToRegister(0x4), kHDCRegisterCylinderLow);
-  EXPECT_EQ(HDCPortOffsetToRegister(0xC), kHDCRegisterCylinderHigh);
-  EXPECT_EQ(HDCPortOffsetToRegister(0x7), kHDCRegisterDeviceControl);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0x6), kHDCRegisterDriveHead);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0xE), kHDCRegisterStatus);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0x8), kHDCRegisterError);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0x0), kHDCRegisterData);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0x1), kHDCRegisterDataHigh);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0x2), kHDCRegisterSectorCount);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0xA), kHDCRegisterSectorNumber);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0x4), kHDCRegisterCylinderLow);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0xC), kHDCRegisterCylinderHigh);
+  EXPECT_EQ(YHDCPortOffsetToRegister(0x7), kHDCRegisterDeviceControl);
 
   // Swapping two address lines is its own inverse.
   for (uint8_t offset = 0; offset < kHDCNumPorts; ++offset) {
-    EXPECT_EQ(HDCPortOffsetToRegister(HDCPortOffsetToRegister(offset)), offset);
+    EXPECT_EQ(
+        YHDCPortOffsetToRegister(YHDCPortOffsetToRegister(offset)), offset);
   }
 }
 
@@ -429,7 +430,7 @@ TEST_F(HDCTaskFileTest, DetachedDriveStopsResponding) {
   SelectDrive(0);
   ASSERT_TRUE(Read(kHDCRegisterStatus) & kHDCStatusReady);
 
-  HDCDetachDrive(&hdc_, 0);
+  YHDCDetachDrive(&hdc_, 0);
   EXPECT_EQ(Read(kHDCRegisterStatus), 0);
 }
 
@@ -487,7 +488,7 @@ TEST_F(HDCTaskFileTest, UnmappedPortOffsetsReadAsOpenBus) {
   // Offsets that no register decodes to. Offset 0x7 is not among them: it
   // reaches the device control register, which is ATA register 0xE.
   for (uint8_t offset : {0x3, 0x5, 0x9, 0xB, 0xD, 0xF}) {
-    EXPECT_EQ(HDCReadPort(&hdc_, kHDCPortBase + offset), kHDCOpenBusValue)
+    EXPECT_EQ(YHDCReadPort(&hdc_, kHDCPortBase + offset), kHDCOpenBusValue)
         << "offset " << (int)offset;
   }
 }

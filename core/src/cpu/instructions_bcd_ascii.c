@@ -18,24 +18,24 @@
 // entry. That is not what Intel's published pseudocode says, which uses 0x99
 // throughout, but it is what the 8086/8088 does - and with AL between 0x9A and
 // 0x9F it is the difference between adjusting and not.
-YAX86_FILE_PRIVATE uint8_t GetBCDHighDigitLimit(bool auxiliary_carry) {
+YAX86_FILE_PRIVATE uint8_t YCPUGetBCDHighDigitLimit(bool auxiliary_carry) {
   return auxiliary_carry ? 0x9F : 0x99;
 }
 
 // AAA
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteAaa(const YCPUInstructionContext* ctx) {
+YCPUExecuteAaa(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
     al += 6;
     ++ah;
-    CPUSetFlag(ctx->cpu, kAF, true);
-    CPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, kAF, true);
+    YCPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    CPUSetFlag(ctx->cpu, kAF, false);
-    CPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, kAF, false);
+    YCPUSetFlag(ctx->cpu, kCF, false);
   }
   al &= 0x0F;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -44,18 +44,18 @@ ExecuteAaa(const YCPUInstructionContext* ctx) {
 
 // AAS
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteAas(const YCPUInstructionContext* ctx) {
+YCPUExecuteAas(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || CPUGetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
     al -= 6;
     --ah;
-    CPUSetFlag(ctx->cpu, kAF, true);
-    CPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, kAF, true);
+    YCPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    CPUSetFlag(ctx->cpu, kAF, false);
-    CPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, kAF, false);
+    YCPUSetFlag(ctx->cpu, kCF, false);
   }
   al &= 0x0F;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
@@ -64,93 +64,93 @@ ExecuteAas(const YCPUInstructionContext* ctx) {
 
 // AAM
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteAam(const YCPUInstructionContext* ctx) {
+YCPUExecuteAam(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  YCPUOperandValue base = ReadImmediate(ctx);
-  uint16_t base_value = FromOperandValue(base);
+  YCPUOperandValue base = YCPUReadImmediate(ctx);
+  uint16_t base_value = YCPUFromOperandValue(base);
   if (base_value == 0) {
     // AAM divides by its immediate operand, so a base of 0 raises a divide
     // error just like DIV by zero does, rather than being an invalid encoding.
     // The division never produces a result, and the flags are left set as
     // though it had produced zero.
-    SetCommonFlagsAfterInstruction(ctx, 0);
-    CPUSetFlag(ctx->cpu, kCF, false);
-    CPUSetFlag(ctx->cpu, kAF, false);
-    CPUSetFlag(ctx->cpu, kOF, false);
-    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
+    YCPUSetCommonFlagsAfterInstruction(ctx, 0);
+    YCPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, kAF, false);
+    YCPUSetFlag(ctx->cpu, kOF, false);
+    YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
   uint8_t ah = al / base_value;
   al %= base_value;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
+  YCPUSetCommonFlagsAfterInstruction(ctx, al);
   return kInstructionExecuted;
 }
 
 // AAD
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteAad(const YCPUInstructionContext* ctx) {
+YCPUExecuteAad(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
-  YCPUOperandValue base = ReadImmediate(ctx);
-  uint8_t base_value = FromOperandValue(base);
+  YCPUOperandValue base = YCPUReadImmediate(ctx);
+  uint8_t base_value = YCPUFromOperandValue(base);
   al += ah * base_value;
   ah = 0;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
+  YCPUSetCommonFlagsAfterInstruction(ctx, al);
   return kInstructionExecuted;
 }
 
 // DAA
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteDaa(const YCPUInstructionContext* ctx) {
+YCPUExecuteDaa(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   const uint8_t original_al = al;
-  const bool original_carry = CPUGetFlag(ctx->cpu, kCF);
+  const bool original_carry = YCPUGetFlag(ctx->cpu, kCF);
   const uint8_t high_digit_limit =
-      GetBCDHighDigitLimit(CPUGetFlag(ctx->cpu, kAF));
+      YCPUGetBCDHighDigitLimit(YCPUGetFlag(ctx->cpu, kAF));
 
-  if ((al & 0x0F) > 9 || CPUGetFlag(ctx->cpu, kAF)) {
+  if ((al & 0x0F) > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
     al += 6;
-    CPUSetFlag(ctx->cpu, kAF, true);
+    YCPUSetFlag(ctx->cpu, kAF, true);
   } else {
-    CPUSetFlag(ctx->cpu, kAF, false);
+    YCPUSetFlag(ctx->cpu, kAF, false);
   }
   if (original_al > high_digit_limit || original_carry) {
     al += 0x60;
-    CPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    CPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, kCF, false);
   }
   ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
+  YCPUSetCommonFlagsAfterInstruction(ctx, al);
   return kInstructionExecuted;
 }
 
 // DAS
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteDas(const YCPUInstructionContext* ctx) {
+YCPUExecuteDas(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
   const uint8_t original_al = al;
-  const bool original_carry = CPUGetFlag(ctx->cpu, kCF);
+  const bool original_carry = YCPUGetFlag(ctx->cpu, kCF);
   const uint8_t high_digit_limit =
-      GetBCDHighDigitLimit(CPUGetFlag(ctx->cpu, kAF));
+      YCPUGetBCDHighDigitLimit(YCPUGetFlag(ctx->cpu, kAF));
 
-  if ((al & 0x0F) > 9 || CPUGetFlag(ctx->cpu, kAF)) {
+  if ((al & 0x0F) > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
     al -= 6;
-    CPUSetFlag(ctx->cpu, kAF, true);
+    YCPUSetFlag(ctx->cpu, kAF, true);
   } else {
-    CPUSetFlag(ctx->cpu, kAF, false);
+    YCPUSetFlag(ctx->cpu, kAF, false);
   }
   if (original_al > high_digit_limit || original_carry) {
     al -= 0x60;
-    CPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, kCF, true);
   } else {
-    CPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, kCF, false);
   }
   ctx->cpu->registers[kAX] = (ah << 8) | al;
-  SetCommonFlagsAfterInstruction(ctx, al);
+  YCPUSetCommonFlagsAfterInstruction(ctx, al);
   return kInstructionExecuted;
 }

@@ -44,8 +44,8 @@ class HDCTransferTest : public ::testing::Test {
       }
     };
 
-    HDCInit(&hdc_);
-    HDCAttachDrive(&hdc_, 0, &kTestGeometry);
+    YHDCInit(&hdc_);
+    YHDCAttachDrive(&hdc_, 0, &kTestGeometry);
     SelectDrive(0);
   }
 
@@ -54,13 +54,13 @@ class HDCTransferTest : public ::testing::Test {
   }
 
   uint8_t Read(YHDCRegister reg) {
-    return HDCReadPort(
-        &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg));
+    return YHDCReadPort(
+        &hdc_, kHDCPortBase + YHDCPortOffsetToRegister((uint8_t)reg));
   }
 
   void Write(YHDCRegister reg, uint8_t value) {
-    HDCWritePort(
-        &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg), value);
+    YHDCWritePort(
+        &hdc_, kHDCPortBase + YHDCPortOffsetToRegister((uint8_t)reg), value);
   }
 
   void SelectDrive(uint8_t drive) {
@@ -297,7 +297,7 @@ TEST_F(HDCTransferTest, ReadDuringAWriteReturnsZero) {
 }
 
 TEST_F(HDCTransferTest, TransfersUseTheDriveSelectedWhenTheCommandStarted) {
-  HDCAttachDrive(&hdc_, 1, &kTestGeometry);
+  YHDCAttachDrive(&hdc_, 1, &kTestGeometry);
   SelectDrive(0);
   SetLbaAddress(0, 1);
   RunCommand(kHDCCommandReadSectors);
@@ -312,8 +312,8 @@ TEST_F(HDCTransferTest, TransfersUseTheDriveSelectedWhenTheCommandStarted) {
 TEST_F(HDCTransferTest, ADriveWithNoImageReadsAsZeroes) {
   hdc_.config.read_image_byte = nullptr;
   hdc_.config.write_image_byte = nullptr;
-  HDCInit(&hdc_);
-  HDCAttachDrive(&hdc_, 0, &kTestGeometry);
+  YHDCInit(&hdc_);
+  YHDCAttachDrive(&hdc_, 0, &kTestGeometry);
   SelectDrive(0);
 
   SetLbaAddress(0, 1);

@@ -53,7 +53,7 @@ class DMATest : public ::testing::Test {
     dma_.config.write_device_byte = MockWriteDevice;
 
     // Initialize the DMA controller.
-    DMAInit(&dma_);
+    YDMAInit(&dma_);
   }
 
   YDMAState dma_ = {0};

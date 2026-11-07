@@ -56,6 +56,6 @@ bool FloppyMount(YPlatformState* platform, const char* path) {
 
   platform->fdc.config.read_image_byte = FloppyReadByte;
   platform->fdc.config.write_image_byte = FloppyWriteByte;
-  FDCInsertDisk(&platform->fdc, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&platform->fdc, 0, &kFDCFormat360KB);
   return true;
 }

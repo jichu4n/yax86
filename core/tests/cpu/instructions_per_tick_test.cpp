@@ -6,7 +6,7 @@
 namespace {
 
 constexpr uint32_t kMemorySize = 0x10000;
-// A power of two, as CPUInit() requires, and large enough that nothing these
+// A power of two, as YCPUInit() requires, and large enough that nothing these
 // tests run collides.
 constexpr uint32_t kNumCacheEntries = 64;
 
@@ -50,8 +50,8 @@ enum : uint8_t {
 // the emulation would otherwise diverge - an interrupt delivered late, a
 // device serviced late, a trap not taken.
 //
-// Everything here drives CPUTick() directly with a budget set by hand, as
-// PlatformRun() does. A run is only ever entered from the decode cache, so
+// Everything here drives YCPUTick() directly with a budget set by hand, as
+// YPlatformRun() does. A run is only ever entered from the decode cache, so
 // each test warms it first.
 class InstructionsPerTickTest : public ::testing::Test {
  protected:
@@ -66,8 +66,8 @@ class InstructionsPerTickTest : public ::testing::Test {
     cpu_.config.interrupt_request_hint = &interrupt_requested_;
     cpu_.config.decode_cache = cache_;
     cpu_.config.decode_cache_num_entries = kNumCacheEntries;
-    CPUInit(&cpu_);
-    CPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
+    YCPUInit(&cpu_);
+    YCPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
     cpu_.registers[kCS] = 0;
     cpu_.registers[kDS] = 0;
     cpu_.registers[kSS] = 0;
@@ -77,7 +77,7 @@ class InstructionsPerTickTest : public ::testing::Test {
 
   void Load(uint16_t address, const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); ++i) {
-      CPUNotifyMemoryWrite(&cpu_, address + i);
+      YCPUNotifyMemoryWrite(&cpu_, address + i);
       memory_[address + i] = bytes[i];
     }
   }
@@ -87,7 +87,7 @@ class InstructionsPerTickTest : public ::testing::Test {
   // instruction per tick however warm the cache gets.
   void WarmCache(int num_instructions) {
     for (int i = 0; i < num_instructions; ++i) {
-      ASSERT_NE(CPUTick(&cpu_, 0), kCPUTickInvalid);
+      ASSERT_NE(YCPUTick(&cpu_, 0), kCPUTickInvalid);
     }
     Reset();
   }
@@ -107,9 +107,9 @@ class InstructionsPerTickTest : public ::testing::Test {
   // Runs one tick with a budget too large to be what ends the run, and returns
   // how many instructions it retired.
   uint64_t RunOneTick() {
-    const uint64_t before = CPUInstructionsRetired(&cpu_);
-    CPUTick(&cpu_, UINT16_MAX);
-    return CPUInstructionsRetired(&cpu_) - before;
+    const uint64_t before = YCPUInstructionsRetired(&cpu_);
+    YCPUTick(&cpu_, UINT16_MAX);
+    return YCPUInstructionsRetired(&cpu_) - before;
   }
 
   static uint8_t TestReadMemoryByte(YCPUState* cpu, uint32_t address) {
@@ -176,7 +176,7 @@ TEST_F(InstructionsPerTickTest, TheRetiredCountCarriesIntoItsHighHalf) {
   cpu_.instructions_retired_low = UINT32_MAX;
 
   EXPECT_EQ(RunOneTick(), 2u);
-  EXPECT_EQ(CPUInstructionsRetired(&cpu_), (uint64_t)UINT32_MAX + 2u);
+  EXPECT_EQ(YCPUInstructionsRetired(&cpu_), (uint64_t)UINT32_MAX + 2u);
   EXPECT_EQ(cpu_.instructions_retired_high, 1u);
 }
 
@@ -191,12 +191,12 @@ TEST_F(
   // WarmCache() insists every tick succeeds, which this program cannot do.
   // The decode is what fills the cache, and this instruction decodes.
   for (int i = 0; i < 3; ++i) {
-    CPUTick(&cpu_, 0);
+    YCPUTick(&cpu_, 0);
   }
   Reset();
 
-  EXPECT_EQ(CPUTick(&cpu_, UINT16_MAX), kCPUTickInvalid);
-  EXPECT_EQ(CPUInstructionsRetired(&cpu_), 2u);
+  EXPECT_EQ(YCPUTick(&cpu_, UINT16_MAX), kCPUTickInvalid);
+  EXPECT_EQ(YCPUInstructionsRetired(&cpu_), 2u);
   EXPECT_EQ(cpu_.registers[kAX], 2u);
 }
 
@@ -238,9 +238,9 @@ TEST_F(InstructionsPerTickTest, NoBudgetRunsOneInstructionPerTick) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
 
-  const uint64_t before = CPUInstructionsRetired(&cpu_);
-  CPUTick(&cpu_, 0);
-  EXPECT_EQ(CPUInstructionsRetired(&cpu_) - before, 1u);
+  const uint64_t before = YCPUInstructionsRetired(&cpu_);
+  YCPUTick(&cpu_, 0);
+  EXPECT_EQ(YCPUInstructionsRetired(&cpu_) - before, 1u);
 }
 
 // A run stops where the host would have taken control back anyway, which is
@@ -250,15 +250,15 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtTheBudget) {
   WarmCache(4);
 
   // What one of these instructions costs, measured rather than assumed.
-  CPUTick(&cpu_, 0);
+  YCPUTick(&cpu_, 0);
   const uint16_t one_instruction = cpu_.cycles_this_tick;
   ASSERT_GT(one_instruction, 0);
   Reset();
 
   // Two instructions' worth of budget is spent by two instructions, so the
   // third does not start.
-  CPUTick(&cpu_, (uint16_t)(2 * one_instruction));
-  EXPECT_EQ(CPUInstructionsRetired(&cpu_), 2u);
+  YCPUTick(&cpu_, (uint16_t)(2 * one_instruction));
+  EXPECT_EQ(YCPUInstructionsRetired(&cpu_), 2u);
   EXPECT_EQ(cpu_.cycles_this_tick, 2 * one_instruction);
 }
 
@@ -343,7 +343,7 @@ TEST_F(InstructionsPerTickTest, TheTrapFlagRunsOneInstructionPerTick) {
   Load(kHandlerAddress, {kOpIret});
   WarmCache(3);
 
-  CPUSetFlag(&cpu_, kTF, true);
+  YCPUSetFlag(&cpu_, kTF, true);
   EXPECT_EQ(RunOneTick(), 1u);
   EXPECT_EQ(cpu_.registers[kIP], kHandlerAddress);
 }
@@ -365,7 +365,7 @@ TEST_F(InstructionsPerTickTest, AnInstructionThatSetsTheTrapFlagEndsTheRun) {
   // after it did not run inside this tick, because the tick it does run in is
   // the one that owes the trap.
   EXPECT_EQ(RunOneTick(), 3u);
-  EXPECT_TRUE(CPUGetFlag(&cpu_, kTF));
+  EXPECT_TRUE(YCPUGetFlag(&cpu_, kTF));
   EXPECT_EQ(cpu_.registers[kIP], kProgramAddress + 5);
 
   // That next tick runs the one instruction and takes the trap.
@@ -381,7 +381,7 @@ TEST_F(InstructionsPerTickTest, ARunStopsWhenAnInterruptIsRequested) {
   Load(kHandlerAddress, {kOpIret});
   WarmCache(3);
 
-  CPUSetFlag(&cpu_, kIF, true);
+  YCPUSetFlag(&cpu_, kIF, true);
   interrupt_requested_ = true;
 
   EXPECT_EQ(RunOneTick(), 1u);
@@ -442,7 +442,7 @@ TEST_F(InstructionsPerTickTest, TheTickIsChargedForTheWholeRun) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
 
-  CPUTick(&cpu_, 0);
+  YCPUTick(&cpu_, 0);
   const uint16_t one_instruction = cpu_.cycles_this_tick;
   Reset();
 

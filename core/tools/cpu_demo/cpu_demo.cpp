@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
   cpu.config.handle_interrupt = HandleInterrupt;
 
   // Initialize CPU state
-  CPUInit(&cpu);
+  YCPUInit(&cpu);
 
   // Load the assembly program into memory
   auto machine_code = Assemble(argv[1]);
@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
   // Execute the program until it terminates, halts, or hits a bad instruction.
   YCPUTickResult status;
   do {
-    status = CPUTick(&cpu, 0);
+    status = YCPUTick(&cpu, 0);
   } while (status == kCPUTickExecuted && !program_finished);
   if (status == kCPUTickInvalid) {
     cerr << "Program execution failed at " << hex << cpu.registers[kCS] << ":"

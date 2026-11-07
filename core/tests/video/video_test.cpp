@@ -35,15 +35,15 @@ class VideoTimingTest : public VideoTestBase,
                                           : uint16_t{kMDAPortStatus};
   }
 
-  uint8_t Status() { return VideoReadPort(&video_, StatusPort()); }
+  uint8_t Status() { return YVideoReadPort(&video_, StatusPort()); }
 
-  // Advance the beam by whole scan lines. VideoTick takes a single
+  // Advance the beam by whole scan lines. YVideoTick takes a single
   // instruction's worth of cycles, so a whole frame has to be stepped a line
   // at a time.
   void AdvanceScanLines(uint16_t scan_lines) {
-    const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+    const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
     for (uint16_t i = 0; i < scan_lines; ++i) {
-      VideoTick(&video_, adapter->cycles_per_scan_line);
+      YVideoTick(&video_, adapter->cycles_per_scan_line);
     }
   }
 };
@@ -57,20 +57,20 @@ TEST_P(VideoTimingTest, StatusStartsInActiveDisplay) {
 }
 
 TEST_P(VideoTimingTest, HorizontalRetraceWithinAScanLine) {
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
 
   // Partway through the active part of a scan line the display is still on.
-  VideoTick(&video_, adapter->display_cycles_per_scan_line - 1);
+  YVideoTick(&video_, adapter->display_cycles_per_scan_line - 1);
   EXPECT_EQ(Status() & kVideoStatusDisplayDisabled, 0);
 
   // Past the end of it, the display is disabled but there is no vertical
   // retrace yet.
-  VideoTick(&video_, 1);
+  YVideoTick(&video_, 1);
   EXPECT_NE(Status() & kVideoStatusDisplayDisabled, 0);
   EXPECT_EQ(Status() & kVideoStatusVerticalRetrace, 0);
 
   // The next scan line starts with the display back on.
-  VideoTick(
+  YVideoTick(
       &video_,
       adapter->cycles_per_scan_line - adapter->display_cycles_per_scan_line);
   EXPECT_EQ(Status() & kVideoStatusDisplayDisabled, 0);
@@ -78,7 +78,7 @@ TEST_P(VideoTimingTest, HorizontalRetraceWithinAScanLine) {
 }
 
 TEST_P(VideoTimingTest, VerticalRetraceAtTheEndOfAFrame) {
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
 
   // Run to the last displayed scan line.
   AdvanceScanLines(adapter->displayed_scan_lines - 1);
@@ -103,13 +103,13 @@ TEST_P(VideoTimingTest, VerticalRetraceAtTheEndOfAFrame) {
 }
 
 TEST_P(VideoTimingTest, TickAccumulatesPartialScanLines) {
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
   // A cycle count that does not divide the scan line period still advances the
   // beam at the right average rate.
   const uint16_t kCyclesPerTick = 17;
   uint32_t total_cycles = 0;
   for (int i = 0; i < 100; ++i) {
-    VideoTick(&video_, kCyclesPerTick);
+    YVideoTick(&video_, kCyclesPerTick);
     total_cycles += kCyclesPerTick;
   }
   EXPECT_EQ(video_.scan_line, total_cycles / adapter->cycles_per_scan_line);
@@ -120,10 +120,10 @@ TEST_P(VideoTimingTest, TickAccumulatesPartialScanLines) {
 TEST_P(VideoTimingTest, StatusHighBitsStayClear) {
   // Bit 7 in particular: the BIOS probes it on the MDA status port to detect a
   // Hercules adapter, which this is not.
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(&video_);
   for (uint16_t i = 0; i < adapter->scan_lines_per_frame; ++i) {
     EXPECT_EQ(Status() & 0xF0, 0);
-    VideoTick(&video_, adapter->cycles_per_scan_line);
+    YVideoTick(&video_, adapter->cycles_per_scan_line);
   }
 }
 
@@ -136,10 +136,10 @@ TEST_P(VideoTimingTest, UnselectedRegisterReadsAsUnmapped) {
                            : uint16_t{kMDAPortRegisterData};
   // The 6845 has 18 registers, and the index masks to five bits, so indices 18
   // to 31 select nothing.
-  VideoWritePort(&video_, index_port, kNumCRTCRegisters);
-  EXPECT_EQ(VideoReadPort(&video_, data_port), 0xFF);
-  VideoWritePort(&video_, data_port, 0x55);
-  EXPECT_EQ(VideoReadPort(&video_, data_port), 0xFF);
+  YVideoWritePort(&video_, index_port, kNumCRTCRegisters);
+  EXPECT_EQ(YVideoReadPort(&video_, data_port), 0xFF);
+  YVideoWritePort(&video_, data_port, 0x55);
+  EXPECT_EQ(YVideoReadPort(&video_, data_port), 0xFF);
 }
 
 TEST_P(VideoTimingTest, RenderIsSafeWithoutCallbacks) {
@@ -149,10 +149,10 @@ TEST_P(VideoTimingTest, RenderIsSafeWithoutCallbacks) {
   YVideoConfig bare_config = kDefaultVideoConfig;
   bare_config.adapter = GetParam();
   YVideoState bare_video = {0};
-  VideoInit(&bare_video);
-  VideoRender(&bare_video);
-  VideoTick(&bare_video, 1000);
-  EXPECT_EQ(VideoReadVRAM(&bare_video, 0), 0xFF);
+  YVideoInit(&bare_video);
+  YVideoRender(&bare_video);
+  YVideoTick(&bare_video, 1000);
+  EXPECT_EQ(YVideoReadVRAM(&bare_video, 0), 0xFF);
 }
 
 INSTANTIATE_TEST_SUITE_P(

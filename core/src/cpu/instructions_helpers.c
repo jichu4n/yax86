@@ -9,45 +9,46 @@
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-YAX86_MODULE_PRIVATE YAX86_HOT void SetCommonFlagsAfterInstruction(
+YAX86_MODULE_PRIVATE YAX86_HOT void YCPUSetCommonFlagsAfterInstruction(
     const YCPUInstructionContext* ctx, uint32_t result) {
   YCPUWidth width = ctx->metadata->width;
   result &= kMaxValue[width];
   // Zero flag (ZF)
-  CPUSetFlag(ctx->cpu, kZF, result == 0);
+  YCPUSetFlag(ctx->cpu, kZF, result == 0);
   // Sign flag (SF)
-  CPUSetFlag(ctx->cpu, kSF, result & kSignBit[width]);
+  YCPUSetFlag(ctx->cpu, kSF, result & kSignBit[width]);
   // Parity flag (PF)
   // Set if the number of set bits in the least significant byte is even
   uint8_t parity = result & 0xFF;  // Check only the low byte for parity
   parity ^= parity >> 4;
   parity ^= parity >> 2;
   parity ^= parity >> 1;
-  CPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
+  YCPUSetFlag(ctx->cpu, kPF, (parity & 1) == 0);
 }
 
-YAX86_MODULE_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
+YAX86_MODULE_PRIVATE uint16_t YCPUToFlagsRegisterValue(uint16_t value) {
   return (value | (uint16_t)kFlagsAlwaysSet) & ~(uint16_t)kFlagsAlwaysClear;
 }
 
 // Write a word where the stack pointer already points. The caller is
 // responsible for having made room for it.
-YAX86_FILE_PRIVATE void WriteToStackTop(
+YAX86_FILE_PRIVATE void YCPUWriteToStackTop(
     YCPUState* cpu, YCPUOperandValue value) {
   YCPUOperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
       .offset = cpu->registers[kSP],
   };
-  WriteMemoryOperandWord(cpu, &address, value);
+  YCPUWriteMemoryOperandWord(cpu, &address, value);
 }
 
-YAX86_MODULE_PRIVATE void PushValue(YCPUState* cpu, YCPUOperandValue value) {
+YAX86_MODULE_PRIVATE void YCPUPushValue(
+    YCPUState* cpu, YCPUOperandValue value) {
   cpu->registers[kSP] -= 2;
-  WriteToStackTop(cpu, value);
+  YCPUWriteToStackTop(cpu, value);
 }
 
-YAX86_MODULE_PRIVATE void PushSourceOperand(
+YAX86_MODULE_PRIVATE void YCPUPushSourceOperand(
     YCPUState* cpu, const YCPUOperand* src) {
   cpu->registers[kSP] -= 2;
   // The 8086/8088 moves the stack pointer before it reads the source, so
@@ -59,33 +60,33 @@ YAX86_MODULE_PRIVATE void PushSourceOperand(
       src->address.register_index == kSP;
   const YCPUOperandValue value =
       source_is_stack_pointer ? cpu->registers[kSP] : src->value;
-  WriteToStackTop(cpu, value);
+  YCPUWriteToStackTop(cpu, value);
 }
 
-YAX86_MODULE_PRIVATE YCPUOperandValue Pop(YCPUState* cpu) {
+YAX86_MODULE_PRIVATE YCPUOperandValue YCPUPop(YCPUState* cpu) {
   YCPUOperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
       .offset = cpu->registers[kSP],
   };
-  YCPUOperandValue value = ReadMemoryOperandWord(cpu, &address);
+  YCPUOperandValue value = YCPUReadMemoryOperandWord(cpu, &address);
   cpu->registers[kSP] += 2;
   return value;
 }
 
 // Dummy instruction for unsupported opcodes.
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteNoOp(YAX86_UNUSED const YCPUInstructionContext* ctx) {
+YCPUExecuteNoOp(YAX86_UNUSED const YCPUInstructionContext* ctx) {
   return kInstructionExecuted;
 }
 
 // Handler for the eight opcode bytes that are prefixes rather than
 // instructions. The prefix decoder consumes those bytes before an opcode is
 // looked up, so a decoded instruction never names one and this is unreachable
-// from CPUTick(). It exists so that every entry in the opcode table is
+// from YCPUTick(). It exists so that every entry in the opcode table is
 // callable, which is what lets the tick path dispatch without first checking
 // for a null handler.
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteInvalidOpcode(YAX86_UNUSED const YCPUInstructionContext* ctx) {
+YCPUExecuteInvalidOpcode(YAX86_UNUSED const YCPUInstructionContext* ctx) {
   return kInstructionInvalid;
 }

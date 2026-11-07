@@ -70,9 +70,9 @@ Outcome Run(
   helper->cpu_.registers[kES] = 0;
   set_up(*helper);
   if (with_window) {
-    CPUSetDirectDataWindow(&helper->cpu_, helper->memory_.get(), kMemorySize);
+    YCPUSetDirectDataWindow(&helper->cpu_, helper->memory_.get(), kMemorySize);
   }
-  EXPECT_EQ(CPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
 
   Outcome outcome;
   outcome.memory.assign(
@@ -144,7 +144,7 @@ TEST_F(StringBulkTest, AgreesWithTheElementPathForEveryShapeOfRun) {
           // directions cover the same bytes.
           helper.cpu_.registers[kSI] = backwards ? 0x05FE : 0x0400;
           helper.cpu_.registers[kDI] = backwards ? 0x07FE : 0x0600;
-          CPUSetFlag(&helper.cpu_, kDF, backwards);
+          YCPUSetFlag(&helper.cpu_, kDF, backwards);
         });
   }
 }
@@ -163,7 +163,7 @@ TEST_F(StringBulkTest, OverlappingCopiesPropagateAsTheyWouldOneAtATime) {
         helper.cpu_.registers[kCX] = 15;
         helper.cpu_.registers[kSI] = 0x0400;
         helper.cpu_.registers[kDI] = 0x0401;
-        CPUSetFlag(&helper.cpu_, kDF, false);
+        YCPUSetFlag(&helper.cpu_, kDF, false);
       });
   // Every byte of the range is the one the copy started from.
   for (uint16_t i = 0; i < 16; ++i) {
@@ -182,7 +182,7 @@ TEST_F(StringBulkTest, OverlappingWordCopiesReadBothBytesBeforeWritingEither) {
         helper.cpu_.registers[kCX] = 16;
         helper.cpu_.registers[kSI] = 0x0400;
         helper.cpu_.registers[kDI] = 0x0401;
-        CPUSetFlag(&helper.cpu_, kDF, false);
+        YCPUSetFlag(&helper.cpu_, kDF, false);
       });
 }
 
@@ -195,7 +195,7 @@ TEST_F(StringBulkTest, ARepeatOfZeroElementsDoesNothing) {
         helper.cpu_.registers[kCX] = 0;
         helper.cpu_.registers[kSI] = 0x0400;
         helper.cpu_.registers[kDI] = 0x0500;
-        CPUSetFlag(&helper.cpu_, kDF, false);
+        YCPUSetFlag(&helper.cpu_, kDF, false);
       });
   EXPECT_EQ(outcome.registers[kSI], 0x0400);
   EXPECT_EQ(outcome.registers[kDI], 0x0500);
@@ -229,8 +229,8 @@ class SplitMemoryHost {
     cpu_.config.context = this;
     cpu_.config.read_memory_byte = TestReadMemoryByte;
     cpu_.config.write_memory_byte = TestWriteMemoryByte;
-    CPUInit(&cpu_);
-    CPUSetDirectDataWindow(&cpu_, ram_, kWindowEnd);
+    YCPUInit(&cpu_);
+    YCPUSetDirectDataWindow(&cpu_, ram_, kWindowEnd);
   }
 
   // Where a linear address lives. Below the window it is RAM; above it, for as
@@ -272,8 +272,8 @@ TEST_F(StringBulkTest, ARunLeavingTheWindowReachesTheDeviceAboveIt) {
   host.cpu_.registers[kAX] = 0x00CD;
   host.cpu_.registers[kCX] = 16;
   host.cpu_.registers[kDI] = SplitMemoryHost::kWindowEnd - 8;
-  CPUSetFlag(&host.cpu_, kDF, false);
-  ASSERT_EQ(CPUTick(&host.cpu_, 0), kCPUTickExecuted);
+  YCPUSetFlag(&host.cpu_, kDF, false);
+  ASSERT_EQ(YCPUTick(&host.cpu_, 0), kCPUTickExecuted);
 
   for (uint32_t i = 0; i < 8; ++i) {
     // Eight bytes inside the window, and eight that had to be handed over.
@@ -302,7 +302,7 @@ TEST_F(StringBulkTest, ARunWrappingTheTopOfItsSegmentFallsBack) {
         helper.cpu_.registers[kAX] = 0x00CD;
         helper.cpu_.registers[kCX] = 8;
         helper.cpu_.registers[kDI] = 0xFFFC;
-        CPUSetFlag(&helper.cpu_, kDF, false);
+        YCPUSetFlag(&helper.cpu_, kDF, false);
       });
   // Four bytes at the top of the segment, and four that wrapped to the bottom
   // of it - not the eight consecutive bytes a straight run would have left.
@@ -323,7 +323,7 @@ TEST_F(StringBulkTest, ABackwardRunWrappingBelowZeroFallsBackToo) {
         helper.cpu_.registers[kAX] = 0x00CD;
         helper.cpu_.registers[kCX] = 8;
         helper.cpu_.registers[kDI] = 0x0003;
-        CPUSetFlag(&helper.cpu_, kDF, true);
+        YCPUSetFlag(&helper.cpu_, kDF, true);
       });
   for (uint16_t i = 0; i < 4; ++i) {
     EXPECT_EQ(outcome.memory[0x1000 + i], 0xCD) << "at offset " << i;
@@ -350,7 +350,7 @@ TEST_F(StringBulkTest, ASegmentOverrideMovesWhereTheCopyReadsFrom) {
         helper.cpu_.registers[kSI] = 0x0400;
         // The destination is ES:DI, which the override does not touch.
         helper.cpu_.registers[kDI] = 0x0600;
-        CPUSetFlag(&helper.cpu_, kDF, false);
+        YCPUSetFlag(&helper.cpu_, kDF, false);
       });
   // Read from ES:SI = 0x0410, written to ES:DI = 0x0610.
   for (uint16_t i = 0; i < 16; ++i) {
@@ -371,7 +371,7 @@ TEST_F(StringBulkTest, ALongRunChargesWhatOneElementAtATimeWouldHave) {
         helper.cpu_.registers[kCX] = 0x1000;
         helper.cpu_.registers[kSI] = 0x0000;
         helper.cpu_.registers[kDI] = 0x2000;
-        CPUSetFlag(&helper.cpu_, kDF, false);
+        YCPUSetFlag(&helper.cpu_, kDF, false);
       });
   EXPECT_EQ(outcome.registers[kCX], 0);
   EXPECT_EQ(outcome.registers[kSI], 0x2000);
@@ -402,8 +402,8 @@ TEST_F(StringBulkTest, ACopyOverCachedCodeDiscardsTheDecodes) {
   helper->cpu_.config.decode_cache_num_entries = 16;
   // Only the flags and the cache fields, so the loaded program and where CS:IP
   // points at it survive this.
-  CPUInit(&helper->cpu_);
-  CPUSetDirectDataWindow(&helper->cpu_, helper->memory_.get(), kMemorySize);
+  YCPUInit(&helper->cpu_);
+  YCPUSetDirectDataWindow(&helper->cpu_, helper->memory_.get(), kMemorySize);
 
   // The copy replaces the INC AX at "target" with the INC BX at 0x0800.
   const uint16_t target = kCOMFileLoadOffset + 6;
@@ -411,13 +411,13 @@ TEST_F(StringBulkTest, ACopyOverCachedCodeDiscardsTheDecodes) {
   helper->cpu_.registers[kCX] = 1;
   helper->cpu_.registers[kSI] = 0x0800;
   helper->cpu_.registers[kDI] = target;
-  CPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, kDF, false);
 
   // MOV, INC AX, REP MOVSB, JMP, and then the instruction at "target" again -
   // which is now INC BX, and has to be decoded afresh rather than served from
   // the cache.
   for (int i = 0; i < 5; ++i) {
-    ASSERT_EQ(CPUTick(&helper->cpu_, 0), kCPUTickExecuted) << "tick " << i;
+    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted) << "tick " << i;
   }
   EXPECT_EQ(helper->memory_[target], 0x43);  // INC BX
   EXPECT_EQ(helper->cpu_.registers[kAX], 1);

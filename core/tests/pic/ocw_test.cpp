@@ -24,12 +24,12 @@ class OCWTest : public ::testing::Test {
   void SetUp() override {
     // Initialize the PIC to a known-ready state (single PIC mode).
     pic_.config.sp = false;
-    PICInit(&pic_);
+    YPICInit(&pic_);
 
     // ICW1: single PIC, no ICW4 needed.
-    PICWritePort(&pic_, 0x20, kTestICW1_INIT | kTestICW1_SNGL);
+    YPICWritePort(&pic_, 0x20, kTestICW1_INIT | kTestICW1_SNGL);
     // ICW2: interrupt vector base 0x08.
-    PICWritePort(&pic_, 0x21, 0x08);
+    YPICWritePort(&pic_, 0x21, 0x08);
 
     ASSERT_EQ(pic_.init_state, kPICReady);
   }
@@ -40,11 +40,11 @@ TEST_F(OCWTest, OCW1_SetIMR) {
   // OCW1 is a write to the data port when the PIC is ready.
   // This should update the Interrupt Mask Register (IMR).
   const uint8_t new_imr = 0b10101010;
-  PICWritePort(&pic_, 0x21, new_imr);
+  YPICWritePort(&pic_, 0x21, new_imr);
   EXPECT_EQ(pic_.imr, new_imr);
 
   const uint8_t newer_imr = 0b01010101;
-  PICWritePort(&pic_, 0x21, newer_imr);
+  YPICWritePort(&pic_, 0x21, newer_imr);
   EXPECT_EQ(pic_.imr, newer_imr);
 }
 
@@ -54,15 +54,15 @@ TEST_F(OCWTest, OCW2_NonSpecificEOI) {
 
   // Send a non-specific EOI. This should clear the highest-priority
   // (lowest index) ISR bit, which is bit 2.
-  PICWritePort(&pic_, 0x20, kTestOCW2_EOI);
+  YPICWritePort(&pic_, 0x20, kTestOCW2_EOI);
   EXPECT_EQ(pic_.isr, (1 << 5) | (1 << 7));
 
   // Send another non-specific EOI. This should clear bit 5.
-  PICWritePort(&pic_, 0x20, kTestOCW2_EOI);
+  YPICWritePort(&pic_, 0x20, kTestOCW2_EOI);
   EXPECT_EQ(pic_.isr, (1 << 7));
 
   // Send a final non-specific EOI. This should clear bit 7.
-  PICWritePort(&pic_, 0x20, kTestOCW2_EOI);
+  YPICWritePort(&pic_, 0x20, kTestOCW2_EOI);
   EXPECT_EQ(pic_.isr, 0x00);
 }
 
@@ -71,15 +71,15 @@ TEST_F(OCWTest, OCW2_SpecificEOI) {
   pic_.isr = (1 << 2) | (1 << 5) | (1 << 7);
 
   // Send a specific EOI for IRQ 5.
-  PICWritePort(&pic_, 0x20, kTestOCW2_EOI | kTestOCW2_SL | 5);
+  YPICWritePort(&pic_, 0x20, kTestOCW2_EOI | kTestOCW2_SL | 5);
   EXPECT_EQ(pic_.isr, (1 << 2) | (1 << 7));
 
   // Send a specific EOI for IRQ 7.
-  PICWritePort(&pic_, 0x20, kTestOCW2_EOI | kTestOCW2_SL | 7);
+  YPICWritePort(&pic_, 0x20, kTestOCW2_EOI | kTestOCW2_SL | 7);
   EXPECT_EQ(pic_.isr, (1 << 2));
 
   // Send a specific EOI for IRQ 2.
-  PICWritePort(&pic_, 0x20, kTestOCW2_EOI | kTestOCW2_SL | 2);
+  YPICWritePort(&pic_, 0x20, kTestOCW2_EOI | kTestOCW2_SL | 2);
   EXPECT_EQ(pic_.isr, 0x00);
 }
 
@@ -89,11 +89,11 @@ TEST_F(OCWTest, OCW3_ReadIRR) {
   pic_.imr = 0xCD;
 
   // Send OCW3 to select reading the IRR.
-  PICWritePort(&pic_, 0x20, kTestOCW_SELECT | kTestOCW3_RR);
-  EXPECT_EQ(PICReadPort(&pic_, 0x21), 0xAB);
+  YPICWritePort(&pic_, 0x20, kTestOCW_SELECT | kTestOCW3_RR);
+  EXPECT_EQ(YPICReadPort(&pic_, 0x21), 0xAB);
 
   // The next read should revert to reading the IMR.
-  EXPECT_EQ(PICReadPort(&pic_, 0x21), 0xCD);
+  EXPECT_EQ(YPICReadPort(&pic_, 0x21), 0xCD);
 }
 
 TEST_F(OCWTest, OCW3_ReadISR) {
@@ -102,11 +102,11 @@ TEST_F(OCWTest, OCW3_ReadISR) {
   pic_.imr = 0x98;
 
   // Send OCW3 to select reading the ISR.
-  PICWritePort(&pic_, 0x20, kTestOCW_SELECT | kTestOCW3_RR | kTestOCW3_RIS);
-  EXPECT_EQ(PICReadPort(&pic_, 0x21), 0xEF);
+  YPICWritePort(&pic_, 0x20, kTestOCW_SELECT | kTestOCW3_RR | kTestOCW3_RIS);
+  EXPECT_EQ(YPICReadPort(&pic_, 0x21), 0xEF);
 
   // The next read should revert to reading the IMR.
-  EXPECT_EQ(PICReadPort(&pic_, 0x21), 0x98);
+  EXPECT_EQ(YPICReadPort(&pic_, 0x21), 0x98);
 }
 
 }  // namespace
