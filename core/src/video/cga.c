@@ -1,8 +1,8 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "fonts.h"
 #include "internal.h"
 #include "public.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 enum {
   Y_VIDEO_CGA_CHAR_HEIGHT = 8,
@@ -32,7 +32,7 @@ enum {
 // The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
 // comes from the color select register instead. The palette-select bit chooses
 // the first two, unless black-and-white mode selects the third.
-YAX86_FILE_PRIVATE const uint8_t YVideoCGAGraphicsPalettes[3][3] = {
+Y_FILE_PRIVATE const uint8_t YVideoCGAGraphicsPalettes[3][3] = {
     // Palette 0: green, red, brown.
     {2, 4, 6},
     // Palette 1: cyan, magenta, light gray.
@@ -41,14 +41,14 @@ YAX86_FILE_PRIVATE const uint8_t YVideoCGAGraphicsPalettes[3][3] = {
     {3, 4, 7},
 };
 
-YAX86_FILE_PRIVATE inline YVideoRGB YVideoCGAGetColor(
+Y_FILE_PRIVATE inline YVideoRGB YVideoCGAGetColor(
     const YVideoState* video, uint8_t color) {
   return video->config.cga_palette[color & (Y_VIDEO_NUM_CGA_COLORS - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
-YAX86_FILE_PRIVATE inline uint32_t YVideoCGAGetScanLineAddress(
+Y_FILE_PRIVATE inline uint32_t YVideoCGAGetScanLineAddress(
     const YVideoState* video, uint16_t y) {
   uint32_t address =
       ((uint32_t)YVideoGetStartAddress(video) * 2 +
@@ -57,7 +57,7 @@ YAX86_FILE_PRIVATE inline uint32_t YVideoCGAGetScanLineAddress(
   return address + (y & 1 ? Y_VIDEO_CGA_GRAPHICS_ODD_SCAN_LINE_OFFSET : 0);
 }
 
-YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
+Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
     YVideoState* video, YVideoPixelRun* run, const YVideoModeMetadata* metadata,
     uint8_t start_column, uint8_t end_column, uint16_t first_y,
     uint16_t end_y) {
@@ -144,7 +144,7 @@ YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
   }
 }
 
-YAX86_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
+Y_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
     YVideoState* video, YVideoRGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & Y_VIDEO_CONTROL_BLACK_AND_WHITE) {
@@ -167,7 +167,7 @@ YAX86_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
   }
 }
 
-YAX86_FILE_PRIVATE void YVideoCGARenderGraphics320x200Region(
+Y_FILE_PRIVATE void YVideoCGARenderGraphics320x200Region(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   YVideoRGB palette[4];
@@ -198,7 +198,7 @@ YAX86_FILE_PRIVATE void YVideoCGARenderGraphics320x200Region(
   }
 }
 
-YAX86_FILE_PRIVATE void YVideoCGARenderGraphics640x200Region(
+Y_FILE_PRIVATE void YVideoCGARenderGraphics640x200Region(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   YVideoRGB foreground = YVideoCGAGetColor(
@@ -224,7 +224,7 @@ YAX86_FILE_PRIVATE void YVideoCGARenderGraphics640x200Region(
   }
 }
 
-YAX86_MODULE_PRIVATE void YVideoCGARenderRegion(
+Y_MODULE_PRIVATE void YVideoCGARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);

@@ -1,16 +1,16 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // ============================================================================
 // IN and OUT instructions
 // ============================================================================
 
 // Read a byte from an I/O port.
-YAX86_FILE_PRIVATE YAX86_HOT YCPUOperandValue
+Y_FILE_PRIVATE Y_HOT YCPUOperandValue
 YCPUReadByteFromPort(YCPUState* cpu, uint16_t port) {
   return (YCPUOperandValue)(cpu->config.read_port
                                 ? cpu->config.read_port(cpu, port)
@@ -21,7 +21,7 @@ YCPUReadByteFromPort(YCPUState* cpu, uint16_t port) {
 // so a word access is two byte accesses to consecutive ports. Peripherals rely
 // on this: writing a 6845 register index and its data in one OUT DX, AX is the
 // standard idiom, and it is what the BIOS uses.
-YAX86_FILE_PRIVATE YCPUOperandValue
+Y_FILE_PRIVATE YCPUOperandValue
 YCPUReadWordFromPort(YCPUState* cpu, uint16_t port) {
   uint8_t low = (uint8_t)YCPUReadByteFromPort(cpu, port);
   uint8_t high = (uint8_t)YCPUReadByteFromPort(cpu, (uint16_t)(port + 1));
@@ -29,14 +29,14 @@ YCPUReadWordFromPort(YCPUState* cpu, uint16_t port) {
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
-YAX86_FILE_PRIVATE YCPUOperandValue (*const YCPUReadFromPortFns[])(
+Y_FILE_PRIVATE YCPUOperandValue (*const YCPUReadFromPortFns[])(
     YCPUState*, uint16_t) = {
   YCPUReadByteFromPort,  // Y_CPU_BYTE
   YCPUReadWordFromPort,  // Y_CPU_WORD
 };
 
 // Common logic for IN instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteIn(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperandValue value =
       YCPUReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
@@ -48,7 +48,7 @@ YCPUExecuteIn(const YCPUInstructionContext* ctx, uint16_t port) {
 
 // IN AL, imm8
 // IN AX, imm8
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteInImmediate(const YCPUInstructionContext* ctx) {
   YCPUOperandValue port = YCPUReadImmediateOperandByte(ctx->instruction);
   return YCPUExecuteIn(ctx, YCPUFromOperandValue(port));
@@ -56,13 +56,13 @@ YCPUExecuteInImmediate(const YCPUInstructionContext* ctx) {
 
 // IN AL, DX
 // IN AX, DX
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteInDX(const YCPUInstructionContext* ctx) {
   return YCPUExecuteIn(ctx, ctx->cpu->registers[Y_CPU_DX]);
 }
 
 // Write a byte to an I/O port.
-YAX86_FILE_PRIVATE void YCPUWriteByteToPort(
+Y_FILE_PRIVATE void YCPUWriteByteToPort(
     YCPUState* cpu, uint16_t port, YCPUOperandValue value) {
   if (!cpu->config.write_port) {
     return;
@@ -72,7 +72,7 @@ YAX86_FILE_PRIVATE void YCPUWriteByteToPort(
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
 // consecutive ports.
-YAX86_FILE_PRIVATE void YCPUWriteWordToPort(
+Y_FILE_PRIVATE void YCPUWriteWordToPort(
     YCPUState* cpu, uint16_t port, YCPUOperandValue value) {
   uint32_t raw_value = YCPUFromOperandValue(value);
   YCPUWriteByteToPort(cpu, port, (YCPUOperandValue)(raw_value & 0xFF));
@@ -81,14 +81,14 @@ YAX86_FILE_PRIVATE void YCPUWriteWordToPort(
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
-YAX86_FILE_PRIVATE void (*const YCPUWriteToPortFns[])(
+Y_FILE_PRIVATE void (*const YCPUWriteToPortFns[])(
     YCPUState*, uint16_t, YCPUOperandValue) = {
     YCPUWriteByteToPort,  // Y_CPU_BYTE
     YCPUWriteWordToPort,  // Y_CPU_WORD
 };
 
 // Common logic for OUT instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperand src;
   YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &src);
@@ -98,7 +98,7 @@ YCPUExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
 
 // OUT imm8, AL
 // OUT imm8, AX
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteOutImmediate(const YCPUInstructionContext* ctx) {
   YCPUOperandValue port = YCPUReadImmediateOperandByte(ctx->instruction);
   return YCPUExecuteOut(ctx, YCPUFromOperandValue(port));
@@ -106,7 +106,7 @@ YCPUExecuteOutImmediate(const YCPUInstructionContext* ctx) {
 
 // OUT DX, AL
 // OUT DX, AX
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteOutDX(const YCPUInstructionContext* ctx) {
   return YCPUExecuteOut(ctx, ctx->cpu->registers[Y_CPU_DX]);
 }

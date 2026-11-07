@@ -1,15 +1,15 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // ============================================================================
 // Boolean AND, OR and XOR instructions
 // ============================================================================
 
-YAX86_MODULE_PRIVATE void YCPUSetFlagsAfterBooleanInstruction(
+Y_MODULE_PRIVATE void YCPUSetFlagsAfterBooleanInstruction(
     const YCPUInstructionContext* ctx, uint32_t result) {
   YCPUSetCommonFlagsAfterInstruction(ctx, result);
   // Carry Flag (CF) should be cleared
@@ -19,7 +19,7 @@ YAX86_MODULE_PRIVATE void YCPUSetFlagsAfterBooleanInstruction(
 }
 
 // Common logic for AND instructions.
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanAnd(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanAnd(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   uint32_t result = YCPUFromOperand(dest) & YCPUFromOperandValue(src_value);
@@ -30,7 +30,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanAnd(
 
 // AND r/m8, r8
 // AND r/m16, r16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanAndRegisterToRegisterOrMemory(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -42,7 +42,7 @@ YCPUExecuteBooleanAndRegisterToRegisterOrMemory(
 
 // AND r8, r/m8
 // AND r16, r/m16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanAndRegisterOrMemoryToRegister(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -54,7 +54,7 @@ YCPUExecuteBooleanAndRegisterOrMemoryToRegister(
 
 // AND AL, imm8
 // AND AX, imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanAndImmediateToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
@@ -63,7 +63,7 @@ YCPUExecuteBooleanAndImmediateToALOrAX(const YCPUInstructionContext* ctx) {
 }
 
 // Common logic for OR instructions.
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanOr(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanOr(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   uint32_t result = YCPUFromOperand(dest) | YCPUFromOperandValue(src_value);
@@ -74,7 +74,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanOr(
 
 // OR r/m8, r8
 // OR r/m16, r16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanOrRegisterToRegisterOrMemory(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -86,7 +86,7 @@ YCPUExecuteBooleanOrRegisterToRegisterOrMemory(
 
 // OR r8, r/m8
 // OR r16, r/m16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanOrRegisterOrMemoryToRegister(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -98,7 +98,7 @@ YCPUExecuteBooleanOrRegisterOrMemoryToRegister(
 
 // OR AL, imm8
 // OR AX, imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanOrImmediateToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
@@ -107,7 +107,7 @@ YCPUExecuteBooleanOrImmediateToALOrAX(const YCPUInstructionContext* ctx) {
 }
 
 // Common logic for XOR instructions.
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanXor(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanXor(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   uint32_t result = YCPUFromOperand(dest) ^ YCPUFromOperandValue(src_value);
@@ -118,7 +118,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteBooleanXor(
 
 // XOR r/m8, r8
 // XOR r/m16, r16
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteBooleanXorRegisterToRegisterOrMemory(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -130,7 +130,7 @@ YCPUExecuteBooleanXorRegisterToRegisterOrMemory(
 
 // XOR r8, r/m8
 // XOR r16, r/m16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanXorRegisterOrMemoryToRegister(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -142,7 +142,7 @@ YCPUExecuteBooleanXorRegisterOrMemoryToRegister(
 
 // XOR AL, imm8
 // XOR AX, imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteBooleanXorImmediateToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
@@ -155,7 +155,7 @@ YCPUExecuteBooleanXorImmediateToALOrAX(const YCPUInstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for TEST instructions.
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteTest(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteTest(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   uint32_t result = YCPUFromOperand(dest) & YCPUFromOperandValue(src_value);
@@ -165,7 +165,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteTest(
 
 // TEST r/m8, r8
 // TEST r/m16, r16
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteTestRegisterToRegisterOrMemory(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
@@ -176,7 +176,7 @@ YCPUExecuteTestRegisterToRegisterOrMemory(const YCPUInstructionContext* ctx) {
 
 // TEST AL, imm8
 // TEST AX, imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteTestImmediateToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);

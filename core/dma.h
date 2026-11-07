@@ -2,8 +2,8 @@
 // YAX86 DMA MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef YAX86_DMA_BUNDLE_H
-#define YAX86_DMA_BUNDLE_H
+#ifndef Y_DMA_BUNDLE_H
+#define Y_DMA_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,16 +14,16 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef YAX86_UTIL_COMMON_H
-#define YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
+#define Y_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
-#define YAX86_PUBLIC
+#define Y_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
 // source file: one copy per translation unit.
-#define YAX86_PUBLIC_HEADER static
+#define Y_PUBLIC_HEADER static
 
 // Visible to other files within the same module, but not publicly to users of
 // the bundled library.
@@ -31,28 +31,28 @@ extern "C" {
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_MODULE_PRIVATE static
+#define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_MODULE_PRIVATE
-#endif  // YAX86_IMPLEMENTATION
+#define Y_MODULE_PRIVATE
+#endif  // Y_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
 // utilities (like snprintf) that are included into multiple module bundles.
-#define YAX86_MODULE_PRIVATE_HEADER static
+#define Y_MODULE_PRIVATE_HEADER static
 
 // Visible only within the source file that defines it.
-#define YAX86_FILE_PRIVATE static
+#define Y_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_UNUSED __attribute__((unused))
+#define Y_UNUSED __attribute__((unused))
 #else
-#define YAX86_UNUSED
+#define Y_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function out of line.
@@ -61,25 +61,25 @@ extern "C" {
 // with few registers, folding a large callee into an already register-hungry
 // caller makes both spill.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_NOINLINE __attribute__((noinline))
+#define Y_NOINLINE __attribute__((noinline))
 #else
-#define YAX86_NOINLINE
+#define Y_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function inlined.
 //
-// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// Like Y_NOINLINE, only worth reaching for against a measurement. The case
 // it exists for is a small helper on the hot path that the compiler inlines
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(YAX86_IMPLEMENTATION)
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#if !defined(Y_IMPLEMENTATION)
+#define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 #else
-#define YAX86_ALWAYS_INLINE inline
+#define Y_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -91,20 +91,20 @@ extern "C" {
 // path in SRAM instead takes that cache out of the picture.
 //
 // Define it before including this header, or on the command line.
-#ifndef YAX86_HOT
-#define YAX86_HOT
-#endif  // YAX86_HOT
+#ifndef Y_HOT
+#define Y_HOT
+#endif  // Y_HOT
 
 // The same, for data rather than code.
 //
-// Separate from YAX86_HOT because a compiler will not put executable code and
+// Separate from Y_HOT because a compiler will not put executable code and
 // read-only data in one section, and because a target may well want to place
 // them differently even where it could.
-#ifndef YAX86_HOT_DATA
-#define YAX86_HOT_DATA
-#endif  // YAX86_HOT_DATA
+#ifndef Y_HOT_DATA
+#define Y_HOT_DATA
+#endif  // Y_HOT_DATA
 
-#endif  // YAX86_UTIL_COMMON_H
+#endif  // Y_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -116,17 +116,17 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/snprintf.h"
-#ifndef YAX86_UTIL_SNPRINTF_H
-#define YAX86_UTIL_SNPRINTF_H
+#ifndef Y_UTIL_SNPRINTF_H
+#define Y_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
 #include "common.h"
-#endif  // YAX86_UTIL_COMMON_H
+#endif  // Y_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -141,15 +141,15 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
-    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) Y_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
-    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
+    char* buffer, size_t size, const char* format, ...) Y_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t
+Y_MODULE_PRIVATE_HEADER size_t
 YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
@@ -158,7 +158,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -179,7 +179,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
@@ -231,7 +231,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
@@ -382,7 +382,7 @@ YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -391,7 +391,7 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_SNPRINTF_H
 
 
 // ==============================================================================
@@ -410,8 +410,8 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef YAX86_UTIL_LOG_H
-#define YAX86_UTIL_LOG_H
+#ifndef Y_UTIL_LOG_H
+#define Y_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -419,14 +419,14 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 #include <stdint.h>
 
 // Sibling includes are guarded by the target's own include guard rather than
-// by YAX86_IMPLEMENTATION, so that this header works both on its own and when
+// by Y_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
 #include "common.h"
-#endif  // YAX86_UTIL_COMMON_H
-#ifndef YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_COMMON_H
+#ifndef Y_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -466,7 +466,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
+Y_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -510,7 +510,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void YLoggerInit(
+Y_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void YLoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
+Y_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
+Y_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= YLogModuleMask(module);
@@ -536,23 +536,23 @@ YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
+Y_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
+// Format and emit a log message. Prefer the Y_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
-    const char* format, ...) YAX86_UNUSED;
+    const char* format, ...) Y_UNUSED;
 
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
-  // Callers normally go through YAX86_LOG, which has already checked this, but
+  // Callers normally go through Y_LOG, which has already checked this, but
   // YLoggerWrite is also callable directly.
   if (!YLoggerIsEnabled(logger, module, level)) {
     return;
@@ -585,14 +585,14 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                 \
+#define Y_LOG(logger, module, level, ...)                     \
   do {                                                        \
     if (YLoggerIsEnabled((logger), (module), (level))) {      \
       YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
     }                                                         \
   } while (0)
 
-#endif  // YAX86_UTIL_LOG_H
+#endif  // Y_UTIL_LOG_H
 
 
 // ==============================================================================
@@ -605,8 +605,8 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 
 #line 1 "./src/dma/public.h"
 // Public interface for the DMA (Direct Memory Access) module.
-#ifndef YAX86_DMA_PUBLIC_H
-#define YAX86_DMA_PUBLIC_H
+#ifndef Y_DMA_PUBLIC_H
+#define Y_DMA_PUBLIC_H
 
 // This module emulates the Intel 8237 DMA controller used in the IBM PC/XT.
 // The DMA controller allows peripherals to transfer data directly to and from
@@ -631,9 +631,9 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_DMA_BUNDLE_H
+#ifndef Y_DMA_BUNDLE_H
 #include "../util/log.h"
-#endif  // YAX86_DMA_BUNDLE_H
+#endif  // Y_DMA_BUNDLE_H
 
 enum {
   // Log module ID for the DMA.
@@ -641,7 +641,7 @@ enum {
 };
 
 // Log module for the DMA.
-YAX86_PUBLIC_HEADER const YLogModule YDMALogModule = {
+Y_PUBLIC_HEADER const YLogModule YDMALogModule = {
     .id = Y_DMA_LOG_MODULE_ID,
     .name = "DMA",
 };
@@ -815,20 +815,20 @@ typedef struct YDMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-YAX86_PUBLIC void YDMAInit(YDMAState* dma);
+Y_PUBLIC void YDMAInit(YDMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
-YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port);
+Y_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port);
 
 // Handles writes to the DMA's I/O ports.
-YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
+Y_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
 
 // Executes a single-byte transfer for the specified channel. This function
 // should be called by the platform in response to a DREQ signal from a
 // peripheral.
-YAX86_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
+Y_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
 
-#endif  // YAX86_DMA_PUBLIC_H
+#endif  // Y_DMA_PUBLIC_H
 
 
 // ==============================================================================
@@ -836,27 +836,27 @@ YAX86_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
 // ==============================================================================
 
 
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 
 // ==============================================================================
 // src/dma/dma.c start
 // ==============================================================================
 
 #line 1 "./src/dma/dma.c"
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "public.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
-#define YAX86_DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)
+#define Y_DMA_LOG(level, ...) \
+  Y_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)
 
-YAX86_PUBLIC void YDMAInit(YDMAState* dma) {
+Y_PUBLIC void YDMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
 
 // Helper to read a 16-bit value byte-by-byte using the flip-flop.
-YAX86_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
+Y_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
     YDMAState* dma, uint16_t value) {
   uint8_t byte;
   if (dma->rw_byte == Y_DMA_REGISTER_MSB) {
@@ -869,7 +869,7 @@ YAX86_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
   return byte;
 }
 
-YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
+Y_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case Y_DMA_PORT_CHANNEL0_ADDRESS:
@@ -903,7 +903,7 @@ YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
 
 // Helper to write a 16-bit value byte-by-byte using the flip-flop.
 // Note: Writes update both the 'base' and 'current' registers.
-YAX86_FILE_PRIVATE inline void YDMAWriteRegisterByte(
+Y_FILE_PRIVATE inline void YDMAWriteRegisterByte(
     YDMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
   if (dma->rw_byte == Y_DMA_REGISTER_MSB) {
     // Second write sets the high byte.
@@ -918,7 +918,7 @@ YAX86_FILE_PRIVATE inline void YDMAWriteRegisterByte(
   *current_reg = *base_reg;
 }
 
-YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
+Y_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case Y_DMA_PORT_CHANNEL0_ADDRESS:
@@ -964,7 +964,7 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
         // Unmasking is the point at which a channel becomes live, so the
         // address, count and page registers are final here.
         const YDMAChannelState* channel = &dma->channels[channel_index];
-        YAX86_DMA_LOG(
+        Y_DMA_LOG(
             Y_LOG_LEVEL_DEBUG,
             "channel %d enabled: address %02X:%04X count %04X mode %02X",
             channel_index, channel->page_register, channel->current_address,
@@ -1021,8 +1021,7 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
-    YDMAState* dma, uint8_t channel_index) {
+Y_PUBLIC Y_HOT void YDMATransferByte(YDMAState* dma, uint8_t channel_index) {
   if (channel_index >= Y_DMA_NUM_CHANNELS) {
     return;
   }
@@ -1100,11 +1099,11 @@ YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
 // ==============================================================================
 
 
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // YAX86_DMA_BUNDLE_H
+#endif  // Y_DMA_BUNDLE_H
 

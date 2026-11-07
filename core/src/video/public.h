@@ -1,15 +1,15 @@
 // Public interface for the Video module.
-#ifndef YAX86_VIDEO_PUBLIC_H
-#define YAX86_VIDEO_PUBLIC_H
+#ifndef Y_VIDEO_PUBLIC_H
+#define Y_VIDEO_PUBLIC_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef YAX86_VIDEO_BUNDLE_H
+#ifndef Y_VIDEO_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // YAX86_VIDEO_BUNDLE_H
+#endif  // Y_VIDEO_BUNDLE_H
 
 enum {
   // Log module ID for the Video.
@@ -17,7 +17,7 @@ enum {
 };
 
 // Log module for the Video.
-YAX86_PUBLIC_HEADER const YLogModule YVideoLogModule = {
+Y_PUBLIC_HEADER const YLogModule YVideoLogModule = {
     .id = Y_VIDEO_LOG_MODULE_ID,
     .name = "VIDEO",
 };
@@ -423,7 +423,7 @@ enum {
 // ============================================================================
 
 // Metadata for each video mode, indexed by mode number.
-YAX86_PUBLIC_HEADER const YVideoModeMetadata
+Y_PUBLIC_HEADER const YVideoModeMetadata
     YVideoModeMetadataTable[Y_VIDEO_NUM_MODES] = {
         // 0x00: CGA text, 40x25, color burst off
         {
@@ -574,7 +574,7 @@ typedef struct YVideoAdapterMetadata {
 // line at 16.257MHz over 370 lines, which is 259 cycles per line and just under
 // 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
 // 304 cycles per line and just under 60Hz.
-YAX86_PUBLIC_HEADER const YVideoAdapterMetadata
+Y_PUBLIC_HEADER const YVideoAdapterMetadata
     YVideoAdapterMetadataTable[Y_VIDEO_NUM_ADAPTERS] = {
         // MDA
         {
@@ -733,7 +733,7 @@ typedef struct YVideoConfig {
 } YVideoConfig;
 
 // Default video config.
-YAX86_PUBLIC_HEADER const YVideoConfig YVideoDefaultConfig = {
+Y_PUBLIC_HEADER const YVideoConfig YVideoDefaultConfig = {
     .context = NULL,
 
     .adapter = Y_VIDEO_ADAPTER_MDA,
@@ -803,29 +803,28 @@ typedef struct YVideoState {
 } YVideoState;
 
 // Initialize video state with the provided configuration.
-YAX86_PUBLIC void YVideoInit(YVideoState* video);
+Y_PUBLIC void YVideoInit(YVideoState* video);
 
 // Metadata for the adapter being emulated.
-YAX86_PUBLIC const YVideoAdapterMetadata* YVideoGetAdapterMetadata(
+Y_PUBLIC const YVideoAdapterMetadata* YVideoGetAdapterMetadata(
     const YVideoState* video);
 
 // The current video mode, derived from the mode control register.
-YAX86_PUBLIC YVideoMode YVideoGetMode(const YVideoState* video);
+Y_PUBLIC YVideoMode YVideoGetMode(const YVideoState* video);
 
 // Metadata for the current video mode.
-YAX86_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
+Y_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video);
 
 // Read a byte from a video I/O port.
-YAX86_PUBLIC uint8_t YVideoReadPort(YVideoState* video, uint16_t port);
+Y_PUBLIC uint8_t YVideoReadPort(YVideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-YAX86_PUBLIC void YVideoWritePort(
-    YVideoState* video, uint16_t port, uint8_t value);
+Y_PUBLIC void YVideoWritePort(YVideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
-YAX86_PUBLIC uint8_t YVideoReadVRAM(YVideoState* video, uint32_t address);
+Y_PUBLIC uint8_t YVideoReadVRAM(YVideoState* video, uint32_t address);
 // Write a byte to video RAM.
-YAX86_PUBLIC void YVideoWriteVRAM(
+Y_PUBLIC void YVideoWriteVRAM(
     YVideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
@@ -834,12 +833,12 @@ YAX86_PUBLIC void YVideoWriteVRAM(
 // The cost does not depend on how many cycles are passed, so a caller that
 // advances the beam only when something is about to look at it may pass a
 // whole frame's worth at once.
-YAX86_PUBLIC void YVideoTick(YVideoState* video, uint32_t cycles);
+Y_PUBLIC void YVideoTick(YVideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
 // write_pixels in row-major horizontal spans. Does nothing when the display is
 // unchanged.
-YAX86_PUBLIC void YVideoRender(YVideoState* video);
+Y_PUBLIC void YVideoRender(YVideoState* video);
 
-#endif  // YAX86_VIDEO_PUBLIC_H
+#endif  // Y_VIDEO_PUBLIC_H

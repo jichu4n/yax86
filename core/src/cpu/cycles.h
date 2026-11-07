@@ -1,11 +1,11 @@
-#ifndef YAX86_CPU_CYCLES_H
-#define YAX86_CPU_CYCLES_H
+#ifndef Y_CPU_CYCLES_H
+#define Y_CPU_CYCLES_H
 
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 enum {
   // What a tick costs while the CPU is halted. It is waiting for an interrupt
@@ -23,10 +23,10 @@ enum {
 };
 
 // Cycles to compute the effective address of a ModR/M memory operand.
-YAX86_MODULE_PRIVATE uint8_t
+Y_MODULE_PRIVATE uint8_t
 YCPUGetEffectiveAddressCycles(const YCPUInstruction* instruction);
 
 // Charge the instruction currently executing for time on the data bus.
-YAX86_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes);
+Y_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes);
 
-#endif  // YAX86_CPU_CYCLES_H
+#endif  // Y_CPU_CYCLES_H

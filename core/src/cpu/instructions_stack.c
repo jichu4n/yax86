@@ -1,16 +1,16 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // ============================================================================
 // PUSH and POP instructions
 // ============================================================================
 
 // PUSH AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecutePushRegister(const YCPUInstructionContext* ctx) {
   YCPURegisterIndex register_index =
       (YCPURegisterIndex)(ctx->instruction->opcode - 0x50);
@@ -21,7 +21,7 @@ YCPUExecutePushRegister(const YCPUInstructionContext* ctx) {
 }
 
 // POP AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecutePopRegister(const YCPUInstructionContext* ctx) {
   YCPURegisterIndex register_index =
       (YCPURegisterIndex)(ctx->instruction->opcode - 0x58);
@@ -33,7 +33,7 @@ YCPUExecutePopRegister(const YCPUInstructionContext* ctx) {
 }
 
 // PUSH ES/CS/SS/DS
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecutePushSegmentRegister(const YCPUInstructionContext* ctx) {
   YCPURegisterIndex register_index =
       (YCPURegisterIndex)(((ctx->instruction->opcode >> 3) & 0x03) + 8);
@@ -44,7 +44,7 @@ YCPUExecutePushSegmentRegister(const YCPUInstructionContext* ctx) {
 }
 
 // POP ES/CS/SS/DS
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecutePopSegmentRegister(const YCPUInstructionContext* ctx) {
   // The segment register field is only two bits wide, which is what makes
   // 0x0F decode as POP CS on the 8086/8088. Popping into CS is legal there -
@@ -59,14 +59,14 @@ YCPUExecutePopSegmentRegister(const YCPUInstructionContext* ctx) {
 }
 
 // PUSHF
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecutePushFlags(const YCPUInstructionContext* ctx) {
   YCPUPushValue(ctx->cpu, ctx->cpu->flags);
   return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // POPF
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecutePopFlags(const YCPUInstructionContext* ctx) {
   YCPUOperandValue value = YCPUPop(ctx->cpu);
   ctx->cpu->flags = YCPUToFlagsRegisterValue(YCPUFromOperandValue(value));
@@ -74,7 +74,7 @@ YCPUExecutePopFlags(const YCPUInstructionContext* ctx) {
 }
 
 // POP r/m16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecutePopRegisterOrMemory(const YCPUInstructionContext* ctx) {
   // The 8086/8088 does not decode the REG field of 0x8F at all, so every value
   // pops. Only REG 0 is documented.
@@ -92,7 +92,7 @@ YCPUExecutePopRegisterOrMemory(const YCPUInstructionContext* ctx) {
 // ============================================================================
 
 // Returns the AH register address.
-YAX86_FILE_PRIVATE const YCPUOperandAddress* YCPUGetAHRegisterAddress(void) {
+Y_FILE_PRIVATE const YCPUOperandAddress* YCPUGetAHRegisterAddress(void) {
   static YCPUOperandAddress ah = {
       .type = Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER,
       .register_index = Y_CPU_AX,
@@ -102,7 +102,7 @@ YAX86_FILE_PRIVATE const YCPUOperandAddress* YCPUGetAHRegisterAddress(void) {
 }
 
 // LAHF
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoadAHFromFlags(const YCPUInstructionContext* ctx) {
   YCPUWriteRegisterOperandByte(
       ctx->cpu, YCPUGetAHRegisterAddress(),
@@ -111,7 +111,7 @@ YCPUExecuteLoadAHFromFlags(const YCPUInstructionContext* ctx) {
 }
 
 // SAHF
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteStoreAHToFlags(const YCPUInstructionContext* ctx) {
   YCPUOperandValue value =
       YCPUReadRegisterOperandByte(ctx->cpu, YCPUGetAHRegisterAddress());

@@ -9,7 +9,7 @@
 
 #include "pico.h"
 
-#define YAX86_HOT __not_in_flash("yax86_code")
-#define YAX86_HOT_DATA __not_in_flash("yax86_data")
+#define Y_HOT __not_in_flash("yax86_code")
+#define Y_HOT_DATA __not_in_flash("yax86_data")
 
 #endif  // YAX86_PICO_HOT_H

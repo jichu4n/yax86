@@ -1,16 +1,16 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // ============================================================================
 // LEA instruction
 // ============================================================================
 
 // LEA r16, m
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoadEffectiveAddress(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperand(ctx, &dest);
@@ -29,7 +29,7 @@ YCPUExecuteLoadEffectiveAddress(const YCPUInstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for LES and LDS instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteLoadSegmentWithPointer(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteLoadSegmentWithPointer(
     const YCPUInstructionContext* ctx,
     YCPURegisterIndex segment_register_index) {
   YCPUOperand destRegister;
@@ -58,13 +58,13 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteLoadSegmentWithPointer(
 }
 
 // LES r16, m
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoadESWithPointer(const YCPUInstructionContext* ctx) {
   return YCPUExecuteLoadSegmentWithPointer(ctx, Y_CPU_ES);
 }
 
 // LDS r16, m
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoadDSWithPointer(const YCPUInstructionContext* ctx) {
   return YCPUExecuteLoadSegmentWithPointer(ctx, Y_CPU_DS);
 }

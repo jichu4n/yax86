@@ -1,15 +1,15 @@
 // Public interface for the Platform module.
-#ifndef YAX86_PLATFORM_PUBLIC_H
-#define YAX86_PLATFORM_PUBLIC_H
+#ifndef Y_PLATFORM_PUBLIC_H
+#define Y_PLATFORM_PUBLIC_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef YAX86_PLATFORM_BUNDLE_H
+#ifndef Y_PLATFORM_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // YAX86_PLATFORM_BUNDLE_H
+#endif  // Y_PLATFORM_BUNDLE_H
 
 enum {
   // Log module ID for the Platform.
@@ -17,7 +17,7 @@ enum {
 };
 
 // Log module for the Platform.
-YAX86_PUBLIC_HEADER const YLogModule YPlatformLogModule = {
+Y_PUBLIC_HEADER const YLogModule YPlatformLogModule = {
     .id = Y_PLATFORM_LOG_MODULE_ID,
     .name = "PLATFORM",
 };
@@ -155,19 +155,19 @@ typedef struct YPlatformMemoryMapEntry {
 // that was unmapped at the time and so read as open bus - which no page
 // generation catches, because nothing was written. YPlatformInit() registers
 // every region the machine has and updates once at the end.
-YAX86_PUBLIC bool YPlatformRegisterMemoryMapEntry(
+Y_PUBLIC bool YPlatformRegisterMemoryMapEntry(
     struct YPlatformState* platform, const YPlatformMemoryMapEntry* entry);
 // Discard what the CPU derives from the memory map: its instruction fetch
 // window, its direct data window and its decode cache.
-YAX86_PUBLIC void YPlatformUpdateAfterMemoryMapChange(
+Y_PUBLIC void YPlatformUpdateAfterMemoryMapChange(
     struct YPlatformState* platform);
 // Look up the memory map entry corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory map entry.
-YAX86_PUBLIC YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryForAddress(
+Y_PUBLIC YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryForAddress(
     struct YPlatformState* platform, uint32_t address);
 // Look up a memory map entry by type. Returns NULL if no entry found with the
 // specified type.
-YAX86_PUBLIC YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryByType(
+Y_PUBLIC YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryByType(
     struct YPlatformState* platform, YPlatformMemoryMapEntryType entry_type);
 
 // Read a byte from a logical memory address, either directly from the
@@ -176,12 +176,12 @@ YAX86_PUBLIC YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryByType(
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-YAX86_PUBLIC uint8_t
+Y_PUBLIC uint8_t
 YPlatformReadMemoryByte(struct YPlatformState* platform, uint32_t address);
 // Read a word from a logical memory address, either directly from the
 // corresponding memory map entry's read_data buffer or via its read_byte_fn
 // callback.
-YAX86_PUBLIC uint16_t
+Y_PUBLIC uint16_t
 YPlatformReadMemoryWord(struct YPlatformState* platform, uint32_t address);
 // Write a byte to a logical memory address, either directly to the
 // corresponding memory map entry's write_data buffer or via its
@@ -189,7 +189,7 @@ YPlatformReadMemoryWord(struct YPlatformState* platform, uint32_t address);
 //
 // On the 8086, accessing an invalid memory address will yield garbage data
 // rather than causing a page fault. This interface mirrors that behavior.
-YAX86_PUBLIC void YPlatformWriteMemoryByte(
+Y_PUBLIC void YPlatformWriteMemoryByte(
     struct YPlatformState* platform, uint32_t address, uint8_t value);
 
 // ============================================================================
@@ -243,24 +243,24 @@ typedef struct YPlatformPortMapEntry {
 // entry was successfully registered, or false if:
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
-YAX86_PUBLIC bool YPlatformRegisterPortMapEntry(
+Y_PUBLIC bool YPlatformRegisterPortMapEntry(
     struct YPlatformState* platform, const YPlatformPortMapEntry* entry);
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-YAX86_PUBLIC YPlatformPortMapEntry* YPlatformGetPortMapEntryForPort(
+Y_PUBLIC YPlatformPortMapEntry* YPlatformGetPortMapEntryForPort(
     struct YPlatformState* platform, uint16_t port);
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-YAX86_PUBLIC YPlatformPortMapEntry* YPlatformGetPortMapEntryByType(
+Y_PUBLIC YPlatformPortMapEntry* YPlatformGetPortMapEntryByType(
     struct YPlatformState* platform, YPlatformPortMapEntryType entry_type);
 
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
-YAX86_PUBLIC uint8_t
+Y_PUBLIC uint8_t
 YPlatformReadPortByte(struct YPlatformState* platform, uint16_t port);
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
-YAX86_PUBLIC void YPlatformWritePortByte(
+Y_PUBLIC void YPlatformWritePortByte(
     struct YPlatformState* platform, uint16_t port, uint8_t value);
 
 // ============================================================================
@@ -367,10 +367,10 @@ typedef struct YPlatformConfig {
   bool enable_dos_idle_skip;
 } YPlatformConfig;
 
-STATIC_VECTOR_TYPE(
+Y_STATIC_VECTOR_TYPE(
     YPlatformMemoryMap, YPlatformMemoryMapEntry,
     Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES)
-STATIC_VECTOR_TYPE(
+Y_STATIC_VECTOR_TYPE(
     YPlatformPortMap, YPlatformPortMapEntry, Y_PLATFORM_MAX_PORT_MAP_ENTRIES)
 
 // State of the platform.
@@ -483,11 +483,11 @@ typedef struct YPlatformState {
 // config first. Nothing here zeroes anything: every module's state is a field
 // of this one, so the caller's single zeroing covers all of them, and each
 // module's init sets only what wants a non-zero value.
-YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform);
+Y_PUBLIC bool YPlatformInit(YPlatformState* platform);
 
 // Raise a hardware interrupt to the CPU via the PIC. Returns true if the
 // IRQ was successfully raised, or false if the IRQ number is invalid.
-YAX86_PUBLIC bool YPlatformRaiseIRQ(YPlatformState* platform, uint8_t irq);
+Y_PUBLIC bool YPlatformRaiseIRQ(YPlatformState* platform, uint8_t irq);
 
 // Execute one instruction, and bring any device whose deadline has come due up
 // to date with the cycles it took.
@@ -503,7 +503,7 @@ YAX86_PUBLIC bool YPlatformRaiseIRQ(YPlatformState* platform, uint8_t irq);
 // the CPU itself. YPlatformRun() batches instructions into a tick instead.
 //
 // Returns Y_PLATFORM_RUNNING if the machine should keep running.
-YAX86_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
+Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 
 // Run up to max_ticks cycles of the platform, stopping early if a tick returns
 // anything other than Y_PLATFORM_RUNNING. Returns the status of the tick that
@@ -522,7 +522,7 @@ YAX86_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 // reached, because the difference wraps to zero first. A budget of a display
 // frame or so, which is what a host driving the machine in real time passes,
 // is nowhere near this.
-YAX86_PUBLIC YPlatformRunStatus
+Y_PUBLIC YPlatformRunStatus
 YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
 
 // Bring every device up to date with the cycles that have run so far.
@@ -533,6 +533,6 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
 // needs it before inspecting a device directly - most usefully before
 // YVideoRender(), so that the frame reflects where the CRT beam has actually
 // reached.
-YAX86_PUBLIC void YPlatformSync(YPlatformState* platform);
+Y_PUBLIC void YPlatformSync(YPlatformState* platform);
 
-#endif  // YAX86_PLATFORM_PUBLIC_H
+#endif  // Y_PLATFORM_PUBLIC_H

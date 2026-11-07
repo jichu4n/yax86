@@ -117,7 +117,7 @@ reason `-Os` is not benchmarked: nothing ships at it.
 
 The library ships as a single bundled translation unit, which is also the only
 configuration CMake builds. The unbundled form — compiling each source file in
-`core/src` independently — is what `YAX86_MODULE_PRIVATE`'s second arm and the
+`core/src` independently — is what `Y_MODULE_PRIVATE`'s second arm and the
 file-local convention both rest on, and nothing else builds it.
 
 `tools/check-unbundled.sh` runs `$CC -std=c99 -fsyntax-only` over every source
@@ -153,8 +153,8 @@ symbols against `core/public_symbols.txt`.
 **An unannotated definition that leaks into the public namespace is what it
 exists to catch.** In C, a file-scope function or variable defined without
 `static` has external linkage by default. Because the library is compiled as a
-single bundle, a helper defined without `YAX86_FILE_PRIVATE` or
-`YAX86_MODULE_PRIVATE` compiles cleanly and passes all tests, but silently
+single bundle, a helper defined without `Y_FILE_PRIVATE` or
+`Y_MODULE_PRIVATE` compiles cleanly and passes all tests, but silently
 pollutes the symbol table of any host application linking against
 `libyax86_core.a`.
 
@@ -193,22 +193,6 @@ system headers define. clang's JSON reports physical locations, so the owner is
 recovered from the bundle's `#line` directives. It needs `clang` whatever `CC`
 is, since only clang dumps an AST, and fails saying so rather than skipping
 when there is none.
-
-While `core/rename_map.txt` exists, the names in its second column are exempt.
-That file is the list of names that predate the rule, and shrinks as they are
-renamed:
-
-```sh
-tools/apply-rename-map.js <kind>    # apply one kind of the map, and delete it
-tools/generate-rename-map.js        # regenerate the map from the bundle
-tools/generate-rename-map.js --check
-```
-
-`generate-rename-map.js` is where every naming decision the rule cannot make
-is written down, with its reason, and it refuses to write a map that maps two
-names to one, produces a name the repository already uses, repeats an owner
-without saying it means to, or renames a name a test or a host also defines for
-itself. It reads its names through the same code as the check.
 
 ### Debugging the WASM build
 
@@ -250,7 +234,7 @@ and RAM even when idle.
 - Define structs and enums as `typedef struct Name { ... } Name;` and
   `typedef enum Name { ... } Name;`.
 - Prefix increment and decrement, `++var` and `--var`, not `var++` and `var--`.
-- Annotate unused parameters with `YAX86_UNUSED` from `util/common.h`.
+- Annotate unused parameters with `Y_UNUSED` from `util/common.h`.
 
 ### Naming
 
@@ -311,9 +295,6 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
   collision can only be with a name this project owns. The guide is also
   written for C++, where `enum class` and namespaces scope an enumerator, and C
   has neither.
-- Names that predate the rule are listed in `core/rename_map.txt` with what each
-  becomes, and are exempt from the namespace check until they are renamed. A
-  new name follows the rule; see "The namespace check" above for the tools.
 
 ### Visibility
 
@@ -323,21 +304,21 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
 
   | macro | expands to | for |
   | --- | --- | --- |
-  | `YAX86_PUBLIC` | nothing | public API, defined in a source file |
-  | `YAX86_PUBLIC_HEADER` | `static` | public API, defined in a header |
-  | `YAX86_MODULE_PRIVATE` | `static` bundled, nothing unbundled | shared between a module's source files |
-  | `YAX86_MODULE_PRIVATE_HEADER` | `static` | module-private, defined in a header |
-  | `YAX86_FILE_PRIVATE` | `static` | used only in the file that defines it |
+  | `Y_PUBLIC` | nothing | public API, defined in a source file |
+  | `Y_PUBLIC_HEADER` | `static` | public API, defined in a header |
+  | `Y_MODULE_PRIVATE` | `static` bundled, nothing unbundled | shared between a module's source files |
+  | `Y_MODULE_PRIVATE_HEADER` | `static` | module-private, defined in a header |
+  | `Y_FILE_PRIVATE` | `static` | used only in the file that defines it |
 
 - **The macro names the tier and nothing else.** `inline`, `const` and the
   return type are written out after it, exactly as they would be without it:
-  `YAX86_PUBLIC_HEADER inline bool YCPUGetFlag(...)`, `YAX86_FILE_PRIVATE const
+  `Y_PUBLIC_HEADER inline bool YCPUGetFlag(...)`, `Y_FILE_PRIVATE const
   YCPUFlag YCPUFlagsForClearAndSetInstructions[]`. Folding a keyword into a
   macro name needs one macro per tier per declaration shape, and the shapes do
   not stop at `inline` - a header-defined public function that is not inline has
   nowhere to go in such a scheme, which `YLoggerWrite()` is.
 - A separate macro is warranted where the **expansion** differs, never where a
-  keyword does. That is why `YAX86_PUBLIC` and `YAX86_PUBLIC_HEADER` are two
+  keyword does. That is why `Y_PUBLIC` and `Y_PUBLIC_HEADER` are two
   macros: a definition in a header needs internal linkage and one in a source
   file must not have it.
 - **Public means reachable through the interface, not referenced by a host
@@ -351,7 +332,7 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
   means internal to the whole bundle rather than to its file. It is the marker
   that cannot express which of the tiers above was meant, which is why none of
   them is spelled that way.
-- The one deliberate exception is the macro body of `STATIC_VECTOR_TYPE` in
+- The one deliberate exception is the macro body of `Y_STATIC_VECTOR_TYPE` in
   `util/static_vector.h`, which generates `static` helper functions into
   whichever header or source file instantiates it. Its tier depends on the
   instantiation site, so its functions remain plain `static`.
@@ -359,25 +340,25 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
 ### Placement and inlining marks
 
 - **The visibility macro comes first, then the placement and inlining marks,
-  then the return type**: `YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-  YCPUExecuteSub(...)`, `YAX86_FILE_PRIVATE YAX86_HOT uint8_t ReadByte(...)`.
+  then the return type**: `Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
+  YCPUExecuteSub(...)`, `Y_FILE_PRIVATE Y_HOT uint8_t ReadByte(...)`.
   Every definition carries a visibility macro and only 91 carry a mark, so
   leading with the universal one puts the answer to "is this part of the
-  interface" in the same place on every line, and makes `^YAX86_PUBLIC` an exact
-  count rather than an approximate one. `YAX86_HOT`, `YAX86_NOINLINE` and
-  `YAX86_ALWAYS_INLINE` follow it, in whatever combination applies -
+  interface" in the same place on every line, and makes `^Y_PUBLIC` an exact
+  count rather than an approximate one. `Y_HOT`, `Y_NOINLINE` and
+  `Y_ALWAYS_INLINE` follow it, in whatever combination applies -
   `YCPUExecuteDecodedInstruction()` carries two.
-- Both orders compile, and an attribute behind `static` (or `YAX86_FILE_PRIVATE`,
-  which expands to it) still takes effect: `YAX86_FILE_PRIVATE YAX86_HOT`,
-  `YAX86_FILE_PRIVATE inline YAX86_HOT` and `YAX86_FILE_PRIVATE YAX86_HOT
-  YAX86_NOINLINE` all land in the named section under gcc and clang. Check that
+- Both orders compile, and an attribute behind `static` (or `Y_FILE_PRIVATE`,
+  which expands to it) still takes effect: `Y_FILE_PRIVATE Y_HOT`,
+  `Y_FILE_PRIVATE inline Y_HOT` and `Y_FILE_PRIVATE Y_HOT
+  Y_NOINLINE` all land in the named section under gcc and clang. Check that
   with `objdump -t` at `-O0` rather than at `-O3`, where a small static inlines
   away and its section never appears.
 - `clang-format` will not fix a misplaced mark, and will disguise one. It
   chooses where to break lines and never reorders tokens, so a mark added to
   the start of a *continuation* line — which is where a wrapped signature's
   declarator lives, below its return type — is already mid-declaration.
-  Reformatting rejoins it as `YCPUInstructionResult YAX86_HOT`, which reads as
+  Reformatting rejoins it as `YCPUInstructionResult Y_HOT`, which reads as
   though the mark belonged to the return type and was put there on purpose.
   Put both macros on the line the declaration *starts* on and reformatting
   keeps them there, however it decides to wrap. A displaced visibility macro is
@@ -456,7 +437,9 @@ Alongside the table, state:
   presenting the speedup.
 - **How the baseline was obtained.** Rebuild it from its own commit through
   `YAX86_CORE_ROOT` against the same harness, on the same board, in the same
-  session. A figure recorded in an earlier PR is a cross-check, not a baseline.
+  session, or with its own harness where the names differ - see "Building and
+  running" below. A figure recorded in an earlier PR is a cross-check, not a
+  baseline.
 - **How many runs, and their spread.** Two or three is enough at this noise
   floor.
 - **`core .text`**, since several changes here have won on speed and size at
@@ -544,7 +527,7 @@ Alongside the table, state:
   declaration is guarded by the module's bundle include guard, preventing
   linkage conflicts with the bundle's `static` definition.
 - **Module-private generation is opt-in via `--module`.** `core/CMakeLists.txt`
-  passes `--module <name>`, which marks the array `YAX86_MODULE_PRIVATE`, adds
+  passes `--module <name>`, which marks the array `Y_MODULE_PRIVATE`, adds
   bundle guards, and names both identifiers in the core's namespace: the symbol
   `BIOSROMData` in `bios` gives the array `YBIOSROMData` and its size
   `Y_BIOS_ROM_DATA_SIZE`. The symbol has to begin with the module's owner, and
@@ -808,7 +791,7 @@ Alongside the table, state:
   sites, at which point it stops inlining the decoder and puts it in flash
   behind a veneer. That measures **2.54% slower at `-O2`**, where `-O3` is
   indifferent between the two (0.01%, inside the noise floor). It is the
-  `YAX86_ALWAYS_INLINE` case from the placement section, met by removing the
+  `Y_ALWAYS_INLINE` case from the placement section, met by removing the
   second call site rather than by a mark - and it is why the no-cache path
   joins the cached one at the decode instead of returning early, which is the
   one piece of this function that does not read as the simplest thing.
@@ -854,7 +837,7 @@ Alongside the table, state:
   new test files and by nothing else**; only dropping the address tag is caught
   broadly, by six platform tests as well.
 - `YCPUWriteRawMemoryByte()` is out of line in flash at both levels and now
-  carries the generation bump. `YAX86_HOT` on it is **0.71% worse at `-O3`** and
+  carries the generation bump. `Y_HOT` on it is **0.71% worse at `-O3`** and
   0.68% better at `-O2`, so it is left unmarked: same shape as
   `YCPUReadImmediateOperand()`, and `-O3` is the level that decides.
 
@@ -978,11 +961,11 @@ Alongside the table, state:
   way to reach one. `EveryEntryHasAHandler` in `opcode_table_test.cpp` keeps it
   that way — an entry added later with the field left out would be a call
   through null rather than an invalid instruction.
-- `YCPUExecuteDecodedInstruction()` is `YAX86_NOINLINE`. Inlined into
+- `YCPUExecuteDecodedInstruction()` is `Y_NOINLINE`. Inlined into
   `YCPUTick()` it measures 31% slower on a Cortex-M0+: the execute path wants
   registers, the core has few, and folding the two together makes both spill.
   The effect only exists once the hot path is in SRAM — running from flash, XIP
-  misses dominate and hide it — which is why this and `YAX86_HOT` belong
+  misses dominate and hide it — which is why this and `Y_HOT` belong
   together. Worth 1.84% at `-O3` and 4.58% at `-O2`, the gap being the
   `YCPUTick()`/`YPlatformTick()` marks, which are inert at `-O3`.
 
@@ -1040,11 +1023,11 @@ Alongside the table, state:
   metadata field is read with a single aligned `ldrb` instruction without bit
   shifts or masking.
 - `-Os` loses 1.00% to the tables, and the cause is inlining rather than the
-  `default` arm — marking all six wrappers `YAX86_ALWAYS_INLINE` recovers it,
+  `default` arm — marking all six wrappers `Y_ALWAYS_INLINE` recovers it,
   at 0.26% and 0.06% off `-O3` and `-O2`. The marks are not taken: `-O3` and
   `-O2` are what this target is measured at.
 - `YCPUReadImmediateOperand()` is the one wrapper the compiler still emits out
-  of line, and it lands in flash. `YAX86_HOT` moves it to SRAM and is worth
+  of line, and it lands in flash. `Y_HOT` moves it to SRAM and is worth
   0.11% at `-O3`, but costs 0.35% at `-O2` by moving other inlining decisions,
   so it is left unmarked.
 
@@ -1141,7 +1124,7 @@ Alongside the table, state:
   value - it is already past four before the tag, so the trick that worked for
   `YCPUOperandAddress` is unavailable and an out-parameter is the only move. The
   seven readers take a `YCPUOperand*` as their last argument.
-- **That only pays alongside `YAX86_ALWAYS_INLINE` on `YCPUReadOperandValue()`,
+- **That only pays alongside `Y_ALWAYS_INLINE` on `YCPUReadOperandValue()`,
   and on its own it is a large loss.** Measured against the flat-address
   baseline:
 
@@ -1247,8 +1230,8 @@ Alongside the table, state:
 - **`YCPUPlanBulkStringRun()` is out of line in flash, and is left that way.**
   It has two callers, which is the shape that usually stops GCC inlining a
   helper and costs a veneer on the hot path — but both marks that would change
-  it measure worse or neutral: `YAX86_HOT` is **0.00%** for 296 bytes of SRAM,
-  and `YAX86_ALWAYS_INLINE` is **0.73% slower** while making the core 216 bytes
+  it measure worse or neutral: `Y_HOT` is **0.00%** for 296 bytes of SRAM,
+  and `Y_ALWAYS_INLINE` is **0.73% slower** while making the core 216 bytes
   *smaller*, having grown both handlers enough to move the register allocation
   around them.
 - The reason the mark buys nothing is that the planner runs **once per repeat,
@@ -1408,7 +1391,7 @@ Alongside the table, state:
 - **This loop's arrangement has to be measured against the base it lands on,
   not carried across one.** The two locals naming the instruction for the
   invalid-instruction log are live across the whole loop body, and reporting
-  them from a `YAX86_NOINLINE` helper instead — which reconstructs the address
+  them from a `Y_NOINLINE` helper instead — which reconstructs the address
   as `IP` less the instruction's size — was worth **10.7% at `-O2`** against
   the first version of the decode cache. Against the version that landed the
   same pair is a wash: the helper measures 0.12% better at `-O3` and 0.25%
@@ -1591,7 +1574,7 @@ Alongside the table, state:
 
 ### util — hot path placement
 
-- `YAX86_HOT` marks a function as being on the per-instruction hot path. It is
+- `Y_HOT` marks a function as being on the per-instruction hot path. It is
   empty by default, because on a machine with a normal cache hierarchy there is
   nothing useful to say; a target whose fastest memory has to be chosen
   explicitly defines it to whatever placement attribute it needs. The Pico
@@ -1629,22 +1612,22 @@ Alongside the table, state:
   through by construction. If the count in the bundle ever drops, something is
   wrong with the bundler:
   ```sh
-  grep -c YAX86_HOT core/yax86_core.h    # 170
+  grep -c Y_HOT core/yax86_core.h    # 170
   ```
   That is 86 annotations plus the macro block in `util/common.h`, whose seven
   lines all match on the substring, once for each of the twelve times a
   `bundle.json` names it - every module's public list, and the cpu module's
   private list as well.
-- `YAX86_ALWAYS_INLINE` is not about placement, but exists for the same reason:
+- `Y_ALWAYS_INLINE` is not about placement, but exists for the same reason:
   something the compiler was doing for free stops being free and nothing in the
   source says so. The case it was added for is a small helper with one hot
   caller, inlined into it at every level — until a second caller appears, at
   which point `-Os` and `-O2` emit it out of line for *both* and the hot path
   grows a call it never had. That measured **3.6% at `-O2`**. Marking the
-  helper `YAX86_HOT` instead recovers nothing, which is the tell that the cost
+  helper `Y_HOT` instead recovers nothing, which is the tell that the cost
   is the call itself rather than where it landed.
 - **The macro omits `inline` when unbundled**, and that is load-bearing rather
-  than an oversight. `YAX86_MODULE_PRIVATE` is empty in that configuration, so
+  than an oversight. `Y_MODULE_PRIVATE` is empty in that configuration, so
   a function carrying both has external linkage, and C99 6.7.4p3 forbids an
   `inline` definition with external linkage from referencing an identifier with
   internal linkage - which `YCPUGetRegisterOrMemoryOperandAddress()` does, in
@@ -1657,11 +1640,11 @@ Alongside the table, state:
   Pinning that helper inline made GCC stop inlining the larger
   `YCPUGetMemoryOperandAddress()` into `YCPUReadRegisterOrMemoryOperand()` at
   `-O3`, putting the effective address computation in flash on the hottest path
-  in the emulator — 0.49%, of which marking it `YAX86_HOT` gives back 0.12%. The
+  in the emulator — 0.49%, of which marking it `Y_HOT` gives back 0.12%. The
   residue is the price of the `-O2` win and is worth paying at that ratio; what
   matters is that both halves get measured, because the second one is somewhere
   the change was never made.
-- `YAX86_HOT_DATA` is the same thing for data, and is separate because a
+- `Y_HOT_DATA` is the same thing for data, and is separate because a
   compiler will not put executable code and read-only data in one section — a
   code section attribute on a `const` array is a hard compile error, not a
   warning. The macro is kept so that whoever finds a candidate that pays
@@ -1807,6 +1790,11 @@ git worktree add ~/Scratch/yax86-baseline <commit>
 YAX86_CORE_ROOT=~/Scratch/yax86-baseline ./pico/bench/build.sh O2 O3
 ```
 
+The harness calls the core's public API and defines `Y_HOT` by name, so it
+only builds against a core that uses the same names. A baseline from before
+the core's names moved into the `Y` namespace has to be built from its own
+checkout, harness and all, by running that checkout's `build.sh`.
+
 Notes on the machinery:
 
 - **The serial port must be opened exactly once.** The firmware waits for DTR
@@ -1822,7 +1810,7 @@ Notes on the machinery:
   `build.sh` spells the path out rather than searching, so its `core_text`
   column always refers to the core just built.
 - `src/yax86_hot.h` is force-included into every translation unit, and is where
-  this target defines `YAX86_HOT` to `__not_in_flash()`. Force-included rather
+  this target defines `Y_HOT` to `__not_in_flash()`. Force-included rather
   than included from the core, so that the core knows nothing about this
   target, and inert against a core revision that does not use the mark.
 - The optimization level is applied through `CMAKE_C_FLAGS_RELEASE` rather than
@@ -1863,7 +1851,7 @@ SRAM, at #89:
   to. Build the baseline from its own commit, as above.
 - `-Os` is not reported and nothing ships at it, though `build.sh` still
   accepts it. It is the slowest level here by a wide margin and the one
-  `YAX86_HOT` hurts.
+  `Y_HOT` hurts.
 - **The XIP cache can reorder the optimization levels**, which is the whole
   reason this harness exists: with the core running entirely from flash, `-O2`
   was the slowest of the three and `-Os` beat it by 6%, because the cache

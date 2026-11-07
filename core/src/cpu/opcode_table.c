@@ -1,9 +1,9 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // ============================================================================
 // Opcode table
@@ -18,7 +18,7 @@
 // instruction costs before it runs - cycles.c has the other half and the
 // rules these figures were derived under, which is where to read them
 // against.
-YAX86_MODULE_PRIVATE const YCPUOpcodeMetadata YCPUOpcodeTable[256] = {
+Y_MODULE_PRIVATE const YCPUOpcodeMetadata YCPUOpcodeTable[256] = {
     // ADD r/m8, r8
     {.base_cycles = 3,
      .has_modrm = true,

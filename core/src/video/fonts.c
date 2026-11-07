@@ -1,15 +1,15 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "fonts.h"
 
 #include "../util/common.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // MDA 9x14 font bitmaps. Each character is actually 8x14, with the rightmost
 // column left blank except for block characters.
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-mda-9x14/fontlist.js
-YAX86_MODULE_PRIVATE const uint16_t YVideoFontMDA9x14Bitmap[256][14] = {
+Y_MODULE_PRIVATE const uint16_t YVideoFontMDA9x14Bitmap[256][14] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
      0x00, 0x00},  // [] (0)
     {0x00, 0x00, 0xfc, 0x102, 0x14a, 0x102, 0x102, 0x17a, 0x132, 0x102, 0xfc,
@@ -528,7 +528,7 @@ YAX86_MODULE_PRIVATE const uint16_t YVideoFontMDA9x14Bitmap[256][14] = {
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-cga-8x8/fontlist.js
-YAX86_MODULE_PRIVATE const uint8_t YVideoFontCGA8x8Bitmap[256][8] = {
+Y_MODULE_PRIVATE const uint8_t YVideoFontCGA8x8Bitmap[256][8] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},  // [] (0)
     {0x7e, 0x81, 0xa5, 0x81, 0xbd, 0x99, 0x81, 0x7e},  // [☺] (1)
     {0x7e, 0xff, 0xdb, 0xff, 0xc3, 0xe7, 0xff, 0x7e},  // [☻] (2)

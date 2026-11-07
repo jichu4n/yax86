@@ -14,9 +14,6 @@
 // through the bundle's #line directives, so a name in the namespace of the
 // wrong module fails as well as one in no namespace at all.
 //
-// Names listed in the second column of core/rename_map.txt are exempt while
-// that file exists.
-//
 // Usage: tools/check-namespace.js
 
 const childProcess = require('child_process');
@@ -25,7 +22,6 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const BUNDLE = 'core/yax86_core.h';
-const MAP_FILE = path.join(ROOT, 'core', 'rename_map.txt');
 const CLANG = process.env.CLANG || 'clang';
 
 // Every owner, with the words a CamelCase name in its namespace may begin with
@@ -181,13 +177,13 @@ function ownerOf(presumedFile) {
 // Every top-level name the bundle declares, once each, as {name, kind, owner,
 // pasted}. kind is type, function, object or enum. pasted is set on a
 // function whose name a macro pasted together, which is what
-// STATIC_VECTOR_TYPE does.
+// Y_STATIC_VECTOR_TYPE does.
 function collectDeclarations() {
   const ast = JSON.parse(
     clang([
       '-std=c99',
       '-fsyntax-only',
-      '-DYAX86_IMPLEMENTATION',
+      '-DY_IMPLEMENTATION',
       '-Xclang',
       '-ast-dump=json',
       '-x',
@@ -267,7 +263,7 @@ function collectMacros() {
         .filter(Boolean)
         .map((match) => match[1]),
     );
-  const args = ['-std=c99', '-E', '-dM', '-DYAX86_IMPLEMENTATION', '-x', 'c'];
+  const args = ['-std=c99', '-E', '-dM', '-DY_IMPLEMENTATION', '-x', 'c'];
   const bundle = defined(clang([...args, BUNDLE]));
   const system = defined(
     clang(
@@ -280,7 +276,7 @@ function collectMacros() {
   // Defined by a host rather than by the header, and so by both dumps.
   return [...bundle]
     .filter((name) => !system.has(name))
-    .concat('YAX86_IMPLEMENTATION');
+    .concat('Y_IMPLEMENTATION');
 }
 
 // Why a name breaks the rule for its kind and owner, or null if it does not.
@@ -300,32 +296,17 @@ function ruleBroken(name, kind, owner) {
     : `a ${kind} of ${owner} is Y${owner} then CamelCase`;
 }
 
-// The old names core/rename_map.txt still lists.
-function exemptions() {
-  if (!fs.existsSync(MAP_FILE)) {
-    return new Set();
-  }
-  return new Set(
-    fs
-      .readFileSync(MAP_FILE, 'utf8')
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => line.trim().split(/\s+/)[1]),
-  );
-}
-
 function main() {
-  const exempt = exemptions();
   const failures = [];
   for (const {name, kind, owner} of collectDeclarations()) {
     const broken = ruleBroken(name, kind, owner);
-    if (broken && !exempt.has(name)) {
+    if (broken) {
       failures.push(`${kind} ${name}: ${broken}`);
     }
   }
   for (const name of collectMacros()) {
     const broken = ruleBroken(name, 'macro', null);
-    if (broken && !exempt.has(name)) {
+    if (broken) {
       failures.push(`macro ${name}: ${broken}`);
     }
   }
@@ -339,19 +320,9 @@ function main() {
   }
 }
 
-module.exports = {
-  ROOT,
-  OWNERS,
-  collectDeclarations,
-  collectMacros,
-  ruleBroken,
-};
-
-if (require.main === module) {
-  try {
-    main();
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
+try {
+  main();
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
 }

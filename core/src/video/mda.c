@@ -1,8 +1,8 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "fonts.h"
 #include "internal.h"
 #include "public.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 enum {
   Y_VIDEO_MDA_CHAR_HEIGHT = 14,
@@ -22,7 +22,7 @@ typedef struct YVideoMDACellColors {
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
-YAX86_FILE_PRIVATE YVideoMDACellColors
+Y_FILE_PRIVATE YVideoMDACellColors
 YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
   const YVideoConfig* config = &video->config;
   YVideoMDACellColors colors = {
@@ -77,7 +77,7 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
 
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
 // first makes write_pixels a row-major stream suitable for an SPI window.
-YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
+Y_MODULE_PRIVATE void YVideoMDARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly

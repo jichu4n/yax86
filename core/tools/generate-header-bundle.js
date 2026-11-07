@@ -3,7 +3,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 
-const IMPLEMENTATION_MACRO = 'YAX86_IMPLEMENTATION';
+const IMPLEMENTATION_MACRO = 'Y_IMPLEMENTATION';
 
 function wrapFileContent({relFilePath, fileContent}) {
   return [
@@ -48,7 +48,7 @@ async function generateHeaderBundle({
   rootDirPath,
   moduleDir,
 }) {
-  const includeGuard = `YAX86_${moduleName.toUpperCase()}_BUNDLE_H`;
+  const includeGuard = `Y_${moduleName.toUpperCase()}_BUNDLE_H`;
   const publicContent = await readAndWrapFileContent({
     fileNames: public,
     rootDirPath,

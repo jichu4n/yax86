@@ -1,6 +1,6 @@
 // Public interface for the DMA (Direct Memory Access) module.
-#ifndef YAX86_DMA_PUBLIC_H
-#define YAX86_DMA_PUBLIC_H
+#ifndef Y_DMA_PUBLIC_H
+#define Y_DMA_PUBLIC_H
 
 // This module emulates the Intel 8237 DMA controller used in the IBM PC/XT.
 // The DMA controller allows peripherals to transfer data directly to and from
@@ -25,9 +25,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_DMA_BUNDLE_H
+#ifndef Y_DMA_BUNDLE_H
 #include "../util/log.h"
-#endif  // YAX86_DMA_BUNDLE_H
+#endif  // Y_DMA_BUNDLE_H
 
 enum {
   // Log module ID for the DMA.
@@ -35,7 +35,7 @@ enum {
 };
 
 // Log module for the DMA.
-YAX86_PUBLIC_HEADER const YLogModule YDMALogModule = {
+Y_PUBLIC_HEADER const YLogModule YDMALogModule = {
     .id = Y_DMA_LOG_MODULE_ID,
     .name = "DMA",
 };
@@ -209,17 +209,17 @@ typedef struct YDMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-YAX86_PUBLIC void YDMAInit(YDMAState* dma);
+Y_PUBLIC void YDMAInit(YDMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
-YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port);
+Y_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port);
 
 // Handles writes to the DMA's I/O ports.
-YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
+Y_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
 
 // Executes a single-byte transfer for the specified channel. This function
 // should be called by the platform in response to a DREQ signal from a
 // peripheral.
-YAX86_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
+Y_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
 
-#endif  // YAX86_DMA_PUBLIC_H
+#endif  // Y_DMA_PUBLIC_H

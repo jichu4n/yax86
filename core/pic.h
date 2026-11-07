@@ -2,8 +2,8 @@
 // YAX86 PIC MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef YAX86_PIC_BUNDLE_H
-#define YAX86_PIC_BUNDLE_H
+#ifndef Y_PIC_BUNDLE_H
+#define Y_PIC_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,16 +14,16 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef YAX86_UTIL_COMMON_H
-#define YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
+#define Y_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
-#define YAX86_PUBLIC
+#define Y_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
 // source file: one copy per translation unit.
-#define YAX86_PUBLIC_HEADER static
+#define Y_PUBLIC_HEADER static
 
 // Visible to other files within the same module, but not publicly to users of
 // the bundled library.
@@ -31,28 +31,28 @@ extern "C" {
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_MODULE_PRIVATE static
+#define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_MODULE_PRIVATE
-#endif  // YAX86_IMPLEMENTATION
+#define Y_MODULE_PRIVATE
+#endif  // Y_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
 // utilities (like snprintf) that are included into multiple module bundles.
-#define YAX86_MODULE_PRIVATE_HEADER static
+#define Y_MODULE_PRIVATE_HEADER static
 
 // Visible only within the source file that defines it.
-#define YAX86_FILE_PRIVATE static
+#define Y_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_UNUSED __attribute__((unused))
+#define Y_UNUSED __attribute__((unused))
 #else
-#define YAX86_UNUSED
+#define Y_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function out of line.
@@ -61,25 +61,25 @@ extern "C" {
 // with few registers, folding a large callee into an already register-hungry
 // caller makes both spill.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_NOINLINE __attribute__((noinline))
+#define Y_NOINLINE __attribute__((noinline))
 #else
-#define YAX86_NOINLINE
+#define Y_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function inlined.
 //
-// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// Like Y_NOINLINE, only worth reaching for against a measurement. The case
 // it exists for is a small helper on the hot path that the compiler inlines
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(YAX86_IMPLEMENTATION)
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#if !defined(Y_IMPLEMENTATION)
+#define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 #else
-#define YAX86_ALWAYS_INLINE inline
+#define Y_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -91,20 +91,20 @@ extern "C" {
 // path in SRAM instead takes that cache out of the picture.
 //
 // Define it before including this header, or on the command line.
-#ifndef YAX86_HOT
-#define YAX86_HOT
-#endif  // YAX86_HOT
+#ifndef Y_HOT
+#define Y_HOT
+#endif  // Y_HOT
 
 // The same, for data rather than code.
 //
-// Separate from YAX86_HOT because a compiler will not put executable code and
+// Separate from Y_HOT because a compiler will not put executable code and
 // read-only data in one section, and because a target may well want to place
 // them differently even where it could.
-#ifndef YAX86_HOT_DATA
-#define YAX86_HOT_DATA
-#endif  // YAX86_HOT_DATA
+#ifndef Y_HOT_DATA
+#define Y_HOT_DATA
+#endif  // Y_HOT_DATA
 
-#endif  // YAX86_UTIL_COMMON_H
+#endif  // Y_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -116,17 +116,17 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/snprintf.h"
-#ifndef YAX86_UTIL_SNPRINTF_H
-#define YAX86_UTIL_SNPRINTF_H
+#ifndef Y_UTIL_SNPRINTF_H
+#define Y_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
 #include "common.h"
-#endif  // YAX86_UTIL_COMMON_H
+#endif  // Y_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -141,15 +141,15 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
-    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) Y_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
-    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
+    char* buffer, size_t size, const char* format, ...) Y_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t
+Y_MODULE_PRIVATE_HEADER size_t
 YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
@@ -158,7 +158,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -179,7 +179,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
@@ -231,7 +231,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
@@ -382,7 +382,7 @@ YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -391,7 +391,7 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_SNPRINTF_H
 
 
 // ==============================================================================
@@ -410,8 +410,8 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef YAX86_UTIL_LOG_H
-#define YAX86_UTIL_LOG_H
+#ifndef Y_UTIL_LOG_H
+#define Y_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -419,14 +419,14 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 #include <stdint.h>
 
 // Sibling includes are guarded by the target's own include guard rather than
-// by YAX86_IMPLEMENTATION, so that this header works both on its own and when
+// by Y_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
 #include "common.h"
-#endif  // YAX86_UTIL_COMMON_H
-#ifndef YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_COMMON_H
+#ifndef Y_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -466,7 +466,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
+Y_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -510,7 +510,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void YLoggerInit(
+Y_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void YLoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
+Y_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
+Y_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= YLogModuleMask(module);
@@ -536,23 +536,23 @@ YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
+Y_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
+// Format and emit a log message. Prefer the Y_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
-    const char* format, ...) YAX86_UNUSED;
+    const char* format, ...) Y_UNUSED;
 
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
-  // Callers normally go through YAX86_LOG, which has already checked this, but
+  // Callers normally go through Y_LOG, which has already checked this, but
   // YLoggerWrite is also callable directly.
   if (!YLoggerIsEnabled(logger, module, level)) {
     return;
@@ -585,14 +585,14 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                 \
+#define Y_LOG(logger, module, level, ...)                     \
   do {                                                        \
     if (YLoggerIsEnabled((logger), (module), (level))) {      \
       YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
     }                                                         \
   } while (0)
 
-#endif  // YAX86_UTIL_LOG_H
+#endif  // Y_UTIL_LOG_H
 
 
 // ==============================================================================
@@ -605,8 +605,8 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 
 #line 1 "./src/pic/public.h"
 // Public interface for the PIC (Programmable Interrupt Controller) module.
-#ifndef YAX86_PIC_PUBLIC_H
-#define YAX86_PIC_PUBLIC_H
+#ifndef Y_PIC_PUBLIC_H
+#define Y_PIC_PUBLIC_H
 
 // This module emulates the Intel 8259 PIC(s) on the IBM PC series. There are
 // two possible configurations:
@@ -628,9 +628,9 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_PIC_BUNDLE_H
+#ifndef Y_PIC_BUNDLE_H
 #include "../util/log.h"
-#endif  // YAX86_PIC_BUNDLE_H
+#endif  // Y_PIC_BUNDLE_H
 
 enum {
   // Log module ID for the PIC.
@@ -638,7 +638,7 @@ enum {
 };
 
 // Log module for the PIC.
-YAX86_PUBLIC_HEADER const YLogModule YPICLogModule = {
+Y_PUBLIC_HEADER const YLogModule YPICLogModule = {
     .id = Y_PIC_LOG_MODULE_ID,
     .name = "PIC",
 };
@@ -754,7 +754,7 @@ typedef struct YPICState {
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-YAX86_PUBLIC void YPICInit(YPICState* pic);
+Y_PUBLIC void YPICInit(YPICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -762,11 +762,11 @@ YAX86_PUBLIC void YPICInit(YPICState* pic);
 
 // Raise an IRQ line (0-7) on this PIC. If this is a slave PIC, also raises
 // the cascade IRQ on the master PIC.
-YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq);
+Y_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq);
 
 // Lower an IRQ line (0-7) on this PIC. If this is a slave PIC and no interrupts
 // are pending, also lowers the cascade IRQ on the master PIC.
-YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
+Y_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
 
 // ============================================================================
 // I/O port interface
@@ -775,12 +775,12 @@ YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
 // Read from a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port);
+Y_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port);
 
 // Write to a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
+Y_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 
 // ============================================================================
 // Interrupt handling
@@ -790,9 +790,9 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 // this is a master PIC, this will consider pending interrupts from the slave
 // PIC as well. If no interrupts are pending, returns
 // Y_PIC_NO_PENDING_INTERRUPT.
-YAX86_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
+Y_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 
-#endif  // YAX86_PIC_PUBLIC_H
+#endif  // Y_PIC_PUBLIC_H
 
 
 // ==============================================================================
@@ -800,19 +800,19 @@ YAX86_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 // ==============================================================================
 
 
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 
 // ==============================================================================
 // src/pic/pic.c start
 // ==============================================================================
 
 #line 1 "./src/pic/pic.c"
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "public.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
-#define YAX86_PIC_LOG(level, ...) \
-  YAX86_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)
+#define Y_PIC_LOG(level, ...) \
+  Y_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)
 
 // ============================================================================
 // Constants
@@ -848,7 +848,7 @@ typedef enum YPICPort {
 } YPICPort;
 
 // Map a PIC mode to its base I/O port.
-YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[Y_PIC_NUM_MODES] = {
+Y_FILE_PRIVATE const uint16_t YPICBasePorts[Y_PIC_NUM_MODES] = {
     0x20,  // Y_PIC_SINGLE
     0x20,  // Y_PIC_MASTER
     0xA0,  // Y_PIC_SLAVE
@@ -859,7 +859,7 @@ YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[Y_PIC_NUM_MODES] = {
 // ============================================================================
 
 // Returns the mode of a PIC based on its ICWs.
-YAX86_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
+Y_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
   if (pic->icw1 & Y_PIC_ICW1_SNGL) {
     return Y_PIC_SINGLE;
@@ -871,22 +871,22 @@ YAX86_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
 }
 
 // Returns if the PIC is configured as a single PIC.
-YAX86_FILE_PRIVATE inline bool YPICIsSingle(YPICState* pic) {
+Y_FILE_PRIVATE inline bool YPICIsSingle(YPICState* pic) {
   return YPICGetMode(pic) == Y_PIC_SINGLE;
 }
 
 // Returns if the PIC is a master PIC.
-YAX86_FILE_PRIVATE inline bool YPICIsMaster(YPICState* pic) {
+Y_FILE_PRIVATE inline bool YPICIsMaster(YPICState* pic) {
   return YPICGetMode(pic) == Y_PIC_MASTER;
 }
 
 // Returns if the PIC is a slave PIC.
-YAX86_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
+Y_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
   return YPICGetMode(pic) == Y_PIC_SLAVE;
 }
 
 // Returns the I/O port corresponding to a given port number.
-YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
+Y_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
   uint16_t port_offset = port - YPICBasePorts[YPICGetMode(pic)];
   if (port_offset >= Y_PIC_NUM_PORTS) {
     return Y_PIC_PORT_INVALID;
@@ -896,7 +896,7 @@ YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
 
 // Returns the IRQ number of the parent PIC connected to a slave PIC.
 // Only valid if pic is a slave PIC.
-YAX86_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
+Y_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
   return pic->icw3 & 0x07;
 }
 
@@ -907,11 +907,11 @@ YAX86_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
 // Recomputes YPICState.has_unmasked_request. This is its sole writer, and every
 // path that changes irr or imr calls it, so the flag can never disagree with
 // the registers it summarizes.
-YAX86_FILE_PRIVATE inline void YPICUpdateUnmaskedRequest(YPICState* pic) {
+Y_FILE_PRIVATE inline void YPICUpdateUnmaskedRequest(YPICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-YAX86_PUBLIC void YPICInit(YPICState* pic) {
+Y_PUBLIC void YPICInit(YPICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
   YPICUpdateUnmaskedRequest(pic);
@@ -921,12 +921,12 @@ YAX86_PUBLIC void YPICInit(YPICState* pic) {
 // IRQ line control
 // ============================================================================
 
-YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
+Y_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
-    YAX86_PIC_LOG(Y_LOG_LEVEL_WARN, "ignoring out of range IRQ %u", irq);
+    Y_PIC_LOG(Y_LOG_LEVEL_WARN, "ignoring out of range IRQ %u", irq);
     return;
   }
-  YAX86_PIC_LOG(
+  Y_PIC_LOG(
       Y_LOG_LEVEL_DEBUG, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
@@ -938,7 +938,7 @@ YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   }
 }
 
-YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
+Y_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     return;
   }
@@ -956,7 +956,7 @@ YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
 // I/O port interface
 // ============================================================================
 
-YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
+Y_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
   YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case Y_PIC_PORT_COMMAND:
@@ -986,7 +986,7 @@ YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
+Y_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
   YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case Y_PIC_PORT_COMMAND:
@@ -1019,13 +1019,13 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
             if (value & Y_PIC_OCW2_SL) {
               // Specific EOI: clear specified ISR bit.
               uint8_t irq = value & 0x07;
-              YAX86_PIC_LOG(Y_LOG_LEVEL_DEBUG, "specific EOI for IRQ %u", irq);
+              Y_PIC_LOG(Y_LOG_LEVEL_DEBUG, "specific EOI for IRQ %u", irq);
               pic->isr &= ~(1 << irq);
             } else {
               // Non-Specific EOI: clear highest priority ISR bit.
               for (uint8_t i = 0, isr_mask = 1; i < 8; ++i, isr_mask <<= 1) {
                 if (pic->isr & isr_mask) {
-                  YAX86_PIC_LOG(
+                  Y_PIC_LOG(
                       Y_LOG_LEVEL_DEBUG, "non-specific EOI for IRQ %u", i);
                   pic->isr &= ~isr_mask;
                   break;
@@ -1089,7 +1089,7 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
 // Interrupt handling
 // ============================================================================
 
-YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
+Y_PUBLIC Y_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {
@@ -1142,11 +1142,11 @@ YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
 // ==============================================================================
 
 
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // YAX86_PIC_BUNDLE_H
+#endif  // Y_PIC_BUNDLE_H
 

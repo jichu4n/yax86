@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#define YAX86_IMPLEMENTATION
+#define Y_IMPLEMENTATION
 #include "cpu.h"
 
 using namespace std;

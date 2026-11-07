@@ -2,8 +2,8 @@
 // YAX86 FDC MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef YAX86_FDC_BUNDLE_H
-#define YAX86_FDC_BUNDLE_H
+#ifndef Y_FDC_BUNDLE_H
+#define Y_FDC_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,16 +14,16 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef YAX86_UTIL_COMMON_H
-#define YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
+#define Y_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
-#define YAX86_PUBLIC
+#define Y_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
 // source file: one copy per translation unit.
-#define YAX86_PUBLIC_HEADER static
+#define Y_PUBLIC_HEADER static
 
 // Visible to other files within the same module, but not publicly to users of
 // the bundled library.
@@ -31,28 +31,28 @@ extern "C" {
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_MODULE_PRIVATE static
+#define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_MODULE_PRIVATE
-#endif  // YAX86_IMPLEMENTATION
+#define Y_MODULE_PRIVATE
+#endif  // Y_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
 // utilities (like snprintf) that are included into multiple module bundles.
-#define YAX86_MODULE_PRIVATE_HEADER static
+#define Y_MODULE_PRIVATE_HEADER static
 
 // Visible only within the source file that defines it.
-#define YAX86_FILE_PRIVATE static
+#define Y_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_UNUSED __attribute__((unused))
+#define Y_UNUSED __attribute__((unused))
 #else
-#define YAX86_UNUSED
+#define Y_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function out of line.
@@ -61,25 +61,25 @@ extern "C" {
 // with few registers, folding a large callee into an already register-hungry
 // caller makes both spill.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_NOINLINE __attribute__((noinline))
+#define Y_NOINLINE __attribute__((noinline))
 #else
-#define YAX86_NOINLINE
+#define Y_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function inlined.
 //
-// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// Like Y_NOINLINE, only worth reaching for against a measurement. The case
 // it exists for is a small helper on the hot path that the compiler inlines
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(YAX86_IMPLEMENTATION)
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#if !defined(Y_IMPLEMENTATION)
+#define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 #else
-#define YAX86_ALWAYS_INLINE inline
+#define Y_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -91,20 +91,20 @@ extern "C" {
 // path in SRAM instead takes that cache out of the picture.
 //
 // Define it before including this header, or on the command line.
-#ifndef YAX86_HOT
-#define YAX86_HOT
-#endif  // YAX86_HOT
+#ifndef Y_HOT
+#define Y_HOT
+#endif  // Y_HOT
 
 // The same, for data rather than code.
 //
-// Separate from YAX86_HOT because a compiler will not put executable code and
+// Separate from Y_HOT because a compiler will not put executable code and
 // read-only data in one section, and because a target may well want to place
 // them differently even where it could.
-#ifndef YAX86_HOT_DATA
-#define YAX86_HOT_DATA
-#endif  // YAX86_HOT_DATA
+#ifndef Y_HOT_DATA
+#define Y_HOT_DATA
+#endif  // Y_HOT_DATA
 
-#endif  // YAX86_UTIL_COMMON_H
+#endif  // Y_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -116,17 +116,17 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/snprintf.h"
-#ifndef YAX86_UTIL_SNPRINTF_H
-#define YAX86_UTIL_SNPRINTF_H
+#ifndef Y_UTIL_SNPRINTF_H
+#define Y_UTIL_SNPRINTF_H
 
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
 #include "common.h"
-#endif  // YAX86_UTIL_COMMON_H
+#endif  // Y_UTIL_COMMON_H
 
 // A minimal implementation of snprintf/vsnprintf for freestanding environments.
 // Supports:
@@ -141,15 +141,15 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
-    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) Y_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
-    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
+    char* buffer, size_t size, const char* format, ...) Y_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t
+Y_MODULE_PRIVATE_HEADER size_t
 YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
@@ -158,7 +158,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -179,7 +179,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
@@ -231,7 +231,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
@@ -382,7 +382,7 @@ YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -391,7 +391,7 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
   return ret;
 }
 
-#endif  // YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_SNPRINTF_H
 
 
 // ==============================================================================
@@ -410,8 +410,8 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
 
-#ifndef YAX86_UTIL_LOG_H
-#define YAX86_UTIL_LOG_H
+#ifndef Y_UTIL_LOG_H
+#define Y_UTIL_LOG_H
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -419,14 +419,14 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 #include <stdint.h>
 
 // Sibling includes are guarded by the target's own include guard rather than
-// by YAX86_IMPLEMENTATION, so that this header works both on its own and when
+// by Y_IMPLEMENTATION, so that this header works both on its own and when
 // bundled into a module, in either declaration-only or implementation mode.
-#ifndef YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
 #include "common.h"
-#endif  // YAX86_UTIL_COMMON_H
-#ifndef YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_COMMON_H
+#ifndef Y_UTIL_SNPRINTF_H
 #include "snprintf.h"
-#endif  // YAX86_UTIL_SNPRINTF_H
+#endif  // Y_UTIL_SNPRINTF_H
 
 // ============================================================================
 // Levels and modules
@@ -466,7 +466,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
+Y_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -510,7 +510,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void YLoggerInit(
+Y_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void YLoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
+Y_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
+Y_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= YLogModuleMask(module);
@@ -536,23 +536,23 @@ YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
+Y_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
+// Format and emit a log message. Prefer the Y_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
-    const char* format, ...) YAX86_UNUSED;
+    const char* format, ...) Y_UNUSED;
 
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
-  // Callers normally go through YAX86_LOG, which has already checked this, but
+  // Callers normally go through Y_LOG, which has already checked this, but
   // YLoggerWrite is also callable directly.
   if (!YLoggerIsEnabled(logger, module, level)) {
     return;
@@ -585,14 +585,14 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                 \
+#define Y_LOG(logger, module, level, ...)                     \
   do {                                                        \
     if (YLoggerIsEnabled((logger), (module), (level))) {      \
       YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
     }                                                         \
   } while (0)
 
-#endif  // YAX86_UTIL_LOG_H
+#endif  // Y_UTIL_LOG_H
 
 
 // ==============================================================================
@@ -610,8 +610,8 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 // a vector, but whose underlying storage is statically allocated and does not
 // rely on dynamic memory allocation.
 
-#ifndef YAX86_UTIL_STATIC_VECTOR_H
-#define YAX86_UTIL_STATIC_VECTOR_H
+#ifndef Y_UTIL_STATIC_VECTOR_H
+#define Y_UTIL_STATIC_VECTOR_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -632,7 +632,7 @@ typedef struct YStaticVectorHeader {
 // macro because this macro is instantiated across different headers and tiers
 // (both public headers and internal source files); its output's tier depends
 // on the instantiation site.
-#define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
+#define Y_STATIC_VECTOR_TYPE(name, element_type, max_length_value)        \
   typedef struct name {                                                   \
     YStaticVectorHeader header;                                           \
     element_type elements[max_length_value];                              \
@@ -698,7 +698,7 @@ typedef struct YStaticVectorHeader {
   static void name##Clear(name* vector) __attribute__((unused));          \
   static void name##Clear(name* vector) { vector->header.length = 0; }
 
-#endif  // YAX86_UTIL_STATIC_VECTOR_H
+#endif  // Y_UTIL_STATIC_VECTOR_H
 
 
 // ==============================================================================
@@ -711,8 +711,8 @@ typedef struct YStaticVectorHeader {
 
 #line 1 "./src/fdc/public.h"
 // Public interface for the Floppy Disk Controller (FDC) module.
-#ifndef YAX86_FDC_PUBLIC_H
-#define YAX86_FDC_PUBLIC_H
+#ifndef Y_FDC_PUBLIC_H
+#define Y_FDC_PUBLIC_H
 
 // This module emulates the NEC uPD765 Floppy Disk Controller. It handles I/O
 // port communication and DMA transfers for floppy operations. Actual disk
@@ -721,10 +721,10 @@ typedef struct YStaticVectorHeader {
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_FDC_BUNDLE_H
+#ifndef Y_FDC_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // YAX86_FDC_BUNDLE_H
+#endif  // Y_FDC_BUNDLE_H
 
 enum {
   // Log module ID for the FDC.
@@ -732,7 +732,7 @@ enum {
 };
 
 // Log module for the FDC.
-YAX86_PUBLIC_HEADER const YLogModule YFDCLogModule = {
+Y_PUBLIC_HEADER const YLogModule YFDCLogModule = {
     .id = Y_FDC_LOG_MODULE_ID,
     .name = "FDC",
 };
@@ -750,7 +750,7 @@ typedef struct YFDCDiskFormat {
 } YFDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-YAX86_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
+Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,
@@ -940,8 +940,8 @@ typedef struct YFDCConfig {
       uint8_t value);
 } YFDCConfig;
 
-STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, Y_FDC_COMMAND_BUFFER_SIZE)
-STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, Y_FDC_RESULT_BUFFER_SIZE)
+Y_STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, Y_FDC_COMMAND_BUFFER_SIZE)
+Y_STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, Y_FDC_RESULT_BUFFER_SIZE)
 
 struct YFDCCommandMetadata;
 
@@ -996,29 +996,29 @@ typedef struct YFDCState {
 } YFDCState;
 
 // Initializes the FDC to its power-on state.
-YAX86_PUBLIC void YFDCInit(YFDCState* fdc);
+Y_PUBLIC void YFDCInit(YFDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
-YAX86_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port);
+Y_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
-YAX86_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value);
+Y_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value);
 
 // Signals to the FDC that the DMA controller has reached the terminal count.
 // This represents the TC signal.
-YAX86_PUBLIC void YFDCHandleTC(YFDCState* fdc);
+Y_PUBLIC void YFDCHandleTC(YFDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
-YAX86_PUBLIC void YFDCInsertDisk(
+Y_PUBLIC void YFDCInsertDisk(
     YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
-YAX86_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive);
+Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive);
 
 // Simulates a tick of the FDC, handling any timed operations.
-YAX86_PUBLIC void YFDCTick(YFDCState* fdc);
+Y_PUBLIC void YFDCTick(YFDCState* fdc);
 
-#endif  // YAX86_FDC_PUBLIC_H
+#endif  // Y_FDC_PUBLIC_H
 
 
 // ==============================================================================
@@ -1026,20 +1026,20 @@ YAX86_PUBLIC void YFDCTick(YFDCState* fdc);
 // ==============================================================================
 
 
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 
 // ==============================================================================
 // src/fdc/fdc.c start
 // ==============================================================================
 
 #line 1 "./src/fdc/fdc.c"
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "public.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
-#define YAX86_FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config.logger, &YFDCLogModule, level, __VA_ARGS__)
+#define Y_FDC_LOG(level, ...) \
+  Y_LOG(fdc->config.logger, &YFDCLogModule, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -1094,15 +1094,15 @@ typedef struct YFDCCommandMetadata {
 
 // Helper to raise an IRQ6 if the callback is set and interrupts are enabled in
 // DOR.
-YAX86_FILE_PRIVATE inline void YFDCRaiseIRQ6(YFDCState* fdc) {
+Y_FILE_PRIVATE inline void YFDCRaiseIRQ6(YFDCState* fdc) {
   if (fdc->config.raise_irq6 && (fdc->dor & Y_FDC_DOR_INTERRUPT_ENABLE)) {
     fdc->config.raise_irq6(fdc->config.context);
   }
 }
 
 // Transition into execution phase.
-YAX86_FILE_PRIVATE inline void YFDCStartCommandExecution(YFDCState* fdc) {
-  YAX86_FDC_LOG(
+Y_FILE_PRIVATE inline void YFDCStartCommandExecution(YFDCState* fdc) {
+  Y_FDC_LOG(
       Y_LOG_LEVEL_DEBUG, "executing command %02X with %u parameter bytes",
       fdc->current_command ? fdc->current_command->opcode : 0,
       (unsigned)YFDCCommandBufferLength(&fdc->command_buffer) - 1);
@@ -1111,8 +1111,8 @@ YAX86_FILE_PRIVATE inline void YFDCStartCommandExecution(YFDCState* fdc) {
 }
 
 // Transition into result phase after command execution.
-YAX86_FILE_PRIVATE inline void YFDCFinishCommandExecution(YFDCState* fdc) {
-  YAX86_FDC_LOG(
+Y_FILE_PRIVATE inline void YFDCFinishCommandExecution(YFDCState* fdc) {
+  Y_FDC_LOG(
       Y_LOG_LEVEL_DEBUG, "command finished with %u result bytes, st0 %02X",
       (unsigned)YFDCResultBufferLength(&fdc->result_buffer),
       YFDCResultBufferLength(&fdc->result_buffer) > 0
@@ -1129,7 +1129,7 @@ YAX86_FILE_PRIVATE inline void YFDCFinishCommandExecution(YFDCState* fdc) {
 }
 
 // Helper to perform a seek operation (for Seek and Recalibrate).
-YAX86_FILE_PRIVATE void YFDCPerformSeek(
+Y_FILE_PRIVATE void YFDCPerformSeek(
     YFDCState* fdc, uint8_t drive_index, uint8_t target_track) {
   YFDCDriveState* drive = &fdc->drives[drive_index];
 
@@ -1167,7 +1167,7 @@ YAX86_FILE_PRIVATE void YFDCPerformSeek(
 // (Head 1, the bottom side) before moving to the next track.
 // In other words, the layout is an array of
 // [num_tracks][num_heads][num_sectors_per_track].
-YAX86_FILE_PRIVATE inline uint32_t YFDCComputeOffset(
+Y_FILE_PRIVATE inline uint32_t YFDCComputeOffset(
     YFDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
     uint16_t sector_offset) {
   if (head >= format.num_heads || track >= format.num_tracks || sector == 0 ||
@@ -1191,7 +1191,7 @@ YAX86_FILE_PRIVATE inline uint32_t YFDCComputeOffset(
 }
 
 // Helper to finish a read/write command.
-YAX86_FILE_PRIVATE void YFDCFinishReadWrite(
+Y_FILE_PRIVATE void YFDCFinishReadWrite(
     YFDCState* fdc, uint8_t st0, uint8_t st1, uint8_t st2) {
   YFDCResultBufferAppend(&fdc->result_buffer, &st0);
   YFDCResultBufferAppend(&fdc->result_buffer, &st1);
@@ -1206,7 +1206,7 @@ YAX86_FILE_PRIVATE void YFDCFinishReadWrite(
 }
 
 // Handler for Write Data command.
-YAX86_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -1347,7 +1347,7 @@ YAX86_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
 }
 
 // Handler for Read Data command.
-YAX86_FILE_PRIVATE YAX86_HOT void YFDCHandleReadData(YFDCState* fdc) {
+Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -1490,14 +1490,14 @@ YAX86_FILE_PRIVATE YAX86_HOT void YFDCHandleReadData(YFDCState* fdc) {
 }
 
 // Handler for Recalibrate command.
-YAX86_FILE_PRIVATE void YFDCHandleRecalibrate(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleRecalibrate(YFDCState* fdc) {
   // Recalibrate command has one parameter byte: drive number (0-3).
   uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
   YFDCPerformSeek(fdc, drive_index, 0);
 }
 
 // Handler for Seek command.
-YAX86_FILE_PRIVATE void YFDCHandleSeek(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleSeek(YFDCState* fdc) {
   // Seek command parameters:
   // Byte 1: Drive number (0-3) and Head address (ignored for seek).
   // Byte 2: New Cylinder Number (NCN).
@@ -1507,14 +1507,14 @@ YAX86_FILE_PRIVATE void YFDCHandleSeek(YFDCState* fdc) {
 }
 
 // Handler for Specify command.
-YAX86_FILE_PRIVATE void YFDCHandleSpecify(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleSpecify(YFDCState* fdc) {
   // We don't currently support changing timings or non-DMA mode, so we just
   // ignore the parameters.
   YFDCFinishCommandExecution(fdc);
 }
 
 // Handler for Sense Interrupt Status command.
-YAX86_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
   // Check for any pending interrupts.
   for (int i = 0; i < Y_FDC_NUM_DRIVES; ++i) {
     YFDCDriveState* drive = &fdc->drives[i];
@@ -1540,7 +1540,7 @@ YAX86_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
 
 // List of supported FDC commands.
 // The opcodes here represent the base 5-bit command.
-YAX86_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
+Y_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
     // Read a Track
     {.opcode = Y_FDC_CMD_READ_TRACK, .num_param_bytes = 8, .handler = NULL},
     // Specify
@@ -1596,11 +1596,11 @@ YAX86_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
 // Nothing to do: an FDC powers on with every field at zero, and the caller has
 // already zeroed the state. Kept so that every module is brought up the same
 // way, and so that a non-zero default acquired later has somewhere to go.
-YAX86_PUBLIC void YFDCInit(YAX86_UNUSED YFDCState* fdc) {}
+Y_PUBLIC void YFDCInit(Y_UNUSED YFDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
-YAX86_FILE_PRIVATE const YFDCCommandMetadata* YFDCFindCommandMetadata(
+Y_FILE_PRIVATE const YFDCCommandMetadata* YFDCFindCommandMetadata(
     uint8_t opcode) {
   for (size_t i = 0;
        i < sizeof(YFDCCommandMetadataTable) / sizeof(YFDCCommandMetadata);
@@ -1612,7 +1612,7 @@ YAX86_FILE_PRIVATE const YFDCCommandMetadata* YFDCFindCommandMetadata(
   return NULL;
 }
 
-YAX86_FILE_PRIVATE uint8_t YFDCReadMSRPort(YFDCState* fdc) {
+Y_FILE_PRIVATE uint8_t YFDCReadMSRPort(YFDCState* fdc) {
   uint8_t msr = 0;
   switch (fdc->phase) {
     case Y_FDC_PHASE_IDLE:
@@ -1639,7 +1639,7 @@ YAX86_FILE_PRIVATE uint8_t YFDCReadMSRPort(YFDCState* fdc) {
   return msr;
 }
 
-YAX86_FILE_PRIVATE uint8_t YFDCReadDataPort(YFDCState* fdc) {
+Y_FILE_PRIVATE uint8_t YFDCReadDataPort(YFDCState* fdc) {
   switch (fdc->phase) {
     case Y_FDC_PHASE_EXECUTION:
       // DMA or Polling read during execution.
@@ -1669,7 +1669,7 @@ YAX86_FILE_PRIVATE uint8_t YFDCReadDataPort(YFDCState* fdc) {
   }
 }
 
-YAX86_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port) {
+Y_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port) {
   switch (port) {
     case Y_FDC_PORT_MSR:  // Main Status Register (MSR)
       return YFDCReadMSRPort(fdc);
@@ -1681,7 +1681,7 @@ YAX86_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port) {
   }
 }
 
-YAX86_FILE_PRIVATE void YFDCWriteDORPort(YFDCState* fdc, uint8_t value) {
+Y_FILE_PRIVATE void YFDCWriteDORPort(YFDCState* fdc, uint8_t value) {
   uint8_t old_dor = fdc->dor;
   fdc->dor = value;
 
@@ -1709,7 +1709,7 @@ YAX86_FILE_PRIVATE void YFDCWriteDORPort(YFDCState* fdc, uint8_t value) {
   }
 }
 
-YAX86_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
+Y_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
   switch (fdc->phase) {
     case Y_FDC_PHASE_IDLE: {
       // This is the first byte of a new command.
@@ -1718,7 +1718,7 @@ YAX86_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
       fdc->current_command = YFDCFindCommandMetadata(opcode);
 
       if (!fdc->current_command) {
-        YAX86_FDC_LOG(Y_LOG_LEVEL_WARN, "invalid command opcode %02X", opcode);
+        Y_FDC_LOG(Y_LOG_LEVEL_WARN, "invalid command opcode %02X", opcode);
         // Invalid command. Set up the result phase with an error.
         YFDCResultBufferClear(&fdc->result_buffer);
         uint8_t status = Y_FDC_ST0_INVALID_COMMAND;
@@ -1774,7 +1774,7 @@ YAX86_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
+Y_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
     case Y_FDC_PORT_DOR:  // Digital Output Register
       YFDCWriteDORPort(fdc, value);
@@ -1791,11 +1791,9 @@ YAX86_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void YFDCHandleTC(YFDCState* fdc) {
-  fdc->transfer.tc_received = true;
-}
+Y_PUBLIC void YFDCHandleTC(YFDCState* fdc) { fdc->transfer.tc_received = true; }
 
-YAX86_PUBLIC void YFDCInsertDisk(
+Y_PUBLIC void YFDCInsertDisk(
     YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format) {
   if (drive >= Y_FDC_NUM_DRIVES) {
     return;
@@ -1807,7 +1805,7 @@ YAX86_PUBLIC void YFDCInsertDisk(
   drive_state->track = 0;
 }
 
-YAX86_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
+Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
   if (drive >= Y_FDC_NUM_DRIVES) {
     return;
   }
@@ -1816,7 +1814,7 @@ YAX86_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
   drive_state->format = NULL;
 }
 
-YAX86_PUBLIC void YFDCTick(YFDCState* fdc) {
+Y_PUBLIC void YFDCTick(YFDCState* fdc) {
   if (fdc->phase != Y_FDC_PHASE_EXECUTION) {
     return;
   }
@@ -1838,11 +1836,11 @@ YAX86_PUBLIC void YFDCTick(YFDCState* fdc) {
 // ==============================================================================
 
 
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // YAX86_FDC_BUNDLE_H
+#endif  // Y_FDC_BUNDLE_H
 

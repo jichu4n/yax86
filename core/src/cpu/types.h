@@ -1,9 +1,9 @@
-#ifndef YAX86_CPU_TYPES_H
-#define YAX86_CPU_TYPES_H
+#ifndef Y_CPU_TYPES_H
+#define Y_CPU_TYPES_H
 
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "public.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // Data width helpers.
 
@@ -26,39 +26,37 @@ enum {
 };
 
 // Bitmask to extract the sign bit of a value.
-YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUSignBit[Y_CPU_NUM_WIDTHS] = {
+Y_MODULE_PRIVATE_HEADER const uint32_t YCPUSignBit[Y_CPU_NUM_WIDTHS] = {
     1 << 7,   // Y_CPU_BYTE
     1 << 15,  // Y_CPU_WORD
 };
 
 // Maximum unsigned value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUMaxValue[Y_CPU_NUM_WIDTHS] = {
+Y_MODULE_PRIVATE_HEADER const uint32_t YCPUMaxValue[Y_CPU_NUM_WIDTHS] = {
     0xFF,   // Y_CPU_BYTE
     0xFFFF  // Y_CPU_WORD
 };
 
 // Maximum signed value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const int32_t
-    YCPUMaxSignedValue[Y_CPU_NUM_WIDTHS] = {
-        0x7F,   // Y_CPU_BYTE
-        0x7FFF  // Y_CPU_WORD
+Y_MODULE_PRIVATE_HEADER const int32_t YCPUMaxSignedValue[Y_CPU_NUM_WIDTHS] = {
+    0x7F,   // Y_CPU_BYTE
+    0x7FFF  // Y_CPU_WORD
 };
 
 // Minimum signed value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const int32_t
-    YCPUMinSignedValue[Y_CPU_NUM_WIDTHS] = {
-        -0x80,   // Y_CPU_BYTE
-        -0x8000  // Y_CPU_WORD
+Y_MODULE_PRIVATE_HEADER const int32_t YCPUMinSignedValue[Y_CPU_NUM_WIDTHS] = {
+    -0x80,   // Y_CPU_BYTE
+    -0x8000  // Y_CPU_WORD
 };
 
 // Number of bytes in each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBytes[Y_CPU_NUM_WIDTHS] = {
+Y_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBytes[Y_CPU_NUM_WIDTHS] = {
     1,  // Y_CPU_BYTE
     2,  // Y_CPU_WORD
 };
 
 // Number of bits in each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBits[Y_CPU_NUM_WIDTHS] = {
+Y_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBits[Y_CPU_NUM_WIDTHS] = {
     8,   // Y_CPU_BYTE
     16,  // Y_CPU_WORD
 };
@@ -168,4 +166,4 @@ typedef struct YCPUOpcodeMetadata {
   YCPUOpcodeHandler handler;
 } YCPUOpcodeMetadata;
 
-#endif  // YAX86_CPU_TYPES_H
+#endif  // Y_CPU_TYPES_H

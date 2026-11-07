@@ -1,16 +1,16 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // ============================================================================
 // Group 5 - INC, DEC, CALL, JMP, PUSH
 // ============================================================================
 
 // Helper to get the segment register value for far JMP and CALL instructions.
-YAX86_FILE_PRIVATE void YCPUGetSegmentRegisterOperandForIndirectFarJumpOrCall(
+Y_FILE_PRIVATE void YCPUGetSegmentRegisterOperandForIndirectFarJumpOrCall(
     const YCPUInstructionContext* ctx, const YCPUOperand* offset,
     YCPUOperand* operand) {
   YCPUOperandAddress segment_address = offset->address;
@@ -20,21 +20,21 @@ YAX86_FILE_PRIVATE void YCPUGetSegmentRegisterOperandForIndirectFarJumpOrCall(
 }
 
 // JMP ptr16
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectNearJump(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectNearJump(
     const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   ctx->cpu->registers[Y_CPU_IP] = YCPUFromOperandValue(dest->value);
   return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // CALL ptr16
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectNearCall(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectNearCall(
     const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUPushValue(ctx->cpu, ctx->cpu->registers[Y_CPU_IP]);
   return YCPUExecuteIndirectNearJump(ctx, dest);
 }
 
 // CALL ptr16:16
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectFarCall(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectFarCall(
     const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperand segment;
   YCPUGetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
@@ -42,7 +42,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectFarCall(
 }
 
 // JMP ptr16:16
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectFarJump(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectFarJump(
     const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperand segment;
   YCPUGetSegmentRegisterOperandForIndirectFarJumpOrCall(ctx, dest, &segment);
@@ -50,7 +50,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteIndirectFarJump(
 }
 
 // PUSH r/m16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteIndirectPush(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUPushSourceOperand(ctx->cpu, dest);
   return Y_CPU_INSTRUCTION_EXECUTED;
@@ -61,7 +61,7 @@ typedef YCPUInstructionResult (*YCPUGroup5ExecuteInstructionFn)(
 
 // Group 5 instruction implementations, indexed by the corresponding REG
 // field value in the YCPUModRM byte.
-YAX86_FILE_PRIVATE const YCPUGroup5ExecuteInstructionFn
+Y_FILE_PRIVATE const YCPUGroup5ExecuteInstructionFn
     YCPUGroup5ExecuteInstructionFns[] = {
         YCPUExecuteInc,               // 0 - INC r/m8/r/m16
         YCPUExecuteDec,               // 1 - DEC r/m8/r/m16
@@ -77,7 +77,7 @@ YAX86_FILE_PRIVATE const YCPUGroup5ExecuteInstructionFn
 };
 
 // Group 5 instruction handler.
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup5ExecuteInstructionFn fn =
       YCPUGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];

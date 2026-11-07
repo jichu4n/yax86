@@ -245,12 +245,12 @@ bool LoadMooFile(const std::string& path, std::vector<MooTest>* tests) {
 
 uint8_t g_memory[kMemorySize];
 
-uint8_t TestReadMemoryByte(YAX86_UNUSED YCPUState* cpu, uint32_t address) {
+uint8_t TestReadMemoryByte(Y_UNUSED YCPUState* cpu, uint32_t address) {
   return address < kMemorySize ? g_memory[address] : 0xFF;
 }
 
 void TestWriteMemoryByte(
-    YAX86_UNUSED YCPUState* cpu, uint32_t address, uint8_t value) {
+    Y_UNUSED YCPUState* cpu, uint32_t address, uint8_t value) {
   if (address < kMemorySize) {
     g_memory[address] = value;
   }

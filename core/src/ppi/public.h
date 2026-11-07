@@ -1,6 +1,6 @@
 // Public interface for the PPI (Programmable Peripheral Interface) module.
-#ifndef YAX86_PPI_PUBLIC_H
-#define YAX86_PPI_PUBLIC_H
+#ifndef Y_PPI_PUBLIC_H
+#define Y_PPI_PUBLIC_H
 
 // This module emulates the Intel 8255 PPI chip as used in the IBM PC and
 // PC/XT. Note that we don't implement all features of the 8255, only those
@@ -56,9 +56,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_PPI_BUNDLE_H
+#ifndef Y_PPI_BUNDLE_H
 #include "../util/log.h"
-#endif  // YAX86_PPI_BUNDLE_H
+#endif  // Y_PPI_BUNDLE_H
 
 enum {
   // Log module ID for the PPI.
@@ -66,7 +66,7 @@ enum {
 };
 
 // Log module for the PPI.
-YAX86_PUBLIC_HEADER const YLogModule YPPILogModule = {
+Y_PUBLIC_HEADER const YLogModule YPPILogModule = {
     .id = Y_PPI_LOG_MODULE_ID,
     .name = "PPI",
 };
@@ -180,25 +180,25 @@ typedef struct YPPIState {
 } YPPIState;
 
 // Initializes the PPI to its power-on state.
-YAX86_PUBLIC void YPPIInit(YPPIState* ppi);
+Y_PUBLIC void YPPIInit(YPPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
-YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port);
+Y_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port);
 
 // Handles writes to the PPI's I/O ports (0x61, 0x63).
-YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value);
+Y_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value);
 
 // Returns whether the PC speaker is currently enabled. This is determined by
 // bit 0 and 1 of Port B.
-YAX86_PUBLIC bool YPPIIsPCSpeakerEnabled(YPPIState* ppi);
+Y_PUBLIC bool YPPIIsPCSpeakerEnabled(YPPIState* ppi);
 
 // Sets the PC speaker frequency from the 8253 timer channel 2 output. This
 // should be wired up to the callback from the PIT emulation module.
-YAX86_PUBLIC void YPPISetPCSpeakerFrequencyFromPIT(
+Y_PUBLIC void YPPISetPCSpeakerFrequencyFromPIT(
     YPPIState* ppi, uint32_t frequency_hz);
 
 // Sets the scancode byte that will be returned when the CPU reads from Port A.
 // This function should be called by the keyboard emulation module.
-YAX86_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode);
+Y_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode);
 
-#endif  // YAX86_PPI_PUBLIC_H
+#endif  // Y_PPI_PUBLIC_H

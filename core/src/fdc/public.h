@@ -1,6 +1,6 @@
 // Public interface for the Floppy Disk Controller (FDC) module.
-#ifndef YAX86_FDC_PUBLIC_H
-#define YAX86_FDC_PUBLIC_H
+#ifndef Y_FDC_PUBLIC_H
+#define Y_FDC_PUBLIC_H
 
 // This module emulates the NEC uPD765 Floppy Disk Controller. It handles I/O
 // port communication and DMA transfers for floppy operations. Actual disk
@@ -9,10 +9,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_FDC_BUNDLE_H
+#ifndef Y_FDC_BUNDLE_H
 #include "../util/log.h"
 #include "../util/static_vector.h"
-#endif  // YAX86_FDC_BUNDLE_H
+#endif  // Y_FDC_BUNDLE_H
 
 enum {
   // Log module ID for the FDC.
@@ -20,7 +20,7 @@ enum {
 };
 
 // Log module for the FDC.
-YAX86_PUBLIC_HEADER const YLogModule YFDCLogModule = {
+Y_PUBLIC_HEADER const YLogModule YFDCLogModule = {
     .id = Y_FDC_LOG_MODULE_ID,
     .name = "FDC",
 };
@@ -38,7 +38,7 @@ typedef struct YFDCDiskFormat {
 } YFDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-YAX86_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
+Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,
@@ -228,8 +228,8 @@ typedef struct YFDCConfig {
       uint8_t value);
 } YFDCConfig;
 
-STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, Y_FDC_COMMAND_BUFFER_SIZE)
-STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, Y_FDC_RESULT_BUFFER_SIZE)
+Y_STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, Y_FDC_COMMAND_BUFFER_SIZE)
+Y_STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, Y_FDC_RESULT_BUFFER_SIZE)
 
 struct YFDCCommandMetadata;
 
@@ -284,26 +284,26 @@ typedef struct YFDCState {
 } YFDCState;
 
 // Initializes the FDC to its power-on state.
-YAX86_PUBLIC void YFDCInit(YFDCState* fdc);
+Y_PUBLIC void YFDCInit(YFDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
-YAX86_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port);
+Y_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
-YAX86_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value);
+Y_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value);
 
 // Signals to the FDC that the DMA controller has reached the terminal count.
 // This represents the TC signal.
-YAX86_PUBLIC void YFDCHandleTC(YFDCState* fdc);
+Y_PUBLIC void YFDCHandleTC(YFDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
-YAX86_PUBLIC void YFDCInsertDisk(
+Y_PUBLIC void YFDCInsertDisk(
     YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
-YAX86_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive);
+Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive);
 
 // Simulates a tick of the FDC, handling any timed operations.
-YAX86_PUBLIC void YFDCTick(YFDCState* fdc);
+Y_PUBLIC void YFDCTick(YFDCState* fdc);
 
-#endif  // YAX86_FDC_PUBLIC_H
+#endif  // Y_FDC_PUBLIC_H

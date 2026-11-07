@@ -2,8 +2,8 @@
 // YAX86 BIOS MODULE - GENERATED SINGLE HEADER BUNDLE
 // ==============================================================================
 
-#ifndef YAX86_BIOS_BUNDLE_H
-#define YAX86_BIOS_BUNDLE_H
+#ifndef Y_BIOS_BUNDLE_H
+#define Y_BIOS_BUNDLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,16 +14,16 @@ extern "C" {
 // ==============================================================================
 
 #line 1 "./src/util/common.h"
-#ifndef YAX86_UTIL_COMMON_H
-#define YAX86_UTIL_COMMON_H
+#ifndef Y_UTIL_COMMON_H
+#define Y_UTIL_COMMON_H
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
-#define YAX86_PUBLIC
+#define Y_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
 // source file: one copy per translation unit.
-#define YAX86_PUBLIC_HEADER static
+#define Y_PUBLIC_HEADER static
 
 // Visible to other files within the same module, but not publicly to users of
 // the bundled library.
@@ -31,28 +31,28 @@ extern "C" {
 // This enables better IDE integration as it allows each source file to be
 // compiled independently in unbundled form, but still keeps the symbols private
 // when bundled.
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_MODULE_PRIVATE static
+#define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_MODULE_PRIVATE
-#endif  // YAX86_IMPLEMENTATION
+#define Y_MODULE_PRIVATE
+#endif  // Y_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
 // utilities (like snprintf) that are included into multiple module bundles.
-#define YAX86_MODULE_PRIVATE_HEADER static
+#define Y_MODULE_PRIVATE_HEADER static
 
 // Visible only within the source file that defines it.
-#define YAX86_FILE_PRIVATE static
+#define Y_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_UNUSED __attribute__((unused))
+#define Y_UNUSED __attribute__((unused))
 #else
-#define YAX86_UNUSED
+#define Y_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function out of line.
@@ -61,25 +61,25 @@ extern "C" {
 // with few registers, folding a large callee into an already register-hungry
 // caller makes both spill.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_NOINLINE __attribute__((noinline))
+#define Y_NOINLINE __attribute__((noinline))
 #else
-#define YAX86_NOINLINE
+#define Y_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function inlined.
 //
-// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// Like Y_NOINLINE, only worth reaching for against a measurement. The case
 // it exists for is a small helper on the hot path that the compiler inlines
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
-#if !defined(YAX86_IMPLEMENTATION)
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#if !defined(Y_IMPLEMENTATION)
+#define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 #else
-#define YAX86_ALWAYS_INLINE inline
+#define Y_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -91,20 +91,20 @@ extern "C" {
 // path in SRAM instead takes that cache out of the picture.
 //
 // Define it before including this header, or on the command line.
-#ifndef YAX86_HOT
-#define YAX86_HOT
-#endif  // YAX86_HOT
+#ifndef Y_HOT
+#define Y_HOT
+#endif  // Y_HOT
 
 // The same, for data rather than code.
 //
-// Separate from YAX86_HOT because a compiler will not put executable code and
+// Separate from Y_HOT because a compiler will not put executable code and
 // read-only data in one section, and because a target may well want to place
 // them differently even where it could.
-#ifndef YAX86_HOT_DATA
-#define YAX86_HOT_DATA
-#endif  // YAX86_HOT_DATA
+#ifndef Y_HOT_DATA
+#define Y_HOT_DATA
+#endif  // Y_HOT_DATA
 
-#endif  // YAX86_UTIL_COMMON_H
+#endif  // Y_UTIL_COMMON_H
 
 
 // ==============================================================================
@@ -117,15 +117,15 @@ extern "C" {
 
 #line 1 "./src/bios/public.h"
 // Public interface for the BIOS module.
-#ifndef YAX86_BIOS_PUBLIC_H
-#define YAX86_BIOS_PUBLIC_H
+#ifndef Y_BIOS_PUBLIC_H
+#define Y_BIOS_PUBLIC_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef YAX86_BIOS_BUNDLE_H
+#ifndef Y_BIOS_BUNDLE_H
 #include "../util/common.h"
-#endif  // YAX86_BIOS_BUNDLE_H
+#endif  // Y_BIOS_BUNDLE_H
 
 enum {
   // Start address of the BIOS ROM.
@@ -133,14 +133,14 @@ enum {
 };
 
 // Get size of BIOS ROM data.
-YAX86_PUBLIC uint32_t YBIOSGetROMSize(void);
+Y_PUBLIC uint32_t YBIOSGetROMSize(void);
 
 // Get a pointer to the BIOS ROM image, YBIOSGetROMSize() bytes of it. The image
 // is a constant array compiled into the library, so the platform maps it
 // directly rather than reading it a byte at a time through a callback.
-YAX86_PUBLIC const uint8_t* YBIOSGetROMData(void);
+Y_PUBLIC const uint8_t* YBIOSGetROMData(void);
 
-#endif  // YAX86_BIOS_PUBLIC_H
+#endif  // Y_BIOS_PUBLIC_H
 
 
 // ==============================================================================
@@ -148,7 +148,7 @@ YAX86_PUBLIC const uint8_t* YBIOSGetROMData(void);
 // ==============================================================================
 
 
-#ifdef YAX86_IMPLEMENTATION
+#ifdef Y_IMPLEMENTATION
 
 // ==============================================================================
 // src/bios/bios_rom_data.h start
@@ -158,8 +158,8 @@ YAX86_PUBLIC const uint8_t* YBIOSGetROMData(void);
 // ROM data automatically generated by generate-rom-data-files.js
 // Source: GLABIOS_0.2.5_8E.rom
 
-#ifndef YAX86_BIOS_ROM_DATA_H
-#define YAX86_BIOS_ROM_DATA_H
+#ifndef Y_BIOS_ROM_DATA_H
+#define Y_BIOS_ROM_DATA_H
 
 #include <stdint.h>
 
@@ -171,11 +171,11 @@ enum {
 // declaration. In bundled builds, the array is static and defined earlier in
 // the same translation unit (via bundle.json), so an extern declaration
 // would conflict and is omitted.
-#ifndef YAX86_BIOS_BUNDLE_H
+#ifndef Y_BIOS_BUNDLE_H
 extern const uint8_t YBIOSROMData[Y_BIOS_ROM_DATA_SIZE];
-#endif // YAX86_BIOS_BUNDLE_H
+#endif // Y_BIOS_BUNDLE_H
 
-#endif // YAX86_BIOS_ROM_DATA_H
+#endif // Y_BIOS_ROM_DATA_H
 
 
 // ==============================================================================
@@ -192,11 +192,11 @@ extern const uint8_t YBIOSROMData[Y_BIOS_ROM_DATA_SIZE];
 
 #include <stdint.h>
 
-#ifndef YAX86_BIOS_BUNDLE_H
+#ifndef Y_BIOS_BUNDLE_H
 #include "../util/common.h"
-#endif // YAX86_BIOS_BUNDLE_H
+#endif // Y_BIOS_BUNDLE_H
 
-YAX86_MODULE_PRIVATE const uint8_t YBIOSROMData[] = {
+Y_MODULE_PRIVATE const uint8_t YBIOSROMData[] = {
 0x0a,0x47,0x4c,0x61,0x42,0x49,0x4f,0x53,0x20,0x5b,0x03,0x5d,0x20,0x00,0x54,0x68,
 0x65,0x20,0x68,0x65,0x72,0x6f,0x20,0x77,0x65,0x20,0x6e,0x65,0x65,0x64,0x20,0x62,
 0x75,0x74,0x20,0x64,0x6f,0x6e,0x27,0x74,0x20,0x64,0x65,0x73,0x65,0x72,0x76,0x65,
@@ -721,15 +721,15 @@ YAX86_MODULE_PRIVATE const uint8_t YBIOSROMData[] = {
 // ==============================================================================
 
 #line 1 "./src/bios/bios.c"
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "bios_rom_data.h"
 #include "public.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
-YAX86_PUBLIC uint32_t YBIOSGetROMSize(void) { return Y_BIOS_ROM_DATA_SIZE; }
+Y_PUBLIC uint32_t YBIOSGetROMSize(void) { return Y_BIOS_ROM_DATA_SIZE; }
 
-YAX86_PUBLIC const uint8_t* YBIOSGetROMData(void) { return YBIOSROMData; }
+Y_PUBLIC const uint8_t* YBIOSGetROMData(void) { return YBIOSROMData; }
 
 
 // ==============================================================================
@@ -737,11 +737,11 @@ YAX86_PUBLIC const uint8_t* YBIOSGetROMData(void) { return YBIOSROMData; }
 // ==============================================================================
 
 
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // YAX86_BIOS_BUNDLE_H
+#endif  // Y_BIOS_BUNDLE_H
 

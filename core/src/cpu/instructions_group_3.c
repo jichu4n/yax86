@@ -1,9 +1,9 @@
-#ifndef YAX86_IMPLEMENTATION
+#ifndef Y_IMPLEMENTATION
 #include "../util/common.h"
 #include "instructions.h"
 #include "operands.h"
 #include "types.h"
-#endif  // YAX86_IMPLEMENTATION
+#endif  // Y_IMPLEMENTATION
 
 // ============================================================================
 // Group 3 - TEST, NOT, NEG, MUL, IMUL, DIV, IDIV
@@ -14,7 +14,7 @@ typedef YCPUInstructionResult (*YCPUGroup3ExecuteInstructionFn)(
 
 // TEST r/m8, imm8
 // TEST r/m16, imm16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup3Test(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
   return YCPUExecuteTest(ctx, op, src_value);
@@ -22,7 +22,7 @@ YCPUExecuteGroup3Test(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 
 // NOT r/m8
 // NOT r/m16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteNot(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUWriteOperand(ctx, op, ~YCPUFromOperand(op));
   return Y_CPU_INSTRUCTION_EXECUTED;
@@ -30,7 +30,7 @@ YCPUExecuteNot(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 
 // NEG r/m8
 // NEG r/m16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteNeg(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   int32_t op_value = YCPUFromSignedOperand(ctx->metadata->width, op);
   int32_t result_value = -op_value;
@@ -41,7 +41,7 @@ YCPUExecuteNeg(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 
 // Table of where to store the higher half of the result for
 // MUL, IMUL, DIV, and IDIV instructions, indexed by the data width.
-YAX86_FILE_PRIVATE const YCPUOperandAddress
+Y_FILE_PRIVATE const YCPUOperandAddress
     YCPUMulDivResultHighHalfAddress[Y_CPU_NUM_WIDTHS] = {
         {.type = Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER,
          .register_index = Y_CPU_AX,
@@ -53,7 +53,7 @@ YAX86_FILE_PRIVATE const YCPUOperandAddress
 
 // Number of bits to shift to extract the high part of the result of MUL, IMUL,
 // DIV, and IDIV instructions, indexed by the data width.
-YAX86_FILE_PRIVATE const uint8_t
+Y_FILE_PRIVATE const uint8_t
     YCPUMulDivResultHighHalfShiftWidth[Y_CPU_NUM_WIDTHS] = {
         8,   // Y_CPU_BYTE
         16,  // Y_CPU_WORD
@@ -64,7 +64,7 @@ YAX86_FILE_PRIVATE const uint8_t
 // a time in microcode - so unlike everything else in the cycle table they are
 // worth charging individually. The published figures are ranges that depend on
 // the operands; these are the low end of each.
-YAX86_FILE_PRIVATE const uint16_t YCPUMulDivCycles[Y_CPU_NUM_WIDTHS][2] = {
+Y_FILE_PRIVATE const uint16_t YCPUMulDivCycles[Y_CPU_NUM_WIDTHS][2] = {
     // Y_CPU_BYTE: unsigned, signed
     {70, 80},
     // Y_CPU_WORD: unsigned, signed
@@ -72,7 +72,7 @@ YAX86_FILE_PRIVATE const uint16_t YCPUMulDivCycles[Y_CPU_NUM_WIDTHS][2] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest, uint32_t result,
     bool overflow) {
   YCPUWidth width = ctx->metadata->width;
@@ -94,7 +94,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
 
 // MUL r/m8
 // MUL r/m16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteMul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][0]);
   YCPUOperand dest;
@@ -106,7 +106,7 @@ YCPUExecuteMul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 
 // IMUL r/m8
 // IMUL r/m16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteImul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][1]);
   YCPUOperand dest;
@@ -120,7 +120,7 @@ YCPUExecuteImul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
           result < YCPUMinSignedValue[ctx->metadata->width]);
 }
 
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUWriteDivResult(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUWriteDivResult(
     const YCPUInstructionContext* ctx, YCPUOperand* dest, uint32_t quotient,
     uint32_t remainder) {
   YCPUWriteOperand(ctx, dest, quotient);
@@ -131,7 +131,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUWriteDivResult(
 
 // DIV r/m8
 // DIV r/m16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteDiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][0]);
   uint32_t divisor = YCPUFromOperand(op);
@@ -159,7 +159,7 @@ YCPUExecuteDiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 
 // IDIV r/m8
 // IDIV r/m16
-YAX86_FILE_PRIVATE YCPUInstructionResult
+Y_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][1]);
   int32_t divisor = YCPUFromSignedOperand(ctx->metadata->width, op);
@@ -192,7 +192,7 @@ YCPUExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 
 // Group 3 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte and data width.
-YAX86_FILE_PRIVATE const YCPUGroup3ExecuteInstructionFn
+Y_FILE_PRIVATE const YCPUGroup3ExecuteInstructionFn
     YCPUGroup3ExecuteInstructionFns[] = {
         YCPUExecuteGroup3Test,  // 0 - TEST
         // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not
@@ -207,7 +207,7 @@ YAX86_FILE_PRIVATE const YCPUGroup3ExecuteInstructionFn
 };
 
 // Group 3 instruction handler.
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup3Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup3ExecuteInstructionFn fn =
       YCPUGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
