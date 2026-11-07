@@ -23,9 +23,9 @@ class InterruptRequestHintTest : public ::testing::Test {
  protected:
   void SetUp() override {
     pic_.config.sp = false;
-    PICInit(&pic_);
-    PICWritePort(&pic_, kCommandPort, kTestICW1_INIT | kTestICW1_SNGL);
-    PICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
+    YPICInit(&pic_);
+    YPICWritePort(&pic_, kCommandPort, kTestICW1_INIT | kTestICW1_SNGL);
+    YPICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
     ASSERT_EQ(pic_.init_state, kPICReady);
   }
 
@@ -41,16 +41,16 @@ class InterruptRequestHintTest : public ::testing::Test {
 // A PIC out of reset has everything masked, so nothing can be requested.
 TEST_F(InterruptRequestHintTest, StartsClear) {
   YPICState fresh = {0};
-  PICInit(&fresh);
+  YPICInit(&fresh);
   EXPECT_FALSE(fresh.has_unmasked_request);
   EXPECT_EQ(fresh.imr, 0xFF);
 }
 
 TEST_F(InterruptRequestHintTest, RaisingAnUnmaskedIRQSetsIt) {
-  PICWritePort(&pic_, kDataPort, 0x00);
+  YPICWritePort(&pic_, kDataPort, 0x00);
   ExpectHintMatchesRegisters();
 
-  PICRaiseIRQ(&pic_, 3);
+  YPICRaiseIRQ(&pic_, 3);
   EXPECT_TRUE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
@@ -58,26 +58,26 @@ TEST_F(InterruptRequestHintTest, RaisingAnUnmaskedIRQSetsIt) {
 // The flag says a request exists, not that it would be taken - so a masked
 // request leaves it false, and unmasking alone is enough to set it.
 TEST_F(InterruptRequestHintTest, MaskingAndUnmaskingTrackTheRequest) {
-  PICWritePort(&pic_, kDataPort, 0xFF);
-  PICRaiseIRQ(&pic_, 4);
+  YPICWritePort(&pic_, kDataPort, 0xFF);
+  YPICRaiseIRQ(&pic_, 4);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 
-  PICWritePort(&pic_, kDataPort, (uint8_t)~(1 << 4));
+  YPICWritePort(&pic_, kDataPort, (uint8_t)~(1 << 4));
   EXPECT_TRUE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 
-  PICWritePort(&pic_, kDataPort, 0xFF);
+  YPICWritePort(&pic_, kDataPort, 0xFF);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
 
 TEST_F(InterruptRequestHintTest, LoweringAnIRQClearsIt) {
-  PICWritePort(&pic_, kDataPort, 0x00);
-  PICRaiseIRQ(&pic_, 5);
+  YPICWritePort(&pic_, kDataPort, 0x00);
+  YPICRaiseIRQ(&pic_, 5);
   ASSERT_TRUE(pic_.has_unmasked_request);
 
-  PICLowerIRQ(&pic_, 5);
+  YPICLowerIRQ(&pic_, 5);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
@@ -85,10 +85,10 @@ TEST_F(InterruptRequestHintTest, LoweringAnIRQClearsIt) {
 // Acknowledging is what clears the request, so the flag has to fall with it -
 // otherwise the CPU would keep running acknowledge cycles that report nothing.
 TEST_F(InterruptRequestHintTest, AcknowledgingClearsIt) {
-  PICWritePort(&pic_, kDataPort, 0x00);
-  PICRaiseIRQ(&pic_, 3);
+  YPICWritePort(&pic_, kDataPort, 0x00);
+  YPICRaiseIRQ(&pic_, 3);
 
-  EXPECT_EQ(PICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 3);
+  EXPECT_EQ(YPICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 3);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
@@ -96,30 +96,30 @@ TEST_F(InterruptRequestHintTest, AcknowledgingClearsIt) {
 // One of two requests acknowledged leaves the other outstanding, so the flag
 // stays set even though the first is now in service.
 TEST_F(InterruptRequestHintTest, StaysSetWhileAnotherRequestRemains) {
-  PICWritePort(&pic_, kDataPort, 0x00);
-  PICRaiseIRQ(&pic_, 2);
-  PICRaiseIRQ(&pic_, 5);
+  YPICWritePort(&pic_, kDataPort, 0x00);
+  YPICRaiseIRQ(&pic_, 2);
+  YPICRaiseIRQ(&pic_, 5);
 
-  EXPECT_EQ(PICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 2);
+  EXPECT_EQ(YPICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 2);
   EXPECT_TRUE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 
-  PICWritePort(&pic_, kCommandPort, kTestOCW2_EOI);
-  EXPECT_EQ(PICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 5);
+  YPICWritePort(&pic_, kCommandPort, kTestOCW2_EOI);
+  EXPECT_EQ(YPICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 5);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
 
 // A request the in-service register outranks is still a request. The flag is
-// allowed to be true where PICGetPendingInterrupt() declines - it may only
+// allowed to be true where YPICGetPendingInterrupt() declines - it may only
 // never be falsely false - and this is the case where that happens.
 TEST_F(InterruptRequestHintTest, SetWhileALowerPriorityRequestIsHeldOff) {
-  PICWritePort(&pic_, kDataPort, 0x00);
-  PICRaiseIRQ(&pic_, 1);
-  ASSERT_EQ(PICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 1);
+  YPICWritePort(&pic_, kDataPort, 0x00);
+  YPICRaiseIRQ(&pic_, 1);
+  ASSERT_EQ(YPICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 1);
 
-  PICRaiseIRQ(&pic_, 6);
-  EXPECT_EQ(PICGetPendingInterrupt(&pic_), kPICNoPendingInterrupt);
+  YPICRaiseIRQ(&pic_, 6);
+  EXPECT_EQ(YPICGetPendingInterrupt(&pic_), kPICNoPendingInterrupt);
   EXPECT_TRUE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
@@ -127,11 +127,11 @@ TEST_F(InterruptRequestHintTest, SetWhileALowerPriorityRequestIsHeldOff) {
 // Re-initializing clears the request register and masks everything, so a
 // request outstanding across it must not survive in the flag.
 TEST_F(InterruptRequestHintTest, ReinitializingClearsIt) {
-  PICWritePort(&pic_, kDataPort, 0x00);
-  PICRaiseIRQ(&pic_, 7);
+  YPICWritePort(&pic_, kDataPort, 0x00);
+  YPICRaiseIRQ(&pic_, 7);
   ASSERT_TRUE(pic_.has_unmasked_request);
 
-  PICWritePort(&pic_, kCommandPort, kTestICW1_INIT | kTestICW1_SNGL);
+  YPICWritePort(&pic_, kCommandPort, kTestICW1_INIT | kTestICW1_SNGL);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
@@ -141,26 +141,26 @@ TEST_F(InterruptRequestHintTest, ReinitializingClearsIt) {
 TEST_F(InterruptRequestHintTest, ASlaveRequestSetsTheMastersFlag) {
   YPICState slave = {0};
   slave.config.sp = true;
-  PICInit(&slave);
-  PICWritePort(&slave, 0xA0, kTestICW1_INIT);
-  PICWritePort(&slave, 0xA1, 0x70);
-  PICWritePort(&slave, 0xA1, 2);
+  YPICInit(&slave);
+  YPICWritePort(&slave, 0xA0, kTestICW1_INIT);
+  YPICWritePort(&slave, 0xA1, 0x70);
+  YPICWritePort(&slave, 0xA1, 2);
   ASSERT_EQ(slave.init_state, kPICReady);
 
-  PICWritePort(&pic_, kCommandPort, kTestICW1_INIT);
-  PICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
-  PICWritePort(&pic_, kDataPort, 1 << 2);
+  YPICWritePort(&pic_, kCommandPort, kTestICW1_INIT);
+  YPICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
+  YPICWritePort(&pic_, kDataPort, 1 << 2);
   ASSERT_EQ(pic_.init_state, kPICReady);
-  PICWritePort(&pic_, kDataPort, 0x00);
-  PICWritePort(&slave, 0xA1, 0x00);
+  YPICWritePort(&pic_, kDataPort, 0x00);
+  YPICWritePort(&slave, 0xA1, 0x00);
   pic_.cascade_pic = &slave;
   slave.cascade_pic = &pic_;
 
-  PICRaiseIRQ(&slave, 3);
+  YPICRaiseIRQ(&slave, 3);
   EXPECT_TRUE(slave.has_unmasked_request);
   EXPECT_TRUE(pic_.has_unmasked_request);
 
-  PICLowerIRQ(&slave, 3);
+  YPICLowerIRQ(&slave, 3);
   EXPECT_FALSE(slave.has_unmasked_request);
   EXPECT_FALSE(pic_.has_unmasked_request);
 }

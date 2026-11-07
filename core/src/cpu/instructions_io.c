@@ -11,7 +11,7 @@
 
 // Read a byte from an I/O port.
 YAX86_FILE_PRIVATE YAX86_HOT YCPUOperandValue
-ReadByteFromPort(YCPUState* cpu, uint16_t port) {
+YCPUReadByteFromPort(YCPUState* cpu, uint16_t port) {
   return (YCPUOperandValue)(cpu->config.read_port
                                 ? cpu->config.read_port(cpu, port)
                                 : 0xFF);
@@ -22,76 +22,76 @@ ReadByteFromPort(YCPUState* cpu, uint16_t port) {
 // on this: writing a 6845 register index and its data in one OUT DX, AX is the
 // standard idiom, and it is what the BIOS uses.
 YAX86_FILE_PRIVATE YCPUOperandValue
-ReadWordFromPort(YCPUState* cpu, uint16_t port) {
-  uint8_t low = (uint8_t)ReadByteFromPort(cpu, port);
-  uint8_t high = (uint8_t)ReadByteFromPort(cpu, (uint16_t)(port + 1));
+YCPUReadWordFromPort(YCPUState* cpu, uint16_t port) {
+  uint8_t low = (uint8_t)YCPUReadByteFromPort(cpu, port);
+  uint8_t high = (uint8_t)YCPUReadByteFromPort(cpu, (uint16_t)(port + 1));
   return (YCPUOperandValue)((high << 8) | low);
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
 YAX86_FILE_PRIVATE YCPUOperandValue (*const kReadFromPortFns[])(
     YCPUState*, uint16_t) = {
-  ReadByteFromPort,  // kByte
-  ReadWordFromPort,  // kWord
+  YCPUReadByteFromPort,  // kByte
+  YCPUReadWordFromPort,  // kWord
 };
 
 // Common logic for IN instructions.
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteIn(const YCPUInstructionContext* ctx, uint16_t port) {
+YCPUExecuteIn(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperandValue value =
       kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   YCPUOperand dest;
-  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
-  WriteOperand(ctx, &dest, FromOperandValue(value));
+  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUWriteOperand(ctx, &dest, YCPUFromOperandValue(value));
   return kInstructionExecuted;
 }
 
 // IN AL, imm8
 // IN AX, imm8
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-ExecuteInImmediate(const YCPUInstructionContext* ctx) {
-  YCPUOperandValue port = ReadImmediateOperandByte(ctx->instruction);
-  return ExecuteIn(ctx, FromOperandValue(port));
+YCPUExecuteInImmediate(const YCPUInstructionContext* ctx) {
+  YCPUOperandValue port = YCPUReadImmediateOperandByte(ctx->instruction);
+  return YCPUExecuteIn(ctx, YCPUFromOperandValue(port));
 }
 
 // IN AL, DX
 // IN AX, DX
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-ExecuteInDX(const YCPUInstructionContext* ctx) {
-  return ExecuteIn(ctx, ctx->cpu->registers[kDX]);
+YCPUExecuteInDX(const YCPUInstructionContext* ctx) {
+  return YCPUExecuteIn(ctx, ctx->cpu->registers[kDX]);
 }
 
 // Write a byte to an I/O port.
-YAX86_FILE_PRIVATE void WriteByteToPort(
+YAX86_FILE_PRIVATE void YCPUWriteByteToPort(
     YCPUState* cpu, uint16_t port, YCPUOperandValue value) {
   if (!cpu->config.write_port) {
     return;
   }
-  cpu->config.write_port(cpu, port, FromOperandValue(value));
+  cpu->config.write_port(cpu, port, YCPUFromOperandValue(value));
 }
 
 // Write a word to an I/O port. As with reads, this is two byte accesses to
 // consecutive ports.
-YAX86_FILE_PRIVATE void WriteWordToPort(
+YAX86_FILE_PRIVATE void YCPUWriteWordToPort(
     YCPUState* cpu, uint16_t port, YCPUOperandValue value) {
-  uint32_t raw_value = FromOperandValue(value);
-  WriteByteToPort(cpu, port, (YCPUOperandValue)(raw_value & 0xFF));
-  WriteByteToPort(
+  uint32_t raw_value = YCPUFromOperandValue(value);
+  YCPUWriteByteToPort(cpu, port, (YCPUOperandValue)(raw_value & 0xFF));
+  YCPUWriteByteToPort(
       cpu, (uint16_t)(port + 1), (YCPUOperandValue)((raw_value >> 8) & 0xFF));
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
 YAX86_FILE_PRIVATE void (*const kWriteToPortFns[])(
     YCPUState*, uint16_t, YCPUOperandValue) = {
-    WriteByteToPort,  // kByte
-    WriteWordToPort,  // kWord
+    YCPUWriteByteToPort,  // kByte
+    YCPUWriteWordToPort,  // kWord
 };
 
 // Common logic for OUT instructions.
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
+YCPUExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperand src;
-  ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
   kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
   return kInstructionExecuted;
 }
@@ -99,14 +99,14 @@ ExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
 // OUT imm8, AL
 // OUT imm8, AX
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteOutImmediate(const YCPUInstructionContext* ctx) {
-  YCPUOperandValue port = ReadImmediateOperandByte(ctx->instruction);
-  return ExecuteOut(ctx, FromOperandValue(port));
+YCPUExecuteOutImmediate(const YCPUInstructionContext* ctx) {
+  YCPUOperandValue port = YCPUReadImmediateOperandByte(ctx->instruction);
+  return YCPUExecuteOut(ctx, YCPUFromOperandValue(port));
 }
 
 // OUT DX, AL
 // OUT DX, AX
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-ExecuteOutDX(const YCPUInstructionContext* ctx) {
-  return ExecuteOut(ctx, ctx->cpu->registers[kDX]);
+YCPUExecuteOutDX(const YCPUInstructionContext* ctx) {
+  return YCPUExecuteOut(ctx, ctx->cpu->registers[kDX]);
 }

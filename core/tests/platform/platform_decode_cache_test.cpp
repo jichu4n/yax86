@@ -24,7 +24,7 @@ class PlatformDecodeCacheTest : public ::testing::Test {
     platform_.config.vram = vram_;
     platform_.config.video_adapter = kVideoAdapterCGA;
 
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
     platform_.cpu.registers[kCS] = 0;
     platform_.cpu.registers[kDS] = 0;
     platform_.cpu.registers[kSS] = 0;
@@ -42,7 +42,7 @@ class PlatformDecodeCacheTest : public ::testing::Test {
 
   void RunAt(uint16_t ip) {
     platform_.cpu.registers[kIP] = ip;
-    ASSERT_EQ(PlatformTick(&platform_), kPlatformRunning);
+    ASSERT_EQ(YPlatformTick(&platform_), kPlatformRunning);
   }
 
   uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
@@ -56,7 +56,7 @@ class PlatformDecodeCacheTest : public ::testing::Test {
 TEST_F(PlatformDecodeCacheTest, ThePlatformHandsTheCPUItsDecodeCache) {
   EXPECT_EQ(platform_.cpu.config.decode_cache, platform_.cpu_decode_cache);
   EXPECT_EQ(platform_.cpu.config.decode_cache_num_entries, kDecodeCacheEntries);
-  // Which CPUInit() accepted, rather than logging and running without one.
+  // Which YCPUInit() accepted, rather than logging and running without one.
   EXPECT_EQ(platform_.cpu.decode_cache_index_mask, kDecodeCacheEntries - 1);
 }
 
@@ -67,7 +67,7 @@ TEST_F(PlatformDecodeCacheTest, AWriteThroughTheMemoryMapDiscardsTheDecode) {
   RunAt(kProgramOffset);
   ASSERT_EQ(al(), 0x11);
 
-  WriteMemoryByte(&platform_, kProgramOffset + 1, 0x22);
+  YPlatformWriteMemoryByte(&platform_, kProgramOffset + 1, 0x22);
   RunAt(kProgramOffset);
   EXPECT_EQ(al(), 0x22);
 }
@@ -86,8 +86,8 @@ TEST_F(PlatformDecodeCacheTest, RegisteringAMemoryRegionDiscardsEveryDecode) {
   extra_rom.start = 0xD0000;
   extra_rom.end = 0xD07FF;
   extra_rom.read_data = rom_;
-  ASSERT_TRUE(RegisterMemoryMapEntry(&platform_, &extra_rom));
-  PlatformUpdateAfterMemoryMapChange(&platform_);
+  ASSERT_TRUE(YPlatformRegisterMemoryMapEntry(&platform_, &extra_rom));
+  YPlatformUpdateAfterMemoryMapChange(&platform_);
 
   RunAt(kProgramOffset);
   EXPECT_EQ(al(), 0x22);

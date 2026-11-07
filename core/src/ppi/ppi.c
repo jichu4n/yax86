@@ -2,20 +2,21 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-YAX86_PUBLIC void PPIInit(YPPIState* ppi) {
+YAX86_PUBLIC void YPPIInit(YPPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
-YAX86_FILE_PRIVATE inline uint8_t GetNumFloppyDrives(const YPPIConfig* config) {
+YAX86_FILE_PRIVATE inline uint8_t YPPIGetNumFloppyDrives(
+    const YPPIConfig* config) {
   if (config->num_floppy_drives < 1) return 1;
   if (config->num_floppy_drives > 4) return 4;
   return config->num_floppy_drives;
 }
 
-YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port) {
+YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port) {
   switch (port) {
     case kPPIPortA:
       // Reading Port A gets the keyboard scancode.
@@ -42,7 +43,7 @@ YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port) {
         port_c |= ppi->config.display_mode & 0x03;
         // Bits 2-3: Number of drives. Slightly confusingly, the encoding is
         // 1-based, i.e. 00=1 drive, 01=2 drives, etc.
-        port_c |= (((GetNumFloppyDrives(&ppi->config) - 1) & 0x03) << 2);
+        port_c |= (((YPPIGetNumFloppyDrives(&ppi->config) - 1) & 0x03) << 2);
         // Bits 4-7 are for unsupported features.
         return port_c;
       }
@@ -52,22 +53,22 @@ YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(YPPIState* ppi) {
+YAX86_PUBLIC bool YPPIIsPCSpeakerEnabled(YPPIState* ppi) {
   return (ppi->port_b & kPPIPortBTimer2Gate) &&
          (ppi->port_b & kPPIPortBSpeakerData);
 }
 
-YAX86_FILE_PRIVATE inline uint8_t PPIGetKeyboardControl(const YPPIState* ppi) {
+YAX86_FILE_PRIVATE inline uint8_t YPPIGetKeyboardControl(const YPPIState* ppi) {
   return (
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
-YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
     case kPPIPortB: {
       // Save old states in order to check for changes after the write.
-      bool old_speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
-      uint8_t old_keyboard_control = PPIGetKeyboardControl(ppi);
+      bool old_speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
+      uint8_t old_keyboard_control = YPPIGetKeyboardControl(ppi);
 
       ppi->port_b = value;
 
@@ -77,16 +78,17 @@ YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
       }
 
       // Check for changes in PC speaker control bits and fire callback.
-      bool speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
+      bool speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
       if (old_speaker_enabled != speaker_enabled &&
           ppi->config.set_pc_speaker_frequency) {
-        const uint32_t frequency =
-            PPIIsPCSpeakerEnabled(ppi) ? ppi->pc_speaker_frequency_from_pit : 0;
+        const uint32_t frequency = YPPIIsPCSpeakerEnabled(ppi)
+                                       ? ppi->pc_speaker_frequency_from_pit
+                                       : 0;
         ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency);
       }
 
       // Check for changes in keyboard control bits and fire callback.
-      uint8_t keyboard_control = PPIGetKeyboardControl(ppi);
+      uint8_t keyboard_control = YPPIGetKeyboardControl(ppi);
       if (old_keyboard_control != keyboard_control &&
           ppi->config.set_keyboard_control) {
         ppi->config.set_keyboard_control(
@@ -107,18 +109,18 @@ YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+YAX86_PUBLIC void YPPISetPCSpeakerFrequencyFromPIT(
     YPPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
   // Invoke the callback only if the speaker is currently enabled and the
   // frequency has changed.
-  if (PPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
+  if (YPPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
       ppi->config.set_pc_speaker_frequency) {
     ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency_hz);
   }
 }
 
-YAX86_PUBLIC void PPISetScancode(YPPIState* ppi, uint8_t scancode) {
+YAX86_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode) {
   ppi->port_a_latch = scancode;
 }

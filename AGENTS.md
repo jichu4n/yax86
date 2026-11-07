@@ -159,7 +159,7 @@ pollutes the symbol table of any host application linking against
 `libyax86_core.a`.
 
 The allowlist records each exported symbol with its `nm` symbol type letter,
-as in `T BIOSGetROMData`, so it pins both which symbols are exported and that
+as in `T YBIOSGetROMData`, so it pins both which symbols are exported and that
 every one of them is a function. The library exports no data at all, and a
 const table that gained external linkage would show up as an `R` rather than
 only as a new name. The file is the record of what the public surface is -
@@ -287,7 +287,7 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
   eleven init functions would otherwise all be called Init.
 - **util is not a module**, and each of its headers is its own owner: `Log`
   (whose state and config are `YLogger` and `YLoggerConfig`), `StaticVector`,
-  and `SNPrintF`, whose `va_list` form keeps C's prefix at the front as
+  and `YSNPrintF`, whose `va_list` form keeps C's prefix at the front as
   `YVSNPrintF`. There is no `YUtil`. The macros in `util/common.h` are the
   project's own infrastructure and have no owner: `Y_PUBLIC`, `Y_HOT`,
   `Y_UNUSED`, and `Y_IMPLEMENTATION`, which a host defines.
@@ -331,21 +331,21 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
 
 - **The macro names the tier and nothing else.** `inline`, `const` and the
   return type are written out after it, exactly as they would be without it:
-  `YAX86_PUBLIC_HEADER inline bool CPUGetFlag(...)`, `YAX86_FILE_PRIVATE const
+  `YAX86_PUBLIC_HEADER inline bool YCPUGetFlag(...)`, `YAX86_FILE_PRIVATE const
   YCPUFlag kFlagsForClearAndSetInstructions[]`. Folding a keyword into a macro
   name needs one macro per tier per declaration shape, and the shapes do not
   stop at `inline` - a header-defined public function that is not inline has
-  nowhere to go in such a scheme, which `LoggerWrite()` is.
+  nowhere to go in such a scheme, which `YLoggerWrite()` is.
 - A separate macro is warranted where the **expansion** differs, never where a
   keyword does. That is why `YAX86_PUBLIC` and `YAX86_PUBLIC_HEADER` are two
   macros: a definition in a header needs internal linkage and one in a source
   file must not have it.
 - **Public means reachable through the interface, not referenced by a host
   today.** The eleven `kLogModule*` descriptors are used only inside `core/src`,
-  and are public because `LoggerEnableModule()` is public and takes one - a host
-  turning on the CPU's logging has nothing else to pass. `SNPrintF()` is the
-  other way round: it sits in every module's public half because `log.h` needs
-  it, and nothing outside the core calls it.
+  and are public because `YLoggerEnableModule()` is public and takes one - a
+  host turning on the CPU's logging has nothing else to pass. `YSNPrintF()` is
+  the other way round: it sits in every module's public half because `log.h`
+  needs it, and nothing outside the core calls it.
 - `static` alone says a symbol has internal linkage, which in the bundled build
   means internal to the whole bundle rather than to its file. It is the marker
   that cannot express which of the tiers above was meant, which is why none of
@@ -359,13 +359,13 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
 
 - **The visibility macro comes first, then the placement and inlining marks,
   then the return type**: `YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-  ExecuteSub(...)`, `YAX86_FILE_PRIVATE YAX86_HOT uint8_t ReadByte(...)`. Every
-  definition carries a visibility macro and only 91 carry a mark, so leading with
-  the universal one puts the answer to "is this part of the interface" in the
-  same place on every line, and makes `^YAX86_PUBLIC` an exact count rather than
-  an approximate one. `YAX86_HOT`, `YAX86_NOINLINE` and `YAX86_ALWAYS_INLINE`
-  follow it, in whatever combination applies - `CPUExecuteDecodedInstruction()`
-  carries two.
+  YCPUExecuteSub(...)`, `YAX86_FILE_PRIVATE YAX86_HOT uint8_t ReadByte(...)`.
+  Every definition carries a visibility macro and only 91 carry a mark, so
+  leading with the universal one puts the answer to "is this part of the
+  interface" in the same place on every line, and makes `^YAX86_PUBLIC` an exact
+  count rather than an approximate one. `YAX86_HOT`, `YAX86_NOINLINE` and
+  `YAX86_ALWAYS_INLINE` follow it, in whatever combination applies -
+  `YCPUExecuteDecodedInstruction()` carries two.
 - Both orders compile, and an attribute behind `static` (or `YAX86_FILE_PRIVATE`,
   which expands to it) still takes effect: `YAX86_FILE_PRIVATE YAX86_HOT`,
   `YAX86_FILE_PRIVATE inline YAX86_HOT` and `YAX86_FILE_PRIVATE YAX86_HOT
@@ -509,14 +509,14 @@ Alongside the table, state:
 - The consequence is that **a host must zero-initialize its `YPlatformState`**.
   `static YPlatformState platform;` does it, as does `= {0}`. Miss it and the
   machine comes up with garbage in every module rather than in one.
-- `FDCInit()` is empty, because an FDC powers on with every field at zero. It
+- `YFDCInit()` is empty, because an FDC powers on with every field at zero. It
   is kept so that every module is brought up the same way, and so that a
   non-zero default acquired later has somewhere to go.
-- **A reset is not an init.** `DMAWritePort()`'s master reset does have to
+- **A reset is not an init.** `YDMAWritePort()`'s master reset does have to
   clear the controller's state, and it saves and restores the config across
   doing so - a reset is the chip's, not the machine's, and the config is what
   the host wired up. That distinction is what the DMA tests caught when the
-  reset was left calling `DMAInit()` after it stopped zeroing.
+  reset was left calling `YDMAInit()` after it stopped zeroing.
 - The logger is the exception and stays a pointer: `YLogger` is a `util` type
   rather than an emulated module, and several of them may reasonably share one
   `YLoggerConfig`.
@@ -551,7 +551,7 @@ Alongside the table, state:
 ### cpu — state and config
 
 - **`YCPUConfig` is a field of `YCPUState`, and a caller fills it in before
-  `CPUInit()`** — the same shape every module follows, described under "How the
+  `YCPUInit()`** — the same shape every module follows, described under "How the
   core fits together". What is specific to the CPU is why it is held by value
   rather than by pointer, and where in the struct it sits.
 - Held by value rather than by pointer. The dereference cost **+0.34% at `-O3`
@@ -560,7 +560,7 @@ Alongside the table, state:
   long as the CPU — a rule nothing stated and nothing enforced.
 - **Three kinds of field, and the difference is what may write them:**
   - **Config — constructor arguments.** Written by the caller before
-    `CPUInit()`, checked there, read-only afterwards. `CPUInit()` is the only
+    `YCPUInit()`, checked there, read-only afterwards. `YCPUInit()` is the only
     reader of `decode_cache_num_entries`, so a host that changes it later
     changes nothing.
   - **Plain state.** `registers`, `flags`, `instructions_retired`,
@@ -568,11 +568,11 @@ Alongside the table, state:
     writing one directly is fine and reads better than a setter would. There
     are about 1,400 such writes in the tests.
   - **Coupled state — a setter, which is its sole writer.** The fields another
-    field's correctness depends on: `CPUSetDirectDataWindow()` and
+    field's correctness depends on: `YCPUSetDirectDataWindow()` and
     `CPUInvalidateInstructionFetchWindow()`. This
     is the sole-writer discipline `PlatformUpdateEnabledFlags()` and
-    `PICUpdateUnmaskedRequest()` already follow, stated as a rule.
-- **`CPUSetDirectDataWindow()` is not an aberration**, and an earlier note here
+    `YPICUpdateUnmaskedRequest()` already follow, stated as a rule.
+- **`YCPUSetDirectDataWindow()` is not an aberration**, and an earlier note here
   called it one. The window is *derived* — the platform computes which slice of
   its memory the CPU may index, from whichever map entry covers address 0 and
   only while no watchpoint is enabled — rather than handed over raw, and its
@@ -580,7 +580,7 @@ Alongside the table, state:
   compare. That is coupled state, and a setter is what coupled state gets.
   What made `CPUSetDecodeCache()` wrong was different: it passed *constructor
   arguments* through a setter.
-- **A per-call parameter is none of the three.** `CPUTick()`'s `max_run_cycles`
+- **A per-call parameter is none of the three.** `YCPUTick()`'s `max_run_cycles`
   is host-provided but set every tick, so it is an argument, not a field. Do
   not "fix" it into the config: config is written once, and a value that
   changes every call written once is wrong rather than tidy.
@@ -595,7 +595,7 @@ Alongside the table, state:
 
 ### cpu — instruction decoding
 
-- `CPUFetchNextInstruction()` decodes directly into the caller's
+- `YCPUFetchNextInstruction()` decodes directly into the caller's
   `YCPUInstruction`. Filling a local and copying it out at the end costs more
   than the whole decode: with `gcc -O3` over a boot and idle run at the DOS
   prompt, 3.5% of host instructions, 8.4% of data references — 97M extra reads
@@ -617,7 +617,7 @@ Alongside the table, state:
   say. Only the two prefix fields are cleared before the decode starts. Worth
   **4.63% at `-O3`** and 3.96% at `-O2`.
 - What makes that safe is that a reused destination keeps nothing of the
-  instruction before it, and reuse is the ordinary case — `CPUTick()` holds a
+  instruction before it, and reuse is the ordinary case — `YCPUTick()` holds a
   single `YCPUInstruction` for the life of the CPU.
   `ADecodeKeepsNothingOfThePreviousInstruction` pins it directly. The hardware
   suite catches a dropped clear as well, and emphatically — removing one fails
@@ -632,10 +632,10 @@ Alongside the table, state:
   to one is a read-modify-write of the byte it shares — `ldrb`/`bics`/`strb`,
   or `ldrb`/`bics`/`orrs`/`strb` to set as well as clear — and a read is a load
   plus a shift plus a mask. `YCPUModRM` is where that bites hardest: `mod` and
-  `rm` are taken by `GetMemoryOperandAddress()` for every memory operand and by
-  `GetEffectiveAddressCycles()` for every instruction, and `reg` selects the
-  handler for all five instruction groups. The margin is widest at `-O2`, where
-  less is inlined and those reads stay explicit.
+  `rm` are taken by `YCPUGetMemoryOperandAddress()` for every memory operand and
+  by `YCPUGetEffectiveAddressCycles()` for every instruction, and `reg` selects
+  the handler for all five instruction groups. The margin is widest at `-O2`,
+  where less is inlined and those reads stay explicit.
 - **Do not re-derive a rule that `YCPUInstruction` should be kept small.** It
   was true only while the decode copied the struct, which it no longer does;
   nothing copies a `YCPUInstruction` per instruction, so its size buys almost
@@ -650,7 +650,7 @@ Alongside the table, state:
   alongside the other two is neutral and dead, since it is assigned
   unconditionally further down.
 - The one field read before it is known to exist is the ModR/M `REG` field,
-  which `GetImmediateSize()` needs whether or not the instruction carries a
+  which `YCPUGetImmediateSize()` needs whether or not the instruction carries a
   ModR/M byte. Only `0xF6` and `0xF7` consult it and both do carry one, so the
   value is never used — but it still has to be *defined*. The decode keeps it
   in a local initialized to 0 rather than reading `mod_rm.reg` back, which is
@@ -686,7 +686,7 @@ Alongside the table, state:
   inside the one already open, so reopening is a compare rather than a call.
 - `YCPUInstructionFetchState` is the per-decode cursor derived from it, and
   holds neither a `YCPUState` pointer nor a reference to the CPU's IP: IP has to
-  keep naming the instruction being decoded until `CPUTick()` advances it by
+  keep naming the instruction being decoded until `YCPUTick()` advances it by
   `instruction.size`, and a byte-by-byte write into `cpu->registers[]` is a
   store the compiler cannot keep in a register.
 - **Caching a pointer is safe where caching bytes would not be.** The window
@@ -724,17 +724,17 @@ Alongside the table, state:
   against this one's +10.86%. Lending the entry out is safe because no
   instruction handler writes through the `YCPUInstruction` it is given.
 - **The storage and its size are constructor arguments, so they are in
-  `YCPUConfig`** and checked in `CPUInit()` — see the state and config section
+  `YCPUConfig`** and checked in `YCPUInit()` — see the state and config section
   below for why that is where host-provided data goes. A compile-time array
   would have been worse: it would put the size of `YCPUState` behind a macro,
   and a single-header library whose layout depends on a define is a mismatch
   waiting to happen between `libyax86_core.a` and whatever includes it.
 - What changes over a CPU's life is not the storage but whether the CPU may use
-  it, which is `YCPUState.decode_cache` — derived by `CPUInit()` and by
+  it, which is `YCPUState.decode_cache` — derived by `YCPUInit()` and by
   `CPUSetDecodeCacheEnabled()`, which is its sole writer afterwards. A rejected
   count and a cache withdrawn for a watchpoint both leave it NULL, so the fetch
   tests one thing rather than two.
-- `CPUInvalidateDecodeCache()` walks `config.decode_cache` rather than the
+- `YCPUInvalidateDecodeCache()` walks `config.decode_cache` rather than the
   derived pointer, so entries are discarded even while the cache is withdrawn.
   A host that hands it back must not find stale decodes waiting in it, and
   `InvalidatingReachesEntriesWhileTheCacheIsAway` is what says so.
@@ -744,7 +744,7 @@ Alongside the table, state:
 - **The fetch tests two guards and both earn their place**, because the two
   ways there is no cache are recorded in different places: the config pointer
   is the host's and may be cleared at any time, and the mask is zero where
-  `CPUInit()` rejected the count. Dropping the second measures **1.9% slower at
+  `YCPUInit()` rejected the count. Dropping the second measures **1.9% slower at
   `-O3`** — one of the clearer examples here of an arrangement that reads
   cheaper and is not. It is also why the minimum count is two rather than one.
 - **A decode records what the instruction costs as well as what it is.**
@@ -757,7 +757,7 @@ Alongside the table, state:
   exactly where the decode it belongs to is kept, and
   `AHitChargesForTheAddressItComputes` and `ARunStopsAtTheBudget` are the two
   tests that catch it going stale.
-- **The base cost is settled inside `CPUFetchNextInstruction()`, and where it
+- **The base cost is settled inside `YCPUFetchNextInstruction()`, and where it
   is read from decides whether one table or two pays.** `YCPUOpcodeMetadata` has
   two bytes of padding, so `base_cycles` lives there for free and there is no
   second table — but only because the decoder reads it through the `metadata`
@@ -770,23 +770,23 @@ Alongside the table, state:
   decoder through the table and cannot rely on the line being warm.
 - **The fetch and the run loop carry a `YCPUDecodeCacheEntry*`, not the
   `YCPUInstruction*` inside it**, and that is measured rather than left over
-  from when the cost lived in the entry: `CPUTick()` reads nothing from an entry
-  but `->instruction`, yet handing back the instruction instead costs **0.68% at
-  `-O3`** and 0.10% at `-O2`. What matters is the type of the pointer carried
-  across the fetch boundary and the loop. One entry pointer addresses the key
-  fields at offsets 0, 22 and 23 and every instruction field at 4 through 21,
-  all within the 5-bit immediate a Cortex-M0+ encodes in a load. Handing back
-  the `YCPUInstruction` makes the inlined probe at the bottom of the run loop
-  hold the entry for its hit test *and* `entry->instruction` to carry across the
-  back-edge and the `CPUExecuteDecodedInstruction()` call - two live pointers
-  where there was one, in a function with none to spare. `CPUTick()`'s frame
-  goes from 52 bytes to 60 and the loop picks up a spill and a reload, while
-  the function gets 4 bytes *smaller*: it is register pressure paid per
-  instruction, not code size.
+  from when the cost lived in the entry: `YCPUTick()` reads nothing from an
+  entry but `->instruction`, yet handing back the instruction instead costs
+  **0.68% at `-O3`** and 0.10% at `-O2`. What matters is the type of the pointer
+  carried across the fetch boundary and the loop. One entry pointer addresses
+  the key fields at offsets 0, 22 and 23 and every instruction field at 4
+  through 21, all within the 5-bit immediate a Cortex-M0+ encodes in a load.
+  Handing back the `YCPUInstruction` makes the inlined probe at the bottom of
+  the run loop hold the entry for its hit test *and* `entry->instruction` to
+  carry across the back-edge and the `YCPUExecuteDecodedInstruction()` call -
+  two live pointers where there was one, in a function with none to spare.
+  `YCPUTick()`'s frame goes from 52 bytes to 60 and the loop picks up a spill
+  and a reload, while the function gets 4 bytes *smaller*: it is register
+  pressure paid per instruction, not code size.
 - **That was worth disassembling rather than accepting.** `nm` says the two
   builds have the same symbols at the same addresses with the same SRAM and
   flash placement, so the usual suspect - a change moving an inlining decision
-  somewhere else - is ruled out, and the cost is local to `CPUTick()`. Three
+  somewhere else - is ruled out, and the cost is local to `YCPUTick()`. Three
   ways of writing it with a `YCPUInstruction*` (the scratch left as an entry,
   the scratch made a bare `YCPUInstruction`, and a `const` local re-derived each
   iteration) all land within 0.005% of each other and 0.68% behind, which is
@@ -798,7 +798,7 @@ Alongside the table, state:
   the same 24.
 - **The fetch has exactly one call to the decoder**, which is load-bearing
   rather than tidiness. The obvious shape — an early return for the no-cache
-  path, a second `CPUFetchNextInstruction()` below it — gives `-O2` two call
+  path, a second `YCPUFetchNextInstruction()` below it — gives `-O2` two call
   sites, at which point it stops inlining the decoder and puts it in flash
   behind a veneer. That measures **2.54% slower at `-O2`**, where `-O3` is
   indifferent between the two (0.01%, inside the noise floor). It is the
@@ -814,12 +814,12 @@ Alongside the table, state:
 - **`code_page_generation` is the whole invalidation mechanism.** One wrapping
   byte per 4KB page; an entry records what its page stood at and is discarded
   once the two disagree. The CPU bumps it for every write it makes itself, in
-  `WriteRawMemoryByte()`, which is where operands, stack pushes and interrupt
-  vector writes all end up — so a host only has to report the writes it makes
-  some *other* way. The platform reports those from `WriteMemoryByte()`, which
-  is the path DMA takes. Without that call DOS loads itself over the boot
-  sector unseen, which the first prototype did: 13,247,281 instructions retired
-  against the 2.3 million the workload runs.
+  `YCPUWriteRawMemoryByte()`, which is where operands, stack pushes and
+  interrupt vector writes all end up — so a host only has to report the writes
+  it makes some *other* way. The platform reports those from
+  `YPlatformWriteMemoryByte()`, which is the path DMA takes. Without that call
+  DOS loads itself over the boot sector unseen, which the first prototype did:
+  13,247,281 instructions retired against the 2.3 million the workload runs.
 - The counter coming back round is the case that has no honest local answer. At
   256 writes to a page a decode taken exactly that long ago looks current
   again, so the wrap discards the whole cache instead — a 256-iteration loop
@@ -836,7 +836,7 @@ Alongside the table, state:
   and the address tag would not catch it, because the address is the field the
   failed decode leaves alone.
 - The cache is handed over once at init and never taken away. What does discard
-  every decode is `PlatformUpdateAfterMemoryMapChange()`, because a
+  every decode is `YPlatformUpdateAfterMemoryMapChange()`, because a
   registration writes nothing — what changed is which region owns the address,
   which no counter can express.
 - **The 8088 hardware suite supplies a cache**, for the same reason it supplies
@@ -847,28 +847,29 @@ Alongside the table, state:
   moves it loudly. Of eleven deliberate breakages, **ten are caught by the two
   new test files and by nothing else**; only dropping the address tag is caught
   broadly, by six platform tests as well.
-- `WriteRawMemoryByte()` is out of line in flash at both levels and now carries
-  the generation bump. `YAX86_HOT` on it is **0.71% worse at `-O3`** and 0.68%
-  better at `-O2`, so it is left unmarked: same shape as
-  `ReadImmediateOperand()`, and `-O3` is the level that decides.
+- `YCPUWriteRawMemoryByte()` is out of line in flash at both levels and now
+  carries the generation bump. `YAX86_HOT` on it is **0.71% worse at `-O3`** and
+  0.68% better at `-O2`, so it is left unmarked: same shape as
+  `YCPUReadImmediateOperand()`, and `-O3` is the level that decides.
 
 ### cpu — the direct data window
 
 - Operand, stack and interrupt-vector accesses read and write guest memory by
   indexing `YCPUState.direct_data_window` rather than calling into the host.
   What that replaces is two calls, one of them indirect, plus a memory map
-  lookup — `ReadRawMemoryByte()` tested a function pointer and called through
-  it, the platform's callback chased `config->context`, and `ReadMemoryByte()`
-  resolved the address through the page index to reach an array. Worth **3.28%
-  at `-O3`** and 5.78% at `-O2`, and the core is 552 and 712 bytes *smaller*.
+  lookup — `YCPUReadRawMemoryByte()` tested a function pointer and called
+  through it, the platform's callback chased `config->context`, and
+  `YPlatformReadMemoryByte()` resolved the address through the page index to
+  reach an array. Worth **3.28% at `-O3`** and 5.78% at `-O2`, and the core is
+  552 and 712 bytes *smaller*.
 - It is the same trick as the instruction fetch window and covers everything
-  that window does not, because `ReadRawMemoryByte()` and
-  `WriteRawMemoryByte()` are also where stack pushes and pops, the IVT reads on
-  interrupt dispatch, and the fetch fallback all end up.
+  that window does not, because `YCPUReadRawMemoryByte()` and
+  `YCPUWriteRawMemoryByte()` are also where stack pushes and pops, the IVT reads
+  on interrupt dispatch, and the fetch fallback all end up.
 - **The window is set, not asked for.** The fetch window is pulled through a
   callback because fetch is sequential and one window answers a whole run of
   it; data accesses are scattered, so there is no locality for a per-access
-  callback to exploit and the host calls `CPUSetDirectDataWindow()` once
+  callback to exploit and the host calls `YCPUSetDirectDataWindow()` once
   instead.
 - **`end` is how far guest memory is directly indexable, not how much guest
   memory there is.** The two coincide today because conventional memory is one
@@ -886,20 +887,20 @@ Alongside the table, state:
   single unsigned compare; a pair would cost a second one and buy nothing.
 - `end` is 0 exactly when `data` is NULL, which is what lets that compare stand
   alone rather than being a compare plus a null check.
-  `CPUSetDirectDataWindow()` is what keeps the two in step, so set the window
+  `YCPUSetDirectDataWindow()` is what keeps the two in step, so set the window
   through it rather than assigning the fields. An inclusive `end` could not
   express an empty window at all — it would need to be below zero — so this is
   load-bearing rather than a matter of taste.
 - The platform derives the window from whichever memory map entry covers
   address 0, and only while that entry is plain storage whose `read_data` and
   `write_data` are the same buffer. Video memory reads from a buffer but writes
-  through `VideoCallbackWriteVRAMByte()`, so a region shaped like that is
-  correctly excluded rather than having its writes swallowed.
-- `RegisterMemoryMapEntry()` recomputes the window rather than discarding it,
-  since a new region usually has nothing to do with address 0. Writes through
-  the same buffer need no call at all: the window is a pointer into the host's
-  own storage, so a write the host makes itself, or one made by DMA, is visible
-  to the next access.
+  through `YPlatformVideoCallbackWriteVRAMByte()`, so a region shaped like that
+  is correctly excluded rather than having its writes swallowed.
+- `YPlatformRegisterMemoryMapEntry()` recomputes the window rather than
+  discarding it, since a new region usually has nothing to do with address 0.
+  Writes through the same buffer need no call at all: the window is a pointer
+  into the host's own storage, so a write the host makes itself, or one made by
+  DMA, is visible to the next access.
 - A word straddling the top of the window has its two halves take different
   paths, because a word is read and written as two independently bounds-checked
   bytes. `WordStraddlingTheTopOfTheWindow` pins it; it is one address in the
@@ -928,11 +929,11 @@ Alongside the table, state:
   so a zero-initialized `YCPUInstruction` is correct by construction. LOCK is
   consumed but not recorded — nothing on a PC/XT acts on it.
 - **Classify and record in one pass.** Deciding whether a byte is a prefix and
-  deciding which group it belongs to are the same test, so `ApplyPrefixByte()`
-  does both and returns whether it consumed anything, rather than the loop
-  asking first and the recording asking again. Splitting them costs 0.7% on
-  `clang`, enough on its own to make the masked compare a net regression there
-  at `-O2` and above.
+  deciding which group it belongs to are the same test, so
+  `YCPUApplyPrefixByte()` does both and returns whether it consumed anything,
+  rather than the loop asking first and the recording asking again. Splitting
+  them costs 0.7% on `clang`, enough on its own to make the masked compare a net
+  regression there at `-O2` and above.
 - Write the `0xF0`–`0xF3` test as a range check rather than a mask. Both are
   exact, but a range folds into one subtract and compare where the mask needs a
   separate `mov`, `and` and `cmp` — which is how `gcc -O3` writes it when left
@@ -944,18 +945,18 @@ Alongside the table, state:
   bytes would otherwise fetch forever: a real 8086 hangs there too, since a
   prefix is not an instruction boundary and so no interrupt is ever recognized,
   but this has to hand control back to its caller. `YCPUInstruction.size` is a
-  `uint8_t` that `CPUTick()` adds to IP, so the bound is what that can still
+  `uint8_t` that `YCPUTick()` adds to IP, so the bound is what that can still
   address — 247 prefixes plus the 8 bytes an instruction can otherwise carry
   comes to exactly 255. It has to be this generous: `LOCK ES: REP MOVSB` is a
   legal three-prefix encoding.
 
 ### cpu — the execute path
 
-- `CPUExecuteInstruction()` checks an instruction against the opcode table
+- `YCPUExecuteInstruction()` checks an instruction against the opcode table
   before running it: that `has_mod_rm` and `immediate_size` are what the entry
-  says they should be. `CPUTick()` skips those checks and calls
-  `CPUExecuteDecodedInstruction()` directly, because its own
-  `CPUFetchNextInstruction()` *derived* both from that same entry a few lines
+  says they should be. `YCPUTick()` skips those checks and calls
+  `YCPUExecuteDecodedInstruction()` directly, because its own
+  `YCPUFetchNextInstruction()` *derived* both from that same entry a few lines
   earlier. Re-establishing something that cannot have changed in between is not
   free — a table read, two compares and a recomputed immediate size on every
   instruction the emulator runs.
@@ -965,19 +966,19 @@ Alongside the table, state:
 - **Every entry in the opcode table has a handler**, so neither path checks for
   one before dispatching. The eight bytes that have no instruction of their own
   — the four segment overrides and `0xF0`–`0xF3` — are exactly the bytes
-  `ApplyPrefixByte()` consumes, so a successful fetch can never leave one in
-  `opcode`; they point at `ExecuteInvalidOpcode()`, which returns
+  `YCPUApplyPrefixByte()` consumes, so a successful fetch can never leave one in
+  `opcode`; they point at `YCPUExecuteInvalidOpcode()`, which returns
   `kInstructionInvalid` for the hand-built instruction that is the only way to
   reach one. `EveryEntryHasAHandler` in `opcode_table_test.cpp` keeps it that
   way — an entry added later with the field left out would be a call through
   null rather than an invalid instruction.
-- `CPUExecuteDecodedInstruction()` is `YAX86_NOINLINE`. Inlined into
-  `CPUTick()` it measures 31% slower on a Cortex-M0+: the execute path wants
+- `YCPUExecuteDecodedInstruction()` is `YAX86_NOINLINE`. Inlined into
+  `YCPUTick()` it measures 31% slower on a Cortex-M0+: the execute path wants
   registers, the core has few, and folding the two together makes both spill.
   The effect only exists once the hot path is in SRAM — running from flash, XIP
   misses dominate and hide it — which is why this and `YAX86_HOT` belong
   together. Worth 1.84% at `-O3` and 4.58% at `-O2`, the gap being the
-  `CPUTick()`/`PlatformTick()` marks, which are inert at `-O3`.
+  `YCPUTick()`/`YPlatformTick()` marks, which are inert at `-O3`.
 
 ### cpu — operand dispatch
 
@@ -992,20 +993,20 @@ Alongside the table, state:
 - **The larger half of that win is second-order.** A function whose address is
   stored in a table has to exist out of line whether or not anything reaches it
   that way. With the tables gone, seven of the eight leaf handlers vanish from
-  the image entirely — only `ReadMemoryOperandWord()` is still emitted — and
+  the image entirely — only `YCPUReadMemoryOperandWord()` is still emitted — and
   the core is **1,208 bytes smaller at `-O3`**, against 48 bytes of table.
 - Before concluding a dispatch table has callers that need it, check whether
   they are really indexing. The one apparent external caller here was two sites
   in `instructions_mov.c` reading a 16-bit offset with
   `kReadImmediateValueFn[kWord]` — a constant index, which is a direct call to
-  `ReadImmediateOperandWord()` written the long way.
+  `YCPUReadImmediateOperandWord()` written the long way.
 - **Switch on the width, but not on the operand address type.** The two look
   like the same dispatch and are not. `YCPUWidth width : 1` is a one-bit
   bitfield, so there is no representable value outside the enum: the compiler
   proves the `default` arm unreachable and emits nothing for it, which is what
   makes the explicit invalid return free and lets these read like
-  `ReadRegisterOperandValue()` and `WriteMemoryOperand()` rather than as bare
-  ternaries. `YCPUOperandAddress.type` is
+  `YCPUReadRegisterOperandValue()` and `YCPUWriteMemoryOperand()` rather than as
+  bare ternaries. `YCPUOperandAddress.type` is
   a whole `YCPUOperandAddressType`, and while `arm-none-eabi` defaults to
   `-fshort-enums` and so gives it one byte, 254 of that byte's 256 values are
   outside the enum and C does not promise a variable holds only named ones. A
@@ -1013,14 +1014,14 @@ Alongside the table, state:
   the *memory* path — the common one — that is an extra `cmp`/`bne` plus the
   constant load for the default, where the one-bit `YCPUWidth` switch compiles
   to a single `lsls`/`bmi` bit test. Switching the type as well costs **1.06% at
-  `-O3`** and 0.70% at `-O2`. There is a comment at `ReadOperandValue()` and
-  `WriteOperandAddress()` saying so.
+  `-O3`** and 0.70% at `-O2`. There is a comment at `YCPUReadOperandValue()` and
+  `YCPUWriteOperandAddress()` saying so.
 - **The distinction is bitfield width, not enum size** — do not restate it as
   the type being "int-sized", which it is not here.
 - Narrowing `type` to `YCPUOperandAddressType type : 1` does make its switch
   free, and still does not pay: **0.22% worse at `-O3`** and 0.10% at `-O2`, for
   a larger core. The read is only half the story —
-  `GetRegisterOrMemoryOperandAddress()` *writes* `address.type` for every
+  `YCPUGetRegisterOrMemoryOperandAddress()` *writes* `address.type` for every
   operand, and a write to a bitfield is a read-modify-write. Cheapening a
   dispatch that runs once per operand does not pay for a store that also runs
   once per operand. So do not "tidy" the `if` into a `switch` for symmetry, and
@@ -1036,10 +1037,10 @@ Alongside the table, state:
   `default` arm — marking all six wrappers `YAX86_ALWAYS_INLINE` recovers it,
   at 0.26% and 0.06% off `-O3` and `-O2`. The marks are not taken: `-O3` and
   `-O2` are what this target is measured at.
-- `ReadImmediateOperand()` is the one wrapper the compiler still emits out of
-  line, and it lands in flash. `YAX86_HOT` moves it to SRAM and is worth 0.11%
-  at `-O3`, but costs 0.35% at `-O2` by moving other inlining decisions, so it
-  is left unmarked.
+- `YCPUReadImmediateOperand()` is the one wrapper the compiler still emits out
+  of line, and it lands in flash. `YAX86_HOT` moves it to SRAM and is worth
+  0.11% at `-O3`, but costs 0.35% at `-O2` by moving other inlining decisions,
+  so it is left unmarked.
 
 ### cpu — operand values
 
@@ -1065,10 +1066,10 @@ Alongside the table, state:
   When a structure on this path is suspect, look at the call sites of
   `__wrap_memcpy` before theorizing.
 - **A byte-wide value is held in the low byte with the high byte zero.** That
-  invariant is what lets `FromOperandValue()` widen by doing nothing, where it
-  used to switch on the width the value carried. Every path that produces a
+  invariant is what lets `YCPUFromOperandValue()` widen by doing nothing, where
+  it used to switch on the width the value carried. Every path that produces a
   byte truncates to one, and the one that has to work for it is
-  `ReadRegisterOperandByte()`, where AH and the high half of a word register
+  `YCPUReadRegisterOperandByte()`, where AH and the high half of a word register
   live in the bits the cast drops. Eight unit tests across `add_sub`, `group_2`
   and `mov_xchg_xlat` fail if that cast goes, and so does the hardware suite.
 - **The unreachable arm of a width dispatch returns `kUnreachableOperandValue`,
@@ -1080,9 +1081,9 @@ Alongside the table, state:
   above promises. The arms cost nothing: naming them, and bringing the one that
   said `0xFFFF` into line, leaves core `.text` unchanged at both levels.
 - What the type no longer carries is the width, so **sign extension takes one
-  explicitly** — `FromSignedOperandValue(width, value)` and
-  `FromSignedOperand(width, operand)`, from the opcode table entry the caller
-  already has. Zero extension needs none, by the invariant above.
+  explicitly** — `YCPUFromSignedOperandValue(width, value)` and
+  `YCPUFromSignedOperand(width, operand)`, from the opcode table entry the
+  caller already has. Zero extension needs none, by the invariant above.
 - **Do not initialize an operand with a designated initializer.** `YCPUOperand
   operand = {.address = {...}}` makes C zero every member the initializer does
   not name, which is a `memset` call over the whole struct before a single
@@ -1123,7 +1124,7 @@ Alongside the table, state:
       grep -cP 'bl\t2000....\s<____wrap_mem'
   ```
 - `YCPUMemoryAddress.segment_register_index` is a `uint8_t` rather than a
-  `YCPURegisterIndex`, because `ApplySegmentOverride()` writes it through a
+  `YCPURegisterIndex`, because `YCPUApplySegmentOverride()` writes it through a
   pointer. An enum's width is the target's business - one byte under
   `-fshort-enums`, four otherwise - so a `uint8_t*` to one is correct only by
   accident of endianness, and the native test build is exactly the target where
@@ -1133,8 +1134,9 @@ Alongside the table, state:
   value - it is already past four before the tag, so the trick that worked for
   `YCPUOperandAddress` is unavailable and an out-parameter is the only move. The
   seven readers take a `YCPUOperand*` as their last argument.
-- **That only pays alongside `YAX86_ALWAYS_INLINE` on `ReadOperandValue()`, and
-  on its own it is a large loss.** Measured against the flat-address baseline:
+- **That only pays alongside `YAX86_ALWAYS_INLINE` on `YCPUReadOperandValue()`,
+  and on its own it is a large loss.** Measured against the flat-address
+  baseline:
 
   | | `-O3` | `-O2` |
   | --- | --- | --- |
@@ -1144,15 +1146,15 @@ Alongside the table, state:
 
 - The reason is the inlining lottery rather than anything about the copy, and
   the tell is in what the function calls. Returning by value,
-  `ReadRegisterOrMemoryOperand()` calls `ReadMemoryOperandWord()` and
-  `ReadMemoryByte()` - `ReadOperandValue()` having been inlined into it, both
-  arms landing in SRAM. With the out-parameter it is small enough that GCC
-  stops inlining `ReadOperandValue()` and calls it instead, and that one lives
-  in flash, so every operand read grew a veneer and an XIP fetch. **Check what
-  a changed function calls, not just whether it got smaller** - the
+  `YCPUReadRegisterOrMemoryOperand()` calls `YCPUReadMemoryOperandWord()` and
+  `YPlatformReadMemoryByte()` - `YCPUReadOperandValue()` having been inlined
+  into it, both arms landing in SRAM. With the out-parameter it is small enough
+  that GCC stops inlining `YCPUReadOperandValue()` and calls it instead, and
+  that one lives in flash, so every operand read grew a veneer and an XIP fetch.
+  **Check what a changed function calls, not just whether it got smaller** - the
   out-parameter version is 94 bytes against 244 and was the slower of the two.
-- The marked `ReadOperandValue()` costs 608 bytes of core `.text` at `-O3` and
-  624 at `-O2`, which is the price of the win above.
+- The marked `YCPUReadOperandValue()` costs 608 bytes of core `.text` at `-O3`
+  and 624 at `-O2`, which is the price of the win above.
 
 ### cpu — what an instruction costs
 
@@ -1164,15 +1166,16 @@ Alongside the table, state:
   from the accesses that actually happen rather than from a table — so an
   instruction that touches memory it has no reason to touch is billed for it.
 - Stores must therefore resolve their destination with
-  `GetRegisterOrMemoryOperandAddress()` and go straight to
-  `WriteOperandAddress()`, never through `ReadRegisterOrMemoryOperand()`.
-  Reading a destination that is about to be overwritten completely prices a
-  store as a read-modify-write: `MOV [BX],AX` costs 23 cycles where the
-  hardware charges 15, and `MOV [BX],AL` 15 against 11.
+  `YCPUGetRegisterOrMemoryOperandAddress()` and go straight to
+  `YCPUWriteOperandAddress()`, never through
+  `YCPUReadRegisterOrMemoryOperand()`. Reading a destination that is about to be
+  overwritten completely prices a store as a read-modify-write: `MOV [BX],AX`
+  costs 23 cycles where the hardware charges 15, and `MOV [BX],AL` 15
+  against 11.
 - **No architectural test can see this.** The registers and memory come out
   identical either way, so the 8088 hardware suite passes on both — it compares
   results, not bus traffic. `cycles_test.cpp` is what covers it: it runs one
-  instruction through `CPUTick()` and asserts `cycles_this_tick`, pinning a
+  instruction through `YCPUTick()` and asserts `cycles_this_tick`, pinning a
   store against the load and the read-modify-write of the same shape.
 - **Any change to cycle costs moves the `dos-boot` invariant**, so runs either
   side of one are not comparable. Cheaper stores do not mean the guest does
@@ -1210,9 +1213,9 @@ Alongside the table, state:
   loop that copies in the same order reproduces that for free. What would break
   it is `memcpy`, which may copy in any order — see below.
 - The word loop reads both bytes of an element before writing either, which is
-  the order `ReadMemoryOperandWord()` and `WriteMemoryOperandWord()` impose.
-  It only shows up where the two ends overlap by exactly one byte, which is one
-  test and nothing else.
+  the order `YCPUReadMemoryOperandWord()` and `YCPUWriteMemoryOperandWord()`
+  impose. It only shows up where the two ends overlap by exactly one byte, which
+  is one test and nothing else.
 - **All four loops walk pointers rather than indexing an array**, and that is
   what keeps the compiler from rewriting them. Written as `memory[index]`,
   `gcc -O3` recognizes the byte-wide `STOS` loop and emits a call to
@@ -1234,11 +1237,11 @@ Alongside the table, state:
 - Each instruction's bulk run lives in its own function beside the iteration it
   replaces, so the handler reads as the two paths it chooses between. Both are
   inlined into their caller at `-O3`, and `core .text` is identical either way.
-- **`PlanBulkStringRun()` is out of line in flash, and is left that way.** It
-  has two callers, which is the shape that usually stops GCC inlining a helper
-  and costs a veneer on the hot path — but both marks that would change it
-  measure worse or neutral: `YAX86_HOT` is **0.00%** for 296 bytes of SRAM, and
-  `YAX86_ALWAYS_INLINE` is **0.73% slower** while making the core 216 bytes
+- **`YCPUPlanBulkStringRun()` is out of line in flash, and is left that way.**
+  It has two callers, which is the shape that usually stops GCC inlining a
+  helper and costs a veneer on the hot path — but both marks that would change
+  it measure worse or neutral: `YAX86_HOT` is **0.00%** for 296 bytes of SRAM,
+  and `YAX86_ALWAYS_INLINE` is **0.73% slower** while making the core 216 bytes
   *smaller*, having grown both handlers enough to move the register allocation
   around them.
 - The reason the mark buys nothing is that the planner runs **once per repeat,
@@ -1251,7 +1254,7 @@ Alongside the table, state:
   counter coming back round after 256 runs rather than after 256 bytes, which
   is a full flush avoided rather than a flush missed.
 - **That is what moved the invariant, and none of it is emulation.** Fewer
-  flushes mean more decode-cache hits, a run ends at a miss, so `PlatformRun()`
+  flushes mean more decode-cache hits, a run ends at a miss, so `YPlatformRun()`
   overshoots its budget by a different amount and the Enter answering DOS's
   date prompt lands at a different emulated time. Building both sides with
   `kMaxInstructionsPerTick` set to 1 gives identical figures —
@@ -1265,13 +1268,13 @@ Alongside the table, state:
   at every instruction boundary with interrupts enabled, and skips the
   acknowledge cycle entirely while it reads false. What that replaces is an
   indirect call through `acknowledge_interrupt` into a callback that chases
-  `config->context` and then calls `PICGetPendingInterrupt()`, on nearly every
+  `config->context` and then calls `YPICGetPendingInterrupt()`, on nearly every
   instruction, to be told there is nothing. Worth **5.97% at `-O3`** and 4.17%
   at `-O2` — the largest single win in the campaign so far.
 - The flag it points at is `YPICState.has_unmasked_request`, which is
   `(irr & ~imr) != 0`. **It is deliberately conservative rather than exact**: it
   ignores priority and the in-service register, so it is true in cases where
-  `PICGetPendingInterrupt()` still declines — a request held off by a
+  `YPICGetPendingInterrupt()` still declines — a request held off by a
   higher-priority interrupt already in service is the one that happens. That
   costs a call that reports nothing, which is what the code did every time
   before.
@@ -1281,10 +1284,10 @@ Alongside the table, state:
   `HintReadingFalseSuppressesTheAcknowledgeCycle` in `tick_test.cpp` pins
   exactly that, so the contract is stated as a test rather than only as a
   comment.
-- `PICUpdateUnmaskedRequest()` is the **sole writer** of the flag, and all six
-  sites that change `irr` or `imr` call it — `PICInit()`, `PICRaiseIRQ()`,
-  `PICLowerIRQ()`, ICW1, OCW1, and the acknowledge in
-  `PICGetPendingInterrupt()`. Same discipline as
+- `YPICUpdateUnmaskedRequest()` is the **sole writer** of the flag, and all six
+  sites that change `irr` or `imr` call it — `YPICInit()`, `YPICRaiseIRQ()`,
+  `YPICLowerIRQ()`, ICW1, OCW1, and the acknowledge in
+  `YPICGetPendingInterrupt()`. Same discipline as
   `PlatformUpdateEnabledFlags()`: the flag cannot disagree with the registers
   it summarizes because no path changes one without recomputing the other.
 - **The hint is a pointer into the PIC's own state, not a value handed over.**
@@ -1307,7 +1310,7 @@ Alongside the table, state:
   and what keeps the tests honest.
 - A slave's request reaches the CPU as the master's cascade line, and the CPU
   only ever reads the master's flag, so the master's has to rise with it.
-  `PICRaiseIRQ()` on a slave already raises the cascade IRQ on the master,
+  `YPICRaiseIRQ()` on a slave already raises the cascade IRQ on the master,
   which recomputes the master's flag by the same path as any other request.
 - A host that cannot promise the flag rises with every request leaves the
   pointer NULL and is asked every time, exactly as before. The mock configs in
@@ -1315,12 +1318,12 @@ Alongside the table, state:
 
 ### cpu — runs of instructions
 
-- A tick driven through `PlatformRun()` executes up to `kMaxInstructionsPerTick`
-  instructions back to back. What that removes is not the instruction, it is
-  the round trip — `PlatformTick()`'s deadline test and stop checks, and
-  `CPUTick()`'s own prologue and epilogue, all of which are per tick. Worth
-  **9.17% at `-O3`** and 9.74% at `-O2`, which is the largest win left after
-  the decode cache and is only possible because of it.
+- A tick driven through `YPlatformRun()` executes up to
+  `kMaxInstructionsPerTick` instructions back to back. What that removes is not
+  the instruction, it is the round trip — `YPlatformTick()`'s deadline test and
+  stop checks, and `YCPUTick()`'s own prologue and epilogue, all of which are
+  per tick. Worth **9.17% at `-O3`** and 9.74% at `-O2`, which is the largest
+  win left after the decode cache and is only possible because of it.
 - **Only the first instruction of a run is fetched**; every one after it comes
   from the decode cache, so a step in a run costs a probe rather than a decode.
   That is also what keeps a cold CPU to one instruction per tick however large
@@ -1329,20 +1332,20 @@ Alongside the table, state:
 - A run is not limited to straight-line code. The next instruction is looked up
   at CS:IP, wherever the one before it left that, so a backwards jump into
   cached code carries on inside the same tick.
-- **`CPUTick()`'s `max_run_cycles` is how long a tick may run**, and it is the
+- **`YCPUTick()`'s `max_run_cycles` is how long a tick may run**, and it is the
   switch as well as the bound: **zero runs exactly one instruction**.
-  `PlatformTick()` passes zero because it promises its caller one instruction;
-  `PlatformRun()` passes what is left before the nearest device deadline. Both
+  `YPlatformTick()` passes zero because it promises its caller one instruction;
+  `YPlatformRun()` passes what is left before the nearest device deadline. Both
   call the same body with a constant, so the tests fold away in each.
 - It is a parameter rather than a field on `YCPUState` because it is set on
-  every tick. Config is for what a host wires up once and `CPUInit()` checks; a
+  every tick. Config is for what a host wires up once and `YCPUInit()` checks; a
   value that changes every call is an argument, and writing it into the state
   first would be poking the object to pass a parameter.
 - **`kMaxInstructionsPerTick` is a cap on how coarse a tick can be, not a
   tuning knob for how long a run should be.** What governs that is
   `max_run_cycles`, which is what keeps a device from being serviced late; the
   instruction count only bounds the case where the next deadline is far away,
-  and what it costs is that `PlatformRun()` overshoots its budget by up to one
+  and what it costs is that `YPlatformRun()` overshoots its budget by up to one
   run.
 - It was 4, chosen from straight-line runs averaging 3.65 instructions, and
   that was the wrong basis: a run also carries on through a taken branch into
@@ -1361,7 +1364,7 @@ Alongside the table, state:
 - **A port access gets a tick to itself**, and needs both halves of that. A run
   ends *after* one because `IN`/`OUT` can reprogram a device and move the
   deadline the budget was computed from. A run also declines to carry on *into*
-  one, because a port handler calls `PlatformSync()` and so is the one
+  one, because a port handler calls `YPlatformSync()` and so is the one
   instruction that looks at the clock — and part way through a run the clock
   stops short of the instructions already run in it, since the host is only
   told what a tick cost once the tick is over. `IN AL, 0x40` two instructions
@@ -1371,14 +1374,14 @@ Alongside the table, state:
   bytes and nothing else. Writing it as two `& 0xF8` compares does not work and
   is not a near miss — `0xE4 & 0xF8` is `0xE0`, so both arms are dead and the
   guard never fires.
-- **A host that needs to stop somewhere drives `PlatformTick()` itself** and
+- **A host that needs to stop somewhere drives `YPlatformTick()` itself** and
   inspects the CPU between calls. The platform holds no breakpoints and no step
-  mode: `PlatformTick()` already runs exactly one instruction, so a stepping
+  mode: `YPlatformTick()` already runs exactly one instruction, so a stepping
   loop is a host loop, and a host comparing CS:IP costs the shared code
   nothing.
 - **Batching is exactly equivalent to stepping, and there is a test that says
   so.** `ABatchedRunIsIndistinguishableFromSteppingIt` runs one program two
-  ways — `PlatformTick()` per instruction, and `PlatformRun(platform, 1)`,
+  ways — `YPlatformTick()` per instruction, and `YPlatformRun(platform, 1)`,
   which is one batched tick — and compares the tick count, the retired count
   and the registers exactly. It is a stronger check than the `dos-boot`
   invariant, which is measured through a harness that polls the screen on
@@ -1390,7 +1393,7 @@ Alongside the table, state:
 - **`dos-boot` moves by 107 instructions and 1,266 cycles, and none of it is
   emulation.** Building the same branch with `kMaxInstructionsPerTick` set to 1
   reproduces master's 2,328,015 / 27,701,507 exactly. What moves is the
-  harness: `PlatformRun()` overshoots its budget by a run rather than by an
+  harness: `YPlatformRun()` overshoots its budget by a run rather than by an
   instruction, so `result.cycles` crosses the screen-poll deadline at a
   different point and the Enter that answers DOS's date prompt is injected at a
   different emulated time. It is the same effect as the poll interval itself,
@@ -1414,14 +1417,14 @@ Alongside the table, state:
 ### cpu — instruction counting
 
 - The count is what the CPU actually ran; a halted tick advances the clock but
-  retires nothing. It lives in the CPU because `CPUTick()` already knows which
+  retires nothing. It lives in the CPU because `YCPUTick()` already knows which
   it did, where a caller could only find out by sampling `is_halted` before
-  every tick and giving up `PlatformRun()`'s batching for a number the core
-  already has. Counting in `CPUTick()` costs 0.17% under callgrind; the same
-  counter driven from `PlatformTick()`, where the flag has to be re-derived,
+  every tick and giving up `YPlatformRun()`'s batching for a number the core
+  already has. Counting in `YCPUTick()` costs 0.17% under callgrind; the same
+  counter driven from `YPlatformTick()`, where the flag has to be re-derived,
   costs 1.09%.
 - **It is kept as two `uint32_t` halves rather than one `uint64_t`**, read
-  together by `CPUInstructionsRetired()`. The increment sits in the hottest
+  together by `YCPUInstructionsRetired()`. The increment sits in the hottest
   basic block the emulator has, and a 64-bit one is eight instructions on a
   Cortex-M0+ — two loads, two constants, an add, an add with carry, two stores
   — where the low half alone is three and the carry above it is a branch not
@@ -1443,8 +1446,8 @@ Alongside the table, state:
 
 ### platform — the memory map
 
-- `GetMemoryMapEntryForAddress()` is the hottest lookup in the emulator —
-  every instruction byte and nearly every operand comes through it — and it is
+- `YPlatformGetMemoryMapEntryForAddress()` is the hottest lookup in the emulator
+  — every instruction byte and nearly every operand comes through it — and it is
   answered from an index rather than by walking the map. A walk is cheap where
   branches are predicted and the region wanted is usually first; on a
   Cortex-M0+ it is neither, since there is no branch predictor and code running
@@ -1465,10 +1468,10 @@ Alongside the table, state:
   fallback. That is the case for any option ROM whose size is not a multiple of
   4KB.
 - **Registering a region and telling the CPU about it are separate steps.**
-  `RegisterMemoryMapEntry()` records the entry;
-  `PlatformUpdateAfterMemoryMapChange()` discards what the CPU derives from the
+  `YPlatformRegisterMemoryMapEntry()` records the entry;
+  `YPlatformUpdateAfterMemoryMapChange()` discards what the CPU derives from the
   map. A caller does both, and may do the second once after a run of the first
-  - which is what `PlatformInit()` does for the four regions the machine has.
+  - which is what `YPlatformInit()` does for the four regions the machine has.
 - **The decode cache is what makes the second call obligatory.** An address
   that is not mapped reads as open bus, so an instruction executed there can be
   cached as 0xFF bytes; mapping a region over it moves no page generation,
@@ -1476,22 +1479,24 @@ Alongside the table, state:
   not overlap, so a newly registered region cannot be inside an open fetch
   window, and the data window is whichever entry covers address 0, which a
   missed update leaves closed rather than wrong.
-- That recompute is the last thing `PlatformInit()` does, by which point every
+- That recompute is the last thing `YPlatformInit()` does, by which point every
   region the machine has is registered.
-- `RegisterMemoryMapEntry()` extends the index rather than rebuilding it. Only
-  the pages the new entry touches can change, and entries may not overlap, so
-  nothing already in the index can have a share of one of them — a registration
-  never has to look at the rest of the map. `UpdateMemoryPageMapForEntry()`
-  takes the entry's index rather than the entry, because the index is what goes
-  into the map; the entry is derivable from it and not the other way round.
+- `YPlatformRegisterMemoryMapEntry()` extends the index rather than rebuilding
+  it. Only the pages the new entry touches can change, and entries may not
+  overlap, so nothing already in the index can have a share of one of them — a
+  registration never has to look at the rest of the map.
+  `YPlatformUpdateMemoryPageMapForEntry()` takes the entry's index rather than
+  the entry, because the index is what goes into the map; the entry is derivable
+  from it and not the other way round.
 - An entry reaching past the top of the address space is rejected, because the
   index has a slot per page of that space and none above it. **That rejection
   is what makes the index the whole answer** rather than a cache in front of
   the map: an address above the space is unmapped by definition, so
-  `GetMemoryPageMapIndex()` says so directly rather than sending the lookup off
-  to walk for an entry that cannot be there. Guest addresses never reach it in
-  any case — `ToRawAddress()` masks every one to the 8086's 20 bits — so this
-  is about what a host may register, not what the CPU may ask for.
+  `YPlatformGetMemoryPageMapIndex()` says so directly rather than sending the
+  lookup off to walk for an entry that cannot be there. Guest addresses never
+  reach it in any case — `YCPUToRawAddress()` masks every one to the 8086's 20
+  bits — so this is about what a host may register, not what the CPU may ask
+  for.
 
 ### platform — idle skipping
 
@@ -1502,11 +1507,11 @@ Alongside the table, state:
   and the CON driver into `INT 16h`.
 - It does announce itself: DOS issues `INT 28h`, the documented DOS idle
   interrupt, 783 times a second while it waits. `YPlatformConfig`'s
-  `enable_dos_idle_skip` makes `PlatformRun()` treat that as a signal to
+  `enable_dos_idle_skip` makes `YPlatformRun()` treat that as a signal to
   advance the clock to whichever comes first, the next device deadline or the
   end of the budget it was given, instead of executing the loop until it gets
   there. The guest's own handler still runs; only the waiting is skipped.
-- **Time is advanced, not discarded.** `PlatformSync()` runs across the skipped
+- **Time is advanced, not discarded.** `YPlatformSync()` runs across the skipped
   interval, so every device sees every cycle and the guest's timer tick count
   is unchanged. Bounding the skip by the caller's budget is what keeps that
   true — without it the machine would be handed more emulated time than was
@@ -1515,12 +1520,12 @@ Alongside the table, state:
   from inside its own `INT 28h` handler would see time jump. The SDL runtime
   turns it on; the tests leave it off.
 - What the skip is worth is capped by the nearest device deadline, which is why
-  `PITTicksUntilNextEvent()` schedules one for channel 0 alone. After POST the
+  `YPITTicksUntilNextEvent()` schedules one for channel 0 alone. After POST the
   BIOS leaves channel 2 programmed at a reload of 1356 with the speaker gated
   off, and asking to be woken every 678 ticks for an output nobody listens to
   truncates every skip. Over 20 emulated seconds at the prompt the skip is
   worth 1.4x with the other channels scheduled and 5.6x without.
-- Only channel 0's output leaves the PIT — `PITChannelSetOutputState()` raises
+- Only channel 0's output leaves the PIT — `YPITChannelSetOutputState()` raises
   IRQ 0 from it. Channels 1 and 2 record a transition and nothing more, and
   that record is recomputed whenever the PIT is advanced, which every path that
   reads it does first. **Give another channel's output an effect and the
@@ -1593,20 +1598,20 @@ Alongside the table, state:
   give 100% for 46.5KB. The extra 2.8% costs three times the memory and
   forecloses the 192KB guest RAM option outright — 206,664 bytes of image plus
   64KB more guest RAM does not fit in 256KB, where the targeted build does.
-- `CPUTick()` and `PlatformTickInternal()` carry the mark even though at `-O3`
-  they are inlined into `PlatformRun()`, which already did. The mark is on
-  `PlatformTickInternal()` rather than on the public `PlatformTick()`, because
-  that is the body `PlatformRun()` calls; `PlatformTick()` is a wrapper nothing
-  hot goes through. The mark buys nothing there
+- `YCPUTick()` and `YPlatformTickInternal()` carry the mark even though at `-O3`
+  they are inlined into `YPlatformRun()`, which already did. The mark is on
+  `YPlatformTickInternal()` rather than on the public `YPlatformTick()`, because
+  that is the body `YPlatformRun()` calls; `YPlatformTick()` is a wrapper
+  nothing hot goes through. The mark buys nothing there
   and costs 1.1KB, because an explicit section attribute overrides
   `-ffunction-sections`: all the marked functions share one section, so
   `--gc-sections` can no longer drop the out-of-line copies individually. It is
   worth paying, because at `-O2` neither inlines and without the mark the two
   hottest functions in the emulator execute from flash. Check placement with
   `nm` rather than assuming, since whether they inline depends on the level and
-  on how large `PlatformRun()` has grown:
+  on how large `YPlatformRun()` has grown:
   ```sh
-  arm-none-eabi-nm -nS build-pico/O3/yax86_pico_bench.elf | grep ' CPUTick$'
+  arm-none-eabi-nm -nS build-pico/O3/yax86_pico_bench.elf | grep ' YCPUTick$'
   ```
   `0x1000xxxx` is flash and `0x2000xxxx` is SRAM.
 - **The annotations live in `core/src`, not in a pass over the generated
@@ -1634,17 +1639,17 @@ Alongside the table, state:
   than an oversight. `YAX86_MODULE_PRIVATE` is empty in that configuration, so
   a function carrying both has external linkage, and C99 6.7.4p3 forbids an
   `inline` definition with external linkage from referencing an identifier with
-  internal linkage - which `GetRegisterOrMemoryOperandAddress()` does, in
-  `GetRegisterAddress()`. Only clang diagnoses it, as `-Wstatic-in-inline`, so
-  `tools/check-unbundled.sh` catches it on the clang legs of the matrix and not
-  the gcc ones. The unbundled form is only ever syntax-checked, never linked or
-  shipped, so dropping the keyword there costs nothing the emulator runs - which
-  is also why removing the condition looks safe and is not.
+  internal linkage - which `YCPUGetRegisterOrMemoryOperandAddress()` does, in
+  `YCPUGetRegisterAddress()`. Only clang diagnoses it, as `-Wstatic-in-inline`,
+  so `tools/check-unbundled.sh` catches it on the clang legs of the matrix and
+  not the gcc ones. The unbundled form is only ever syntax-checked, never linked
+  or shipped, so dropping the keyword there costs nothing the emulator runs -
+  which is also why removing the condition looks safe and is not.
 - **Forcing one inlining decision moves others, and not always in your favour.**
   Pinning that helper inline made GCC stop inlining the larger
-  `GetMemoryOperandAddress()` into `ReadRegisterOrMemoryOperand()` at `-O3`,
-  putting the effective address computation in flash on the hottest path in the
-  emulator — 0.49%, of which marking it `YAX86_HOT` gives back 0.12%. The
+  `YCPUGetMemoryOperandAddress()` into `YCPUReadRegisterOrMemoryOperand()` at
+  `-O3`, putting the effective address computation in flash on the hottest path
+  in the emulator — 0.49%, of which marking it `YAX86_HOT` gives back 0.12%. The
   residue is the price of the `-O2` win and is worth paying at that ratio; what
   matters is that both halves get measured, because the second one is somewhere
   the change was never made.
@@ -1700,7 +1705,7 @@ Alongside the table, state:
   would be unreachable in the browser.
 - `--cga` or `--mda` selects the video adapter, defaulting to CGA. The adapter
   is fixed for the life of the machine: it is chosen through
-  `YPlatformConfig.video_adapter` before `PlatformInit()`, which decides both
+  `YPlatformConfig.video_adapter` before `YPlatformInit()`, which decides both
   what the platform registers and what the PPI's DIP switches report, and the
   BIOS branches on those switches to decide which adapter to program.
 - Both disks are loaded into memory with guest writes discarded. FDISK, FORMAT
@@ -1892,7 +1897,7 @@ SRAM, at #89:
   drives from a timer interrupt. It costs the same in every build, so it does
   not affect any comparison this harness exists to make.
 - The run is driven a batch of emulated cycles at a time through
-  `PlatformRun()`, which is how an application drives it, rather than an
+  `YPlatformRun()`, which is how an application drives it, rather than an
   instruction at a time. The core counts retired instructions itself, so there
   is nothing left for a caller to do per instruction. An invalid opcode does
   not stop the run: the 8088 has no invalid opcode exception, so a real machine

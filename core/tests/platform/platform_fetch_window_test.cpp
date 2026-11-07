@@ -32,7 +32,7 @@ class PlatformFetchWindowTest : public ::testing::Test {
     platform_.config.physical_memory = ram_;
     platform_.config.vram = vram_;
 
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
     platform_.cpu.registers[kCS] = 0;
     platform_.cpu.registers[kIP] = kProgramOffset;
     platform_.cpu.registers[kSS] = 0;
@@ -48,7 +48,7 @@ class PlatformFetchWindowTest : public ::testing::Test {
   YPlatformRunStatus RunInstructions(int num_instructions) {
     YPlatformRunStatus status = kPlatformRunning;
     for (int i = 0; i < num_instructions; ++i) {
-      status = PlatformTick(&platform_);
+      status = YPlatformTick(&platform_);
       if (status != kPlatformRunning) {
         return status;
       }
@@ -78,8 +78,8 @@ TEST_F(PlatformFetchWindowTest, SelfModifyingCodeIsVisibleThroughTheWindow) {
   ASSERT_NE(platform_.cpu.instruction_fetch_window.data, nullptr);
 
   // Overwrite the two NOPs ahead of IP with MOV AL, 0x42.
-  WriteMemoryByte(&platform_, kProgramOffset + 1, kOpMovAlImm8);
-  WriteMemoryByte(&platform_, kProgramOffset + 2, 0x42);
+  YPlatformWriteMemoryByte(&platform_, kProgramOffset + 1, kOpMovAlImm8);
+  YPlatformWriteMemoryByte(&platform_, kProgramOffset + 2, 0x42);
 
   ASSERT_EQ(RunInstructions(1), kPlatformRunning);
   EXPECT_EQ(al(), 0x42);

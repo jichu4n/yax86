@@ -141,16 +141,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
-    char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -158,7 +158,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -170,18 +170,18 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += SNPrintFPutC(buffer, size, pos, ' ');
+    count += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += SNPrintFPutC(buffer, size, pos, *s++);
+    count += YSNPrintFPutC(buffer, size, pos, *s++);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t
-SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
-              int base, int uppercase, int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+    char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
+    int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -209,35 +209,35 @@ SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
   // If zero padding is requested, sign should be printed before padding
   if (pad_zero) {
     if (negative) {
-      count += SNPrintFPutC(buffer, size, pos, '-');
+      count += YSNPrintFPutC(buffer, size, pos, '-');
       negative = 0; // Sign already handled
     }
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, '0');
+      count += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, ' ');
+      count += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
   if (negative) {
-    count += SNPrintFPutC(buffer, size, pos, '-');
+    count += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += SNPrintFPutC(buffer, size, pos, temp[--i]);
+    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
     if (*format != '%') {
-      SNPrintFPutC(buffer, size, &pos, *format++);
+      YSNPrintFPutC(buffer, size, &pos, *format++);
       continue;
     }
 
@@ -279,15 +279,15 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         // Pad with spaces (zero flag is ignored for %c per standard)
         int pad = width - 1;
         while (pad-- > 0) {
-          SNPrintFPutC(buffer, size, &pos, ' ');
+          YSNPrintFPutC(buffer, size, &pos, ' ');
         }
-        SNPrintFPutC(buffer, size, &pos, c);
+        YSNPrintFPutC(buffer, size, &pos, c);
         break;
       }
       case 's': {
         const char* s = va_arg(args, const char*);
         if (!s) s = "(null)";
-        SNPrintFPutS(buffer, size, &pos, s, width);
+        YSNPrintFPutS(buffer, size, &pos, s, width);
         break;
       }
       case 'd':
@@ -313,8 +313,8 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         } else {
           uval = (unsigned long long)val;
         }
-        SNPrintFPutUI(buffer, size, &pos, uval, 10, 0, width, pad_zero,
-                        negative);
+        YSNPrintFPutUI(
+            buffer, size, &pos, uval, 10, 0, width, pad_zero, negative);
         break;
       }
       case 'u':
@@ -340,30 +340,30 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         else
           val = va_arg(args, unsigned int);
 
-        SNPrintFPutUI(buffer, size, &pos, val, base, uppercase, width,
-                        pad_zero, 0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, base, uppercase, width, pad_zero, 0);
         break;
       }
       case 'p': {
         unsigned long long val =
             (unsigned long long)(uintptr_t)va_arg(args, void*);
         // Print 0x prefix
-        SNPrintFPutC(buffer, size, &pos, '0');
-        SNPrintFPutC(buffer, size, &pos, 'x');
+        YSNPrintFPutC(buffer, size, &pos, '0');
+        YSNPrintFPutC(buffer, size, &pos, 'x');
         // Adjust width to account for "0x" prefix
         int adjusted_width = width > 2 ? width - 2 : 0;
-        SNPrintFPutUI(buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero,
-                        0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero, 0);
         break;
       }
       case '%': {
-        SNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, '%');
         break;
       }
       default: {
         // Unknown specifier, print % and the specifier literally
-        SNPrintFPutC(buffer, size, &pos, '%');
-        SNPrintFPutC(buffer, size, &pos, *format);
+        YSNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, *format);
         break;
       }
     }
@@ -382,11 +382,11 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
-  int ret = VSNPrintF(buffer, size, format, args);
+  int ret = YVSNPrintF(buffer, size, format, args);
   va_end(args);
   return ret;
 }
@@ -465,7 +465,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -509,7 +509,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void LoggerInit(
+YAX86_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -518,52 +518,52 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
-         (logger->config->enabled_modules & LogModuleMask(module)) != 0;
+         (logger->config->enabled_modules & YLogModuleMask(module)) != 0;
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules |= LogModuleMask(module);
+    logger->config->enabled_modules |= YLogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules &= ~LogModuleMask(module);
+    logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) YAX86_UNUSED;
 
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
-  // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, module, level)) {
+  // YLoggerWrite is also callable directly.
+  if (!YLoggerIsEnabled(logger, module, level)) {
     return;
   }
 
   va_list args;
   va_start(args, format);
   int formatted_length =
-      VSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
   va_end(args);
 
-  // VSNPrintF returns the length the message would have had, which may exceed
+  // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
@@ -584,11 +584,11 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                \
-  do {                                                       \
-    if (LoggerIsEnabled((logger), (module), (level))) {      \
-      LoggerWrite((logger), (module), (level), __VA_ARGS__); \
-    }                                                        \
+#define YAX86_LOG(logger, module, level, ...)                 \
+  do {                                                        \
+    if (YLoggerIsEnabled((logger), (module), (level))) {      \
+      YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
+    }                                                         \
   } while (0)
 
 #endif  // YAX86_UTIL_LOG_H
@@ -1317,20 +1317,20 @@ typedef struct YVideoConfig {
   //
   // Rendering is the heaviest reader of video RAM, so a callback per byte
   // would cost an indirect call in its inner loops. Writes still go through
-  // VideoWriteVRAM(), which marks the corresponding display region dirty.
+  // YVideoWriteVRAM(), which marks the corresponding display region dirty.
   //
   // The caller owns the buffer and it must outlive the video state.
   uint8_t* vram;
 
   // Callback to write a horizontal span of RGB pixels to the real display,
-  // invoked from VideoRender(). The pixels begin at origin, remain on one scan
+  // invoked from YVideoRender(). The pixels begin at origin, remain on one scan
   // line, and are valid only for the duration of the synchronous callback.
   // count is between 1 and kVideoPixelBatchSize, inclusive.
   void (*write_pixels)(
       struct YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
       uint8_t count);
   // Optional callbacks surrounding each dirty rectangular region emitted by
-  // VideoRender(). A retained display can use them to set a transfer window
+  // YVideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
   void (*begin_render_region)(struct YVideoState* video, YVideoRegion region);
   void (*end_render_region)(struct YVideoState* video);
@@ -1407,29 +1407,29 @@ typedef struct YVideoState {
 } YVideoState;
 
 // Initialize video state with the provided configuration.
-YAX86_PUBLIC void VideoInit(YVideoState* video);
+YAX86_PUBLIC void YVideoInit(YVideoState* video);
 
 // Metadata for the adapter being emulated.
-YAX86_PUBLIC const YVideoAdapterMetadata* VideoGetAdapterMetadata(
+YAX86_PUBLIC const YVideoAdapterMetadata* YVideoGetAdapterMetadata(
     const YVideoState* video);
 
 // The current video mode, derived from the mode control register.
-YAX86_PUBLIC YVideoMode VideoGetMode(const YVideoState* video);
+YAX86_PUBLIC YVideoMode YVideoGetMode(const YVideoState* video);
 
 // Metadata for the current video mode.
-YAX86_PUBLIC const YVideoModeMetadata* VideoGetModeMetadata(
+YAX86_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video);
 
 // Read a byte from a video I/O port.
-YAX86_PUBLIC uint8_t VideoReadPort(YVideoState* video, uint16_t port);
+YAX86_PUBLIC uint8_t YVideoReadPort(YVideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
-YAX86_PUBLIC void VideoWritePort(
+YAX86_PUBLIC void YVideoWritePort(
     YVideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
-YAX86_PUBLIC uint8_t VideoReadVRAM(YVideoState* video, uint32_t address);
+YAX86_PUBLIC uint8_t YVideoReadVRAM(YVideoState* video, uint32_t address);
 // Write a byte to video RAM.
-YAX86_PUBLIC void VideoWriteVRAM(
+YAX86_PUBLIC void YVideoWriteVRAM(
     YVideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
@@ -1438,13 +1438,13 @@ YAX86_PUBLIC void VideoWriteVRAM(
 // The cost does not depend on how many cycles are passed, so a caller that
 // advances the beam only when something is about to look at it may pass a
 // whole frame's worth at once.
-YAX86_PUBLIC void VideoTick(YVideoState* video, uint32_t cycles);
+YAX86_PUBLIC void YVideoTick(YVideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
 // write_pixels in row-major horizontal spans. Does nothing when the display is
 // unchanged.
-YAX86_PUBLIC void VideoRender(YVideoState* video);
+YAX86_PUBLIC void YVideoRender(YVideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H
 
@@ -1500,11 +1500,11 @@ extern const uint8_t kFontCGA8x8Bitmap[256][8];
 // VRAM is aliased throughout the adapter's window, so an address past the end
 // wraps around.
 YAX86_MODULE_PRIVATE uint8_t
-VideoReadVRAMByte(YVideoState* video, uint32_t address);
+YVideoReadVRAMByte(YVideoState* video, uint32_t address);
 
 // Write a byte to the emulated video RAM, ignored if no callback is installed.
 // The address wraps in the same way as for reads.
-YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
+YAX86_MODULE_PRIVATE void YVideoWriteVRAMByte(
     YVideoState* video, uint32_t address, uint8_t value);
 
 // A horizontal run of pixels on its way to the host, buffered so that the
@@ -1524,7 +1524,7 @@ typedef struct YVideoPixelRun {
 } YVideoPixelRun;
 
 // Hand over what has been buffered and continue the run after it.
-YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunFlush(
+YAX86_MODULE_PRIVATE_HEADER inline void YVideoPixelRunFlush(
     YVideoPixelRun* run) {
   if (run->count == 0) {
     return;
@@ -1540,19 +1540,19 @@ YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunFlush(
 
 // Open a run at the leftmost pixel of a row. Any partial batch is handed over
 // first, so one call both ends the previous row and begins the next.
-YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunBegin(
+YAX86_MODULE_PRIVATE_HEADER inline void YVideoPixelRunBegin(
     YVideoPixelRun* run, uint16_t x, uint16_t y) {
-  VideoPixelRunFlush(run);
+  YVideoPixelRunFlush(run);
   run->origin.x = x;
   run->origin.y = y;
 }
 
-YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunPush(
+YAX86_MODULE_PRIVATE_HEADER inline void YVideoPixelRunPush(
     YVideoPixelRun* run, YVideoRGB rgb) {
   run->pixels[run->count] = rgb;
   ++run->count;
   if (run->count == kVideoPixelBatchSize) {
-    VideoPixelRunFlush(run);
+    YVideoPixelRunFlush(run);
   }
 }
 
@@ -1560,58 +1560,58 @@ YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunPush(
 // natural columns; vertical coordinates are dirty rows - a character row in
 // text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
 // modes.
-YAX86_MODULE_PRIVATE void VideoInvalidateRows(
+YAX86_MODULE_PRIVATE void YVideoInvalidateRows(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row);
 
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.
-YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const YVideoState* video);
+YAX86_MODULE_PRIVATE bool YVideoIsCursorBlinkOn(const YVideoState* video);
 
 // Whether characters carrying the blink attribute are currently visible. This
 // runs at half the cursor's rate, so the two drift in and out of phase.
-YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const YVideoState* video);
+YAX86_MODULE_PRIVATE bool YVideoIsTextBlinkOn(const YVideoState* video);
 
 // Whether the text mode cursor is enabled in the 6845 registers.
-YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const YVideoState* video);
+YAX86_MODULE_PRIVATE bool YVideoIsCursorEnabled(const YVideoState* video);
 
 // The first scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor start register. May be out of range for the current
 // character height.
 YAX86_MODULE_PRIVATE uint8_t
-VideoGetCursorStartScanLine(const YVideoState* video);
+YVideoGetCursorStartScanLine(const YVideoState* video);
 
 // The last scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor end register. May be out of range for the current
 // character height.
 YAX86_MODULE_PRIVATE uint8_t
-VideoGetCursorEndScanLine(const YVideoState* video);
+YVideoGetCursorEndScanLine(const YVideoState* video);
 
 // The address of the first displayed character, in character units, from the
 // 6845 start address registers.
-YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const YVideoState* video);
+YAX86_MODULE_PRIVATE uint16_t YVideoGetStartAddress(const YVideoState* video);
 
 // The address of the text mode cursor, in character units, from the 6845 cursor
 // address registers.
-YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const YVideoState* video);
+YAX86_MODULE_PRIVATE uint16_t YVideoGetCursorAddress(const YVideoState* video);
 
 // Whether the text mode cursor is currently drawn, and if so where. The offset
 // is relative to start_address in character cells, and is only written when
 // this returns true. The cursor is not drawn when it is disabled, when its
 // blink phase is off, or when it addresses a cell outside the display.
-YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
+YAX86_MODULE_PRIVATE bool YVideoGetVisibleCursorOffset(
     const YVideoState* video, const YVideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset);
 
 // Render a dirty region of the current MDA text display. Pixels are emitted in
 // row-major order.
-YAX86_MODULE_PRIVATE void MDARenderRegion(
+YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
 // Render a dirty region of the current CGA display. Pixels are emitted in
 // row-major order.
-YAX86_MODULE_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void YVideoCGARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
@@ -2451,7 +2451,7 @@ typedef struct YVideoMDACellColors {
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
 YAX86_FILE_PRIVATE YVideoMDACellColors
-MDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
+YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
   const YVideoConfig* config = &video->config;
   YVideoMDACellColors colors = {
       .foreground = &config->foreground,
@@ -2496,7 +2496,7 @@ MDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
   // attribute only applies if blinking is enabled in the mode control register.
   if ((attr_value & kVideoAttributeBlink) &&
       (video->control_register & kVideoControlEnableBlink) &&
-      !VideoIsTextBlinkOn(video)) {
+      !YVideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
     colors.underline = false;
   }
@@ -2505,7 +2505,7 @@ MDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
 
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
 // first makes write_pixels a row-major stream suitable for an SPI window.
-YAX86_MODULE_PRIVATE void MDARenderRegion(
+YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly
@@ -2515,18 +2515,18 @@ YAX86_MODULE_PRIVATE void MDARenderRegion(
 
   // The cursor is resolved once for the region rather than per cell: it can
   // only be in one place, so the loop just tests each cell against it.
-  uint16_t start_address = VideoGetStartAddress(video);
+  uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = VideoGetVisibleCursorOffset(
+  bool cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
-  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
+  uint8_t cursor_start = YVideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = YVideoGetCursorEndScanLine(video);
 
   // Scan lines are the outer loop so that pixels leave in row-major order,
   // which is what a display addressed by transfer window expects. The cost is
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
-    VideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
+    YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
     uint8_t row = (uint8_t)(y / kMDACharHeight);
     uint8_t char_scan_line = (uint8_t)(y % kMDACharHeight);
     for (uint8_t col = start_column; col < end_column; ++col) {
@@ -2535,9 +2535,9 @@ YAX86_MODULE_PRIVATE void MDARenderRegion(
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
       uint32_t char_address = ((uint32_t)start_address + cell_offset) * 2;
       char_address &= metadata->vram_size - 1;
-      uint8_t char_value = VideoReadVRAMByte(video, char_address);
-      uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
-      YVideoMDACellColors colors = MDADecodeAttribute(video, attr_value);
+      uint8_t char_value = YVideoReadVRAMByte(video, char_address);
+      uint8_t attr_value = YVideoReadVRAMByte(video, char_address + 1);
+      YVideoMDACellColors colors = YVideoMDADecodeAttribute(video, attr_value);
 
       // The underline is a solid rule across the cell, so it replaces the
       // glyph row outright on the one scan line it occupies. The glyph row is
@@ -2559,7 +2559,7 @@ YAX86_MODULE_PRIVATE void MDARenderRegion(
             cursor_scan_line
                 ? &video->config.foreground
                 : (is_foreground ? colors.foreground : colors.background);
-        VideoPixelRunPush(run, *rgb);
+        YVideoPixelRunPush(run, *rgb);
       }
     }
   }
@@ -2615,22 +2615,22 @@ YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
     {3, 4, 7},
 };
 
-YAX86_FILE_PRIVATE inline YVideoRGB CGAGetColor(
+YAX86_FILE_PRIVATE inline YVideoRGB YVideoCGAGetColor(
     const YVideoState* video, uint8_t color) {
   return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
-YAX86_FILE_PRIVATE inline uint32_t CGAGetScanLineAddress(
+YAX86_FILE_PRIVATE inline uint32_t YVideoCGAGetScanLineAddress(
     const YVideoState* video, uint16_t y) {
-  uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
+  uint32_t address = ((uint32_t)YVideoGetStartAddress(video) * 2 +
                       (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
                      kCGAGraphicsScanLineAddressMask;
   return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
 }
 
-YAX86_FILE_PRIVATE void CGARenderTextRegion(
+YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
     YVideoState* video, YVideoPixelRun* run, const YVideoModeMetadata* metadata,
     uint8_t start_column, uint8_t end_column, uint16_t first_y,
     uint16_t end_y) {
@@ -2648,12 +2648,12 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
 
   // The cursor is resolved once for the region rather than per cell: it can
   // only be in one place, so the loop just tests each cell against it.
-  uint16_t start_address = VideoGetStartAddress(video);
+  uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = VideoGetVisibleCursorOffset(
+  bool cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
-  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
+  uint8_t cursor_start = YVideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = YVideoGetCursorEndScanLine(video);
 
   // Scan lines are the outer loop so that pixels leave in row-major order,
   // which is what a display addressed by transfer window expects. The cost is
@@ -2661,37 +2661,38 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
   for (uint16_t y = first_y; y < end_y; ++y) {
     // A 40-column cell is twice as wide but there are half as many, so a row
     // starts at the same pixel either way.
-    VideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
+    YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
     uint8_t row = (uint8_t)(y / kCGACharHeight);
     uint8_t char_scan_line = (uint8_t)(y % kCGACharHeight);
     for (uint8_t col = first_char; col < end_char; ++col) {
       // Character and attribute occupy consecutive bytes of a cell.
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
       uint32_t char_address = ((uint32_t)start_address + cell_offset) * 2;
-      uint8_t char_value = VideoReadVRAMByte(video, char_address);
-      uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+      uint8_t char_value = YVideoReadVRAMByte(video, char_address);
+      uint8_t attr_value = YVideoReadVRAMByte(video, char_address + 1);
 
       uint8_t foreground_color =
           attr_value &
           (kVideoAttributeForegroundMask | kVideoAttributeIntenseForeground);
       // The cursor uses the cell's foreground even when that cell's blinking
       // character is currently hidden.
-      YVideoRGB cursor_foreground = CGAGetColor(video, foreground_color);
+      YVideoRGB cursor_foreground = YVideoCGAGetColor(video, foreground_color);
       uint8_t background_color = (attr_value & kVideoAttributeBackgroundMask) >>
                                  kVideoAttributeBackgroundShift;
       // Bit 7 is the blink attribute only while blinking is enabled. With it
       // disabled the same bit is the background's intensity, which is how the
       // CGA reaches all 16 background colors.
       if (video->control_register & kVideoControlEnableBlink) {
-        if ((attr_value & kVideoAttributeBlink) && !VideoIsTextBlinkOn(video)) {
+        if ((attr_value & kVideoAttributeBlink) &&
+            !YVideoIsTextBlinkOn(video)) {
           foreground_color = background_color;
         }
       } else if (attr_value & kVideoAttributeBlink) {
         background_color |= kNumCGAColors / 2;
       }
 
-      YVideoRGB foreground = CGAGetColor(video, foreground_color);
-      YVideoRGB background = CGAGetColor(video, background_color);
+      YVideoRGB foreground = YVideoCGAGetColor(video, foreground_color);
+      YVideoRGB background = YVideoCGAGetColor(video, background_color);
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
@@ -2706,14 +2707,14 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
         // In 40-column mode each glyph pixel is emitted twice, which is how
         // the adapter fills the same 640 dot line with half the characters.
         for (uint8_t i = 0; i < scale; ++i) {
-          VideoPixelRunPush(run, rgb);
+          YVideoPixelRunPush(run, rgb);
         }
       }
     }
   }
 }
 
-YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
+YAX86_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
     YVideoState* video, YVideoRGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
@@ -2727,85 +2728,85 @@ YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
       (video->color_select_register & kCGAColorSelectPaletteIntensity)
           ? kNumCGAColors / 2
           : 0;
-  palette[0] = CGAGetColor(
+  palette[0] = YVideoCGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
   for (uint8_t i = 0; i < 3; ++i) {
-    palette[i + 1] = CGAGetColor(video, palette_colors[i] | intensity);
+    palette[i + 1] = YVideoCGAGetColor(video, palette_colors[i] | intensity);
   }
 }
 
-YAX86_FILE_PRIVATE void CGARenderGraphics320x200Region(
+YAX86_FILE_PRIVATE void YVideoCGARenderGraphics320x200Region(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   YVideoRGB palette[4];
-  CGAResolve320x200Palette(video, palette);
+  YVideoCGAResolve320x200Palette(video, palette);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
-    VideoPixelRunBegin(
+    YVideoPixelRunBegin(
         run, (uint16_t)start_column * kCGAFrameBufferPixelsPerByte320x200, y);
-    uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
+    uint32_t scan_line_address = YVideoCGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
-          VideoReadVRAMByte(video, scan_line_address + byte_column);
+          YVideoReadVRAMByte(video, scan_line_address + byte_column);
       for (uint8_t i = 0; i < kCGAPixelsPerByte320x200; ++i) {
         uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 - i) *
                                   kCGABitsPerPixel320x200);
         uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
         for (uint8_t scale_x = 0; scale_x < kCGA320x200HorizontalScale;
              ++scale_x) {
-          VideoPixelRunPush(run, palette[color]);
+          YVideoPixelRunPush(run, palette[color]);
         }
       }
     }
   }
 }
 
-YAX86_FILE_PRIVATE void CGARenderGraphics640x200Region(
+YAX86_FILE_PRIVATE void YVideoCGARenderGraphics640x200Region(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
-  YVideoRGB foreground = CGAGetColor(
+  YVideoRGB foreground = YVideoCGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
-  YVideoRGB background = CGAGetColor(video, 0);
+  YVideoRGB background = YVideoCGAGetColor(video, 0);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
-    VideoPixelRunBegin(
+    YVideoPixelRunBegin(
         run, (uint16_t)start_column * kCGAPixelsPerByte640x200, y);
-    uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
+    uint32_t scan_line_address = YVideoCGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
-          VideoReadVRAMByte(video, scan_line_address + byte_column);
+          YVideoReadVRAMByte(video, scan_line_address + byte_column);
       for (uint8_t i = 0; i < kCGAPixelsPerByte640x200; ++i) {
         uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 - i);
         bool is_foreground = (byte_value >> shift) & 1;
-        VideoPixelRunPush(run, is_foreground ? foreground : background);
+        YVideoPixelRunPush(run, is_foreground ? foreground : background);
       }
     }
   }
 }
 
-YAX86_MODULE_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void YVideoCGARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
-  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   switch (metadata->mode) {
     case kVideoModeCGAText40x25Mono:
     case kVideoModeCGAText40x25Color:
     case kVideoModeCGAText80x25Mono:
     case kVideoModeCGAText80x25Color:
-      CGARenderTextRegion(
+      YVideoCGARenderTextRegion(
           video, run, metadata, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics320x200:
     case kVideoModeCGAGraphics320x200Alt:
-      CGARenderGraphics320x200Region(
+      YVideoCGARenderGraphics320x200Region(
           video, run, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics640x200:
-      CGARenderGraphics640x200Region(
+      YVideoCGARenderGraphics640x200Region(
           video, run, start_column, end_column, first_y, end_y);
       break;
     default:
@@ -2864,13 +2865,13 @@ enum {
   kVideoText80ColumnScale = 1,
 };
 
-YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
+YAX86_FILE_PRIVATE void YVideoInvalidateVRAMAddress(
     YVideoState* video, uint32_t address);
-YAX86_FILE_PRIVATE void VideoInvalidateCursor(YVideoState* video);
-YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(YVideoState* video);
-YAX86_FILE_PRIVATE void VideoInvalidateAll(YVideoState* video);
+YAX86_FILE_PRIVATE void YVideoInvalidateCursor(YVideoState* video);
+YAX86_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video);
+YAX86_FILE_PRIVATE void YVideoInvalidateAll(YVideoState* video);
 
-YAX86_PUBLIC const YVideoAdapterMetadata* VideoGetAdapterMetadata(
+YAX86_PUBLIC const YVideoAdapterMetadata* YVideoGetAdapterMetadata(
     const YVideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
 }
@@ -2880,7 +2881,7 @@ YAX86_PUBLIC const YVideoAdapterMetadata* VideoGetAdapterMetadata(
 // ============================================================================
 
 YAX86_MODULE_PRIVATE uint8_t
-VideoReadVRAMByte(YVideoState* video, uint32_t address) {
+YVideoReadVRAMByte(YVideoState* video, uint32_t address) {
   if (!video->config.vram) {
     return kVideoUnmappedPortValue;
   }
@@ -2892,16 +2893,16 @@ VideoReadVRAMByte(YVideoState* video, uint32_t address) {
   // than a remainder. The size is only known at run time, so a remainder would
   // compile to a hardware divide in the middle of the render loop - and the
   // Cortex-M0+ this targets has no divide instruction at all.
-  uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
+  uint32_t vram_size = YVideoGetAdapterMetadata(video)->vram_size;
   return video->config.vram[address & (vram_size - 1)];
 }
 
-YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
+YAX86_MODULE_PRIVATE void YVideoWriteVRAMByte(
     YVideoState* video, uint32_t address, uint8_t value) {
   if (!video->config.vram) {
     return;
   }
-  uint32_t vram_size = VideoGetAdapterMetadata(video)->vram_size;
+  uint32_t vram_size = YVideoGetAdapterMetadata(video)->vram_size;
   address &= vram_size - 1;
   if (video->config.vram[address] == value) {
     return;
@@ -2910,33 +2911,33 @@ YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
   if (video->dirty_state.status == kVideoFullRedraw) {
     return;
   }
-  VideoInvalidateVRAMAddress(video, address);
+  YVideoInvalidateVRAMAddress(video, address);
 }
 
-YAX86_PUBLIC uint8_t VideoReadVRAM(YVideoState* video, uint32_t address) {
-  if (address >= VideoGetAdapterMetadata(video)->vram_size) {
+YAX86_PUBLIC uint8_t YVideoReadVRAM(YVideoState* video, uint32_t address) {
+  if (address >= YVideoGetAdapterMetadata(video)->vram_size) {
     return kVideoUnmappedPortValue;
   }
-  return VideoReadVRAMByte(video, address);
+  return YVideoReadVRAMByte(video, address);
 }
 
-YAX86_PUBLIC void VideoWriteVRAM(
+YAX86_PUBLIC void YVideoWriteVRAM(
     YVideoState* video, uint32_t address, uint8_t value) {
-  if (address >= VideoGetAdapterMetadata(video)->vram_size) {
+  if (address >= YVideoGetAdapterMetadata(video)->vram_size) {
     return;
   }
-  VideoWriteVRAMByte(video, address, value);
+  YVideoWriteVRAMByte(video, address, value);
 }
 
 // ============================================================================
 // Initialization
 // ============================================================================
 
-YAX86_PUBLIC void VideoInit(YVideoState* video) {
+YAX86_PUBLIC void YVideoInit(YVideoState* video) {
   video->adapter = video->config.adapter == kVideoAdapterCGA ? kVideoAdapterCGA
                                                              : kVideoAdapterMDA;
 
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == kVideoAdapterCGA
                                          ? kDefaultCGARegisters
                                          : kDefaultMDARegisters;
@@ -2944,11 +2945,11 @@ YAX86_PUBLIC void VideoInit(YVideoState* video) {
     video->registers[i] = default_registers[i];
   }
   video->control_register = adapter->default_control_register;
-  VideoInvalidateAll(video);
+  YVideoInvalidateAll(video);
 
   for (uint32_t i = 0; i < adapter->vram_size; i += 2) {
-    VideoWriteVRAMByte(video, i, ' ');
-    VideoWriteVRAMByte(video, i + 1, 0x07 /* default attr */);
+    YVideoWriteVRAMByte(video, i, ' ');
+    YVideoWriteVRAMByte(video, i + 1, 0x07 /* default attr */);
   }
 }
 
@@ -2956,7 +2957,7 @@ YAX86_PUBLIC void VideoInit(YVideoState* video) {
 // Video mode
 // ============================================================================
 
-YAX86_PUBLIC YAX86_HOT YVideoMode VideoGetMode(const YVideoState* video) {
+YAX86_PUBLIC YAX86_HOT YVideoMode YVideoGetMode(const YVideoState* video) {
   if (video->adapter == kVideoAdapterMDA) {
     // The MDA has only one mode.
     return kVideoModeMDAText80x25;
@@ -2987,55 +2988,55 @@ YAX86_PUBLIC YAX86_HOT YVideoMode VideoGetMode(const YVideoState* video) {
              : kVideoModeCGAGraphics320x200;
 }
 
-YAX86_PUBLIC const YVideoModeMetadata* VideoGetModeMetadata(
+YAX86_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video) {
-  return &kVideoModeMetadata[VideoGetMode(video)];
+  return &kVideoModeMetadata[YVideoGetMode(video)];
 }
 
 // ============================================================================
 // 6845 CRT controller
 // ============================================================================
 
-YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const YVideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t YVideoGetStartAddress(const YVideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterStartAddressH] << 8) |
          video->registers[kCRTCRegisterStartAddressL];
 }
 
-YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const YVideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t YVideoGetCursorAddress(const YVideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterCursorH] << 8) |
          video->registers[kCRTCRegisterCursorL];
 }
 
-YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const YVideoState* video) {
+YAX86_MODULE_PRIVATE bool YVideoIsCursorEnabled(const YVideoState* video) {
   return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
          kCRTCCursorDisabled;
 }
 
 YAX86_MODULE_PRIVATE uint8_t
-VideoGetCursorStartScanLine(const YVideoState* video) {
+YVideoGetCursorStartScanLine(const YVideoState* video) {
   return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
 }
 
 YAX86_MODULE_PRIVATE uint8_t
-VideoGetCursorEndScanLine(const YVideoState* video) {
+YVideoGetCursorEndScanLine(const YVideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
-YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const YVideoState* video) {
+YAX86_MODULE_PRIVATE bool YVideoIsCursorBlinkOn(const YVideoState* video) {
   return (video->frames / kVideoFramesPerCursorBlinkPhase) % 2 == 0;
 }
 
-YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const YVideoState* video) {
+YAX86_MODULE_PRIVATE bool YVideoIsTextBlinkOn(const YVideoState* video) {
   return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
-YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
+YAX86_MODULE_PRIVATE bool YVideoGetVisibleCursorOffset(
     const YVideoState* video, const YVideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset) {
-  if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
+  if (!YVideoIsCursorEnabled(video) || !YVideoIsCursorBlinkOn(video)) {
     return false;
   }
-  *cursor_offset = (VideoGetCursorAddress(video) - start_address) &
+  *cursor_offset = (YVideoGetCursorAddress(video) - start_address) &
                    (metadata->vram_size / 2 - 1);
   return *cursor_offset < (uint16_t)metadata->columns * metadata->rows;
 }
@@ -3044,7 +3045,7 @@ YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
 // Dirty regions
 // ============================================================================
 
-YAX86_FILE_PRIVATE void VideoDirtyRangeAdd(
+YAX86_FILE_PRIVATE void YVideoDirtyRangeAdd(
     YVideoDirtyRange* range, uint8_t start_column, uint8_t end_column) {
   if (range->end_column == 0) {
     range->start_column = start_column;
@@ -3068,8 +3069,8 @@ typedef struct YVideoDirtyGeometry {
 } YVideoDirtyGeometry;
 
 YAX86_FILE_PRIVATE YVideoDirtyGeometry
-VideoGetDirtyGeometry(const YVideoState* video) {
-  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
+YVideoGetDirtyGeometry(const YVideoState* video) {
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   YVideoDirtyGeometry geometry;
   if (metadata->type == kVideoModeText) {
     geometry.rows = metadata->rows;
@@ -3086,7 +3087,7 @@ VideoGetDirtyGeometry(const YVideoState* video) {
   return geometry;
 }
 
-YAX86_MODULE_PRIVATE void VideoInvalidateRows(
+YAX86_MODULE_PRIVATE void YVideoInvalidateRows(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
   if (start_column >= end_column || end_column > kVideoDirtyColumns ||
@@ -3098,7 +3099,7 @@ YAX86_MODULE_PRIVATE void VideoInvalidateRows(
   }
 
   for (uint8_t row = first_row; row < end_row; ++row) {
-    VideoDirtyRangeAdd(
+    YVideoDirtyRangeAdd(
         &video->dirty_state.ranges[row], start_column, end_column);
   }
   // A pending full redraw already covers these rows, and downgrading it would
@@ -3108,11 +3109,11 @@ YAX86_MODULE_PRIVATE void VideoInvalidateRows(
   }
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateAll(YVideoState* video) {
+YAX86_FILE_PRIVATE void YVideoInvalidateAll(YVideoState* video) {
   video->dirty_state.status = kVideoFullRedraw;
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateTextCell(
+YAX86_FILE_PRIVATE void YVideoInvalidateTextCell(
     YVideoState* video, const YVideoModeMetadata* metadata,
     uint16_t cell_offset) {
   if (cell_offset >= (uint16_t)metadata->columns * metadata->rows) {
@@ -3132,26 +3133,26 @@ YAX86_FILE_PRIVATE void VideoInvalidateTextCell(
   }
   // The character row is the dirty row, so a changed cell marks exactly the
   // scan lines it covers - no conversion to scan lines and back.
-  VideoInvalidateRows(
+  YVideoInvalidateRows(
       video, col * column_scale, (col + 1) * column_scale, row,
       (uint8_t)(row + 1));
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
+YAX86_FILE_PRIVATE void YVideoInvalidateVRAMAddress(
     YVideoState* video, uint32_t address) {
-  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   if (metadata->type == kVideoModeText) {
     uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
     uint16_t character_address = (uint16_t)(address / 2);
     uint16_t cell_offset =
-        (character_address - VideoGetStartAddress(video)) & character_mask;
-    VideoInvalidateTextCell(video, metadata, cell_offset);
+        (character_address - YVideoGetStartAddress(video)) & character_mask;
+    YVideoInvalidateTextCell(video, metadata, cell_offset);
     return;
   }
 
   // Each half of CGA graphics VRAM holds either the even or odd scan lines.
   uint32_t half_mask = kCGAGraphicsOddScanLineOffset - 1;
-  uint32_t start = (uint32_t)VideoGetStartAddress(video) * 2 & half_mask;
+  uint32_t start = (uint32_t)YVideoGetStartAddress(video) * 2 & half_mask;
   uint32_t offset = ((address & half_mask) - start) & half_mask;
   uint32_t visible_bytes =
       (metadata->height / 2) * kCGAGraphicsBytesPerScanLine;
@@ -3165,30 +3166,30 @@ YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
   // Graphics modes have no character rows, so neighboring scan lines share a
   // dirty row.
   uint8_t dirty_row = (uint8_t)(y / kVideoDirtyScanLinesPerGroup);
-  VideoInvalidateRows(
+  YVideoInvalidateRows(
       video, byte_column, byte_column + 1, dirty_row, (uint8_t)(dirty_row + 1));
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateCursor(YVideoState* video) {
-  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
+YAX86_FILE_PRIVATE void YVideoInvalidateCursor(YVideoState* video) {
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText) {
     return;
   }
   uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
   uint16_t cursor_offset =
-      (VideoGetCursorAddress(video) - VideoGetStartAddress(video)) &
+      (YVideoGetCursorAddress(video) - YVideoGetStartAddress(video)) &
       character_mask;
-  VideoInvalidateTextCell(video, metadata, cursor_offset);
+  YVideoInvalidateTextCell(video, metadata, cursor_offset);
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(YVideoState* video) {
-  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
+YAX86_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video) {
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText ||
       !(video->control_register & kVideoControlEnableBlink)) {
     return;
   }
 
-  uint16_t start_address = VideoGetStartAddress(video);
+  uint16_t start_address = YVideoGetStartAddress(video);
   uint8_t column_scale = metadata->columns == kVideoTextColumns40
                              ? kVideoText40ColumnScale
                              : kVideoText80ColumnScale;
@@ -3198,7 +3199,7 @@ YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(YVideoState* video) {
     for (uint8_t col = 0; col < metadata->columns; ++col) {
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
       uint32_t attr_address = ((uint32_t)start_address + cell_offset) * 2 + 1;
-      if (VideoReadVRAMByte(video, attr_address) & kVideoAttributeBlink) {
+      if (YVideoReadVRAMByte(video, attr_address) & kVideoAttributeBlink) {
         uint8_t dirty_column = col * column_scale;
         if (dirty_column < start_column) {
           start_column = dirty_column;
@@ -3207,7 +3208,7 @@ YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(YVideoState* video) {
       }
     }
     if (end_column != 0) {
-      VideoInvalidateRows(
+      YVideoInvalidateRows(
           video, start_column, end_column, row, (uint8_t)(row + 1));
     }
   }
@@ -3227,18 +3228,18 @@ YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(YVideoState* video) {
 // toward the next scan line; the loop pays it off a scan line at a time,
 // looping rather than branching once since a single call can be worth more
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
-// incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
+// incrementing frames, which YVideoIsCursorBlinkOn() and YVideoIsTextBlinkOn()
 // use to derive their blink phases.
-YAX86_PUBLIC YAX86_HOT void VideoTick(YVideoState* video, uint32_t cycles) {
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+YAX86_PUBLIC YAX86_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
       adapter->scan_lines_per_frame == 0) {
     // No adapter geometry to advance through.
     return;
   }
 
-  bool cursor_was_on = VideoIsCursorBlinkOn(video);
-  bool text_was_on = VideoIsTextBlinkOn(video);
+  bool cursor_was_on = YVideoIsCursorBlinkOn(video);
+  bool text_was_on = YVideoIsTextBlinkOn(video);
 
   // Computed rather than stepped, because the platform advances the beam in
   // arrears - only when something actually looks at it - so cycles here can be
@@ -3254,19 +3255,19 @@ YAX86_PUBLIC YAX86_HOT void VideoTick(YVideoState* video, uint32_t cycles) {
   video->frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 
-  if (cursor_was_on != VideoIsCursorBlinkOn(video) &&
-      VideoIsCursorEnabled(video)) {
-    VideoInvalidateCursor(video);
+  if (cursor_was_on != YVideoIsCursorBlinkOn(video) &&
+      YVideoIsCursorEnabled(video)) {
+    YVideoInvalidateCursor(video);
   }
-  if (text_was_on != VideoIsTextBlinkOn(video)) {
-    VideoInvalidateBlinkingText(video);
+  if (text_was_on != YVideoIsTextBlinkOn(video)) {
+    YVideoInvalidateBlinkingText(video);
   }
 }
 
 // The value the status port reads back, computed from where the CRT beam
 // currently is.
-YAX86_FILE_PRIVATE uint8_t VideoGetStatus(const YVideoState* video) {
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+YAX86_FILE_PRIVATE uint8_t YVideoGetStatus(const YVideoState* video) {
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
   bool in_horizontal_retrace =
       video->scan_line_cycles >= adapter->display_cycles_per_scan_line;
@@ -3307,7 +3308,7 @@ typedef enum YVideoPortFunction {
 
 // Decode an I/O port within the adapter's range.
 YAX86_FILE_PRIVATE YVideoPortFunction
-VideoDecodePort(const YVideoState* video, uint16_t port) {
+YVideoDecodePort(const YVideoState* video, uint16_t port) {
   if (video->adapter == kVideoAdapterMDA) {
     switch (port) {
       case kMDAPortRegisterIndex:
@@ -3343,8 +3344,8 @@ VideoDecodePort(const YVideoState* video, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC uint8_t VideoReadPort(YVideoState* video, uint16_t port) {
-  switch (VideoDecodePort(video, port)) {
+YAX86_PUBLIC uint8_t YVideoReadPort(YVideoState* video, uint16_t port) {
+  switch (YVideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       return video->selected_register;
     case kVideoPortRegisterData:
@@ -3357,15 +3358,15 @@ YAX86_PUBLIC uint8_t VideoReadPort(YVideoState* video, uint16_t port) {
     case kVideoPortColorSelect:
       return video->color_select_register;
     case kVideoPortStatus:
-      return VideoGetStatus(video);
+      return YVideoGetStatus(video);
     default:
       return kVideoUnmappedPortValue;
   }
 }
 
-YAX86_PUBLIC void VideoWritePort(
+YAX86_PUBLIC void YVideoWritePort(
     YVideoState* video, uint16_t port, uint8_t value) {
-  switch (VideoDecodePort(video, port)) {
+  switch (YVideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       video->selected_register = value & kCRTCRegisterIndexMask;
       break;
@@ -3377,18 +3378,18 @@ YAX86_PUBLIC void VideoWritePort(
         }
         if (video->selected_register == kCRTCRegisterCursorH ||
             video->selected_register == kCRTCRegisterCursorL) {
-          VideoInvalidateCursor(video);
+          YVideoInvalidateCursor(video);
           *selected = value;
-          VideoInvalidateCursor(video);
+          YVideoInvalidateCursor(video);
         } else {
           *selected = value;
           if (video->selected_register == kCRTCRegisterStartAddressH ||
               video->selected_register == kCRTCRegisterStartAddressL) {
-            VideoInvalidateAll(video);
+            YVideoInvalidateAll(video);
           } else if (
               video->selected_register == kCRTCRegisterCursorStart ||
               video->selected_register == kCRTCRegisterCursorEnd) {
-            VideoInvalidateCursor(video);
+            YVideoInvalidateCursor(video);
           }
         }
       }
@@ -3396,13 +3397,13 @@ YAX86_PUBLIC void VideoWritePort(
     case kVideoPortControl:
       if (video->control_register != value) {
         video->control_register = value;
-        VideoInvalidateAll(video);
+        YVideoInvalidateAll(video);
       }
       break;
     case kVideoPortColorSelect:
       if (video->color_select_register != value) {
         video->color_select_register = value;
-        VideoInvalidateAll(video);
+        YVideoInvalidateAll(video);
       }
       break;
     default:
@@ -3415,7 +3416,7 @@ YAX86_PUBLIC void VideoWritePort(
 // Rendering
 // ============================================================================
 
-YAX86_FILE_PRIVATE void VideoRenderBlankRegion(
+YAX86_FILE_PRIVATE void YVideoRenderBlankRegion(
     YVideoState* video, YVideoPixelRun* run, YVideoRegion region) {
   YVideoRGB blank = video->adapter == kVideoAdapterCGA
                         ? video->config.cga_palette[0]
@@ -3423,20 +3424,20 @@ YAX86_FILE_PRIVATE void VideoRenderBlankRegion(
   uint16_t end_x = region.origin.x + region.width;
   uint16_t end_y = region.origin.y + region.height;
   for (uint16_t y = region.origin.y; y < end_y; ++y) {
-    VideoPixelRunBegin(run, region.origin.x, y);
+    YVideoPixelRunBegin(run, region.origin.x, y);
     for (uint16_t x = region.origin.x; x < end_x; ++x) {
-      VideoPixelRunPush(run, blank);
+      YVideoPixelRunPush(run, blank);
     }
   }
 }
 
-YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
+YAX86_FILE_PRIVATE void YVideoRenderDirtyRegion(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
   // Every mode divides the frame buffer into kVideoDirtyColumns equal columns,
   // so a dirty column is 9 pixels wide on the MDA and 8 on the CGA.
   uint16_t column_width =
-      VideoGetAdapterMetadata(video)->frame_buffer_width / kVideoDirtyColumns;
+      YVideoGetAdapterMetadata(video)->frame_buffer_width / kVideoDirtyColumns;
   YVideoRegion region = {
       .origin = {.x = start_column * column_width, .y = first_y},
       .width = (end_column - start_column) * column_width,
@@ -3456,13 +3457,15 @@ YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
   run.count = 0;
 
   if (!(video->control_register & kVideoControlVideoEnable)) {
-    VideoRenderBlankRegion(video, &run, region);
+    YVideoRenderBlankRegion(video, &run, region);
   } else if (video->adapter == kVideoAdapterCGA) {
-    CGARenderRegion(video, &run, start_column, end_column, first_y, end_y);
+    YVideoCGARenderRegion(
+        video, &run, start_column, end_column, first_y, end_y);
   } else {
-    MDARenderRegion(video, &run, start_column, end_column, first_y, end_y);
+    YVideoMDARenderRegion(
+        video, &run, start_column, end_column, first_y, end_y);
   }
-  VideoPixelRunFlush(&run);
+  YVideoPixelRunFlush(&run);
 
   // A retained display addressed by transfer window advances its own write
   // pointer once per pixel, so it is the pixel count that positions them, not
@@ -3484,17 +3487,17 @@ YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
   }
 }
 
-YAX86_PUBLIC void VideoRender(YVideoState* video) {
+YAX86_PUBLIC void YVideoRender(YVideoState* video) {
   if (!video->config.write_pixels || video->dirty_state.status == kVideoClean) {
     return;
   }
 
-  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   if (video->dirty_state.status == kVideoFullRedraw) {
-    VideoRenderDirtyRegion(
+    YVideoRenderDirtyRegion(
         video, 0, kVideoDirtyColumns, 0, adapter->frame_buffer_height);
   } else {
-    YVideoDirtyGeometry geometry = VideoGetDirtyGeometry(video);
+    YVideoDirtyGeometry geometry = YVideoGetDirtyGeometry(video);
     for (uint8_t row = 0; row < geometry.rows;) {
       YVideoDirtyRange range = video->dirty_state.ranges[row];
       if (range.end_column == 0) {
@@ -3515,7 +3518,7 @@ YAX86_PUBLIC void VideoRender(YVideoState* video) {
       if (end_y > adapter->frame_buffer_height) {
         end_y = adapter->frame_buffer_height;
       }
-      VideoRenderDirtyRegion(
+      YVideoRenderDirtyRegion(
           video, range.start_column, range.end_column, first_y, end_y);
       row = end_row;
     }

@@ -141,16 +141,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
-    char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -158,7 +158,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -170,18 +170,18 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += SNPrintFPutC(buffer, size, pos, ' ');
+    count += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += SNPrintFPutC(buffer, size, pos, *s++);
+    count += YSNPrintFPutC(buffer, size, pos, *s++);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t
-SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
-              int base, int uppercase, int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+    char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
+    int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -209,35 +209,35 @@ SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
   // If zero padding is requested, sign should be printed before padding
   if (pad_zero) {
     if (negative) {
-      count += SNPrintFPutC(buffer, size, pos, '-');
+      count += YSNPrintFPutC(buffer, size, pos, '-');
       negative = 0; // Sign already handled
     }
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, '0');
+      count += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, ' ');
+      count += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
   if (negative) {
-    count += SNPrintFPutC(buffer, size, pos, '-');
+    count += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += SNPrintFPutC(buffer, size, pos, temp[--i]);
+    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
     if (*format != '%') {
-      SNPrintFPutC(buffer, size, &pos, *format++);
+      YSNPrintFPutC(buffer, size, &pos, *format++);
       continue;
     }
 
@@ -279,15 +279,15 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         // Pad with spaces (zero flag is ignored for %c per standard)
         int pad = width - 1;
         while (pad-- > 0) {
-          SNPrintFPutC(buffer, size, &pos, ' ');
+          YSNPrintFPutC(buffer, size, &pos, ' ');
         }
-        SNPrintFPutC(buffer, size, &pos, c);
+        YSNPrintFPutC(buffer, size, &pos, c);
         break;
       }
       case 's': {
         const char* s = va_arg(args, const char*);
         if (!s) s = "(null)";
-        SNPrintFPutS(buffer, size, &pos, s, width);
+        YSNPrintFPutS(buffer, size, &pos, s, width);
         break;
       }
       case 'd':
@@ -313,8 +313,8 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         } else {
           uval = (unsigned long long)val;
         }
-        SNPrintFPutUI(buffer, size, &pos, uval, 10, 0, width, pad_zero,
-                        negative);
+        YSNPrintFPutUI(
+            buffer, size, &pos, uval, 10, 0, width, pad_zero, negative);
         break;
       }
       case 'u':
@@ -340,30 +340,30 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         else
           val = va_arg(args, unsigned int);
 
-        SNPrintFPutUI(buffer, size, &pos, val, base, uppercase, width,
-                        pad_zero, 0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, base, uppercase, width, pad_zero, 0);
         break;
       }
       case 'p': {
         unsigned long long val =
             (unsigned long long)(uintptr_t)va_arg(args, void*);
         // Print 0x prefix
-        SNPrintFPutC(buffer, size, &pos, '0');
-        SNPrintFPutC(buffer, size, &pos, 'x');
+        YSNPrintFPutC(buffer, size, &pos, '0');
+        YSNPrintFPutC(buffer, size, &pos, 'x');
         // Adjust width to account for "0x" prefix
         int adjusted_width = width > 2 ? width - 2 : 0;
-        SNPrintFPutUI(buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero,
-                        0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero, 0);
         break;
       }
       case '%': {
-        SNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, '%');
         break;
       }
       default: {
         // Unknown specifier, print % and the specifier literally
-        SNPrintFPutC(buffer, size, &pos, '%');
-        SNPrintFPutC(buffer, size, &pos, *format);
+        YSNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, *format);
         break;
       }
     }
@@ -382,11 +382,11 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
-  int ret = VSNPrintF(buffer, size, format, args);
+  int ret = YVSNPrintF(buffer, size, format, args);
   va_end(args);
   return ret;
 }
@@ -465,7 +465,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -509,7 +509,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void LoggerInit(
+YAX86_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -518,52 +518,52 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
-         (logger->config->enabled_modules & LogModuleMask(module)) != 0;
+         (logger->config->enabled_modules & YLogModuleMask(module)) != 0;
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules |= LogModuleMask(module);
+    logger->config->enabled_modules |= YLogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules &= ~LogModuleMask(module);
+    logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) YAX86_UNUSED;
 
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
-  // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, module, level)) {
+  // YLoggerWrite is also callable directly.
+  if (!YLoggerIsEnabled(logger, module, level)) {
     return;
   }
 
   va_list args;
   va_start(args, format);
   int formatted_length =
-      VSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
   va_end(args);
 
-  // VSNPrintF returns the length the message would have had, which may exceed
+  // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
@@ -584,11 +584,11 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                \
-  do {                                                       \
-    if (LoggerIsEnabled((logger), (module), (level))) {      \
-      LoggerWrite((logger), (module), (level), __VA_ARGS__); \
-    }                                                        \
+#define YAX86_LOG(logger, module, level, ...)                 \
+  do {                                                        \
+    if (YLoggerIsEnabled((logger), (module), (level))) {      \
+      YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
+    }                                                         \
   } while (0)
 
 #endif  // YAX86_UTIL_LOG_H
@@ -725,7 +725,7 @@ typedef struct YPICState {
   uint8_t imr;
 
   // Whether any requested interrupt is unmasked - that is, whether irr & ~imr
-  // is non-zero. Recomputed by PICUpdateUnmaskedRequest(), which is the sole
+  // is non-zero. Recomputed by YPICUpdateUnmaskedRequest(), which is the sole
   // writer, wherever irr or imr changes.
   //
   // This exists so that a CPU can tell in a load whether asking for an
@@ -734,7 +734,7 @@ typedef struct YPICState {
   // always no.
   //
   // It is deliberately conservative rather than exact: it ignores priority and
-  // the in-service register, so it can be true where PICGetPendingInterrupt()
+  // the in-service register, so it can be true where YPICGetPendingInterrupt()
   // would still decline. That costs only a call that reports nothing. What it
   // may never be is falsely false, because a reader takes it as permission not
   // to ask at all.
@@ -753,7 +753,7 @@ typedef struct YPICState {
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-YAX86_PUBLIC void PICInit(YPICState* pic);
+YAX86_PUBLIC void YPICInit(YPICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -761,11 +761,11 @@ YAX86_PUBLIC void PICInit(YPICState* pic);
 
 // Raise an IRQ line (0-7) on this PIC. If this is a slave PIC, also raises
 // the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq);
+YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq);
 
 // Lower an IRQ line (0-7) on this PIC. If this is a slave PIC and no interrupts
 // are pending, also lowers the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq);
+YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
 
 // ============================================================================
 // I/O port interface
@@ -774,12 +774,12 @@ YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq);
 // Read from a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port);
+YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port);
 
 // Write to a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 
 // ============================================================================
 // Interrupt handling
@@ -788,7 +788,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
 // PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
-YAX86_PUBLIC uint8_t PICGetPendingInterrupt(YPICState* pic);
+YAX86_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H
 
@@ -857,7 +857,7 @@ YAX86_FILE_PRIVATE const uint16_t kPICBasePorts[kPICNumModes] = {
 // ============================================================================
 
 // Returns the mode of a PIC based on its ICWs.
-YAX86_FILE_PRIVATE inline YPICMode PICGetMode(YPICState* pic) {
+YAX86_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
   if (pic->icw1 & kICW1_SNGL) {
     return kPICSingle;
@@ -869,23 +869,23 @@ YAX86_FILE_PRIVATE inline YPICMode PICGetMode(YPICState* pic) {
 }
 
 // Returns if the PIC is configured as a single PIC.
-YAX86_FILE_PRIVATE inline bool PICIsSingle(YPICState* pic) {
-  return PICGetMode(pic) == kPICSingle;
+YAX86_FILE_PRIVATE inline bool YPICIsSingle(YPICState* pic) {
+  return YPICGetMode(pic) == kPICSingle;
 }
 
 // Returns if the PIC is a master PIC.
-YAX86_FILE_PRIVATE inline bool PICIsMaster(YPICState* pic) {
-  return PICGetMode(pic) == kPICMaster;
+YAX86_FILE_PRIVATE inline bool YPICIsMaster(YPICState* pic) {
+  return YPICGetMode(pic) == kPICMaster;
 }
 
 // Returns if the PIC is a slave PIC.
-YAX86_FILE_PRIVATE inline bool PICIsSlave(YPICState* pic) {
-  return PICGetMode(pic) == kPICSlave;
+YAX86_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
+  return YPICGetMode(pic) == kPICSlave;
 }
 
 // Returns the I/O port corresponding to a given port number.
-YAX86_FILE_PRIVATE inline YPICPort PICGetPort(YPICState* pic, uint16_t port) {
-  uint16_t port_offset = port - kPICBasePorts[PICGetMode(pic)];
+YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
+  uint16_t port_offset = port - kPICBasePorts[YPICGetMode(pic)];
   if (port_offset >= kNumPICPorts) {
     return kPICPortInvalid;
   }
@@ -894,7 +894,7 @@ YAX86_FILE_PRIVATE inline YPICPort PICGetPort(YPICState* pic, uint16_t port) {
 
 // Returns the IRQ number of the parent PIC connected to a slave PIC.
 // Only valid if pic is a slave PIC.
-YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(YPICState* pic) {
+YAX86_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
   return pic->icw3 & 0x07;
 }
 
@@ -905,21 +905,21 @@ YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(YPICState* pic) {
 // Recomputes YPICState.has_unmasked_request. This is its sole writer, and every
 // path that changes irr or imr calls it, so the flag can never disagree with
 // the registers it summarizes.
-YAX86_FILE_PRIVATE inline void PICUpdateUnmaskedRequest(YPICState* pic) {
+YAX86_FILE_PRIVATE inline void YPICUpdateUnmaskedRequest(YPICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-YAX86_PUBLIC void PICInit(YPICState* pic) {
+YAX86_PUBLIC void YPICInit(YPICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 }
 
 // ============================================================================
 // IRQ line control
 // ============================================================================
 
-YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq) {
+YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
@@ -928,25 +928,25 @@ YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq) {
       kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC, also raise the cascade IRQ on the master.
-  if (PICIsSlave(pic) && pic->cascade_pic) {
-    PICRaiseIRQ(pic->cascade_pic, PICGetCascadeIRQ(pic));
+  if (YPICIsSlave(pic) && pic->cascade_pic) {
+    YPICRaiseIRQ(pic->cascade_pic, YPICGetCascadeIRQ(pic));
   }
 }
 
-YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq) {
+YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     return;
   }
   pic->irr &= ~(1 << irq);
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 
   // If this is a slave PIC and no interrupts are pending, lower the cascade
   // IRQ on the master.
-  if (PICIsSlave(pic) && pic->irr == 0 && pic->cascade_pic) {
-    PICLowerIRQ(pic->cascade_pic, PICGetCascadeIRQ(pic));
+  if (YPICIsSlave(pic) && pic->irr == 0 && pic->cascade_pic) {
+    YPICLowerIRQ(pic->cascade_pic, YPICGetCascadeIRQ(pic));
   }
 }
 
@@ -954,8 +954,8 @@ YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq) {
 // I/O port interface
 // ============================================================================
 
-YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port) {
-  YPICPort pic_port = PICGetPort(pic, port);
+YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
+  YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
       // Reading from the command port is not a defined operation.
@@ -984,8 +984,8 @@ YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
-  YPICPort pic_port = PICGetPort(pic, port);
+YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
+  YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
       if (value & kICW1_INIT) {
@@ -995,7 +995,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
         pic->isr = 0x00;
         // All interrupts masked by default.
         pic->imr = 0xFF;
-        PICUpdateUnmaskedRequest(pic);
+        YPICUpdateUnmaskedRequest(pic);
 
         // The next write to the data port will be ICW2.
         pic->init_state = kPICExpectICW2;
@@ -1043,7 +1043,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
           // This is ICW2. It sets the interrupt vector base.
           // The PIC uses the upper 5 bits of this value.
           pic->icw2 = value;
-          if (PICIsSingle(pic)) {
+          if (YPICIsSingle(pic)) {
             // Single mode -> no ICW3, ICW4 optional depending on ICW1.
             pic->init_state =
                 pic->icw1 & kICW1_IC4 ? kPICExpectICW4 : kPICReady;
@@ -1070,7 +1070,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
         default:
           // This is an OCW1, which sets the IMR.
           pic->imr = value;
-          PICUpdateUnmaskedRequest(pic);
+          YPICUpdateUnmaskedRequest(pic);
           break;
       }
       break;
@@ -1085,7 +1085,7 @@ YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
 // Interrupt handling
 // ============================================================================
 
-YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(YPICState* pic) {
+YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {
@@ -1115,9 +1115,9 @@ YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(YPICState* pic) {
 
   // If this is the master PIC and the interrupt is from the slave, return the
   // slave PIC's interrupt vector.
-  if (PICIsMaster(pic) && pending_irq == kMasterCascadeIRQ &&
+  if (YPICIsMaster(pic) && pending_irq == kMasterCascadeIRQ &&
       pic->cascade_pic) {
-    uint8_t slave_vector = PICGetPendingInterrupt(pic->cascade_pic);
+    uint8_t slave_vector = YPICGetPendingInterrupt(pic->cascade_pic);
     if (slave_vector != kPICNoPendingInterrupt) {
       pic->isr |= pending_irq_mask;
     }
@@ -1127,7 +1127,7 @@ YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(YPICState* pic) {
   // This is a normal interrupt on this PIC (or it's a slave reporting up).
   pic->isr |= pending_irq_mask;
   pic->irr &= ~pending_irq_mask;
-  PICUpdateUnmaskedRequest(pic);
+  YPICUpdateUnmaskedRequest(pic);
 
   return (pic->icw2 & kICW2_BASE) + pending_irq;
 }

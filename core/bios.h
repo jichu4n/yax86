@@ -133,12 +133,12 @@ enum {
 };
 
 // Get size of BIOS ROM data.
-YAX86_PUBLIC uint32_t BIOSGetROMSize(void);
+YAX86_PUBLIC uint32_t YBIOSGetROMSize(void);
 
-// Get a pointer to the BIOS ROM image, BIOSGetROMSize() bytes of it. The image
+// Get a pointer to the BIOS ROM image, YBIOSGetROMSize() bytes of it. The image
 // is a constant array compiled into the library, so the platform maps it
 // directly rather than reading it a byte at a time through a callback.
-YAX86_PUBLIC const uint8_t* BIOSGetROMData(void);
+YAX86_PUBLIC const uint8_t* YBIOSGetROMData(void);
 
 #endif  // YAX86_BIOS_PUBLIC_H
 
@@ -727,13 +727,9 @@ YAX86_MODULE_PRIVATE const uint8_t kBIOSROMData[] = {
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-YAX86_PUBLIC uint32_t BIOSGetROMSize(void) {
-  return kBIOSROMDataSize;
-}
+YAX86_PUBLIC uint32_t YBIOSGetROMSize(void) { return kBIOSROMDataSize; }
 
-YAX86_PUBLIC const uint8_t* BIOSGetROMData(void) {
-  return kBIOSROMData;
-}
+YAX86_PUBLIC const uint8_t* YBIOSGetROMData(void) { return kBIOSROMData; }
 
 
 // ==============================================================================

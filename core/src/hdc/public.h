@@ -54,7 +54,7 @@ enum {
 };
 
 // Task file registers, given as offsets from kHDCPortBase after the card's
-// address line swap has been undone. See HDCPortOffsetToRegister().
+// address line swap has been undone. See YHDCPortOffsetToRegister().
 typedef enum YHDCRegister {
   // Data register, low byte of each 16-bit word.
   kHDCRegisterData = 0x0,
@@ -268,41 +268,41 @@ typedef struct YHDCState {
   // The card's latch for the high byte of a word, which serves both
   // directions: a read of the low byte port fills it, and a write of the high
   // byte port loads it for the following write of the low byte to commit. See
-  // HDCReadDataRegister() and HDCWriteDataRegister().
+  // YHDCReadDataRegister() and YHDCWriteDataRegister().
   uint8_t data_high_latch;
 } YHDCState;
 
 // Initializes the HDC to its power-on state.
-YAX86_PUBLIC void HDCInit(YHDCState* hdc);
+YAX86_PUBLIC void YHDCInit(YHDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
-YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void);
+YAX86_PUBLIC uint32_t YHDCGetOptionROMSize(void);
 
-// Returns a pointer to the option ROM image, HDCGetOptionROMSize() bytes of
+// Returns a pointer to the option ROM image, YHDCGetOptionROMSize() bytes of
 // it. The image is a constant array compiled into the library, so the platform
 // maps it directly rather than reading it a byte at a time through a callback.
-YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void);
+YAX86_PUBLIC const uint8_t* YHDCGetOptionROMData(void);
 
 // Handles reads from the HDC's I/O ports.
-YAX86_PUBLIC uint8_t HDCReadPort(YHDCState* hdc, uint16_t port);
+YAX86_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port);
 
 // Handles writes to the HDC's I/O ports.
-YAX86_PUBLIC void HDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value);
 
 // Attaches a drive with the given geometry. Drive 0 is the master and drive 1
 // is the slave.
-YAX86_PUBLIC void HDCAttachDrive(
+YAX86_PUBLIC void YHDCAttachDrive(
     YHDCState* hdc, uint8_t drive, const YHDCDriveGeometry* geometry);
 
 // Detaches the drive in the given slot.
-YAX86_PUBLIC void HDCDetachDrive(YHDCState* hdc, uint8_t drive);
+YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive);
 
 // Maps an I/O port offset from kHDCPortBase to the task file register it
 // reaches. An XT-IDE rev 2 card crosses address lines A0 and A3, so a register
 // is reached at the port offset with bits 0 and 3 swapped - the status
 // register, ATA register 7, is read at port offset 0xE. The mapping is its own
 // inverse.
-YAX86_PUBLIC_HEADER inline uint8_t HDCPortOffsetToRegister(uint8_t offset) {
+YAX86_PUBLIC_HEADER inline uint8_t YHDCPortOffsetToRegister(uint8_t offset) {
   return (uint8_t)((offset & ~0x09) | ((offset & 0x01) << 3) |
                    ((offset >> 3) & 0x01));
 }

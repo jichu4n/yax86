@@ -180,12 +180,12 @@ static bool ResetMachine(void) {
   // which is where DOS starts idling, so the skip would have nothing to skip -
   // and leaving it off keeps the workload a measurement of how fast guest
   // instructions execute rather than of how many of them are elided.
-  if (!PlatformInit(&g_platform)) {
+  if (!YPlatformInit(&g_platform)) {
     return false;
   }
   g_platform.fdc.config.read_image_byte = FloppyReadByte;
   g_platform.fdc.config.write_image_byte = FloppyWriteByte;
-  FDCInsertDisk(&g_platform.fdc, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&g_platform.fdc, 0, &kFDCFormat360KB);
   return true;
 }
 
@@ -233,13 +233,13 @@ static bool AdvanceBootToPrompt(void) {
   switch (g_boot_prompt_state) {
     case kBootPromptWaitingForDate:
       if (ScreenContains("Enter new date")) {
-        KeyboardHandleKeyPress(&g_platform.keyboard, kEnterScancode);
+        YKeyboardHandleKeyPress(&g_platform.keyboard, kEnterScancode);
         g_boot_prompt_state = kBootPromptWaitingForTime;
       }
       break;
     case kBootPromptWaitingForTime:
       if (ScreenContains("Enter new time")) {
-        KeyboardHandleKeyPress(&g_platform.keyboard, kEnterScancode);
+        YKeyboardHandleKeyPress(&g_platform.keyboard, kEnterScancode);
         g_boot_prompt_state = kBootPromptWaitingForCommand;
       }
       break;
@@ -403,7 +403,7 @@ static BenchResult RunBenchmark(void) {
     // One register write per batch, so an overclock that survives the clock
     // change but falls over under load still recovers.
     watchdog_update();
-    // Driven a batch at a time through PlatformRun() rather than an
+    // Driven a batch at a time through YPlatformRun() rather than an
     // instruction at a time, which is how an application would drive it. The
     // core counts retired instructions itself, so there is nothing left for a
     // caller to do per instruction.
@@ -411,11 +411,11 @@ static BenchResult RunBenchmark(void) {
     // An invalid opcode is not a stop: the 8088 has no invalid opcode
     // exception, so a real machine would carry on. Anything else means the
     // machine can no longer make progress.
-    const uint64_t retired_before = CPUInstructionsRetired(&g_platform.cpu);
+    const uint64_t retired_before = YCPUInstructionsRetired(&g_platform.cpu);
     YPlatformRunStatus status = kPlatformRunning;
     for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
       const uint32_t batch_start = g_platform.ticks;
-      status = PlatformRun(&g_platform, remaining);
+      status = YPlatformRun(&g_platform, remaining);
       const uint32_t consumed = g_platform.ticks - batch_start;
       remaining -= consumed < remaining ? consumed : remaining;
       if (status != kPlatformInvalid) {
@@ -423,7 +423,7 @@ static BenchResult RunBenchmark(void) {
       }
     }
     result.instructions +=
-        CPUInstructionsRetired(&g_platform.cpu) - retired_before;
+        YCPUInstructionsRetired(&g_platform.cpu) - retired_before;
     result.cycles += (uint32_t)(g_platform.ticks - last_ticks);
     last_ticks = g_platform.ticks;
     if (status != kPlatformRunning && status != kPlatformInvalid) {

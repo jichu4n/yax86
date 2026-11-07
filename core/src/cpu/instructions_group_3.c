@@ -15,27 +15,27 @@ typedef YCPUInstructionResult (*YCPUGroup3ExecuteInstructionFn)(
 // TEST r/m8, imm8
 // TEST r/m16, imm16
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteGroup3Test(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  YCPUOperandValue src_value = ReadImmediate(ctx);
-  return ExecuteTest(ctx, op, src_value);
+YCPUExecuteGroup3Test(const YCPUInstructionContext* ctx, YCPUOperand* op) {
+  YCPUOperandValue src_value = YCPUReadImmediate(ctx);
+  return YCPUExecuteTest(ctx, op, src_value);
 }
 
 // NOT r/m8
 // NOT r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteNot(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  WriteOperand(ctx, op, ~FromOperand(op));
+YCPUExecuteNot(const YCPUInstructionContext* ctx, YCPUOperand* op) {
+  YCPUWriteOperand(ctx, op, ~YCPUFromOperand(op));
   return kInstructionExecuted;
 }
 
 // NEG r/m8
 // NEG r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteNeg(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  int32_t op_value = FromSignedOperand(ctx->metadata->width, op);
+YCPUExecuteNeg(const YCPUInstructionContext* ctx, YCPUOperand* op) {
+  int32_t op_value = YCPUFromSignedOperand(ctx->metadata->width, op);
   int32_t result_value = -op_value;
-  WriteOperand(ctx, op, result_value);
-  SetFlagsAfterSub(ctx, 0, op_value, result_value, false);
+  YCPUWriteOperand(ctx, op, result_value);
+  YCPUSetFlagsAfterSub(ctx, 0, op_value, result_value, false);
   return kInstructionExecuted;
 }
 
@@ -71,21 +71,21 @@ YAX86_FILE_PRIVATE const uint16_t kMulDivCycles[kNumWidths][2] = {
 };
 
 // Common logic for MUL and IMUL instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteMulCommon(
+YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest, uint32_t result,
     bool overflow) {
   YCPUWidth width = ctx->metadata->width;
 
   uint32_t result_low_half = result & kMaxValue[width];
-  WriteOperand(ctx, dest, result_low_half);
+  YCPUWriteOperand(ctx, dest, result_low_half);
 
   uint32_t result_high_half =
       (result >> kMulDivResultHighHalfShiftWidth[width]) & kMaxValue[width];
-  WriteOperandAddress(
+  YCPUWriteOperandAddress(
       ctx, &kMulDivResultHighHalfAddress[width], result_high_half);
 
-  CPUSetFlag(ctx->cpu, kCF, overflow);
-  CPUSetFlag(ctx->cpu, kOF, overflow);
+  YCPUSetFlag(ctx->cpu, kCF, overflow);
+  YCPUSetFlag(ctx->cpu, kOF, overflow);
 
   return kInstructionExecuted;
 }
@@ -93,36 +93,36 @@ YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteMulCommon(
 // MUL r/m8
 // MUL r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteMul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
+YCPUExecuteMul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
+  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
   YCPUOperand dest;
-  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
-  uint32_t result = FromOperand(&dest) * FromOperand(op);
-  return ExecuteMulCommon(
+  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  uint32_t result = YCPUFromOperand(&dest) * YCPUFromOperand(op);
+  return YCPUExecuteMulCommon(
       ctx, &dest, result, result > kMaxValue[ctx->metadata->width]);
 }
 
 // IMUL r/m8
 // IMUL r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteImul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
+YCPUExecuteImul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
+  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
   YCPUOperand dest;
-  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   const YCPUWidth width = ctx->metadata->width;
   int32_t result =
-      FromSignedOperand(width, &dest) * FromSignedOperand(width, op);
-  return ExecuteMulCommon(
+      YCPUFromSignedOperand(width, &dest) * YCPUFromSignedOperand(width, op);
+  return YCPUExecuteMulCommon(
       ctx, &dest, result,
       result > kMaxSignedValue[ctx->metadata->width] ||
           result < kMinSignedValue[ctx->metadata->width]);
 }
 
-YAX86_FILE_PRIVATE YCPUInstructionResult WriteDivResult(
+YAX86_FILE_PRIVATE YCPUInstructionResult YCPUWriteDivResult(
     const YCPUInstructionContext* ctx, YCPUOperand* dest, uint32_t quotient,
     uint32_t remainder) {
-  WriteOperand(ctx, dest, quotient);
-  WriteOperandAddress(
+  YCPUWriteOperand(ctx, dest, quotient);
+  YCPUWriteOperandAddress(
       ctx, &kMulDivResultHighHalfAddress[ctx->metadata->width], remainder);
   return kInstructionExecuted;
 }
@@ -130,51 +130,51 @@ YAX86_FILE_PRIVATE YCPUInstructionResult WriteDivResult(
 // DIV r/m8
 // DIV r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteDiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
-  uint32_t divisor = FromOperand(op);
+YCPUExecuteDiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
+  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
+  uint32_t divisor = YCPUFromOperand(op);
   if (divisor == 0) {
-    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
+    YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
 
   YCPUWidth width = ctx->metadata->width;
   YCPUOperand dest;
-  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
 
   YCPUOperandValue dest_high_half =
-      ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
+      YCPUReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
   uint32_t dividend =
-      FromOperand(&dest) | (FromOperandValue(dest_high_half)
-                            << kMulDivResultHighHalfShiftWidth[width]);
+      YCPUFromOperand(&dest) | (YCPUFromOperandValue(dest_high_half)
+                                << kMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
   if (quotient > kMaxValue[ctx->metadata->width]) {
-    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
+    YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
-  return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
+  return YCPUWriteDivResult(ctx, &dest, quotient, dividend % divisor);
 }
 
 // IDIV r/m8
 // IDIV r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
-ExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  CPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
-  int32_t divisor = FromSignedOperand(ctx->metadata->width, op);
+YCPUExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
+  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
+  int32_t divisor = YCPUFromSignedOperand(ctx->metadata->width, op);
   if (divisor == 0) {
-    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
+    YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
 
   YCPUWidth width = ctx->metadata->width;
   YCPUOperand dest;
-  ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
 
   YCPUOperandValue dest_high_half =
-      ReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
-  int32_t dividend =
-      FromOperand(&dest) | (FromSignedOperandValue(width, dest_high_half)
-                            << kMulDivResultHighHalfShiftWidth[width]);
+      YCPUReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
+  int32_t dividend = YCPUFromOperand(&dest) |
+                     (YCPUFromSignedOperandValue(width, dest_high_half)
+                      << kMulDivResultHighHalfShiftWidth[width]);
   int32_t quotient = dividend / divisor;
   // The 8086/8088 divides the magnitudes and checks the result against the
   // largest quotient that fits, so it rejects a quotient of -128 or -32768
@@ -182,34 +182,34 @@ ExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   // narrower at the bottom than the operand's own range.
   if (quotient > kMaxSignedValue[ctx->metadata->width] ||
       quotient < -kMaxSignedValue[ctx->metadata->width]) {
-    CPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
+    YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
-  return WriteDivResult(ctx, &dest, quotient, dividend % divisor);
+  return YCPUWriteDivResult(ctx, &dest, quotient, dividend % divisor);
 }
 
 // Group 3 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte and data width.
 YAX86_FILE_PRIVATE const YCPUGroup3ExecuteInstructionFn
     kGroup3ExecuteInstructionFns[] = {
-        ExecuteGroup3Test,  // 0 - TEST
+        YCPUExecuteGroup3Test,  // 0 - TEST
         // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not
         // decode bit 0 of the REG field for this group.
-        ExecuteGroup3Test,  // 1 - TEST
-        ExecuteNot,         // 2 - NOT
-        ExecuteNeg,         // 3 - NEG
-        ExecuteMul,         // 4 - MUL
-        ExecuteImul,        // 5 - IMUL
-        ExecuteDiv,         // 6 - DIV
-        ExecuteIdiv,        // 7 - IDIV
+        YCPUExecuteGroup3Test,  // 1 - TEST
+        YCPUExecuteNot,         // 2 - NOT
+        YCPUExecuteNeg,         // 3 - NEG
+        YCPUExecuteMul,         // 4 - MUL
+        YCPUExecuteImul,        // 5 - IMUL
+        YCPUExecuteDiv,         // 6 - DIV
+        YCPUExecuteIdiv,        // 7 - IDIV
 };
 
 // Group 3 instruction handler.
 YAX86_MODULE_PRIVATE YCPUInstructionResult
-ExecuteGroup3Instruction(const YCPUInstructionContext* ctx) {
+YCPUExecuteGroup3Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup3ExecuteInstructionFn fn =
       kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
-  ReadRegisterOrMemoryOperand(ctx, &dest);
+  YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);
 }

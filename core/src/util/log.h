@@ -60,7 +60,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -104,7 +104,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void LoggerInit(
+YAX86_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -113,52 +113,52 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
-         (logger->config->enabled_modules & LogModuleMask(module)) != 0;
+         (logger->config->enabled_modules & YLogModuleMask(module)) != 0;
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules |= LogModuleMask(module);
+    logger->config->enabled_modules |= YLogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules &= ~LogModuleMask(module);
+    logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) YAX86_UNUSED;
 
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
-  // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, module, level)) {
+  // YLoggerWrite is also callable directly.
+  if (!YLoggerIsEnabled(logger, module, level)) {
     return;
   }
 
   va_list args;
   va_start(args, format);
   int formatted_length =
-      VSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
   va_end(args);
 
-  // VSNPrintF returns the length the message would have had, which may exceed
+  // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
@@ -179,11 +179,11 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                \
-  do {                                                       \
-    if (LoggerIsEnabled((logger), (module), (level))) {      \
-      LoggerWrite((logger), (module), (level), __VA_ARGS__); \
-    }                                                        \
+#define YAX86_LOG(logger, module, level, ...)                 \
+  do {                                                        \
+    if (YLoggerIsEnabled((logger), (module), (level))) {      \
+      YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
+    }                                                         \
   } while (0)
 
 #endif  // YAX86_UTIL_LOG_H

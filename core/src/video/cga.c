@@ -38,22 +38,22 @@ YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
     {3, 4, 7},
 };
 
-YAX86_FILE_PRIVATE inline YVideoRGB CGAGetColor(
+YAX86_FILE_PRIVATE inline YVideoRGB YVideoCGAGetColor(
     const YVideoState* video, uint8_t color) {
   return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
-YAX86_FILE_PRIVATE inline uint32_t CGAGetScanLineAddress(
+YAX86_FILE_PRIVATE inline uint32_t YVideoCGAGetScanLineAddress(
     const YVideoState* video, uint16_t y) {
-  uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
+  uint32_t address = ((uint32_t)YVideoGetStartAddress(video) * 2 +
                       (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
                      kCGAGraphicsScanLineAddressMask;
   return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
 }
 
-YAX86_FILE_PRIVATE void CGARenderTextRegion(
+YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
     YVideoState* video, YVideoPixelRun* run, const YVideoModeMetadata* metadata,
     uint8_t start_column, uint8_t end_column, uint16_t first_y,
     uint16_t end_y) {
@@ -71,12 +71,12 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
 
   // The cursor is resolved once for the region rather than per cell: it can
   // only be in one place, so the loop just tests each cell against it.
-  uint16_t start_address = VideoGetStartAddress(video);
+  uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = VideoGetVisibleCursorOffset(
+  bool cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
-  uint8_t cursor_start = VideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = VideoGetCursorEndScanLine(video);
+  uint8_t cursor_start = YVideoGetCursorStartScanLine(video);
+  uint8_t cursor_end = YVideoGetCursorEndScanLine(video);
 
   // Scan lines are the outer loop so that pixels leave in row-major order,
   // which is what a display addressed by transfer window expects. The cost is
@@ -84,37 +84,38 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
   for (uint16_t y = first_y; y < end_y; ++y) {
     // A 40-column cell is twice as wide but there are half as many, so a row
     // starts at the same pixel either way.
-    VideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
+    YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
     uint8_t row = (uint8_t)(y / kCGACharHeight);
     uint8_t char_scan_line = (uint8_t)(y % kCGACharHeight);
     for (uint8_t col = first_char; col < end_char; ++col) {
       // Character and attribute occupy consecutive bytes of a cell.
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
       uint32_t char_address = ((uint32_t)start_address + cell_offset) * 2;
-      uint8_t char_value = VideoReadVRAMByte(video, char_address);
-      uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
+      uint8_t char_value = YVideoReadVRAMByte(video, char_address);
+      uint8_t attr_value = YVideoReadVRAMByte(video, char_address + 1);
 
       uint8_t foreground_color =
           attr_value &
           (kVideoAttributeForegroundMask | kVideoAttributeIntenseForeground);
       // The cursor uses the cell's foreground even when that cell's blinking
       // character is currently hidden.
-      YVideoRGB cursor_foreground = CGAGetColor(video, foreground_color);
+      YVideoRGB cursor_foreground = YVideoCGAGetColor(video, foreground_color);
       uint8_t background_color = (attr_value & kVideoAttributeBackgroundMask) >>
                                  kVideoAttributeBackgroundShift;
       // Bit 7 is the blink attribute only while blinking is enabled. With it
       // disabled the same bit is the background's intensity, which is how the
       // CGA reaches all 16 background colors.
       if (video->control_register & kVideoControlEnableBlink) {
-        if ((attr_value & kVideoAttributeBlink) && !VideoIsTextBlinkOn(video)) {
+        if ((attr_value & kVideoAttributeBlink) &&
+            !YVideoIsTextBlinkOn(video)) {
           foreground_color = background_color;
         }
       } else if (attr_value & kVideoAttributeBlink) {
         background_color |= kNumCGAColors / 2;
       }
 
-      YVideoRGB foreground = CGAGetColor(video, foreground_color);
-      YVideoRGB background = CGAGetColor(video, background_color);
+      YVideoRGB foreground = YVideoCGAGetColor(video, foreground_color);
+      YVideoRGB background = YVideoCGAGetColor(video, background_color);
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
@@ -129,14 +130,14 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
         // In 40-column mode each glyph pixel is emitted twice, which is how
         // the adapter fills the same 640 dot line with half the characters.
         for (uint8_t i = 0; i < scale; ++i) {
-          VideoPixelRunPush(run, rgb);
+          YVideoPixelRunPush(run, rgb);
         }
       }
     }
   }
 }
 
-YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
+YAX86_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
     YVideoState* video, YVideoRGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
@@ -150,85 +151,85 @@ YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
       (video->color_select_register & kCGAColorSelectPaletteIntensity)
           ? kNumCGAColors / 2
           : 0;
-  palette[0] = CGAGetColor(
+  palette[0] = YVideoCGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
   for (uint8_t i = 0; i < 3; ++i) {
-    palette[i + 1] = CGAGetColor(video, palette_colors[i] | intensity);
+    palette[i + 1] = YVideoCGAGetColor(video, palette_colors[i] | intensity);
   }
 }
 
-YAX86_FILE_PRIVATE void CGARenderGraphics320x200Region(
+YAX86_FILE_PRIVATE void YVideoCGARenderGraphics320x200Region(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   YVideoRGB palette[4];
-  CGAResolve320x200Palette(video, palette);
+  YVideoCGAResolve320x200Palette(video, palette);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
-    VideoPixelRunBegin(
+    YVideoPixelRunBegin(
         run, (uint16_t)start_column * kCGAFrameBufferPixelsPerByte320x200, y);
-    uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
+    uint32_t scan_line_address = YVideoCGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
-          VideoReadVRAMByte(video, scan_line_address + byte_column);
+          YVideoReadVRAMByte(video, scan_line_address + byte_column);
       for (uint8_t i = 0; i < kCGAPixelsPerByte320x200; ++i) {
         uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 - i) *
                                   kCGABitsPerPixel320x200);
         uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
         for (uint8_t scale_x = 0; scale_x < kCGA320x200HorizontalScale;
              ++scale_x) {
-          VideoPixelRunPush(run, palette[color]);
+          YVideoPixelRunPush(run, palette[color]);
         }
       }
     }
   }
 }
 
-YAX86_FILE_PRIVATE void CGARenderGraphics640x200Region(
+YAX86_FILE_PRIVATE void YVideoCGARenderGraphics640x200Region(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
-  YVideoRGB foreground = CGAGetColor(
+  YVideoRGB foreground = YVideoCGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
-  YVideoRGB background = CGAGetColor(video, 0);
+  YVideoRGB background = YVideoCGAGetColor(video, 0);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
-    VideoPixelRunBegin(
+    YVideoPixelRunBegin(
         run, (uint16_t)start_column * kCGAPixelsPerByte640x200, y);
-    uint32_t scan_line_address = CGAGetScanLineAddress(video, y);
+    uint32_t scan_line_address = YVideoCGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
-          VideoReadVRAMByte(video, scan_line_address + byte_column);
+          YVideoReadVRAMByte(video, scan_line_address + byte_column);
       for (uint8_t i = 0; i < kCGAPixelsPerByte640x200; ++i) {
         uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 - i);
         bool is_foreground = (byte_value >> shift) & 1;
-        VideoPixelRunPush(run, is_foreground ? foreground : background);
+        YVideoPixelRunPush(run, is_foreground ? foreground : background);
       }
     }
   }
 }
 
-YAX86_MODULE_PRIVATE void CGARenderRegion(
+YAX86_MODULE_PRIVATE void YVideoCGARenderRegion(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
-  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   switch (metadata->mode) {
     case kVideoModeCGAText40x25Mono:
     case kVideoModeCGAText40x25Color:
     case kVideoModeCGAText80x25Mono:
     case kVideoModeCGAText80x25Color:
-      CGARenderTextRegion(
+      YVideoCGARenderTextRegion(
           video, run, metadata, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics320x200:
     case kVideoModeCGAGraphics320x200Alt:
-      CGARenderGraphics320x200Region(
+      YVideoCGARenderGraphics320x200Region(
           video, run, start_column, end_column, first_y, end_y);
       break;
     case kVideoModeCGAGraphics640x200:
-      CGARenderGraphics640x200Region(
+      YVideoCGARenderGraphics640x200Region(
           video, run, start_column, end_column, first_y, end_y);
       break;
     default:

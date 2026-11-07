@@ -104,7 +104,7 @@ TEST_F(Group1Test, AddWithCarryImmediateByteToMemoryByte) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0xFE;     // 254
-  CPUSetFlag(&helper->cpu_, kCF, true);  // Set Carry Flag
+  YCPUSetFlag(&helper->cpu_, kCF, true);  // Set Carry Flag
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
@@ -120,7 +120,7 @@ TEST_F(Group1Test, AddWithCarryImmediateWordToMemoryWord) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0xFF;  // Low byte
   helper->memory_[0x0801] = 0xFF;  // High byte (0xFFFF)
-  CPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, true);
 
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
@@ -135,7 +135,7 @@ TEST_F(Group1Test, AddWithCarryImmediateByteSignExtendedToMemoryWord) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0xFE;  // Low byte
   helper->memory_[0x0801] = 0xFF;  // High byte (0xFFFE)
-  CPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, true);
   // Immediate 0x01 sign-extended is 0x0001
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
@@ -150,7 +150,7 @@ TEST_F(Group1Test, SubtractWithBorrowImmediateByteFromMemoryByte) {
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x02;
-  CPUSetFlag(&helper->cpu_, kCF, true);  // Set Carry Flag (as borrow)
+  YCPUSetFlag(&helper->cpu_, kCF, true);  // Set Carry Flag (as borrow)
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x00);  // 0x02 - 0x01 - 1 (CF) = 0x00
@@ -164,7 +164,7 @@ TEST_F(Group1Test, SubtractWithBorrowImmediateWordFromMemoryWord) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x02;  // Low byte
   helper->memory_[0x0801] = 0x00;  // High byte (0x0002)
-  CPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, true);
 
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
@@ -179,7 +179,7 @@ TEST_F(Group1Test, SubtractWithBorrowImmediateByteSignExtendedFromMemoryWord) {
   helper->cpu_.registers[kBX] = 0x0800;
   helper->memory_[0x0800] = 0x02;  // Low byte
   helper->memory_[0x0801] = 0x00;  // High byte (0x0002)
-  CPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, true);
   // Immediate 0x01 sign-extended is 0x0001
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);

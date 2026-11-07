@@ -32,7 +32,7 @@ class PCSpeakerTest : public ::testing::Test {
     platform_.config.vram = vram_;
 
     // Initialize the platform.
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
 
     // Wire up the mock speaker callback.
     // This is the connection that is currently a TODO in the main platform.
@@ -47,30 +47,31 @@ class PCSpeakerTest : public ::testing::Test {
     }
 
     // Command to PIT: Channel 2, LSB then MSB, Mode 3 (Square Wave).
-    WritePortByte(&platform_, kPITPortControl, 0b10110110);
+    YPlatformWritePortByte(&platform_, kPITPortControl, 0b10110110);
     // Write reload value.
-    WritePortByte(&platform_, kPITPortChannel2, reload_value & 0xFF);
-    WritePortByte(&platform_, kPITPortChannel2, (reload_value >> 8) & 0xFF);
+    YPlatformWritePortByte(&platform_, kPITPortChannel2, reload_value & 0xFF);
+    YPlatformWritePortByte(
+        &platform_, kPITPortChannel2, (reload_value >> 8) & 0xFF);
   }
 
   // Helper to enable the speaker via PPI Port B.
   void EnableSpeaker() {
     // Set bits 0 (Timer 2 Gate) and 1 (Speaker Data)
-    WritePortByte(&platform_, kPPIPortB, 0b00000011);
+    YPlatformWritePortByte(&platform_, kPPIPortB, 0b00000011);
   }
 
   // Helper to disable the speaker via PPI Port B.
   void DisableSpeaker() {
     // Clear bit 1 (Speaker Data)
-    uint8_t port_b = ReadPortByte(&platform_, kPPIPortB);
-    WritePortByte(&platform_, kPPIPortB, port_b & ~0b00000010);
+    uint8_t port_b = YPlatformReadPortByte(&platform_, kPPIPortB);
+    YPlatformWritePortByte(&platform_, kPPIPortB, port_b & ~0b00000010);
   }
 
   // Helper to disable the speaker gate via PPI Port B.
   void DisableSpeakerGate() {
     // Clear bit 0 (Timer 2 Gate)
-    uint8_t port_b = ReadPortByte(&platform_, kPPIPortB);
-    WritePortByte(&platform_, kPPIPortB, port_b & ~0b00000001);
+    uint8_t port_b = YPlatformReadPortByte(&platform_, kPPIPortB);
+    YPlatformWritePortByte(&platform_, kPPIPortB, port_b & ~0b00000001);
   }
 
   // Helper to get the actual frequency the PIT will generate for a given

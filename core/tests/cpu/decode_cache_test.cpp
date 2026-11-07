@@ -49,8 +49,8 @@ class DecodeCacheTest : public ::testing::Test {
     cpu_.config.get_instruction_fetch_window = GetInstructionFetchWindow;
     cpu_.config.decode_cache = entries;
     cpu_.config.decode_cache_num_entries = num_entries;
-    CPUInit(&cpu_);
-    CPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
+    YCPUInit(&cpu_);
+    YCPUSetDirectDataWindow(&cpu_, memory_.data(), kMemorySize);
     cpu_.registers[kCS] = 0;
     cpu_.registers[kDS] = 0;
     cpu_.registers[kSS] = 0;
@@ -62,7 +62,7 @@ class DecodeCacheTest : public ::testing::Test {
   // is discarded.
   void Write(uint32_t address, const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); ++i) {
-      CPUNotifyMemoryWrite(&cpu_, address + i);
+      YCPUNotifyMemoryWrite(&cpu_, address + i);
       memory_[address + i] = bytes[i];
     }
   }
@@ -78,7 +78,7 @@ class DecodeCacheTest : public ::testing::Test {
 
   void RunAt(uint16_t ip) {
     cpu_.registers[kIP] = ip;
-    ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
+    ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickExecuted);
   }
 
   static uint8_t TestReadMemoryByte(YCPUState* cpu, uint32_t address) {
@@ -166,7 +166,7 @@ TEST_F(DecodeCacheTest, AWriteToAnotherPageKeepsTheDecode) {
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
   RunAt(kProgramAddress);
 
-  CPUNotifyMemoryWrite(&cpu_, kProgramAddress + kCodePageSize);
+  YCPUNotifyMemoryWrite(&cpu_, kProgramAddress + kCodePageSize);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
   EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
@@ -180,7 +180,7 @@ TEST_F(DecodeCacheTest, AGenerationComingBackRoundDiscardsEverything) {
   RunAt(kProgramAddress);
 
   for (int i = 0; i < 256; ++i) {
-    CPUNotifyMemoryWrite(&cpu_, kProgramAddress);
+    YCPUNotifyMemoryWrite(&cpu_, kProgramAddress);
   }
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
@@ -304,7 +304,7 @@ TEST_F(DecodeCacheTest, AFailedDecodeLeavesNothingBehindInItsEntry) {
   ASSERT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
 
   cpu_.registers[kIP] = too_many_prefixes;
-  ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickInvalid);
+  ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickInvalid);
 
   RunAt(good);
   EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x11);
@@ -314,7 +314,7 @@ TEST_F(DecodeCacheTest, InvalidatingDiscardsEveryDecode) {
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
   RunAt(kProgramAddress);
 
-  CPUInvalidateDecodeCache(&cpu_);
+  YCPUInvalidateDecodeCache(&cpu_);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
   EXPECT_EQ(cpu_.registers[kAX] & 0xFF, 0x22);
@@ -365,17 +365,17 @@ TEST_F(DecodeCacheTest, ABadCountIsLogged) {
   logger_config.enabled_modules = 0xFFFFFFFF;
   logger_config.min_level = kLogLevelError;
   YLogger logger;
-  LoggerInit(&logger, &logger_config);
+  YLoggerInit(&logger, &logger_config);
 
   // The logger has to be in place before the init that rejects the count:
-  // CPUInit() clears its own copy of the pointer on the way out, so a second
+  // YCPUInit() clears its own copy of the pointer on the way out, so a second
   // call sees no cache and has nothing to complain about.
   log_lines_.clear();
   cpu_ = YCPUState{};
   cpu_.config.logger = &logger;
   cpu_.config.decode_cache = cache_;
   cpu_.config.decode_cache_num_entries = kNumCacheEntries - 1;
-  CPUInit(&cpu_);
+  YCPUInit(&cpu_);
 
   EXPECT_EQ(log_lines_.size(), 1u);
   EXPECT_EQ(cpu_.config.decode_cache, nullptr);
@@ -387,8 +387,8 @@ TEST_F(DecodeCacheTest, ALoopRunsTheSameWayEveryTimeRound) {
   Write(kProgramAddress, {kOpIncBx, 0xEB, 0xFD});
   cpu_.registers[kIP] = kProgramAddress;
   for (int i = 0; i < 16; ++i) {
-    ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
-    ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
+    ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickExecuted);
+    ASSERT_EQ(YCPUTick(&cpu_, 0), kCPUTickExecuted);
     ASSERT_EQ(cpu_.registers[kIP], kProgramAddress);
     ASSERT_EQ(cpu_.registers[kBX], i + 1);
   }

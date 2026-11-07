@@ -41,7 +41,7 @@ TEST_F(UndocumentedOpcodesTest, ConditionalJumpAliasesDecodeAsTwoBytes) {
     auto helper = WithCode({opcode, 0x10});
     YCPUInstruction instruction;
     ASSERT_EQ(
-        CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess)
+        YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess)
         << "opcode " << hex << static_cast<int>(opcode);
     EXPECT_EQ(instruction.size, 2)
         << "opcode " << hex << static_cast<int>(opcode);
@@ -128,7 +128,7 @@ TEST_F(UndocumentedOpcodesTest, NearReturnAndPopAliasDecodesImmediate) {
 
   YCPUInstruction instruction;
   ASSERT_EQ(
-      CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.size, 3);
 
   helper->ExecuteInstructions(1);
@@ -159,7 +159,7 @@ TEST_F(UndocumentedOpcodesTest, FarReturnAndPopAliasDecodesImmediate) {
   auto helper = WithCode({0xC8, 0x02, 0x00});
   YCPUInstruction instruction;
   ASSERT_EQ(
-      CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.size, 3);
 }
 
@@ -170,7 +170,7 @@ TEST_F(UndocumentedOpcodesTest, FarReturnAndPopAliasDecodesImmediate) {
 TEST_F(UndocumentedOpcodesTest, SetALFromCarry) {
   auto helper = WithCode({0xD6});
   helper->cpu_.registers[kAX] = 0x1234;
-  CPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, true);
 
   helper->ExecuteInstructions(1);
 
@@ -183,7 +183,7 @@ TEST_F(UndocumentedOpcodesTest, SetALFromCarry) {
 TEST_F(UndocumentedOpcodesTest, SetALFromCarryWhenClear) {
   auto helper = WithCode({0xD6});
   helper->cpu_.registers[kAX] = 0x12AB;
-  CPUSetFlag(&helper->cpu_, kCF, false);
+  YCPUSetFlag(&helper->cpu_, kCF, false);
 
   helper->ExecuteInstructions(1);
 
@@ -201,7 +201,7 @@ TEST_F(UndocumentedOpcodesTest, LockPrefixAliasIsConsumedAsAPrefix) {
 
   YCPUInstruction instruction;
   ASSERT_EQ(
-      CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   // 0xF1 aliases LOCK, which selects nothing, so what shows it was consumed as
   // a prefix rather than treated as an opcode in its own right is that 0x90
   // decoded as the opcode behind it and the whole thing measured two bytes.
@@ -223,7 +223,7 @@ TEST_F(UndocumentedOpcodesTest, Group3Reg1IsTestAndDecodesImmediate) {
 
   YCPUInstruction instruction;
   ASSERT_EQ(
-      CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.size, 3);
 
   helper->ExecuteInstructions(1);
@@ -273,9 +273,9 @@ TEST_F(UndocumentedOpcodesTest, SetMinusOneByte) {
   // D0 /6 with mod=11, rm=011: SETMO BL
   auto helper = WithCode({0xD0, 0xF3});
   helper->cpu_.registers[kBX] = 0x1234;
-  CPUSetFlag(&helper->cpu_, kCF, true);
-  CPUSetFlag(&helper->cpu_, kOF, true);
-  CPUSetFlag(&helper->cpu_, kAF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, kOF, true);
+  YCPUSetFlag(&helper->cpu_, kAF, true);
 
   helper->ExecuteInstructions(1);
 
@@ -319,7 +319,7 @@ TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalIsNoOpWhenCountIsZero) {
   auto helper = WithCode({0xD2, 0xF3});
   helper->cpu_.registers[kBX] = 0x1234;
   helper->cpu_.registers[kCX] = 0x0000;
-  CPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, kCF, true);
 
   helper->ExecuteInstructions(1);
 

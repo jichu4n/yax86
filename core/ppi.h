@@ -141,16 +141,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
-    char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -158,7 +158,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -170,18 +170,18 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += SNPrintFPutC(buffer, size, pos, ' ');
+    count += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += SNPrintFPutC(buffer, size, pos, *s++);
+    count += YSNPrintFPutC(buffer, size, pos, *s++);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t
-SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
-              int base, int uppercase, int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+    char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
+    int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -209,35 +209,35 @@ SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
   // If zero padding is requested, sign should be printed before padding
   if (pad_zero) {
     if (negative) {
-      count += SNPrintFPutC(buffer, size, pos, '-');
+      count += YSNPrintFPutC(buffer, size, pos, '-');
       negative = 0; // Sign already handled
     }
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, '0');
+      count += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, ' ');
+      count += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
   if (negative) {
-    count += SNPrintFPutC(buffer, size, pos, '-');
+    count += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += SNPrintFPutC(buffer, size, pos, temp[--i]);
+    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
     if (*format != '%') {
-      SNPrintFPutC(buffer, size, &pos, *format++);
+      YSNPrintFPutC(buffer, size, &pos, *format++);
       continue;
     }
 
@@ -279,15 +279,15 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         // Pad with spaces (zero flag is ignored for %c per standard)
         int pad = width - 1;
         while (pad-- > 0) {
-          SNPrintFPutC(buffer, size, &pos, ' ');
+          YSNPrintFPutC(buffer, size, &pos, ' ');
         }
-        SNPrintFPutC(buffer, size, &pos, c);
+        YSNPrintFPutC(buffer, size, &pos, c);
         break;
       }
       case 's': {
         const char* s = va_arg(args, const char*);
         if (!s) s = "(null)";
-        SNPrintFPutS(buffer, size, &pos, s, width);
+        YSNPrintFPutS(buffer, size, &pos, s, width);
         break;
       }
       case 'd':
@@ -313,8 +313,8 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         } else {
           uval = (unsigned long long)val;
         }
-        SNPrintFPutUI(buffer, size, &pos, uval, 10, 0, width, pad_zero,
-                        negative);
+        YSNPrintFPutUI(
+            buffer, size, &pos, uval, 10, 0, width, pad_zero, negative);
         break;
       }
       case 'u':
@@ -340,30 +340,30 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         else
           val = va_arg(args, unsigned int);
 
-        SNPrintFPutUI(buffer, size, &pos, val, base, uppercase, width,
-                        pad_zero, 0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, base, uppercase, width, pad_zero, 0);
         break;
       }
       case 'p': {
         unsigned long long val =
             (unsigned long long)(uintptr_t)va_arg(args, void*);
         // Print 0x prefix
-        SNPrintFPutC(buffer, size, &pos, '0');
-        SNPrintFPutC(buffer, size, &pos, 'x');
+        YSNPrintFPutC(buffer, size, &pos, '0');
+        YSNPrintFPutC(buffer, size, &pos, 'x');
         // Adjust width to account for "0x" prefix
         int adjusted_width = width > 2 ? width - 2 : 0;
-        SNPrintFPutUI(buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero,
-                        0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero, 0);
         break;
       }
       case '%': {
-        SNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, '%');
         break;
       }
       default: {
         // Unknown specifier, print % and the specifier literally
-        SNPrintFPutC(buffer, size, &pos, '%');
-        SNPrintFPutC(buffer, size, &pos, *format);
+        YSNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, *format);
         break;
       }
     }
@@ -382,11 +382,11 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
-  int ret = VSNPrintF(buffer, size, format, args);
+  int ret = YVSNPrintF(buffer, size, format, args);
   va_end(args);
   return ret;
 }
@@ -465,7 +465,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -509,7 +509,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void LoggerInit(
+YAX86_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -518,52 +518,52 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
-         (logger->config->enabled_modules & LogModuleMask(module)) != 0;
+         (logger->config->enabled_modules & YLogModuleMask(module)) != 0;
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules |= LogModuleMask(module);
+    logger->config->enabled_modules |= YLogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules &= ~LogModuleMask(module);
+    logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) YAX86_UNUSED;
 
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
-  // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, module, level)) {
+  // YLoggerWrite is also callable directly.
+  if (!YLoggerIsEnabled(logger, module, level)) {
     return;
   }
 
   va_list args;
   va_start(args, format);
   int formatted_length =
-      VSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
   va_end(args);
 
-  // VSNPrintF returns the length the message would have had, which may exceed
+  // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
@@ -584,11 +584,11 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                \
-  do {                                                       \
-    if (LoggerIsEnabled((logger), (module), (level))) {      \
-      LoggerWrite((logger), (module), (level), __VA_ARGS__); \
-    }                                                        \
+#define YAX86_LOG(logger, module, level, ...)                 \
+  do {                                                        \
+    if (YLoggerIsEnabled((logger), (module), (level))) {      \
+      YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
+    }                                                         \
   } while (0)
 
 #endif  // YAX86_UTIL_LOG_H
@@ -785,26 +785,26 @@ typedef struct YPPIState {
 } YPPIState;
 
 // Initializes the PPI to its power-on state.
-YAX86_PUBLIC void PPIInit(YPPIState* ppi);
+YAX86_PUBLIC void YPPIInit(YPPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
-YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port);
+YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port);
 
 // Handles writes to the PPI's I/O ports (0x61, 0x63).
-YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value);
 
 // Returns whether the PC speaker is currently enabled. This is determined by
 // bit 0 and 1 of Port B.
-YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(YPPIState* ppi);
+YAX86_PUBLIC bool YPPIIsPCSpeakerEnabled(YPPIState* ppi);
 
 // Sets the PC speaker frequency from the 8253 timer channel 2 output. This
 // should be wired up to the callback from the PIT emulation module.
-YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+YAX86_PUBLIC void YPPISetPCSpeakerFrequencyFromPIT(
     YPPIState* ppi, uint32_t frequency_hz);
 
 // Sets the scancode byte that will be returned when the CPU reads from Port A.
 // This function should be called by the keyboard emulation module.
-YAX86_PUBLIC void PPISetScancode(YPPIState* ppi, uint8_t scancode);
+YAX86_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode);
 
 #endif  // YAX86_PPI_PUBLIC_H
 
@@ -825,20 +825,21 @@ YAX86_PUBLIC void PPISetScancode(YPPIState* ppi, uint8_t scancode);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-YAX86_PUBLIC void PPIInit(YPPIState* ppi) {
+YAX86_PUBLIC void YPPIInit(YPPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
-YAX86_FILE_PRIVATE inline uint8_t GetNumFloppyDrives(const YPPIConfig* config) {
+YAX86_FILE_PRIVATE inline uint8_t YPPIGetNumFloppyDrives(
+    const YPPIConfig* config) {
   if (config->num_floppy_drives < 1) return 1;
   if (config->num_floppy_drives > 4) return 4;
   return config->num_floppy_drives;
 }
 
-YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port) {
+YAX86_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port) {
   switch (port) {
     case kPPIPortA:
       // Reading Port A gets the keyboard scancode.
@@ -865,7 +866,7 @@ YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port) {
         port_c |= ppi->config.display_mode & 0x03;
         // Bits 2-3: Number of drives. Slightly confusingly, the encoding is
         // 1-based, i.e. 00=1 drive, 01=2 drives, etc.
-        port_c |= (((GetNumFloppyDrives(&ppi->config) - 1) & 0x03) << 2);
+        port_c |= (((YPPIGetNumFloppyDrives(&ppi->config) - 1) & 0x03) << 2);
         // Bits 4-7 are for unsupported features.
         return port_c;
       }
@@ -875,22 +876,22 @@ YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(YPPIState* ppi) {
+YAX86_PUBLIC bool YPPIIsPCSpeakerEnabled(YPPIState* ppi) {
   return (ppi->port_b & kPPIPortBTimer2Gate) &&
          (ppi->port_b & kPPIPortBSpeakerData);
 }
 
-YAX86_FILE_PRIVATE inline uint8_t PPIGetKeyboardControl(const YPPIState* ppi) {
+YAX86_FILE_PRIVATE inline uint8_t YPPIGetKeyboardControl(const YPPIState* ppi) {
   return (
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
-YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
     case kPPIPortB: {
       // Save old states in order to check for changes after the write.
-      bool old_speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
-      uint8_t old_keyboard_control = PPIGetKeyboardControl(ppi);
+      bool old_speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
+      uint8_t old_keyboard_control = YPPIGetKeyboardControl(ppi);
 
       ppi->port_b = value;
 
@@ -900,16 +901,17 @@ YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
       }
 
       // Check for changes in PC speaker control bits and fire callback.
-      bool speaker_enabled = PPIIsPCSpeakerEnabled(ppi);
+      bool speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
       if (old_speaker_enabled != speaker_enabled &&
           ppi->config.set_pc_speaker_frequency) {
-        const uint32_t frequency =
-            PPIIsPCSpeakerEnabled(ppi) ? ppi->pc_speaker_frequency_from_pit : 0;
+        const uint32_t frequency = YPPIIsPCSpeakerEnabled(ppi)
+                                       ? ppi->pc_speaker_frequency_from_pit
+                                       : 0;
         ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency);
       }
 
       // Check for changes in keyboard control bits and fire callback.
-      uint8_t keyboard_control = PPIGetKeyboardControl(ppi);
+      uint8_t keyboard_control = YPPIGetKeyboardControl(ppi);
       if (old_keyboard_control != keyboard_control &&
           ppi->config.set_keyboard_control) {
         ppi->config.set_keyboard_control(
@@ -930,19 +932,19 @@ YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
+YAX86_PUBLIC void YPPISetPCSpeakerFrequencyFromPIT(
     YPPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
   // Invoke the callback only if the speaker is currently enabled and the
   // frequency has changed.
-  if (PPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
+  if (YPPIIsPCSpeakerEnabled(ppi) && (frequency_hz != old_frequency) &&
       ppi->config.set_pc_speaker_frequency) {
     ppi->config.set_pc_speaker_frequency(ppi->config.context, frequency_hz);
   }
 }
 
-YAX86_PUBLIC void PPISetScancode(YPPIState* ppi, uint8_t scancode) {
+YAX86_PUBLIC void YPPISetScancode(YPPIState* ppi, uint8_t scancode) {
   ppi->port_a_latch = scancode;
 }
 

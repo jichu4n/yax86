@@ -141,16 +141,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
-    char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -158,7 +158,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -170,18 +170,18 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += SNPrintFPutC(buffer, size, pos, ' ');
+    count += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += SNPrintFPutC(buffer, size, pos, *s++);
+    count += YSNPrintFPutC(buffer, size, pos, *s++);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t
-SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
-              int base, int uppercase, int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+    char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
+    int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -209,35 +209,35 @@ SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
   // If zero padding is requested, sign should be printed before padding
   if (pad_zero) {
     if (negative) {
-      count += SNPrintFPutC(buffer, size, pos, '-');
+      count += YSNPrintFPutC(buffer, size, pos, '-');
       negative = 0; // Sign already handled
     }
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, '0');
+      count += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, ' ');
+      count += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
   if (negative) {
-    count += SNPrintFPutC(buffer, size, pos, '-');
+    count += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += SNPrintFPutC(buffer, size, pos, temp[--i]);
+    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
     if (*format != '%') {
-      SNPrintFPutC(buffer, size, &pos, *format++);
+      YSNPrintFPutC(buffer, size, &pos, *format++);
       continue;
     }
 
@@ -279,15 +279,15 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         // Pad with spaces (zero flag is ignored for %c per standard)
         int pad = width - 1;
         while (pad-- > 0) {
-          SNPrintFPutC(buffer, size, &pos, ' ');
+          YSNPrintFPutC(buffer, size, &pos, ' ');
         }
-        SNPrintFPutC(buffer, size, &pos, c);
+        YSNPrintFPutC(buffer, size, &pos, c);
         break;
       }
       case 's': {
         const char* s = va_arg(args, const char*);
         if (!s) s = "(null)";
-        SNPrintFPutS(buffer, size, &pos, s, width);
+        YSNPrintFPutS(buffer, size, &pos, s, width);
         break;
       }
       case 'd':
@@ -313,8 +313,8 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         } else {
           uval = (unsigned long long)val;
         }
-        SNPrintFPutUI(buffer, size, &pos, uval, 10, 0, width, pad_zero,
-                        negative);
+        YSNPrintFPutUI(
+            buffer, size, &pos, uval, 10, 0, width, pad_zero, negative);
         break;
       }
       case 'u':
@@ -340,30 +340,30 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         else
           val = va_arg(args, unsigned int);
 
-        SNPrintFPutUI(buffer, size, &pos, val, base, uppercase, width,
-                        pad_zero, 0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, base, uppercase, width, pad_zero, 0);
         break;
       }
       case 'p': {
         unsigned long long val =
             (unsigned long long)(uintptr_t)va_arg(args, void*);
         // Print 0x prefix
-        SNPrintFPutC(buffer, size, &pos, '0');
-        SNPrintFPutC(buffer, size, &pos, 'x');
+        YSNPrintFPutC(buffer, size, &pos, '0');
+        YSNPrintFPutC(buffer, size, &pos, 'x');
         // Adjust width to account for "0x" prefix
         int adjusted_width = width > 2 ? width - 2 : 0;
-        SNPrintFPutUI(buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero,
-                        0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero, 0);
         break;
       }
       case '%': {
-        SNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, '%');
         break;
       }
       default: {
         // Unknown specifier, print % and the specifier literally
-        SNPrintFPutC(buffer, size, &pos, '%');
-        SNPrintFPutC(buffer, size, &pos, *format);
+        YSNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, *format);
         break;
       }
     }
@@ -382,11 +382,11 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
-  int ret = VSNPrintF(buffer, size, format, args);
+  int ret = YVSNPrintF(buffer, size, format, args);
   va_end(args);
   return ret;
 }
@@ -465,7 +465,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -509,7 +509,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void LoggerInit(
+YAX86_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -518,52 +518,52 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
-         (logger->config->enabled_modules & LogModuleMask(module)) != 0;
+         (logger->config->enabled_modules & YLogModuleMask(module)) != 0;
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules |= LogModuleMask(module);
+    logger->config->enabled_modules |= YLogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules &= ~LogModuleMask(module);
+    logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) YAX86_UNUSED;
 
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
-  // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, module, level)) {
+  // YLoggerWrite is also callable directly.
+  if (!YLoggerIsEnabled(logger, module, level)) {
     return;
   }
 
   va_list args;
   va_start(args, format);
   int formatted_length =
-      VSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
   va_end(args);
 
-  // VSNPrintF returns the length the message would have had, which may exceed
+  // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
@@ -584,11 +584,11 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                \
-  do {                                                       \
-    if (LoggerIsEnabled((logger), (module), (level))) {      \
-      LoggerWrite((logger), (module), (level), __VA_ARGS__); \
-    }                                                        \
+#define YAX86_LOG(logger, module, level, ...)                 \
+  do {                                                        \
+    if (YLoggerIsEnabled((logger), (module), (level))) {      \
+      YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
+    }                                                         \
   } while (0)
 
 #endif  // YAX86_UTIL_LOG_H
@@ -733,32 +733,32 @@ typedef struct YPITState {
 } YPITState;
 
 // Initializes the PIT to its power-on state.
-YAX86_PUBLIC void PITInit(YPITState* pit);
+YAX86_PUBLIC void YPITInit(YPITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
-YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port);
+YAX86_PUBLIC uint8_t YPITReadPort(YPITState* pit, uint16_t port);
 
 // Handles writes to the PIT's I/O ports (0x40-0x43).
-YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value);
 
 // Simulates a single tick of the PIT's input clock. This method should be
 // invoked at a frequency of 1.193182 MHz for accurate timing.
-YAX86_PUBLIC void PITTick(YPITState* pit);
+YAX86_PUBLIC void YPITTick(YPITState* pit);
 
 enum {
-  // Returned by PITTicksUntilNextEvent() when no channel is counting towards
+  // Returned by YPITTicksUntilNextEvent() when no channel is counting towards
   // anything, so there is nothing to schedule.
   kPITNoEvent = 0x7FFFFFFF,
 };
 
 // Advances the PIT by num_ticks of its input clock. Equivalent to calling
-// PITTick() num_ticks times, but does not take time proportional to num_ticks.
+// YPITTick() num_ticks times, but does not take time proportional to num_ticks.
 //
 // A counter spends nearly all of its life counting down through values that
 // change nothing observable, so those stretches are skipped arithmetically and
 // only the ticks that can change a channel's output are simulated one at a
 // time.
-YAX86_PUBLIC void PITAdvance(YPITState* pit, uint32_t num_ticks);
+YAX86_PUBLIC void YPITAdvance(YPITState* pit, uint32_t num_ticks);
 
 // Returns the number of input clock ticks until the earliest tick that could
 // change any channel's output state, or kPITNoEvent if no channel is counting
@@ -767,7 +767,7 @@ YAX86_PUBLIC void PITAdvance(YPITState* pit, uint32_t num_ticks);
 // This is a lower bound rather than an exact answer. A caller that advances the
 // PIT by this much and finds nothing happened has only done unnecessary work,
 // whereas one that waited longer would miss an edge.
-YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const YPITState* pit);
+YAX86_PUBLIC uint32_t YPITTicksUntilNextEvent(const YPITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H
 
@@ -824,7 +824,7 @@ typedef struct YPITModeMetadata {
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITUnsupportedMode = {0};
 
 // Handles a channel reaching terminal count.
-YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
+YAX86_FILE_PRIVATE inline void YPITChannelSetOutputState(
     YPITState* pit, YPITChannelState* channel, int channel_index,
     bool new_output_state) {
   // No-op if the output state is unchanged.
@@ -838,7 +838,7 @@ YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
   // On rising edge of channel 0 output state, raise IRQ 0.
   //
   // This is the only effect any channel's output has outside the PIT, which is
-  // why PITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
+  // why YPITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
   // another channel's output an effect here and that has to change with it.
   if (channel_index == kPITChannelTimer && new_output_state &&
       pit->config.raise_irq_0) {
@@ -847,7 +847,7 @@ YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
 }
 
 // Tick handler for Mode 0: Interrupt on Terminal Count.
-YAX86_FILE_PRIVATE void PITMode0HandleTick(
+YAX86_FILE_PRIVATE void YPITMode0HandleTick(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // Since this is a one-shot timer, do nothing if the counter is already 0.
   if (channel->counter == 0) {
@@ -859,19 +859,20 @@ YAX86_FILE_PRIVATE void PITMode0HandleTick(
 
   // If at terminal count, set output high and trigger terminal count.
   if (channel->counter == 0) {
-    PITChannelSetOutputState(pit, channel, channel_index, true);
+    YPITChannelSetOutputState(pit, channel, channel_index, true);
   }
 }
 
 // A counter above 1 cannot reach terminal count on the next tick, so every
 // tick down to 1 is uneventful. A counter already at 0 has finished and never
 // changes again, which the caller detects as no event rather than a skip.
-YAX86_FILE_PRIVATE uint32_t PITMode0SkipTicks(const YPITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+YPITMode0SkipTicks(const YPITChannelState* channel) {
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 0;
 }
 
 YAX86_FILE_PRIVATE uint32_t
-PITMode0TicksUntilEvent(const YPITChannelState* channel) {
+YPITMode0TicksUntilEvent(const YPITChannelState* channel) {
   // A one-shot that has already fired is not counting towards anything.
   return channel->counter == 0 ? kPITNoEvent : (uint32_t)channel->counter;
 }
@@ -879,14 +880,14 @@ PITMode0TicksUntilEvent(const YPITChannelState* channel) {
 // Metadata for Mode 0: Interrupt on Terminal Count.
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode0Metadata = {
     .initial_output_state = false,
-    .handle_tick = PITMode0HandleTick,
+    .handle_tick = YPITMode0HandleTick,
     .counter_step = 1,
-    .skip_ticks = PITMode0SkipTicks,
-    .ticks_until_event = PITMode0TicksUntilEvent,
+    .skip_ticks = YPITMode0SkipTicks,
+    .ticks_until_event = YPITMode0TicksUntilEvent,
 };
 
 // Tick handler for Mode 2: Rate Generator.
-YAX86_FILE_PRIVATE void PITMode2HandleTick(
+YAX86_FILE_PRIVATE void YPITMode2HandleTick(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // Decrement the counter by 1.
   --channel->counter;
@@ -894,12 +895,12 @@ YAX86_FILE_PRIVATE void PITMode2HandleTick(
   switch (channel->counter) {
     case 1:
       // When the counter reaches 1, set output low for one tick.
-      PITChannelSetOutputState(pit, channel, channel_index, false);
+      YPITChannelSetOutputState(pit, channel, channel_index, false);
       break;
     case 0:
       // When the counter reaches 0, reload, set output high again.
       channel->counter = channel->reload_value;
-      PITChannelSetOutputState(pit, channel, channel_index, true);
+      YPITChannelSetOutputState(pit, channel, channel_index, true);
       break;
     default:
       break;
@@ -908,12 +909,13 @@ YAX86_FILE_PRIVATE void PITMode2HandleTick(
 
 // Mode 2 acts when the counter reaches 1 and again when it reaches 0, so every
 // tick down to 2 is uneventful.
-YAX86_FILE_PRIVATE uint32_t PITMode2SkipTicks(const YPITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+YPITMode2SkipTicks(const YPITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
 YAX86_FILE_PRIVATE YAX86_HOT uint32_t
-PITMode2TicksUntilEvent(const YPITChannelState* channel) {
+YPITMode2TicksUntilEvent(const YPITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
@@ -922,14 +924,14 @@ PITMode2TicksUntilEvent(const YPITChannelState* channel) {
 // Metadata for Mode 2: Rate Generator.
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode2Metadata = {
     .initial_output_state = true,
-    .handle_tick = PITMode2HandleTick,
+    .handle_tick = YPITMode2HandleTick,
     .counter_step = 1,
-    .skip_ticks = PITMode2SkipTicks,
-    .ticks_until_event = PITMode2TicksUntilEvent,
+    .skip_ticks = YPITMode2SkipTicks,
+    .ticks_until_event = YPITMode2TicksUntilEvent,
 };
 
 // Tick handler for Mode 3: Square Wave Generator.
-YAX86_FILE_PRIVATE void PITMode3HandleTick(
+YAX86_FILE_PRIVATE void YPITMode3HandleTick(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // In Mode 3, the counter decrements by 2 each tick. We reach terminal count
   // when we reach either 0 or wrap around to 0xFFFF.
@@ -940,7 +942,7 @@ YAX86_FILE_PRIVATE void PITMode3HandleTick(
     case 0xFFFF:
       // When the counter reaches terminal count, reload and toggle output.
       channel->counter = channel->reload_value;
-      PITChannelSetOutputState(
+      YPITChannelSetOutputState(
           pit, channel, channel_index, !channel->output_state);
       break;
     default:
@@ -953,12 +955,12 @@ YAX86_FILE_PRIVATE void PITMode3HandleTick(
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
 YAX86_FILE_PRIVATE YAX86_HOT uint32_t
-PITMode3SkipTicks(const YPITChannelState* channel) {
+YPITMode3SkipTicks(const YPITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
 YAX86_FILE_PRIVATE uint32_t
-PITMode3TicksUntilEvent(const YPITChannelState* channel) {
+YPITMode3TicksUntilEvent(const YPITChannelState* channel) {
   // Even counters reach 0 after counter/2 steps, odd ones reach 0xFFFF after
   // (counter+1)/2; the rounding covers both.
   const uint32_t ticks = ((uint32_t)channel->counter + 1) / 2;
@@ -968,10 +970,10 @@ PITMode3TicksUntilEvent(const YPITChannelState* channel) {
 // Metadata for Mode 3: Square Wave Generator.
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode3Metadata = {
     .initial_output_state = true,
-    .handle_tick = PITMode3HandleTick,
+    .handle_tick = YPITMode3HandleTick,
     .counter_step = 2,
-    .skip_ticks = PITMode3SkipTicks,
-    .ticks_until_event = PITMode3TicksUntilEvent,
+    .skip_ticks = YPITMode3SkipTicks,
+    .ticks_until_event = YPITMode3TicksUntilEvent,
 };
 
 // Array of mode metadata indexed by mode number.
@@ -984,7 +986,7 @@ YAX86_FILE_PRIVATE const YPITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
-YAX86_PUBLIC void PITInit(YPITState* pit) {
+YAX86_PUBLIC void YPITInit(YPITState* pit) {
   // On the IBM PC, the output pins of all three channels are initially pulled
   // high.
   for (int i = 0; i < kPITNumChannels; ++i) {
@@ -995,7 +997,7 @@ YAX86_PUBLIC void PITInit(YPITState* pit) {
 // Whether a channel in this mode drives its output at the reload frequency.
 // Only modes 2 and 3 oscillate; the others produce a single edge, which a
 // frequency has no way to express.
-YAX86_FILE_PRIVATE inline bool PITModeOscillates(uint8_t mode) {
+YAX86_FILE_PRIVATE inline bool YPITModeOscillates(uint8_t mode) {
   return mode == 2 || mode == 3;
 }
 
@@ -1007,7 +1009,7 @@ YAX86_FILE_PRIVATE inline bool PITModeOscillates(uint8_t mode) {
 // The frequency describes only how often the output oscillates. Mode 2's
 // narrow output pulse sounds thinner than mode 3's square wave, which a
 // frequency cannot express.
-YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
+YAX86_FILE_PRIVATE inline void YPITNotifySpeakerFrequency(
     YPITState* pit, const YPITChannelState* channel, int channel_index,
     bool has_count) {
   if (channel_index != kPITSpeakerChannel ||
@@ -1015,7 +1017,7 @@ YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
     return;
   }
   uint32_t frequency = 0;
-  if (has_count && PITModeOscillates(channel->mode)) {
+  if (has_count && YPITModeOscillates(channel->mode)) {
     frequency =
         kPITTickFrequencyHz / (channel->reload_value ? channel->reload_value
                                                      : kPITFallbackReloadValue);
@@ -1024,17 +1026,17 @@ YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
 }
 
 // Helper function to load the counter and handle side effects.
-YAX86_FILE_PRIVATE inline void PITChannelLoadCounter(
+YAX86_FILE_PRIVATE inline void YPITChannelLoadCounter(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // A reload value of 0 is treated as 0x10000 by the hardware.
   // This will wrap to 0 when assigned to the 16-bit counter.
   channel->counter = channel->reload_value;
 
-  PITNotifySpeakerFrequency(pit, channel, channel_index, true);
+  YPITNotifySpeakerFrequency(pit, channel, channel_index, true);
 }
 
 // Helper function to handle a write to a channel's data port.
-YAX86_FILE_PRIVATE inline void PITChannelWritePort(
+YAX86_FILE_PRIVATE inline void YPITChannelWritePort(
     YPITState* pit, YPITChannelState* channel, int channel_index,
     uint8_t value) {
   switch (channel->access_mode) {
@@ -1043,12 +1045,12 @@ YAX86_FILE_PRIVATE inline void PITChannelWritePort(
       break;
     case kPITAccessLSBOnly:
       channel->reload_value = (channel->reload_value & 0xFF00) | value;
-      PITChannelLoadCounter(pit, channel, channel_index);
+      YPITChannelLoadCounter(pit, channel, channel_index);
       break;
     case kPITAccessMSBOnly:
       channel->reload_value =
           (channel->reload_value & 0x00FF) | ((uint16_t)value << 8);
-      PITChannelLoadCounter(pit, channel, channel_index);
+      YPITChannelLoadCounter(pit, channel, channel_index);
       break;
     case kPITAccessLSBThenMSB:
       switch (channel->rw_byte) {
@@ -1062,7 +1064,7 @@ YAX86_FILE_PRIVATE inline void PITChannelWritePort(
           channel->reload_value =
               (channel->reload_value & 0x00FF) | ((uint16_t)value << 8);
           channel->rw_byte = kPITByteLSB;
-          PITChannelLoadCounter(pit, channel, channel_index);
+          YPITChannelLoadCounter(pit, channel, channel_index);
           break;
         default:
           // Should not happen - ignore.
@@ -1075,7 +1077,7 @@ YAX86_FILE_PRIVATE inline void PITChannelWritePort(
   }
 }
 
-YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
   switch (port) {
     case kPITPortControl: {
       // Control word.
@@ -1100,13 +1102,13 @@ YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
           channel->mode -= 4;
         }
         channel->rw_byte = kPITByteLSB;
-        PITChannelSetOutputState(
+        YPITChannelSetOutputState(
             pit, channel, channel_index,
             kPITModeMetadata[channel->mode]->initial_output_state);
         // A reprogrammed channel is silent until its count arrives, so a tone
         // playing on channel 2 stops here and resumes on the next counter
         // load.
-        PITNotifySpeakerFrequency(pit, channel, channel_index, false);
+        YPITNotifySpeakerFrequency(pit, channel, channel_index, false);
       }
       break;
     }
@@ -1116,7 +1118,7 @@ YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
       // Data port for a channel.
       int channel_index = port - kPITPortChannel0;
       YPITChannelState* channel = &pit->channels[channel_index];
-      PITChannelWritePort(pit, channel, channel_index, value);
+      YPITChannelWritePort(pit, channel, channel_index, value);
       break;
     }
     default:
@@ -1126,7 +1128,7 @@ YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
 }
 
 // Helper function to handle a read from a channel's data port.
-YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
+YAX86_FILE_PRIVATE inline uint8_t YPITChannelReadPort(
     YAX86_UNUSED YPITState* pit, YPITChannelState* channel,
     YAX86_UNUSED int channel_index) {
   uint16_t value = channel->latch_active ? channel->latch : channel->counter;
@@ -1168,7 +1170,7 @@ YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
   return result;
 }
 
-YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port) {
+YAX86_PUBLIC uint8_t YPITReadPort(YPITState* pit, uint16_t port) {
   switch (port) {
     case kPITPortChannel0:
     case kPITPortChannel1:
@@ -1176,7 +1178,7 @@ YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port) {
       // Data port for a channel.
       int channel_index = port - kPITPortChannel0;
       YPITChannelState* channel = &pit->channels[channel_index];
-      return PITChannelReadPort(pit, channel, channel_index);
+      return YPITChannelReadPort(pit, channel, channel_index);
     }
     default:
       // Invalid port - return 0xFF as is common for reads from unused ports.
@@ -1184,7 +1186,7 @@ YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void PITTick(YPITState* pit) {
+YAX86_PUBLIC YAX86_HOT void YPITTick(YPITState* pit) {
   YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     if (channel->mode >= kPITNumModes) {
@@ -1205,7 +1207,7 @@ YAX86_PUBLIC YAX86_HOT void PITTick(YPITState* pit) {
 // applied to the counter arithmetically; every tick that could change it still
 // goes through the handler, so there is only one description of what a tick
 // does.
-YAX86_FILE_PRIVATE void PITAdvanceChannel(
+YAX86_FILE_PRIVATE void YPITAdvanceChannel(
     YPITState* pit, YPITChannelState* channel, int channel_index,
     uint32_t num_ticks) {
   if (channel->mode >= kPITNumModes) {
@@ -1242,23 +1244,23 @@ YAX86_FILE_PRIVATE void PITAdvanceChannel(
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void PITAdvance(YPITState* pit, uint32_t num_ticks) {
+YAX86_PUBLIC YAX86_HOT void YPITAdvance(YPITState* pit, uint32_t num_ticks) {
   if (num_ticks == 0) {
     return;
   }
   YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
-    PITAdvanceChannel(pit, channel, i, num_ticks);
+    YPITAdvanceChannel(pit, channel, i, num_ticks);
   }
 }
 
-YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const YPITState* pit) {
+YAX86_PUBLIC uint32_t YPITTicksUntilNextEvent(const YPITState* pit) {
   uint32_t earliest = kPITNoEvent;
   const YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     // Only channel 0 is worth waking up for. Its output is the one thing that
-    // leaves the chip - PITChannelSetOutputState() raises IRQ 0 from it - while
-    // channels 1 and 2 do nothing on a transition but record it, and that
+    // leaves the chip - YPITChannelSetOutputState() raises IRQ 0 from it -
+    // while channels 1 and 2 do nothing on a transition but record it, and that
     // record is recomputed from scratch whenever the PIT is advanced. Every
     // path that reads it advances the PIT first, so there is no state to miss.
     //

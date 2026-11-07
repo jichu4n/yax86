@@ -18,35 +18,35 @@ class IRQTest : public ::testing::Test {
  protected:
   void SetUpSinglePIC() {
     master_.config.sp = false;
-    PICInit(&master_);
+    YPICInit(&master_);
 
     // ICW1: single PIC, no ICW4 needed.
-    PICWritePort(&master_, 0x20, kTestICW1_INIT | kTestICW1_SNGL);
+    YPICWritePort(&master_, 0x20, kTestICW1_INIT | kTestICW1_SNGL);
     // ICW2: interrupt vector base 0x08.
-    PICWritePort(&master_, 0x21, kICW2_BASE_XT);
+    YPICWritePort(&master_, 0x21, kICW2_BASE_XT);
 
     ASSERT_EQ(master_.init_state, kPICReady);
     // Unmask all interrupts for testing. Written as an OCW1 rather than
     // assigned, so that the mask goes through the path a guest uses and
     // has_unmasked_request is recomputed with it.
-    PICWritePort(&master_, 0x21, 0x00);
+    YPICWritePort(&master_, 0x21, 0x00);
   }
 
   void SetUpCascadedPICs() {
     // Master PIC setup
     master_.config.sp = false;
-    PICInit(&master_);
-    PICWritePort(&master_, 0x20, kTestICW1_INIT);  // Cascaded, ICW4 not needed
-    PICWritePort(&master_, 0x21, kICW2_BASE_AT_M);
-    PICWritePort(&master_, 0x21, 1 << 2);  // Slave is on IRQ 2
+    YPICInit(&master_);
+    YPICWritePort(&master_, 0x20, kTestICW1_INIT);  // Cascaded, ICW4 not needed
+    YPICWritePort(&master_, 0x21, kICW2_BASE_AT_M);
+    YPICWritePort(&master_, 0x21, 1 << 2);  // Slave is on IRQ 2
     ASSERT_EQ(master_.init_state, kPICReady);
 
     // Slave PIC setup
     slave_.config.sp = true;
-    PICInit(&slave_);
-    PICWritePort(&slave_, 0xA0, kTestICW1_INIT);  // Cascaded, ICW4 not needed
-    PICWritePort(&slave_, 0xA1, kICW2_BASE_AT_S);
-    PICWritePort(&slave_, 0xA1, 2);  // Slave ID is 2
+    YPICInit(&slave_);
+    YPICWritePort(&slave_, 0xA0, kTestICW1_INIT);  // Cascaded, ICW4 not needed
+    YPICWritePort(&slave_, 0xA1, kICW2_BASE_AT_S);
+    YPICWritePort(&slave_, 0xA1, 2);  // Slave ID is 2
     ASSERT_EQ(slave_.init_state, kPICReady);
 
     // Link them
@@ -54,8 +54,8 @@ class IRQTest : public ::testing::Test {
     slave_.cascade_pic = &master_;
 
     // Unmask all interrupts for testing, through OCW1 as above.
-    PICWritePort(&master_, 0x21, 0x00);
-    PICWritePort(&slave_, 0xA1, 0x00);
+    YPICWritePort(&master_, 0x21, 0x00);
+    YPICWritePort(&slave_, 0xA1, 0x00);
   }
   YPICState master_ = {0};
   YPICState slave_ = {0};
@@ -63,55 +63,55 @@ class IRQTest : public ::testing::Test {
 
 TEST_F(IRQTest, SinglePIC_BasicIRQ) {
   SetUpSinglePIC();
-  PICRaiseIRQ(&master_, 3);
+  YPICRaiseIRQ(&master_, 3);
 
   EXPECT_EQ(master_.irr, 1 << 3);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 3);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_XT + 3);
   EXPECT_EQ(master_.irr, 0);       // IRR bit should be cleared after ack.
   EXPECT_EQ(master_.isr, 1 << 3);  // ISR bit should be set.
 }
 
 TEST_F(IRQTest, SinglePIC_Priority) {
   SetUpSinglePIC();
-  PICRaiseIRQ(&master_, 5);
-  PICRaiseIRQ(&master_, 2);
+  YPICRaiseIRQ(&master_, 5);
+  YPICRaiseIRQ(&master_, 2);
 
   // IRQ 2 has higher priority (lower number) than IRQ 5.
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 2);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_XT + 2);
   EXPECT_EQ(master_.isr, 1 << 2);
   EXPECT_EQ(master_.irr, 1 << 5);  // IRQ 5 should still be pending.
 }
 
 TEST_F(IRQTest, SinglePIC_Masking) {
   SetUpSinglePIC();
-  PICRaiseIRQ(&master_, 4);
+  YPICRaiseIRQ(&master_, 4);
 
   // Mask IRQ 4.
-  PICWritePort(&master_, 0x21, 1 << 4);
+  YPICWritePort(&master_, 0x21, 1 << 4);
   EXPECT_FALSE(master_.has_unmasked_request);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Unmask IRQ 4.
-  PICWritePort(&master_, 0x21, 0x00);
+  YPICWritePort(&master_, 0x21, 0x00);
   EXPECT_TRUE(master_.has_unmasked_request);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 4);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_XT + 4);
 }
 
 TEST_F(IRQTest, SinglePIC_InServicePriority) {
   SetUpSinglePIC();
 
   // Service IRQ 5.
-  PICRaiseIRQ(&master_, 5);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 5);
+  YPICRaiseIRQ(&master_, 5);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_XT + 5);
   EXPECT_EQ(master_.isr, 1 << 5);
 
   // Raise a lower-priority interrupt (IRQ 7). It should not be serviced.
-  PICRaiseIRQ(&master_, 7);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
+  YPICRaiseIRQ(&master_, 7);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Raise a higher-priority interrupt (IRQ 3). It should be serviced.
-  PICRaiseIRQ(&master_, 3);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 3);
+  YPICRaiseIRQ(&master_, 3);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_XT + 3);
   EXPECT_EQ(master_.isr, (1 << 5) | (1 << 3));
 }
 
@@ -119,25 +119,25 @@ TEST_F(IRQTest, SinglePIC_EOIInteraction) {
   SetUpSinglePIC();
 
   // Service IRQ 4.
-  PICRaiseIRQ(&master_, 4);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 4);
+  YPICRaiseIRQ(&master_, 4);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_XT + 4);
 
   // Raise IRQ 5. It shouldn't be serviced yet.
-  PICRaiseIRQ(&master_, 5);
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
+  YPICRaiseIRQ(&master_, 5);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Issue an EOI for IRQ 4.
-  PICWritePort(&master_, 0x20, kTestOCW2_EOI);
+  YPICWritePort(&master_, 0x20, kTestOCW2_EOI);
 
   // Now IRQ 5 should be serviced.
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 5);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_XT + 5);
 }
 
 TEST_F(IRQTest, Cascaded_SlaveToMasterTrigger) {
   SetUpCascadedPICs();
 
   // Raise IRQ 11 (slave IRQ 3).
-  PICRaiseIRQ(&slave_, 3);
+  YPICRaiseIRQ(&slave_, 3);
 
   // This should be reflected in the slave's IRR.
   EXPECT_EQ(slave_.irr, 1 << 3);
@@ -149,10 +149,10 @@ TEST_F(IRQTest, Cascaded_GetSlaveInterrupt) {
   SetUpCascadedPICs();
 
   // Raise IRQ 11 (slave IRQ 3).
-  PICRaiseIRQ(&slave_, 3);
+  YPICRaiseIRQ(&slave_, 3);
 
   // Ask the master for the pending interrupt.
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_AT_S + 3);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_AT_S + 3);
 
   // Master's ISR should have the cascade bit set.
   EXPECT_EQ(master_.isr, 1 << 2);
@@ -163,33 +163,33 @@ TEST_F(IRQTest, Cascaded_GetSlaveInterrupt) {
 TEST_F(IRQTest, Cascaded_MasterVsSlavePriority) {
   SetUpCascadedPICs();
 
-  PICRaiseIRQ(&master_, 4);  // Master IRQ 4
-  PICRaiseIRQ(&slave_, 3);   // Slave IRQ 3 (overall IRQ 11)
+  YPICRaiseIRQ(&master_, 4);  // Master IRQ 4
+  YPICRaiseIRQ(&slave_, 3);   // Slave IRQ 3 (overall IRQ 11)
 
   // The slave is on master's IRQ 2. Since 2 < 4, the slave's
   // interrupt has higher priority.
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_AT_S + 3);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_AT_S + 3);
 }
 
 TEST_F(IRQTest, Cascaded_SlaveVsMasterPriority) {
   SetUpCascadedPICs();
 
-  PICRaiseIRQ(&master_, 1);  // Master IRQ 1
-  PICRaiseIRQ(&slave_, 3);   // Slave IRQ 3 (overall IRQ 11)
+  YPICRaiseIRQ(&master_, 1);  // Master IRQ 1
+  YPICRaiseIRQ(&slave_, 3);   // Slave IRQ 3 (overall IRQ 11)
 
   // The slave is on master's IRQ 2. Since 1 < 2, the master's
   // own interrupt has higher priority.
-  EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_AT_M + 1);
+  EXPECT_EQ(YPICGetPendingInterrupt(&master_), kICW2_BASE_AT_M + 1);
 }
 
 TEST_F(IRQTest, Cascaded_LowerIRQ) {
   SetUpCascadedPICs();
 
   // Raise and lower an IRQ on the slave.
-  PICRaiseIRQ(&slave_, 5);
+  YPICRaiseIRQ(&slave_, 5);
   EXPECT_EQ(master_.irr, 1 << 2);  // Master cascade line is up.
 
-  PICLowerIRQ(&slave_, 5);
+  YPICLowerIRQ(&slave_, 5);
   EXPECT_EQ(master_.irr, 0);  // Master cascade line is down.
 }
 

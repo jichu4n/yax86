@@ -11,7 +11,7 @@ class PlatformHDCIntegrationTest : public ::testing::Test {
     platform_.config.physical_memory = ram_;
     platform_.config.vram = vram_;
 
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
   }
 
   YPlatformState platform_ = {};
@@ -23,40 +23,45 @@ TEST_F(PlatformHDCIntegrationTest, OptionROMIsVisibleWhereTheBIOSScans) {
   // The BIOS looks for the signature at the start of the ROM, then reads its
   // size from the third byte.
   EXPECT_EQ(
-      ReadMemoryWord(&platform_, kHDCOptionROMStartAddress), (uint16_t)0xAA55);
+      YPlatformReadMemoryWord(&platform_, kHDCOptionROMStartAddress),
+      (uint16_t)0xAA55);
   EXPECT_EQ(
-      ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + 2) * 512,
-      HDCGetOptionROMSize());
+      YPlatformReadMemoryByte(&platform_, kHDCOptionROMStartAddress + 2) * 512,
+      YHDCGetOptionROMSize());
 
   // Every byte of the ROM is reachable through the memory map, and matches
   // what the module reports directly.
-  const uint8_t* rom = HDCGetOptionROMData();
-  for (uint32_t offset = 0; offset < HDCGetOptionROMSize(); offset += 256) {
+  const uint8_t* rom = YHDCGetOptionROMData();
+  for (uint32_t offset = 0; offset < YHDCGetOptionROMSize(); offset += 256) {
     ASSERT_EQ(
-        ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + offset),
+        YPlatformReadMemoryByte(&platform_, kHDCOptionROMStartAddress + offset),
         rom[offset])
         << "at offset " << offset;
   }
-  const uint32_t last = HDCGetOptionROMSize() - 1;
+  const uint32_t last = YHDCGetOptionROMSize() - 1;
   EXPECT_EQ(
-      ReadMemoryByte(&platform_, kHDCOptionROMStartAddress + last), rom[last]);
+      YPlatformReadMemoryByte(&platform_, kHDCOptionROMStartAddress + last),
+      rom[last]);
 }
 
 TEST_F(PlatformHDCIntegrationTest, OptionROMIsMappedAsItsOwnRegion) {
   YPlatformMemoryMapEntry* entry =
-      GetMemoryMapEntryByType(&platform_, kMemoryMapEntryHDCOptionROM);
+      YPlatformGetMemoryMapEntryByType(&platform_, kMemoryMapEntryHDCOptionROM);
   ASSERT_NE(entry, nullptr);
   EXPECT_EQ(entry->start, (uint32_t)kHDCOptionROMStartAddress);
-  EXPECT_EQ(entry->end, kHDCOptionROMStartAddress + HDCGetOptionROMSize() - 1);
+  EXPECT_EQ(entry->end, kHDCOptionROMStartAddress + YHDCGetOptionROMSize() - 1);
   EXPECT_EQ(
-      GetMemoryMapEntryForAddress(&platform_, kHDCOptionROMStartAddress),
+      YPlatformGetMemoryMapEntryForAddress(
+          &platform_, kHDCOptionROMStartAddress),
       entry);
 }
 
 TEST_F(PlatformHDCIntegrationTest, OptionROMIsReadOnly) {
-  const uint8_t before = ReadMemoryByte(&platform_, kHDCOptionROMStartAddress);
-  WriteMemoryByte(&platform_, kHDCOptionROMStartAddress, 0x00);
-  EXPECT_EQ(ReadMemoryByte(&platform_, kHDCOptionROMStartAddress), before);
+  const uint8_t before =
+      YPlatformReadMemoryByte(&platform_, kHDCOptionROMStartAddress);
+  YPlatformWriteMemoryByte(&platform_, kHDCOptionROMStartAddress, 0x00);
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(&platform_, kHDCOptionROMStartAddress), before);
 }
 
 }  // namespace

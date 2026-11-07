@@ -16,36 +16,37 @@ typedef YCPUInstructionResult (*YCPUGroup1ExecuteInstructionFn)(
 // value in the YCPUModRM byte.
 YAX86_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
     kGroup1ExecuteInstructionFns[] = {
-        ExecuteAdd,            // 0 - ADD
-        ExecuteBooleanOr,      // 1 - OR
-        ExecuteAddWithCarry,   // 2 - ADC
-        ExecuteSubWithBorrow,  // 3 - SBB
-        ExecuteBooleanAnd,     // 4 - AND
-        ExecuteSub,            // 5 - SUB
-        ExecuteBooleanXor,     // 6 - XOR
-        ExecuteCmp,            // 7 - CMP
+        YCPUExecuteAdd,            // 0 - ADD
+        YCPUExecuteBooleanOr,      // 1 - OR
+        YCPUExecuteAddWithCarry,   // 2 - ADC
+        YCPUExecuteSubWithBorrow,  // 3 - SBB
+        YCPUExecuteBooleanAnd,     // 4 - AND
+        YCPUExecuteSub,            // 5 - SUB
+        YCPUExecuteBooleanXor,     // 6 - XOR
+        YCPUExecuteCmp,            // 7 - CMP
 };
 
 // Group 1 instruction handler.
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-ExecuteGroup1Instruction(const YCPUInstructionContext* ctx) {
+YCPUExecuteGroup1Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
-  ReadRegisterOrMemoryOperand(ctx, &dest);
-  YCPUOperandValue src_value = ReadImmediate(ctx);
+  YCPUReadRegisterOrMemoryOperand(ctx, &dest);
+  YCPUOperandValue src_value = YCPUReadImmediate(ctx);
   return fn(ctx, &dest, src_value);
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
-ExecuteGroup1InstructionWithSignExtension(const YCPUInstructionContext* ctx) {
+YCPUExecuteGroup1InstructionWithSignExtension(
+    const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =
       kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
-  ReadRegisterOrMemoryOperand(ctx, &dest);
-  YCPUOperandValue src_value =
-      ReadImmediateOperandByte(ctx->instruction);  // immediate is always 8-bit
+  YCPUReadRegisterOrMemoryOperand(ctx, &dest);
+  YCPUOperandValue src_value = YCPUReadImmediateOperandByte(
+      ctx->instruction);  // immediate is always 8-bit
   YCPUOperandValue src_value_extended =
       (YCPUOperandValue)((int16_t)((int8_t)src_value));
   // Sign-extend the immediate value to the destination width.

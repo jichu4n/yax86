@@ -41,7 +41,7 @@
 //
 // Instructions whose cost depends on more than their operands - a conditional
 // jump that is taken, a shift by a count in CL, a multiply or divide - add the
-// difference themselves through CPUAddCycles().
+// difference themselves through YCPUAddCycles().
 
 // Cycles to compute an effective address, by addressing mode. The 8086 pays
 // for each component it has to add together.
@@ -64,7 +64,7 @@ enum {
 
 // Cycles to compute the effective address of a ModR/M memory operand.
 YAX86_MODULE_PRIVATE uint8_t
-GetEffectiveAddressCycles(const YCPUInstruction* instruction) {
+YCPUGetEffectiveAddressCycles(const YCPUInstruction* instruction) {
   if (!instruction->has_mod_rm || instruction->mod_rm.mod == 0x03) {
     // A register operand needs no address computed.
     return 0;
@@ -99,10 +99,10 @@ GetEffectiveAddressCycles(const YCPUInstruction* instruction) {
   return cycles;
 }
 
-YAX86_MODULE_PRIVATE void AddBusCycles(YCPUState* cpu, uint8_t num_bytes) {
+YAX86_MODULE_PRIVATE void YCPUAddBusCycles(YCPUState* cpu, uint8_t num_bytes) {
   cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
 }
 
-YAX86_PUBLIC void CPUAddCycles(YCPUState* cpu, uint16_t cycles) {
+YAX86_PUBLIC void YCPUAddCycles(YCPUState* cpu, uint16_t cycles) {
   cpu->pending_cycles += cycles;
 }

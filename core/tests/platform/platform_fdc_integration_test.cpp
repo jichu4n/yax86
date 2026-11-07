@@ -17,17 +17,19 @@ class PlatformFDCIntegrationTest : public ::testing::Test {
     platform_.config.vram = vram_;
 
     // Initialize platform.
-    ASSERT_TRUE(PlatformInit(&platform_));
+    ASSERT_TRUE(YPlatformInit(&platform_));
 
     // Hook FDC image callback directly.
     platform_.fdc.config.read_image_byte = MockImageRead;
   }
 
   void WritePort(uint16_t port, uint8_t value) {
-    WritePortByte(&platform_, port, value);
+    YPlatformWritePortByte(&platform_, port, value);
   }
 
-  uint8_t ReadPort(uint16_t port) { return ReadPortByte(&platform_, port); }
+  uint8_t ReadPort(uint16_t port) {
+    return YPlatformReadPortByte(&platform_, port);
+  }
 
   YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
@@ -44,17 +46,17 @@ TEST_F(PlatformFDCIntegrationTest, ReadSectorViaDMA) {
 
   // Clear Reset Interrupt (Sense Interrupt Status 4x).
   // Tick to trigger reset interrupt.
-  FDCTick(&platform_.fdc);
+  YFDCTick(&platform_.fdc);
   // Verify IRQ 6 pending in PIC.
   // PIC not initialized with ICWs, so base vector is 0. IRQ 6 -> Vector 6.
-  EXPECT_EQ(PICGetPendingInterrupt(&platform_.pic), 6);
-  // Wait, PICInit default base is usually 0x08? GLaBIOS sets it later.
+  EXPECT_EQ(YPICGetPendingInterrupt(&platform_.pic), 6);
+  // Wait, YPICInit default base is usually 0x08? GLaBIOS sets it later.
   // 8259 default init state?
   // Let's assume IRQ 6 is raised.
   // Clear it by SENSE INT loop.
   for (int i = 0; i < 4; ++i) {
     WritePort(0x3F5, 0x08);
-    FDCTick(&platform_.fdc);
+    YFDCTick(&platform_.fdc);
     ReadPort(0x3F5);  // ST0
     ReadPort(0x3F5);  // PCN
   }
@@ -86,14 +88,15 @@ TEST_F(PlatformFDCIntegrationTest, ReadSectorViaDMA) {
 
   // Initialize target memory with a canary pattern.
   for (int i = 0; i < 512; ++i) {
-    // We can't use WriteMemoryByte directly as it's not exposed in test class
-    // helper. Use helper. But 'WriteMemoryByte' is global in public.h? Yes.
-    WriteMemoryByte(&platform_, 0x1000 + i, 0xCC);
+    // We can't use YPlatformWriteMemoryByte directly as it's not exposed in
+    // test class helper. Use helper. But 'YPlatformWriteMemoryByte' is global
+    // in public.h? Yes.
+    YPlatformWriteMemoryByte(&platform_, 0x1000 + i, 0xCC);
   }
 
   // 3. Issue FDC Read Data Command.
   // Insert Disk.
-  FDCInsertDisk(&platform_.fdc, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&platform_.fdc, 0, &kFDCFormat360KB);
 
   // Command: Read Data (0x06)
   WritePort(0x3F5, 0x06);
@@ -112,7 +115,7 @@ TEST_F(PlatformFDCIntegrationTest, ReadSectorViaDMA) {
   int ticks = 0;
   bool done = false;
   while (ticks < 2000) {  // 512 bytes + overhead
-    FDCTick(&platform_.fdc);
+    YFDCTick(&platform_.fdc);
     ticks++;
     // Check if IRQ 6 is raised (Transfer Complete).
     // Note: FDC raises IRQ 6 at end of command.
@@ -131,7 +134,7 @@ TEST_F(PlatformFDCIntegrationTest, ReadSectorViaDMA) {
   // MockImageRead(0, 1) = 0x01 -> RAM[0x1001]
   // ...
   for (int i = 0; i < 512; ++i) {
-    uint8_t val = ReadMemoryByte(&platform_, 0x1000 + i);
+    uint8_t val = YPlatformReadMemoryByte(&platform_, 0x1000 + i);
     EXPECT_EQ(val, (uint8_t)(i & 0xFF)) << "Mismatch at offset " << i;
   }
 }

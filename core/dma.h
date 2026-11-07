@@ -141,16 +141,16 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
-    char* buffer, size_t size, size_t* pos, char c) {
+YAX86_MODULE_PRIVATE_HEADER size_t
+YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
   }
@@ -158,7 +158,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutC(
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -170,18 +170,18 @@ YAX86_MODULE_PRIVATE_HEADER size_t SNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += SNPrintFPutC(buffer, size, pos, ' ');
+    count += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += SNPrintFPutC(buffer, size, pos, *s++);
+    count += YSNPrintFPutC(buffer, size, pos, *s++);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t
-SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
-              int base, int uppercase, int width, int pad_zero, int negative) {
+YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+    char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
+    int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
   size_t count = 0;
@@ -209,35 +209,35 @@ SNPrintFPutUI(char* buffer, size_t size, size_t* pos, unsigned long long value,
   // If zero padding is requested, sign should be printed before padding
   if (pad_zero) {
     if (negative) {
-      count += SNPrintFPutC(buffer, size, pos, '-');
+      count += YSNPrintFPutC(buffer, size, pos, '-');
       negative = 0; // Sign already handled
     }
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, '0');
+      count += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += SNPrintFPutC(buffer, size, pos, ' ');
+      count += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
   if (negative) {
-    count += SNPrintFPutC(buffer, size, pos, '-');
+    count += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += SNPrintFPutC(buffer, size, pos, temp[--i]);
+    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
   while (*format) {
     if (*format != '%') {
-      SNPrintFPutC(buffer, size, &pos, *format++);
+      YSNPrintFPutC(buffer, size, &pos, *format++);
       continue;
     }
 
@@ -279,15 +279,15 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         // Pad with spaces (zero flag is ignored for %c per standard)
         int pad = width - 1;
         while (pad-- > 0) {
-          SNPrintFPutC(buffer, size, &pos, ' ');
+          YSNPrintFPutC(buffer, size, &pos, ' ');
         }
-        SNPrintFPutC(buffer, size, &pos, c);
+        YSNPrintFPutC(buffer, size, &pos, c);
         break;
       }
       case 's': {
         const char* s = va_arg(args, const char*);
         if (!s) s = "(null)";
-        SNPrintFPutS(buffer, size, &pos, s, width);
+        YSNPrintFPutS(buffer, size, &pos, s, width);
         break;
       }
       case 'd':
@@ -313,8 +313,8 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         } else {
           uval = (unsigned long long)val;
         }
-        SNPrintFPutUI(buffer, size, &pos, uval, 10, 0, width, pad_zero,
-                        negative);
+        YSNPrintFPutUI(
+            buffer, size, &pos, uval, 10, 0, width, pad_zero, negative);
         break;
       }
       case 'u':
@@ -340,30 +340,30 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
         else
           val = va_arg(args, unsigned int);
 
-        SNPrintFPutUI(buffer, size, &pos, val, base, uppercase, width,
-                        pad_zero, 0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, base, uppercase, width, pad_zero, 0);
         break;
       }
       case 'p': {
         unsigned long long val =
             (unsigned long long)(uintptr_t)va_arg(args, void*);
         // Print 0x prefix
-        SNPrintFPutC(buffer, size, &pos, '0');
-        SNPrintFPutC(buffer, size, &pos, 'x');
+        YSNPrintFPutC(buffer, size, &pos, '0');
+        YSNPrintFPutC(buffer, size, &pos, 'x');
         // Adjust width to account for "0x" prefix
         int adjusted_width = width > 2 ? width - 2 : 0;
-        SNPrintFPutUI(buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero,
-                        0);
+        YSNPrintFPutUI(
+            buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero, 0);
         break;
       }
       case '%': {
-        SNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, '%');
         break;
       }
       default: {
         // Unknown specifier, print % and the specifier literally
-        SNPrintFPutC(buffer, size, &pos, '%');
-        SNPrintFPutC(buffer, size, &pos, *format);
+        YSNPrintFPutC(buffer, size, &pos, '%');
+        YSNPrintFPutC(buffer, size, &pos, *format);
         break;
       }
     }
@@ -382,11 +382,11 @@ YAX86_MODULE_PRIVATE_HEADER int VSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
+YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
-  int ret = VSNPrintF(buffer, size, format, args);
+  int ret = YVSNPrintF(buffer, size, format, args);
   va_end(args);
   return ret;
 }
@@ -465,7 +465,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -509,7 +509,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void LoggerInit(
+YAX86_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -518,52 +518,52 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
+YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
-         (logger->config->enabled_modules & LogModuleMask(module)) != 0;
+         (logger->config->enabled_modules & YLogModuleMask(module)) != 0;
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules |= LogModuleMask(module);
+    logger->config->enabled_modules |= YLogModuleMask(module);
   }
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
+YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
-    logger->config->enabled_modules &= ~LogModuleMask(module);
+    logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) YAX86_UNUSED;
 
-YAX86_PUBLIC_HEADER void LoggerWrite(
+YAX86_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
-  // LoggerWrite is also callable directly.
-  if (!LoggerIsEnabled(logger, module, level)) {
+  // YLoggerWrite is also callable directly.
+  if (!YLoggerIsEnabled(logger, module, level)) {
     return;
   }
 
   va_list args;
   va_start(args, format);
   int formatted_length =
-      VSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
   va_end(args);
 
-  // VSNPrintF returns the length the message would have had, which may exceed
+  // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
@@ -584,11 +584,11 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                \
-  do {                                                       \
-    if (LoggerIsEnabled((logger), (module), (level))) {      \
-      LoggerWrite((logger), (module), (level), __VA_ARGS__); \
-    }                                                        \
+#define YAX86_LOG(logger, module, level, ...)                 \
+  do {                                                        \
+    if (YLoggerIsEnabled((logger), (module), (level))) {      \
+      YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
+    }                                                         \
   } while (0)
 
 #endif  // YAX86_UTIL_LOG_H
@@ -814,18 +814,18 @@ typedef struct YDMAState {
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-YAX86_PUBLIC void DMAInit(YDMAState* dma);
+YAX86_PUBLIC void YDMAInit(YDMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
-YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port);
+YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port);
 
 // Handles writes to the DMA's I/O ports.
-YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
 
 // Executes a single-byte transfer for the specified channel. This function
 // should be called by the platform in response to a DREQ signal from a
 // peripheral.
-YAX86_PUBLIC void DMATransferByte(YDMAState* dma, uint8_t channel_index);
+YAX86_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
 
 #endif  // YAX86_DMA_PUBLIC_H
 
@@ -849,13 +849,13 @@ YAX86_PUBLIC void DMATransferByte(YDMAState* dma, uint8_t channel_index);
 #define YAX86_DMA_LOG(level, ...) \
   YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
 
-YAX86_PUBLIC void DMAInit(YDMAState* dma) {
+YAX86_PUBLIC void YDMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
 
 // Helper to read a 16-bit value byte-by-byte using the flip-flop.
-YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
+YAX86_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
     YDMAState* dma, uint16_t value) {
   uint8_t byte;
   if (dma->rw_byte == kDMARegisterMSB) {
@@ -868,7 +868,7 @@ YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
   return byte;
 }
 
-YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port) {
+YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -882,7 +882,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port) {
       const int channel_index = port / 2;
       const bool is_count_register = port % 2;
       const YDMAChannelState* channel = &dma->channels[channel_index];
-      return DMAReadRegisterByte(
+      return YDMAReadRegisterByte(
           dma, is_count_register ? channel->current_count
                                  : channel->current_address);
     }
@@ -902,7 +902,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port) {
 
 // Helper to write a 16-bit value byte-by-byte using the flip-flop.
 // Note: Writes update both the 'base' and 'current' registers.
-YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
+YAX86_FILE_PRIVATE inline void YDMAWriteRegisterByte(
     YDMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
   if (dma->rw_byte == kDMARegisterMSB) {
     // Second write sets the high byte.
@@ -917,7 +917,7 @@ YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
   *current_reg = *base_reg;
 }
 
-YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -933,10 +933,10 @@ YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
       YDMAChannelState* channel = &dma->channels[channel_index];
 
       if (is_count_register) {
-        DMAWriteRegisterByte(
+        YDMAWriteRegisterByte(
             dma, &channel->base_count, &channel->current_count, value);
       } else {
-        DMAWriteRegisterByte(
+        YDMAWriteRegisterByte(
             dma, &channel->base_address, &channel->current_address, value);
       }
       break;
@@ -987,12 +987,12 @@ YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
     // Master Reset (port 0x0D)
     case kDMAPortMasterReset:
       // A master reset returns the controller to its power-on state, so
-      // unlike DMAInit() this does have to clear what is there. The config is
+      // unlike YDMAInit() this does have to clear what is there. The config is
       // what the host wired up and survives - a reset is the chip's, not the
       // machine's. Members left out of an initializer are zeroed, so naming
       // the one that stays is the whole of it.
       *dma = (YDMAState){.config = dma->config};
-      DMAInit(dma);
+      YDMAInit(dma);
       break;
 
     // Mask Register for all channels (port 0x0F)
@@ -1020,7 +1020,7 @@ YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void DMATransferByte(
+YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
     YDMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;

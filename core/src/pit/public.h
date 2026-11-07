@@ -128,32 +128,32 @@ typedef struct YPITState {
 } YPITState;
 
 // Initializes the PIT to its power-on state.
-YAX86_PUBLIC void PITInit(YPITState* pit);
+YAX86_PUBLIC void YPITInit(YPITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
-YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port);
+YAX86_PUBLIC uint8_t YPITReadPort(YPITState* pit, uint16_t port);
 
 // Handles writes to the PIT's I/O ports (0x40-0x43).
-YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value);
+YAX86_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value);
 
 // Simulates a single tick of the PIT's input clock. This method should be
 // invoked at a frequency of 1.193182 MHz for accurate timing.
-YAX86_PUBLIC void PITTick(YPITState* pit);
+YAX86_PUBLIC void YPITTick(YPITState* pit);
 
 enum {
-  // Returned by PITTicksUntilNextEvent() when no channel is counting towards
+  // Returned by YPITTicksUntilNextEvent() when no channel is counting towards
   // anything, so there is nothing to schedule.
   kPITNoEvent = 0x7FFFFFFF,
 };
 
 // Advances the PIT by num_ticks of its input clock. Equivalent to calling
-// PITTick() num_ticks times, but does not take time proportional to num_ticks.
+// YPITTick() num_ticks times, but does not take time proportional to num_ticks.
 //
 // A counter spends nearly all of its life counting down through values that
 // change nothing observable, so those stretches are skipped arithmetically and
 // only the ticks that can change a channel's output are simulated one at a
 // time.
-YAX86_PUBLIC void PITAdvance(YPITState* pit, uint32_t num_ticks);
+YAX86_PUBLIC void YPITAdvance(YPITState* pit, uint32_t num_ticks);
 
 // Returns the number of input clock ticks until the earliest tick that could
 // change any channel's output state, or kPITNoEvent if no channel is counting
@@ -162,6 +162,6 @@ YAX86_PUBLIC void PITAdvance(YPITState* pit, uint32_t num_ticks);
 // This is a lower bound rather than an exact answer. A caller that advances the
 // PIT by this much and finds nothing happened has only done unnecessary work,
 // whereas one that waited longer would miss an edge.
-YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const YPITState* pit);
+YAX86_PUBLIC uint32_t YPITTicksUntilNextEvent(const YPITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H

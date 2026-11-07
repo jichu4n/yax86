@@ -157,7 +157,8 @@ void MainTick(void) {
       (uint32_t)(elapsed_ns * kCPUCyclesPerSecond / kNanosecondsPerSecond);
   while (!g_cpu_stopped && remaining_ticks > 0) {
     const uint32_t start_tick = g_platform.ticks;
-    const YPlatformRunStatus status = PlatformRun(&g_platform, remaining_ticks);
+    const YPlatformRunStatus status =
+        YPlatformRun(&g_platform, remaining_ticks);
     // Unsigned subtraction, so this stays correct across a tick counter wrap.
     const uint32_t consumed_ticks = g_platform.ticks - start_tick;
     remaining_ticks -=
@@ -169,7 +170,7 @@ void MainTick(void) {
     }
     if (status == kPlatformInvalid) {
       // Not fatal here. The 8088 has no invalid opcode exception, so a real
-      // machine would keep going, and CPUTick() has already logged it. The
+      // machine would keep going, and YCPUTick() has already logged it. The
       // offending tick was counted, so resuming makes progress.
       continue;
     }
@@ -187,8 +188,8 @@ void MainTick(void) {
   // Bring the CRT beam up to the current cycle before drawing from it. The
   // platform advances devices only when they have something to do, so without
   // this the blink phase would lag by however long the frame took.
-  PlatformSync(&g_platform);
-  VideoRender(&g_platform.video);  // Update virtual buffer
+  YPlatformSync(&g_platform);
+  YVideoRender(&g_platform.video);  // Update virtual buffer
   DisplayRender();                 // Update screen
 }
 
@@ -270,7 +271,7 @@ int main(int argc, char* argv[]) {
   // it is a background tab's share of a laptop - so it takes the skip.
   config->enable_dos_idle_skip = true;
 
-  if (!PlatformInit(&g_platform)) {
+  if (!YPlatformInit(&g_platform)) {
     fprintf(stderr, "Failed to init platform\n");
     AudioQuit();
     DisplayQuit();
@@ -309,7 +310,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // PlatformInit initializes sub-modules, including video. Video memory comes
+  // YPlatformInit initializes sub-modules, including video. Video memory comes
   // from the config, but the display is ours, so hook up the pixel sink here.
   g_platform.video.config.write_pixels = MainWritePixels;
   g_platform.video.config.begin_render_region = MainBeginRenderRegion;

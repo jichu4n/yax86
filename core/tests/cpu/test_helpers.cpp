@@ -169,7 +169,7 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
         "Interrupt " + to_string(interrupt_number) + " not handled in test");
   };
 
-  CPUInit(&cpu_);
+  YCPUInit(&cpu_);
 }
 
 CPUTestHelper::~CPUTestHelper() {}
@@ -207,7 +207,7 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
   cout << ">> Executing encoded instructions:" << endl;
   for (int i = 0; i < num_instructions; ++i) {
     YCPUInstruction instruction;
-    auto fetch_status = CPUFetchNextInstruction(&cpu_, &instruction);
+    auto fetch_status = YCPUFetchNextInstruction(&cpu_, &instruction);
     if (fetch_status != kFetchSuccess) {
       throw runtime_error(
           "Failed to fetch instruction at IP: " + to_string(*ip) +
@@ -216,7 +216,7 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
     cout << "[" << hex << setw(4) << setfill('0') << (*ip) << "]\t"
          << instruction << endl;
     *ip += instruction.size;
-    auto execute_result = CPUExecuteInstruction(&cpu_, &instruction);
+    auto execute_result = YCPUExecuteInstruction(&cpu_, &instruction);
     if (execute_result != kInstructionExecuted) {
       cout << "Warning: Instruction execution returned result " << dec
            << execute_result << endl;
@@ -226,9 +226,9 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
 
 void CPUTestHelper::CheckFlags(const vector<pair<YCPUFlag, bool> >& flags) {
   for (const auto& it : flags) {
-    EXPECT_EQ(CPUGetFlag(&cpu_, it.first), it.second)
+    EXPECT_EQ(YCPUGetFlag(&cpu_, it.first), it.second)
         << "Flag " << GetFlagName(it.first) << " expected to be "
         << (it.second ? "set" : "not set") << ", but was "
-        << (CPUGetFlag(&cpu_, it.first) ? "set" : "not set");
+        << (YCPUGetFlag(&cpu_, it.first) ? "set" : "not set");
   }
 }

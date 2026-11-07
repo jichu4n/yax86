@@ -38,7 +38,7 @@ typedef struct YPITModeMetadata {
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITUnsupportedMode = {0};
 
 // Handles a channel reaching terminal count.
-YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
+YAX86_FILE_PRIVATE inline void YPITChannelSetOutputState(
     YPITState* pit, YPITChannelState* channel, int channel_index,
     bool new_output_state) {
   // No-op if the output state is unchanged.
@@ -52,7 +52,7 @@ YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
   // On rising edge of channel 0 output state, raise IRQ 0.
   //
   // This is the only effect any channel's output has outside the PIT, which is
-  // why PITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
+  // why YPITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
   // another channel's output an effect here and that has to change with it.
   if (channel_index == kPITChannelTimer && new_output_state &&
       pit->config.raise_irq_0) {
@@ -61,7 +61,7 @@ YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
 }
 
 // Tick handler for Mode 0: Interrupt on Terminal Count.
-YAX86_FILE_PRIVATE void PITMode0HandleTick(
+YAX86_FILE_PRIVATE void YPITMode0HandleTick(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // Since this is a one-shot timer, do nothing if the counter is already 0.
   if (channel->counter == 0) {
@@ -73,19 +73,20 @@ YAX86_FILE_PRIVATE void PITMode0HandleTick(
 
   // If at terminal count, set output high and trigger terminal count.
   if (channel->counter == 0) {
-    PITChannelSetOutputState(pit, channel, channel_index, true);
+    YPITChannelSetOutputState(pit, channel, channel_index, true);
   }
 }
 
 // A counter above 1 cannot reach terminal count on the next tick, so every
 // tick down to 1 is uneventful. A counter already at 0 has finished and never
 // changes again, which the caller detects as no event rather than a skip.
-YAX86_FILE_PRIVATE uint32_t PITMode0SkipTicks(const YPITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+YPITMode0SkipTicks(const YPITChannelState* channel) {
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 0;
 }
 
 YAX86_FILE_PRIVATE uint32_t
-PITMode0TicksUntilEvent(const YPITChannelState* channel) {
+YPITMode0TicksUntilEvent(const YPITChannelState* channel) {
   // A one-shot that has already fired is not counting towards anything.
   return channel->counter == 0 ? kPITNoEvent : (uint32_t)channel->counter;
 }
@@ -93,14 +94,14 @@ PITMode0TicksUntilEvent(const YPITChannelState* channel) {
 // Metadata for Mode 0: Interrupt on Terminal Count.
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode0Metadata = {
     .initial_output_state = false,
-    .handle_tick = PITMode0HandleTick,
+    .handle_tick = YPITMode0HandleTick,
     .counter_step = 1,
-    .skip_ticks = PITMode0SkipTicks,
-    .ticks_until_event = PITMode0TicksUntilEvent,
+    .skip_ticks = YPITMode0SkipTicks,
+    .ticks_until_event = YPITMode0TicksUntilEvent,
 };
 
 // Tick handler for Mode 2: Rate Generator.
-YAX86_FILE_PRIVATE void PITMode2HandleTick(
+YAX86_FILE_PRIVATE void YPITMode2HandleTick(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // Decrement the counter by 1.
   --channel->counter;
@@ -108,12 +109,12 @@ YAX86_FILE_PRIVATE void PITMode2HandleTick(
   switch (channel->counter) {
     case 1:
       // When the counter reaches 1, set output low for one tick.
-      PITChannelSetOutputState(pit, channel, channel_index, false);
+      YPITChannelSetOutputState(pit, channel, channel_index, false);
       break;
     case 0:
       // When the counter reaches 0, reload, set output high again.
       channel->counter = channel->reload_value;
-      PITChannelSetOutputState(pit, channel, channel_index, true);
+      YPITChannelSetOutputState(pit, channel, channel_index, true);
       break;
     default:
       break;
@@ -122,12 +123,13 @@ YAX86_FILE_PRIVATE void PITMode2HandleTick(
 
 // Mode 2 acts when the counter reaches 1 and again when it reaches 0, so every
 // tick down to 2 is uneventful.
-YAX86_FILE_PRIVATE uint32_t PITMode2SkipTicks(const YPITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t
+YPITMode2SkipTicks(const YPITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
 YAX86_FILE_PRIVATE YAX86_HOT uint32_t
-PITMode2TicksUntilEvent(const YPITChannelState* channel) {
+YPITMode2TicksUntilEvent(const YPITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
@@ -136,14 +138,14 @@ PITMode2TicksUntilEvent(const YPITChannelState* channel) {
 // Metadata for Mode 2: Rate Generator.
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode2Metadata = {
     .initial_output_state = true,
-    .handle_tick = PITMode2HandleTick,
+    .handle_tick = YPITMode2HandleTick,
     .counter_step = 1,
-    .skip_ticks = PITMode2SkipTicks,
-    .ticks_until_event = PITMode2TicksUntilEvent,
+    .skip_ticks = YPITMode2SkipTicks,
+    .ticks_until_event = YPITMode2TicksUntilEvent,
 };
 
 // Tick handler for Mode 3: Square Wave Generator.
-YAX86_FILE_PRIVATE void PITMode3HandleTick(
+YAX86_FILE_PRIVATE void YPITMode3HandleTick(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // In Mode 3, the counter decrements by 2 each tick. We reach terminal count
   // when we reach either 0 or wrap around to 0xFFFF.
@@ -154,7 +156,7 @@ YAX86_FILE_PRIVATE void PITMode3HandleTick(
     case 0xFFFF:
       // When the counter reaches terminal count, reload and toggle output.
       channel->counter = channel->reload_value;
-      PITChannelSetOutputState(
+      YPITChannelSetOutputState(
           pit, channel, channel_index, !channel->output_state);
       break;
     default:
@@ -167,12 +169,12 @@ YAX86_FILE_PRIVATE void PITMode3HandleTick(
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
 YAX86_FILE_PRIVATE YAX86_HOT uint32_t
-PITMode3SkipTicks(const YPITChannelState* channel) {
+YPITMode3SkipTicks(const YPITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
 YAX86_FILE_PRIVATE uint32_t
-PITMode3TicksUntilEvent(const YPITChannelState* channel) {
+YPITMode3TicksUntilEvent(const YPITChannelState* channel) {
   // Even counters reach 0 after counter/2 steps, odd ones reach 0xFFFF after
   // (counter+1)/2; the rounding covers both.
   const uint32_t ticks = ((uint32_t)channel->counter + 1) / 2;
@@ -182,10 +184,10 @@ PITMode3TicksUntilEvent(const YPITChannelState* channel) {
 // Metadata for Mode 3: Square Wave Generator.
 YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode3Metadata = {
     .initial_output_state = true,
-    .handle_tick = PITMode3HandleTick,
+    .handle_tick = YPITMode3HandleTick,
     .counter_step = 2,
-    .skip_ticks = PITMode3SkipTicks,
-    .ticks_until_event = PITMode3TicksUntilEvent,
+    .skip_ticks = YPITMode3SkipTicks,
+    .ticks_until_event = YPITMode3TicksUntilEvent,
 };
 
 // Array of mode metadata indexed by mode number.
@@ -198,7 +200,7 @@ YAX86_FILE_PRIVATE const YPITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
-YAX86_PUBLIC void PITInit(YPITState* pit) {
+YAX86_PUBLIC void YPITInit(YPITState* pit) {
   // On the IBM PC, the output pins of all three channels are initially pulled
   // high.
   for (int i = 0; i < kPITNumChannels; ++i) {
@@ -209,7 +211,7 @@ YAX86_PUBLIC void PITInit(YPITState* pit) {
 // Whether a channel in this mode drives its output at the reload frequency.
 // Only modes 2 and 3 oscillate; the others produce a single edge, which a
 // frequency has no way to express.
-YAX86_FILE_PRIVATE inline bool PITModeOscillates(uint8_t mode) {
+YAX86_FILE_PRIVATE inline bool YPITModeOscillates(uint8_t mode) {
   return mode == 2 || mode == 3;
 }
 
@@ -221,7 +223,7 @@ YAX86_FILE_PRIVATE inline bool PITModeOscillates(uint8_t mode) {
 // The frequency describes only how often the output oscillates. Mode 2's
 // narrow output pulse sounds thinner than mode 3's square wave, which a
 // frequency cannot express.
-YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
+YAX86_FILE_PRIVATE inline void YPITNotifySpeakerFrequency(
     YPITState* pit, const YPITChannelState* channel, int channel_index,
     bool has_count) {
   if (channel_index != kPITSpeakerChannel ||
@@ -229,7 +231,7 @@ YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
     return;
   }
   uint32_t frequency = 0;
-  if (has_count && PITModeOscillates(channel->mode)) {
+  if (has_count && YPITModeOscillates(channel->mode)) {
     frequency =
         kPITTickFrequencyHz / (channel->reload_value ? channel->reload_value
                                                      : kPITFallbackReloadValue);
@@ -238,17 +240,17 @@ YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
 }
 
 // Helper function to load the counter and handle side effects.
-YAX86_FILE_PRIVATE inline void PITChannelLoadCounter(
+YAX86_FILE_PRIVATE inline void YPITChannelLoadCounter(
     YPITState* pit, YPITChannelState* channel, int channel_index) {
   // A reload value of 0 is treated as 0x10000 by the hardware.
   // This will wrap to 0 when assigned to the 16-bit counter.
   channel->counter = channel->reload_value;
 
-  PITNotifySpeakerFrequency(pit, channel, channel_index, true);
+  YPITNotifySpeakerFrequency(pit, channel, channel_index, true);
 }
 
 // Helper function to handle a write to a channel's data port.
-YAX86_FILE_PRIVATE inline void PITChannelWritePort(
+YAX86_FILE_PRIVATE inline void YPITChannelWritePort(
     YPITState* pit, YPITChannelState* channel, int channel_index,
     uint8_t value) {
   switch (channel->access_mode) {
@@ -257,12 +259,12 @@ YAX86_FILE_PRIVATE inline void PITChannelWritePort(
       break;
     case kPITAccessLSBOnly:
       channel->reload_value = (channel->reload_value & 0xFF00) | value;
-      PITChannelLoadCounter(pit, channel, channel_index);
+      YPITChannelLoadCounter(pit, channel, channel_index);
       break;
     case kPITAccessMSBOnly:
       channel->reload_value =
           (channel->reload_value & 0x00FF) | ((uint16_t)value << 8);
-      PITChannelLoadCounter(pit, channel, channel_index);
+      YPITChannelLoadCounter(pit, channel, channel_index);
       break;
     case kPITAccessLSBThenMSB:
       switch (channel->rw_byte) {
@@ -276,7 +278,7 @@ YAX86_FILE_PRIVATE inline void PITChannelWritePort(
           channel->reload_value =
               (channel->reload_value & 0x00FF) | ((uint16_t)value << 8);
           channel->rw_byte = kPITByteLSB;
-          PITChannelLoadCounter(pit, channel, channel_index);
+          YPITChannelLoadCounter(pit, channel, channel_index);
           break;
         default:
           // Should not happen - ignore.
@@ -289,7 +291,7 @@ YAX86_FILE_PRIVATE inline void PITChannelWritePort(
   }
 }
 
-YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
   switch (port) {
     case kPITPortControl: {
       // Control word.
@@ -314,13 +316,13 @@ YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
           channel->mode -= 4;
         }
         channel->rw_byte = kPITByteLSB;
-        PITChannelSetOutputState(
+        YPITChannelSetOutputState(
             pit, channel, channel_index,
             kPITModeMetadata[channel->mode]->initial_output_state);
         // A reprogrammed channel is silent until its count arrives, so a tone
         // playing on channel 2 stops here and resumes on the next counter
         // load.
-        PITNotifySpeakerFrequency(pit, channel, channel_index, false);
+        YPITNotifySpeakerFrequency(pit, channel, channel_index, false);
       }
       break;
     }
@@ -330,7 +332,7 @@ YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
       // Data port for a channel.
       int channel_index = port - kPITPortChannel0;
       YPITChannelState* channel = &pit->channels[channel_index];
-      PITChannelWritePort(pit, channel, channel_index, value);
+      YPITChannelWritePort(pit, channel, channel_index, value);
       break;
     }
     default:
@@ -340,7 +342,7 @@ YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
 }
 
 // Helper function to handle a read from a channel's data port.
-YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
+YAX86_FILE_PRIVATE inline uint8_t YPITChannelReadPort(
     YAX86_UNUSED YPITState* pit, YPITChannelState* channel,
     YAX86_UNUSED int channel_index) {
   uint16_t value = channel->latch_active ? channel->latch : channel->counter;
@@ -382,7 +384,7 @@ YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
   return result;
 }
 
-YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port) {
+YAX86_PUBLIC uint8_t YPITReadPort(YPITState* pit, uint16_t port) {
   switch (port) {
     case kPITPortChannel0:
     case kPITPortChannel1:
@@ -390,7 +392,7 @@ YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port) {
       // Data port for a channel.
       int channel_index = port - kPITPortChannel0;
       YPITChannelState* channel = &pit->channels[channel_index];
-      return PITChannelReadPort(pit, channel, channel_index);
+      return YPITChannelReadPort(pit, channel, channel_index);
     }
     default:
       // Invalid port - return 0xFF as is common for reads from unused ports.
@@ -398,7 +400,7 @@ YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void PITTick(YPITState* pit) {
+YAX86_PUBLIC YAX86_HOT void YPITTick(YPITState* pit) {
   YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     if (channel->mode >= kPITNumModes) {
@@ -419,7 +421,7 @@ YAX86_PUBLIC YAX86_HOT void PITTick(YPITState* pit) {
 // applied to the counter arithmetically; every tick that could change it still
 // goes through the handler, so there is only one description of what a tick
 // does.
-YAX86_FILE_PRIVATE void PITAdvanceChannel(
+YAX86_FILE_PRIVATE void YPITAdvanceChannel(
     YPITState* pit, YPITChannelState* channel, int channel_index,
     uint32_t num_ticks) {
   if (channel->mode >= kPITNumModes) {
@@ -456,23 +458,23 @@ YAX86_FILE_PRIVATE void PITAdvanceChannel(
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void PITAdvance(YPITState* pit, uint32_t num_ticks) {
+YAX86_PUBLIC YAX86_HOT void YPITAdvance(YPITState* pit, uint32_t num_ticks) {
   if (num_ticks == 0) {
     return;
   }
   YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
-    PITAdvanceChannel(pit, channel, i, num_ticks);
+    YPITAdvanceChannel(pit, channel, i, num_ticks);
   }
 }
 
-YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const YPITState* pit) {
+YAX86_PUBLIC uint32_t YPITTicksUntilNextEvent(const YPITState* pit) {
   uint32_t earliest = kPITNoEvent;
   const YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     // Only channel 0 is worth waking up for. Its output is the one thing that
-    // leaves the chip - PITChannelSetOutputState() raises IRQ 0 from it - while
-    // channels 1 and 2 do nothing on a transition but record it, and that
+    // leaves the chip - YPITChannelSetOutputState() raises IRQ 0 from it -
+    // while channels 1 and 2 do nothing on a transition but record it, and that
     // record is recomputed from scratch whenever the PIT is advanced. Every
     // path that reads it advances the PIT first, so there is no state to miss.
     //

@@ -4,57 +4,57 @@
 
 TEST(SNPrintFTest, BasicString) {
   char buffer[100];
-  int ret = SNPrintF(buffer, sizeof(buffer), "Hello World");
+  int ret = YSNPrintF(buffer, sizeof(buffer), "Hello World");
   EXPECT_EQ(ret, 11);
   EXPECT_STREQ(buffer, "Hello World");
 }
 
 TEST(SNPrintFTest, BasicInt) {
   char buffer[100];
-  int ret = SNPrintF(buffer, sizeof(buffer), "Value: %d", 123);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "Value: %d", 123);
   EXPECT_EQ(ret, 10);
   EXPECT_STREQ(buffer, "Value: 123");
 }
 
 TEST(SNPrintFTest, NegativeInt) {
   char buffer[100];
-  int ret = SNPrintF(buffer, sizeof(buffer), "Value: %d", -123);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "Value: %d", -123);
   EXPECT_EQ(ret, 11);
   EXPECT_STREQ(buffer, "Value: -123");
 }
 
 TEST(SNPrintFTest, Hex) {
   char buffer[100];
-  int ret = SNPrintF(buffer, sizeof(buffer), "Hex: %x", 0xABCD);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "Hex: %x", 0xABCD);
   EXPECT_EQ(ret, 9);
   EXPECT_STREQ(buffer, "Hex: abcd");
 
-  ret = SNPrintF(buffer, sizeof(buffer), "HEX: %X", 0xABCD);
+  ret = YSNPrintF(buffer, sizeof(buffer), "HEX: %X", 0xABCD);
   EXPECT_EQ(ret, 9);
   EXPECT_STREQ(buffer, "HEX: ABCD");
 }
 
 TEST(SNPrintFTest, Padding) {
   char buffer[100];
-  int ret = SNPrintF(buffer, sizeof(buffer), "%05d", 123);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "%05d", 123);
   EXPECT_EQ(ret, 5);
   EXPECT_STREQ(buffer, "00123");
 
-  ret = SNPrintF(buffer, sizeof(buffer), "%5d", 123);
+  ret = YSNPrintF(buffer, sizeof(buffer), "%5d", 123);
   EXPECT_EQ(ret, 5);
   EXPECT_STREQ(buffer, "  123");
 }
 
 TEST(SNPrintFTest, NegativePadding) {
   char buffer[100];
-  int ret = SNPrintF(buffer, sizeof(buffer), "%05d", -12);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "%05d", -12);
   EXPECT_EQ(ret, 5);
   EXPECT_STREQ(buffer, "-0012");
 }
 
 TEST(SNPrintFTest, Truncation) {
   char buffer[5];
-  int ret = SNPrintF(buffer, sizeof(buffer), "Hello World");
+  int ret = YSNPrintF(buffer, sizeof(buffer), "Hello World");
   EXPECT_EQ(ret, 11);            // Returns needed size
   EXPECT_STREQ(buffer, "Hell");  // Truncated
 }
@@ -62,7 +62,7 @@ TEST(SNPrintFTest, Truncation) {
 TEST(SNPrintFTest, Pointer) {
   char buffer[100];
   void* ptr = (void*)0x1234;
-  int ret = SNPrintF(buffer, sizeof(buffer), "%p", ptr);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "%p", ptr);
   EXPECT_GT(ret, 2);
   // Check for 0x prefix
   EXPECT_EQ(buffer[0], '0');
@@ -79,7 +79,7 @@ TEST(SNPrintFTest, Pointer) {
 TEST(SNPrintFTest, Modifiers) {
   char buffer[100];
   long val = 1234567890L;
-  int ret = SNPrintF(buffer, sizeof(buffer), "%ld", val);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "%ld", val);
   EXPECT_EQ(ret, 10);
   EXPECT_STREQ(buffer, "1234567890");
 }
@@ -87,14 +87,14 @@ TEST(SNPrintFTest, Modifiers) {
 TEST(SNPrintFTest, SizeT) {
   char buffer[100];
   size_t val = 12345;
-  int ret = SNPrintF(buffer, sizeof(buffer), "%zu", val);
+  int ret = YSNPrintF(buffer, sizeof(buffer), "%zu", val);
   EXPECT_EQ(ret, 5);
   EXPECT_STREQ(buffer, "12345");
 }
 
 TEST(SNPrintFTest, StringPadding) {
   char buffer[100];
-  int ret = SNPrintF(buffer, sizeof(buffer), "%5s", "Hi");
+  int ret = YSNPrintF(buffer, sizeof(buffer), "%5s", "Hi");
   EXPECT_EQ(ret, 5);
   EXPECT_STREQ(buffer, "   Hi");
 }

@@ -406,16 +406,16 @@ std::string RunMooTest(
   YCPUDecodeCacheEntry decode_cache[kHardwareTestDecodeCacheEntries] = {};
   cpu.config.decode_cache = decode_cache;
   cpu.config.decode_cache_num_entries = kHardwareTestDecodeCacheEntries;
-  CPUInit(&cpu);
+  YCPUInit(&cpu);
   // Hands the CPU the whole of memory to read and write by indexing, for the
   // same reason the fetch window above is supplied: anything gated on a
   // host-supplied capability is unreachable in this suite unless the suite
   // supplies it, and this suite is the strongest check the operand path has.
   // The path taken when a host supplies no window is what the mock configs in
   // cpu_test.cpp use.
-  CPUSetDirectDataWindow(&cpu, g_memory, kMemorySize);
+  YCPUSetDirectDataWindow(&cpu, g_memory, kMemorySize);
   // The tick below is given a budget, for the same reason again: it puts the
-  // test CPUTick() makes after every instruction - whether to carry on into
+  // test YCPUTick() makes after every instruction - whether to carry on into
   // the next - against all three million encodings.
   //
   // A second instruction is out of reach by construction rather than by luck,
@@ -456,7 +456,7 @@ std::string RunMooTest(
     }
   }
 
-  CPUTick(&cpu, UINT16_MAX);
+  YCPUTick(&cpu, UINT16_MAX);
 
   char message[512];
   for (int i = 0; i < kNumMooRegisters; ++i) {

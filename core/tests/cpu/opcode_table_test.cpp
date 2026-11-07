@@ -16,7 +16,7 @@ TEST_F(OpcodeTableTest, MetadataIntegrity) {
   for (int i = 0; i < 256; ++i) {
     const YCPUOpcodeMetadata& metadata = opcode_table[i];
 
-    if (metadata.handler == ExecuteInvalidOpcode) {
+    if (metadata.handler == YCPUExecuteInvalidOpcode) {
       continue;
     }
 
@@ -43,9 +43,9 @@ TEST_F(OpcodeTableTest, InstructionPrefixMetadataIntegrity) {
   };
   for (const auto& prefix : prefixes) {
     const YCPUOpcodeMetadata& metadata = opcode_table[prefix];
-    EXPECT_EQ(metadata.handler, ExecuteInvalidOpcode)
+    EXPECT_EQ(metadata.handler, YCPUExecuteInvalidOpcode)
         << "Prefix opcode 0x" << hex << prefix
-        << " should be handled by ExecuteInvalidOpcode";
+        << " should be handled by YCPUExecuteInvalidOpcode";
   }
 }
 
@@ -60,13 +60,14 @@ TEST_F(OpcodeTableTest, EveryOpcodeByteDecodes) {
   for (int opcode = 0; opcode < 256; ++opcode) {
     const bool is_prefix =
         find(begin(kPrefixes), end(kPrefixes), opcode) != end(kPrefixes);
-    EXPECT_EQ(opcode_table[opcode].handler == ExecuteInvalidOpcode, is_prefix)
+    EXPECT_EQ(
+        opcode_table[opcode].handler == YCPUExecuteInvalidOpcode, is_prefix)
         << "opcode 0x" << hex << opcode;
   }
 }
 
 TEST_F(OpcodeTableTest, EveryEntryHasAHandler) {
-  // CPUTick() calls through the handler without checking it first, which is
+  // YCPUTick() calls through the handler without checking it first, which is
   // only safe because every entry in the table has one. A new entry that left
   // the field out would be a null call rather than an invalid instruction.
   for (int opcode = 0; opcode < 256; ++opcode) {
