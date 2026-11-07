@@ -49,16 +49,14 @@ static const char* MainLogLevelName(YLogLevel level) {
 
 // Log sink. Under Emscripten, stdout is routed to the browser console.
 static void MainWriteLogLine(
-    YAX86_UNUSED void* context, const YLogModule* module, YLogLevel level,
-    uint64_t tick, const char* message, YAX86_UNUSED size_t length) {
+    Y_UNUSED void* context, const YLogModule* module, YLogLevel level,
+    uint64_t tick, const char* message, Y_UNUSED size_t length) {
   printf(
       "[%llu] %-5s %-8s %s\n", (unsigned long long)tick,
       MainLogLevelName(level), module->name, message);
 }
 
-static uint64_t MainGetTick(YAX86_UNUSED void* context) {
-  return g_platform.ticks;
-}
+static uint64_t MainGetTick(Y_UNUSED void* context) { return g_platform.ticks; }
 
 enum {
   // Nanoseconds in a second, for turning elapsed real time into guest cycles.
@@ -91,23 +89,23 @@ static YVideoAdapter g_video_adapter = Y_VIDEO_ADAPTER_CGA;
 static const YVideoAdapterMetadata* g_video_adapter_metadata = NULL;
 
 static void MainWritePixels(
-    YAX86_UNUSED struct YVideoState* video, YVideoPosition origin,
+    Y_UNUSED struct YVideoState* video, YVideoPosition origin,
     const YVideoRGB* pixels, uint8_t count) {
   DisplayPutPixels(origin.x, origin.y, pixels, count);
 }
 
 static void MainBeginRenderRegion(
-    YAX86_UNUSED struct YVideoState* video, YVideoRegion region) {
+    Y_UNUSED struct YVideoState* video, YVideoRegion region) {
   DisplayBeginRegion(
       region.origin.x, region.origin.y, region.width, region.height);
 }
 
-static void MainEndRenderRegion(YAX86_UNUSED struct YVideoState* video) {
+static void MainEndRenderRegion(Y_UNUSED struct YVideoState* video) {
   DisplayEndRegion();
 }
 
 static void MainSetPCSpeakerFrequency(
-    YAX86_UNUSED YPlatformState* platform, uint32_t frequency_hz) {
+    Y_UNUSED YPlatformState* platform, uint32_t frequency_hz) {
   AudioSetFrequency(frequency_hz);
 }
 
@@ -177,7 +175,7 @@ void MainTick(void) {
     }
     // Anything else means the machine cannot make progress. Stop ticking it,
     // but keep rendering so the final screen stays up.
-    YAX86_LOG(
+    Y_LOG(
         &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
         "execution stopped at %04X:%04X with status %d",
         g_platform.cpu.registers[Y_CPU_CS], g_platform.cpu.registers[Y_CPU_IP],
@@ -279,7 +277,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  YAX86_LOG(
+  Y_LOG(
       &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
       "yax86 started with %u KB of conventional memory",
       config->physical_memory_size / 1024);
@@ -287,24 +285,24 @@ int main(int argc, char* argv[]) {
   // Mount the boot floppy. Without one the BIOS still runs, so a failure here
   // is reported but not fatal.
   if (FloppyMount(&g_platform, floppy_path)) {
-    YAX86_LOG(
+    Y_LOG(
         &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
         "mounted %s in floppy drive A", floppy_path);
   } else {
-    YAX86_LOG(
+    Y_LOG(
         &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
         "floppy drive A is empty - could not mount %s", floppy_path);
   }
 
   if (attach_hard_disk) {
     if (HardDiskAttach(&g_platform, hard_disk_path)) {
-      YAX86_LOG(
+      Y_LOG(
           &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
           "attached a %u MB hard disk (%s)",
           (unsigned)(Y_HDC_GEOMETRY_10MB_IMAGE_SIZE / (1024 * 1024)),
           hard_disk_path ? hard_disk_path : "blank");
     } else {
-      YAX86_LOG(
+      Y_LOG(
           &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
           "no hard disk attached - could not mount %s",
           hard_disk_path ? hard_disk_path : "blank disk");

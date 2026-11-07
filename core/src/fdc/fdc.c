@@ -3,8 +3,8 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define YAX86_FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config.logger, &YFDCLogModule, level, __VA_ARGS__)
+#define Y_FDC_LOG(level, ...) \
+  Y_LOG(fdc->config.logger, &YFDCLogModule, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -59,15 +59,15 @@ typedef struct YFDCCommandMetadata {
 
 // Helper to raise an IRQ6 if the callback is set and interrupts are enabled in
 // DOR.
-YAX86_FILE_PRIVATE inline void YFDCRaiseIRQ6(YFDCState* fdc) {
+Y_FILE_PRIVATE inline void YFDCRaiseIRQ6(YFDCState* fdc) {
   if (fdc->config.raise_irq6 && (fdc->dor & Y_FDC_DOR_INTERRUPT_ENABLE)) {
     fdc->config.raise_irq6(fdc->config.context);
   }
 }
 
 // Transition into execution phase.
-YAX86_FILE_PRIVATE inline void YFDCStartCommandExecution(YFDCState* fdc) {
-  YAX86_FDC_LOG(
+Y_FILE_PRIVATE inline void YFDCStartCommandExecution(YFDCState* fdc) {
+  Y_FDC_LOG(
       Y_LOG_LEVEL_DEBUG, "executing command %02X with %u parameter bytes",
       fdc->current_command ? fdc->current_command->opcode : 0,
       (unsigned)YFDCCommandBufferLength(&fdc->command_buffer) - 1);
@@ -76,8 +76,8 @@ YAX86_FILE_PRIVATE inline void YFDCStartCommandExecution(YFDCState* fdc) {
 }
 
 // Transition into result phase after command execution.
-YAX86_FILE_PRIVATE inline void YFDCFinishCommandExecution(YFDCState* fdc) {
-  YAX86_FDC_LOG(
+Y_FILE_PRIVATE inline void YFDCFinishCommandExecution(YFDCState* fdc) {
+  Y_FDC_LOG(
       Y_LOG_LEVEL_DEBUG, "command finished with %u result bytes, st0 %02X",
       (unsigned)YFDCResultBufferLength(&fdc->result_buffer),
       YFDCResultBufferLength(&fdc->result_buffer) > 0
@@ -94,7 +94,7 @@ YAX86_FILE_PRIVATE inline void YFDCFinishCommandExecution(YFDCState* fdc) {
 }
 
 // Helper to perform a seek operation (for Seek and Recalibrate).
-YAX86_FILE_PRIVATE void YFDCPerformSeek(
+Y_FILE_PRIVATE void YFDCPerformSeek(
     YFDCState* fdc, uint8_t drive_index, uint8_t target_track) {
   YFDCDriveState* drive = &fdc->drives[drive_index];
 
@@ -132,7 +132,7 @@ YAX86_FILE_PRIVATE void YFDCPerformSeek(
 // (Head 1, the bottom side) before moving to the next track.
 // In other words, the layout is an array of
 // [num_tracks][num_heads][num_sectors_per_track].
-YAX86_FILE_PRIVATE inline uint32_t YFDCComputeOffset(
+Y_FILE_PRIVATE inline uint32_t YFDCComputeOffset(
     YFDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
     uint16_t sector_offset) {
   if (head >= format.num_heads || track >= format.num_tracks || sector == 0 ||
@@ -156,7 +156,7 @@ YAX86_FILE_PRIVATE inline uint32_t YFDCComputeOffset(
 }
 
 // Helper to finish a read/write command.
-YAX86_FILE_PRIVATE void YFDCFinishReadWrite(
+Y_FILE_PRIVATE void YFDCFinishReadWrite(
     YFDCState* fdc, uint8_t st0, uint8_t st1, uint8_t st2) {
   YFDCResultBufferAppend(&fdc->result_buffer, &st0);
   YFDCResultBufferAppend(&fdc->result_buffer, &st1);
@@ -171,7 +171,7 @@ YAX86_FILE_PRIVATE void YFDCFinishReadWrite(
 }
 
 // Handler for Write Data command.
-YAX86_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -312,7 +312,7 @@ YAX86_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
 }
 
 // Handler for Read Data command.
-YAX86_FILE_PRIVATE YAX86_HOT void YFDCHandleReadData(YFDCState* fdc) {
+Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
@@ -455,14 +455,14 @@ YAX86_FILE_PRIVATE YAX86_HOT void YFDCHandleReadData(YFDCState* fdc) {
 }
 
 // Handler for Recalibrate command.
-YAX86_FILE_PRIVATE void YFDCHandleRecalibrate(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleRecalibrate(YFDCState* fdc) {
   // Recalibrate command has one parameter byte: drive number (0-3).
   uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
   YFDCPerformSeek(fdc, drive_index, 0);
 }
 
 // Handler for Seek command.
-YAX86_FILE_PRIVATE void YFDCHandleSeek(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleSeek(YFDCState* fdc) {
   // Seek command parameters:
   // Byte 1: Drive number (0-3) and Head address (ignored for seek).
   // Byte 2: New Cylinder Number (NCN).
@@ -472,14 +472,14 @@ YAX86_FILE_PRIVATE void YFDCHandleSeek(YFDCState* fdc) {
 }
 
 // Handler for Specify command.
-YAX86_FILE_PRIVATE void YFDCHandleSpecify(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleSpecify(YFDCState* fdc) {
   // We don't currently support changing timings or non-DMA mode, so we just
   // ignore the parameters.
   YFDCFinishCommandExecution(fdc);
 }
 
 // Handler for Sense Interrupt Status command.
-YAX86_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
+Y_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
   // Check for any pending interrupts.
   for (int i = 0; i < Y_FDC_NUM_DRIVES; ++i) {
     YFDCDriveState* drive = &fdc->drives[i];
@@ -505,7 +505,7 @@ YAX86_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
 
 // List of supported FDC commands.
 // The opcodes here represent the base 5-bit command.
-YAX86_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
+Y_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
     // Read a Track
     {.opcode = Y_FDC_CMD_READ_TRACK, .num_param_bytes = 8, .handler = NULL},
     // Specify
@@ -561,11 +561,11 @@ YAX86_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
 // Nothing to do: an FDC powers on with every field at zero, and the caller has
 // already zeroed the state. Kept so that every module is brought up the same
 // way, and so that a non-zero default acquired later has somewhere to go.
-YAX86_PUBLIC void YFDCInit(YAX86_UNUSED YFDCState* fdc) {}
+Y_PUBLIC void YFDCInit(Y_UNUSED YFDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
-YAX86_FILE_PRIVATE const YFDCCommandMetadata* YFDCFindCommandMetadata(
+Y_FILE_PRIVATE const YFDCCommandMetadata* YFDCFindCommandMetadata(
     uint8_t opcode) {
   for (size_t i = 0;
        i < sizeof(YFDCCommandMetadataTable) / sizeof(YFDCCommandMetadata);
@@ -577,7 +577,7 @@ YAX86_FILE_PRIVATE const YFDCCommandMetadata* YFDCFindCommandMetadata(
   return NULL;
 }
 
-YAX86_FILE_PRIVATE uint8_t YFDCReadMSRPort(YFDCState* fdc) {
+Y_FILE_PRIVATE uint8_t YFDCReadMSRPort(YFDCState* fdc) {
   uint8_t msr = 0;
   switch (fdc->phase) {
     case Y_FDC_PHASE_IDLE:
@@ -604,7 +604,7 @@ YAX86_FILE_PRIVATE uint8_t YFDCReadMSRPort(YFDCState* fdc) {
   return msr;
 }
 
-YAX86_FILE_PRIVATE uint8_t YFDCReadDataPort(YFDCState* fdc) {
+Y_FILE_PRIVATE uint8_t YFDCReadDataPort(YFDCState* fdc) {
   switch (fdc->phase) {
     case Y_FDC_PHASE_EXECUTION:
       // DMA or Polling read during execution.
@@ -634,7 +634,7 @@ YAX86_FILE_PRIVATE uint8_t YFDCReadDataPort(YFDCState* fdc) {
   }
 }
 
-YAX86_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port) {
+Y_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port) {
   switch (port) {
     case Y_FDC_PORT_MSR:  // Main Status Register (MSR)
       return YFDCReadMSRPort(fdc);
@@ -646,7 +646,7 @@ YAX86_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port) {
   }
 }
 
-YAX86_FILE_PRIVATE void YFDCWriteDORPort(YFDCState* fdc, uint8_t value) {
+Y_FILE_PRIVATE void YFDCWriteDORPort(YFDCState* fdc, uint8_t value) {
   uint8_t old_dor = fdc->dor;
   fdc->dor = value;
 
@@ -674,7 +674,7 @@ YAX86_FILE_PRIVATE void YFDCWriteDORPort(YFDCState* fdc, uint8_t value) {
   }
 }
 
-YAX86_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
+Y_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
   switch (fdc->phase) {
     case Y_FDC_PHASE_IDLE: {
       // This is the first byte of a new command.
@@ -683,7 +683,7 @@ YAX86_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
       fdc->current_command = YFDCFindCommandMetadata(opcode);
 
       if (!fdc->current_command) {
-        YAX86_FDC_LOG(Y_LOG_LEVEL_WARN, "invalid command opcode %02X", opcode);
+        Y_FDC_LOG(Y_LOG_LEVEL_WARN, "invalid command opcode %02X", opcode);
         // Invalid command. Set up the result phase with an error.
         YFDCResultBufferClear(&fdc->result_buffer);
         uint8_t status = Y_FDC_ST0_INVALID_COMMAND;
@@ -739,7 +739,7 @@ YAX86_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
+Y_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
     case Y_FDC_PORT_DOR:  // Digital Output Register
       YFDCWriteDORPort(fdc, value);
@@ -756,11 +756,9 @@ YAX86_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void YFDCHandleTC(YFDCState* fdc) {
-  fdc->transfer.tc_received = true;
-}
+Y_PUBLIC void YFDCHandleTC(YFDCState* fdc) { fdc->transfer.tc_received = true; }
 
-YAX86_PUBLIC void YFDCInsertDisk(
+Y_PUBLIC void YFDCInsertDisk(
     YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format) {
   if (drive >= Y_FDC_NUM_DRIVES) {
     return;
@@ -772,7 +770,7 @@ YAX86_PUBLIC void YFDCInsertDisk(
   drive_state->track = 0;
 }
 
-YAX86_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
+Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
   if (drive >= Y_FDC_NUM_DRIVES) {
     return;
   }
@@ -781,7 +779,7 @@ YAX86_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
   drive_state->format = NULL;
 }
 
-YAX86_PUBLIC void YFDCTick(YFDCState* fdc) {
+Y_PUBLIC void YFDCTick(YFDCState* fdc) {
   if (fdc->phase != Y_FDC_PHASE_EXECUTION) {
     return;
   }

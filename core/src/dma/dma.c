@@ -2,16 +2,16 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define YAX86_DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)
+#define Y_DMA_LOG(level, ...) \
+  Y_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)
 
-YAX86_PUBLIC void YDMAInit(YDMAState* dma) {
+Y_PUBLIC void YDMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
 
 // Helper to read a 16-bit value byte-by-byte using the flip-flop.
-YAX86_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
+Y_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
     YDMAState* dma, uint16_t value) {
   uint8_t byte;
   if (dma->rw_byte == Y_DMA_REGISTER_MSB) {
@@ -24,7 +24,7 @@ YAX86_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
   return byte;
 }
 
-YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
+Y_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case Y_DMA_PORT_CHANNEL0_ADDRESS:
@@ -58,7 +58,7 @@ YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
 
 // Helper to write a 16-bit value byte-by-byte using the flip-flop.
 // Note: Writes update both the 'base' and 'current' registers.
-YAX86_FILE_PRIVATE inline void YDMAWriteRegisterByte(
+Y_FILE_PRIVATE inline void YDMAWriteRegisterByte(
     YDMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
   if (dma->rw_byte == Y_DMA_REGISTER_MSB) {
     // Second write sets the high byte.
@@ -73,7 +73,7 @@ YAX86_FILE_PRIVATE inline void YDMAWriteRegisterByte(
   *current_reg = *base_reg;
 }
 
-YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
+Y_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case Y_DMA_PORT_CHANNEL0_ADDRESS:
@@ -119,7 +119,7 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
         // Unmasking is the point at which a channel becomes live, so the
         // address, count and page registers are final here.
         const YDMAChannelState* channel = &dma->channels[channel_index];
-        YAX86_DMA_LOG(
+        Y_DMA_LOG(
             Y_LOG_LEVEL_DEBUG,
             "channel %d enabled: address %02X:%04X count %04X mode %02X",
             channel_index, channel->page_register, channel->current_address,
@@ -176,8 +176,7 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
-    YDMAState* dma, uint8_t channel_index) {
+Y_PUBLIC Y_HOT void YDMATransferByte(YDMAState* dma, uint8_t channel_index) {
   if (channel_index >= Y_DMA_NUM_CHANNELS) {
     return;
   }

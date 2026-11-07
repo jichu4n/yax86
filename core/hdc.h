@@ -19,11 +19,11 @@ extern "C" {
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
-#define YAX86_PUBLIC
+#define Y_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
 // source file: one copy per translation unit.
-#define YAX86_PUBLIC_HEADER static
+#define Y_PUBLIC_HEADER static
 
 // Visible to other files within the same module, but not publicly to users of
 // the bundled library.
@@ -34,25 +34,25 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_MODULE_PRIVATE static
+#define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_MODULE_PRIVATE
+#define Y_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
 // utilities (like snprintf) that are included into multiple module bundles.
-#define YAX86_MODULE_PRIVATE_HEADER static
+#define Y_MODULE_PRIVATE_HEADER static
 
 // Visible only within the source file that defines it.
-#define YAX86_FILE_PRIVATE static
+#define Y_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_UNUSED __attribute__((unused))
+#define Y_UNUSED __attribute__((unused))
 #else
-#define YAX86_UNUSED
+#define Y_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function out of line.
@@ -61,25 +61,25 @@ extern "C" {
 // with few registers, folding a large callee into an already register-hungry
 // caller makes both spill.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_NOINLINE __attribute__((noinline))
+#define Y_NOINLINE __attribute__((noinline))
 #else
-#define YAX86_NOINLINE
+#define Y_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function inlined.
 //
-// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// Like Y_NOINLINE, only worth reaching for against a measurement. The case
 // it exists for is a small helper on the hot path that the compiler inlines
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
 #if !defined(YAX86_IMPLEMENTATION)
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 #else
-#define YAX86_ALWAYS_INLINE inline
+#define Y_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -91,18 +91,18 @@ extern "C" {
 // path in SRAM instead takes that cache out of the picture.
 //
 // Define it before including this header, or on the command line.
-#ifndef YAX86_HOT
-#define YAX86_HOT
-#endif  // YAX86_HOT
+#ifndef Y_HOT
+#define Y_HOT
+#endif  // Y_HOT
 
 // The same, for data rather than code.
 //
-// Separate from YAX86_HOT because a compiler will not put executable code and
+// Separate from Y_HOT because a compiler will not put executable code and
 // read-only data in one section, and because a target may well want to place
 // them differently even where it could.
-#ifndef YAX86_HOT_DATA
-#define YAX86_HOT_DATA
-#endif  // YAX86_HOT_DATA
+#ifndef Y_HOT_DATA
+#define Y_HOT_DATA
+#endif  // Y_HOT_DATA
 
 #endif  // YAX86_UTIL_COMMON_H
 
@@ -141,15 +141,15 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
-    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) Y_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
-    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
+    char* buffer, size_t size, const char* format, ...) Y_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t
+Y_MODULE_PRIVATE_HEADER size_t
 YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
@@ -158,7 +158,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -179,7 +179,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
@@ -231,7 +231,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
@@ -382,7 +382,7 @@ YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -466,7 +466,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
+Y_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -510,7 +510,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void YLoggerInit(
+Y_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void YLoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
+Y_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
+Y_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= YLogModuleMask(module);
@@ -536,23 +536,23 @@ YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
+Y_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
+// Format and emit a log message. Prefer the Y_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
-    const char* format, ...) YAX86_UNUSED;
+    const char* format, ...) Y_UNUSED;
 
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
-  // Callers normally go through YAX86_LOG, which has already checked this, but
+  // Callers normally go through Y_LOG, which has already checked this, but
   // YLoggerWrite is also callable directly.
   if (!YLoggerIsEnabled(logger, module, level)) {
     return;
@@ -585,7 +585,7 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                 \
+#define Y_LOG(logger, module, level, ...)                     \
   do {                                                        \
     if (YLoggerIsEnabled((logger), (module), (level))) {      \
       YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
@@ -634,7 +634,7 @@ enum {
 };
 
 // Log module for the HDC.
-YAX86_PUBLIC_HEADER const YLogModule YHDCLogModule = {
+Y_PUBLIC_HEADER const YLogModule YHDCLogModule = {
     .id = Y_HDC_LOG_MODULE_ID,
     .name = "HDC",
 };
@@ -784,7 +784,7 @@ enum {
       Y_HDC_GEOMETRY_10MB_NUM_HEADS *
       Y_HDC_GEOMETRY_10MB_NUM_SECTORS_PER_TRACK * Y_HDC_SECTOR_SIZE,
 };
-YAX86_PUBLIC_HEADER const YHDCDriveGeometry YHDCGeometry10MB = {
+Y_PUBLIC_HEADER const YHDCDriveGeometry YHDCGeometry10MB = {
     .num_cylinders = Y_HDC_GEOMETRY_10MB_NUM_CYLINDERS,
     .num_heads = Y_HDC_GEOMETRY_10MB_NUM_HEADS,
     .num_sectors_per_track = Y_HDC_GEOMETRY_10MB_NUM_SECTORS_PER_TRACK,
@@ -879,36 +879,36 @@ typedef struct YHDCState {
 } YHDCState;
 
 // Initializes the HDC to its power-on state.
-YAX86_PUBLIC void YHDCInit(YHDCState* hdc);
+Y_PUBLIC void YHDCInit(YHDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
-YAX86_PUBLIC uint32_t YHDCGetOptionROMSize(void);
+Y_PUBLIC uint32_t YHDCGetOptionROMSize(void);
 
 // Returns a pointer to the option ROM image, YHDCGetOptionROMSize() bytes of
 // it. The image is a constant array compiled into the library, so the platform
 // maps it directly rather than reading it a byte at a time through a callback.
-YAX86_PUBLIC const uint8_t* YHDCGetOptionROMData(void);
+Y_PUBLIC const uint8_t* YHDCGetOptionROMData(void);
 
 // Handles reads from the HDC's I/O ports.
-YAX86_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port);
+Y_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port);
 
 // Handles writes to the HDC's I/O ports.
-YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value);
+Y_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value);
 
 // Attaches a drive with the given geometry. Drive 0 is the master and drive 1
 // is the slave.
-YAX86_PUBLIC void YHDCAttachDrive(
+Y_PUBLIC void YHDCAttachDrive(
     YHDCState* hdc, uint8_t drive, const YHDCDriveGeometry* geometry);
 
 // Detaches the drive in the given slot.
-YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive);
+Y_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive);
 
 // Maps an I/O port offset from Y_HDC_PORT_BASE to the task file register it
 // reaches. An XT-IDE rev 2 card crosses address lines A0 and A3, so a register
 // is reached at the port offset with bits 0 and 3 swapped - the status
 // register, ATA register 7, is read at port offset 0xE. The mapping is its own
 // inverse.
-YAX86_PUBLIC_HEADER inline uint8_t YHDCPortOffsetToRegister(uint8_t offset) {
+Y_PUBLIC_HEADER inline uint8_t YHDCPortOffsetToRegister(uint8_t offset) {
   return (uint8_t)((offset & ~0x09) | ((offset & 0x01) << 3) |
                    ((offset >> 3) & 0x01));
 }
@@ -969,7 +969,7 @@ extern const uint8_t YHDCOptionROMData[Y_HDC_OPTION_ROM_DATA_SIZE];
 #include "../util/common.h"
 #endif // YAX86_HDC_BUNDLE_H
 
-YAX86_MODULE_PRIVATE const uint8_t YHDCOptionROMData[] = {
+Y_MODULE_PRIVATE const uint8_t YHDCOptionROMData[] = {
 0x55,0xaa,0x18,0xe9,0xe4,0x0a,0x58,0x55,0x42,0x32,0x31,0x30,0x2d,0x3d,0x58,0x54,
 0x49,0x44,0x45,0x20,0x55,0x6e,0x69,0x76,0x65,0x72,0x73,0x61,0x6c,0x20,0x42,0x49,
 0x4f,0x53,0x20,0x28,0x58,0x54,0x29,0x3d,0x2d,0x00,0x00,0x00,0x72,0x36,0x33,0x31,
@@ -1755,8 +1755,8 @@ YAX86_MODULE_PRIVATE const uint8_t YHDCOptionROMData[] = {
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define YAX86_HDC_LOG(level, ...) \
-  YAX86_LOG(hdc->config.logger, &YHDCLogModule, level, __VA_ARGS__)
+#define Y_HDC_LOG(level, ...) \
+  Y_LOG(hdc->config.logger, &YHDCLogModule, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -1823,24 +1823,24 @@ enum {
   Y_HDC_IDENTIFY_NUM_ECC_BYTES = 4,
 };
 
-YAX86_FILE_PRIVATE const char* const YHDCModelNumber = "YAX86 HARD DISK";
-YAX86_FILE_PRIVATE const char* const YHDCSerialNumber = "YAX86-0000001";
-YAX86_FILE_PRIVATE const char* const YHDCFirmwareRevision = "1.0";
+Y_FILE_PRIVATE const char* const YHDCModelNumber = "YAX86 HARD DISK";
+Y_FILE_PRIVATE const char* const YHDCSerialNumber = "YAX86-0000001";
+Y_FILE_PRIVATE const char* const YHDCFirmwareRevision = "1.0";
 
 // Returns the drive the drive/head register currently selects.
-YAX86_FILE_PRIVATE YHDCDriveState* YHDCSelectedDrive(YHDCState* hdc) {
+Y_FILE_PRIVATE YHDCDriveState* YHDCSelectedDrive(YHDCState* hdc) {
   return &hdc->drives
               [(hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0];
 }
 
 // Completes a command successfully.
-YAX86_FILE_PRIVATE void YHDCFinishCommand(YHDCState* hdc) {
+Y_FILE_PRIVATE void YHDCFinishCommand(YHDCState* hdc) {
   hdc->error = 0;
   hdc->status = Y_HDC_STATUS_IDLE;
 }
 
 // Fails a command, leaving the given bits in the error register.
-YAX86_FILE_PRIVATE void YHDCFailCommand(YHDCState* hdc, uint8_t error) {
+Y_FILE_PRIVATE void YHDCFailCommand(YHDCState* hdc, uint8_t error) {
   hdc->error = error;
   hdc->status = Y_HDC_STATUS_IDLE | Y_HDC_STATUS_ERROR;
   hdc->transfer = Y_HDC_TRANSFER_NONE;
@@ -1848,7 +1848,7 @@ YAX86_FILE_PRIVATE void YHDCFailCommand(YHDCState* hdc, uint8_t error) {
 }
 
 // Total number of sectors on a drive.
-YAX86_FILE_PRIVATE uint32_t YHDCDriveNumSectors(const YHDCDriveState* drive) {
+Y_FILE_PRIVATE uint32_t YHDCDriveNumSectors(const YHDCDriveState* drive) {
   return (uint32_t)drive->geometry.num_cylinders *
          (uint32_t)drive->geometry.num_heads *
          (uint32_t)drive->geometry.num_sectors_per_track;
@@ -1862,7 +1862,7 @@ YAX86_FILE_PRIVATE uint32_t YHDCDriveNumSectors(const YHDCDriveState* drive) {
 // the geometry the guest asked for with Initialize Device Parameters rather
 // than the physical geometry, which is what lets a guest address the drive
 // with a geometry of its own choosing.
-YAX86_FILE_PRIVATE bool YHDCComputeSectorNumber(
+Y_FILE_PRIVATE bool YHDCComputeSectorNumber(
     YHDCState* hdc, const YHDCDriveState* drive, uint32_t* sector_number) {
   uint32_t lba;
   if (hdc->drive_head & Y_HDC_DRIVE_HEAD_LBA) {
@@ -1892,7 +1892,7 @@ YAX86_FILE_PRIVATE bool YHDCComputeSectorNumber(
 }
 
 // Writes a 16-bit word into the Identify Device block, which is little endian.
-YAX86_FILE_PRIVATE void YHDCWriteIdentifyWord(
+Y_FILE_PRIVATE void YHDCWriteIdentifyWord(
     YHDCState* hdc, uint16_t word_index, uint16_t value) {
   hdc->sector_buffer[word_index * 2] = (uint8_t)(value & 0xFF);
   hdc->sector_buffer[word_index * 2 + 1] = (uint8_t)(value >> 8);
@@ -1901,7 +1901,7 @@ YAX86_FILE_PRIVATE void YHDCWriteIdentifyWord(
 // Writes a space padded string into the Identify Device block. ATA strings
 // are byte swapped within each word, so the first character of a pair lands in
 // the high byte.
-YAX86_FILE_PRIVATE void YHDCWriteIdentifyString(
+Y_FILE_PRIVATE void YHDCWriteIdentifyString(
     YHDCState* hdc, uint16_t word_index, const char* text, uint16_t num_words) {
   const char* next = text;
   for (uint16_t i = 0; i < num_words; ++i) {
@@ -1914,7 +1914,7 @@ YAX86_FILE_PRIVATE void YHDCWriteIdentifyString(
 }
 
 // Fills the sector buffer with the drive's Identify Device block.
-YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
+Y_FILE_PRIVATE void YHDCBuildIdentifyBlock(
     YHDCState* hdc, const YHDCDriveState* drive) {
   for (uint16_t i = 0; i < Y_HDC_SECTOR_SIZE; ++i) {
     hdc->sector_buffer[i] = 0;
@@ -2005,7 +2005,7 @@ YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
 }
 
 // Opens a transfer through the data register.
-YAX86_FILE_PRIVATE void YHDCStartTransfer(
+Y_FILE_PRIVATE void YHDCStartTransfer(
     YHDCState* hdc, YHDCTransfer transfer, uint32_t offset,
     uint16_t num_sectors) {
   hdc->transfer = transfer;
@@ -2020,7 +2020,7 @@ YAX86_FILE_PRIVATE void YHDCStartTransfer(
 
 // Advances past the byte just transferred, moving on to the next sector or
 // ending the transfer as needed.
-YAX86_FILE_PRIVATE void YHDCAdvanceTransfer(YHDCState* hdc) {
+Y_FILE_PRIVATE void YHDCAdvanceTransfer(YHDCState* hdc) {
   ++hdc->transfer_byte_index;
   if (hdc->transfer_byte_index < Y_HDC_SECTOR_SIZE) {
     return;
@@ -2045,7 +2045,7 @@ YAX86_FILE_PRIVATE void YHDCAdvanceTransfer(YHDCState* hdc) {
   }
 }
 
-YAX86_FILE_PRIVATE void YHDCHandleIdentifyDevice(
+Y_FILE_PRIVATE void YHDCHandleIdentifyDevice(
     YHDCState* hdc, YHDCDriveState* drive) {
   YHDCBuildIdentifyBlock(hdc, drive);
   YHDCStartTransfer(hdc, Y_HDC_TRANSFER_IDENTIFY, 0, 1);
@@ -2056,7 +2056,7 @@ YAX86_FILE_PRIVATE void YHDCHandleIdentifyDevice(
 // byte callback has no way to refuse an address, so a command that would walk
 // off the end has to fail before it moves anything rather than part way
 // through.
-YAX86_FILE_PRIVATE bool YHDCComputeSectorRange(
+Y_FILE_PRIVATE bool YHDCComputeSectorRange(
     YHDCState* hdc, const YHDCDriveState* drive, uint32_t* sector_number,
     uint16_t* num_sectors) {
   if (!YHDCComputeSectorNumber(hdc, drive, sector_number)) {
@@ -2070,7 +2070,7 @@ YAX86_FILE_PRIVATE bool YHDCComputeSectorRange(
 // Sets up a read or write of one or more sectors starting at the address in
 // the task file. A sector count of zero means 256 sectors, which is how ATA
 // encodes the largest transfer a single command can make.
-YAX86_FILE_PRIVATE void YHDCHandleReadWriteSectors(
+Y_FILE_PRIVATE void YHDCHandleReadWriteSectors(
     YHDCState* hdc, YHDCDriveState* drive, YHDCTransfer transfer) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
@@ -2082,7 +2082,7 @@ YAX86_FILE_PRIVATE void YHDCHandleReadWriteSectors(
       hdc, transfer, sector_number * Y_HDC_SECTOR_SIZE, num_sectors);
 }
 
-YAX86_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
+Y_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
     YHDCState* hdc, YHDCDriveState* drive) {
   const uint8_t num_heads = (hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK) + 1;
   const uint8_t num_sectors_per_track = hdc->sector_count;
@@ -2092,7 +2092,7 @@ YAX86_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
   }
   drive->num_translated_heads = num_heads;
   drive->num_translated_sectors_per_track = num_sectors_per_track;
-  YAX86_HDC_LOG(
+  Y_HDC_LOG(
       Y_LOG_LEVEL_DEBUG, "drive %u translated geometry set to %u heads, %u S/T",
       (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, num_heads,
       num_sectors_per_track);
@@ -2102,7 +2102,7 @@ YAX86_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
 // Checks that the addressed sectors exist without transferring them. The
 // sector count counts here just as it does for a real transfer, so a verify
 // that runs off the end of the drive fails rather than reporting success.
-YAX86_FILE_PRIVATE void YHDCHandleReadVerifySectors(
+Y_FILE_PRIVATE void YHDCHandleReadVerifySectors(
     YHDCState* hdc, YHDCDriveState* drive) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
@@ -2113,7 +2113,7 @@ YAX86_FILE_PRIVATE void YHDCHandleReadVerifySectors(
   YHDCFinishCommand(hdc);
 }
 
-YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
+Y_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
   YHDCDriveState* drive = YHDCSelectedDrive(hdc);
   if (!drive->present) {
     // An absent drive never answers, so the command simply goes unheard. The
@@ -2123,7 +2123,7 @@ YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
     return;
   }
 
-  YAX86_HDC_LOG(
+  Y_HDC_LOG(
       Y_LOG_LEVEL_DEBUG, "drive %u command %02X, CHS %u/%u/%u, count %u",
       (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, opcode,
       ((uint16_t)hdc->cylinder_high << 8) | hdc->cylinder_low,
@@ -2169,14 +2169,14 @@ YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
       break;
 
     default:
-      YAX86_HDC_LOG(Y_LOG_LEVEL_WARN, "unsupported command %02X", opcode);
+      Y_HDC_LOG(Y_LOG_LEVEL_WARN, "unsupported command %02X", opcode);
       YHDCFailCommand(hdc, Y_HDC_ERROR_ABORTED);
       break;
   }
 }
 
 // Returns the byte at the current transfer position, without advancing.
-YAX86_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
   switch (hdc->transfer) {
     case Y_HDC_TRANSFER_IDENTIFY:
       return hdc->sector_buffer[hdc->transfer_byte_index];
@@ -2200,14 +2200,13 @@ YAX86_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
 // the high half in its latch for the guest to collect from the other port.
 // Reading the two ports is therefore not the same thing, and the card consumes
 // a word per low byte read rather than a byte per read of either port.
-YAX86_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
   if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST)) {
-    YAX86_HDC_LOG(
-        Y_LOG_LEVEL_WARN, "data register read with no transfer active");
+    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read with no transfer active");
     return 0;
   }
   if (hdc->transfer == Y_HDC_TRANSFER_WRITE) {
-    YAX86_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read during a write");
+    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read during a write");
     return 0;
   }
 
@@ -2227,12 +2226,12 @@ YAX86_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
 // port first returns whatever the previous word left behind. Nothing here
 // touches the transfer, which is what keeps a guest that reads the ports out
 // of order from sliding the transfer out of step.
-YAX86_FILE_PRIVATE uint8_t YHDCReadDataHighRegister(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadDataHighRegister(YHDCState* hdc) {
   return hdc->data_high_latch;
 }
 
 // Writes one byte of the drive's image.
-YAX86_FILE_PRIVATE void YHDCWriteImageByte(YHDCState* hdc, uint8_t value) {
+Y_FILE_PRIVATE void YHDCWriteImageByte(YHDCState* hdc, uint8_t value) {
   if (hdc->config.write_image_byte) {
     hdc->config.write_image_byte(
         hdc->config.context, hdc->transfer_drive,
@@ -2250,12 +2249,11 @@ YAX86_FILE_PRIVATE void YHDCWriteImageByte(YHDCState* hdc, uint8_t value) {
 // the whole word, so the guest writes the high byte to the latch first and the
 // write of the low byte is what commits the pair. Streaming bytes in the order
 // they arrive would put every word on the disk back to front.
-YAX86_FILE_PRIVATE void YHDCWriteDataRegister(
+Y_FILE_PRIVATE void YHDCWriteDataRegister(
     YHDCState* hdc, bool is_high_byte, uint8_t value) {
   if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST) ||
       hdc->transfer != Y_HDC_TRANSFER_WRITE) {
-    YAX86_HDC_LOG(
-        Y_LOG_LEVEL_WARN, "data register written with no write active");
+    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register written with no write active");
     return;
   }
 
@@ -2273,12 +2271,12 @@ YAX86_FILE_PRIVATE void YHDCWriteDataRegister(
 // What the status and alternate status registers read back as. An empty drive
 // slot leaves the bus undriven, which the guest reads as a drive that is never
 // ready.
-YAX86_FILE_PRIVATE uint8_t YHDCReadStatusRegister(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadStatusRegister(YHDCState* hdc) {
   return YHDCSelectedDrive(hdc)->present ? hdc->status : 0;
 }
 
 // Handles a write to the device control register.
-YAX86_FILE_PRIVATE void YHDCWriteDeviceControlRegister(
+Y_FILE_PRIVATE void YHDCWriteDeviceControlRegister(
     YHDCState* hdc, uint8_t value) {
   // A software reset abandons whatever the drive was doing, which is the point
   // of it: it is how a guest recovers a transfer it cannot finish. Only the
@@ -2297,7 +2295,7 @@ YAX86_FILE_PRIVATE void YHDCWriteDeviceControlRegister(
   }
 }
 
-YAX86_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port) {
+Y_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port) {
   const uint8_t offset =
       (uint8_t)((port - Y_HDC_PORT_BASE) & (Y_HDC_NUM_PORTS - 1));
   switch (YHDCPortOffsetToRegister(offset)) {
@@ -2325,7 +2323,7 @@ YAX86_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
+Y_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
   const uint8_t offset =
       (uint8_t)((port - Y_HDC_PORT_BASE) & (Y_HDC_NUM_PORTS - 1));
   switch (YHDCPortOffsetToRegister(offset)) {
@@ -2364,7 +2362,7 @@ YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void YHDCAttachDrive(
+Y_PUBLIC void YHDCAttachDrive(
     YHDCState* hdc, uint8_t drive, const YHDCDriveGeometry* geometry) {
   if (drive >= Y_HDC_NUM_DRIVES) {
     return;
@@ -2379,7 +2377,7 @@ YAX86_PUBLIC void YHDCAttachDrive(
       geometry->num_sectors_per_track;
 }
 
-YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
+Y_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
   if (drive >= Y_HDC_NUM_DRIVES) {
     return;
   }
@@ -2387,15 +2385,13 @@ YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
   hdc->drives[drive] = empty_drive_state;
 }
 
-YAX86_PUBLIC void YHDCInit(YHDCState* hdc) { hdc->status = Y_HDC_STATUS_IDLE; }
+Y_PUBLIC void YHDCInit(YHDCState* hdc) { hdc->status = Y_HDC_STATUS_IDLE; }
 
-YAX86_PUBLIC uint32_t YHDCGetOptionROMSize(void) {
+Y_PUBLIC uint32_t YHDCGetOptionROMSize(void) {
   return Y_HDC_OPTION_ROM_DATA_SIZE;
 }
 
-YAX86_PUBLIC const uint8_t* YHDCGetOptionROMData(void) {
-  return YHDCOptionROMData;
-}
+Y_PUBLIC const uint8_t* YHDCGetOptionROMData(void) { return YHDCOptionROMData; }
 
 
 // ==============================================================================

@@ -20,12 +20,12 @@ const char* const kDefaultFloppyImagePath =
 static uint8_t g_floppy_image[kFloppyImageSize];
 
 static uint8_t FloppyReadByte(
-    YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive, uint32_t offset) {
+    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset) {
   return offset < kFloppyImageSize ? g_floppy_image[offset] : 0xFF;
 }
 
 static void FloppyWriteByte(
-    YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive, uint32_t offset,
+    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset,
     uint8_t value) {
   if (offset < kFloppyImageSize) {
     g_floppy_image[offset] = value;

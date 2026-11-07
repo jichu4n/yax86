@@ -32,7 +32,7 @@ enum {
 };
 
 // Log module for the PIC.
-YAX86_PUBLIC_HEADER const YLogModule YPICLogModule = {
+Y_PUBLIC_HEADER const YLogModule YPICLogModule = {
     .id = Y_PIC_LOG_MODULE_ID,
     .name = "PIC",
 };
@@ -148,7 +148,7 @@ typedef struct YPICState {
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-YAX86_PUBLIC void YPICInit(YPICState* pic);
+Y_PUBLIC void YPICInit(YPICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -156,11 +156,11 @@ YAX86_PUBLIC void YPICInit(YPICState* pic);
 
 // Raise an IRQ line (0-7) on this PIC. If this is a slave PIC, also raises
 // the cascade IRQ on the master PIC.
-YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq);
+Y_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq);
 
 // Lower an IRQ line (0-7) on this PIC. If this is a slave PIC and no interrupts
 // are pending, also lowers the cascade IRQ on the master PIC.
-YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
+Y_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
 
 // ============================================================================
 // I/O port interface
@@ -169,12 +169,12 @@ YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq);
 // Read from a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port);
+Y_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port);
 
 // Write to a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
+Y_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 
 // ============================================================================
 // Interrupt handling
@@ -184,6 +184,6 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 // this is a master PIC, this will consider pending interrupts from the slave
 // PIC as well. If no interrupts are pending, returns
 // Y_PIC_NO_PENDING_INTERRUPT.
-YAX86_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
+Y_PUBLIC uint8_t YPICGetPendingInterrupt(YPICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H

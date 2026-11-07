@@ -13,7 +13,7 @@
 // This function sets ZF, SF, PF, OF, AF. It does NOT affect CF.
 // - OF is for the full operation op1 - (op2 + did_borrow).
 // - AF is for the full operation op1 - (op2 + did_borrow).
-YAX86_FILE_PRIVATE void YCPUSetFlagsAfterDec(
+Y_FILE_PRIVATE void YCPUSetFlagsAfterDec(
     const YCPUInstructionContext* ctx, uint32_t op1, uint32_t op2,
     uint32_t result, bool did_borrow) {
   YCPUSetCommonFlagsAfterInstruction(ctx, result);
@@ -41,7 +41,7 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterDec(
 
 // Set CPU flags after a SUB, SBB, CMP or NEG instruction.
 // This calls YCPUSetFlagsAfterDec and then sets the Carry Flag (CF).
-YAX86_MODULE_PRIVATE void YCPUSetFlagsAfterSub(
+Y_MODULE_PRIVATE void YCPUSetFlagsAfterSub(
     const YCPUInstructionContext* ctx, uint32_t op1, uint32_t op2,
     uint32_t result, bool did_borrow) {
   YCPUSetFlagsAfterDec(ctx, op1, op2, result, did_borrow);
@@ -59,7 +59,7 @@ typedef void (*YCPUSetFlagsAfterSubFn)(
     uint32_t result, bool did_borrow);
 
 // Common logic for SUB, SBB, and DEC instructions.
-YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteSubCommon(
+Y_FILE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteSubCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value, bool borrow,
     YCPUSetFlagsAfterSubFn set_flags_after_fn) {
@@ -74,7 +74,7 @@ YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteSubCommon(
 }
 
 // Common logic for SUB instructions
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSub(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSub(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
@@ -83,7 +83,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSub(
 
 // SUB r/m8, r8
 // SUB r/m16, r16
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteSubRegisterFromRegisterOrMemory(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
@@ -94,7 +94,7 @@ YCPUExecuteSubRegisterFromRegisterOrMemory(const YCPUInstructionContext* ctx) {
 
 // SUB r8, r/m8
 // SUB r16, r/m16
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteSubRegisterOrMemoryFromRegister(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperand(ctx, &dest);
@@ -105,7 +105,7 @@ YCPUExecuteSubRegisterOrMemoryFromRegister(const YCPUInstructionContext* ctx) {
 
 // SUB AL, imm8
 // SUB AX, imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteSubImmediateFromALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
@@ -114,7 +114,7 @@ YCPUExecuteSubImmediateFromALOrAX(const YCPUInstructionContext* ctx) {
 }
 
 // Common logic for SBB instructions
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSubWithBorrow(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSubWithBorrow(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
@@ -123,7 +123,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSubWithBorrow(
 
 // SBB r/m8, r8
 // SBB r/m16, r16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -135,7 +135,7 @@ YCPUExecuteSubRegisterFromRegisterOrMemoryWithBorrow(
 
 // SBB r8, r/m8
 // SBB r16, r/m16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
     const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
@@ -147,7 +147,7 @@ YCPUExecuteSubRegisterOrMemoryFromRegisterWithBorrow(
 
 // SBB AL, imm8
 // SBB AX, imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteSubImmediateFromALOrAXWithBorrow(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
@@ -156,7 +156,7 @@ YCPUExecuteSubImmediateFromALOrAXWithBorrow(const YCPUInstructionContext* ctx) {
 }
 
 // Common logic for DEC instructions
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDec(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperandValue src_value = 1;
   return YCPUExecuteSubCommon(
@@ -164,7 +164,7 @@ YCPUExecuteDec(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDecRegister(const YCPUInstructionContext* ctx) {
   YCPURegisterIndex register_index =
       (YCPURegisterIndex)(ctx->instruction->opcode - 0x48);

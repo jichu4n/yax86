@@ -3,8 +3,8 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define YAX86_HDC_LOG(level, ...) \
-  YAX86_LOG(hdc->config.logger, &YHDCLogModule, level, __VA_ARGS__)
+#define Y_HDC_LOG(level, ...) \
+  Y_LOG(hdc->config.logger, &YHDCLogModule, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -71,24 +71,24 @@ enum {
   Y_HDC_IDENTIFY_NUM_ECC_BYTES = 4,
 };
 
-YAX86_FILE_PRIVATE const char* const YHDCModelNumber = "YAX86 HARD DISK";
-YAX86_FILE_PRIVATE const char* const YHDCSerialNumber = "YAX86-0000001";
-YAX86_FILE_PRIVATE const char* const YHDCFirmwareRevision = "1.0";
+Y_FILE_PRIVATE const char* const YHDCModelNumber = "YAX86 HARD DISK";
+Y_FILE_PRIVATE const char* const YHDCSerialNumber = "YAX86-0000001";
+Y_FILE_PRIVATE const char* const YHDCFirmwareRevision = "1.0";
 
 // Returns the drive the drive/head register currently selects.
-YAX86_FILE_PRIVATE YHDCDriveState* YHDCSelectedDrive(YHDCState* hdc) {
+Y_FILE_PRIVATE YHDCDriveState* YHDCSelectedDrive(YHDCState* hdc) {
   return &hdc->drives
               [(hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0];
 }
 
 // Completes a command successfully.
-YAX86_FILE_PRIVATE void YHDCFinishCommand(YHDCState* hdc) {
+Y_FILE_PRIVATE void YHDCFinishCommand(YHDCState* hdc) {
   hdc->error = 0;
   hdc->status = Y_HDC_STATUS_IDLE;
 }
 
 // Fails a command, leaving the given bits in the error register.
-YAX86_FILE_PRIVATE void YHDCFailCommand(YHDCState* hdc, uint8_t error) {
+Y_FILE_PRIVATE void YHDCFailCommand(YHDCState* hdc, uint8_t error) {
   hdc->error = error;
   hdc->status = Y_HDC_STATUS_IDLE | Y_HDC_STATUS_ERROR;
   hdc->transfer = Y_HDC_TRANSFER_NONE;
@@ -96,7 +96,7 @@ YAX86_FILE_PRIVATE void YHDCFailCommand(YHDCState* hdc, uint8_t error) {
 }
 
 // Total number of sectors on a drive.
-YAX86_FILE_PRIVATE uint32_t YHDCDriveNumSectors(const YHDCDriveState* drive) {
+Y_FILE_PRIVATE uint32_t YHDCDriveNumSectors(const YHDCDriveState* drive) {
   return (uint32_t)drive->geometry.num_cylinders *
          (uint32_t)drive->geometry.num_heads *
          (uint32_t)drive->geometry.num_sectors_per_track;
@@ -110,7 +110,7 @@ YAX86_FILE_PRIVATE uint32_t YHDCDriveNumSectors(const YHDCDriveState* drive) {
 // the geometry the guest asked for with Initialize Device Parameters rather
 // than the physical geometry, which is what lets a guest address the drive
 // with a geometry of its own choosing.
-YAX86_FILE_PRIVATE bool YHDCComputeSectorNumber(
+Y_FILE_PRIVATE bool YHDCComputeSectorNumber(
     YHDCState* hdc, const YHDCDriveState* drive, uint32_t* sector_number) {
   uint32_t lba;
   if (hdc->drive_head & Y_HDC_DRIVE_HEAD_LBA) {
@@ -140,7 +140,7 @@ YAX86_FILE_PRIVATE bool YHDCComputeSectorNumber(
 }
 
 // Writes a 16-bit word into the Identify Device block, which is little endian.
-YAX86_FILE_PRIVATE void YHDCWriteIdentifyWord(
+Y_FILE_PRIVATE void YHDCWriteIdentifyWord(
     YHDCState* hdc, uint16_t word_index, uint16_t value) {
   hdc->sector_buffer[word_index * 2] = (uint8_t)(value & 0xFF);
   hdc->sector_buffer[word_index * 2 + 1] = (uint8_t)(value >> 8);
@@ -149,7 +149,7 @@ YAX86_FILE_PRIVATE void YHDCWriteIdentifyWord(
 // Writes a space padded string into the Identify Device block. ATA strings
 // are byte swapped within each word, so the first character of a pair lands in
 // the high byte.
-YAX86_FILE_PRIVATE void YHDCWriteIdentifyString(
+Y_FILE_PRIVATE void YHDCWriteIdentifyString(
     YHDCState* hdc, uint16_t word_index, const char* text, uint16_t num_words) {
   const char* next = text;
   for (uint16_t i = 0; i < num_words; ++i) {
@@ -162,7 +162,7 @@ YAX86_FILE_PRIVATE void YHDCWriteIdentifyString(
 }
 
 // Fills the sector buffer with the drive's Identify Device block.
-YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
+Y_FILE_PRIVATE void YHDCBuildIdentifyBlock(
     YHDCState* hdc, const YHDCDriveState* drive) {
   for (uint16_t i = 0; i < Y_HDC_SECTOR_SIZE; ++i) {
     hdc->sector_buffer[i] = 0;
@@ -253,7 +253,7 @@ YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
 }
 
 // Opens a transfer through the data register.
-YAX86_FILE_PRIVATE void YHDCStartTransfer(
+Y_FILE_PRIVATE void YHDCStartTransfer(
     YHDCState* hdc, YHDCTransfer transfer, uint32_t offset,
     uint16_t num_sectors) {
   hdc->transfer = transfer;
@@ -268,7 +268,7 @@ YAX86_FILE_PRIVATE void YHDCStartTransfer(
 
 // Advances past the byte just transferred, moving on to the next sector or
 // ending the transfer as needed.
-YAX86_FILE_PRIVATE void YHDCAdvanceTransfer(YHDCState* hdc) {
+Y_FILE_PRIVATE void YHDCAdvanceTransfer(YHDCState* hdc) {
   ++hdc->transfer_byte_index;
   if (hdc->transfer_byte_index < Y_HDC_SECTOR_SIZE) {
     return;
@@ -293,7 +293,7 @@ YAX86_FILE_PRIVATE void YHDCAdvanceTransfer(YHDCState* hdc) {
   }
 }
 
-YAX86_FILE_PRIVATE void YHDCHandleIdentifyDevice(
+Y_FILE_PRIVATE void YHDCHandleIdentifyDevice(
     YHDCState* hdc, YHDCDriveState* drive) {
   YHDCBuildIdentifyBlock(hdc, drive);
   YHDCStartTransfer(hdc, Y_HDC_TRANSFER_IDENTIFY, 0, 1);
@@ -304,7 +304,7 @@ YAX86_FILE_PRIVATE void YHDCHandleIdentifyDevice(
 // byte callback has no way to refuse an address, so a command that would walk
 // off the end has to fail before it moves anything rather than part way
 // through.
-YAX86_FILE_PRIVATE bool YHDCComputeSectorRange(
+Y_FILE_PRIVATE bool YHDCComputeSectorRange(
     YHDCState* hdc, const YHDCDriveState* drive, uint32_t* sector_number,
     uint16_t* num_sectors) {
   if (!YHDCComputeSectorNumber(hdc, drive, sector_number)) {
@@ -318,7 +318,7 @@ YAX86_FILE_PRIVATE bool YHDCComputeSectorRange(
 // Sets up a read or write of one or more sectors starting at the address in
 // the task file. A sector count of zero means 256 sectors, which is how ATA
 // encodes the largest transfer a single command can make.
-YAX86_FILE_PRIVATE void YHDCHandleReadWriteSectors(
+Y_FILE_PRIVATE void YHDCHandleReadWriteSectors(
     YHDCState* hdc, YHDCDriveState* drive, YHDCTransfer transfer) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
@@ -330,7 +330,7 @@ YAX86_FILE_PRIVATE void YHDCHandleReadWriteSectors(
       hdc, transfer, sector_number * Y_HDC_SECTOR_SIZE, num_sectors);
 }
 
-YAX86_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
+Y_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
     YHDCState* hdc, YHDCDriveState* drive) {
   const uint8_t num_heads = (hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK) + 1;
   const uint8_t num_sectors_per_track = hdc->sector_count;
@@ -340,7 +340,7 @@ YAX86_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
   }
   drive->num_translated_heads = num_heads;
   drive->num_translated_sectors_per_track = num_sectors_per_track;
-  YAX86_HDC_LOG(
+  Y_HDC_LOG(
       Y_LOG_LEVEL_DEBUG, "drive %u translated geometry set to %u heads, %u S/T",
       (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, num_heads,
       num_sectors_per_track);
@@ -350,7 +350,7 @@ YAX86_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
 // Checks that the addressed sectors exist without transferring them. The
 // sector count counts here just as it does for a real transfer, so a verify
 // that runs off the end of the drive fails rather than reporting success.
-YAX86_FILE_PRIVATE void YHDCHandleReadVerifySectors(
+Y_FILE_PRIVATE void YHDCHandleReadVerifySectors(
     YHDCState* hdc, YHDCDriveState* drive) {
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
@@ -361,7 +361,7 @@ YAX86_FILE_PRIVATE void YHDCHandleReadVerifySectors(
   YHDCFinishCommand(hdc);
 }
 
-YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
+Y_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
   YHDCDriveState* drive = YHDCSelectedDrive(hdc);
   if (!drive->present) {
     // An absent drive never answers, so the command simply goes unheard. The
@@ -371,7 +371,7 @@ YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
     return;
   }
 
-  YAX86_HDC_LOG(
+  Y_HDC_LOG(
       Y_LOG_LEVEL_DEBUG, "drive %u command %02X, CHS %u/%u/%u, count %u",
       (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, opcode,
       ((uint16_t)hdc->cylinder_high << 8) | hdc->cylinder_low,
@@ -417,14 +417,14 @@ YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
       break;
 
     default:
-      YAX86_HDC_LOG(Y_LOG_LEVEL_WARN, "unsupported command %02X", opcode);
+      Y_HDC_LOG(Y_LOG_LEVEL_WARN, "unsupported command %02X", opcode);
       YHDCFailCommand(hdc, Y_HDC_ERROR_ABORTED);
       break;
   }
 }
 
 // Returns the byte at the current transfer position, without advancing.
-YAX86_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
   switch (hdc->transfer) {
     case Y_HDC_TRANSFER_IDENTIFY:
       return hdc->sector_buffer[hdc->transfer_byte_index];
@@ -448,14 +448,13 @@ YAX86_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
 // the high half in its latch for the guest to collect from the other port.
 // Reading the two ports is therefore not the same thing, and the card consumes
 // a word per low byte read rather than a byte per read of either port.
-YAX86_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
   if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST)) {
-    YAX86_HDC_LOG(
-        Y_LOG_LEVEL_WARN, "data register read with no transfer active");
+    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read with no transfer active");
     return 0;
   }
   if (hdc->transfer == Y_HDC_TRANSFER_WRITE) {
-    YAX86_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read during a write");
+    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read during a write");
     return 0;
   }
 
@@ -475,12 +474,12 @@ YAX86_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
 // port first returns whatever the previous word left behind. Nothing here
 // touches the transfer, which is what keeps a guest that reads the ports out
 // of order from sliding the transfer out of step.
-YAX86_FILE_PRIVATE uint8_t YHDCReadDataHighRegister(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadDataHighRegister(YHDCState* hdc) {
   return hdc->data_high_latch;
 }
 
 // Writes one byte of the drive's image.
-YAX86_FILE_PRIVATE void YHDCWriteImageByte(YHDCState* hdc, uint8_t value) {
+Y_FILE_PRIVATE void YHDCWriteImageByte(YHDCState* hdc, uint8_t value) {
   if (hdc->config.write_image_byte) {
     hdc->config.write_image_byte(
         hdc->config.context, hdc->transfer_drive,
@@ -498,12 +497,11 @@ YAX86_FILE_PRIVATE void YHDCWriteImageByte(YHDCState* hdc, uint8_t value) {
 // the whole word, so the guest writes the high byte to the latch first and the
 // write of the low byte is what commits the pair. Streaming bytes in the order
 // they arrive would put every word on the disk back to front.
-YAX86_FILE_PRIVATE void YHDCWriteDataRegister(
+Y_FILE_PRIVATE void YHDCWriteDataRegister(
     YHDCState* hdc, bool is_high_byte, uint8_t value) {
   if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST) ||
       hdc->transfer != Y_HDC_TRANSFER_WRITE) {
-    YAX86_HDC_LOG(
-        Y_LOG_LEVEL_WARN, "data register written with no write active");
+    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register written with no write active");
     return;
   }
 
@@ -521,12 +519,12 @@ YAX86_FILE_PRIVATE void YHDCWriteDataRegister(
 // What the status and alternate status registers read back as. An empty drive
 // slot leaves the bus undriven, which the guest reads as a drive that is never
 // ready.
-YAX86_FILE_PRIVATE uint8_t YHDCReadStatusRegister(YHDCState* hdc) {
+Y_FILE_PRIVATE uint8_t YHDCReadStatusRegister(YHDCState* hdc) {
   return YHDCSelectedDrive(hdc)->present ? hdc->status : 0;
 }
 
 // Handles a write to the device control register.
-YAX86_FILE_PRIVATE void YHDCWriteDeviceControlRegister(
+Y_FILE_PRIVATE void YHDCWriteDeviceControlRegister(
     YHDCState* hdc, uint8_t value) {
   // A software reset abandons whatever the drive was doing, which is the point
   // of it: it is how a guest recovers a transfer it cannot finish. Only the
@@ -545,7 +543,7 @@ YAX86_FILE_PRIVATE void YHDCWriteDeviceControlRegister(
   }
 }
 
-YAX86_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port) {
+Y_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port) {
   const uint8_t offset =
       (uint8_t)((port - Y_HDC_PORT_BASE) & (Y_HDC_NUM_PORTS - 1));
   switch (YHDCPortOffsetToRegister(offset)) {
@@ -573,7 +571,7 @@ YAX86_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
+Y_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
   const uint8_t offset =
       (uint8_t)((port - Y_HDC_PORT_BASE) & (Y_HDC_NUM_PORTS - 1));
   switch (YHDCPortOffsetToRegister(offset)) {
@@ -612,7 +610,7 @@ YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void YHDCAttachDrive(
+Y_PUBLIC void YHDCAttachDrive(
     YHDCState* hdc, uint8_t drive, const YHDCDriveGeometry* geometry) {
   if (drive >= Y_HDC_NUM_DRIVES) {
     return;
@@ -627,7 +625,7 @@ YAX86_PUBLIC void YHDCAttachDrive(
       geometry->num_sectors_per_track;
 }
 
-YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
+Y_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
   if (drive >= Y_HDC_NUM_DRIVES) {
     return;
   }
@@ -635,12 +633,10 @@ YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
   hdc->drives[drive] = empty_drive_state;
 }
 
-YAX86_PUBLIC void YHDCInit(YHDCState* hdc) { hdc->status = Y_HDC_STATUS_IDLE; }
+Y_PUBLIC void YHDCInit(YHDCState* hdc) { hdc->status = Y_HDC_STATUS_IDLE; }
 
-YAX86_PUBLIC uint32_t YHDCGetOptionROMSize(void) {
+Y_PUBLIC uint32_t YHDCGetOptionROMSize(void) {
   return Y_HDC_OPTION_ROM_DATA_SIZE;
 }
 
-YAX86_PUBLIC const uint8_t* YHDCGetOptionROMData(void) {
-  return YHDCOptionROMData;
-}
+Y_PUBLIC const uint8_t* YHDCGetOptionROMData(void) { return YHDCOptionROMData; }

@@ -8,14 +8,19 @@
 // - an enum value is Y_, its owner, _, then ALL_CAPS;
 // - a macro is Y_ then ALL_CAPS.
 //
+// YAX86_IMPLEMENTATION, which a host defines, and the include guards are not
+// names the header gives a host: each decides what the header compiles to, so
+// both keep the project's full name. YAX86_IMPLEMENTATION is not checked, and
+// an include guard must be YAX86_ then ALL_CAPS. An include guard is a macro
+// ending in _H that the bundle defines on the line after testing it with
+// #ifndef; the suffix is what tells one from a default such as Y_HOT, which has
+// the same shape.
+//
 // Names come from the compiler rather than from a grep: the top-level
 // declarations in a clang AST dump of the bundle, and the macros it defines.
 // A name's owner is the module directory of the file that defines it, read
 // through the bundle's #line directives, so a name in the namespace of the
 // wrong module fails as well as one in no namespace at all.
-//
-// Names listed in the second column of core/rename_map.txt are exempt while
-// that file exists.
 //
 // Usage: tools/check-namespace.js
 
@@ -25,7 +30,6 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const BUNDLE = 'core/yax86_core.h';
-const MAP_FILE = path.join(ROOT, 'core', 'rename_map.txt');
 const CLANG = process.env.CLANG || 'clang';
 
 // Every owner, with the words a CamelCase name in its namespace may begin with
@@ -181,7 +185,7 @@ function ownerOf(presumedFile) {
 // Every top-level name the bundle declares, once each, as {name, kind, owner,
 // pasted}. kind is type, function, object or enum. pasted is set on a
 // function whose name a macro pasted together, which is what
-// STATIC_VECTOR_TYPE does.
+// Y_STATIC_VECTOR_TYPE does.
 function collectDeclarations() {
   const ast = JSON.parse(
     clang([
@@ -277,15 +281,22 @@ function collectMacros() {
         .join(''),
     ),
   );
-  // Defined by a host rather than by the header, and so by both dumps.
-  return [...bundle]
-    .filter((name) => !system.has(name))
-    .concat('YAX86_IMPLEMENTATION');
+  // YAX86_IMPLEMENTATION is defined on both command lines and so drops out
+  // here, which is what it should do: the header defines it nowhere, and like
+  // an include guard it selects what the header compiles to rather than being
+  // a name the header hands the host. See "Naming" in AGENTS.md.
+  return [...bundle].filter((name) => !system.has(name));
 }
 
 // Why a name breaks the rule for its kind and owner, or null if it does not.
-// kind is type, function, object, enum or macro; owner is ignored for a macro.
+// kind is type, function, object, enum, macro or guard; owner is ignored for
+// the last two.
 function ruleBroken(name, kind, owner) {
+  if (kind === 'guard') {
+    return /^YAX86_[A-Z0-9_]+$/.test(name)
+      ? null
+      : 'an include guard is YAX86_ then ALL_CAPS';
+  }
   if (kind === 'macro') {
     return /^Y_[A-Z0-9_]+$/.test(name) ? null : 'a macro is Y_ then ALL_CAPS';
   }
@@ -300,33 +311,32 @@ function ruleBroken(name, kind, owner) {
     : `a ${kind} of ${owner} is Y${owner} then CamelCase`;
 }
 
-// The old names core/rename_map.txt still lists.
-function exemptions() {
-  if (!fs.existsSync(MAP_FILE)) {
-    return new Set();
+// The macros the bundle uses as include guards.
+function collectGuards() {
+  const text = fs.readFileSync(path.join(ROOT, BUNDLE), 'utf8');
+  const guards = new Set();
+  const re = /^#ifndef (\w+_H)\n#define \1$/gm;
+  let match;
+  while ((match = re.exec(text))) {
+    guards.add(match[1]);
   }
-  return new Set(
-    fs
-      .readFileSync(MAP_FILE, 'utf8')
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => line.trim().split(/\s+/)[1]),
-  );
+  return guards;
 }
 
 function main() {
-  const exempt = exemptions();
   const failures = [];
   for (const {name, kind, owner} of collectDeclarations()) {
     const broken = ruleBroken(name, kind, owner);
-    if (broken && !exempt.has(name)) {
+    if (broken) {
       failures.push(`${kind} ${name}: ${broken}`);
     }
   }
+  const guards = collectGuards();
   for (const name of collectMacros()) {
-    const broken = ruleBroken(name, 'macro', null);
-    if (broken && !exempt.has(name)) {
-      failures.push(`macro ${name}: ${broken}`);
+    const kind = guards.has(name) ? 'guard' : 'macro';
+    const broken = ruleBroken(name, kind, null);
+    if (broken) {
+      failures.push(`${kind} ${name}: ${broken}`);
     }
   }
   if (failures.length > 0) {
@@ -339,19 +349,9 @@ function main() {
   }
 }
 
-module.exports = {
-  ROOT,
-  OWNERS,
-  collectDeclarations,
-  collectMacros,
-  ruleBroken,
-};
-
-if (require.main === module) {
-  try {
-    main();
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
+try {
+  main();
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
 }

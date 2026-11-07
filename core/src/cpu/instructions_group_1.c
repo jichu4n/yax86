@@ -14,7 +14,7 @@ typedef YCPUInstructionResult (*YCPUGroup1ExecuteInstructionFn)(
 
 // Group 1 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte.
-YAX86_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
+Y_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
     YCPUGroup1ExecuteInstructionFns[] = {
         YCPUExecuteAdd,            // 0 - ADD
         YCPUExecuteBooleanOr,      // 1 - OR
@@ -27,7 +27,7 @@ YAX86_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
 };
 
 // Group 1 instruction handler.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteGroup1Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =
       YCPUGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
@@ -38,7 +38,7 @@ YCPUExecuteGroup1Instruction(const YCPUInstructionContext* ctx) {
 }
 
 // Group 1 instruction handler, but sign-extends the 8-bit immediate value.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteGroup1InstructionWithSignExtension(
     const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =

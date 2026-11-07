@@ -11,7 +11,7 @@
 // ============================================================================
 
 // Jump to a relative signed byte offset.
-YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteRelativeJumpByte(
+Y_FILE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteRelativeJumpByte(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) {
   ctx->cpu->registers[Y_CPU_IP] = YCPUAddSignedOffsetByte(
       ctx->cpu->registers[Y_CPU_IP], YCPUFromOperandValue(offset_value));
@@ -19,7 +19,7 @@ YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteRelativeJumpByte(
 }
 
 // Jump to a relative signed word offset.
-YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteRelativeJumpWord(
+Y_FILE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteRelativeJumpWord(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) {
   ctx->cpu->registers[Y_CPU_IP] = YCPUAddSignedOffsetWord(
       ctx->cpu->registers[Y_CPU_IP], YCPUFromOperandValue(offset_value));
@@ -27,7 +27,7 @@ YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteRelativeJumpWord(
 }
 
 // Table of relative jump instructions, indexed by width.
-YAX86_FILE_PRIVATE
+Y_FILE_PRIVATE
 YCPUInstructionResult (*const YCPURelativeJumpFn[Y_CPU_NUM_WIDTHS])(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) = {
     YCPUExecuteRelativeJumpByte,  // Y_CPU_BYTE
@@ -35,21 +35,21 @@ YCPUInstructionResult (*const YCPURelativeJumpFn[Y_CPU_NUM_WIDTHS])(
 };
 
 // Common logic for JMP instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteRelativeJump(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteRelativeJump(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) {
   return YCPURelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
 // JMP rel8
 // JMP rel16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteShortOrNearJump(const YCPUInstructionContext* ctx) {
   YCPUOperandValue offset_value = YCPUReadImmediate(ctx);
   return YCPUExecuteRelativeJump(ctx, offset_value);
 }
 
 // Common logic for far jumps.
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteFarJump(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteFarJump(
     const YCPUInstructionContext* ctx, YCPUOperandValue segment,
     YCPUOperandValue offset) {
   ctx->cpu->registers[Y_CPU_CS] = YCPUFromOperandValue(segment);
@@ -58,7 +58,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteFarJump(
 }
 
 // JMP ptr16:16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDirectFarJump(const YCPUInstructionContext* ctx) {
   YCPUOperandValue new_cs =
       (YCPUOperandValue)(((uint16_t)ctx->instruction->immediate[2]) |
@@ -74,7 +74,7 @@ YCPUExecuteDirectFarJump(const YCPUInstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for conditional jumps.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteConditionalJump(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteConditionalJump(
     const YCPUInstructionContext* ctx, bool value, bool success_value) {
   if (value == success_value) {
     // A taken jump throws away the prefetch queue and has to fill it again.
@@ -89,7 +89,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteConditionalJump(
 // Table of flag register bitmasks for conditional jumps. The index corresponds
 // to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
 // entries of their 0x70-0x7F counterparts.
-YAX86_FILE_PRIVATE const uint16_t YCPUUnsignedConditionalJumpFlagBitmasks[] = {
+Y_FILE_PRIVATE const uint16_t YCPUUnsignedConditionalJumpFlagBitmasks[] = {
     Y_CPU_OF,             // 0x70 - JO, 0x71 - JNO
     Y_CPU_CF,             // 0x72 - JC, 0x73 - JNC
     Y_CPU_ZF,             // 0x74 - JE, 0x75 - JNE
@@ -99,7 +99,7 @@ YAX86_FILE_PRIVATE const uint16_t YCPUUnsignedConditionalJumpFlagBitmasks[] = {
 };
 
 // Unsigned conditional jumps.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteUnsignedConditionalJump(const YCPUInstructionContext* ctx) {
   // Masking off the high nibble handles both 0x70-0x7F and their undocumented
   // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
@@ -113,7 +113,7 @@ YCPUExecuteUnsignedConditionalJump(const YCPUInstructionContext* ctx) {
 }
 
 // JL/JGNE and JNL/JGE
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteSignedConditionalJumpJLOrJNL(const YCPUInstructionContext* ctx) {
   const bool is_greater_or_equal =
       YCPUGetFlag(ctx->cpu, Y_CPU_SF) == YCPUGetFlag(ctx->cpu, Y_CPU_OF);
@@ -122,7 +122,7 @@ YCPUExecuteSignedConditionalJumpJLOrJNL(const YCPUInstructionContext* ctx) {
 }
 
 // JLE/JG and JNLE/JG
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteSignedConditionalJumpJLEOrJNLE(const YCPUInstructionContext* ctx) {
   const bool is_greater =
       !YCPUGetFlag(ctx->cpu, Y_CPU_ZF) &&
@@ -136,7 +136,7 @@ YCPUExecuteSignedConditionalJumpJLEOrJNLE(const YCPUInstructionContext* ctx) {
 // ============================================================================
 
 // LOOP rel8
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteLoop(const YCPUInstructionContext* ctx) {
   return YCPUExecuteConditionalJump(
       ctx, --(ctx->cpu->registers[Y_CPU_CX]) != 0, true);
@@ -144,7 +144,7 @@ YCPUExecuteLoop(const YCPUInstructionContext* ctx) {
 
 // LOOPZ rel8
 // LOOPNZ rel8
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoopZOrNZ(const YCPUInstructionContext* ctx) {
   bool condition1 = --(ctx->cpu->registers[Y_CPU_CX]) != 0;
   bool condition2 = YCPUGetFlag(ctx->cpu, Y_CPU_ZF) ==
@@ -153,7 +153,7 @@ YCPUExecuteLoopZOrNZ(const YCPUInstructionContext* ctx) {
 }
 
 // JCXZ rel8
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteJumpIfCXIsZero(const YCPUInstructionContext* ctx) {
   return YCPUExecuteConditionalJump(
       ctx, ctx->cpu->registers[Y_CPU_CX] == 0, true);
@@ -164,21 +164,21 @@ YCPUExecuteJumpIfCXIsZero(const YCPUInstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for near calls.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteNearCall(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteNearCall(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset) {
   YCPUPushValue(ctx->cpu, ctx->cpu->registers[Y_CPU_IP]);
   return YCPUExecuteRelativeJump(ctx, offset);
 }
 
 // CALL rel16
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteDirectNearCall(const YCPUInstructionContext* ctx) {
   YCPUOperandValue offset = YCPUReadImmediate(ctx);
   return YCPUExecuteNearCall(ctx, offset);
 }
 
 // Common logic for far calls.
-YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteFarCall(
+Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteFarCall(
     const YCPUInstructionContext* ctx, YCPUOperandValue segment,
     YCPUOperandValue offset) {
   // Push the current CS and IP onto the stack.
@@ -188,7 +188,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteFarCall(
 }
 
 // CALL ptr16:16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDirectFarCall(const YCPUInstructionContext* ctx) {
   YCPUPushValue(ctx->cpu, ctx->cpu->registers[Y_CPU_CS]);
   YCPUPushValue(ctx->cpu, ctx->cpu->registers[Y_CPU_IP]);
@@ -196,7 +196,7 @@ YCPUExecuteDirectFarCall(const YCPUInstructionContext* ctx) {
 }
 
 // Common logic for RET instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteNearReturnCommon(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteNearReturnCommon(
     const YCPUInstructionContext* ctx, uint16_t arg_size) {
   YCPUOperandValue new_ip = YCPUPop(ctx->cpu);
   ctx->cpu->registers[Y_CPU_IP] = YCPUFromOperandValue(new_ip);
@@ -205,20 +205,20 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteNearReturnCommon(
 }
 
 // RET
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult
 YCPUExecuteNearReturn(const YCPUInstructionContext* ctx) {
   return YCPUExecuteNearReturnCommon(ctx, 0);
 }
 
 // RET imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteNearReturnAndPop(const YCPUInstructionContext* ctx) {
   YCPUOperandValue arg_size_value = YCPUReadImmediate(ctx);
   return YCPUExecuteNearReturnCommon(ctx, YCPUFromOperandValue(arg_size_value));
 }
 
 // Common logic for RETF instructions.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteFarReturnCommon(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteFarReturnCommon(
     const YCPUInstructionContext* ctx, uint16_t arg_size) {
   YCPUOperandValue new_ip = YCPUPop(ctx->cpu);
   YCPUOperandValue new_cs = YCPUPop(ctx->cpu);
@@ -229,13 +229,13 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteFarReturnCommon(
 }
 
 // RETF
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteFarReturn(const YCPUInstructionContext* ctx) {
   return YCPUExecuteFarReturnCommon(ctx, 0);
 }
 
 // RETF imm16
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteFarReturnAndPop(const YCPUInstructionContext* ctx) {
   YCPUOperandValue arg_size_value = YCPUReadImmediate(ctx);
   return YCPUExecuteFarReturnCommon(ctx, YCPUFromOperandValue(arg_size_value));
@@ -246,7 +246,7 @@ YCPUExecuteFarReturnAndPop(const YCPUInstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for returning from an interrupt.
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteReturnFromInterrupt(YCPUState* cpu) {
   YCPUOperandValue ip_value = YCPUPop(cpu);
   cpu->registers[Y_CPU_IP] = YCPUFromOperandValue(ip_value);
@@ -258,20 +258,20 @@ YCPUExecuteReturnFromInterrupt(YCPUState* cpu) {
 }
 
 // IRET
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteIret(const YCPUInstructionContext* ctx) {
   return YCPUExecuteReturnFromInterrupt(ctx->cpu);
 }
 
 // INT 3
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteInt3(const YCPUInstructionContext* ctx) {
   YCPURaiseInternalInterrupt(ctx->cpu, Y_CPU_INTERRUPT_BREAKPOINT);
   return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // INTO
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteInto(const YCPUInstructionContext* ctx) {
   if (YCPUGetFlag(ctx->cpu, Y_CPU_OF)) {
     YCPURaiseInternalInterrupt(ctx->cpu, Y_CPU_INTERRUPT_OVERFLOW);
@@ -280,7 +280,7 @@ YCPUExecuteInto(const YCPUInstructionContext* ctx) {
 }
 
 // INT n
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteIntN(const YCPUInstructionContext* ctx) {
   YCPUOperandValue interrupt_number_value = YCPUReadImmediate(ctx);
   YCPURaiseInternalInterrupt(
@@ -289,8 +289,8 @@ YCPUExecuteIntN(const YCPUInstructionContext* ctx) {
 }
 
 // HLT
-YAX86_MODULE_PRIVATE YCPUInstructionResult
-YCPUExecuteHlt(YAX86_UNUSED const YCPUInstructionContext* ctx) {
+Y_MODULE_PRIVATE YCPUInstructionResult
+YCPUExecuteHlt(Y_UNUSED const YCPUInstructionContext* ctx) {
   // HLT executes successfully - it just leaves the CPU halted until an
   // interrupt wakes it. YCPUTick() reports the halted state to its caller.
   ctx->cpu->is_halted = true;

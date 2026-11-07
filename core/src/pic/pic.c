@@ -2,8 +2,8 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define YAX86_PIC_LOG(level, ...) \
-  YAX86_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)
+#define Y_PIC_LOG(level, ...) \
+  Y_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)
 
 // ============================================================================
 // Constants
@@ -39,7 +39,7 @@ typedef enum YPICPort {
 } YPICPort;
 
 // Map a PIC mode to its base I/O port.
-YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[Y_PIC_NUM_MODES] = {
+Y_FILE_PRIVATE const uint16_t YPICBasePorts[Y_PIC_NUM_MODES] = {
     0x20,  // Y_PIC_SINGLE
     0x20,  // Y_PIC_MASTER
     0xA0,  // Y_PIC_SLAVE
@@ -50,7 +50,7 @@ YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[Y_PIC_NUM_MODES] = {
 // ============================================================================
 
 // Returns the mode of a PIC based on its ICWs.
-YAX86_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
+Y_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
   if (pic->icw1 & Y_PIC_ICW1_SNGL) {
     return Y_PIC_SINGLE;
@@ -62,22 +62,22 @@ YAX86_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
 }
 
 // Returns if the PIC is configured as a single PIC.
-YAX86_FILE_PRIVATE inline bool YPICIsSingle(YPICState* pic) {
+Y_FILE_PRIVATE inline bool YPICIsSingle(YPICState* pic) {
   return YPICGetMode(pic) == Y_PIC_SINGLE;
 }
 
 // Returns if the PIC is a master PIC.
-YAX86_FILE_PRIVATE inline bool YPICIsMaster(YPICState* pic) {
+Y_FILE_PRIVATE inline bool YPICIsMaster(YPICState* pic) {
   return YPICGetMode(pic) == Y_PIC_MASTER;
 }
 
 // Returns if the PIC is a slave PIC.
-YAX86_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
+Y_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
   return YPICGetMode(pic) == Y_PIC_SLAVE;
 }
 
 // Returns the I/O port corresponding to a given port number.
-YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
+Y_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
   uint16_t port_offset = port - YPICBasePorts[YPICGetMode(pic)];
   if (port_offset >= Y_PIC_NUM_PORTS) {
     return Y_PIC_PORT_INVALID;
@@ -87,7 +87,7 @@ YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
 
 // Returns the IRQ number of the parent PIC connected to a slave PIC.
 // Only valid if pic is a slave PIC.
-YAX86_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
+Y_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
   return pic->icw3 & 0x07;
 }
 
@@ -98,11 +98,11 @@ YAX86_FILE_PRIVATE inline uint8_t YPICGetCascadeIRQ(YPICState* pic) {
 // Recomputes YPICState.has_unmasked_request. This is its sole writer, and every
 // path that changes irr or imr calls it, so the flag can never disagree with
 // the registers it summarizes.
-YAX86_FILE_PRIVATE inline void YPICUpdateUnmaskedRequest(YPICState* pic) {
+Y_FILE_PRIVATE inline void YPICUpdateUnmaskedRequest(YPICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-YAX86_PUBLIC void YPICInit(YPICState* pic) {
+Y_PUBLIC void YPICInit(YPICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
   YPICUpdateUnmaskedRequest(pic);
@@ -112,12 +112,12 @@ YAX86_PUBLIC void YPICInit(YPICState* pic) {
 // IRQ line control
 // ============================================================================
 
-YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
+Y_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
-    YAX86_PIC_LOG(Y_LOG_LEVEL_WARN, "ignoring out of range IRQ %u", irq);
+    Y_PIC_LOG(Y_LOG_LEVEL_WARN, "ignoring out of range IRQ %u", irq);
     return;
   }
-  YAX86_PIC_LOG(
+  Y_PIC_LOG(
       Y_LOG_LEVEL_DEBUG, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
@@ -129,7 +129,7 @@ YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   }
 }
 
-YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
+Y_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     return;
   }
@@ -147,7 +147,7 @@ YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
 // I/O port interface
 // ============================================================================
 
-YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
+Y_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
   YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case Y_PIC_PORT_COMMAND:
@@ -177,7 +177,7 @@ YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
+Y_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
   YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
     case Y_PIC_PORT_COMMAND:
@@ -210,13 +210,13 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
             if (value & Y_PIC_OCW2_SL) {
               // Specific EOI: clear specified ISR bit.
               uint8_t irq = value & 0x07;
-              YAX86_PIC_LOG(Y_LOG_LEVEL_DEBUG, "specific EOI for IRQ %u", irq);
+              Y_PIC_LOG(Y_LOG_LEVEL_DEBUG, "specific EOI for IRQ %u", irq);
               pic->isr &= ~(1 << irq);
             } else {
               // Non-Specific EOI: clear highest priority ISR bit.
               for (uint8_t i = 0, isr_mask = 1; i < 8; ++i, isr_mask <<= 1) {
                 if (pic->isr & isr_mask) {
-                  YAX86_PIC_LOG(
+                  Y_PIC_LOG(
                       Y_LOG_LEVEL_DEBUG, "non-specific EOI for IRQ %u", i);
                   pic->isr &= ~isr_mask;
                   break;
@@ -280,7 +280,7 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
 // Interrupt handling
 // ============================================================================
 
-YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
+Y_PUBLIC Y_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {
