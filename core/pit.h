@@ -405,7 +405,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 #line 1 "./src/util/log.h"
 // Logging library.
 //
-// Provides a Logger that formats messages and hands them to a caller-provided
+// Provides a YLogger that formats messages and hands them to a caller-provided
 // sink. Logging is always compiled in - even on MCU targets the sink can write
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
@@ -433,7 +433,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 // ============================================================================
 
 // Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
+typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
   kLogLevelError = 0,
@@ -441,31 +441,31 @@ typedef enum LogLevel {
   kLogLevelWarn,
   // Diagnostic detail.
   kLogLevelDebug,
-} LogLevel;
+} YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
   kLogMaxLineLength = 256,
   // Maximum number of distinct log modules, bounded by the width of
-  // LoggerConfig.enabled_modules.
+  // YLoggerConfig.enabled_modules.
   kLogMaxModules = 32,
 };
 
 // Identifies the module a log message originated from.
 //
-// Each module declares its own LogModule in its own public header, so that
+// Each module declares its own YLogModule in its own public header, so that
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
-typedef struct LogModule {
+typedef struct YLogModule {
   // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
-} LogModule;
+} YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -474,7 +474,7 @@ YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
 // ============================================================================
 
 // Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
+typedef struct YLoggerConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -482,7 +482,7 @@ typedef struct LoggerConfig {
   // and carries no prefix or trailing newline - the host composes the final
   // output line.
   void (*write_line)(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length);
 
   // Callback returning the current tick count. The platform wires this to its
@@ -490,27 +490,27 @@ typedef struct LoggerConfig {
   // is 0.
   uint64_t (*get_tick)(void* context);
 
-  // Bit mask of enabled modules, indexed by LogModule.id.
+  // Bit mask of enabled modules, indexed by YLogModule.id.
   uint32_t enabled_modules;
 
   // Maximum severity level to emit. Messages with a level greater than this
   // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
+  YLogLevel min_level;
+} YLoggerConfig;
 
 // State of a logger.
-typedef struct Logger {
+typedef struct YLogger {
   // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
+  YLoggerConfig* config;
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
   char buffer[kLogMaxLineLength];
-} Logger;
+} YLogger;
 
 // Initialize a logger with the provided configuration.
 YAX86_PUBLIC_HEADER inline void LoggerInit(
-    Logger* logger, LoggerConfig* config) {
+    YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
 YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
-    const Logger* logger, const LogModule* module, LogLevel level) {
+    const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
 
 // Enable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -536,7 +536,7 @@ YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
 
 // Disable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
   }
@@ -545,12 +545,12 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) YAX86_UNUSED;
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) YAX86_UNUSED;
 
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) {
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
   if (!LoggerIsEnabled(logger, module, level)) {
@@ -630,7 +630,7 @@ enum {
 };
 
 // Log module for the PIT.
-YAX86_PUBLIC_HEADER const LogModule kLogModulePIT = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModulePIT = {
     .id = kLogModuleIDPIT,
     .name = "PIT",
 };
@@ -649,7 +649,7 @@ enum {
 };
 
 // I/O ports exposed by the PIT.
-typedef enum PITPort {
+typedef enum YPITPort {
   // Data port for PIT channel 0
   kPITPortChannel0 = 0x40,
   // Data port for PIT channel 1
@@ -658,11 +658,11 @@ typedef enum PITPort {
   kPITPortChannel2 = 0x42,
   // Control word port
   kPITPortControl = 0x43,
-} PITPort;
+} YPITPort;
 
 // Channel read/write access modes. This corresponds to bits 4-5 of the control
 // word written to port 0x43.
-typedef enum PITAccessMode {
+typedef enum YPITAccessMode {
   // Latch count value command
   kPITAccessLatch = 0,
   // Read/write lower byte only
@@ -671,23 +671,23 @@ typedef enum PITAccessMode {
   kPITAccessMSBOnly = 2,
   // Read/write lower byte then upper byte
   kPITAccessLSBThenMSB = 3,
-} PITAccessMode;
+} YPITAccessMode;
 
 // Which byte to read/write next when in mode kPITAccessLSBThenMSB.
-typedef enum PITByte {
+typedef enum YPITByte {
   kPITByteLSB = 0,
   kPITByteMSB = 1,
-} PITByte;
+} YPITByte;
 
-struct PITState;
+struct YPITState;
 
 // Caller-provided runtime configuration for the PIT.
-typedef struct PITConfig {
+typedef struct YPITConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to raise IRQ 0.
   void (*raise_irq_0)(void* context);
@@ -701,10 +701,10 @@ typedef struct PITConfig {
   // value hears one continuous tone, while a host that queues every value
   // hears a gap.
   void (*set_pc_speaker_frequency)(void* context, uint32_t frequency_hz);
-} PITConfig;
+} YPITConfig;
 
 // State of a single PIT timer channel.
-typedef struct PITChannelState {
+typedef struct YPITChannelState {
   // The 16-bit counter value.
   uint16_t counter;
   // The 16-bit latched value for reading.
@@ -714,36 +714,36 @@ typedef struct PITChannelState {
   // The operating mode (0-5).
   uint8_t mode;
   // The read/write access mode.
-  PITAccessMode access_mode;
+  YPITAccessMode access_mode;
   // The current output state of the channel.
   bool output_state;
   // Which byte to read/write next when in mode kPITAccessLSBThenMSB.
-  PITByte rw_byte;
+  YPITByte rw_byte;
   // Whether a latch command is active.
   bool latch_active;
-} PITChannelState;
+} YPITChannelState;
 
 // State of the PIT.
-typedef struct PITState {
+typedef struct YPITState {
   // Pointer to the PIT configuration.
-  PITConfig config;
+  YPITConfig config;
 
   // The three timer channels.
-  PITChannelState channels[kPITNumChannels];
-} PITState;
+  YPITChannelState channels[kPITNumChannels];
+} YPITState;
 
 // Initializes the PIT to its power-on state.
-YAX86_PUBLIC void PITInit(PITState* pit);
+YAX86_PUBLIC void PITInit(YPITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
-YAX86_PUBLIC uint8_t PITReadPort(PITState* pit, uint16_t port);
+YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port);
 
 // Handles writes to the PIT's I/O ports (0x40-0x43).
-YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value);
 
 // Simulates a single tick of the PIT's input clock. This method should be
 // invoked at a frequency of 1.193182 MHz for accurate timing.
-YAX86_PUBLIC void PITTick(PITState* pit);
+YAX86_PUBLIC void PITTick(YPITState* pit);
 
 enum {
   // Returned by PITTicksUntilNextEvent() when no channel is counting towards
@@ -758,7 +758,7 @@ enum {
 // change nothing observable, so those stretches are skipped arithmetically and
 // only the ticks that can change a channel's output are simulated one at a
 // time.
-YAX86_PUBLIC void PITAdvance(PITState* pit, uint32_t num_ticks);
+YAX86_PUBLIC void PITAdvance(YPITState* pit, uint32_t num_ticks);
 
 // Returns the number of input clock ticks until the earliest tick that could
 // change any channel's output state, or kPITNoEvent if no channel is counting
@@ -767,7 +767,7 @@ YAX86_PUBLIC void PITAdvance(PITState* pit, uint32_t num_ticks);
 // This is a lower bound rather than an exact answer. A caller that advances the
 // PIT by this much and finds nothing happened has only done unnecessary work,
 // whereas one that waited longer would miss an edge.
-YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const PITState* pit);
+YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const YPITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H
 
@@ -800,12 +800,12 @@ enum {
 };
 
 // Specifies the behavior of a timer channel in a specific mode (0-5).
-typedef struct PITModeMetadata {
+typedef struct YPITModeMetadata {
   // Initial output state when a timer channel is programmed in this mode.
   bool initial_output_state;
   // Callback to handle a tick for this mode.
   void (*handle_tick)(
-      PITState* pit, PITChannelState* channel, int channel_index);
+      YPITState* pit, YPITChannelState* channel, int channel_index);
   // How much the counter moves per tick. Modes 0 and 2 count down by one;
   // mode 3 counts down by two so that its output is a square wave.
   uint16_t counter_step;
@@ -816,16 +816,16 @@ typedef struct PITModeMetadata {
   // skip_ticks returns how many ticks may be applied to the counter with no
   // observable effect other than the counter's own value; ticks_until_event
   // returns a lower bound on the ticks until the output could change.
-  uint32_t (*skip_ticks)(const PITChannelState* channel);
-  uint32_t (*ticks_until_event)(const PITChannelState* channel);
-} PITModeMetadata;
+  uint32_t (*skip_ticks)(const YPITChannelState* channel);
+  uint32_t (*ticks_until_event)(const YPITChannelState* channel);
+} YPITModeMetadata;
 
 // Metadata for unsupported modes (1, 4, 5).
-YAX86_FILE_PRIVATE const PITModeMetadata kPITUnsupportedMode = {0};
+YAX86_FILE_PRIVATE const YPITModeMetadata kPITUnsupportedMode = {0};
 
 // Handles a channel reaching terminal count.
 YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
-    PITState* pit, PITChannelState* channel, int channel_index,
+    YPITState* pit, YPITChannelState* channel, int channel_index,
     bool new_output_state) {
   // No-op if the output state is unchanged.
   if (channel->output_state == new_output_state) {
@@ -848,7 +848,7 @@ YAX86_FILE_PRIVATE inline void PITChannelSetOutputState(
 
 // Tick handler for Mode 0: Interrupt on Terminal Count.
 YAX86_FILE_PRIVATE void PITMode0HandleTick(
-    PITState* pit, PITChannelState* channel, int channel_index) {
+    YPITState* pit, YPITChannelState* channel, int channel_index) {
   // Since this is a one-shot timer, do nothing if the counter is already 0.
   if (channel->counter == 0) {
     return;
@@ -866,18 +866,18 @@ YAX86_FILE_PRIVATE void PITMode0HandleTick(
 // A counter above 1 cannot reach terminal count on the next tick, so every
 // tick down to 1 is uneventful. A counter already at 0 has finished and never
 // changes again, which the caller detects as no event rather than a skip.
-YAX86_FILE_PRIVATE uint32_t PITMode0SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t PITMode0SkipTicks(const YPITChannelState* channel) {
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 0;
 }
 
 YAX86_FILE_PRIVATE uint32_t
-PITMode0TicksUntilEvent(const PITChannelState* channel) {
+PITMode0TicksUntilEvent(const YPITChannelState* channel) {
   // A one-shot that has already fired is not counting towards anything.
   return channel->counter == 0 ? kPITNoEvent : (uint32_t)channel->counter;
 }
 
 // Metadata for Mode 0: Interrupt on Terminal Count.
-YAX86_FILE_PRIVATE const PITModeMetadata kPITMode0Metadata = {
+YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode0Metadata = {
     .initial_output_state = false,
     .handle_tick = PITMode0HandleTick,
     .counter_step = 1,
@@ -887,7 +887,7 @@ YAX86_FILE_PRIVATE const PITModeMetadata kPITMode0Metadata = {
 
 // Tick handler for Mode 2: Rate Generator.
 YAX86_FILE_PRIVATE void PITMode2HandleTick(
-    PITState* pit, PITChannelState* channel, int channel_index) {
+    YPITState* pit, YPITChannelState* channel, int channel_index) {
   // Decrement the counter by 1.
   --channel->counter;
 
@@ -908,19 +908,19 @@ YAX86_FILE_PRIVATE void PITMode2HandleTick(
 
 // Mode 2 acts when the counter reaches 1 and again when it reaches 0, so every
 // tick down to 2 is uneventful.
-YAX86_FILE_PRIVATE uint32_t PITMode2SkipTicks(const PITChannelState* channel) {
+YAX86_FILE_PRIVATE uint32_t PITMode2SkipTicks(const YPITChannelState* channel) {
   return channel->counter > 2 ? (uint32_t)(channel->counter - 2) : 0;
 }
 
 YAX86_FILE_PRIVATE YAX86_HOT uint32_t
-PITMode2TicksUntilEvent(const PITChannelState* channel) {
+PITMode2TicksUntilEvent(const YPITChannelState* channel) {
   // A counter of 0 wraps to 0xFFFF on the next tick without changing the
   // output, but reporting 1 only costs a wasted wakeup.
   return channel->counter > 1 ? (uint32_t)(channel->counter - 1) : 1;
 }
 
 // Metadata for Mode 2: Rate Generator.
-YAX86_FILE_PRIVATE const PITModeMetadata kPITMode2Metadata = {
+YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode2Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode2HandleTick,
     .counter_step = 1,
@@ -930,7 +930,7 @@ YAX86_FILE_PRIVATE const PITModeMetadata kPITMode2Metadata = {
 
 // Tick handler for Mode 3: Square Wave Generator.
 YAX86_FILE_PRIVATE void PITMode3HandleTick(
-    PITState* pit, PITChannelState* channel, int channel_index) {
+    YPITState* pit, YPITChannelState* channel, int channel_index) {
   // In Mode 3, the counter decrements by 2 each tick. We reach terminal count
   // when we reach either 0 or wrap around to 0xFFFF.
   channel->counter -= 2;
@@ -953,12 +953,12 @@ YAX86_FILE_PRIVATE void PITMode3HandleTick(
 // least one uneventful step left, and stopping at 2 or 3 leaves the next step
 // to the tick handler.
 YAX86_FILE_PRIVATE YAX86_HOT uint32_t
-PITMode3SkipTicks(const PITChannelState* channel) {
+PITMode3SkipTicks(const YPITChannelState* channel) {
   return channel->counter >= 4 ? (uint32_t)((channel->counter - 2) / 2) : 0;
 }
 
 YAX86_FILE_PRIVATE uint32_t
-PITMode3TicksUntilEvent(const PITChannelState* channel) {
+PITMode3TicksUntilEvent(const YPITChannelState* channel) {
   // Even counters reach 0 after counter/2 steps, odd ones reach 0xFFFF after
   // (counter+1)/2; the rounding covers both.
   const uint32_t ticks = ((uint32_t)channel->counter + 1) / 2;
@@ -966,7 +966,7 @@ PITMode3TicksUntilEvent(const PITChannelState* channel) {
 }
 
 // Metadata for Mode 3: Square Wave Generator.
-YAX86_FILE_PRIVATE const PITModeMetadata kPITMode3Metadata = {
+YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode3Metadata = {
     .initial_output_state = true,
     .handle_tick = PITMode3HandleTick,
     .counter_step = 2,
@@ -975,7 +975,7 @@ YAX86_FILE_PRIVATE const PITModeMetadata kPITMode3Metadata = {
 };
 
 // Array of mode metadata indexed by mode number.
-YAX86_FILE_PRIVATE const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
+YAX86_FILE_PRIVATE const YPITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITMode0Metadata,    // Mode 0
     &kPITUnsupportedMode,  // Mode 1 (unsupported)
     &kPITMode2Metadata,    // Mode 2
@@ -984,7 +984,7 @@ YAX86_FILE_PRIVATE const PITModeMetadata* kPITModeMetadata[kPITNumModes] = {
     &kPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
-YAX86_PUBLIC void PITInit(PITState* pit) {
+YAX86_PUBLIC void PITInit(YPITState* pit) {
   // On the IBM PC, the output pins of all three channels are initially pulled
   // high.
   for (int i = 0; i < kPITNumChannels; ++i) {
@@ -1008,7 +1008,7 @@ YAX86_FILE_PRIVATE inline bool PITModeOscillates(uint8_t mode) {
 // narrow output pulse sounds thinner than mode 3's square wave, which a
 // frequency cannot express.
 YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
-    PITState* pit, const PITChannelState* channel, int channel_index,
+    YPITState* pit, const YPITChannelState* channel, int channel_index,
     bool has_count) {
   if (channel_index != kPITSpeakerChannel ||
       !pit->config.set_pc_speaker_frequency) {
@@ -1025,7 +1025,7 @@ YAX86_FILE_PRIVATE inline void PITNotifySpeakerFrequency(
 
 // Helper function to load the counter and handle side effects.
 YAX86_FILE_PRIVATE inline void PITChannelLoadCounter(
-    PITState* pit, PITChannelState* channel, int channel_index) {
+    YPITState* pit, YPITChannelState* channel, int channel_index) {
   // A reload value of 0 is treated as 0x10000 by the hardware.
   // This will wrap to 0 when assigned to the 16-bit counter.
   channel->counter = channel->reload_value;
@@ -1035,7 +1035,8 @@ YAX86_FILE_PRIVATE inline void PITChannelLoadCounter(
 
 // Helper function to handle a write to a channel's data port.
 YAX86_FILE_PRIVATE inline void PITChannelWritePort(
-    PITState* pit, PITChannelState* channel, int channel_index, uint8_t value) {
+    YPITState* pit, YPITChannelState* channel, int channel_index,
+    uint8_t value) {
   switch (channel->access_mode) {
     case kPITAccessLatch:
       // If latch command, ignore data writes.
@@ -1074,7 +1075,7 @@ YAX86_FILE_PRIVATE inline void PITChannelWritePort(
   }
 }
 
-YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
   switch (port) {
     case kPITPortControl: {
       // Control word.
@@ -1083,9 +1084,9 @@ YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
         // Invalid channel, or read-back command (not supported).
         return;
       }
-      PITChannelState* channel = &pit->channels[channel_index];
+      YPITChannelState* channel = &pit->channels[channel_index];
 
-      PITAccessMode access_mode = (PITAccessMode)((value >> 4) & 0x03);
+      YPITAccessMode access_mode = (YPITAccessMode)((value >> 4) & 0x03);
       if (access_mode == kPITAccessLatch) {
         // Latch command.
         channel->latch = channel->counter;
@@ -1114,7 +1115,7 @@ YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
     case kPITPortChannel2: {
       // Data port for a channel.
       int channel_index = port - kPITPortChannel0;
-      PITChannelState* channel = &pit->channels[channel_index];
+      YPITChannelState* channel = &pit->channels[channel_index];
       PITChannelWritePort(pit, channel, channel_index, value);
       break;
     }
@@ -1126,7 +1127,7 @@ YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value) {
 
 // Helper function to handle a read from a channel's data port.
 YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
-    YAX86_UNUSED PITState* pit, PITChannelState* channel,
+    YAX86_UNUSED YPITState* pit, YPITChannelState* channel,
     YAX86_UNUSED int channel_index) {
   uint16_t value = channel->latch_active ? channel->latch : channel->counter;
   uint8_t result = 0;
@@ -1167,14 +1168,14 @@ YAX86_FILE_PRIVATE inline uint8_t PITChannelReadPort(
   return result;
 }
 
-YAX86_PUBLIC uint8_t PITReadPort(PITState* pit, uint16_t port) {
+YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port) {
   switch (port) {
     case kPITPortChannel0:
     case kPITPortChannel1:
     case kPITPortChannel2: {
       // Data port for a channel.
       int channel_index = port - kPITPortChannel0;
-      PITChannelState* channel = &pit->channels[channel_index];
+      YPITChannelState* channel = &pit->channels[channel_index];
       return PITChannelReadPort(pit, channel, channel_index);
     }
     default:
@@ -1183,14 +1184,14 @@ YAX86_PUBLIC uint8_t PITReadPort(PITState* pit, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void PITTick(PITState* pit) {
-  PITChannelState* channel = &pit->channels[0];
+YAX86_PUBLIC YAX86_HOT void PITTick(YPITState* pit) {
+  YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     if (channel->mode >= kPITNumModes) {
       // Invalid mode - ignore.
       continue;
     }
-    const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+    const YPITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
     if (mode_metadata->handle_tick) {
       mode_metadata->handle_tick(pit, channel, i);
     }
@@ -1205,13 +1206,13 @@ YAX86_PUBLIC YAX86_HOT void PITTick(PITState* pit) {
 // goes through the handler, so there is only one description of what a tick
 // does.
 YAX86_FILE_PRIVATE void PITAdvanceChannel(
-    PITState* pit, PITChannelState* channel, int channel_index,
+    YPITState* pit, YPITChannelState* channel, int channel_index,
     uint32_t num_ticks) {
   if (channel->mode >= kPITNumModes) {
     // Invalid mode - ignore.
     return;
   }
-  const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+  const YPITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
   if (!mode_metadata->handle_tick) {
     // A mode that does nothing on a tick cannot be moved on by one.
     return;
@@ -1241,19 +1242,19 @@ YAX86_FILE_PRIVATE void PITAdvanceChannel(
   }
 }
 
-YAX86_PUBLIC YAX86_HOT void PITAdvance(PITState* pit, uint32_t num_ticks) {
+YAX86_PUBLIC YAX86_HOT void PITAdvance(YPITState* pit, uint32_t num_ticks) {
   if (num_ticks == 0) {
     return;
   }
-  PITChannelState* channel = &pit->channels[0];
+  YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     PITAdvanceChannel(pit, channel, i, num_ticks);
   }
 }
 
-YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const PITState* pit) {
+YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const YPITState* pit) {
   uint32_t earliest = kPITNoEvent;
-  const PITChannelState* channel = &pit->channels[0];
+  const YPITChannelState* channel = &pit->channels[0];
   for (int i = 0; i < kPITNumChannels; ++i, ++channel) {
     // Only channel 0 is worth waking up for. Its output is the one thing that
     // leaves the chip - PITChannelSetOutputState() raises IRQ 0 from it - while
@@ -1270,7 +1271,7 @@ YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const PITState* pit) {
     if (channel->mode >= kPITNumModes) {
       continue;
     }
-    const PITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+    const YPITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
     if (!mode_metadata->ticks_until_event) {
       continue;
     }

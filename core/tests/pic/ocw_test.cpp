@@ -33,7 +33,7 @@ class OCWTest : public ::testing::Test {
 
     ASSERT_EQ(pic_.init_state, kPICReady);
   }
-  PICState pic_ = {0};
+  YPICState pic_ = {0};
 };
 
 TEST_F(OCWTest, OCW1_SetIMR) {

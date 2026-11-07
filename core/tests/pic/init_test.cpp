@@ -7,7 +7,7 @@ namespace {
 class ICWTest : public ::testing::Test {
  protected:
   void SetUp() override { PICInit(&pic_); }
-  PICState pic_ = {0};
+  YPICState pic_ = {0};
 };
 
 TEST_F(ICWTest, InitialState) {

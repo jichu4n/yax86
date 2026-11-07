@@ -25,7 +25,7 @@ class Mode3Test : public ::testing::Test {
     irq_0_call_count = 0;
     speaker_frequency_hz = 0;
   }
-  PITState pit_ = {0};
+  YPITState pit_ = {0};
 };
 
 TEST_F(Mode3Test, SystemTimerSquareWave) {

@@ -33,7 +33,7 @@ class KeyboardTest : public ::testing::Test {
   }
 
   // Member variables for the module's state
-  KeyboardState keyboard_ = {0};
+  YKeyboardState keyboard_ = {0};
 };
 
 TEST_F(KeyboardTest, Initialization) {
@@ -42,7 +42,7 @@ TEST_F(KeyboardTest, Initialization) {
   ASSERT_TRUE(keyboard_.clock_low);
   ASSERT_EQ(keyboard_.clock_low_ms, 0);
   ASSERT_FALSE(keyboard_.waiting_for_ack);
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 0);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 0);
 }
 
 TEST_F(KeyboardTest, ResetSequence) {
@@ -53,8 +53,8 @@ TEST_F(KeyboardTest, ResetSequence) {
   }
 
   // Verify 0xAA is buffered but not sent yet.
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
-  ASSERT_EQ(*KeyboardBufferGet(&keyboard_.buffer, 0), 0xAA);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
+  ASSERT_EQ(*YKeyboardBufferGet(&keyboard_.buffer, 0), 0xAA);
   ASSERT_TRUE(g_sent_scancodes.empty());
 
   // 2. Release clock and pulse enable_clear to signal ack.
@@ -89,7 +89,7 @@ TEST_F(KeyboardTest, KeyPressAndAck) {
 
   // Verify the second scancode is NOT sent because we're waiting for an ack.
   ASSERT_EQ(g_sent_scancodes.size(), 1);
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   // 4. Simulate BIOS acknowledgement pulse.
   KeyboardHandleControl(&keyboard_, true, true);   // Pulse high
@@ -112,7 +112,7 @@ TEST_F(KeyboardTest, BufferOverflow) {
   }
 
   // Verify the buffer is full but not over-full.
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), kKeyboardBufferSize);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), kKeyboardBufferSize);
 }
 
 TEST_F(KeyboardTest, KeysPressedDuringResetAreDropped) {
@@ -124,10 +124,10 @@ TEST_F(KeyboardTest, KeysPressedDuringResetAreDropped) {
   for (int i = 0; i < kKeyboardResetThresholdMs; ++i) {
     KeyboardTickMs(&keyboard_);
   }
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);  // the 0xAA self test
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);  // the 0xAA self test
 
   KeyboardHandleKeyPress(&keyboard_, 0x1C);
-  EXPECT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+  EXPECT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   // Coming out of reset, the self test code is the only thing sent.
   KeyboardHandleControl(&keyboard_, false, true);
@@ -174,7 +174,7 @@ TEST_F(KeyboardTest, KeysPressedDuringAShortClockLowAreKept) {
   }
 
   KeyboardHandleKeyPress(&keyboard_, 0x1E);
-  EXPECT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+  EXPECT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   KeyboardHandleControl(&keyboard_, false, true);
   KeyboardTickMs(&keyboard_);
@@ -188,7 +188,7 @@ TEST_F(KeyboardTest, KeysPressedWhileMerelyInhibitedAreKept) {
   // pressed then is held until the keyboard is enabled again rather than lost.
   KeyboardHandleControl(&keyboard_, true, true);
   KeyboardHandleKeyPress(&keyboard_, 0x1E);
-  EXPECT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+  EXPECT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   KeyboardHandleControl(&keyboard_, false, true);
   KeyboardTickMs(&keyboard_);
@@ -208,13 +208,13 @@ TEST_F(KeyboardTest, InhibitedState) {
 
   // Verify no scancode was sent.
   ASSERT_TRUE(g_sent_scancodes.empty());
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 }
 
 TEST_F(KeyboardTest, ShortClockLowDoesNotReset) {
   // 1. Buffer a key to ensure it's preserved.
   KeyboardHandleKeyPress(&keyboard_, 0x1E);  // 'A' key
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
 
   // 2. Hold clock low for less than the reset threshold.
   KeyboardHandleControl(&keyboard_, false, false);
@@ -223,8 +223,8 @@ TEST_F(KeyboardTest, ShortClockLowDoesNotReset) {
   }
 
   // 3. Verify that no reset was triggered and the buffer is intact.
-  ASSERT_EQ(KeyboardBufferLength(&keyboard_.buffer), 1);
-  ASSERT_EQ(*KeyboardBufferGet(&keyboard_.buffer, 0), 0x1E);
+  ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 1);
+  ASSERT_EQ(*YKeyboardBufferGet(&keyboard_.buffer, 0), 0x1E);
   ASSERT_TRUE(g_sent_scancodes.empty());  // Nothing should have been sent.
 
   // 4. Release the clock.

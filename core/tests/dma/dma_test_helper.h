@@ -56,7 +56,7 @@ class DMATest : public ::testing::Test {
     DMAInit(&dma_);
   }
 
-  DMAState dma_ = {0};
+  YDMAState dma_ = {0};
 };
 
 }  // namespace

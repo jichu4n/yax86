@@ -405,7 +405,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 #line 1 "./src/util/log.h"
 // Logging library.
 //
-// Provides a Logger that formats messages and hands them to a caller-provided
+// Provides a YLogger that formats messages and hands them to a caller-provided
 // sink. Logging is always compiled in - even on MCU targets the sink can write
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
@@ -433,7 +433,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 // ============================================================================
 
 // Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
+typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
   kLogLevelError = 0,
@@ -441,31 +441,31 @@ typedef enum LogLevel {
   kLogLevelWarn,
   // Diagnostic detail.
   kLogLevelDebug,
-} LogLevel;
+} YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
   kLogMaxLineLength = 256,
   // Maximum number of distinct log modules, bounded by the width of
-  // LoggerConfig.enabled_modules.
+  // YLoggerConfig.enabled_modules.
   kLogMaxModules = 32,
 };
 
 // Identifies the module a log message originated from.
 //
-// Each module declares its own LogModule in its own public header, so that
+// Each module declares its own YLogModule in its own public header, so that
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
-typedef struct LogModule {
+typedef struct YLogModule {
   // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
-} LogModule;
+} YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -474,7 +474,7 @@ YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
 // ============================================================================
 
 // Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
+typedef struct YLoggerConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -482,7 +482,7 @@ typedef struct LoggerConfig {
   // and carries no prefix or trailing newline - the host composes the final
   // output line.
   void (*write_line)(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length);
 
   // Callback returning the current tick count. The platform wires this to its
@@ -490,27 +490,27 @@ typedef struct LoggerConfig {
   // is 0.
   uint64_t (*get_tick)(void* context);
 
-  // Bit mask of enabled modules, indexed by LogModule.id.
+  // Bit mask of enabled modules, indexed by YLogModule.id.
   uint32_t enabled_modules;
 
   // Maximum severity level to emit. Messages with a level greater than this
   // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
+  YLogLevel min_level;
+} YLoggerConfig;
 
 // State of a logger.
-typedef struct Logger {
+typedef struct YLogger {
   // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
+  YLoggerConfig* config;
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
   char buffer[kLogMaxLineLength];
-} Logger;
+} YLogger;
 
 // Initialize a logger with the provided configuration.
 YAX86_PUBLIC_HEADER inline void LoggerInit(
-    Logger* logger, LoggerConfig* config) {
+    YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
 YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
-    const Logger* logger, const LogModule* module, LogLevel level) {
+    const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
 
 // Enable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -536,7 +536,7 @@ YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
 
 // Disable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
   }
@@ -545,12 +545,12 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) YAX86_UNUSED;
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) YAX86_UNUSED;
 
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) {
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
   if (!LoggerIsEnabled(logger, module, level)) {
@@ -640,13 +640,13 @@ enum {
 };
 
 // Log module for the DMA.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleDMA = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleDMA = {
     .id = kLogModuleIDDMA,
     .name = "DMA",
 };
 
 // I/O ports for the 8237 DMA Controller and Page Registers.
-typedef enum DMAPort {
+typedef enum YDMAPort {
   // --- 8237 DMA Controller ---
   // Channel 0 base and current address
   kDMAPortChannel0Address = 0x00,
@@ -688,7 +688,7 @@ typedef enum DMAPort {
   kDMAPortPageChannel1 = 0x83,
   // Page register for Channel 0
   kDMAPortPageChannel0 = 0x87,
-} DMAPort;
+} YDMAPort;
 
 // Bit definitions for the Mode Register (Port 0x0B)
 enum {
@@ -738,15 +738,15 @@ enum {
 // DMA state
 // ============================================================================
 
-struct DMAState;
+struct YDMAState;
 
 // Caller-provided runtime configuration for the DMA controller.
-typedef struct DMAConfig {
+typedef struct YDMAConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to read a byte from system memory.
   uint8_t (*read_memory_byte)(void* context, uint32_t address);
@@ -762,10 +762,10 @@ typedef struct DMAConfig {
   // count. This corresponds to the EOP (End of Process) signal on the 8237,
   // which is connected to the TC (Terminal Count) pin on devices like the FDC.
   void (*on_terminal_count)(void* context, uint8_t channel);
-} DMAConfig;
+} YDMAConfig;
 
 // State for a single DMA channel.
-typedef struct DMAChannelState {
+typedef struct YDMAChannelState {
   // Base address register, reloaded on auto-initialization.
   uint16_t base_address;
   // Current address register, updated during a transfer.
@@ -778,23 +778,23 @@ typedef struct DMAChannelState {
   uint8_t mode;
   // High-order address bits from the page register.
   uint8_t page_register;
-} DMAChannelState;
+} YDMAChannelState;
 
 // Which register byte to read/write next.
-typedef enum DMARegisterByte {
+typedef enum YDMARegisterByte {
   // Read or write the lower byte next.
   kDMARegisterLSB = 0,
   // Read or write the upper byte next.
   kDMARegisterMSB = 1,
-} DMARegisterByte;
+} YDMARegisterByte;
 
 // State for the entire 8237 DMA controller.
-typedef struct DMAState {
+typedef struct YDMAState {
   // Pointer to the DMA configuration.
-  DMAConfig config;
+  YDMAConfig config;
 
   // The four DMA channels.
-  DMAChannelState channels[kDMANumChannels];
+  YDMAChannelState channels[kDMANumChannels];
 
   // Command register for the controller.
   uint8_t command_register;
@@ -806,26 +806,26 @@ typedef struct DMAState {
   uint8_t mask_register;
 
   // Internal byte flip-flop for 16-bit register access.
-  DMARegisterByte rw_byte;
-} DMAState;
+  YDMARegisterByte rw_byte;
+} YDMAState;
 
 // ============================================================================
 // DMA interface
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-YAX86_PUBLIC void DMAInit(DMAState* dma);
+YAX86_PUBLIC void DMAInit(YDMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
-YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port);
+YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port);
 
 // Handles writes to the DMA's I/O ports.
-YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value);
+YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
 
 // Executes a single-byte transfer for the specified channel. This function
 // should be called by the platform in response to a DREQ signal from a
 // peripheral.
-YAX86_PUBLIC void DMATransferByte(DMAState* dma, uint8_t channel_index);
+YAX86_PUBLIC void DMATransferByte(YDMAState* dma, uint8_t channel_index);
 
 #endif  // YAX86_DMA_PUBLIC_H
 
@@ -849,14 +849,14 @@ YAX86_PUBLIC void DMATransferByte(DMAState* dma, uint8_t channel_index);
 #define YAX86_DMA_LOG(level, ...) \
   YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
 
-YAX86_PUBLIC void DMAInit(DMAState* dma) {
+YAX86_PUBLIC void DMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
 
 // Helper to read a 16-bit value byte-by-byte using the flip-flop.
 YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
-    DMAState* dma, uint16_t value) {
+    YDMAState* dma, uint16_t value) {
   uint8_t byte;
   if (dma->rw_byte == kDMARegisterMSB) {
     byte = (value >> 8) & 0xFF;
@@ -868,7 +868,7 @@ YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
   return byte;
 }
 
-YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
+YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -881,7 +881,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
     case kDMAPortChannel3Count: {
       const int channel_index = port / 2;
       const bool is_count_register = port % 2;
-      const DMAChannelState* channel = &dma->channels[channel_index];
+      const YDMAChannelState* channel = &dma->channels[channel_index];
       return DMAReadRegisterByte(
           dma, is_count_register ? channel->current_count
                                  : channel->current_address);
@@ -903,7 +903,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
 // Helper to write a 16-bit value byte-by-byte using the flip-flop.
 // Note: Writes update both the 'base' and 'current' registers.
 YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
-    DMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
+    YDMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
   if (dma->rw_byte == kDMARegisterMSB) {
     // Second write sets the high byte.
     *base_reg = (*base_reg & 0x00FF) | ((uint16_t)value << 8);
@@ -917,7 +917,7 @@ YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
   *current_reg = *base_reg;
 }
 
-YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -930,7 +930,7 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
     case kDMAPortChannel3Count: {
       const int channel_index = port / 2;
       const bool is_count_register = port % 2;
-      DMAChannelState* channel = &dma->channels[channel_index];
+      YDMAChannelState* channel = &dma->channels[channel_index];
 
       if (is_count_register) {
         DMAWriteRegisterByte(
@@ -962,7 +962,7 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
         dma->mask_register &= ~(1 << channel_index);
         // Unmasking is the point at which a channel becomes live, so the
         // address, count and page registers are final here.
-        const DMAChannelState* channel = &dma->channels[channel_index];
+        const YDMAChannelState* channel = &dma->channels[channel_index];
         YAX86_DMA_LOG(
             kLogLevelDebug,
             "channel %d enabled: address %02X:%04X count %04X mode %02X",
@@ -991,7 +991,7 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
       // what the host wired up and survives - a reset is the chip's, not the
       // machine's. Members left out of an initializer are zeroed, so naming
       // the one that stays is the whole of it.
-      *dma = (DMAState){.config = dma->config};
+      *dma = (YDMAState){.config = dma->config};
       DMAInit(dma);
       break;
 
@@ -1021,11 +1021,11 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
 }
 
 YAX86_PUBLIC YAX86_HOT void DMATransferByte(
-    DMAState* dma, uint8_t channel_index) {
+    YDMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;
   }
-  DMAChannelState* channel = &dma->channels[channel_index];
+  YDMAChannelState* channel = &dma->channels[channel_index];
 
   // Check if controller is disabled (bit 2 of command register).
   if ((dma->command_register & 0x04) != 0) {

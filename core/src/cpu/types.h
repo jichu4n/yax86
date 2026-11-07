@@ -8,10 +8,10 @@
 // Data width helpers.
 
 // Data widths supported by the 8086 CPU.
-typedef enum Width {
+typedef enum YCPUWidth {
   kByte = 0,
   kWord,
-} Width;
+} YCPUWidth;
 
 enum {
   // Number of data width types.
@@ -64,30 +64,30 @@ YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBits[kNumWidths] = {
 // Operand types.
 
 // The address of a register operand.
-typedef struct RegisterAddress {
+typedef struct YCPURegisterAddress {
   // Register index. A uint8_t so the layout does not depend on
   // -fshort-enums.
   uint8_t register_index;
   // Byte offset within the register; only relevant for byte-sized operands.
   // 0 for low byte (AL, CL, DL, BL), 8 for high byte (AH, CH, DH, BH).
   uint8_t byte_offset;
-} RegisterAddress;
+} YCPURegisterAddress;
 
 // The address of a memory operand.
-typedef struct MemoryAddress {
+typedef struct YCPUMemoryAddress {
   // Segment register. A uint8_t because ApplySegmentOverride() writes it
   // through a pointer, and an enum's width is the target's business - one byte
   // under -fshort-enums and four otherwise.
   uint8_t segment_register_index;
   // Effective address offset.
   uint16_t offset;
-} MemoryAddress;
+} YCPUMemoryAddress;
 
 // Whether the operand is a register or memory operand.
-typedef enum OperandAddressType {
+typedef enum YCPUOperandAddressType {
   kOperandAddressTypeRegister = 0,
   kOperandAddressTypeMemory,
-} OperandAddressType;
+} YCPUOperandAddressType;
 
 enum {
   // Number of operand address types.
@@ -98,7 +98,7 @@ enum {
 //
 // Four bytes, which is the largest a composite AAPCS returns in a register
 // rather than through memory.
-typedef struct OperandAddress {
+typedef struct YCPUOperandAddress {
   // kOperandAddressTypeRegister or kOperandAddressTypeMemory. A uint8_t rather
   // than the enum to ensure the four byte layout.
   uint8_t type;
@@ -108,7 +108,7 @@ typedef struct OperandAddress {
   // The byte within that register - 0 for AL, 8 for AH - or the effective
   // address offset within that segment.
   uint16_t offset;
-} OperandAddress;
+} YCPUOperandAddress;
 
 // The value of an operand.
 //
@@ -122,32 +122,33 @@ typedef struct OperandAddress {
 // widen it by doing nothing. What the type no longer carries is the width, and
 // the width is what sign extension needs - so that is passed explicitly, from
 // the opcode table entry the caller already has.
-typedef uint16_t OperandValue;
+typedef uint16_t YCPUOperandValue;
 
 // An operand.
-typedef struct Operand {
+typedef struct YCPUOperand {
   // Address of the operand.
-  OperandAddress address;
+  YCPUOperandAddress address;
   // Value of the operand.
-  OperandValue value;
-} Operand;
+  YCPUOperandValue value;
+} YCPUOperand;
 
 // Instruction types.
 
-struct OpcodeMetadata;
+struct YCPUOpcodeMetadata;
 
 // Context during instruction execution.
 typedef struct {
-  CPUState* cpu;
-  const Instruction* instruction;
-  const struct OpcodeMetadata* metadata;
-} InstructionContext;
+  YCPUState* cpu;
+  const YCPUInstruction* instruction;
+  const struct YCPUOpcodeMetadata* metadata;
+} YCPUInstructionContext;
 
 // Handler function for an opcode.
-typedef InstructionResult (*OpcodeHandler)(const InstructionContext* context);
+typedef YCPUInstructionResult (*YCPUOpcodeHandler)(
+    const YCPUInstructionContext* context);
 
 // An entry in the opcode lookup table.
-typedef struct OpcodeMetadata {
+typedef struct YCPUOpcodeMetadata {
   // What the instruction costs before the effective address computation and
   // its time on the data bus - see cycles.c for how the three fit together.
   uint8_t base_cycles;
@@ -159,10 +160,10 @@ typedef struct OpcodeMetadata {
   uint8_t immediate_size;
 
   // Width of the instruction's operands.
-  Width width : 8;
+  YCPUWidth width : 8;
 
   // Handler function.
-  OpcodeHandler handler;
-} OpcodeMetadata;
+  YCPUOpcodeHandler handler;
+} YCPUOpcodeMetadata;
 
 #endif  // YAX86_CPU_TYPES_H

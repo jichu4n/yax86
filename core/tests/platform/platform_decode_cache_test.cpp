@@ -47,7 +47,7 @@ class PlatformDecodeCacheTest : public ::testing::Test {
 
   uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
 
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
   uint8_t rom_[0x800] = {0};
@@ -81,7 +81,7 @@ TEST_F(PlatformDecodeCacheTest, RegisteringAMemoryRegionDiscardsEveryDecode) {
 
   PokeBehindTheCPUsBack(kProgramOffset, {kOpMovAlImm8, 0x22});
   // Any type no module has claimed, mapped somewhere nothing else covers.
-  MemoryMapEntry extra_rom = {};
+  YPlatformMemoryMapEntry extra_rom = {};
   extra_rom.entry_type = 0x7F;
   extra_rom.start = 0xD0000;
   extra_rom.end = 0xD07FF;

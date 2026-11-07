@@ -21,7 +21,7 @@ class PlatformMemoryMapTest : public ::testing::Test {
 
   // Registers a region backed by region_ over [start, end].
   bool RegisterTestRegion(uint32_t start, uint32_t end) {
-    MemoryMapEntry entry = {0};
+    YPlatformMemoryMapEntry entry = {0};
     entry.context = this;
     entry.entry_type = kMemoryMapEntryTest;
     entry.start = start;
@@ -35,16 +35,19 @@ class PlatformMemoryMapTest : public ::testing::Test {
     return true;
   }
 
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
   uint8_t region_[3 * kMemoryPageSize] = {0};
 };
 
 TEST_F(PlatformMemoryMapTest, ResolvesConventionalMemory) {
-  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(&platform_, 0x00400);
+  YPlatformMemoryMapEntry* entry =
+      GetMemoryMapEntryForAddress(&platform_, 0x00400);
   ASSERT_NE(entry, nullptr);
-  EXPECT_EQ(entry->entry_type, (MemoryMapEntryType)kMemoryMapEntryConventional);
+  EXPECT_EQ(
+      entry->entry_type,
+      (YPlatformMemoryMapEntryType)kMemoryMapEntryConventional);
   EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, sizeof(ram_) - 1), entry);
 }
 
@@ -73,7 +76,7 @@ TEST_F(PlatformMemoryMapTest, RegionReachingPastTheAddressSpaceIsRejected) {
       kMemoryAddressSpaceSize, kMemoryAddressSpaceSize + kMemoryPageSize - 1));
   EXPECT_EQ(
       GetMemoryMapEntryByType(
-          &platform_, (MemoryMapEntryType)kMemoryMapEntryTest),
+          &platform_, (YPlatformMemoryMapEntryType)kMemoryMapEntryTest),
       nullptr);
 }
 
@@ -82,8 +85,8 @@ TEST_F(PlatformMemoryMapTest, PageAlignedRegionResolvesThroughout) {
   const uint32_t end = start + sizeof(region_) - 1;
   ASSERT_TRUE(RegisterTestRegion(start, end));
 
-  MemoryMapEntry* entry = GetMemoryMapEntryByType(
-      &platform_, (MemoryMapEntryType)kMemoryMapEntryTest);
+  YPlatformMemoryMapEntry* entry = GetMemoryMapEntryByType(
+      &platform_, (YPlatformMemoryMapEntryType)kMemoryMapEntryTest);
   ASSERT_NE(entry, nullptr);
   for (uint32_t address = start; address <= end; address += 256) {
     ASSERT_EQ(GetMemoryMapEntryForAddress(&platform_, address), entry)
@@ -102,8 +105,8 @@ TEST_F(PlatformMemoryMapTest, RegionStraddlingPageBoundariesResolvesExactly) {
   const uint32_t end = start + kMemoryPageSize;  // Spans three pages, partly.
   ASSERT_TRUE(RegisterTestRegion(start, end));
 
-  MemoryMapEntry* entry = GetMemoryMapEntryByType(
-      &platform_, (MemoryMapEntryType)kMemoryMapEntryTest);
+  YPlatformMemoryMapEntry* entry = GetMemoryMapEntryByType(
+      &platform_, (YPlatformMemoryMapEntryType)kMemoryMapEntryTest);
   ASSERT_NE(entry, nullptr);
 
   // Every byte inside resolves to the region, including the two partial pages
@@ -154,7 +157,7 @@ TEST_F(PlatformMemoryMapTest, IndexTracksRegistrationsAfterInit) {
 // builds.
 TEST_F(PlatformMemoryMapTest, TopPageOfTheAddressSpaceIsIndexed) {
   const uint32_t top = kMemoryAddressSpaceSize - 1;
-  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(&platform_, top);
+  YPlatformMemoryMapEntry* entry = GetMemoryMapEntryForAddress(&platform_, top);
   ASSERT_NE(entry, nullptr);
   ASSERT_EQ(entry->end, top);
 
@@ -167,7 +170,7 @@ TEST_F(PlatformMemoryMapTest, TopPageOfTheAddressSpaceIsIndexed) {
 
 TEST_F(PlatformMemoryMapTest, OverlappingRegistrationIsRejected) {
   // Conventional memory already covers this, so the index must be left alone.
-  MemoryMapEntry entry = {0};
+  YPlatformMemoryMapEntry entry = {0};
   entry.entry_type = kMemoryMapEntryTest;
   entry.start = 0x00000;
   entry.end = 0x00FFF;
@@ -175,7 +178,7 @@ TEST_F(PlatformMemoryMapTest, OverlappingRegistrationIsRejected) {
   entry.write_data = region_;
   EXPECT_FALSE(RegisterMemoryMapEntry(&platform_, &entry));
 
-  MemoryMapEntry* conventional =
+  YPlatformMemoryMapEntry* conventional =
       GetMemoryMapEntryByType(&platform_, kMemoryMapEntryConventional);
   EXPECT_EQ(GetMemoryMapEntryForAddress(&platform_, 0x00000), conventional);
 }

@@ -405,7 +405,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 #line 1 "./src/util/log.h"
 // Logging library.
 //
-// Provides a Logger that formats messages and hands them to a caller-provided
+// Provides a YLogger that formats messages and hands them to a caller-provided
 // sink. Logging is always compiled in - even on MCU targets the sink can write
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
@@ -433,7 +433,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 // ============================================================================
 
 // Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
+typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
   kLogLevelError = 0,
@@ -441,31 +441,31 @@ typedef enum LogLevel {
   kLogLevelWarn,
   // Diagnostic detail.
   kLogLevelDebug,
-} LogLevel;
+} YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
   kLogMaxLineLength = 256,
   // Maximum number of distinct log modules, bounded by the width of
-  // LoggerConfig.enabled_modules.
+  // YLoggerConfig.enabled_modules.
   kLogMaxModules = 32,
 };
 
 // Identifies the module a log message originated from.
 //
-// Each module declares its own LogModule in its own public header, so that
+// Each module declares its own YLogModule in its own public header, so that
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
-typedef struct LogModule {
+typedef struct YLogModule {
   // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
-} LogModule;
+} YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -474,7 +474,7 @@ YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
 // ============================================================================
 
 // Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
+typedef struct YLoggerConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -482,7 +482,7 @@ typedef struct LoggerConfig {
   // and carries no prefix or trailing newline - the host composes the final
   // output line.
   void (*write_line)(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length);
 
   // Callback returning the current tick count. The platform wires this to its
@@ -490,27 +490,27 @@ typedef struct LoggerConfig {
   // is 0.
   uint64_t (*get_tick)(void* context);
 
-  // Bit mask of enabled modules, indexed by LogModule.id.
+  // Bit mask of enabled modules, indexed by YLogModule.id.
   uint32_t enabled_modules;
 
   // Maximum severity level to emit. Messages with a level greater than this
   // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
+  YLogLevel min_level;
+} YLoggerConfig;
 
 // State of a logger.
-typedef struct Logger {
+typedef struct YLogger {
   // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
+  YLoggerConfig* config;
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
   char buffer[kLogMaxLineLength];
-} Logger;
+} YLogger;
 
 // Initialize a logger with the provided configuration.
 YAX86_PUBLIC_HEADER inline void LoggerInit(
-    Logger* logger, LoggerConfig* config) {
+    YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
 YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
-    const Logger* logger, const LogModule* module, LogLevel level) {
+    const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
 
 // Enable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -536,7 +536,7 @@ YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
 
 // Disable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
   }
@@ -545,12 +545,12 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) YAX86_UNUSED;
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) YAX86_UNUSED;
 
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) {
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
   if (!LoggerIsEnabled(logger, module, level)) {
@@ -671,13 +671,13 @@ enum {
 };
 
 // Log module for the PPI.
-YAX86_PUBLIC_HEADER const LogModule kLogModulePPI = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModulePPI = {
     .id = kLogModuleIDPPI,
     .name = "PPI",
 };
 
 // I/O ports exposed by the PPI.
-typedef enum PPIPort {
+typedef enum YPPIPort {
   // Keyboard scancode
   kPPIPortA = 0x60,
   // System control
@@ -686,7 +686,7 @@ typedef enum PPIPort {
   kPPIPortC = 0x62,
   // Control word
   kPPIPortControl = 0x63,
-} PPIPort;
+} YPPIPort;
 
 // Bit definitions for PPI Port B (kPPIPortB).
 enum {
@@ -711,7 +711,7 @@ enum {
 // Memory sizes defined by DIP switches, corresponding to Port A bits 2-3.
 // Note that GLaBIOS in ARCH_TYPE_EMU mode does not actually make use of these
 // and instead performs its own memory detection based on the video card type.
-typedef enum PPIMemorySize {
+typedef enum YPPIMemorySize {
   // 00 = 64KB
   kPPIMemorySize64KB = 0,
   // 01 = 128KB
@@ -720,10 +720,10 @@ typedef enum PPIMemorySize {
   kPPIMemorySize192KB = 2,
   // 11 = 256KB
   kPPIMemorySize256KB = 3,
-} PPIMemorySize;
+} YPPIMemorySize;
 
 // Display mode at boot time, corresponding to Port A bits 4-5.
-typedef enum PPIDisplayMode {
+typedef enum YPPIDisplayMode {
   // 00 = EGA/VGA (ROM)
   kPPIDisplayEGA = 0,
   // 01 = CGA 40x25
@@ -732,26 +732,26 @@ typedef enum PPIDisplayMode {
   kPPIDisplayCGA80x25 = 2,
   // 11 = MDA 80x25
   kPPIDisplayMDA = 3,
-} PPIDisplayMode;
+} YPPIDisplayMode;
 
-struct PPIState;
+struct YPPIState;
 
 // Caller-provided runtime configuration for the PPI.
-typedef struct PPIConfig {
+typedef struct YPPIConfig {
   // Opaque context pointer, passed to all callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Number of floppy drives (1-4).
   uint8_t num_floppy_drives;
 
   // Memory size setting from DIP switches.
-  PPIMemorySize memory_size;
+  YPPIMemorySize memory_size;
 
   // Display mode setting from DIP switches.
-  PPIDisplayMode display_mode;
+  YPPIDisplayMode display_mode;
 
   // Whether FPU is installed.
   bool fpu_installed;
@@ -767,12 +767,12 @@ typedef struct PPIConfig {
       bool keyboard_enable_clear,
       // Port B bit 6
       bool keyboard_clock_low);
-} PPIConfig;
+} YPPIConfig;
 
 // State of the PPI.
-typedef struct PPIState {
+typedef struct YPPIState {
   // Pointer to the PPI configuration.
-  PPIConfig config;
+  YPPIConfig config;
 
   // Port A: Keyboard scancode latch.
   uint8_t port_a_latch;
@@ -782,29 +782,29 @@ typedef struct PPIState {
 
   // Current frequency of the PC speaker generated by the PIT, in Hz.
   uint32_t pc_speaker_frequency_from_pit;
-} PPIState;
+} YPPIState;
 
 // Initializes the PPI to its power-on state.
-YAX86_PUBLIC void PPIInit(PPIState* ppi);
+YAX86_PUBLIC void PPIInit(YPPIState* ppi);
 
 // Handles reads from the PPI's I/O ports (0x60-0x62).
-YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port);
+YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port);
 
 // Handles writes to the PPI's I/O ports (0x61, 0x63).
-YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value);
 
 // Returns whether the PC speaker is currently enabled. This is determined by
 // bit 0 and 1 of Port B.
-YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi);
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(YPPIState* ppi);
 
 // Sets the PC speaker frequency from the 8253 timer channel 2 output. This
 // should be wired up to the callback from the PIT emulation module.
 YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
-    PPIState* ppi, uint32_t frequency_hz);
+    YPPIState* ppi, uint32_t frequency_hz);
 
 // Sets the scancode byte that will be returned when the CPU reads from Port A.
 // This function should be called by the keyboard emulation module.
-YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode);
+YAX86_PUBLIC void PPISetScancode(YPPIState* ppi, uint8_t scancode);
 
 #endif  // YAX86_PPI_PUBLIC_H
 
@@ -825,20 +825,20 @@ YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode);
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-YAX86_PUBLIC void PPIInit(PPIState* ppi) {
+YAX86_PUBLIC void PPIInit(YPPIState* ppi) {
   // Initially, keyboard clock is enabled (bit 6 = 1) and keyboard read is
   // enabled (bit 7 = 0).
   ppi->port_b = kPPIPortBKeyboardClockLow;
 }
 
 // Gets the number of floppy drives from the config, clamped to 1-4.
-YAX86_FILE_PRIVATE inline uint8_t GetNumFloppyDrives(const PPIConfig* config) {
+YAX86_FILE_PRIVATE inline uint8_t GetNumFloppyDrives(const YPPIConfig* config) {
   if (config->num_floppy_drives < 1) return 1;
   if (config->num_floppy_drives > 4) return 4;
   return config->num_floppy_drives;
 }
 
-YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
+YAX86_PUBLIC uint8_t PPIReadPort(YPPIState* ppi, uint16_t port) {
   switch (port) {
     case kPPIPortA:
       // Reading Port A gets the keyboard scancode.
@@ -875,17 +875,17 @@ YAX86_PUBLIC uint8_t PPIReadPort(PPIState* ppi, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(PPIState* ppi) {
+YAX86_PUBLIC bool PPIIsPCSpeakerEnabled(YPPIState* ppi) {
   return (ppi->port_b & kPPIPortBTimer2Gate) &&
          (ppi->port_b & kPPIPortBSpeakerData);
 }
 
-YAX86_FILE_PRIVATE inline uint8_t PPIGetKeyboardControl(const PPIState* ppi) {
+YAX86_FILE_PRIVATE inline uint8_t PPIGetKeyboardControl(const YPPIState* ppi) {
   return (
       ppi->port_b & (kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow));
 }
 
-YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void PPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
     case kPPIPortB: {
       // Save old states in order to check for changes after the write.
@@ -931,7 +931,7 @@ YAX86_PUBLIC void PPIWritePort(PPIState* ppi, uint16_t port, uint8_t value) {
 }
 
 YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
-    PPIState* ppi, uint32_t frequency_hz) {
+    YPPIState* ppi, uint32_t frequency_hz) {
   uint32_t old_frequency = ppi->pc_speaker_frequency_from_pit;
   ppi->pc_speaker_frequency_from_pit = frequency_hz;
   // Invoke the callback only if the speaker is currently enabled and the
@@ -942,7 +942,7 @@ YAX86_PUBLIC void PPISetPCSpeakerFrequencyFromPIT(
   }
 }
 
-YAX86_PUBLIC void PPISetScancode(PPIState* ppi, uint8_t scancode) {
+YAX86_PUBLIC void PPISetScancode(YPPIState* ppi, uint8_t scancode) {
   ppi->port_a_latch = scancode;
 }
 

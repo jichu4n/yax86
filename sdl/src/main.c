@@ -17,7 +17,7 @@
 // 1MB of internal address space (covers conventional memory + video RAM + BIOS)
 #define INTERNAL_RAM_SIZE (1024 * 1024)
 static uint8_t g_memory[INTERNAL_RAM_SIZE];
-static PlatformState g_platform;
+static YPlatformState g_platform;
 static bool g_running = true;
 // Set once the emulated machine can no longer make progress. The window stays
 // open and keeps rendering, but the platform is no longer ticked.
@@ -27,14 +27,14 @@ static bool g_cpu_stopped = false;
 enum {
   kLogModuleIDApp = 16,
 };
-static const LogModule kLogModuleApp = {
+static const YLogModule kLogModuleApp = {
     .id = kLogModuleIDApp,
     .name = "APP",
 };
 
-static LoggerConfig g_logger_config;
+static YLoggerConfig g_logger_config;
 
-static const char* MainLogLevelName(LogLevel level) {
+static const char* MainLogLevelName(YLogLevel level) {
   switch (level) {
     case kLogLevelError:
       return "ERROR";
@@ -49,7 +49,7 @@ static const char* MainLogLevelName(LogLevel level) {
 
 // Log sink. Under Emscripten, stdout is routed to the browser console.
 static void MainWriteLogLine(
-    YAX86_UNUSED void* context, const LogModule* module, LogLevel level,
+    YAX86_UNUSED void* context, const YLogModule* module, YLogLevel level,
     uint64_t tick, const char* message, YAX86_UNUSED size_t length) {
   printf(
       "[%llu] %-5s %-8s %s\n", (unsigned long long)tick,
@@ -87,27 +87,27 @@ enum {
 };
 
 // The video adapter installed in the emulated machine, and its metadata.
-static VideoAdapter g_video_adapter = kVideoAdapterCGA;
-static const VideoAdapterMetadata* g_video_adapter_metadata = NULL;
+static YVideoAdapter g_video_adapter = kVideoAdapterCGA;
+static const YVideoAdapterMetadata* g_video_adapter_metadata = NULL;
 
 static void MainWritePixels(
-    YAX86_UNUSED struct VideoState* video, Position origin, const RGB* pixels,
-    uint8_t count) {
+    YAX86_UNUSED struct YVideoState* video, YVideoPosition origin,
+    const YVideoRGB* pixels, uint8_t count) {
   DisplayPutPixels(origin.x, origin.y, pixels, count);
 }
 
 static void MainBeginRenderRegion(
-    YAX86_UNUSED struct VideoState* video, VideoRegion region) {
+    YAX86_UNUSED struct YVideoState* video, YVideoRegion region) {
   DisplayBeginRegion(
       region.origin.x, region.origin.y, region.width, region.height);
 }
 
-static void MainEndRenderRegion(YAX86_UNUSED struct VideoState* video) {
+static void MainEndRenderRegion(YAX86_UNUSED struct YVideoState* video) {
   DisplayEndRegion();
 }
 
 static void MainSetPCSpeakerFrequency(
-    YAX86_UNUSED PlatformState* platform, uint32_t frequency_hz) {
+    YAX86_UNUSED YPlatformState* platform, uint32_t frequency_hz) {
   AudioSetFrequency(frequency_hz);
 }
 
@@ -157,7 +157,7 @@ void MainTick(void) {
       (uint32_t)(elapsed_ns * kCPUCyclesPerSecond / kNanosecondsPerSecond);
   while (!g_cpu_stopped && remaining_ticks > 0) {
     const uint32_t start_tick = g_platform.ticks;
-    const PlatformRunStatus status = PlatformRun(&g_platform, remaining_ticks);
+    const YPlatformRunStatus status = PlatformRun(&g_platform, remaining_ticks);
     // Unsigned subtraction, so this stays correct across a tick counter wrap.
     const uint32_t consumed_ticks = g_platform.ticks - start_tick;
     remaining_ticks -=
@@ -251,9 +251,9 @@ int main(int argc, char* argv[]) {
   // Initialize Platform. The caller zeroes the state and fills in its config;
   // nothing inside zeroes anything, because every module's state is a field of
   // this one.
-  static const PlatformState kEmptyPlatform = {0};
+  static const YPlatformState kEmptyPlatform = {0};
   g_platform = kEmptyPlatform;
-  PlatformConfig* config = &g_platform.config;
+  YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_logger_config;
   config->physical_memory_size =
       640 * 1024;  // Use max allowed conventional memory

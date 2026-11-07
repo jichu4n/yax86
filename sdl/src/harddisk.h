@@ -17,6 +17,6 @@
 // The controller's option ROM, which is what gives the guest INT 13h support
 // for hard disks at all, is compiled into the core library and needs nothing
 // from the host.
-bool HardDiskAttach(PlatformState* platform, const char* path);
+bool HardDiskAttach(YPlatformState* platform, const char* path);
 
 #endif  // YAX86_SDL_HARDDISK_H

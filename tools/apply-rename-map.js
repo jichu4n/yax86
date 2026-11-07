@@ -138,51 +138,76 @@ function renameIdentifiers(text, renames) {
   return text.replace(/[A-Za-z_]\w*/g, (name) => renames.get(name) || name);
 }
 
+// Renames the code spans in a run of Markdown lines outside any fenced block.
+// A code span is delimited by a run of backticks and closed by a run of the
+// same length, and may wrap onto the lines after the one it opens on.
+function renameInMarkdownText(text, firstLine, renames, report) {
+  let result = '';
+  let rest = text;
+  let consumed = 0;
+  while (rest.length > 0) {
+    const open = /`+/.exec(rest);
+    const prose = open ? rest.slice(0, open.index) : rest;
+    for (const match of prose.matchAll(/[A-Za-z_]\w*/g)) {
+      if (renames.has(match[0]) && !isEnglishWord(match[0])) {
+        report(
+          firstLine + lineOf(text, consumed + match.index) - 1,
+          match[0],
+          'in Markdown prose',
+        );
+      }
+    }
+    result += prose;
+    if (!open) {
+      break;
+    }
+    const after = rest.slice(open.index + open[0].length);
+    const close = after.indexOf(open[0]);
+    if (close < 0) {
+      result += rest.slice(open.index);
+      break;
+    }
+    result += open[0] + renameIdentifiers(after.slice(0, close), renames) + open[0];
+    const length = open.index + open[0].length + close + open[0].length;
+    consumed += length;
+    rest = rest.slice(length);
+  }
+  return result;
+}
+
 function renameInMarkdown(text, renames, report) {
   const lines = text.split('\n');
+  const result = [];
   let fence = null;
-  return lines
-    .map((line, index) => {
-      const opening = /^\s*(`{3,}|~{3,})/.exec(line);
-      if (fence) {
-        if (opening && opening[1][0] === fence[0] && opening[1].length >= fence.length) {
-          fence = null;
-          return line;
-        }
-        return renameIdentifiers(line, renames);
+  // The prose lines since the last fence, renamed together so that a code
+  // span can wrap.
+  let pending = [];
+  const flush = (index) => {
+    if (pending.length > 0) {
+      const firstLine = index - pending.length + 1;
+      result.push(renameInMarkdownText(pending.join('\n'), firstLine, renames, report));
+      pending = [];
+    }
+  };
+  lines.forEach((line, index) => {
+    const opening = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (opening && opening[1][0] === fence[0] && opening[1].length >= fence.length) {
+        fence = null;
+        result.push(line);
+      } else {
+        result.push(renameIdentifiers(line, renames));
       }
-      if (opening) {
-        fence = opening[1];
-        return line;
-      }
-      // Alternate between prose and code spans, a code span being delimited
-      // by a run of backticks and closed by a run of the same length.
-      let result = '';
-      let rest = line;
-      while (rest.length > 0) {
-        const open = /`+/.exec(rest);
-        const prose = open ? rest.slice(0, open.index) : rest;
-        for (const match of prose.matchAll(/[A-Za-z_]\w*/g)) {
-          if (renames.has(match[0]) && !isEnglishWord(match[0])) {
-            report(index + 1, match[0], 'in Markdown prose');
-          }
-        }
-        result += prose;
-        if (!open) {
-          break;
-        }
-        const after = rest.slice(open.index + open[0].length);
-        const close = after.indexOf(open[0]);
-        if (close < 0) {
-          result += rest.slice(open.index);
-          break;
-        }
-        result += open[0] + renameIdentifiers(after.slice(0, close), renames) + open[0];
-        rest = after.slice(close + open[0].length);
-      }
-      return result;
-    })
-    .join('\n');
+    } else if (opening) {
+      flush(index);
+      fence = opening[1];
+      result.push(line);
+    } else {
+      pending.push(line);
+    }
+  });
+  flush(lines.length);
+  return result.join('\n');
 }
 
 function main() {

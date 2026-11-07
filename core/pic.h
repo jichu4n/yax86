@@ -405,7 +405,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 #line 1 "./src/util/log.h"
 // Logging library.
 //
-// Provides a Logger that formats messages and hands them to a caller-provided
+// Provides a YLogger that formats messages and hands them to a caller-provided
 // sink. Logging is always compiled in - even on MCU targets the sink can write
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
@@ -433,7 +433,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 // ============================================================================
 
 // Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
+typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
   kLogLevelError = 0,
@@ -441,31 +441,31 @@ typedef enum LogLevel {
   kLogLevelWarn,
   // Diagnostic detail.
   kLogLevelDebug,
-} LogLevel;
+} YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
   kLogMaxLineLength = 256,
   // Maximum number of distinct log modules, bounded by the width of
-  // LoggerConfig.enabled_modules.
+  // YLoggerConfig.enabled_modules.
   kLogMaxModules = 32,
 };
 
 // Identifies the module a log message originated from.
 //
-// Each module declares its own LogModule in its own public header, so that
+// Each module declares its own YLogModule in its own public header, so that
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
-typedef struct LogModule {
+typedef struct YLogModule {
   // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
-} LogModule;
+} YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -474,7 +474,7 @@ YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
 // ============================================================================
 
 // Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
+typedef struct YLoggerConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -482,7 +482,7 @@ typedef struct LoggerConfig {
   // and carries no prefix or trailing newline - the host composes the final
   // output line.
   void (*write_line)(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length);
 
   // Callback returning the current tick count. The platform wires this to its
@@ -490,27 +490,27 @@ typedef struct LoggerConfig {
   // is 0.
   uint64_t (*get_tick)(void* context);
 
-  // Bit mask of enabled modules, indexed by LogModule.id.
+  // Bit mask of enabled modules, indexed by YLogModule.id.
   uint32_t enabled_modules;
 
   // Maximum severity level to emit. Messages with a level greater than this
   // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
+  YLogLevel min_level;
+} YLoggerConfig;
 
 // State of a logger.
-typedef struct Logger {
+typedef struct YLogger {
   // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
+  YLoggerConfig* config;
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
   char buffer[kLogMaxLineLength];
-} Logger;
+} YLogger;
 
 // Initialize a logger with the provided configuration.
 YAX86_PUBLIC_HEADER inline void LoggerInit(
-    Logger* logger, LoggerConfig* config) {
+    YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
 YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
-    const Logger* logger, const LogModule* module, LogLevel level) {
+    const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
 
 // Enable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -536,7 +536,7 @@ YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
 
 // Disable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
   }
@@ -545,12 +545,12 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) YAX86_UNUSED;
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) YAX86_UNUSED;
 
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) {
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
   if (!LoggerIsEnabled(logger, module, level)) {
@@ -637,7 +637,7 @@ enum {
 };
 
 // Log module for the PIC.
-YAX86_PUBLIC_HEADER const LogModule kLogModulePIC = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModulePIC = {
     .id = kLogModuleIDPIC,
     .name = "PIC",
 };
@@ -647,7 +647,7 @@ YAX86_PUBLIC_HEADER const LogModule kLogModulePIC = {
 // ============================================================================
 
 // The mode of a PIC - single, master, or slave.
-typedef enum PICMode {
+typedef enum YPICMode {
   // Single PIC on IBM PC and PC/XT
   kPICSingle = 0,
   // Master PIC on IBM PC/AT and PS/2
@@ -656,10 +656,10 @@ typedef enum PICMode {
   kPICSlave,
   // Number of PIC modes
   kPICNumModes,
-} PICMode;
+} YPICMode;
 
 // Initialization state of a PIC.
-typedef enum PICInitState {
+typedef enum YPICInitState {
   // Uninitialized - waiting for ICW1.
   kPICExpectICW1 = 0,
   // ICW1 received - waiting for ICW2.
@@ -670,7 +670,7 @@ typedef enum PICInitState {
   kPICExpectICW4,
   // Fully initialized.
   kPICReady,
-} PICInitState;
+} YPICInitState;
 
 enum {
   // Indicates no pending interrupt. In normal operation, valid ranges of
@@ -679,34 +679,34 @@ enum {
   kPICNoPendingInterrupt = 0xFF,
 };
 
-struct PICState;
+struct YPICState;
 
 // Caller-provided runtime configuration.
-typedef struct PICConfig {
+typedef struct YPICConfig {
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // State of the SP pin.
   // - Single PIC on IBM PC and PC/XT => false
   // - Master PIC on IBM PC/AT and PS/2 => false
   // - Slave PIC on IBM PC/AT and PS/2 => true
   bool sp;
-} PICConfig;
+} YPICConfig;
 
 // The register to read on the next read from the data port.
-typedef enum PICReadRegister {
+typedef enum YPICReadRegister {
   kPICReadIMR = 0,  // Default: read Interrupt Mask Register
   kPICReadIRR = 1,  // Read Interrupt Request Register on next read
   kPICReadISR = 2,  // Read In-Service Register on next read
-} PICReadRegister;
+} YPICReadRegister;
 
 // State of a single 8259 PIC chip.
-typedef struct PICState {
+typedef struct YPICState {
   // Pointer to caller-provided runtime configuration.
-  PICConfig config;
+  YPICConfig config;
 
   // Initialization state.
-  PICInitState init_state;
+  YPICInitState init_state;
   // Received initialization words.
   uint8_t icw1;
   uint8_t icw2;
@@ -741,19 +741,19 @@ typedef struct PICState {
   bool has_unmasked_request;
 
   // The register to read on the next read from the data port.
-  PICReadRegister read_register;
+  YPICReadRegister read_register;
 
   // Pointer to master PIC if this is a slave, or to slave PIC if this is a
   // master. NULL if this is a single PIC.
-  struct PICState* cascade_pic;
-} PICState;
+  struct YPICState* cascade_pic;
+} YPICState;
 
 // ============================================================================
 // PIC initialization
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-YAX86_PUBLIC void PICInit(PICState* pic);
+YAX86_PUBLIC void PICInit(YPICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -761,11 +761,11 @@ YAX86_PUBLIC void PICInit(PICState* pic);
 
 // Raise an IRQ line (0-7) on this PIC. If this is a slave PIC, also raises
 // the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICRaiseIRQ(PICState* pic, uint8_t irq);
+YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq);
 
 // Lower an IRQ line (0-7) on this PIC. If this is a slave PIC and no interrupts
 // are pending, also lowers the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq);
+YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq);
 
 // ============================================================================
 // I/O port interface
@@ -774,12 +774,12 @@ YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq);
 // Read from a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC uint8_t PICReadPort(PICState* pic, uint16_t port);
+YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port);
 
 // Write to a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 
 // ============================================================================
 // Interrupt handling
@@ -788,7 +788,7 @@ YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
 // PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
-YAX86_PUBLIC uint8_t PICGetPendingInterrupt(PICState* pic);
+YAX86_PUBLIC uint8_t PICGetPendingInterrupt(YPICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H
 
@@ -835,7 +835,7 @@ enum {
 };
 
 // The I/O port of a PIC.
-typedef enum PICPort {
+typedef enum YPICPort {
   kPICPortCommand = 0,
   kPICPortData = 1,
 
@@ -843,7 +843,7 @@ typedef enum PICPort {
   kNumPICPorts,
   // Invalid port.
   kPICPortInvalid = -1,
-} PICPort;
+} YPICPort;
 
 // Map a PIC mode to its base I/O port.
 YAX86_FILE_PRIVATE const uint16_t kPICBasePorts[kPICNumModes] = {
@@ -857,7 +857,7 @@ YAX86_FILE_PRIVATE const uint16_t kPICBasePorts[kPICNumModes] = {
 // ============================================================================
 
 // Returns the mode of a PIC based on its ICWs.
-YAX86_FILE_PRIVATE inline PICMode PICGetMode(PICState* pic) {
+YAX86_FILE_PRIVATE inline YPICMode PICGetMode(YPICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
   if (pic->icw1 & kICW1_SNGL) {
     return kPICSingle;
@@ -869,32 +869,32 @@ YAX86_FILE_PRIVATE inline PICMode PICGetMode(PICState* pic) {
 }
 
 // Returns if the PIC is configured as a single PIC.
-YAX86_FILE_PRIVATE inline bool PICIsSingle(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsSingle(YPICState* pic) {
   return PICGetMode(pic) == kPICSingle;
 }
 
 // Returns if the PIC is a master PIC.
-YAX86_FILE_PRIVATE inline bool PICIsMaster(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsMaster(YPICState* pic) {
   return PICGetMode(pic) == kPICMaster;
 }
 
 // Returns if the PIC is a slave PIC.
-YAX86_FILE_PRIVATE inline bool PICIsSlave(PICState* pic) {
+YAX86_FILE_PRIVATE inline bool PICIsSlave(YPICState* pic) {
   return PICGetMode(pic) == kPICSlave;
 }
 
 // Returns the I/O port corresponding to a given port number.
-YAX86_FILE_PRIVATE inline PICPort PICGetPort(PICState* pic, uint16_t port) {
+YAX86_FILE_PRIVATE inline YPICPort PICGetPort(YPICState* pic, uint16_t port) {
   uint16_t port_offset = port - kPICBasePorts[PICGetMode(pic)];
   if (port_offset >= kNumPICPorts) {
     return kPICPortInvalid;
   }
-  return (PICPort)port_offset;
+  return (YPICPort)port_offset;
 }
 
 // Returns the IRQ number of the parent PIC connected to a slave PIC.
 // Only valid if pic is a slave PIC.
-YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(PICState* pic) {
+YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(YPICState* pic) {
   return pic->icw3 & 0x07;
 }
 
@@ -902,14 +902,14 @@ YAX86_FILE_PRIVATE inline uint8_t PICGetCascadeIRQ(PICState* pic) {
 // PIC initialization
 // ============================================================================
 
-// Recomputes PICState.has_unmasked_request. This is its sole writer, and every
+// Recomputes YPICState.has_unmasked_request. This is its sole writer, and every
 // path that changes irr or imr calls it, so the flag can never disagree with
 // the registers it summarizes.
-YAX86_FILE_PRIVATE inline void PICUpdateUnmaskedRequest(PICState* pic) {
+YAX86_FILE_PRIVATE inline void PICUpdateUnmaskedRequest(YPICState* pic) {
   pic->has_unmasked_request = (pic->irr & ~pic->imr) != 0;
 }
 
-YAX86_PUBLIC void PICInit(PICState* pic) {
+YAX86_PUBLIC void PICInit(YPICState* pic) {
   // All interrupts masked by default.
   pic->imr = 0xFF;
   PICUpdateUnmaskedRequest(pic);
@@ -919,7 +919,7 @@ YAX86_PUBLIC void PICInit(PICState* pic) {
 // IRQ line control
 // ============================================================================
 
-YAX86_PUBLIC void PICRaiseIRQ(PICState* pic, uint8_t irq) {
+YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
     return;
@@ -936,7 +936,7 @@ YAX86_PUBLIC void PICRaiseIRQ(PICState* pic, uint8_t irq) {
   }
 }
 
-YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq) {
+YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
     return;
   }
@@ -954,8 +954,8 @@ YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq) {
 // I/O port interface
 // ============================================================================
 
-YAX86_PUBLIC uint8_t PICReadPort(PICState* pic, uint16_t port) {
-  PICPort pic_port = PICGetPort(pic, port);
+YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port) {
+  YPICPort pic_port = PICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
       // Reading from the command port is not a defined operation.
@@ -984,8 +984,8 @@ YAX86_PUBLIC uint8_t PICReadPort(PICState* pic, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
-  PICPort pic_port = PICGetPort(pic, port);
+YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
+  YPICPort pic_port = PICGetPort(pic, port);
   switch (pic_port) {
     case kPICPortCommand:
       if (value & kICW1_INIT) {
@@ -1085,7 +1085,7 @@ YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value) {
 // Interrupt handling
 // ============================================================================
 
-YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(PICState* pic) {
+YAX86_PUBLIC YAX86_HOT uint8_t PICGetPendingInterrupt(YPICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {

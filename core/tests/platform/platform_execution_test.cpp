@@ -26,7 +26,7 @@ enum : uint8_t {
   kOpMovAlMoffs8 = 0xA0,
   // INC r/m8 (Group 4). Every single opcode byte now decodes to something, so
   // the only encodings this emulator rejects are undocumented REG values
-  // within a group - here 0xFE with REG 2, i.e. a ModRM byte of 0xD0.
+  // within a group - here 0xFE with REG 2, i.e. a YCPUModRM byte of 0xD0.
   kOpGroup4 = 0xFE,
   kModRMGroup4Reg2 = 0xD0,
 };
@@ -61,8 +61,8 @@ class PlatformExecutionTest : public ::testing::Test {
   // tests are pinning down is execution control - how many instructions ran,
   // and what stopped them - so they count instructions instead and stay
   // independent of what any one of them costs.
-  PlatformRunStatus RunInstructions(int num_instructions) {
-    PlatformRunStatus status = kPlatformRunning;
+  YPlatformRunStatus RunInstructions(int num_instructions) {
+    YPlatformRunStatus status = kPlatformRunning;
     for (int i = 0; i < num_instructions; ++i) {
       status = PlatformTick(&platform_);
       if (status != kPlatformRunning) {
@@ -72,7 +72,7 @@ class PlatformExecutionTest : public ::testing::Test {
     return status;
   }
 
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };
@@ -185,7 +185,7 @@ TEST_F(PlatformExecutionTest, PlatformTickRunsOneInstructionWithAWarmCache) {
 
 // A whole machine, so that two of them can be run side by side.
 struct Machine {
-  PlatformState platform = {};
+  YPlatformState platform = {};
   uint8_t ram[64 * 1024] = {0};
   uint8_t vram[kCGAVRAMSize] = {0};
 };
@@ -210,7 +210,7 @@ struct Outcome {
 // makes where it ends a property of the emulation rather than of the driver.
 Outcome RunTimerProgram(bool batched) {
   auto machine = std::unique_ptr<Machine>(new Machine());
-  PlatformState* platform = &machine->platform;
+  YPlatformState* platform = &machine->platform;
   platform->config.physical_memory_size = sizeof(machine->ram);
   platform->config.physical_memory = machine->ram;
   platform->config.vram = machine->vram;
@@ -334,7 +334,7 @@ TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
   ASSERT_EQ(RunInstructions(8), kPlatformRunning);
   const uint64_t stepped = CPUInstructionsRetired(&platform_.cpu);
 
-  PlatformState batched = {};
+  YPlatformState batched = {};
   static uint8_t batched_ram[64 * 1024] = {0};
   static uint8_t batched_vram[kCGAVRAMSize] = {0};
   batched.config.physical_memory_size = sizeof(batched_ram);

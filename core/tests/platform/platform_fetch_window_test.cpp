@@ -45,8 +45,8 @@ class PlatformFetchWindowTest : public ::testing::Test {
     }
   }
 
-  PlatformRunStatus RunInstructions(int num_instructions) {
-    PlatformRunStatus status = kPlatformRunning;
+  YPlatformRunStatus RunInstructions(int num_instructions) {
+    YPlatformRunStatus status = kPlatformRunning;
     for (int i = 0; i < num_instructions; ++i) {
       status = PlatformTick(&platform_);
       if (status != kPlatformRunning) {
@@ -58,7 +58,7 @@ class PlatformFetchWindowTest : public ::testing::Test {
 
   uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
 
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };
@@ -132,7 +132,7 @@ TEST_F(PlatformFetchWindowTest, WindowCoversTheRegionBeforeTheFetchAddress) {
   ram_[0x00C1] = kOpHlt;
 
   ASSERT_EQ(RunInstructions(1), kPlatformRunning);
-  const CPUInstructionFetchWindow window =
+  const YCPUInstructionFetchWindow window =
       platform_.cpu.instruction_fetch_window;
   ASSERT_NE(window.data, nullptr);
   // Conventional memory starts at zero, so the window reaches back past the

@@ -7,7 +7,7 @@ namespace {
 
 // Small enough that a whole image fits in the fixture, and that running off
 // the end of the drive is easy to arrange. 8 sectors of 512 bytes.
-constexpr HDCDriveGeometry kTestGeometry = {
+constexpr YHDCDriveGeometry kTestGeometry = {
     /*num_cylinders=*/2,
     /*num_heads=*/2,
     /*num_sectors_per_track=*/2,
@@ -53,12 +53,12 @@ class HDCTransferTest : public ::testing::Test {
     return static_cast<uint8_t>((offset * 7 + 3) & 0xFF);
   }
 
-  uint8_t Read(HDCRegister reg) {
+  uint8_t Read(YHDCRegister reg) {
     return HDCReadPort(
         &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg));
   }
 
-  void Write(HDCRegister reg, uint8_t value) {
+  void Write(YHDCRegister reg, uint8_t value) {
     HDCWritePort(
         &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg), value);
   }
@@ -114,7 +114,7 @@ class HDCTransferTest : public ::testing::Test {
       Write(kHDCRegisterData, data[i]);
     }
   }
-  HDCState hdc_ = {0};
+  YHDCState hdc_ = {0};
   uint8_t image_[kTestImageSize] = {0};
   std::vector<uint32_t> read_offsets_;
   std::vector<uint32_t> written_offsets_;

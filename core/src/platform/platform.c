@@ -12,10 +12,11 @@
 
 // How long until the next device needs attention, in CPU cycles from now.
 YAX86_FILE_PRIVATE uint32_t PlatformCyclesUntilNextEvent(
-    const PlatformState* platform, uint32_t max_cycles);
+    const YPlatformState* platform, uint32_t max_cycles);
 
 // Hand the CPU conventional memory to index directly, or take it away again.
-YAX86_FILE_PRIVATE void PlatformUpdateDirectDataWindow(PlatformState* platform);
+YAX86_FILE_PRIVATE void PlatformUpdateDirectDataWindow(
+    YPlatformState* platform);
 
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
@@ -53,9 +54,9 @@ enum {
 // index therefore costs one pass over the address space between them, rather
 // than one pass per entry.
 YAX86_FILE_PRIVATE void UpdateMemoryPageMapForEntry(
-    PlatformState* platform, uint8_t entry_index) {
-  const MemoryMapEntry* entry =
-      MemoryMapGet(&platform->memory_map, entry_index);
+    YPlatformState* platform, uint8_t entry_index) {
+  const YPlatformMemoryMapEntry* entry =
+      YPlatformMemoryMapGet(&platform->memory_map, entry_index);
   for (uint32_t page = entry->start >> kMemoryPageShift,
                 last_page = entry->end >> kMemoryPageShift;
        page <= last_page; ++page) {
@@ -79,18 +80,20 @@ YAX86_FILE_PRIVATE void UpdateMemoryPageMapForEntry(
 // cache - is left to the caller, so that a run of registrations pays for one
 // recompute rather than one each.
 YAX86_PUBLIC bool RegisterMemoryMapEntry(
-    PlatformState* platform, const MemoryMapEntry* entry) {
+    YPlatformState* platform, const YPlatformMemoryMapEntry* entry) {
   // The index has a slot per page of the address space and none above it, so
   // an entry reaching past the top could not be recorded in it. Rejecting one
   // here is what lets the lookup treat the index as the whole answer.
   if (entry->end >= kMemoryAddressSpaceSize || entry->start > entry->end) {
     return false;
   }
-  if (MemoryMapLength(&platform->memory_map) >= kMaxMemoryMapEntries) {
+  if (YPlatformMemoryMapLength(&platform->memory_map) >= kMaxMemoryMapEntries) {
     return false;
   }
-  for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
-    MemoryMapEntry* existing_entry = MemoryMapGet(&platform->memory_map, i);
+  for (uint8_t i = 0; i < YPlatformMemoryMapLength(&platform->memory_map);
+       ++i) {
+    YPlatformMemoryMapEntry* existing_entry =
+        YPlatformMemoryMapGet(&platform->memory_map, i);
     if (existing_entry->entry_type == entry->entry_type) {
       return false;
     }
@@ -99,15 +102,15 @@ YAX86_PUBLIC bool RegisterMemoryMapEntry(
       return false;
     }
   }
-  if (!MemoryMapAppend(&platform->memory_map, entry)) {
+  if (!YPlatformMemoryMapAppend(&platform->memory_map, entry)) {
     return false;
   }
   UpdateMemoryPageMapForEntry(
-      platform, MemoryMapLength(&platform->memory_map) - 1);
+      platform, YPlatformMemoryMapLength(&platform->memory_map) - 1);
   return true;
 }
 
-YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
+YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(YPlatformState* platform) {
   // The data window is whichever entry covers address 0, which a registration
   // may have just become.
   PlatformUpdateDirectDataWindow(platform);
@@ -127,7 +130,7 @@ YAX86_PUBLIC void PlatformUpdateAfterMemoryMapChange(PlatformState* platform) {
 // a load, where a call on a core with no cheap way to do any of it is a push, a
 // branch, a pop and a return.
 YAX86_FILE_PRIVATE inline uint8_t GetMemoryPageMapIndex(
-    const PlatformState* platform, uint32_t address) {
+    const YPlatformState* platform, uint32_t address) {
   return address < kMemoryAddressSpaceSize
              ? platform->memory_page_map[address >> kMemoryPageShift]
              : kMemoryPageUnmapped;
@@ -135,18 +138,20 @@ YAX86_FILE_PRIVATE inline uint8_t GetMemoryPageMapIndex(
 
 // Look up the memory region corresponding to an address. Returns NULL if the
 // address is not mapped to a known memory region.
-YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
-    PlatformState* platform, uint32_t address) {
+YAX86_PUBLIC YAX86_HOT YPlatformMemoryMapEntry* GetMemoryMapEntryForAddress(
+    YPlatformState* platform, uint32_t address) {
   const uint8_t index = GetMemoryPageMapIndex(platform, address);
   if (index < kMaxMemoryMapEntries) {
-    return MemoryMapGet(&platform->memory_map, index);
+    return YPlatformMemoryMapGet(&platform->memory_map, index);
   }
   if (index == kMemoryPageUnmapped) {
     return NULL;
   }
   // A page more than one entry has a share of, which the index cannot answer.
-  for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
-    MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
+  for (uint8_t i = 0; i < YPlatformMemoryMapLength(&platform->memory_map);
+       ++i) {
+    YPlatformMemoryMapEntry* entry =
+        YPlatformMemoryMapGet(&platform->memory_map, i);
     if (address >= entry->start && address <= entry->end) {
       return entry;
     }
@@ -156,10 +161,12 @@ YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryForAddress(
 
 // Look up a memory region by type. Returns NULL if no region found with the
 // specified type.
-YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
-    PlatformState* platform, uint8_t entry_type) {
-  for (uint8_t i = 0; i < MemoryMapLength(&platform->memory_map); ++i) {
-    MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, i);
+YAX86_PUBLIC YAX86_HOT YPlatformMemoryMapEntry* GetMemoryMapEntryByType(
+    YPlatformState* platform, uint8_t entry_type) {
+  for (uint8_t i = 0; i < YPlatformMemoryMapLength(&platform->memory_map);
+       ++i) {
+    YPlatformMemoryMapEntry* entry =
+        YPlatformMemoryMapGet(&platform->memory_map, i);
     if (entry->entry_type == entry_type) {
       return entry;
     }
@@ -169,8 +176,9 @@ YAX86_PUBLIC YAX86_HOT MemoryMapEntry* GetMemoryMapEntryByType(
 
 // Read a byte from a logical memory address.
 YAX86_PUBLIC YAX86_HOT uint8_t
-ReadMemoryByte(PlatformState* platform, uint32_t address) {
-  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
+ReadMemoryByte(YPlatformState* platform, uint32_t address) {
+  YPlatformMemoryMapEntry* entry =
+      GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     // Plain storage, which is what every region except video memory is. Going
     // straight to the buffer saves an indirect call on the hottest path in the
@@ -192,7 +200,7 @@ ReadMemoryByte(PlatformState* platform, uint32_t address) {
 
 // Read a word from a logical memory address.
 YAX86_PUBLIC uint16_t
-ReadMemoryWord(PlatformState* platform, uint32_t address) {
+ReadMemoryWord(YPlatformState* platform, uint32_t address) {
   uint8_t low_byte = ReadMemoryByte(platform, address);
   uint8_t high_byte = ReadMemoryByte(platform, address + 1);
   return (high_byte << 8) | low_byte;
@@ -200,12 +208,13 @@ ReadMemoryWord(PlatformState* platform, uint32_t address) {
 
 // Write a byte to a logical memory address.
 YAX86_PUBLIC YAX86_HOT void WriteMemoryByte(
-    PlatformState* platform, uint32_t address, uint8_t value) {
+    YPlatformState* platform, uint32_t address, uint8_t value) {
   // Writes that do not come from the CPU arrive here, and can land on bytes it
   // has already decoded. DMA is the one that matters: DOS loads itself over
   // the boot sector that way.
   CPUNotifyMemoryWrite(&platform->cpu, address);
-  MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, address);
+  YPlatformMemoryMapEntry* entry =
+      GetMemoryMapEntryForAddress(platform, address);
   if (entry) {
     if (entry->write_data) {
       entry->write_data[address - entry->start] = value;
@@ -227,12 +236,13 @@ YAX86_PUBLIC YAX86_HOT void WriteMemoryByte(
 //   - There already exists an I/O port map entry with the same type.
 //   - The new entry's I/O port range overlaps with an existing entry.
 YAX86_PUBLIC bool RegisterPortMapEntry(
-    PlatformState* platform, const PortMapEntry* entry) {
-  if (PortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
+    YPlatformState* platform, const YPlatformPortMapEntry* entry) {
+  if (YPlatformPortMapLength(&platform->io_port_map) >= kMaxPortMapEntries) {
     return false;
   }
-  for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
-    PortMapEntry* existing_entry = PortMapGet(&platform->io_port_map, i);
+  for (uint8_t i = 0; i < YPlatformPortMapLength(&platform->io_port_map); ++i) {
+    YPlatformPortMapEntry* existing_entry =
+        YPlatformPortMapGet(&platform->io_port_map, i);
     if (existing_entry->entry_type == entry->entry_type) {
       return false;
     }
@@ -241,15 +251,16 @@ YAX86_PUBLIC bool RegisterPortMapEntry(
       return false;
     }
   }
-  return PortMapAppend(&platform->io_port_map, entry);
+  return YPlatformPortMapAppend(&platform->io_port_map, entry);
 }
 
 // Look up the I/O port map entry corresponding to a port. Returns NULL if the
 // port is not mapped to a known I/O port map entry.
-YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
-    PlatformState* platform, uint16_t port) {
-  for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
-    PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
+YAX86_PUBLIC YPlatformPortMapEntry* GetPortMapEntryForPort(
+    YPlatformState* platform, uint16_t port) {
+  for (uint8_t i = 0; i < YPlatformPortMapLength(&platform->io_port_map); ++i) {
+    YPlatformPortMapEntry* entry =
+        YPlatformPortMapGet(&platform->io_port_map, i);
     if (port >= entry->start && port <= entry->end) {
       return entry;
     }
@@ -258,10 +269,11 @@ YAX86_PUBLIC PortMapEntry* GetPortMapEntryForPort(
 }
 // Look up an I/O port map entry by type. Returns NULL if no entry found with
 // the specified type.
-YAX86_PUBLIC YAX86_HOT PortMapEntry* GetPortMapEntryByType(
-    PlatformState* platform, PortMapEntryType entry_type) {
-  for (uint8_t i = 0; i < PortMapLength(&platform->io_port_map); ++i) {
-    PortMapEntry* entry = PortMapGet(&platform->io_port_map, i);
+YAX86_PUBLIC YAX86_HOT YPlatformPortMapEntry* GetPortMapEntryByType(
+    YPlatformState* platform, YPlatformPortMapEntryType entry_type) {
+  for (uint8_t i = 0; i < YPlatformPortMapLength(&platform->io_port_map); ++i) {
+    YPlatformPortMapEntry* entry =
+        YPlatformPortMapGet(&platform->io_port_map, i);
     if (entry->entry_type == entry_type) {
       return entry;
     }
@@ -272,8 +284,8 @@ YAX86_PUBLIC YAX86_HOT PortMapEntry* GetPortMapEntryByType(
 // Read a byte from an I/O port by invoking the corresponding I/O port map
 // entry's read_byte callback.
 YAX86_PUBLIC YAX86_HOT uint8_t
-ReadPortByte(PlatformState* platform, uint16_t port) {
-  PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
+ReadPortByte(YPlatformState* platform, uint16_t port) {
+  YPlatformPortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
     // missing from the port map, so this stays at warning level.
@@ -286,8 +298,8 @@ ReadPortByte(PlatformState* platform, uint16_t port) {
 // Write a byte to an I/O port by invoking the corresponding I/O port map
 // entry's write_byte callback.
 YAX86_PUBLIC YAX86_HOT void WritePortByte(
-    PlatformState* platform, uint16_t port, uint8_t value) {
-  PortMapEntry* entry = GetPortMapEntryForPort(platform, port);
+    YPlatformState* platform, uint16_t port, uint8_t value) {
+  YPlatformPortMapEntry* entry = GetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
     YAX86_PLATFORM_LOG(
         kLogLevelWarn, "write of %02X to unmapped port %04X", value, port);
@@ -301,23 +313,23 @@ YAX86_PUBLIC YAX86_HOT void WritePortByte(
 // ============================================================================
 
 YAX86_FILE_PRIVATE uint8_t
-CPUCallbackReadMemoryByte(CPUState* cpu, uint32_t address) {
-  return ReadMemoryByte((PlatformState*)cpu->config.context, address);
+CPUCallbackReadMemoryByte(YCPUState* cpu, uint32_t address) {
+  return ReadMemoryByte((YPlatformState*)cpu->config.context, address);
 }
 
 YAX86_FILE_PRIVATE void CPUCallbackWriteMemoryByte(
-    CPUState* cpu, uint32_t address, uint8_t value) {
-  WriteMemoryByte((PlatformState*)cpu->config.context, address, value);
+    YCPUState* cpu, uint32_t address, uint8_t value) {
+  WriteMemoryByte((YPlatformState*)cpu->config.context, address, value);
 }
 
 YAX86_FILE_PRIVATE uint8_t
-CPUCallbackReadPortByte(CPUState* cpu, uint16_t port) {
-  return ReadPortByte((PlatformState*)cpu->config.context, port);
+CPUCallbackReadPortByte(YCPUState* cpu, uint16_t port) {
+  return ReadPortByte((YPlatformState*)cpu->config.context, port);
 }
 
 YAX86_FILE_PRIVATE void CPUCallbackWritePortByte(
-    CPUState* cpu, uint16_t port, uint8_t value) {
-  WritePortByte((PlatformState*)cpu->config.context, port, value);
+    YCPUState* cpu, uint16_t port, uint8_t value) {
+  WritePortByte((YPlatformState*)cpu->config.context, port, value);
 }
 
 // ============================================================================
@@ -325,17 +337,17 @@ YAX86_FILE_PRIVATE void CPUCallbackWritePortByte(
 // ============================================================================
 
 YAX86_FILE_PRIVATE uint8_t
-PICCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return PICReadPort((PICState*)entry->context, port);
+PICCallbackReadPortByte(YPlatformPortMapEntry* entry, uint16_t port) {
+  return PICReadPort((YPICState*)entry->context, port);
 }
 
 YAX86_FILE_PRIVATE YAX86_HOT void PICCallbackWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
-  PICWritePort((PICState*)entry->context, port, value);
+    YPlatformPortMapEntry* entry, uint16_t port, uint8_t value) {
+  PICWritePort((YPICState*)entry->context, port, value);
 }
 
 YAX86_FILE_PRIVATE void PICCallbackPlatformRaiseIRQ0(void* context) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   PlatformRaiseIRQ(platform, 0);
 }
 
@@ -344,19 +356,19 @@ YAX86_FILE_PRIVATE void PICCallbackPlatformRaiseIRQ0(void* context) {
 // ============================================================================
 
 YAX86_FILE_PRIVATE YAX86_HOT uint8_t
-PITCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+PITCallbackReadPortByte(YPlatformPortMapEntry* entry, uint16_t port) {
   // A guest timing loop reads the counter expecting it to have moved, so the
   // PIT has to be caught up before it is read.
-  PlatformState* platform = (PlatformState*)entry->context;
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   return PITReadPort(&platform->pit, port);
 }
 
 YAX86_FILE_PRIVATE void PITCallbackWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
+    YPlatformPortMapEntry* entry, uint16_t port, uint8_t value) {
   // Syncing first applies the cycles that ran under the old configuration;
   // syncing again afterwards reschedules against the new one.
-  PlatformState* platform = (PlatformState*)entry->context;
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   PITWritePort(&platform->pit, port, value);
   PlatformSync(platform);
@@ -364,7 +376,7 @@ YAX86_FILE_PRIVATE void PITCallbackWritePortByte(
 
 YAX86_FILE_PRIVATE void PITCallbackSetPCSpeakerFrequency(
     void* context, uint32_t frequency_hz) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   PPISetPCSpeakerFrequencyFromPIT(&platform->ppi, frequency_hz);
 }
 
@@ -373,17 +385,17 @@ YAX86_FILE_PRIVATE void PITCallbackSetPCSpeakerFrequency(
 // ============================================================================
 
 YAX86_FILE_PRIVATE uint8_t
-PPICallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  PlatformState* platform = (PlatformState*)entry->context;
+PPICallbackReadPortByte(YPlatformPortMapEntry* entry, uint16_t port) {
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   return PPIReadPort(&platform->ppi, port);
 }
 
 YAX86_FILE_PRIVATE void PPICallbackWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
+    YPlatformPortMapEntry* entry, uint16_t port, uint8_t value) {
   // Port B gates the speaker against PIT channel 2, so what the guest hears
   // depends on the channel's output state being current.
-  PlatformState* platform = (PlatformState*)entry->context;
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   PPIWritePort(&platform->ppi, port, value);
   PlatformSync(platform);
@@ -391,14 +403,14 @@ YAX86_FILE_PRIVATE void PPICallbackWritePortByte(
 
 YAX86_FILE_PRIVATE void PPICallbackSetKeyboardControl(
     void* context, bool keyboard_enable_clear, bool keyboard_clock_low) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   KeyboardHandleControl(
       &platform->keyboard, keyboard_enable_clear, keyboard_clock_low);
 }
 
 YAX86_FILE_PRIVATE void PPICallbackSetPCSpeakerFrequency(
     void* context, uint32_t frequency_hz) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   if (platform->config.set_pc_speaker_frequency) {
     platform->config.set_pc_speaker_frequency(platform, frequency_hz);
   }
@@ -409,13 +421,13 @@ YAX86_FILE_PRIVATE void PPICallbackSetPCSpeakerFrequency(
 // ============================================================================
 
 YAX86_FILE_PRIVATE void KeyboardCallbackPlatformRaiseIRQ1(void* context) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   PlatformRaiseIRQ(platform, 1);
 }
 
 YAX86_FILE_PRIVATE void KeyboardCallbackSendScancode(
     void* context, uint8_t scancode) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   PPISetScancode(&platform->ppi, scancode);
 }
 
@@ -428,27 +440,27 @@ enum {
 };
 
 YAX86_FILE_PRIVATE void FDCCallbackRaiseIRQ6(void* context) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   PlatformRaiseIRQ(platform, 6);
 }
 
 YAX86_FILE_PRIVATE YAX86_HOT void FDCCallbackRequestDMA(void* context) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   DMATransferByte(&platform->dma, kPlatformDMAChannelFloppy);
 }
 
 YAX86_FILE_PRIVATE uint8_t
-FDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  PlatformState* platform = (PlatformState*)entry->context;
+FDCCallbackReadPortByte(YPlatformPortMapEntry* entry, uint16_t port) {
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   return FDCReadPort(&platform->fdc, port);
 }
 
 YAX86_FILE_PRIVATE void FDCCallbackWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
+    YPlatformPortMapEntry* entry, uint16_t port, uint8_t value) {
   // A write can start a command, which is what puts the controller into the
   // execution phase the scheduler watches for.
-  PlatformState* platform = (PlatformState*)entry->context;
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   FDCWritePort(&platform->fdc, port, value);
   PlatformSync(platform);
@@ -460,19 +472,19 @@ YAX86_FILE_PRIVATE void FDCCallbackWritePortByte(
 
 YAX86_FILE_PRIVATE uint8_t
 DMACallbackReadMemoryByte(void* context, uint32_t address) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   return ReadMemoryByte(platform, address);
 }
 
 YAX86_FILE_PRIVATE void DMACallbackWriteMemoryByte(
     void* context, uint32_t address, uint8_t value) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   WriteMemoryByte(platform, address, value);
 }
 
 YAX86_FILE_PRIVATE uint8_t
 DMACallbackReadDeviceByte(void* context, uint8_t channel) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   switch (channel) {
     case kPlatformDMAChannelFloppy:
       return FDCReadPort(&platform->fdc, kFDCPortData);
@@ -483,7 +495,7 @@ DMACallbackReadDeviceByte(void* context, uint8_t channel) {
 
 YAX86_FILE_PRIVATE void DMACallbackWriteDeviceByte(
     void* context, uint8_t channel, uint8_t value) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   switch (channel) {
     case kPlatformDMAChannelFloppy:
       FDCWritePort(&platform->fdc, kFDCPortData, value);
@@ -495,7 +507,7 @@ YAX86_FILE_PRIVATE void DMACallbackWriteDeviceByte(
 
 YAX86_FILE_PRIVATE void DMACallbackOnTerminalCount(
     void* context, uint8_t channel) {
-  PlatformState* platform = (PlatformState*)context;
+  YPlatformState* platform = (YPlatformState*)context;
   switch (channel) {
     case kPlatformDMAChannelFloppy:
       FDCHandleTC(&platform->fdc);
@@ -506,13 +518,13 @@ YAX86_FILE_PRIVATE void DMACallbackOnTerminalCount(
 }
 
 YAX86_FILE_PRIVATE uint8_t
-DMACallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return DMAReadPort((DMAState*)entry->context, port);
+DMACallbackReadPortByte(YPlatformPortMapEntry* entry, uint16_t port) {
+  return DMAReadPort((YDMAState*)entry->context, port);
 }
 
 YAX86_FILE_PRIVATE void DMACallbackWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
-  DMAWritePort((DMAState*)entry->context, port, value);
+    YPlatformPortMapEntry* entry, uint16_t port, uint8_t value) {
+  DMAWritePort((YDMAState*)entry->context, port, value);
 }
 
 // ============================================================================
@@ -520,25 +532,25 @@ YAX86_FILE_PRIVATE void DMACallbackWritePortByte(
 // ============================================================================
 
 YAX86_FILE_PRIVATE YAX86_HOT uint8_t
-VideoCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
+VideoCallbackReadPortByte(YPlatformPortMapEntry* entry, uint16_t port) {
   // The status port reports where the CRT beam is, which is only meaningful
   // once the beam has been advanced to now. Guests poll this to wait for
   // retrace.
-  PlatformState* platform = (PlatformState*)entry->context;
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   return VideoReadPort(&platform->video, port);
 }
 
 YAX86_FILE_PRIVATE void VideoCallbackWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
-  PlatformState* platform = (PlatformState*)entry->context;
+    YPlatformPortMapEntry* entry, uint16_t port, uint8_t value) {
+  YPlatformState* platform = (YPlatformState*)entry->context;
   PlatformSync(platform);
   VideoWritePort(&platform->video, port, value);
 }
 
 YAX86_FILE_PRIVATE void VideoCallbackWriteVRAMByte(
-    MemoryMapEntry* entry, uint32_t address, uint8_t value) {
-  VideoWriteVRAM((VideoState*)entry->context, address, value);
+    YPlatformMemoryMapEntry* entry, uint32_t address, uint8_t value) {
+  VideoWriteVRAM((YVideoState*)entry->context, address, value);
 }
 
 // ============================================================================
@@ -546,22 +558,22 @@ YAX86_FILE_PRIVATE void VideoCallbackWriteVRAMByte(
 // ============================================================================
 
 YAX86_FILE_PRIVATE uint8_t
-HDCCallbackReadPortByte(PortMapEntry* entry, uint16_t port) {
-  return HDCReadPort((HDCState*)entry->context, port);
+HDCCallbackReadPortByte(YPlatformPortMapEntry* entry, uint16_t port) {
+  return HDCReadPort((YHDCState*)entry->context, port);
 }
 
 YAX86_FILE_PRIVATE void HDCCallbackWritePortByte(
-    PortMapEntry* entry, uint16_t port, uint8_t value) {
-  HDCWritePort((HDCState*)entry->context, port, value);
+    YPlatformPortMapEntry* entry, uint16_t port, uint8_t value) {
+  HDCWritePort((YHDCState*)entry->context, port, value);
 }
 
 // ============================================================================
 // Initialization
 // ============================================================================
 
-YAX86_FILE_PRIVATE void PlatformInitBIOS(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitBIOS(YPlatformState* platform) {
   uint32_t bios_size = BIOSGetROMSize();
-  MemoryMapEntry bios_rom = {
+  YPlatformMemoryMapEntry bios_rom = {
       .context = NULL,
       .entry_type = kMemoryMapEntryBIOSROM,
       .start = kBIOSROMStartAddress,
@@ -578,8 +590,8 @@ YAX86_FILE_PRIVATE void PlatformInitBIOS(PlatformState* platform) {
 // the interrupt in service as part of it - so a vector is never produced
 // unless the CPU is taking it right now.
 YAX86_FILE_PRIVATE bool CPUCallbackAcknowledgeInterrupt(
-    CPUState* cpu, uint8_t* vector) {
-  PlatformState* platform = (PlatformState*)cpu->config.context;
+    YCPUState* cpu, uint8_t* vector) {
+  YPlatformState* platform = (YPlatformState*)cpu->config.context;
   const uint8_t interrupt_vector = PICGetPendingInterrupt(&platform->pic);
   if (interrupt_vector == kPICNoPendingInterrupt) {
     return false;
@@ -600,10 +612,10 @@ enum {
 //
 // Only installed when the idle skip is enabled, so a machine without it pays
 // nothing per interrupt.
-YAX86_FILE_PRIVATE YAX86_HOT InterruptHandlerResult
-CPUCallbackHandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
+YAX86_FILE_PRIVATE YAX86_HOT YCPUInterruptHandlerResult
+CPUCallbackHandleInterrupt(YCPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == kDOSIdleInterrupt) {
-    PlatformState* platform = (PlatformState*)cpu->config.context;
+    YPlatformState* platform = (YPlatformState*)cpu->config.context;
     platform->is_guest_idle = true;
   }
   return kInterruptHandlerUnhandled;
@@ -614,17 +626,18 @@ CPUCallbackHandleInterrupt(CPUState* cpu, uint8_t interrupt_number) {
 // Declines wherever a read has to be observed or computed rather than loaded:
 // a device region, unmapped memory, or a page shared by two entries.
 YAX86_FILE_PRIVATE void CPUCallbackGetInstructionFetchWindow(
-    CPUState* cpu, uint32_t address) {
-  CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+    YCPUState* cpu, uint32_t address) {
+  YCPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
   window->data = NULL;
-  PlatformState* platform = (PlatformState*)cpu->config.context;
+  YPlatformState* platform = (YPlatformState*)cpu->config.context;
   // Anything that is not a single entry's page - unmapped, or shared by more
   // than one entry - has no window to hand out.
   const uint8_t index = GetMemoryPageMapIndex(platform, address);
   if (index >= kMaxMemoryMapEntries) {
     return;
   }
-  MemoryMapEntry* entry = MemoryMapGet(&platform->memory_map, index);
+  YPlatformMemoryMapEntry* entry =
+      YPlatformMemoryMapGet(&platform->memory_map, index);
   if (entry->read_data == NULL) {
     return;
   }
@@ -635,7 +648,7 @@ YAX86_FILE_PRIVATE void CPUCallbackGetInstructionFetchWindow(
   window->end = entry->end + 1;
 }
 
-YAX86_FILE_PRIVATE void PlatformInitCPU(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitCPU(YPlatformState* platform) {
   platform->cpu.config.context = platform;
   platform->cpu.config.logger = &platform->logger;
   platform->cpu.config.read_memory_byte = CPUCallbackReadMemoryByte;
@@ -667,12 +680,12 @@ YAX86_FILE_PRIVATE void PlatformInitCPU(PlatformState* platform) {
   platform->cpu.registers[kSP] = 0xFFFE;
 }
 
-YAX86_FILE_PRIVATE void PlatformInitMemoryMap(PlatformState* platform) {
-  MemoryMapInit(&platform->memory_map);
+YAX86_FILE_PRIVATE void PlatformInitMemoryMap(YPlatformState* platform) {
+  YPlatformMemoryMapInit(&platform->memory_map);
   for (uint32_t page = 0; page < kNumMemoryPages; ++page) {
     platform->memory_page_map[page] = kMemoryPageUnmapped;
   }
-  MemoryMapEntry conventional_memory = {
+  YPlatformMemoryMapEntry conventional_memory = {
       .context = platform,
       .entry_type = kMemoryMapEntryConventional,
       .start = 0x0000,
@@ -683,11 +696,11 @@ YAX86_FILE_PRIVATE void PlatformInitMemoryMap(PlatformState* platform) {
   RegisterMemoryMapEntry(platform, &conventional_memory);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitPIC(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitPIC(YPlatformState* platform) {
   platform->pic.config.sp = false;
   platform->pic.config.logger = &platform->logger;
   PICInit(&platform->pic);
-  PortMapEntry pic_entry = {
+  YPlatformPortMapEntry pic_entry = {
       .entry_type = kPortMapEntryPIC,
       .start = 0x20,
       .end = 0x21,
@@ -698,14 +711,14 @@ YAX86_FILE_PRIVATE void PlatformInitPIC(PlatformState* platform) {
   RegisterPortMapEntry(platform, &pic_entry);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitPIT(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitPIT(YPlatformState* platform) {
   platform->pit.config.context = platform;
   platform->pit.config.logger = &platform->logger;
   platform->pit.config.raise_irq_0 = PICCallbackPlatformRaiseIRQ0;
   platform->pit.config.set_pc_speaker_frequency =
       PITCallbackSetPCSpeakerFrequency;
   PITInit(&platform->pit);
-  PortMapEntry pit_entry = {
+  YPlatformPortMapEntry pit_entry = {
       .entry_type = kPortMapEntryPIT,
       .start = 0x40,
       .end = 0x43,
@@ -716,7 +729,7 @@ YAX86_FILE_PRIVATE void PlatformInitPIT(PlatformState* platform) {
   RegisterPortMapEntry(platform, &pit_entry);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitPPI(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
   platform->ppi.config.num_floppy_drives = 1;
@@ -731,7 +744,7 @@ YAX86_FILE_PRIVATE void PlatformInitPPI(PlatformState* platform) {
       PPICallbackSetPCSpeakerFrequency;
   platform->ppi.config.set_keyboard_control = PPICallbackSetKeyboardControl;
   PPIInit(&platform->ppi);
-  PortMapEntry ppi_entry = {
+  YPlatformPortMapEntry ppi_entry = {
       .entry_type = kPortMapEntryPPI,
       .start = 0x60,
       .end = 0x63,
@@ -742,7 +755,7 @@ YAX86_FILE_PRIVATE void PlatformInitPPI(PlatformState* platform) {
   RegisterPortMapEntry(platform, &ppi_entry);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitKeyboard(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitKeyboard(YPlatformState* platform) {
   platform->keyboard.config.context = platform;
   platform->keyboard.config.logger = &platform->logger;
   platform->keyboard.config.raise_irq1 = KeyboardCallbackPlatformRaiseIRQ1;
@@ -750,7 +763,7 @@ YAX86_FILE_PRIVATE void PlatformInitKeyboard(PlatformState* platform) {
   KeyboardInit(&platform->keyboard);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitFDC(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitFDC(YPlatformState* platform) {
   platform->fdc.config.context = platform;
   platform->fdc.config.logger = &platform->logger;
   platform->fdc.config.raise_irq6 = FDCCallbackRaiseIRQ6;
@@ -758,8 +771,8 @@ YAX86_FILE_PRIVATE void PlatformInitFDC(PlatformState* platform) {
   platform->fdc.config.read_image_byte = NULL;
   platform->fdc.config.write_image_byte = NULL;
   FDCInit(&platform->fdc);
-  PortMapEntry fdc_entry = {
-      .entry_type = (PortMapEntryType)kPortMapEntryFDC,
+  YPlatformPortMapEntry fdc_entry = {
+      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryFDC,
       .start = 0x3F0,
       .end = 0x3F7,
       .read_byte = FDCCallbackReadPortByte,
@@ -769,13 +782,13 @@ YAX86_FILE_PRIVATE void PlatformInitFDC(PlatformState* platform) {
   RegisterPortMapEntry(platform, &fdc_entry);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitHDC(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitHDC(YPlatformState* platform) {
   platform->hdc.config.context = platform;
   platform->hdc.config.logger = &platform->logger;
   HDCInit(&platform->hdc);
 
   const uint32_t option_rom_size = HDCGetOptionROMSize();
-  MemoryMapEntry option_rom_entry = {
+  YPlatformMemoryMapEntry option_rom_entry = {
       .context = &platform->hdc,
       .entry_type = kMemoryMapEntryHDCOptionROM,
       .start = kHDCOptionROMStartAddress,
@@ -786,9 +799,9 @@ YAX86_FILE_PRIVATE void PlatformInitHDC(PlatformState* platform) {
   };
   RegisterMemoryMapEntry(platform, &option_rom_entry);
 
-  PortMapEntry port_entry = {
+  YPlatformPortMapEntry port_entry = {
       .context = &platform->hdc,
-      .entry_type = (PortMapEntryType)kPortMapEntryHDC,
+      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryHDC,
       .start = kHDCPortBase,
       .end = kHDCPortBase + kHDCNumPorts - 1,
       .read_byte = HDCCallbackReadPortByte,
@@ -797,7 +810,7 @@ YAX86_FILE_PRIVATE void PlatformInitHDC(PlatformState* platform) {
   RegisterPortMapEntry(platform, &port_entry);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitDMA(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitDMA(YPlatformState* platform) {
   platform->dma.config.context = platform;
   platform->dma.config.logger = &platform->logger;
   platform->dma.config.read_memory_byte = DMACallbackReadMemoryByte;
@@ -806,8 +819,8 @@ YAX86_FILE_PRIVATE void PlatformInitDMA(PlatformState* platform) {
   platform->dma.config.write_device_byte = DMACallbackWriteDeviceByte;
   platform->dma.config.on_terminal_count = DMACallbackOnTerminalCount;
   DMAInit(&platform->dma);
-  PortMapEntry dma_entry = {
-      .entry_type = (PortMapEntryType)kPortMapEntryDMA,
+  YPlatformPortMapEntry dma_entry = {
+      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryDMA,
       .start = 0x00,
       .end = 0x0F,
       .read_byte = DMACallbackReadPortByte,
@@ -815,8 +828,8 @@ YAX86_FILE_PRIVATE void PlatformInitDMA(PlatformState* platform) {
       .context = &platform->dma,
   };
   RegisterPortMapEntry(platform, &dma_entry);
-  PortMapEntry dma_page_entry = {
-      .entry_type = (PortMapEntryType)kPortMapEntryDMAPage,
+  YPlatformPortMapEntry dma_page_entry = {
+      .entry_type = (YPlatformPortMapEntryType)kPortMapEntryDMAPage,
       .start = 0x80,
       .end = 0x8F,
       .read_byte = DMACallbackReadPortByte,
@@ -826,7 +839,7 @@ YAX86_FILE_PRIVATE void PlatformInitDMA(PlatformState* platform) {
   RegisterPortMapEntry(platform, &dma_page_entry);
 }
 
-YAX86_FILE_PRIVATE void PlatformInitVideo(PlatformState* platform) {
+YAX86_FILE_PRIVATE void PlatformInitVideo(YPlatformState* platform) {
   platform->video.config = kDefaultVideoConfig;
   platform->video.config.context = platform;
   platform->video.config.logger = &platform->logger;
@@ -834,10 +847,10 @@ YAX86_FILE_PRIVATE void PlatformInitVideo(PlatformState* platform) {
   platform->video.config.vram = platform->config.vram;
   VideoInit(&platform->video);
 
-  const VideoAdapterMetadata* adapter =
+  const YVideoAdapterMetadata* adapter =
       VideoGetAdapterMetadata(&platform->video);
 
-  MemoryMapEntry vram_entry = {
+  YPlatformMemoryMapEntry vram_entry = {
       .context = &platform->video,
       .entry_type = kMemoryMapEntryVRAM,
       .start = adapter->vram_address,
@@ -850,7 +863,7 @@ YAX86_FILE_PRIVATE void PlatformInitVideo(PlatformState* platform) {
   };
   RegisterMemoryMapEntry(platform, &vram_entry);
 
-  PortMapEntry port_entry = {
+  YPlatformPortMapEntry port_entry = {
       .context = platform,
       .entry_type = kPortMapEntryVideo,
       .start = adapter->port_start,
@@ -864,7 +877,7 @@ YAX86_FILE_PRIVATE void PlatformInitVideo(PlatformState* platform) {
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
-YAX86_PUBLIC bool PlatformInit(PlatformState* platform) {
+YAX86_PUBLIC bool PlatformInit(YPlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
   LoggerInit(&platform->logger, platform->config.logger_config);
@@ -927,7 +940,7 @@ YAX86_PUBLIC bool PlatformInit(PlatformState* platform) {
 }
 
 YAX86_PUBLIC YAX86_HOT bool PlatformRaiseIRQ(
-    PlatformState* platform, uint8_t irq) {
+    YPlatformState* platform, uint8_t irq) {
   if (irq >= 8) {
     return false;
   }
@@ -961,7 +974,7 @@ YAX86_FILE_PRIVATE const uint32_t kTickCounterHalfRange = (uint32_t)1 << 31;
 // so that a deadline stays in the future across the point where the 32-bit
 // cycle counter wraps.
 YAX86_FILE_PRIVATE inline bool PlatformIsEventDue(
-    const PlatformState* platform) {
+    const YPlatformState* platform) {
   // An unsigned comparison against half the range rather than a cast of the
   // difference to int32_t, because converting an out-of-range unsigned value is
   // only defined from C23 on and this is C99.
@@ -975,7 +988,7 @@ YAX86_FILE_PRIVATE inline bool PlatformIsEventDue(
 // how far the clock may be moved rather than how long until it is checked
 // again.
 YAX86_FILE_PRIVATE uint32_t PlatformCyclesUntilNextEvent(
-    const PlatformState* platform, uint32_t max_cycles) {
+    const YPlatformState* platform, uint32_t max_cycles) {
   uint32_t cycles = max_cycles;
 
   // The PIT's next output change, converted from its own 1.19MHz clock and
@@ -1004,7 +1017,7 @@ YAX86_FILE_PRIVATE uint32_t PlatformCyclesUntilNextEvent(
 
 // Bring every device up to date with the cycles that have run since the last
 // sync, and schedule the next deadline.
-YAX86_PUBLIC YAX86_HOT void PlatformSync(PlatformState* platform) {
+YAX86_PUBLIC YAX86_HOT void PlatformSync(YPlatformState* platform) {
   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
   platform->last_sync_ticks = platform->ticks;
 
@@ -1053,8 +1066,8 @@ YAX86_PUBLIC YAX86_HOT void PlatformSync(PlatformState* platform) {
 // The body of both entry points. PlatformTick() promises its caller one
 // instruction; PlatformRun() is driving the machine rather than stepping it.
 // Both pass a constant, so the tests below fold away in each.
-YAX86_FILE_PRIVATE YAX86_HOT PlatformRunStatus
-PlatformTickInternal(PlatformState* platform, bool may_batch_instructions) {
+YAX86_FILE_PRIVATE YAX86_HOT YPlatformRunStatus
+PlatformTickInternal(YPlatformState* platform, bool may_batch_instructions) {
   // How long the CPU may run before something in the machine needs to see it.
   // A deadline already due leaves no budget: the subtraction would otherwise
   // wrap and let the CPU run on past a device that is already waiting.
@@ -1064,7 +1077,7 @@ PlatformTickInternal(PlatformState* platform, bool may_batch_instructions) {
           : 0;
 
   // Tick the CPU.
-  CPUTickResult cpu_result = CPUTick(&platform->cpu, max_run_cycles);
+  YCPUTickResult cpu_result = CPUTick(&platform->cpu, max_run_cycles);
 
   // The instruction took as long as it took, and every device is clocked from
   // that - but in arrears. Rather than offering each device its share of the
@@ -1092,7 +1105,7 @@ PlatformTickInternal(PlatformState* platform, bool may_batch_instructions) {
   return kPlatformRunning;
 }
 
-YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform) {
+YAX86_PUBLIC YPlatformRunStatus PlatformTick(YPlatformState* platform) {
   return PlatformTickInternal(platform, false);
 }
 
@@ -1108,7 +1121,7 @@ YAX86_PUBLIC PlatformRunStatus PlatformTick(PlatformState* platform) {
 // case the caller's budget is itself large enough to overflow the catch-up
 // arithmetic.
 YAX86_FILE_PRIVATE void PlatformSkipIdleTime(
-    PlatformState* platform, uint32_t max_cycles) {
+    YPlatformState* platform, uint32_t max_cycles) {
   if (max_cycles > kMaxIdleSkipCycles) {
     max_cycles = kMaxIdleSkipCycles;
   }
@@ -1120,15 +1133,15 @@ YAX86_FILE_PRIVATE void PlatformSkipIdleTime(
   PlatformSync(platform);
 }
 
-YAX86_PUBLIC YAX86_HOT PlatformRunStatus
-PlatformRun(PlatformState* platform, uint32_t max_cycles) {
+YAX86_PUBLIC YAX86_HOT YPlatformRunStatus
+PlatformRun(YPlatformState* platform, uint32_t max_cycles) {
   // Instructions are only ever run whole, so the last one of a run generally
   // takes the total a little past the budget. Unsigned subtraction keeps this
   // right across the counter wrapping.
   const uint32_t start = platform->ticks;
   uint32_t elapsed = 0;
   while (elapsed < max_cycles) {
-    PlatformRunStatus status = PlatformTickInternal(platform, true);
+    YPlatformRunStatus status = PlatformTickInternal(platform, true);
     if (status != kPlatformRunning) {
       return status;
     }
@@ -1152,14 +1165,15 @@ PlatformRun(PlatformState* platform, uint32_t max_cycles) {
 // ============================================================================
 
 YAX86_FILE_PRIVATE void PlatformUpdateDirectDataWindow(
-    PlatformState* platform) {
+    YPlatformState* platform) {
   CPUInvalidateDirectDataWindow(&platform->cpu);
   // The window is a prefix of the address space, so it is whichever region
   // covers address 0 and only while that region is plain storage reached
   // through one buffer in both directions. Conventional memory is that region;
   // a read-only region, or one with a callback in either direction, is not,
   // and is left to the memory map.
-  const MemoryMapEntry* entry = GetMemoryMapEntryForAddress(platform, 0);
+  const YPlatformMemoryMapEntry* entry =
+      GetMemoryMapEntryForAddress(platform, 0);
   if (entry == NULL || entry->start != 0 || entry->read_data == NULL ||
       entry->write_data != entry->read_data) {
     return;

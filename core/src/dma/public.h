@@ -35,13 +35,13 @@ enum {
 };
 
 // Log module for the DMA.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleDMA = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleDMA = {
     .id = kLogModuleIDDMA,
     .name = "DMA",
 };
 
 // I/O ports for the 8237 DMA Controller and Page Registers.
-typedef enum DMAPort {
+typedef enum YDMAPort {
   // --- 8237 DMA Controller ---
   // Channel 0 base and current address
   kDMAPortChannel0Address = 0x00,
@@ -83,7 +83,7 @@ typedef enum DMAPort {
   kDMAPortPageChannel1 = 0x83,
   // Page register for Channel 0
   kDMAPortPageChannel0 = 0x87,
-} DMAPort;
+} YDMAPort;
 
 // Bit definitions for the Mode Register (Port 0x0B)
 enum {
@@ -133,15 +133,15 @@ enum {
 // DMA state
 // ============================================================================
 
-struct DMAState;
+struct YDMAState;
 
 // Caller-provided runtime configuration for the DMA controller.
-typedef struct DMAConfig {
+typedef struct YDMAConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to read a byte from system memory.
   uint8_t (*read_memory_byte)(void* context, uint32_t address);
@@ -157,10 +157,10 @@ typedef struct DMAConfig {
   // count. This corresponds to the EOP (End of Process) signal on the 8237,
   // which is connected to the TC (Terminal Count) pin on devices like the FDC.
   void (*on_terminal_count)(void* context, uint8_t channel);
-} DMAConfig;
+} YDMAConfig;
 
 // State for a single DMA channel.
-typedef struct DMAChannelState {
+typedef struct YDMAChannelState {
   // Base address register, reloaded on auto-initialization.
   uint16_t base_address;
   // Current address register, updated during a transfer.
@@ -173,23 +173,23 @@ typedef struct DMAChannelState {
   uint8_t mode;
   // High-order address bits from the page register.
   uint8_t page_register;
-} DMAChannelState;
+} YDMAChannelState;
 
 // Which register byte to read/write next.
-typedef enum DMARegisterByte {
+typedef enum YDMARegisterByte {
   // Read or write the lower byte next.
   kDMARegisterLSB = 0,
   // Read or write the upper byte next.
   kDMARegisterMSB = 1,
-} DMARegisterByte;
+} YDMARegisterByte;
 
 // State for the entire 8237 DMA controller.
-typedef struct DMAState {
+typedef struct YDMAState {
   // Pointer to the DMA configuration.
-  DMAConfig config;
+  YDMAConfig config;
 
   // The four DMA channels.
-  DMAChannelState channels[kDMANumChannels];
+  YDMAChannelState channels[kDMANumChannels];
 
   // Command register for the controller.
   uint8_t command_register;
@@ -201,25 +201,25 @@ typedef struct DMAState {
   uint8_t mask_register;
 
   // Internal byte flip-flop for 16-bit register access.
-  DMARegisterByte rw_byte;
-} DMAState;
+  YDMARegisterByte rw_byte;
+} YDMAState;
 
 // ============================================================================
 // DMA interface
 // ============================================================================
 
 // Initializes the DMA state to its power-on default.
-YAX86_PUBLIC void DMAInit(DMAState* dma);
+YAX86_PUBLIC void DMAInit(YDMAState* dma);
 
 // Handles reads from the DMA's I/O ports.
-YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port);
+YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port);
 
 // Handles writes to the DMA's I/O ports.
-YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value);
+YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value);
 
 // Executes a single-byte transfer for the specified channel. This function
 // should be called by the platform in response to a DREQ signal from a
 // peripheral.
-YAX86_PUBLIC void DMATransferByte(DMAState* dma, uint8_t channel_index);
+YAX86_PUBLIC void DMATransferByte(YDMAState* dma, uint8_t channel_index);
 
 #endif  // YAX86_DMA_PUBLIC_H

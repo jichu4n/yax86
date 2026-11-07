@@ -11,14 +11,14 @@
 #include <stdint.h>
 
 // Header structure at the beginning of a static vector.
-typedef struct StaticVectorHeader {
+typedef struct YStaticVectorHeader {
   // Element size in bytes.
   size_t element_size;
   // Maximum number of elements the vector can hold.
   size_t max_length;
   // Number of elements currently in the vector.
   size_t length;
-} StaticVectorHeader;
+} YStaticVectorHeader;
 
 // Define a static vector type with an element type.
 //
@@ -28,12 +28,12 @@ typedef struct StaticVectorHeader {
 // on the instantiation site.
 #define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
   typedef struct name {                                                   \
-    StaticVectorHeader header;                                            \
+    YStaticVectorHeader header;                                           \
     element_type elements[max_length_value];                              \
   } name;                                                                 \
   static void name##Init(name* vector) __attribute__((unused));           \
   static void name##Init(name* vector) {                                  \
-    static const StaticVectorHeader header = {                            \
+    static const YStaticVectorHeader header = {                           \
         .element_size = sizeof(element_type),                             \
         .max_length = (max_length_value),                                 \
         .length = 0,                                                      \

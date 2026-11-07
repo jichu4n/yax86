@@ -19,7 +19,7 @@
 //
 // The cost of an instruction is built from three parts.
 //
-// 1. A base cost per opcode, which is OpcodeMetadata.base_cycles in
+// 1. A base cost per opcode, which is YCPUOpcodeMetadata.base_cycles in
 //    opcode_table.c. These are the published 8086 figures for the register
 //    form, less the time the figure already accounts for on the bus, which is
 //    charged separately in part 3. Where the published figure covers an
@@ -64,7 +64,7 @@ enum {
 
 // Cycles to compute the effective address of a ModR/M memory operand.
 YAX86_MODULE_PRIVATE uint8_t
-GetEffectiveAddressCycles(const Instruction* instruction) {
+GetEffectiveAddressCycles(const YCPUInstruction* instruction) {
   if (!instruction->has_mod_rm || instruction->mod_rm.mod == 0x03) {
     // A register operand needs no address computed.
     return 0;
@@ -99,10 +99,10 @@ GetEffectiveAddressCycles(const Instruction* instruction) {
   return cycles;
 }
 
-YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes) {
+YAX86_MODULE_PRIVATE void AddBusCycles(YCPUState* cpu, uint8_t num_bytes) {
   cpu->pending_cycles += (uint16_t)num_bytes * kBusCyclesPerByte;
 }
 
-YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles) {
+YAX86_PUBLIC void CPUAddCycles(YCPUState* cpu, uint16_t cycles) {
   cpu->pending_cycles += cycles;
 }

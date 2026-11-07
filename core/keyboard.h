@@ -405,7 +405,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 #line 1 "./src/util/log.h"
 // Logging library.
 //
-// Provides a Logger that formats messages and hands them to a caller-provided
+// Provides a YLogger that formats messages and hands them to a caller-provided
 // sink. Logging is always compiled in - even on MCU targets the sink can write
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
@@ -433,7 +433,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 // ============================================================================
 
 // Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
+typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
   kLogLevelError = 0,
@@ -441,31 +441,31 @@ typedef enum LogLevel {
   kLogLevelWarn,
   // Diagnostic detail.
   kLogLevelDebug,
-} LogLevel;
+} YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
   kLogMaxLineLength = 256,
   // Maximum number of distinct log modules, bounded by the width of
-  // LoggerConfig.enabled_modules.
+  // YLoggerConfig.enabled_modules.
   kLogMaxModules = 32,
 };
 
 // Identifies the module a log message originated from.
 //
-// Each module declares its own LogModule in its own public header, so that
+// Each module declares its own YLogModule in its own public header, so that
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
-typedef struct LogModule {
+typedef struct YLogModule {
   // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
-} LogModule;
+} YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -474,7 +474,7 @@ YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
 // ============================================================================
 
 // Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
+typedef struct YLoggerConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -482,7 +482,7 @@ typedef struct LoggerConfig {
   // and carries no prefix or trailing newline - the host composes the final
   // output line.
   void (*write_line)(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length);
 
   // Callback returning the current tick count. The platform wires this to its
@@ -490,27 +490,27 @@ typedef struct LoggerConfig {
   // is 0.
   uint64_t (*get_tick)(void* context);
 
-  // Bit mask of enabled modules, indexed by LogModule.id.
+  // Bit mask of enabled modules, indexed by YLogModule.id.
   uint32_t enabled_modules;
 
   // Maximum severity level to emit. Messages with a level greater than this
   // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
+  YLogLevel min_level;
+} YLoggerConfig;
 
 // State of a logger.
-typedef struct Logger {
+typedef struct YLogger {
   // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
+  YLoggerConfig* config;
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
   char buffer[kLogMaxLineLength];
-} Logger;
+} YLogger;
 
 // Initialize a logger with the provided configuration.
 YAX86_PUBLIC_HEADER inline void LoggerInit(
-    Logger* logger, LoggerConfig* config) {
+    YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
 YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
-    const Logger* logger, const LogModule* module, LogLevel level) {
+    const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
 
 // Enable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -536,7 +536,7 @@ YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
 
 // Disable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
   }
@@ -545,12 +545,12 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) YAX86_UNUSED;
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) YAX86_UNUSED;
 
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) {
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
   if (!LoggerIsEnabled(logger, module, level)) {
@@ -616,14 +616,14 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 #include <stdint.h>
 
 // Header structure at the beginning of a static vector.
-typedef struct StaticVectorHeader {
+typedef struct YStaticVectorHeader {
   // Element size in bytes.
   size_t element_size;
   // Maximum number of elements the vector can hold.
   size_t max_length;
   // Number of elements currently in the vector.
   size_t length;
-} StaticVectorHeader;
+} YStaticVectorHeader;
 
 // Define a static vector type with an element type.
 //
@@ -633,12 +633,12 @@ typedef struct StaticVectorHeader {
 // on the instantiation site.
 #define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
   typedef struct name {                                                   \
-    StaticVectorHeader header;                                            \
+    YStaticVectorHeader header;                                           \
     element_type elements[max_length_value];                              \
   } name;                                                                 \
   static void name##Init(name* vector) __attribute__((unused));           \
   static void name##Init(name* vector) {                                  \
-    static const StaticVectorHeader header = {                            \
+    static const YStaticVectorHeader header = {                           \
         .element_size = sizeof(element_type),                             \
         .max_length = (max_length_value),                                 \
         .length = 0,                                                      \
@@ -763,26 +763,26 @@ enum {
 };
 
 // Log module for the Keyboard.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleKeyboard = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleKeyboard = {
     .id = kLogModuleIDKeyboard,
     .name = "KEYBOARD",
 };
 
-struct KeyboardState;
+struct YKeyboardState;
 
 // Caller-provided runtime configuration for the Keyboard.
-typedef struct KeyboardConfig {
+typedef struct YKeyboardConfig {
   // Opaque context pointer, passed to all callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to send a scancode to the PPI.
   void (*send_scancode)(void* context, uint8_t scancode);
   // Callback to raise an IRQ1 (keyboard interrupt) to the CPU.
   void (*raise_irq1)(void* context);
-} KeyboardConfig;
+} YKeyboardConfig;
 
 enum {
   // Maximum number of keys to buffer. Additional key presses will be dropped.
@@ -790,12 +790,12 @@ enum {
   // Threshold required to trigger keyboard reset when clock line is held low.
   kKeyboardResetThresholdMs = 20,
 };
-STATIC_VECTOR_TYPE(KeyboardBuffer, uint8_t, kKeyboardBufferSize)
+STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, kKeyboardBufferSize)
 
 // State of the Keyboard.
-typedef struct KeyboardState {
+typedef struct YKeyboardState {
   // Pointer to the keyboard configuration.
-  KeyboardConfig config;
+  YKeyboardConfig config;
 
   // State of PPI Port B bit 7, or PBKB in GLaBIOS.
   // - false = enable keyboard
@@ -820,23 +820,23 @@ typedef struct KeyboardState {
   bool waiting_for_ack;
 
   // Buffer of key presses received.
-  KeyboardBuffer buffer;
-} KeyboardState;
+  YKeyboardBuffer buffer;
+} YKeyboardState;
 
 // Initializes the keyboard to its power-on state.
-YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardInit(YKeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
 YAX86_PUBLIC void KeyboardHandleControl(
-    KeyboardState* keyboard, bool enable_clear, bool clock_low);
+    YKeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
 YAX86_PUBLIC void KeyboardHandleKeyPress(
-    KeyboardState* keyboard, uint8_t scancode);
+    YKeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
-YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardTickMs(YKeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H
 
@@ -864,20 +864,20 @@ enum {
   kKeyboardSelfTestOK = 0xAA,
 };
 
-YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardInit(YKeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
   keyboard->enable_clear = false;
   keyboard->clock_low = true;
   keyboard->clock_low_ms = 0;
-  KeyboardBufferInit(&keyboard->buffer);
+  YKeyboardBufferInit(&keyboard->buffer);
   keyboard->waiting_for_ack = false;
 }
 
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
 YAX86_FILE_PRIVATE inline void KeyboardSendScancode(
-    KeyboardState* keyboard, uint8_t scancode) {
+    YKeyboardState* keyboard, uint8_t scancode) {
   if (keyboard->config.send_scancode) {
     keyboard->config.send_scancode(keyboard->config.context, scancode);
   }
@@ -889,7 +889,7 @@ YAX86_FILE_PRIVATE inline void KeyboardSendScancode(
 
 // Helper to send the next scancode in the buffer if available.
 YAX86_FILE_PRIVATE inline void KeyboardSendNextScancode(
-    KeyboardState* keyboard) {
+    YKeyboardState* keyboard) {
   // Can only send in state [0, 1], i.e. enable_clear = false clock_low = true
   if (!(keyboard->enable_clear == false && keyboard->clock_low == true)) {
     return;
@@ -899,18 +899,18 @@ YAX86_FILE_PRIVATE inline void KeyboardSendNextScancode(
     return;
   }
   // If buffer is empty, nothing to send.
-  if (KeyboardBufferLength(&keyboard->buffer) == 0) {
+  if (YKeyboardBufferLength(&keyboard->buffer) == 0) {
     return;
   }
 
   // Send the next scancode in the buffer.
-  uint8_t scancode = *KeyboardBufferGet(&keyboard->buffer, 0);
-  KeyboardBufferRemove(&keyboard->buffer, 0);
+  uint8_t scancode = *YKeyboardBufferGet(&keyboard->buffer, 0);
+  YKeyboardBufferRemove(&keyboard->buffer, 0);
   KeyboardSendScancode(keyboard, scancode);
 }
 
 YAX86_PUBLIC void KeyboardHandleControl(
-    KeyboardState* keyboard, bool enable_clear, bool clock_low) {
+    YKeyboardState* keyboard, bool enable_clear, bool clock_low) {
   // Save previous state.
   bool old_clock_low = keyboard->clock_low;
   bool old_enable_clear = keyboard->enable_clear;
@@ -935,7 +935,7 @@ YAX86_PUBLIC void KeyboardHandleControl(
 }
 
 YAX86_PUBLIC void KeyboardHandleKeyPress(
-    KeyboardState* keyboard, uint8_t scancode) {
+    YKeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.
@@ -943,10 +943,10 @@ YAX86_PUBLIC void KeyboardHandleKeyPress(
       keyboard->clock_low_ms == kKeyboardResetTriggered) {
     return;
   }
-  KeyboardBufferAppend(&keyboard->buffer, &scancode);
+  YKeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
-YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard) {
+YAX86_PUBLIC void KeyboardTickMs(YKeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {
@@ -964,13 +964,13 @@ YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard) {
     }
 
     // Reached threshold, trigger reset.
-    KeyboardBufferClear(&keyboard->buffer);
+    YKeyboardBufferClear(&keyboard->buffer);
     keyboard->waiting_for_ack = false;
     // Set to special value indicating reset has been triggered.
     keyboard->clock_low_ms = kKeyboardResetTriggered;
     // Send self-test passed scancode on next falling edge of enable_clear.
     uint8_t scancode = kKeyboardSelfTestOK;
-    KeyboardBufferAppend(&keyboard->buffer, &scancode);
+    YKeyboardBufferAppend(&keyboard->buffer, &scancode);
     return;
   }
 

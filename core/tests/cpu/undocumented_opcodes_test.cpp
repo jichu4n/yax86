@@ -39,7 +39,7 @@ unique_ptr<CPUTestHelper> WithCode(const vector<uint8_t>& code) {
 TEST_F(UndocumentedOpcodesTest, ConditionalJumpAliasesDecodeAsTwoBytes) {
   for (uint8_t opcode = 0x60; opcode <= 0x6F; ++opcode) {
     auto helper = WithCode({opcode, 0x10});
-    Instruction instruction;
+    YCPUInstruction instruction;
     ASSERT_EQ(
         CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess)
         << "opcode " << hex << static_cast<int>(opcode);
@@ -126,7 +126,7 @@ TEST_F(UndocumentedOpcodesTest, NearReturnAndPopAliasDecodesImmediate) {
   helper->memory_[0x0800] = 0xCD;
   helper->memory_[0x0801] = 0xAB;
 
-  Instruction instruction;
+  YCPUInstruction instruction;
   ASSERT_EQ(
       CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.size, 3);
@@ -157,7 +157,7 @@ TEST_F(UndocumentedOpcodesTest, FarReturnAliases) {
 TEST_F(UndocumentedOpcodesTest, FarReturnAndPopAliasDecodesImmediate) {
   // 0xC8 is RETF imm16.
   auto helper = WithCode({0xC8, 0x02, 0x00});
-  Instruction instruction;
+  YCPUInstruction instruction;
   ASSERT_EQ(
       CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.size, 3);
@@ -199,7 +199,7 @@ TEST_F(UndocumentedOpcodesTest, LockPrefixAliasIsConsumedAsAPrefix) {
   // 0xF1 prefixing NOP must decode as a single two-byte instruction.
   auto helper = WithCode({0xF1, 0x90});
 
-  Instruction instruction;
+  YCPUInstruction instruction;
   ASSERT_EQ(
       CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   // 0xF1 aliases LOCK, which selects nothing, so what shows it was consumed as
@@ -217,11 +217,11 @@ TEST_F(UndocumentedOpcodesTest, LockPrefixAliasIsConsumedAsAPrefix) {
 
 TEST_F(UndocumentedOpcodesTest, Group3Reg1IsTestAndDecodesImmediate) {
   // 0xF6 /1 aliases 0xF6 /0 (TEST r/m8, imm8), so it carries an immediate.
-  // ModRM 0xC8 = mod 11, reg 001, rm 000 -> AL.
+  // YCPUModRM 0xC8 = mod 11, reg 001, rm 000 -> AL.
   auto helper = WithCode({0xF6, 0xC8, 0x0F});
   helper->cpu_.registers[kAX] = 0x00F0;
 
-  Instruction instruction;
+  YCPUInstruction instruction;
   ASSERT_EQ(
       CPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.size, 3);
@@ -235,7 +235,7 @@ TEST_F(UndocumentedOpcodesTest, Group3Reg1IsTestAndDecodesImmediate) {
 
 TEST_F(UndocumentedOpcodesTest, Group5Reg7IsPush) {
   // 0xFF /7 aliases 0xFF /6 (PUSH r/m16).
-  // ModRM 0xFB = mod 11, reg 111, rm 011 -> BX.
+  // YCPUModRM 0xFB = mod 11, reg 111, rm 011 -> BX.
   auto helper = WithCode({0xFF, 0xFB});
   helper->cpu_.registers[kSS] = 0;
   helper->cpu_.registers[kSP] = 0x0800;
@@ -249,8 +249,8 @@ TEST_F(UndocumentedOpcodesTest, Group5Reg7IsPush) {
 }
 
 TEST_F(UndocumentedOpcodesTest, PopRegisterOrMemoryIgnoresRegField) {
-  // 0x8F with a non-zero REG field still pops. ModRM 0xCB = mod 11, reg 001,
-  // rm 011 -> BX.
+  // 0x8F with a non-zero REG field still pops. YCPUModRM 0xCB = mod 11, reg
+  // 001, rm 011 -> BX.
   auto helper = WithCode({0x8F, 0xCB});
   helper->cpu_.registers[kSS] = 0;
   helper->cpu_.registers[kSP] = 0x0800;
@@ -335,11 +335,11 @@ TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalIsNoOpWhenCountIsZero) {
 // The segment register field is only two bits wide. The 8086/8088 does not
 // decode the third bit, so REG 4 through 7 name ES, CS, SS and DS over again.
 TEST_F(UndocumentedOpcodesTest, MoveFromSegmentRegisterIgnoresTheThirdRegBit) {
-  static const RegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
+  static const YCPURegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
   for (uint8_t reg = 4; reg <= 7; ++reg) {
     // 8C /reg with mod=11, rm=000: MOV AX, sreg
     auto helper = WithCode({0x8C, static_cast<uint8_t>(0xC0 | (reg << 3))});
-    const RegisterIndex expected = kSegmentRegisters[reg & 0x03];
+    const YCPURegisterIndex expected = kSegmentRegisters[reg & 0x03];
     uint16_t expected_value = 0xBEEF;
     if (expected == kCS) {
       // The instruction is fetched through CS, so it has to keep pointing at
@@ -358,11 +358,11 @@ TEST_F(UndocumentedOpcodesTest, MoveFromSegmentRegisterIgnoresTheThirdRegBit) {
 }
 
 TEST_F(UndocumentedOpcodesTest, MoveToSegmentRegisterIgnoresTheThirdRegBit) {
-  static const RegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
+  static const YCPURegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
   for (uint8_t reg = 4; reg <= 7; ++reg) {
     // 8E /reg with mod=11, rm=000: MOV sreg, AX
     auto helper = WithCode({0x8E, static_cast<uint8_t>(0xC0 | (reg << 3))});
-    const RegisterIndex expected = kSegmentRegisters[reg & 0x03];
+    const YCPURegisterIndex expected = kSegmentRegisters[reg & 0x03];
     helper->cpu_.registers[kAX] = 0xBEEF;
     helper->cpu_.registers[expected] = 0;
 

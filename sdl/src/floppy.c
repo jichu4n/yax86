@@ -32,7 +32,7 @@ static void FloppyWriteByte(
   }
 }
 
-bool FloppyMount(PlatformState* platform, const char* path) {
+bool FloppyMount(YPlatformState* platform, const char* path) {
   FILE* file = fopen(path, "rb");
   if (!file) {
     fprintf(stderr, "Could not open floppy image '%s'\n", path);

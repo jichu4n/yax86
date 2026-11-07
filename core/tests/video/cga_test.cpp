@@ -57,7 +57,9 @@ class CGATest : public VideoTestBase {
     VideoWritePort(&video_, kCGAPortColorSelect, value);
   }
 
-  RGB Color(uint8_t index) const { return video_.config.cga_palette[index]; }
+  YVideoRGB Color(uint8_t index) const {
+    return video_.config.cga_palette[index];
+  }
 
   // Write a byte of graphics mode VRAM. Even scan lines live in the first half
   // of VRAM and odd scan lines in the second.
@@ -84,7 +86,7 @@ TEST_F(CGATest, Initialization) {
 }
 
 TEST_F(CGATest, AdapterMetadata) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
   EXPECT_EQ(adapter->adapter, kVideoAdapterCGA);
   EXPECT_EQ(adapter->frame_buffer_width, kFrameBufferWidth);
   EXPECT_EQ(adapter->frame_buffer_height, kFrameBufferHeight);
@@ -97,7 +99,7 @@ TEST_F(CGATest, AdapterMetadata) {
 TEST_F(CGATest, ModeSelection) {
   struct ModeCase {
     uint8_t control;
-    VideoMode mode;
+    YVideoMode mode;
   };
   const ModeCase cases[] = {
       {kControlMode0, kVideoModeCGAText40x25Mono},

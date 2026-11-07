@@ -27,7 +27,7 @@ enum {
 };
 
 // Exercises the speaker the way a guest does, through the platform's I/O port
-// map, and checks what reaches the host callback in PlatformConfig.
+// map, and checks what reaches the host callback in YPlatformConfig.
 class PlatformPCSpeakerTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -35,7 +35,7 @@ class PlatformPCSpeakerTest : public ::testing::Test {
     platform_.config.context = this;
     platform_.config.physical_memory = ram_;
     platform_.config.vram = vram_;
-    platform_.config.set_pc_speaker_frequency = [](PlatformState* p,
+    platform_.config.set_pc_speaker_frequency = [](YPlatformState* p,
                                                    uint32_t frequency_hz) {
       auto* test = static_cast<PlatformPCSpeakerTest*>(p->config.context);
       test->frequencies_.push_back(frequency_hz);
@@ -61,7 +61,7 @@ class PlatformPCSpeakerTest : public ::testing::Test {
     return frequencies_.empty() ? 0 : frequencies_.back();
   }
 
-  PlatformState platform_ = {0};
+  YPlatformState platform_ = {0};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
   // Every frequency reported to the host, in order.

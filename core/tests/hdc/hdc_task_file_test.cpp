@@ -7,7 +7,7 @@
 namespace {
 
 // A geometry small enough to make out-of-range addresses easy to construct.
-constexpr HDCDriveGeometry kTestGeometry = {
+constexpr YHDCDriveGeometry kTestGeometry = {
     /*num_cylinders=*/10,
     /*num_heads=*/2,
     /*num_sectors_per_track=*/4,
@@ -23,12 +23,12 @@ class HDCTaskFileTest : public ::testing::Test {
 
   // Reads and writes go through the physical port, so every test exercises the
   // card's address line swap rather than assuming it.
-  uint8_t Read(HDCRegister reg) {
+  uint8_t Read(YHDCRegister reg) {
     return HDCReadPort(
         &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg));
   }
 
-  void Write(HDCRegister reg, uint8_t value) {
+  void Write(YHDCRegister reg, uint8_t value) {
     HDCWritePort(
         &hdc_, kHDCPortBase + HDCPortOffsetToRegister((uint8_t)reg), value);
   }
@@ -71,7 +71,7 @@ class HDCTaskFileTest : public ::testing::Test {
     }
     return text;
   }
-  HDCState hdc_ = {0};
+  YHDCState hdc_ = {0};
 };
 
 TEST_F(HDCTaskFileTest, PortOffsetToRegisterMatchesTheCardWiring) {

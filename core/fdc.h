@@ -405,7 +405,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 #line 1 "./src/util/log.h"
 // Logging library.
 //
-// Provides a Logger that formats messages and hands them to a caller-provided
+// Provides a YLogger that formats messages and hands them to a caller-provided
 // sink. Logging is always compiled in - even on MCU targets the sink can write
 // to a debugging serial port - and is filtered entirely at runtime, by module
 // and by severity level, before a message is formatted.
@@ -433,7 +433,7 @@ YAX86_MODULE_PRIVATE_HEADER int SNPrintF(
 // ============================================================================
 
 // Log severity levels, in decreasing order of severity.
-typedef enum LogLevel {
+typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
   kLogLevelError = 0,
@@ -441,31 +441,31 @@ typedef enum LogLevel {
   kLogLevelWarn,
   // Diagnostic detail.
   kLogLevelDebug,
-} LogLevel;
+} YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
   kLogMaxLineLength = 256,
   // Maximum number of distinct log modules, bounded by the width of
-  // LoggerConfig.enabled_modules.
+  // YLoggerConfig.enabled_modules.
   kLogMaxModules = 32,
 };
 
 // Identifies the module a log message originated from.
 //
-// Each module declares its own LogModule in its own public header, so that
+// Each module declares its own YLogModule in its own public header, so that
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
-typedef struct LogModule {
+typedef struct YLogModule {
   // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
-} LogModule;
+} YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
+YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -474,7 +474,7 @@ YAX86_PUBLIC_HEADER inline uint32_t LogModuleMask(const LogModule* module) {
 // ============================================================================
 
 // Caller-provided runtime configuration for a logger.
-typedef struct LoggerConfig {
+typedef struct YLoggerConfig {
   // Custom data passed through to callbacks.
   void* context;
 
@@ -482,7 +482,7 @@ typedef struct LoggerConfig {
   // and carries no prefix or trailing newline - the host composes the final
   // output line.
   void (*write_line)(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length);
 
   // Callback returning the current tick count. The platform wires this to its
@@ -490,27 +490,27 @@ typedef struct LoggerConfig {
   // is 0.
   uint64_t (*get_tick)(void* context);
 
-  // Bit mask of enabled modules, indexed by LogModule.id.
+  // Bit mask of enabled modules, indexed by YLogModule.id.
   uint32_t enabled_modules;
 
   // Maximum severity level to emit. Messages with a level greater than this
   // are suppressed.
-  LogLevel min_level;
-} LoggerConfig;
+  YLogLevel min_level;
+} YLoggerConfig;
 
 // State of a logger.
-typedef struct Logger {
+typedef struct YLogger {
   // Pointer to caller-provided runtime configuration.
-  LoggerConfig* config;
+  YLoggerConfig* config;
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
   char buffer[kLogMaxLineLength];
-} Logger;
+} YLogger;
 
 // Initialize a logger with the provided configuration.
 YAX86_PUBLIC_HEADER inline void LoggerInit(
-    Logger* logger, LoggerConfig* config) {
+    YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
 }
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void LoggerInit(
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
 YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
-    const Logger* logger, const LogModule* module, LogLevel level) {
+    const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
          level <= logger->config->min_level &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool LoggerIsEnabled(
 
 // Enable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= LogModuleMask(module);
   }
@@ -536,7 +536,7 @@ YAX86_PUBLIC_HEADER inline void LoggerEnableModule(
 
 // Disable a module on a logger.
 YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
-    Logger* logger, const LogModule* module) {
+    YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~LogModuleMask(module);
   }
@@ -545,12 +545,12 @@ YAX86_PUBLIC_HEADER inline void LoggerDisableModule(
 // Format and emit a log message. Prefer the YAX86_LOG macro, which skips
 // formatting when the message would be suppressed.
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) YAX86_UNUSED;
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) YAX86_UNUSED;
 
 YAX86_PUBLIC_HEADER void LoggerWrite(
-    Logger* logger, const LogModule* module, LogLevel level, const char* format,
-    ...) {
+    YLogger* logger, const YLogModule* module, YLogLevel level,
+    const char* format, ...) {
   // Callers normally go through YAX86_LOG, which has already checked this, but
   // LoggerWrite is also callable directly.
   if (!LoggerIsEnabled(logger, module, level)) {
@@ -616,14 +616,14 @@ YAX86_PUBLIC_HEADER void LoggerWrite(
 #include <stdint.h>
 
 // Header structure at the beginning of a static vector.
-typedef struct StaticVectorHeader {
+typedef struct YStaticVectorHeader {
   // Element size in bytes.
   size_t element_size;
   // Maximum number of elements the vector can hold.
   size_t max_length;
   // Number of elements currently in the vector.
   size_t length;
-} StaticVectorHeader;
+} YStaticVectorHeader;
 
 // Define a static vector type with an element type.
 //
@@ -633,12 +633,12 @@ typedef struct StaticVectorHeader {
 // on the instantiation site.
 #define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
   typedef struct name {                                                   \
-    StaticVectorHeader header;                                            \
+    YStaticVectorHeader header;                                           \
     element_type elements[max_length_value];                              \
   } name;                                                                 \
   static void name##Init(name* vector) __attribute__((unused));           \
   static void name##Init(name* vector) {                                  \
-    static const StaticVectorHeader header = {                            \
+    static const YStaticVectorHeader header = {                           \
         .element_size = sizeof(element_type),                             \
         .max_length = (max_length_value),                                 \
         .length = 0,                                                      \
@@ -731,13 +731,13 @@ enum {
 };
 
 // Log module for the FDC.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleFDC = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
 
 // Floppy disk format configuration.
-typedef struct FDCDiskFormat {
+typedef struct YFDCDiskFormat {
   // Number of heads (1 or 2).
   uint8_t num_heads;
   // Number of tracks.
@@ -746,17 +746,17 @@ typedef struct FDCDiskFormat {
   uint8_t num_sectors_per_track;
   // Size of each sector in bytes.
   uint16_t sector_size;
-} FDCDiskFormat;
+} YFDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-YAX86_PUBLIC_HEADER const FDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const YFDCDiskFormat kFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,
     .sector_size = 512,
 };
 
-struct FDCState;
+struct YFDCState;
 
 enum {
   // Number of floppy drives supported by the FDC.
@@ -768,7 +768,7 @@ enum {
 };
 
 // Command phases of the FDC.
-typedef enum FDCCommandPhase {
+typedef enum YFDCCommandPhase {
   // No command in progress.
   kFDCPhaseIdle = 0,
   // Command has been issued, waiting for parameters.
@@ -777,17 +777,17 @@ typedef enum FDCCommandPhase {
   kFDCPhaseExecution,
   // Command execution complete, sending result bytes.
   kFDCPhaseResult,
-} FDCCommandPhase;
+} YFDCCommandPhase;
 
 // I/O ports for the FDC.
-typedef enum FDCPort {
+typedef enum YFDCPort {
   // Digital Output Register (write-only).
   kFDCPortDOR = 0x3F2,
   // Main Status Register (read-only).
   kFDCPortMSR = 0x3F4,
   // Data Register (read/write).
   kFDCPortData = 0x3F5,
-} FDCPort;
+} YFDCPort;
 
 // Flags for the Main Status Register (MSR).
 enum {
@@ -884,13 +884,13 @@ enum {
 };
 
 // State for a single floppy drive.
-typedef struct FDCDriveState {
+typedef struct YFDCDriveState {
   // Whether there is a disk inserted in the drive, i.e. whether an image is
   // mounted. The real hardware doesn't actually know this and will attempt to
   // access the disk and time out.
   bool present;
   // The format of the disk currently inserted in the drive.
-  const FDCDiskFormat* format;
+  const YFDCDiskFormat* format;
   // The track the read/write head is currently on.
   uint8_t track;
   // The currently active head (0 or 1).
@@ -903,15 +903,15 @@ typedef struct FDCDriveState {
   // Whether there is a pending interrupt from a completed Seek or Recalibrate
   // operation on this drive.
   bool has_pending_interrupt;
-} FDCDriveState;
+} YFDCDriveState;
 
 // Caller-provided runtime configuration for the FDC.
-typedef struct FDCConfig {
+typedef struct YFDCConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to raise an IRQ6 (FDC interrupt) to the CPU.
   void (*raise_irq6)(void* context);
@@ -937,37 +937,37 @@ typedef struct FDCConfig {
       uint32_t offset,
       // byte value to write
       uint8_t value);
-} FDCConfig;
+} YFDCConfig;
 
-STATIC_VECTOR_TYPE(FDCCommandBuffer, uint8_t, kFDCCommandBufferSize)
-STATIC_VECTOR_TYPE(FDCResultBuffer, uint8_t, kFDCResultBufferSize)
+STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, kFDCCommandBufferSize)
+STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, kFDCResultBufferSize)
 
-struct FDCCommandMetadata;
+struct YFDCCommandMetadata;
 
 // State of the Floppy Disk Controller.
-typedef struct FDCState {
+typedef struct YFDCState {
   // Pointer to the FDC configuration.
-  FDCConfig config;
+  YFDCConfig config;
 
   // Value of the Digital Output Register (DOR) from the last write to port
   // 0x3F2.
   uint8_t dor;
 
   // Per-drive state.
-  FDCDriveState drives[kFDCNumDrives];
+  YFDCDriveState drives[kFDCNumDrives];
 
   // Current command phase.
-  FDCCommandPhase phase;
+  YFDCCommandPhase phase;
 
   // Command buffer to receive command and parameters from the CPU.
-  FDCCommandBuffer command_buffer;
+  YFDCCommandBuffer command_buffer;
   // Metadata for the command currently being processed.
-  const struct FDCCommandMetadata* current_command;
+  const struct YFDCCommandMetadata* current_command;
   // How many ticks the current command has been executing.
   uint32_t current_command_ticks;
 
   // Result buffer to send to the CPU.
-  FDCResultBuffer result_buffer;
+  YFDCResultBuffer result_buffer;
   // Next index to read from result buffer.
   uint8_t next_result_byte_index;
 
@@ -992,30 +992,30 @@ typedef struct FDCState {
     bool dma_request_active;  // DREQ is asserted, waiting for DMA access.
     bool tc_received;         // TC (Terminal Count) signal received from DMA.
   } transfer;
-} FDCState;
+} YFDCState;
 
 // Initializes the FDC to its power-on state.
-YAX86_PUBLIC void FDCInit(FDCState* fdc);
+YAX86_PUBLIC void FDCInit(YFDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
-YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
+YAX86_PUBLIC uint8_t FDCReadPort(YFDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
-YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void FDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value);
 
 // Signals to the FDC that the DMA controller has reached the terminal count.
 // This represents the TC signal.
-YAX86_PUBLIC void FDCHandleTC(FDCState* fdc);
+YAX86_PUBLIC void FDCHandleTC(YFDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
 YAX86_PUBLIC void FDCInsertDisk(
-    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
+    YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
-YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive);
+YAX86_PUBLIC void FDCEjectDisk(YFDCState* fdc, uint8_t drive);
 
 // Simulates a tick of the FDC, handling any timed operations.
-YAX86_PUBLIC void FDCTick(FDCState* fdc);
+YAX86_PUBLIC void FDCTick(YFDCState* fdc);
 
 #endif  // YAX86_FDC_PUBLIC_H
 
@@ -1048,7 +1048,7 @@ enum {
 };
 
 // FDC command opcodes.
-typedef enum FDCCommand {
+typedef enum YFDCCommand {
   // Read a Track
   kFDCCmdReadTrack = 0x02,
   // Specify
@@ -1079,45 +1079,45 @@ typedef enum FDCCommand {
   kFDCCmdScanLowOrEqual = 0x19,
   // Scan High or Equal
   kFDCCmdScanHighOrEqual = 0x1D,
-} FDCCommand;
+} YFDCCommand;
 
 // Metadata for each FDC command.
-typedef struct FDCCommandMetadata {
+typedef struct YFDCCommandMetadata {
   // Base opcode of the command (lower 5 bits).
   uint8_t opcode;
   // Number of parameter bytes expected.
   uint8_t num_param_bytes;
   // Handler to execute the command.
-  void (*handler)(FDCState* fdc);
-} FDCCommandMetadata;
+  void (*handler)(YFDCState* fdc);
+} YFDCCommandMetadata;
 
 // Helper to raise an IRQ6 if the callback is set and interrupts are enabled in
 // DOR.
-YAX86_FILE_PRIVATE inline void FDCRaiseIRQ6(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCRaiseIRQ6(YFDCState* fdc) {
   if (fdc->config.raise_irq6 && (fdc->dor & kFDCDORInterruptEnable)) {
     fdc->config.raise_irq6(fdc->config.context);
   }
 }
 
 // Transition into execution phase.
-YAX86_FILE_PRIVATE inline void FDCStartCommandExecution(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCStartCommandExecution(YFDCState* fdc) {
   YAX86_FDC_LOG(
       kLogLevelDebug, "executing command %02X with %u parameter bytes",
       fdc->current_command ? fdc->current_command->opcode : 0,
-      (unsigned)FDCCommandBufferLength(&fdc->command_buffer) - 1);
+      (unsigned)YFDCCommandBufferLength(&fdc->command_buffer) - 1);
   fdc->phase = kFDCPhaseExecution;
   fdc->current_command_ticks = 0;
 }
 
 // Transition into result phase after command execution.
-YAX86_FILE_PRIVATE inline void FDCFinishCommandExecution(FDCState* fdc) {
+YAX86_FILE_PRIVATE inline void FDCFinishCommandExecution(YFDCState* fdc) {
   YAX86_FDC_LOG(
       kLogLevelDebug, "command finished with %u result bytes, st0 %02X",
-      (unsigned)FDCResultBufferLength(&fdc->result_buffer),
-      FDCResultBufferLength(&fdc->result_buffer) > 0
-          ? *FDCResultBufferGet(&fdc->result_buffer, 0)
+      (unsigned)YFDCResultBufferLength(&fdc->result_buffer),
+      YFDCResultBufferLength(&fdc->result_buffer) > 0
+          ? *YFDCResultBufferGet(&fdc->result_buffer, 0)
           : 0);
-  if (FDCResultBufferLength(&fdc->result_buffer) == 0) {
+  if (YFDCResultBufferLength(&fdc->result_buffer) == 0) {
     // No result bytes to send, go back to idle phase.
     fdc->phase = kFDCPhaseIdle;
   } else {
@@ -1129,8 +1129,8 @@ YAX86_FILE_PRIVATE inline void FDCFinishCommandExecution(FDCState* fdc) {
 
 // Helper to perform a seek operation (for Seek and Recalibrate).
 YAX86_FILE_PRIVATE void FDCPerformSeek(
-    FDCState* fdc, uint8_t drive_index, uint8_t target_track) {
-  FDCDriveState* drive = &fdc->drives[drive_index];
+    YFDCState* fdc, uint8_t drive_index, uint8_t target_track) {
+  YFDCDriveState* drive = &fdc->drives[drive_index];
 
   // On initial tick, start seeking.
   if (fdc->current_command_ticks == 0) {
@@ -1167,7 +1167,7 @@ YAX86_FILE_PRIVATE void FDCPerformSeek(
 // In other words, the layout is an array of
 // [num_tracks][num_heads][num_sectors_per_track].
 YAX86_FILE_PRIVATE inline uint32_t FDCComputeOffset(
-    FDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
+    YFDCDiskFormat format, uint8_t head, uint8_t track, uint8_t sector,
     uint16_t sector_offset) {
   if (head >= format.num_heads || track >= format.num_tracks || sector == 0 ||
       sector > format.num_sectors_per_track ||
@@ -1191,39 +1191,39 @@ YAX86_FILE_PRIVATE inline uint32_t FDCComputeOffset(
 
 // Helper to finish a read/write command.
 YAX86_FILE_PRIVATE void FDCFinishReadWrite(
-    FDCState* fdc, uint8_t st0, uint8_t st1, uint8_t st2) {
-  FDCResultBufferAppend(&fdc->result_buffer, &st0);
-  FDCResultBufferAppend(&fdc->result_buffer, &st1);
-  FDCResultBufferAppend(&fdc->result_buffer, &st2);
-  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.cylinder);
-  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.head);
-  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.sector);
-  FDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.sector_size_code);
+    YFDCState* fdc, uint8_t st0, uint8_t st1, uint8_t st2) {
+  YFDCResultBufferAppend(&fdc->result_buffer, &st0);
+  YFDCResultBufferAppend(&fdc->result_buffer, &st1);
+  YFDCResultBufferAppend(&fdc->result_buffer, &st2);
+  YFDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.cylinder);
+  YFDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.head);
+  YFDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.sector);
+  YFDCResultBufferAppend(&fdc->result_buffer, &fdc->transfer.sector_size_code);
 
   FDCRaiseIRQ6(fdc);
   FDCFinishCommandExecution(fdc);
 }
 
 // Handler for Write Data command.
-YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleWriteData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
-    uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
+    uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
     fdc->transfer.multi_track = (cmd_byte & 0x80) != 0;
 
-    uint8_t drive_head = *FDCCommandBufferGet(&fdc->command_buffer, 1);
+    uint8_t drive_head = *YFDCCommandBufferGet(&fdc->command_buffer, 1);
     uint8_t drive_index = drive_head & 0x03;
     uint8_t head_address = (drive_head >> 2) & 0x01;
 
-    fdc->transfer.cylinder = *FDCCommandBufferGet(&fdc->command_buffer, 2);
-    fdc->transfer.head = *FDCCommandBufferGet(&fdc->command_buffer, 3);
-    fdc->transfer.sector = *FDCCommandBufferGet(&fdc->command_buffer, 4);
+    fdc->transfer.cylinder = *YFDCCommandBufferGet(&fdc->command_buffer, 2);
+    fdc->transfer.head = *YFDCCommandBufferGet(&fdc->command_buffer, 3);
+    fdc->transfer.sector = *YFDCCommandBufferGet(&fdc->command_buffer, 4);
     fdc->transfer.sector_size_code =
-        *FDCCommandBufferGet(&fdc->command_buffer, 5);
-    fdc->transfer.eot = *FDCCommandBufferGet(&fdc->command_buffer, 6);
+        *YFDCCommandBufferGet(&fdc->command_buffer, 5);
+    fdc->transfer.eot = *YFDCCommandBufferGet(&fdc->command_buffer, 6);
     // GPL and DTL are ignored.
 
-    FDCDriveState* drive = &fdc->drives[drive_index];
+    YFDCDriveState* drive = &fdc->drives[drive_index];
     if (!drive->present) {
       // Drive not ready.
       FDCFinishReadWrite(
@@ -1261,7 +1261,7 @@ YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
   // Check for Terminal Count (TC).
   if (fdc->transfer.tc_received) {
     // Transfer complete.
-    uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+    uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
     uint8_t head_address = (fdc->transfer.head & 0x01);
     FDCFinishReadWrite(
         fdc, kFDCST0NormalTermination | head_address << 2 | drive_index, 0, 0);
@@ -1274,7 +1274,7 @@ YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
   }
 
   // Data has arrived in data_register. Write it to image.
-  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
   if (fdc->config.write_image_byte) {
     fdc->config.write_image_byte(
         fdc->config.context, drive_index, fdc->transfer.current_offset,
@@ -1287,7 +1287,7 @@ YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
 
   // Calculate sector size.
   uint16_t sector_size;
-  uint8_t dtl = *FDCCommandBufferGet(&fdc->command_buffer, 8);
+  uint8_t dtl = *YFDCCommandBufferGet(&fdc->command_buffer, 8);
   if (fdc->transfer.sector_size_code == 0) {
     sector_size = dtl;
   } else {
@@ -1306,7 +1306,7 @@ YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
         fdc->transfer.sector_byte_index = 0;
 
         // Recompute offset.
-        FDCDriveState* drive = &fdc->drives[drive_index];
+        YFDCDriveState* drive = &fdc->drives[drive_index];
         fdc->transfer.current_offset = FDCComputeOffset(
             *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
             fdc->transfer.sector, 0);
@@ -1325,7 +1325,7 @@ YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
       // Next sector.
       fdc->transfer.sector++;
       fdc->transfer.sector_byte_index = 0;
-      FDCDriveState* drive = &fdc->drives[drive_index];
+      YFDCDriveState* drive = &fdc->drives[drive_index];
       fdc->transfer.current_offset = FDCComputeOffset(
           *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
           fdc->transfer.sector, 0);
@@ -1345,26 +1345,26 @@ YAX86_FILE_PRIVATE void FDCHandleWriteData(FDCState* fdc) {
 }
 
 // Handler for Read Data command.
-YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
+YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
-    uint8_t cmd_byte = *FDCCommandBufferGet(&fdc->command_buffer, 0);
+    uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
     fdc->transfer.multi_track = (cmd_byte & 0x80) != 0;
 
-    uint8_t drive_head = *FDCCommandBufferGet(&fdc->command_buffer, 1);
+    uint8_t drive_head = *YFDCCommandBufferGet(&fdc->command_buffer, 1);
     uint8_t drive_index = drive_head & 0x03;
     uint8_t head_address = (drive_head >> 2) & 0x01;
 
-    fdc->transfer.cylinder = *FDCCommandBufferGet(&fdc->command_buffer, 2);
-    fdc->transfer.head = *FDCCommandBufferGet(&fdc->command_buffer, 3);
-    fdc->transfer.sector = *FDCCommandBufferGet(&fdc->command_buffer, 4);
+    fdc->transfer.cylinder = *YFDCCommandBufferGet(&fdc->command_buffer, 2);
+    fdc->transfer.head = *YFDCCommandBufferGet(&fdc->command_buffer, 3);
+    fdc->transfer.sector = *YFDCCommandBufferGet(&fdc->command_buffer, 4);
     fdc->transfer.sector_size_code =
-        *FDCCommandBufferGet(&fdc->command_buffer, 5);
-    fdc->transfer.eot = *FDCCommandBufferGet(&fdc->command_buffer, 6);
+        *YFDCCommandBufferGet(&fdc->command_buffer, 5);
+    fdc->transfer.eot = *YFDCCommandBufferGet(&fdc->command_buffer, 6);
     // GPL and DTL are ignored as we don't simulate gap timings or use DTL for
     // init.
 
-    FDCDriveState* drive = &fdc->drives[drive_index];
+    YFDCDriveState* drive = &fdc->drives[drive_index];
     if (!drive->present) {
       // Drive not ready.
       FDCFinishReadWrite(
@@ -1401,7 +1401,7 @@ YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
   // Check for Terminal Count (TC).
   if (fdc->transfer.tc_received) {
     // Transfer complete.
-    uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+    uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
     uint8_t head_address = (fdc->transfer.head & 0x01);
     FDCFinishReadWrite(
         fdc, kFDCST0NormalTermination | head_address << 2 | drive_index, 0, 0);
@@ -1414,7 +1414,7 @@ YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
   }
 
   // Read next byte.
-  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
   if (fdc->config.read_image_byte) {
     fdc->transfer.data_register = fdc->config.read_image_byte(
         fdc->config.context, drive_index, fdc->transfer.current_offset);
@@ -1434,7 +1434,7 @@ YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
 
   // Calculate sector size again for boundary check.
   uint16_t sector_size;
-  uint8_t dtl = *FDCCommandBufferGet(&fdc->command_buffer, 8);
+  uint8_t dtl = *YFDCCommandBufferGet(&fdc->command_buffer, 8);
   if (fdc->transfer.sector_size_code == 0) {
     sector_size = dtl;
   } else {
@@ -1453,7 +1453,7 @@ YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
         fdc->transfer.sector_byte_index = 0;
 
         // Recompute offset for new head/sector.
-        FDCDriveState* drive = &fdc->drives[drive_index];
+        YFDCDriveState* drive = &fdc->drives[drive_index];
         fdc->transfer.current_offset = FDCComputeOffset(
             *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
             fdc->transfer.sector, 0);
@@ -1472,7 +1472,7 @@ YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
       fdc->transfer.sector++;
       fdc->transfer.sector_byte_index = 0;
       // Recompute offset for new sector.
-      FDCDriveState* drive = &fdc->drives[drive_index];
+      YFDCDriveState* drive = &fdc->drives[drive_index];
       fdc->transfer.current_offset = FDCComputeOffset(
           *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
           fdc->transfer.sector, 0);
@@ -1487,42 +1487,42 @@ YAX86_FILE_PRIVATE YAX86_HOT void FDCHandleReadData(FDCState* fdc) {
 }
 
 // Handler for Recalibrate command.
-YAX86_FILE_PRIVATE void FDCHandleRecalibrate(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleRecalibrate(YFDCState* fdc) {
   // Recalibrate command has one parameter byte: drive number (0-3).
-  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
   FDCPerformSeek(fdc, drive_index, 0);
 }
 
 // Handler for Seek command.
-YAX86_FILE_PRIVATE void FDCHandleSeek(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSeek(YFDCState* fdc) {
   // Seek command parameters:
   // Byte 1: Drive number (0-3) and Head address (ignored for seek).
   // Byte 2: New Cylinder Number (NCN).
-  uint8_t drive_index = *FDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
-  uint8_t target_track = *FDCCommandBufferGet(&fdc->command_buffer, 2);
+  uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  uint8_t target_track = *YFDCCommandBufferGet(&fdc->command_buffer, 2);
   FDCPerformSeek(fdc, drive_index, target_track);
 }
 
 // Handler for Specify command.
-YAX86_FILE_PRIVATE void FDCHandleSpecify(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSpecify(YFDCState* fdc) {
   // We don't currently support changing timings or non-DMA mode, so we just
   // ignore the parameters.
   FDCFinishCommandExecution(fdc);
 }
 
 // Handler for Sense Interrupt Status command.
-YAX86_FILE_PRIVATE void FDCHandleSenseInterruptStatus(FDCState* fdc) {
+YAX86_FILE_PRIVATE void FDCHandleSenseInterruptStatus(YFDCState* fdc) {
   // Check for any pending interrupts.
   for (int i = 0; i < kFDCNumDrives; ++i) {
-    FDCDriveState* drive = &fdc->drives[i];
+    YFDCDriveState* drive = &fdc->drives[i];
     if (drive->has_pending_interrupt) {
       // Clear the pending interrupt flag.
       drive->has_pending_interrupt = false;
 
       // Result Byte 0: ST0 (Status Register 0)
-      FDCResultBufferAppend(&fdc->result_buffer, &drive->st0);
+      YFDCResultBufferAppend(&fdc->result_buffer, &drive->st0);
       // Result Byte 1: PCN (Present Cylinder Number)
-      FDCResultBufferAppend(&fdc->result_buffer, &drive->track);
+      YFDCResultBufferAppend(&fdc->result_buffer, &drive->track);
 
       FDCFinishCommandExecution(fdc);
       return;
@@ -1531,13 +1531,13 @@ YAX86_FILE_PRIVATE void FDCHandleSenseInterruptStatus(FDCState* fdc) {
 
   // No pending interrupts found. This is treated as an invalid command.
   uint8_t st0 = kFDCST0InvalidCommand;
-  FDCResultBufferAppend(&fdc->result_buffer, &st0);
+  YFDCResultBufferAppend(&fdc->result_buffer, &st0);
   FDCFinishCommandExecution(fdc);
 }
 
 // List of supported FDC commands.
 // The opcodes here represent the base 5-bit command.
-YAX86_FILE_PRIVATE const FDCCommandMetadata kFDCCommandMetadataTable[] = {
+YAX86_FILE_PRIVATE const YFDCCommandMetadata kFDCCommandMetadataTable[] = {
     // Read a Track
     {.opcode = kFDCCmdReadTrack, .num_param_bytes = 8, .handler = NULL},
     // Specify
@@ -1583,14 +1583,15 @@ YAX86_FILE_PRIVATE const FDCCommandMetadata kFDCCommandMetadataTable[] = {
 // Nothing to do: an FDC powers on with every field at zero, and the caller has
 // already zeroed the state. Kept so that every module is brought up the same
 // way, and so that a non-zero default acquired later has somewhere to go.
-YAX86_PUBLIC void FDCInit(YAX86_UNUSED FDCState* fdc) {}
+YAX86_PUBLIC void FDCInit(YAX86_UNUSED YFDCState* fdc) {}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
-YAX86_FILE_PRIVATE const FDCCommandMetadata* FDCFindCommandMetadata(
+YAX86_FILE_PRIVATE const YFDCCommandMetadata* FDCFindCommandMetadata(
     uint8_t opcode) {
   for (size_t i = 0;
-       i < sizeof(kFDCCommandMetadataTable) / sizeof(FDCCommandMetadata); ++i) {
+       i < sizeof(kFDCCommandMetadataTable) / sizeof(YFDCCommandMetadata);
+       ++i) {
     if (kFDCCommandMetadataTable[i].opcode == opcode) {
       return &kFDCCommandMetadataTable[i];
     }
@@ -1598,7 +1599,7 @@ YAX86_FILE_PRIVATE const FDCCommandMetadata* FDCFindCommandMetadata(
   return NULL;
 }
 
-YAX86_FILE_PRIVATE uint8_t FDCReadMSRPort(FDCState* fdc) {
+YAX86_FILE_PRIVATE uint8_t FDCReadMSRPort(YFDCState* fdc) {
   uint8_t msr = 0;
   switch (fdc->phase) {
     case kFDCPhaseIdle:
@@ -1624,7 +1625,7 @@ YAX86_FILE_PRIVATE uint8_t FDCReadMSRPort(FDCState* fdc) {
   return msr;
 }
 
-YAX86_FILE_PRIVATE uint8_t FDCReadDataPort(FDCState* fdc) {
+YAX86_FILE_PRIVATE uint8_t FDCReadDataPort(YFDCState* fdc) {
   switch (fdc->phase) {
     case kFDCPhaseExecution:
       // DMA or Polling read during execution.
@@ -1633,18 +1634,18 @@ YAX86_FILE_PRIVATE uint8_t FDCReadDataPort(FDCState* fdc) {
 
     case kFDCPhaseResult: {
       if (fdc->next_result_byte_index >=
-          FDCResultBufferLength(&fdc->result_buffer)) {
+          YFDCResultBufferLength(&fdc->result_buffer)) {
         return 0xFF;  // All result bytes have been read.
       }
-      uint8_t value =
-          *FDCResultBufferGet(&fdc->result_buffer, fdc->next_result_byte_index);
+      uint8_t value = *YFDCResultBufferGet(
+          &fdc->result_buffer, fdc->next_result_byte_index);
       fdc->next_result_byte_index++;
       if (fdc->next_result_byte_index >=
-          FDCResultBufferLength(&fdc->result_buffer)) {
+          YFDCResultBufferLength(&fdc->result_buffer)) {
         // Last result byte was read, reset to idle.
         fdc->phase = kFDCPhaseIdle;
         fdc->next_result_byte_index = 0;
-        FDCResultBufferClear(&fdc->result_buffer);
+        YFDCResultBufferClear(&fdc->result_buffer);
       }
       return value;
     }
@@ -1654,7 +1655,7 @@ YAX86_FILE_PRIVATE uint8_t FDCReadDataPort(FDCState* fdc) {
   }
 }
 
-YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
+YAX86_PUBLIC uint8_t FDCReadPort(YFDCState* fdc, uint16_t port) {
   switch (port) {
     case kFDCPortMSR:  // Main Status Register (MSR)
       return FDCReadMSRPort(fdc);
@@ -1666,7 +1667,7 @@ YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port) {
   }
 }
 
-YAX86_FILE_PRIVATE void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
+YAX86_FILE_PRIVATE void FDCWriteDORPort(YFDCState* fdc, uint8_t value) {
   uint8_t old_dor = fdc->dor;
   fdc->dor = value;
 
@@ -1676,8 +1677,8 @@ YAX86_FILE_PRIVATE void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
   if (!new_reset_bit && old_reset_bit) {
     // Entering reset state (1 -> 0).
     fdc->phase = kFDCPhaseIdle;
-    FDCCommandBufferClear(&fdc->command_buffer);
-    FDCResultBufferClear(&fdc->result_buffer);
+    YFDCCommandBufferClear(&fdc->command_buffer);
+    YFDCResultBufferClear(&fdc->result_buffer);
     for (int i = 0; i < kFDCNumDrives; ++i) {
       fdc->drives[i].busy = false;
       fdc->drives[i].has_pending_interrupt = false;
@@ -1694,7 +1695,7 @@ YAX86_FILE_PRIVATE void FDCWriteDORPort(FDCState* fdc, uint8_t value) {
   }
 }
 
-YAX86_FILE_PRIVATE void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
+YAX86_FILE_PRIVATE void FDCWriteDataPort(YFDCState* fdc, uint8_t value) {
   switch (fdc->phase) {
     case kFDCPhaseIdle: {
       // This is the first byte of a new command.
@@ -1705,16 +1706,16 @@ YAX86_FILE_PRIVATE void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
       if (!fdc->current_command) {
         YAX86_FDC_LOG(kLogLevelWarn, "invalid command opcode %02X", opcode);
         // Invalid command. Set up the result phase with an error.
-        FDCResultBufferClear(&fdc->result_buffer);
+        YFDCResultBufferClear(&fdc->result_buffer);
         uint8_t status = kFDCST0InvalidCommand;
-        FDCResultBufferAppend(&fdc->result_buffer, &status);
+        YFDCResultBufferAppend(&fdc->result_buffer, &status);
         FDCFinishCommandExecution(fdc);
         return;
       }
 
       // Clear previous command and store the first byte.
-      FDCCommandBufferClear(&fdc->command_buffer);
-      FDCCommandBufferAppend(&fdc->command_buffer, &value);
+      YFDCCommandBufferClear(&fdc->command_buffer);
+      YFDCCommandBufferAppend(&fdc->command_buffer, &value);
 
       if (fdc->current_command->num_param_bytes == 0) {
         // Command has no parameters, move directly to execution.
@@ -1735,11 +1736,11 @@ YAX86_FILE_PRIVATE void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
       }
 
       // Store the parameter byte.
-      FDCCommandBufferAppend(&fdc->command_buffer, &value);
+      YFDCCommandBufferAppend(&fdc->command_buffer, &value);
 
       // Check if all parameters have been received.
       // Total bytes = 1 (command) + num_param_bytes.
-      if (FDCCommandBufferLength(&fdc->command_buffer) >=
+      if (YFDCCommandBufferLength(&fdc->command_buffer) >=
           (uint8_t)(fdc->current_command->num_param_bytes + 1)) {
         // All bytes received, move to execution phase.
         FDCStartCommandExecution(fdc);
@@ -1759,7 +1760,7 @@ YAX86_FILE_PRIVATE void FDCWriteDataPort(FDCState* fdc, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void FDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
   switch (port) {
     case kFDCPortDOR:  // Digital Output Register
       FDCWriteDORPort(fdc, value);
@@ -1776,32 +1777,32 @@ YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-YAX86_PUBLIC void FDCHandleTC(FDCState* fdc) {
+YAX86_PUBLIC void FDCHandleTC(YFDCState* fdc) {
   fdc->transfer.tc_received = true;
 }
 
 YAX86_PUBLIC void FDCInsertDisk(
-    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format) {
+    YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format) {
   if (drive >= kFDCNumDrives) {
     return;
   }
-  FDCDriveState* drive_state = &fdc->drives[drive];
+  YFDCDriveState* drive_state = &fdc->drives[drive];
   drive_state->present = true;
   drive_state->format = format;
   drive_state->head = 0;
   drive_state->track = 0;
 }
 
-YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive) {
+YAX86_PUBLIC void FDCEjectDisk(YFDCState* fdc, uint8_t drive) {
   if (drive >= kFDCNumDrives) {
     return;
   }
-  FDCDriveState* drive_state = &fdc->drives[drive];
+  YFDCDriveState* drive_state = &fdc->drives[drive];
   drive_state->present = false;
   drive_state->format = NULL;
 }
 
-YAX86_PUBLIC void FDCTick(FDCState* fdc) {
+YAX86_PUBLIC void FDCTick(YFDCState* fdc) {
   if (fdc->phase != kFDCPhaseExecution) {
     return;
   }
@@ -1812,7 +1813,7 @@ YAX86_PUBLIC void FDCTick(FDCState* fdc) {
     ++fdc->current_command_ticks;
   } else {
     // No handler defined, finish execution immediately.
-    FDCResultBufferClear(&fdc->result_buffer);
+    YFDCResultBufferClear(&fdc->result_buffer);
     FDCFinishCommandExecution(fdc);
   }
 }

@@ -22,6 +22,6 @@ void DisplayEndRegion(void);
 void DisplayRender(void);
 
 // Write a horizontal RGB pixel span to the retained display buffer.
-void DisplayPutPixels(int x, int y, const RGB* pixels, uint8_t count);
+void DisplayPutPixels(int x, int y, const YVideoRGB* pixels, uint8_t count);
 
 #endif  // YAX86_SDL_DISPLAY_H

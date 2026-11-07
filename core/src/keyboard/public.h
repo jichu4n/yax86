@@ -52,26 +52,26 @@ enum {
 };
 
 // Log module for the Keyboard.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleKeyboard = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleKeyboard = {
     .id = kLogModuleIDKeyboard,
     .name = "KEYBOARD",
 };
 
-struct KeyboardState;
+struct YKeyboardState;
 
 // Caller-provided runtime configuration for the Keyboard.
-typedef struct KeyboardConfig {
+typedef struct YKeyboardConfig {
   // Opaque context pointer, passed to all callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to send a scancode to the PPI.
   void (*send_scancode)(void* context, uint8_t scancode);
   // Callback to raise an IRQ1 (keyboard interrupt) to the CPU.
   void (*raise_irq1)(void* context);
-} KeyboardConfig;
+} YKeyboardConfig;
 
 enum {
   // Maximum number of keys to buffer. Additional key presses will be dropped.
@@ -79,12 +79,12 @@ enum {
   // Threshold required to trigger keyboard reset when clock line is held low.
   kKeyboardResetThresholdMs = 20,
 };
-STATIC_VECTOR_TYPE(KeyboardBuffer, uint8_t, kKeyboardBufferSize)
+STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, kKeyboardBufferSize)
 
 // State of the Keyboard.
-typedef struct KeyboardState {
+typedef struct YKeyboardState {
   // Pointer to the keyboard configuration.
-  KeyboardConfig config;
+  YKeyboardConfig config;
 
   // State of PPI Port B bit 7, or PBKB in GLaBIOS.
   // - false = enable keyboard
@@ -109,22 +109,22 @@ typedef struct KeyboardState {
   bool waiting_for_ack;
 
   // Buffer of key presses received.
-  KeyboardBuffer buffer;
-} KeyboardState;
+  YKeyboardBuffer buffer;
+} YKeyboardState;
 
 // Initializes the keyboard to its power-on state.
-YAX86_PUBLIC void KeyboardInit(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardInit(YKeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
 YAX86_PUBLIC void KeyboardHandleControl(
-    KeyboardState* keyboard, bool enable_clear, bool clock_low);
+    YKeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
 YAX86_PUBLIC void KeyboardHandleKeyPress(
-    KeyboardState* keyboard, uint8_t scancode);
+    YKeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
-YAX86_PUBLIC void KeyboardTickMs(KeyboardState* keyboard);
+YAX86_PUBLIC void KeyboardTickMs(YKeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H

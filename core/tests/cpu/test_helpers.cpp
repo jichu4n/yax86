@@ -12,8 +12,8 @@ using namespace std;
 // COM file load offset.
 constexpr const char* kCOMFileLoadOffsetString = "100h";
 
-// Overload the << operator for Instruction to print its contents.
-ostream& operator<<(ostream& os, const Instruction& instruction) {
+// Overload the << operator for YCPUInstruction to print its contents.
+ostream& operator<<(ostream& os, const YCPUInstruction& instruction) {
   // Prefixes, as what they selected rather than as the bytes that encoded
   // them. A LOCK prefix selects nothing and is not recorded, so it does not
   // appear here - only the instruction's size shows it was there.
@@ -34,7 +34,7 @@ ostream& operator<<(ostream& os, const Instruction& instruction) {
   }
   // Opcode
   os << hex << setw(2) << setfill('0') << static_cast<int>(instruction.opcode);
-  // ModRM
+  // YCPUModRM
   if (instruction.has_mod_rm) {
     os << " m[" << static_cast<int>(instruction.mod_rm.mod) << ","
        << static_cast<int>(instruction.mod_rm.reg) << ","
@@ -62,7 +62,7 @@ ostream& operator<<(ostream& os, const Instruction& instruction) {
   return os;
 }
 
-string GetFlagName(Flag flag) {
+string GetFlagName(YCPUFlag flag) {
   switch (flag) {
     case kCF:
       return "CF";
@@ -131,7 +131,7 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
       context_{this, memory_.get(), memory_size},
       cpu_{} {
   cpu_.config.context = &context_;
-  cpu_.config.read_memory_byte = [](CPUState* cpu, uint32_t address) {
+  cpu_.config.read_memory_byte = [](YCPUState* cpu, uint32_t address) {
     Context* context = reinterpret_cast<Context*>(cpu->config.context);
     if (address >= context->memory_size) {
       ostringstream oss;
@@ -146,7 +146,7 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     }
     return context->memory[address];
   };
-  cpu_.config.write_memory_byte = [](CPUState* cpu, uint32_t address,
+  cpu_.config.write_memory_byte = [](YCPUState* cpu, uint32_t address,
                                      uint8_t value) {
     Context* context = reinterpret_cast<Context*>(cpu->config.context);
     if (address >= context->memory_size) {
@@ -163,7 +163,8 @@ CPUTestHelper::CPUTestHelper(size_t memory_size)
     context->memory[address] = value;
   };
   cpu_.config.handle_interrupt =
-      [](CPUState* cpu, uint8_t interrupt_number) -> InterruptHandlerResult {
+      [](YCPUState* cpu,
+         uint8_t interrupt_number) -> YCPUInterruptHandlerResult {
     throw runtime_error(
         "Interrupt " + to_string(interrupt_number) + " not handled in test");
   };
@@ -205,7 +206,7 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
 
   cout << ">> Executing encoded instructions:" << endl;
   for (int i = 0; i < num_instructions; ++i) {
-    Instruction instruction;
+    YCPUInstruction instruction;
     auto fetch_status = CPUFetchNextInstruction(&cpu_, &instruction);
     if (fetch_status != kFetchSuccess) {
       throw runtime_error(
@@ -223,7 +224,7 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
   }
 }
 
-void CPUTestHelper::CheckFlags(const vector<pair<Flag, bool> >& flags) {
+void CPUTestHelper::CheckFlags(const vector<pair<YCPUFlag, bool> >& flags) {
   for (const auto& it : flags) {
     EXPECT_EQ(CPUGetFlag(&cpu_, it.first), it.second)
         << "Flag " << GetFlagName(it.first) << " expected to be "

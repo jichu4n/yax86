@@ -55,8 +55,8 @@ class PlatformDirectDataWindowTest : public ::testing::Test {
     }
   }
 
-  PlatformRunStatus RunInstructions(int num_instructions) {
-    PlatformRunStatus status = kPlatformRunning;
+  YPlatformRunStatus RunInstructions(int num_instructions) {
+    YPlatformRunStatus status = kPlatformRunning;
     for (int i = 0; i < num_instructions; ++i) {
       status = PlatformTick(&platform_);
       if (status != kPlatformRunning) {
@@ -69,7 +69,7 @@ class PlatformDirectDataWindowTest : public ::testing::Test {
   uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
   uint16_t ax() const { return platform_.cpu.registers[kAX]; }
 
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };
@@ -134,7 +134,7 @@ TEST_F(PlatformDirectDataWindowTest, WordStraddlingTheTopOfTheWindow) {
 TEST_F(
     PlatformDirectDataWindowTest, RegisteringAnUnrelatedRegionKeepsTheWindow) {
   static uint8_t region[4096] = {0};
-  MemoryMapEntry entry = {0};
+  YPlatformMemoryMapEntry entry = {0};
   entry.entry_type = 0x7F;
   entry.start = 0xD0000;
   entry.end = 0xD0000 + sizeof(region) - 1;

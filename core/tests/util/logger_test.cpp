@@ -11,13 +11,13 @@ namespace {
 
 // Modules used by these tests. IDs here are local to the test and do not
 // need to match those of any module.
-const LogModule kModuleA = {0, "A"};
-const LogModule kModuleB = {1, "B"};
+const YLogModule kModuleA = {0, "A"};
+const YLogModule kModuleB = {1, "B"};
 
 // A single message captured by the test sink.
 struct CapturedMessage {
   string module_name;
-  LogLevel level;
+  YLogLevel level;
   uint64_t tick;
   string message;
   size_t length;
@@ -36,15 +36,15 @@ class TestLogger {
     LoggerInit(&logger_, &config_);
   }
 
-  Logger* logger() { return &logger_; }
-  LoggerConfig* config() { return &config_; }
+  YLogger* logger() { return &logger_; }
+  YLoggerConfig* config() { return &config_; }
   const vector<CapturedMessage>& messages() const { return messages_; }
 
   uint64_t tick_ = 0;
 
  private:
   static void WriteLine(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length) {
     TestLogger* self = static_cast<TestLogger*>(context);
     self->messages_.push_back(
@@ -55,8 +55,8 @@ class TestLogger {
     return static_cast<TestLogger*>(context)->tick_;
   }
 
-  LoggerConfig config_ = {};
-  Logger logger_ = {};
+  YLoggerConfig config_ = {};
+  YLogger logger_ = {};
   vector<CapturedMessage> messages_;
 };
 
@@ -163,7 +163,7 @@ TEST_F(LoggerTest, ToleratesMissingCallbacksAndState) {
       LoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelDebug));
 
   // A logger with no config, and no logger at all.
-  Logger unconfigured = {};
+  YLogger unconfigured = {};
   LoggerInit(&unconfigured, NULL);
   YAX86_LOG(&unconfigured, &kModuleA, kLogLevelError, "no config");
   YAX86_LOG(NULL, &kModuleA, kLogLevelError, "no logger");
@@ -204,7 +204,7 @@ TEST_F(LoggerTest, EnableAndDisableModule) {
       LoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelDebug));
 
   // Safe on a logger with no config, and on no logger at all.
-  Logger unconfigured = {};
+  YLogger unconfigured = {};
   LoggerInit(&unconfigured, NULL);
   LoggerEnableModule(&unconfigured, &kModuleA);
   LoggerDisableModule(&unconfigured, &kModuleA);

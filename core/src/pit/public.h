@@ -25,7 +25,7 @@ enum {
 };
 
 // Log module for the PIT.
-YAX86_PUBLIC_HEADER const LogModule kLogModulePIT = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModulePIT = {
     .id = kLogModuleIDPIT,
     .name = "PIT",
 };
@@ -44,7 +44,7 @@ enum {
 };
 
 // I/O ports exposed by the PIT.
-typedef enum PITPort {
+typedef enum YPITPort {
   // Data port for PIT channel 0
   kPITPortChannel0 = 0x40,
   // Data port for PIT channel 1
@@ -53,11 +53,11 @@ typedef enum PITPort {
   kPITPortChannel2 = 0x42,
   // Control word port
   kPITPortControl = 0x43,
-} PITPort;
+} YPITPort;
 
 // Channel read/write access modes. This corresponds to bits 4-5 of the control
 // word written to port 0x43.
-typedef enum PITAccessMode {
+typedef enum YPITAccessMode {
   // Latch count value command
   kPITAccessLatch = 0,
   // Read/write lower byte only
@@ -66,23 +66,23 @@ typedef enum PITAccessMode {
   kPITAccessMSBOnly = 2,
   // Read/write lower byte then upper byte
   kPITAccessLSBThenMSB = 3,
-} PITAccessMode;
+} YPITAccessMode;
 
 // Which byte to read/write next when in mode kPITAccessLSBThenMSB.
-typedef enum PITByte {
+typedef enum YPITByte {
   kPITByteLSB = 0,
   kPITByteMSB = 1,
-} PITByte;
+} YPITByte;
 
-struct PITState;
+struct YPITState;
 
 // Caller-provided runtime configuration for the PIT.
-typedef struct PITConfig {
+typedef struct YPITConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to raise IRQ 0.
   void (*raise_irq_0)(void* context);
@@ -96,10 +96,10 @@ typedef struct PITConfig {
   // value hears one continuous tone, while a host that queues every value
   // hears a gap.
   void (*set_pc_speaker_frequency)(void* context, uint32_t frequency_hz);
-} PITConfig;
+} YPITConfig;
 
 // State of a single PIT timer channel.
-typedef struct PITChannelState {
+typedef struct YPITChannelState {
   // The 16-bit counter value.
   uint16_t counter;
   // The 16-bit latched value for reading.
@@ -109,36 +109,36 @@ typedef struct PITChannelState {
   // The operating mode (0-5).
   uint8_t mode;
   // The read/write access mode.
-  PITAccessMode access_mode;
+  YPITAccessMode access_mode;
   // The current output state of the channel.
   bool output_state;
   // Which byte to read/write next when in mode kPITAccessLSBThenMSB.
-  PITByte rw_byte;
+  YPITByte rw_byte;
   // Whether a latch command is active.
   bool latch_active;
-} PITChannelState;
+} YPITChannelState;
 
 // State of the PIT.
-typedef struct PITState {
+typedef struct YPITState {
   // Pointer to the PIT configuration.
-  PITConfig config;
+  YPITConfig config;
 
   // The three timer channels.
-  PITChannelState channels[kPITNumChannels];
-} PITState;
+  YPITChannelState channels[kPITNumChannels];
+} YPITState;
 
 // Initializes the PIT to its power-on state.
-YAX86_PUBLIC void PITInit(PITState* pit);
+YAX86_PUBLIC void PITInit(YPITState* pit);
 
 // Handles reads from the PIT's I/O ports (0x40-0x42).
-YAX86_PUBLIC uint8_t PITReadPort(PITState* pit, uint16_t port);
+YAX86_PUBLIC uint8_t PITReadPort(YPITState* pit, uint16_t port);
 
 // Handles writes to the PIT's I/O ports (0x40-0x43).
-YAX86_PUBLIC void PITWritePort(PITState* pit, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PITWritePort(YPITState* pit, uint16_t port, uint8_t value);
 
 // Simulates a single tick of the PIT's input clock. This method should be
 // invoked at a frequency of 1.193182 MHz for accurate timing.
-YAX86_PUBLIC void PITTick(PITState* pit);
+YAX86_PUBLIC void PITTick(YPITState* pit);
 
 enum {
   // Returned by PITTicksUntilNextEvent() when no channel is counting towards
@@ -153,7 +153,7 @@ enum {
 // change nothing observable, so those stretches are skipped arithmetically and
 // only the ticks that can change a channel's output are simulated one at a
 // time.
-YAX86_PUBLIC void PITAdvance(PITState* pit, uint32_t num_ticks);
+YAX86_PUBLIC void PITAdvance(YPITState* pit, uint32_t num_ticks);
 
 // Returns the number of input clock ticks until the earliest tick that could
 // change any channel's output state, or kPITNoEvent if no channel is counting
@@ -162,6 +162,6 @@ YAX86_PUBLIC void PITAdvance(PITState* pit, uint32_t num_ticks);
 // This is a lower bound rather than an exact answer. A caller that advances the
 // PIT by this much and finds nothing happened has only done unnecessary work,
 // whereas one that waited longer would miss an edge.
-YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const PITState* pit);
+YAX86_PUBLIC uint32_t PITTicksUntilNextEvent(const YPITState* pit);
 
 #endif  // YAX86_PIT_PUBLIC_H

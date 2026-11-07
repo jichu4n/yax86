@@ -57,8 +57,8 @@ class IRQTest : public ::testing::Test {
     PICWritePort(&master_, 0x21, 0x00);
     PICWritePort(&slave_, 0xA1, 0x00);
   }
-  PICState master_ = {0};
-  PICState slave_ = {0};
+  YPICState master_ = {0};
+  YPICState slave_ = {0};
 };
 
 TEST_F(IRQTest, SinglePIC_BasicIRQ) {

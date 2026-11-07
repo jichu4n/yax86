@@ -38,15 +38,15 @@ YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
     {3, 4, 7},
 };
 
-YAX86_FILE_PRIVATE inline RGB CGAGetColor(
-    const VideoState* video, uint8_t color) {
+YAX86_FILE_PRIVATE inline YVideoRGB CGAGetColor(
+    const YVideoState* video, uint8_t color) {
   return video->config.cga_palette[color & (kNumCGAColors - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
 YAX86_FILE_PRIVATE inline uint32_t CGAGetScanLineAddress(
-    const VideoState* video, uint16_t y) {
+    const YVideoState* video, uint16_t y) {
   uint32_t address = ((uint32_t)VideoGetStartAddress(video) * 2 +
                       (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
                      kCGAGraphicsScanLineAddressMask;
@@ -54,7 +54,7 @@ YAX86_FILE_PRIVATE inline uint32_t CGAGetScanLineAddress(
 }
 
 YAX86_FILE_PRIVATE void CGARenderTextRegion(
-    VideoState* video, VideoPixelRun* run, const VideoModeMetadata* metadata,
+    YVideoState* video, YVideoPixelRun* run, const YVideoModeMetadata* metadata,
     uint8_t start_column, uint8_t end_column, uint16_t first_y,
     uint16_t end_y) {
   // A 40-column cell is drawn twice as wide, so it spans two dirty columns
@@ -99,7 +99,7 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
           (kVideoAttributeForegroundMask | kVideoAttributeIntenseForeground);
       // The cursor uses the cell's foreground even when that cell's blinking
       // character is currently hidden.
-      RGB cursor_foreground = CGAGetColor(video, foreground_color);
+      YVideoRGB cursor_foreground = CGAGetColor(video, foreground_color);
       uint8_t background_color = (attr_value & kVideoAttributeBackgroundMask) >>
                                  kVideoAttributeBackgroundShift;
       // Bit 7 is the blink attribute only while blinking is enabled. With it
@@ -113,8 +113,8 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
         background_color |= kNumCGAColors / 2;
       }
 
-      RGB foreground = CGAGetColor(video, foreground_color);
-      RGB background = CGAGetColor(video, background_color);
+      YVideoRGB foreground = CGAGetColor(video, foreground_color);
+      YVideoRGB background = CGAGetColor(video, background_color);
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
@@ -123,8 +123,9 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
       for (uint8_t x = 0; x < metadata->char_width; ++x) {
         bool is_foreground =
             (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
-        RGB rgb = cursor_scan_line ? cursor_foreground
-                                   : (is_foreground ? foreground : background);
+        YVideoRGB rgb = cursor_scan_line
+                            ? cursor_foreground
+                            : (is_foreground ? foreground : background);
         // In 40-column mode each glyph pixel is emitted twice, which is how
         // the adapter fills the same 640 dot line with half the characters.
         for (uint8_t i = 0; i < scale; ++i) {
@@ -136,7 +137,7 @@ YAX86_FILE_PRIVATE void CGARenderTextRegion(
 }
 
 YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
-    VideoState* video, RGB palette[4]) {
+    YVideoState* video, YVideoRGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
     palette_colors = kCGAGraphicsPalettes[2];
@@ -158,9 +159,9 @@ YAX86_FILE_PRIVATE void CGAResolve320x200Palette(
 }
 
 YAX86_FILE_PRIVATE void CGARenderGraphics320x200Region(
-    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
-  RGB palette[4];
+  YVideoRGB palette[4];
   CGAResolve320x200Palette(video, palette);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
@@ -185,12 +186,12 @@ YAX86_FILE_PRIVATE void CGARenderGraphics320x200Region(
 }
 
 YAX86_FILE_PRIVATE void CGARenderGraphics640x200Region(
-    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
-  RGB foreground = CGAGetColor(
+  YVideoRGB foreground = CGAGetColor(
       video, video->color_select_register &
                  (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
-  RGB background = CGAGetColor(video, 0);
+  YVideoRGB background = CGAGetColor(video, 0);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
     VideoPixelRunBegin(
@@ -210,9 +211,9 @@ YAX86_FILE_PRIVATE void CGARenderGraphics640x200Region(
 }
 
 YAX86_MODULE_PRIVATE void CGARenderRegion(
-    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
-  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
   switch (metadata->mode) {
     case kVideoModeCGAText40x25Mono:
     case kVideoModeCGAText40x25Color:

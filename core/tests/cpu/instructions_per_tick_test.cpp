@@ -57,7 +57,7 @@ class InstructionsPerTickTest : public ::testing::Test {
  protected:
   void SetUp() override {
     memory_.assign(kMemorySize, 0);
-    cpu_ = CPUState{};
+    cpu_ = YCPUState{};
     cpu_.config.context = this;
     cpu_.config.read_memory_byte = TestReadMemoryByte;
     cpu_.config.write_memory_byte = TestWriteMemoryByte;
@@ -112,14 +112,14 @@ class InstructionsPerTickTest : public ::testing::Test {
     return CPUInstructionsRetired(&cpu_) - before;
   }
 
-  static uint8_t TestReadMemoryByte(CPUState* cpu, uint32_t address) {
+  static uint8_t TestReadMemoryByte(YCPUState* cpu, uint32_t address) {
     InstructionsPerTickTest* self =
         static_cast<InstructionsPerTickTest*>(cpu->config.context);
     return address < kMemorySize ? self->memory_[address] : 0xFF;
   }
 
   static void TestWriteMemoryByte(
-      CPUState* cpu, uint32_t address, uint8_t value) {
+      YCPUState* cpu, uint32_t address, uint8_t value) {
     InstructionsPerTickTest* self =
         static_cast<InstructionsPerTickTest*>(cpu->config.context);
     if (address < kMemorySize) {
@@ -127,7 +127,7 @@ class InstructionsPerTickTest : public ::testing::Test {
     }
   }
 
-  static void GetInstructionFetchWindow(CPUState* cpu, uint32_t address) {
+  static void GetInstructionFetchWindow(YCPUState* cpu, uint32_t address) {
     InstructionsPerTickTest* self =
         static_cast<InstructionsPerTickTest*>(cpu->config.context);
     if (address >= kMemorySize) {
@@ -139,7 +139,7 @@ class InstructionsPerTickTest : public ::testing::Test {
     cpu->instruction_fetch_window.end = kMemorySize;
   }
 
-  static bool AcknowledgeInterrupt(CPUState* cpu, uint8_t* vector) {
+  static bool AcknowledgeInterrupt(YCPUState* cpu, uint8_t* vector) {
     InstructionsPerTickTest* self =
         static_cast<InstructionsPerTickTest*>(cpu->config.context);
     if (!self->interrupt_requested_) {
@@ -152,8 +152,8 @@ class InstructionsPerTickTest : public ::testing::Test {
   }
 
   std::vector<uint8_t> memory_;
-  CPUState cpu_ = {};
-  CPUDecodeCacheEntry cache_[kNumCacheEntries] = {};
+  YCPUState cpu_ = {};
+  YCPUDecodeCacheEntry cache_[kNumCacheEntries] = {};
   bool interrupt_requested_ = false;
   int interrupts_acknowledged_ = 0;
 };

@@ -110,9 +110,9 @@ enum {
 // arrays are most of what the machine costs in RAM.
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[kCGAVRAMSize];
-static PlatformState g_platform;
+static YPlatformState g_platform;
 // Held for the platform's lifetime, which is why it is not a local.
-static LoggerConfig g_logger_config;
+static YLoggerConfig g_logger_config;
 
 #ifdef YAX86_PICO_SYS_CLK_KHZ
 // Deliberately not zeroed at startup - see where it is read.
@@ -131,14 +131,14 @@ typedef struct BenchResult {
   // Whether the command prompt was reached.
   bool completed;
   // Why the run stopped, if it stopped before completing.
-  PlatformRunStatus status;
+  YPlatformRunStatus status;
 } BenchResult;
 
 // Only errors are logged, and only outside a run: anything chattier would put
 // host I/O in the measured path.
 static void BenchWriteLogLine(
-    YAX86_UNUSED void* context, const LogModule* module,
-    YAX86_UNUSED LogLevel level, YAX86_UNUSED uint64_t tick,
+    YAX86_UNUSED void* context, const YLogModule* module,
+    YAX86_UNUSED YLogLevel level, YAX86_UNUSED uint64_t tick,
     const char* message, YAX86_UNUSED size_t length) {
   printf("[%s] %s\n", module->name, message);
 }
@@ -167,10 +167,10 @@ static bool ResetMachine(void) {
   for (uint32_t i = 0; i < kCGAVRAMSize; ++i) {
     g_vram[i] = 0;
   }
-  static const PlatformState kEmptyPlatform = {0};
+  static const YPlatformState kEmptyPlatform = {0};
   g_platform = kEmptyPlatform;
 
-  PlatformConfig* config = &g_platform.config;
+  YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_logger_config;
   config->physical_memory_size = kGuestRAMSize;
   config->physical_memory = g_guest_ram;
@@ -412,7 +412,7 @@ static BenchResult RunBenchmark(void) {
     // exception, so a real machine would carry on. Anything else means the
     // machine can no longer make progress.
     const uint64_t retired_before = CPUInstructionsRetired(&g_platform.cpu);
-    PlatformRunStatus status = kPlatformRunning;
+    YPlatformRunStatus status = kPlatformRunning;
     for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
       const uint32_t batch_start = g_platform.ticks;
       status = PlatformRun(&g_platform, remaining);
@@ -574,7 +574,7 @@ static void PrintHeader(void) {
   printf("%-13s %u\n", "guest_ram_kb", (unsigned)YAX86_PICO_GUEST_RAM_KB);
   printf("%-13s %u\n", "sys_clk_khz", (unsigned)(clock_get_hz(clk_sys) / 1000));
   printf("%-13s %u\n", "profile", (unsigned)YAX86_PICO_PROFILE);
-  printf("%-13s %u\n", "state_bytes", (unsigned)sizeof(PlatformState));
+  printf("%-13s %u\n", "state_bytes", (unsigned)sizeof(YPlatformState));
   printf("\n");
 }
 

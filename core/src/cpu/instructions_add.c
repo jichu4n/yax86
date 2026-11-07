@@ -14,8 +14,8 @@
 // - Overflow Flag (OF) - Set when result has wrong sign
 // - Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
 YAX86_FILE_PRIVATE void SetFlagsAfterInc(
-    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
-    bool did_carry) {
+    const YCPUInstructionContext* ctx, uint32_t op1, uint32_t op2,
+    uint32_t result, bool did_carry) {
   SetCommonFlagsAfterInstruction(ctx, result);
 
   // Overflow Flag (OF) Set when result has wrong sign (both operands have same
@@ -37,22 +37,23 @@ YAX86_FILE_PRIVATE void SetFlagsAfterInc(
 // following flags:
 // - Carry Flag (CF) - Set when result overflows the maximum width
 YAX86_FILE_PRIVATE void SetFlagsAfterAdd(
-    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
-    bool did_carry) {
+    const YCPUInstructionContext* ctx, uint32_t op1, uint32_t op2,
+    uint32_t result, bool did_carry) {
   SetFlagsAfterInc(ctx, op1, op2, result, did_carry);
   // Carry Flag (CF)
   CPUSetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
 }
 
 // Common signature of SetFlagsAfterAdd and SetFlagsAfterInc.
-typedef void (*SetFlagsAfterAddFn)(
-    const InstructionContext* ctx, uint32_t op1, uint32_t op2, uint32_t result,
-    bool did_carry);
+typedef void (*YCPUSetFlagsAfterAddFn)(
+    const YCPUInstructionContext* ctx, uint32_t op1, uint32_t op2,
+    uint32_t result, bool did_carry);
 
 // Common logic for ADD, ADC, and INC instructions.
-YAX86_FILE_PRIVATE InstructionResult ExecuteAddCommon(
-    const InstructionContext* ctx, Operand* dest, OperandValue src_value,
-    bool carry, SetFlagsAfterAddFn set_flags_after_fn) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteAddCommon(
+    const YCPUInstructionContext* ctx, YCPUOperand* dest,
+    YCPUOperandValue src_value, bool carry,
+    YCPUSetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
   bool should_carry = carry && CPUGetFlag(ctx->cpu, kCF);
@@ -64,96 +65,100 @@ YAX86_FILE_PRIVATE InstructionResult ExecuteAddCommon(
 }
 
 // Common logic for ADD instructions
-YAX86_MODULE_PRIVATE InstructionResult ExecuteAdd(
-    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult ExecuteAdd(
+    const YCPUInstructionContext* ctx, YCPUOperand* dest,
+    YCPUOperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ false, SetFlagsAfterAdd);
 }
 
 // ADD r/m8, r8
 // ADD r/m16, r16
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteAddRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteAddRegisterToRegisterOrMemory(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
-  Operand src;
+  YCPUOperand src;
   ReadRegisterOperand(ctx, &src);
   return ExecuteAdd(ctx, &dest, src.value);
 }
 
 // ADD r8, r/m8
 // ADD r16, r/m16
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
-ExecuteAddRegisterOrMemoryToRegister(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+ExecuteAddRegisterOrMemoryToRegister(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOperand(ctx, &dest);
-  Operand src;
+  YCPUOperand src;
   ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteAdd(ctx, &dest, src.value);
 }
 
 // ADD AL, imm8
 // ADD AX, imm16
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteAddImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteAddImmediateToALOrAX(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
-  OperandValue src_value = ReadImmediate(ctx);
+  YCPUOperandValue src_value = ReadImmediate(ctx);
   return ExecuteAdd(ctx, &dest, src_value);
 }
 
 // Common logic for ADC instructions
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteAddWithCarry(
-    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult ExecuteAddWithCarry(
+    const YCPUInstructionContext* ctx, YCPUOperand* dest,
+    YCPUOperandValue src_value) {
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ true, SetFlagsAfterAdd);
 }
 
 // ADC r/m8, r8
 // ADC r/m16, r16
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteAddRegisterToRegisterOrMemoryWithCarry(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteAddRegisterToRegisterOrMemoryWithCarry(
+    const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
-  Operand src;
+  YCPUOperand src;
   ReadRegisterOperand(ctx, &src);
   return ExecuteAddWithCarry(ctx, &dest, src.value);
 }
 // ADC r8, r/m8
 // ADC r16, r/m16
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteAddRegisterOrMemoryToRegisterWithCarry(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteAddRegisterOrMemoryToRegisterWithCarry(
+    const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOperand(ctx, &dest);
-  Operand src;
+  YCPUOperand src;
   ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteAddWithCarry(ctx, &dest, src.value);
 }
 
 // ADC AL, imm8
 // ADC AX, imm16
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteAddImmediateToALOrAXWithCarry(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteAddImmediateToALOrAXWithCarry(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
-  OperandValue src_value = ReadImmediate(ctx);
+  YCPUOperandValue src_value = ReadImmediate(ctx);
   return ExecuteAddWithCarry(ctx, &dest, src_value);
 }
 
 // Common logic for INC instructions
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteInc(const InstructionContext* ctx, Operand* dest) {
-  OperandValue src_value = 1;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteInc(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
+  YCPUOperandValue src_value = 1;
   return ExecuteAddCommon(
       ctx, dest, src_value, /* carry */ false, SetFlagsAfterInc);
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteIncRegister(const InstructionContext* ctx) {
-  RegisterIndex register_index =
-      (RegisterIndex)(ctx->instruction->opcode - 0x40);
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteIncRegister(const YCPUInstructionContext* ctx) {
+  YCPURegisterIndex register_index =
+      (YCPURegisterIndex)(ctx->instruction->opcode - 0x40);
+  YCPUOperand dest;
   ReadRegisterOperandForRegisterIndex(ctx, register_index, &dest);
   return ExecuteInc(ctx, &dest);
 }

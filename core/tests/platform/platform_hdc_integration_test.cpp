@@ -14,7 +14,7 @@ class PlatformHDCIntegrationTest : public ::testing::Test {
     ASSERT_TRUE(PlatformInit(&platform_));
   }
 
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };
@@ -43,7 +43,7 @@ TEST_F(PlatformHDCIntegrationTest, OptionROMIsVisibleWhereTheBIOSScans) {
 }
 
 TEST_F(PlatformHDCIntegrationTest, OptionROMIsMappedAsItsOwnRegion) {
-  MemoryMapEntry* entry =
+  YPlatformMemoryMapEntry* entry =
       GetMemoryMapEntryByType(&platform_, kMemoryMapEntryHDCOptionROM);
   ASSERT_NE(entry, nullptr);
   EXPECT_EQ(entry->start, (uint32_t)kHDCOptionROMStartAddress);

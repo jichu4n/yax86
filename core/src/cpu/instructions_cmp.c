@@ -10,8 +10,9 @@
 // ============================================================================
 
 // Common logic for CMP instructions. Computes dest - src and sets flags.
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteCmp(
-    const InstructionContext* ctx, Operand* dest, OperandValue src_value) {
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult ExecuteCmp(
+    const YCPUInstructionContext* ctx, YCPUOperand* dest,
+    YCPUOperandValue src_value) {
   uint32_t raw_dest_value = FromOperand(dest);
   uint32_t raw_src_value = FromOperandValue(src_value);
   uint32_t result = raw_dest_value - raw_src_value;
@@ -21,32 +22,32 @@ YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult ExecuteCmp(
 
 // CMP r/m8, r8
 // CMP r/m16, r16
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteCmpRegisterToRegisterOrMemory(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteCmpRegisterToRegisterOrMemory(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOrMemoryOperand(ctx, &dest);
-  Operand src;
+  YCPUOperand src;
   ReadRegisterOperand(ctx, &src);
   return ExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP r8, r/m8
 // CMP r16, r/m16
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
-ExecuteCmpRegisterOrMemoryToRegister(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+ExecuteCmpRegisterOrMemoryToRegister(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOperand(ctx, &dest);
-  Operand src;
+  YCPUOperand src;
   ReadRegisterOrMemoryOperand(ctx, &src);
   return ExecuteCmp(ctx, &dest, src.value);
 }
 
 // CMP AL, imm8
 // CMP AX, imm16
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
-ExecuteCmpImmediateToALOrAX(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+ExecuteCmpImmediateToALOrAX(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
-  OperandValue src_value = ReadImmediate(ctx);
+  YCPUOperandValue src_value = ReadImmediate(ctx);
   return ExecuteCmp(ctx, &dest, src_value);
 }

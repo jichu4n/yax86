@@ -28,7 +28,7 @@ enum {
 };
 
 // Log module for the HDC.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleHDC = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleHDC = {
     .id = kLogModuleIDHDC,
     .name = "HDC",
 };
@@ -55,7 +55,7 @@ enum {
 
 // Task file registers, given as offsets from kHDCPortBase after the card's
 // address line swap has been undone. See HDCPortOffsetToRegister().
-typedef enum HDCRegister {
+typedef enum YHDCRegister {
   // Data register, low byte of each 16-bit word.
   kHDCRegisterData = 0x0,
   // Error on read, features on write.
@@ -80,7 +80,7 @@ typedef enum HDCRegister {
   // wants the status without the side effects a status read has on a drive
   // that raises interrupts.
   kHDCRegisterDeviceControl = 0xE,
-} HDCRegister;
+} YHDCRegister;
 
 // Bits of the status register.
 enum {
@@ -130,7 +130,7 @@ enum {
 };
 
 // ATA commands.
-typedef enum HDCCommand {
+typedef enum YHDCCommand {
   // Seek to cylinder 0. The low nibble is a step rate that has no meaning
   // here, so 0x10 through 0x1F are all this command.
   kHDCCommandRecalibrate = 0x10,
@@ -148,7 +148,7 @@ typedef enum HDCCommand {
   kHDCCommandInitializeDeviceParameters = 0x91,
   // Returns a 512-byte block describing the drive.
   kHDCCommandIdentifyDevice = 0xEC,
-} HDCCommand;
+} YHDCCommand;
 
 enum {
   // Number of drives the controller supports: a master and a slave.
@@ -159,11 +159,11 @@ enum {
 };
 
 // Physical geometry of an attached drive.
-typedef struct HDCDriveGeometry {
+typedef struct YHDCDriveGeometry {
   uint16_t num_cylinders;
   uint8_t num_heads;
   uint8_t num_sectors_per_track;
-} HDCDriveGeometry;
+} YHDCDriveGeometry;
 
 // Geometry of the 10MB fixed disk the IBM PC/XT shipped with. Era-accurate,
 // comfortably under the 32MB per-partition ceiling of MS-DOS 3.3, and small
@@ -178,14 +178,14 @@ enum {
       kHDCGeometry10MBNumCylinders * kHDCGeometry10MBNumHeads *
       kHDCGeometry10MBNumSectorsPerTrack * kHDCSectorSize,
 };
-YAX86_PUBLIC_HEADER const HDCDriveGeometry kHDCGeometry10MB = {
+YAX86_PUBLIC_HEADER const YHDCDriveGeometry kHDCGeometry10MB = {
     .num_cylinders = kHDCGeometry10MBNumCylinders,
     .num_heads = kHDCGeometry10MBNumHeads,
     .num_sectors_per_track = kHDCGeometry10MBNumSectorsPerTrack,
 };
 
 // What the data register is currently moving.
-typedef enum HDCTransfer {
+typedef enum YHDCTransfer {
   // Nothing; a read returns zero and a write is discarded.
   kHDCTransferNone = 0,
   // The Identify Device block, out of the sector buffer.
@@ -194,15 +194,15 @@ typedef enum HDCTransfer {
   kHDCTransferRead,
   // Sectors from the guest to the drive's image.
   kHDCTransferWrite,
-} HDCTransfer;
+} YHDCTransfer;
 
 // State of a single drive.
-typedef struct HDCDriveState {
+typedef struct YHDCDriveState {
   // Whether a drive is attached.
   bool present;
 
   // Physical geometry of the drive.
-  HDCDriveGeometry geometry;
+  YHDCDriveGeometry geometry;
 
   // Head and sector counts the guest asked for with Initialize Device
   // Parameters, which is what cylinder/head/sector addresses are translated
@@ -210,15 +210,15 @@ typedef struct HDCDriveState {
   // issues the command expects the geometry the drive reported.
   uint8_t num_translated_heads;
   uint8_t num_translated_sectors_per_track;
-} HDCDriveState;
+} YHDCDriveState;
 
 // Caller-provided runtime configuration for the HDC.
-typedef struct HDCConfig {
+typedef struct YHDCConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger, or NULL to disable logging.
-  Logger* logger;
+  YLogger* logger;
 
   // Callbacks to read and write a byte of a drive's image, where offset is a
   // byte offset from the start of the image. The controller range checks every
@@ -229,15 +229,15 @@ typedef struct HDCConfig {
   uint8_t (*read_image_byte)(void* context, uint8_t drive, uint32_t offset);
   void (*write_image_byte)(
       void* context, uint8_t drive, uint32_t offset, uint8_t value);
-} HDCConfig;
+} YHDCConfig;
 
 // State of the HDC.
-typedef struct HDCState {
+typedef struct YHDCState {
   // Pointer to caller-provided runtime configuration.
-  HDCConfig config;
+  YHDCConfig config;
 
   // Attached drives.
-  HDCDriveState drives[kHDCNumDrives];
+  YHDCDriveState drives[kHDCNumDrives];
 
   // Task file registers.
   uint8_t error;
@@ -254,7 +254,7 @@ typedef struct HDCState {
   uint8_t sector_buffer[kHDCSectorSize];
 
   // What the data register is currently moving, if anything.
-  HDCTransfer transfer;
+  YHDCTransfer transfer;
   // Index of the next byte within the sector being transferred. Only
   // meaningful while kHDCStatusDataRequest is set.
   uint16_t transfer_byte_index;
@@ -270,10 +270,10 @@ typedef struct HDCState {
   // byte port loads it for the following write of the low byte to commit. See
   // HDCReadDataRegister() and HDCWriteDataRegister().
   uint8_t data_high_latch;
-} HDCState;
+} YHDCState;
 
 // Initializes the HDC to its power-on state.
-YAX86_PUBLIC void HDCInit(HDCState* hdc);
+YAX86_PUBLIC void HDCInit(YHDCState* hdc);
 
 // Returns the size of the option ROM in bytes.
 YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void);
@@ -284,18 +284,18 @@ YAX86_PUBLIC uint32_t HDCGetOptionROMSize(void);
 YAX86_PUBLIC const uint8_t* HDCGetOptionROMData(void);
 
 // Handles reads from the HDC's I/O ports.
-YAX86_PUBLIC uint8_t HDCReadPort(HDCState* hdc, uint16_t port);
+YAX86_PUBLIC uint8_t HDCReadPort(YHDCState* hdc, uint16_t port);
 
 // Handles writes to the HDC's I/O ports.
-YAX86_PUBLIC void HDCWritePort(HDCState* hdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void HDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value);
 
 // Attaches a drive with the given geometry. Drive 0 is the master and drive 1
 // is the slave.
 YAX86_PUBLIC void HDCAttachDrive(
-    HDCState* hdc, uint8_t drive, const HDCDriveGeometry* geometry);
+    YHDCState* hdc, uint8_t drive, const YHDCDriveGeometry* geometry);
 
 // Detaches the drive in the given slot.
-YAX86_PUBLIC void HDCDetachDrive(HDCState* hdc, uint8_t drive);
+YAX86_PUBLIC void HDCDetachDrive(YHDCState* hdc, uint8_t drive);
 
 // Maps an I/O port offset from kHDCPortBase to the task file register it
 // reaches. An XT-IDE rev 2 card crosses address lines A0 and A3, so a register
