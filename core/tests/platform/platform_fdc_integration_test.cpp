@@ -96,7 +96,7 @@ TEST_F(PlatformFDCIntegrationTest, ReadSectorViaDMA) {
 
   // 3. Issue FDC Read Data Command.
   // Insert Disk.
-  YFDCInsertDisk(&platform_.fdc, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&platform_.fdc, 0, &YFDCFormat360KB);
 
   // Command: Read Data (0x06)
   WritePort(0x3F5, 0x06);

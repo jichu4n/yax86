@@ -15,7 +15,7 @@ typedef YCPUInstructionResult (*YCPUGroup4ExecuteInstructionFn)(
 // Group 4 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte.
 YAX86_FILE_PRIVATE const YCPUGroup4ExecuteInstructionFn
-    kGroup4ExecuteInstructionFns[] = {
+    YCPUGroup4ExecuteInstructionFns[] = {
         YCPUExecuteInc,  // 0 - INC
         YCPUExecuteDec,  // 1 - DEC
 };
@@ -37,7 +37,7 @@ YCPUExecuteGroup4Instruction(const YCPUInstructionContext* ctx) {
     return kInstructionInvalid;
   }
   const YCPUGroup4ExecuteInstructionFn fn =
-      kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);

@@ -146,7 +146,7 @@ TEST_P(VideoTimingTest, RenderIsSafeWithoutCallbacks) {
   // A host that has not installed its callbacks yet must not crash the
   // renderer. The platform initializes the video module before the host has a
   // chance to install them.
-  YVideoConfig bare_config = kDefaultVideoConfig;
+  YVideoConfig bare_config = YVideoDefaultConfig;
   bare_config.adapter = GetParam();
   YVideoState bare_video = {0};
   YVideoInit(&bare_video);

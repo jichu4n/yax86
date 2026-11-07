@@ -728,7 +728,7 @@ enum {
 };
 
 // Log module for the Platform.
-YAX86_PUBLIC_HEADER const YLogModule kLogModulePlatform = {
+YAX86_PUBLIC_HEADER const YLogModule YPlatformLogModule = {
     .id = kLogModuleIDPlatform,
     .name = "PLATFORM",
 };
@@ -1265,7 +1265,7 @@ YAX86_PUBLIC void YPlatformSync(YPlatformState* platform);
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_PLATFORM_LOG(level, ...) \
-  YAX86_LOG(&platform->logger, &kLogModulePlatform, level, __VA_ARGS__)
+  YAX86_LOG(&platform->logger, &YPlatformLogModule, level, __VA_ARGS__)
 
 // How long until the next device needs attention, in CPU cycles from now.
 YAX86_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
@@ -2106,7 +2106,7 @@ YAX86_FILE_PRIVATE void YPlatformInitDMA(YPlatformState* platform) {
 }
 
 YAX86_FILE_PRIVATE void YPlatformInitVideo(YPlatformState* platform) {
-  platform->video.config = kDefaultVideoConfig;
+  platform->video.config = YVideoDefaultConfig;
   platform->video.config.context = platform;
   platform->video.config.logger = &platform->logger;
   platform->video.config.adapter = platform->config.video_adapter;
@@ -2151,7 +2151,7 @@ YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   if (platform->config.physical_memory_size < kMinPhysicalMemorySize ||
       platform->config.physical_memory_size > kMaxPhysicalMemorySize) {
     YAX86_LOG(
-        &platform->logger, &kLogModulePlatform, kLogLevelError,
+        &platform->logger, &YPlatformLogModule, kLogLevelError,
         "physical_memory_size %u is not between %u and %u bytes",
         (unsigned)platform->config.physical_memory_size,
         (unsigned)kMinPhysicalMemorySize, (unsigned)kMaxPhysicalMemorySize);
@@ -2162,7 +2162,7 @@ YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // obscurely later.
   if (platform->config.physical_memory == NULL) {
     YAX86_LOG(
-        &platform->logger, &kLogModulePlatform, kLogLevelError,
+        &platform->logger, &YPlatformLogModule, kLogLevelError,
         "no physical_memory buffer was provided");
     return false;
   }
@@ -2170,7 +2170,7 @@ YAX86_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // would leave the screen permanently blank with nothing to say why.
   if (platform->config.vram == NULL) {
     YAX86_LOG(
-        &platform->logger, &kLogModulePlatform, kLogLevelError,
+        &platform->logger, &YPlatformLogModule, kLogLevelError,
         "no vram buffer was provided");
     return false;
   }
@@ -2234,7 +2234,8 @@ YAX86_PUBLIC YAX86_HOT bool YPlatformRaiseIRQ(
 //
 // Shifted rather than written out, and shifted from a uint32_t rather than an
 // int, because shifting a 1 into an int's sign bit is undefined.
-YAX86_FILE_PRIVATE const uint32_t kTickCounterHalfRange = (uint32_t)1 << 31;
+YAX86_FILE_PRIVATE const uint32_t YPlatformTickCounterHalfRange = (uint32_t)1
+                                                                  << 31;
 
 // Whether the earliest device deadline has come due. Compared as a difference
 // so that a deadline stays in the future across the point where the 32-bit
@@ -2245,7 +2246,7 @@ YAX86_FILE_PRIVATE inline bool YPlatformIsEventDue(
   // difference to int32_t, because converting an out-of-range unsigned value is
   // only defined from C23 on and this is C99.
   return (uint32_t)(platform->ticks - platform->next_event_ticks) <
-         kTickCounterHalfRange;
+         YPlatformTickCounterHalfRange;
 }
 
 // Work out when the next device needs attention, in cycles from now, up to

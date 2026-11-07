@@ -3,7 +3,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
+  YAX86_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)
 
 YAX86_PUBLIC void YDMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.

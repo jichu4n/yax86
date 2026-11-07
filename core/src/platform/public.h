@@ -17,7 +17,7 @@ enum {
 };
 
 // Log module for the Platform.
-YAX86_PUBLIC_HEADER const YLogModule kLogModulePlatform = {
+YAX86_PUBLIC_HEADER const YLogModule YPlatformLogModule = {
     .id = kLogModuleIDPlatform,
     .name = "PLATFORM",
 };

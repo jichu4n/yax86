@@ -11,7 +11,7 @@
 
 // Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
 // instructions, indexed by (opcode - 0xF8) / 2.
-YAX86_FILE_PRIVATE const YCPUFlag kFlagsForClearAndSetInstructions[] = {
+YAX86_FILE_PRIVATE const YCPUFlag YCPUFlagsForClearAndSetInstructions[] = {
     kCF,  // CLC, STC
     kIF,  // CLI, STI
     kDF,  // CLD, STD
@@ -20,7 +20,7 @@ YAX86_FILE_PRIVATE const YCPUFlag kFlagsForClearAndSetInstructions[] = {
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteClearOrSetFlag(const YCPUInstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
-  YCPUFlag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
+  YCPUFlag flag = YCPUFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
   YCPUSetFlag(ctx->cpu, flag, value);
   return kInstructionExecuted;

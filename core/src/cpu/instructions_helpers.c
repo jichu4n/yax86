@@ -12,11 +12,11 @@
 YAX86_MODULE_PRIVATE YAX86_HOT void YCPUSetCommonFlagsAfterInstruction(
     const YCPUInstructionContext* ctx, uint32_t result) {
   YCPUWidth width = ctx->metadata->width;
-  result &= kMaxValue[width];
+  result &= YCPUMaxValue[width];
   // Zero flag (ZF)
   YCPUSetFlag(ctx->cpu, kZF, result == 0);
   // Sign flag (SF)
-  YCPUSetFlag(ctx->cpu, kSF, result & kSignBit[width]);
+  YCPUSetFlag(ctx->cpu, kSF, result & YCPUSignBit[width]);
   // Parity flag (PF)
   // Set if the number of set bits in the least significant byte is even
   uint8_t parity = result & 0xFF;  // Check only the low byte for parity

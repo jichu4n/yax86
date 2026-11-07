@@ -28,7 +28,7 @@ enum {
 };
 
 // Log module for the HDC.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleHDC = {
+YAX86_PUBLIC_HEADER const YLogModule YHDCLogModule = {
     .id = kLogModuleIDHDC,
     .name = "HDC",
 };
@@ -178,7 +178,7 @@ enum {
       kHDCGeometry10MBNumCylinders * kHDCGeometry10MBNumHeads *
       kHDCGeometry10MBNumSectorsPerTrack * kHDCSectorSize,
 };
-YAX86_PUBLIC_HEADER const YHDCDriveGeometry kHDCGeometry10MB = {
+YAX86_PUBLIC_HEADER const YHDCDriveGeometry YHDCGeometry10MB = {
     .num_cylinders = kHDCGeometry10MBNumCylinders,
     .num_heads = kHDCGeometry10MBNumHeads,
     .num_sectors_per_track = kHDCGeometry10MBNumSectorsPerTrack,

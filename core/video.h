@@ -622,7 +622,7 @@ enum {
 };
 
 // Log module for the Video.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleVideo = {
+YAX86_PUBLIC_HEADER const YLogModule YVideoLogModule = {
     .id = kLogModuleIDVideo,
     .name = "VIDEO",
 };
@@ -1029,7 +1029,7 @@ enum {
 
 // Metadata for each video mode, indexed by mode number.
 YAX86_PUBLIC_HEADER const YVideoModeMetadata
-    kVideoModeMetadata[kNumVideoModes] = {
+    YVideoModeMetadataTable[kNumVideoModes] = {
         // 0x00: CGA text, 40x25, color burst off
         {
             .mode = kVideoModeCGAText40x25Mono,
@@ -1180,7 +1180,7 @@ typedef struct YVideoAdapterMetadata {
 // 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
 // 304 cycles per line and just under 60Hz.
 YAX86_PUBLIC_HEADER const YVideoAdapterMetadata
-    kVideoAdapterMetadata[kNumVideoAdapters] = {
+    YVideoAdapterMetadataTable[kNumVideoAdapters] = {
         // MDA
         {
             .adapter = kVideoAdapterMDA,
@@ -1337,7 +1337,7 @@ typedef struct YVideoConfig {
 } YVideoConfig;
 
 // Default video config.
-YAX86_PUBLIC_HEADER const YVideoConfig kDefaultVideoConfig = {
+YAX86_PUBLIC_HEADER const YVideoConfig YVideoDefaultConfig = {
     .context = NULL,
 
     .adapter = kVideoAdapterMDA,
@@ -1469,9 +1469,9 @@ YAX86_PUBLIC void YVideoRender(YVideoState* video);
 #include "public.h"
 
 // MDA 9x14 font bitmaps.
-extern const uint16_t kFontMDA9x14Bitmap[256][14];
+extern const uint16_t YVideoFontMDA9x14Bitmap[256][14];
 // CGA 8x8 font bitmaps.
-extern const uint8_t kFontCGA8x8Bitmap[256][8];
+extern const uint8_t YVideoFontCGA8x8Bitmap[256][8];
 
 #endif  // YAX86_IMPLEMENTATION
 
@@ -1638,7 +1638,7 @@ YAX86_MODULE_PRIVATE void YVideoCGARenderRegion(
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-mda-9x14/fontlist.js
-YAX86_MODULE_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
+YAX86_MODULE_PRIVATE const uint16_t YVideoFontMDA9x14Bitmap[256][14] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
      0x00, 0x00},  // [] (0)
     {0x00, 0x00, 0xfc, 0x102, 0x14a, 0x102, 0x102, 0x17a, 0x132, 0x102, 0xfc,
@@ -2157,7 +2157,7 @@ YAX86_MODULE_PRIVATE const uint16_t kFontMDA9x14Bitmap[256][14] = {
 //
 // From pcface project:
 // https://github.com/susam/pcface/blob/main/out/oldschool-cga-8x8/fontlist.js
-YAX86_MODULE_PRIVATE const uint8_t kFontCGA8x8Bitmap[256][8] = {
+YAX86_MODULE_PRIVATE const uint8_t YVideoFontCGA8x8Bitmap[256][8] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},  // [] (0)
     {0x7e, 0x81, 0xa5, 0x81, 0xbd, 0x99, 0x81, 0x7e},  // [☺] (1)
     {0x7e, 0xff, 0xdb, 0xff, 0xc3, 0xe7, 0xff, 0x7e},  // [☻] (2)
@@ -2511,7 +2511,7 @@ YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
   // The MDA has exactly one mode, so its metadata is looked up directly
   // rather than derived from the mode control register.
   const YVideoModeMetadata* metadata =
-      &kVideoModeMetadata[kVideoModeMDAText80x25];
+      &YVideoModeMetadataTable[kVideoModeMDAText80x25];
 
   // The cursor is resolved once for the region rather than per cell: it can
   // only be in one place, so the loop just tests each cell against it.
@@ -2546,7 +2546,7 @@ YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
       uint16_t row_bitmap =
           char_scan_line == kMDAUnderlinePosition && colors.underline
               ? 0xFFFF
-              : kFontMDA9x14Bitmap[char_value][char_scan_line];
+              : YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
@@ -2606,7 +2606,7 @@ enum {
 // The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
 // comes from the color select register instead. The palette-select bit chooses
 // the first two, unless black-and-white mode selects the third.
-YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
+YAX86_FILE_PRIVATE const uint8_t YVideoCGAGraphicsPalettes[3][3] = {
     // Palette 0: green, red, brown.
     {2, 4, 6},
     // Palette 1: cyan, magenta, light gray.
@@ -2697,7 +2697,7 @@ YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
       // The glyph row is a bitmap with the leftmost pixel in the high bit.
-      uint8_t row_bitmap = kFontCGA8x8Bitmap[char_value][char_scan_line];
+      uint8_t row_bitmap = YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
       for (uint8_t x = 0; x < metadata->char_width; ++x) {
         bool is_foreground =
             (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
@@ -2718,11 +2718,11 @@ YAX86_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
     YVideoState* video, YVideoRGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
-    palette_colors = kCGAGraphicsPalettes[2];
+    palette_colors = YVideoCGAGraphicsPalettes[2];
   } else if (video->color_select_register & kCGAColorSelectPalette) {
-    palette_colors = kCGAGraphicsPalettes[1];
+    palette_colors = YVideoCGAGraphicsPalettes[1];
   } else {
-    palette_colors = kCGAGraphicsPalettes[0];
+    palette_colors = YVideoCGAGraphicsPalettes[0];
   }
   uint8_t intensity =
       (video->color_select_register & kCGAColorSelectPaletteIntensity)
@@ -2830,19 +2830,21 @@ YAX86_MODULE_PRIVATE void YVideoCGARenderRegion(
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_VIDEO_LOG(level, ...) \
-  YAX86_LOG(video->config.logger, &kLogModuleVideo, level, __VA_ARGS__)
+  YAX86_LOG(video->config.logger, &YVideoLogModule, level, __VA_ARGS__)
 
 // Power-on 6845 register values for the IBM Monochrome Display.
-YAX86_FILE_PRIVATE const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
-    0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
-    0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+YAX86_FILE_PRIVATE const uint8_t
+    YVideoDefaultMDARegisters[kNumCRTCRegisters] = {
+        0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
+        0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 // Power-on 6845 register values for the CGA in 80x25 text mode, matching the
 // values GLaBIOS programs for that mode.
-YAX86_FILE_PRIVATE const uint8_t kDefaultCGARegisters[kNumCRTCRegisters] = {
-    0x71, 0x50, 0x5A, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02,
-    0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+YAX86_FILE_PRIVATE const uint8_t
+    YVideoDefaultCGARegisters[kNumCRTCRegisters] = {
+        0x71, 0x50, 0x5A, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02,
+        0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 enum {
@@ -2873,7 +2875,7 @@ YAX86_FILE_PRIVATE void YVideoInvalidateAll(YVideoState* video);
 
 YAX86_PUBLIC const YVideoAdapterMetadata* YVideoGetAdapterMetadata(
     const YVideoState* video) {
-  return &kVideoAdapterMetadata[video->adapter];
+  return &YVideoAdapterMetadataTable[video->adapter];
 }
 
 // ============================================================================
@@ -2939,8 +2941,8 @@ YAX86_PUBLIC void YVideoInit(YVideoState* video) {
 
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == kVideoAdapterCGA
-                                         ? kDefaultCGARegisters
-                                         : kDefaultMDARegisters;
+                                         ? YVideoDefaultCGARegisters
+                                         : YVideoDefaultMDARegisters;
   for (uint8_t i = 0; i < kNumCRTCRegisters; ++i) {
     video->registers[i] = default_registers[i];
   }
@@ -2990,7 +2992,7 @@ YAX86_PUBLIC YAX86_HOT YVideoMode YVideoGetMode(const YVideoState* video) {
 
 YAX86_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video) {
-  return &kVideoModeMetadata[YVideoGetMode(video)];
+  return &YVideoModeMetadataTable[YVideoGetMode(video)];
 }
 
 // ============================================================================

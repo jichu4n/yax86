@@ -121,11 +121,11 @@ class VideoTestBase : public ::testing::Test {
 
     logger_config_ = YLoggerConfig{};
     logger_config_.write_line = MockWriteLogLine;
-    logger_config_.enabled_modules = YLogModuleMask(&kLogModuleVideo);
+    logger_config_.enabled_modules = YLogModuleMask(&YVideoLogModule);
     logger_config_.min_level = kLogLevelError;
     YLoggerInit(&logger_, &logger_config_);
 
-    video_.config = kDefaultVideoConfig;
+    video_.config = YVideoDefaultConfig;
     video_.config.adapter = adapter;
     video_.config.vram = mock_vram;
     video_.config.logger = &logger_;

@@ -3,7 +3,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_PIC_LOG(level, ...) \
-  YAX86_LOG(pic->config.logger, &kLogModulePIC, level, __VA_ARGS__)
+  YAX86_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)
 
 // ============================================================================
 // Constants
@@ -39,7 +39,7 @@ typedef enum YPICPort {
 } YPICPort;
 
 // Map a PIC mode to its base I/O port.
-YAX86_FILE_PRIVATE const uint16_t kPICBasePorts[kPICNumModes] = {
+YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[kPICNumModes] = {
     0x20,  // kPICSingle
     0x20,  // kPICMaster
     0xA0,  // kPICSlave
@@ -78,7 +78,7 @@ YAX86_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
 
 // Returns the I/O port corresponding to a given port number.
 YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
-  uint16_t port_offset = port - kPICBasePorts[YPICGetMode(pic)];
+  uint16_t port_offset = port - YPICBasePorts[YPICGetMode(pic)];
   if (port_offset >= kNumPICPorts) {
     return kPICPortInvalid;
   }

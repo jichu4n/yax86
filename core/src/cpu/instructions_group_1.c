@@ -15,7 +15,7 @@ typedef YCPUInstructionResult (*YCPUGroup1ExecuteInstructionFn)(
 // Group 1 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte.
 YAX86_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
-    kGroup1ExecuteInstructionFns[] = {
+    YCPUGroup1ExecuteInstructionFns[] = {
         YCPUExecuteAdd,            // 0 - ADD
         YCPUExecuteBooleanOr,      // 1 - OR
         YCPUExecuteAddWithCarry,   // 2 - ADC
@@ -30,7 +30,7 @@ YAX86_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteGroup1Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =
-      kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
@@ -42,7 +42,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteGroup1InstructionWithSignExtension(
     const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =
-      kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   YCPUOperandValue src_value = YCPUReadImmediateOperandByte(

@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 enum {
-  kHDCOptionROMDataSize = 12288,
+  Y_HDC_OPTION_ROM_DATA_SIZE = 12288,
 };
 
 // In unbundled builds, external callers within the module need an extern
@@ -15,7 +15,7 @@ enum {
 // the same translation unit (via bundle.json), so an extern declaration
 // would conflict and is omitted.
 #ifndef YAX86_HDC_BUNDLE_H
-extern const uint8_t kHDCOptionROMData[kHDCOptionROMDataSize];
+extern const uint8_t YHDCOptionROMData[Y_HDC_OPTION_ROM_DATA_SIZE];
 #endif // YAX86_HDC_BUNDLE_H
 
 #endif // YAX86_HDC_OPTION_ROM_DATA_H
