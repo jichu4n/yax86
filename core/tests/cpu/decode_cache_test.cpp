@@ -40,9 +40,9 @@ class DecodeCacheTest : public ::testing::Test {
 
   // The cache is part of the config, so choosing a different one means
   // initializing again.
-  void Init(CPUDecodeCacheEntry* entries, uint32_t num_entries) {
+  void Init(YCPUDecodeCacheEntry* entries, uint32_t num_entries) {
     memory_.assign(kMemorySize, 0);
-    cpu_ = CPUState{};
+    cpu_ = YCPUState{};
     cpu_.config.context = this;
     cpu_.config.read_memory_byte = TestReadMemoryByte;
     cpu_.config.write_memory_byte = TestWriteMemoryByte;
@@ -81,13 +81,13 @@ class DecodeCacheTest : public ::testing::Test {
     ASSERT_EQ(CPUTick(&cpu_, 0), kCPUTickExecuted);
   }
 
-  static uint8_t TestReadMemoryByte(CPUState* cpu, uint32_t address) {
+  static uint8_t TestReadMemoryByte(YCPUState* cpu, uint32_t address) {
     DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     return address < kMemorySize ? self->memory_[address] : 0xFF;
   }
 
   static void TestWriteMemoryByte(
-      CPUState* cpu, uint32_t address, uint8_t value) {
+      YCPUState* cpu, uint32_t address, uint8_t value) {
     DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     if (address < kMemorySize) {
       self->memory_[address] = value;
@@ -95,7 +95,7 @@ class DecodeCacheTest : public ::testing::Test {
   }
 
   static void RecordLogLine(
-      void* context, const LogModule* module, LogLevel level, uint64_t tick,
+      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
       const char* message, size_t length) {
     (void)module;
     (void)level;
@@ -104,7 +104,7 @@ class DecodeCacheTest : public ::testing::Test {
         std::string(message, length));
   }
 
-  static void GetInstructionFetchWindow(CPUState* cpu, uint32_t address) {
+  static void GetInstructionFetchWindow(YCPUState* cpu, uint32_t address) {
     DecodeCacheTest* self = static_cast<DecodeCacheTest*>(cpu->config.context);
     if (address >= kMemorySize) {
       cpu->instruction_fetch_window.data = nullptr;
@@ -117,8 +117,8 @@ class DecodeCacheTest : public ::testing::Test {
 
   std::vector<std::string> log_lines_;
   std::vector<uint8_t> memory_;
-  CPUState cpu_ = {};
-  CPUDecodeCacheEntry cache_[kNumCacheEntries] = {};
+  YCPUState cpu_ = {};
+  YCPUDecodeCacheEntry cache_[kNumCacheEntries] = {};
 };
 
 TEST_F(DecodeCacheTest, ARepeatedInstructionIsAnsweredFromTheCache) {
@@ -359,19 +359,19 @@ TEST_F(DecodeCacheTest, ACountOfOneIsAccepted) {
 
 // A host about to run 10% slower than it asked to should be told why.
 TEST_F(DecodeCacheTest, ABadCountIsLogged) {
-  LoggerConfig logger_config = {};
+  YLoggerConfig logger_config = {};
   logger_config.context = this;
   logger_config.write_line = RecordLogLine;
   logger_config.enabled_modules = 0xFFFFFFFF;
   logger_config.min_level = kLogLevelError;
-  Logger logger;
+  YLogger logger;
   LoggerInit(&logger, &logger_config);
 
   // The logger has to be in place before the init that rejects the count:
   // CPUInit() clears its own copy of the pointer on the way out, so a second
   // call sees no cache and has nothing to complain about.
   log_lines_.clear();
-  cpu_ = CPUState{};
+  cpu_ = YCPUState{};
   cpu_.config.logger = &logger;
   cpu_.config.decode_cache = cache_;
   cpu_.config.decode_cache_num_entries = kNumCacheEntries - 1;

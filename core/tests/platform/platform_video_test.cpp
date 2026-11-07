@@ -7,7 +7,7 @@ namespace {
 
 class PlatformVideoTest : public ::testing::Test {
  protected:
-  void Init(VideoAdapter adapter) {
+  void Init(YVideoAdapter adapter) {
     platform_.config.physical_memory_size = sizeof(ram_);
     platform_.config.physical_memory = ram_;
     platform_.config.vram = vram_;
@@ -15,24 +15,25 @@ class PlatformVideoTest : public ::testing::Test {
     ASSERT_TRUE(PlatformInit(&platform_));
   }
 
-  PlatformState platform_ = {0};
+  YPlatformState platform_ = {0};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };
 
 TEST_F(PlatformVideoTest, DefaultsToMDA) {
-  Init(static_cast<VideoAdapter>(0));
+  Init(static_cast<YVideoAdapter>(0));
   EXPECT_EQ(platform_.video.adapter, kVideoAdapterMDA);
   EXPECT_EQ(platform_.ppi.config.display_mode, kPPIDisplayMDA);
 
-  MemoryMapEntry* vram =
+  YPlatformMemoryMapEntry* vram =
       GetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);
   ASSERT_NE(vram, nullptr);
   EXPECT_EQ(vram->start, static_cast<uint32_t>(kMDAVRAMAddress));
   EXPECT_EQ(
       vram->end, static_cast<uint32_t>(kMDAVRAMAddress + kMDAVRAMSize - 1));
 
-  PortMapEntry* ports = GetPortMapEntryByType(&platform_, kPortMapEntryVideo);
+  YPlatformPortMapEntry* ports =
+      GetPortMapEntryByType(&platform_, kPortMapEntryVideo);
   ASSERT_NE(ports, nullptr);
   EXPECT_EQ(ports->start, kMDAPortStart);
   EXPECT_EQ(ports->end, kMDAPortEnd);
@@ -45,14 +46,15 @@ TEST_F(PlatformVideoTest, RegistersCGA) {
   // so they have to agree with what the platform registered.
   EXPECT_EQ(platform_.ppi.config.display_mode, kPPIDisplayCGA80x25);
 
-  MemoryMapEntry* vram =
+  YPlatformMemoryMapEntry* vram =
       GetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);
   ASSERT_NE(vram, nullptr);
   EXPECT_EQ(vram->start, static_cast<uint32_t>(kCGAVRAMAddress));
   EXPECT_EQ(
       vram->end, static_cast<uint32_t>(kCGAVRAMAddress + kCGAVRAMSize - 1));
 
-  PortMapEntry* ports = GetPortMapEntryByType(&platform_, kPortMapEntryVideo);
+  YPlatformPortMapEntry* ports =
+      GetPortMapEntryByType(&platform_, kPortMapEntryVideo);
   ASSERT_NE(ports, nullptr);
   EXPECT_EQ(ports->start, kCGAPortStart);
   EXPECT_EQ(ports->end, kCGAPortEnd);
@@ -71,7 +73,7 @@ TEST_F(PlatformVideoTest, VideoPortsAreRoutedThroughTheMap) {
 
 TEST_F(PlatformVideoTest, TicksAdvanceTheBeam) {
   Init(kVideoAdapterCGA);
-  const VideoAdapterMetadata* adapter =
+  const YVideoAdapterMetadata* adapter =
       VideoGetAdapterMetadata(&platform_.video);
   uint32_t start_ticks = platform_.ticks;
   while (platform_.ticks - start_ticks < adapter->cycles_per_scan_line * 4) {

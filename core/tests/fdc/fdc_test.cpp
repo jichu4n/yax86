@@ -62,7 +62,7 @@ class FDCTest : public ::testing::Test {
   void WriteDmaByte(uint8_t value) { FDCWritePort(&fdc_, kFDCPortData, value); }
 
   uint8_t ReadResult() { return FDCReadPort(&fdc_, kFDCPortData); }
-  FDCState fdc_ = {};
+  YFDCState fdc_ = {};
   bool irq6_raised_ = false;
   bool dma_requested_ = false;
   DmaMode dma_mode_ = kDmaModeRead;

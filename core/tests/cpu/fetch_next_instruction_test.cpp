@@ -14,19 +14,19 @@
 using namespace std;
 
 // Helper function to test decoding a sequence of assembly instructions.
-vector<Instruction> TestFetchInstructions(
+vector<YCPUInstruction> TestFetchInstructions(
     const string& name, const string& asm_code) {
   CPUTestHelper cpu_test_helper(4 * 1024);
   size_t machine_code_size =
       cpu_test_helper.AssembleAndLoadProgram(name, asm_code);
-  CPUState* cpu = &cpu_test_helper.cpu_;
+  YCPUState* cpu = &cpu_test_helper.cpu_;
   uint16_t* ip = &cpu->registers[kIP];
 
   // Fetch instructions until we reach the end of the machine code
   cout << ">> Reading encoded instructions:" << endl;
-  vector<Instruction> instructions;
+  vector<YCPUInstruction> instructions;
   while (*ip < kCOMFileLoadOffset + machine_code_size) {
-    Instruction instruction;
+    YCPUInstruction instruction;
     auto status = CPUFetchNextInstruction(cpu, &instruction);
     if (status != kFetchSuccess) {
       throw runtime_error(
@@ -147,7 +147,7 @@ TEST_F(FetchNextInstructionTest, FetchInstructionsWithPrefixes) {
   // raw bytes were not. A LOCK prefix selects nothing, so the encoded size is
   // what shows it was consumed rather than mistaken for an opcode; every case
   // checks it for that reason.
-  auto VerifyPrefixes = [](const Instruction& inst, uint8_t size,
+  auto VerifyPrefixes = [](const YCPUInstruction& inst, uint8_t size,
                            uint8_t segment_override,
                            uint8_t repetition_prefix) {
     EXPECT_EQ(inst.size, size);
@@ -180,7 +180,7 @@ TEST_F(FetchNextInstructionTest, FetchAcceptsMoreThanTwoPrefixes) {
   CPUTestHelper helper;
   // LOCK ES: SS: REP MOVSB - four prefixes, two of them segment overrides.
   helper.LoadCOM({kPrefixLOCK, kPrefixES, kPrefixSS, kPrefixREP, 0xA4, 0x90});
-  Instruction instruction;
+  YCPUInstruction instruction;
   ASSERT_EQ(CPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.opcode, 0xA4);
   EXPECT_EQ(instruction.size, 5);
@@ -190,7 +190,7 @@ TEST_F(FetchNextInstructionTest, FetchAcceptsMoreThanTwoPrefixes) {
 }
 
 // A run of prefix bytes must not fetch forever. The bound is whatever still
-// leaves the whole encoding addressable by Instruction.size.
+// leaves the whole encoding addressable by YCPUInstruction.size.
 TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
   // Builds n segment override prefixes followed by a NOP. Sized up front
   // rather than appended to, which keeps gcc from mis-analyzing the
@@ -203,7 +203,7 @@ TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
 
   CPUTestHelper at_limit;
   at_limit.LoadCOM(PrefixRun(kMaxPrefixBytes));
-  Instruction instruction;
+  YCPUInstruction instruction;
   ASSERT_EQ(
       CPUFetchNextInstruction(&at_limit.cpu_, &instruction), kFetchSuccess);
   EXPECT_EQ(instruction.opcode, 0x90);
@@ -220,7 +220,7 @@ TEST_F(FetchNextInstructionTest, FetchRejectsPrefixesBeyondMaxInstructionSize) {
 // A decode writes the fields it needs rather than zeroing the struct, so a
 // destination reused across decodes must keep nothing of the instruction
 // before it. Reuse is the ordinary case rather than an unusual one: CPUTick()
-// holds a single Instruction for the life of the CPU.
+// holds a single YCPUInstruction for the life of the CPU.
 TEST_F(FetchNextInstructionTest, ADecodeKeepsNothingOfThePreviousInstruction) {
   CPUTestHelper helper;
   helper.LoadCOM({
@@ -246,7 +246,7 @@ TEST_F(FetchNextInstructionTest, ADecodeKeepsNothingOfThePreviousInstruction) {
   });
 
   // One destination for every decode, as CPUTick() has.
-  Instruction instruction = {0};
+  YCPUInstruction instruction = {0};
   auto Fetch = [&]() {
     ASSERT_EQ(
         CPUFetchNextInstruction(&helper.cpu_, &instruction), kFetchSuccess);

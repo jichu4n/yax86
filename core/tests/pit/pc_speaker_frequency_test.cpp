@@ -50,7 +50,7 @@ class PCSpeakerFrequencyTest : public ::testing::Test {
   uint32_t LastFrequency() const {
     return reported_frequencies.empty() ? 0 : reported_frequencies.back();
   }
-  PITState pit_ = {0};
+  YPITState pit_ = {0};
 };
 
 TEST_F(PCSpeakerFrequencyTest, Mode3ReportsReloadFrequency) {

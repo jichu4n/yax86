@@ -32,7 +32,7 @@ enum {
 };
 
 // Log module for the PIC.
-YAX86_PUBLIC_HEADER const LogModule kLogModulePIC = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModulePIC = {
     .id = kLogModuleIDPIC,
     .name = "PIC",
 };
@@ -42,7 +42,7 @@ YAX86_PUBLIC_HEADER const LogModule kLogModulePIC = {
 // ============================================================================
 
 // The mode of a PIC - single, master, or slave.
-typedef enum PICMode {
+typedef enum YPICMode {
   // Single PIC on IBM PC and PC/XT
   kPICSingle = 0,
   // Master PIC on IBM PC/AT and PS/2
@@ -51,10 +51,10 @@ typedef enum PICMode {
   kPICSlave,
   // Number of PIC modes
   kPICNumModes,
-} PICMode;
+} YPICMode;
 
 // Initialization state of a PIC.
-typedef enum PICInitState {
+typedef enum YPICInitState {
   // Uninitialized - waiting for ICW1.
   kPICExpectICW1 = 0,
   // ICW1 received - waiting for ICW2.
@@ -65,7 +65,7 @@ typedef enum PICInitState {
   kPICExpectICW4,
   // Fully initialized.
   kPICReady,
-} PICInitState;
+} YPICInitState;
 
 enum {
   // Indicates no pending interrupt. In normal operation, valid ranges of
@@ -74,34 +74,34 @@ enum {
   kPICNoPendingInterrupt = 0xFF,
 };
 
-struct PICState;
+struct YPICState;
 
 // Caller-provided runtime configuration.
-typedef struct PICConfig {
+typedef struct YPICConfig {
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // State of the SP pin.
   // - Single PIC on IBM PC and PC/XT => false
   // - Master PIC on IBM PC/AT and PS/2 => false
   // - Slave PIC on IBM PC/AT and PS/2 => true
   bool sp;
-} PICConfig;
+} YPICConfig;
 
 // The register to read on the next read from the data port.
-typedef enum PICReadRegister {
+typedef enum YPICReadRegister {
   kPICReadIMR = 0,  // Default: read Interrupt Mask Register
   kPICReadIRR = 1,  // Read Interrupt Request Register on next read
   kPICReadISR = 2,  // Read In-Service Register on next read
-} PICReadRegister;
+} YPICReadRegister;
 
 // State of a single 8259 PIC chip.
-typedef struct PICState {
+typedef struct YPICState {
   // Pointer to caller-provided runtime configuration.
-  PICConfig config;
+  YPICConfig config;
 
   // Initialization state.
-  PICInitState init_state;
+  YPICInitState init_state;
   // Received initialization words.
   uint8_t icw1;
   uint8_t icw2;
@@ -136,19 +136,19 @@ typedef struct PICState {
   bool has_unmasked_request;
 
   // The register to read on the next read from the data port.
-  PICReadRegister read_register;
+  YPICReadRegister read_register;
 
   // Pointer to master PIC if this is a slave, or to slave PIC if this is a
   // master. NULL if this is a single PIC.
-  struct PICState* cascade_pic;
-} PICState;
+  struct YPICState* cascade_pic;
+} YPICState;
 
 // ============================================================================
 // PIC initialization
 // ============================================================================
 
 // Initialize a PIC with the provided configuration.
-YAX86_PUBLIC void PICInit(PICState* pic);
+YAX86_PUBLIC void PICInit(YPICState* pic);
 
 // ============================================================================
 // IRQ line control
@@ -156,11 +156,11 @@ YAX86_PUBLIC void PICInit(PICState* pic);
 
 // Raise an IRQ line (0-7) on this PIC. If this is a slave PIC, also raises
 // the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICRaiseIRQ(PICState* pic, uint8_t irq);
+YAX86_PUBLIC void PICRaiseIRQ(YPICState* pic, uint8_t irq);
 
 // Lower an IRQ line (0-7) on this PIC. If this is a slave PIC and no interrupts
 // are pending, also lowers the cascade IRQ on the master PIC.
-YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq);
+YAX86_PUBLIC void PICLowerIRQ(YPICState* pic, uint8_t irq);
 
 // ============================================================================
 // I/O port interface
@@ -169,12 +169,12 @@ YAX86_PUBLIC void PICLowerIRQ(PICState* pic, uint8_t irq);
 // Read from a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC uint8_t PICReadPort(PICState* pic, uint16_t port);
+YAX86_PUBLIC uint8_t PICReadPort(YPICState* pic, uint16_t port);
 
 // Write to a PIC I/O port.
 // For master PIC: port should be 0x20 (command) or 0x21 (data).
 // For slave PIC: port should be 0xA0 (command) or 0xA1 (data).
-YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
+YAX86_PUBLIC void PICWritePort(YPICState* pic, uint16_t port, uint8_t value);
 
 // ============================================================================
 // Interrupt handling
@@ -183,6 +183,6 @@ YAX86_PUBLIC void PICWritePort(PICState* pic, uint16_t port, uint8_t value);
 // Get the highest priority pending interrupt vector number from this PIC. If
 // this is a master PIC, this will consider pending interrupts from the slave
 // PIC as well. If no interrupts are pending, returns kPICNoPendingInterrupt.
-YAX86_PUBLIC uint8_t PICGetPendingInterrupt(PICState* pic);
+YAX86_PUBLIC uint8_t PICGetPendingInterrupt(YPICState* pic);
 
 #endif  // YAX86_PIC_PUBLIC_H

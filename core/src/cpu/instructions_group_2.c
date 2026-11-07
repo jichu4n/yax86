@@ -10,8 +10,8 @@
 // Group 2 - ROL, ROR, RCL, RCR, SHL, SHR, SAL, SAR
 // ============================================================================
 
-typedef InstructionResult (*Group2ExecuteInstructionFn)(
-    const InstructionContext* ctx, Operand* op, uint8_t count);
+typedef YCPUInstructionResult (*YCPUGroup2ExecuteInstructionFn)(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count);
 
 // The 8086/8088 shifts one bit at a time and recomputes the overflow flag on
 // every pass, so a multi-bit shift leaves behind the flag from its last pass
@@ -22,7 +22,7 @@ typedef InstructionResult (*Group2ExecuteInstructionFn)(
 // differs from the sign bit left behind, which is to say the last pass changed
 // the sign of the value.
 YAX86_FILE_PRIVATE void SetOverflowFlagAfterLeftShift(
-    const InstructionContext* ctx, uint32_t result, bool carry) {
+    const YCPUInstructionContext* ctx, uint32_t result, bool carry) {
   const bool result_sign = (result & kSignBit[ctx->metadata->width]) != 0;
   CPUSetFlag(ctx->cpu, kOF, carry != result_sign);
 }
@@ -31,7 +31,7 @@ YAX86_FILE_PRIVATE void SetOverflowFlagAfterLeftShift(
 // bit rotated into the top came from the bottom, so this again says the last
 // pass changed the sign of the value.
 YAX86_FILE_PRIVATE void SetOverflowFlagAfterRightRotate(
-    const InstructionContext* ctx, uint32_t result) {
+    const YCPUInstructionContext* ctx, uint32_t result) {
   const uint32_t sign_bit = kSignBit[ctx->metadata->width];
   const bool result_sign = (result & sign_bit) != 0;
   const bool below_sign = (result & (sign_bit >> 1)) != 0;
@@ -45,7 +45,7 @@ YAX86_FILE_PRIVATE void SetOverflowFlagAfterRightRotate(
 // the width keeps that true while holding the shifts below the width of the
 // intermediate they are computed in, where C leaves them undefined.
 YAX86_FILE_PRIVATE uint8_t
-ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
+ClampShiftCount(const YCPUInstructionContext* ctx, uint8_t count) {
   const uint8_t limit = kNumBits[ctx->metadata->width] + 1;
   return count > limit ? limit : count;
 }
@@ -54,8 +54,8 @@ ClampShiftCount(const InstructionContext* ctx, uint8_t count) {
 // SHL r/m16, 1
 // SHL r/m8, CL
 // SHL r/m16, CL
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteGroup2Shl(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteGroup2Shl(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -76,8 +76,8 @@ ExecuteGroup2Shl(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
-ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult ExecuteGroup2Shr(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -100,8 +100,8 @@ ExecuteGroup2Shr(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // SAR r/m16, 1
 // SAR r/m8, CL
 // SAR r/m16, CL
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteGroup2Sar(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteGroup2Sar(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -123,8 +123,8 @@ ExecuteGroup2Sar(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // ROL r/m16, 1
 // ROL r/m8, CL
 // ROL r/m16, CL
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteGroup2Rol(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteGroup2Rol(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -147,8 +147,8 @@ ExecuteGroup2Rol(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // ROR r/m16, 1
 // ROR r/m8, CL
 // ROR r/m16, CL
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteGroup2Ror(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteGroup2Ror(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -171,13 +171,13 @@ ExecuteGroup2Ror(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // RCL r/m16, 1
 // RCL r/m8, CL
 // RCL r/m16, CL
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteGroup2Rcl(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteGroup2Rcl(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
   }
-  const Width width = ctx->metadata->width;
+  const YCPUWidth width = ctx->metadata->width;
   // Rotating through the carry flag cycles over one more bit than the operand
   // is wide. A whole number of cycles puts the value and the carry back the
   // way they were, but the passes still happened, so the overflow flag is
@@ -203,13 +203,13 @@ ExecuteGroup2Rcl(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // RCR r/m16, 1
 // RCR r/m8, CL
 // RCR r/m16, CL
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteGroup2Rcr(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteGroup2Rcr(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
   }
-  const Width width = ctx->metadata->width;
+  const YCPUWidth width = ctx->metadata->width;
   // As with RCL, a whole number of cycles restores the value and the carry but
   // still leaves the overflow flag from the last pass.
   uint8_t effective_count = count % (kNumBits[width] + 1);
@@ -243,8 +243,8 @@ ExecuteGroup2Rcr(const InstructionContext* ctx, Operand* op, uint8_t count) {
 // Nothing an IBM PC/XT runs uses this, but leaving REG 6 aliased to SAL would
 // silently give a different answer than the hardware for the same encoding,
 // and the operation is a single store.
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteGroup2Setmo(const InstructionContext* ctx, Operand* op, uint8_t count) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteGroup2Setmo(
+    const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
     return kInstructionExecuted;
@@ -258,7 +258,7 @@ ExecuteGroup2Setmo(const InstructionContext* ctx, Operand* op, uint8_t count) {
   return kInstructionExecuted;
 }
 
-YAX86_FILE_PRIVATE const Group2ExecuteInstructionFn
+YAX86_FILE_PRIVATE const YCPUGroup2ExecuteInstructionFn
     kGroup2ExecuteInstructionFns[] = {
         ExecuteGroup2Rol,    // 0 - ROL
         ExecuteGroup2Ror,    // 1 - ROR
@@ -271,21 +271,21 @@ YAX86_FILE_PRIVATE const Group2ExecuteInstructionFn
 };
 
 // Group 2 shift / rotate by 1.
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteGroup2ShiftOrRotateBy1Instruction(const InstructionContext* ctx) {
-  const Group2ExecuteInstructionFn fn =
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteGroup2ShiftOrRotateBy1Instruction(const YCPUInstructionContext* ctx) {
+  const YCPUGroup2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  Operand op;
+  YCPUOperand op;
   ReadRegisterOrMemoryOperand(ctx, &op);
   return fn(ctx, &op, 1);
 }
 
 // Group 2 shift / rotate by CL.
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteGroup2ShiftOrRotateByCLInstruction(const InstructionContext* ctx) {
-  const Group2ExecuteInstructionFn fn =
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteGroup2ShiftOrRotateByCLInstruction(const YCPUInstructionContext* ctx) {
+  const YCPUGroup2ExecuteInstructionFn fn =
       kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
-  Operand op;
+  YCPUOperand op;
   ReadRegisterOrMemoryOperand(ctx, &op);
   const uint8_t count = ctx->cpu->registers[kCX] & 0xFF;
   // A shift by CL works through the count a bit at a time.

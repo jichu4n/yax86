@@ -44,7 +44,7 @@ constexpr uint8_t kChannel0Mode2 = 0x34;
 // A plain struct rather than a test fixture, because most of these tests run
 // two machines side by side and compare them.
 struct IdleMachine {
-  PlatformState platform = {};
+  YPlatformState platform = {};
   uint8_t ram[64 * 1024] = {0};
   uint8_t vram[kCGAVRAMSize] = {0};
 

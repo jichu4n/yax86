@@ -17,6 +17,6 @@ extern const char* const kDefaultFloppyImagePath;
 //
 // The image is copied into memory. Guest writes go to that copy and are never
 // written back, so booting cannot damage the file it booted from.
-bool FloppyMount(PlatformState* platform, const char* path);
+bool FloppyMount(YPlatformState* platform, const char* path);
 
 #endif  // YAX86_SDL_FLOPPY_H

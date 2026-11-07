@@ -40,13 +40,13 @@ enum {
 };
 
 YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
-    VideoState* video, uint32_t address);
-YAX86_FILE_PRIVATE void VideoInvalidateCursor(VideoState* video);
-YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(VideoState* video);
-YAX86_FILE_PRIVATE void VideoInvalidateAll(VideoState* video);
+    YVideoState* video, uint32_t address);
+YAX86_FILE_PRIVATE void VideoInvalidateCursor(YVideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(YVideoState* video);
+YAX86_FILE_PRIVATE void VideoInvalidateAll(YVideoState* video);
 
-YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
-    const VideoState* video) {
+YAX86_PUBLIC const YVideoAdapterMetadata* VideoGetAdapterMetadata(
+    const YVideoState* video) {
   return &kVideoAdapterMetadata[video->adapter];
 }
 
@@ -54,7 +54,8 @@ YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
 // Video RAM
 // ============================================================================
 
-YAX86_MODULE_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address) {
+YAX86_MODULE_PRIVATE uint8_t
+VideoReadVRAMByte(YVideoState* video, uint32_t address) {
   if (!video->config.vram) {
     return kVideoUnmappedPortValue;
   }
@@ -71,7 +72,7 @@ YAX86_MODULE_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t addre
 }
 
 YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
-    VideoState* video, uint32_t address, uint8_t value) {
+    YVideoState* video, uint32_t address, uint8_t value) {
   if (!video->config.vram) {
     return;
   }
@@ -87,7 +88,7 @@ YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
   VideoInvalidateVRAMAddress(video, address);
 }
 
-YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
+YAX86_PUBLIC uint8_t VideoReadVRAM(YVideoState* video, uint32_t address) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return kVideoUnmappedPortValue;
   }
@@ -95,7 +96,7 @@ YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address) {
 }
 
 YAX86_PUBLIC void VideoWriteVRAM(
-    VideoState* video, uint32_t address, uint8_t value) {
+    YVideoState* video, uint32_t address, uint8_t value) {
   if (address >= VideoGetAdapterMetadata(video)->vram_size) {
     return;
   }
@@ -106,11 +107,11 @@ YAX86_PUBLIC void VideoWriteVRAM(
 // Initialization
 // ============================================================================
 
-YAX86_PUBLIC void VideoInit(VideoState* video) {
+YAX86_PUBLIC void VideoInit(YVideoState* video) {
   video->adapter = video->config.adapter == kVideoAdapterCGA ? kVideoAdapterCGA
                                                              : kVideoAdapterMDA;
 
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == kVideoAdapterCGA
                                          ? kDefaultCGARegisters
                                          : kDefaultMDARegisters;
@@ -130,7 +131,7 @@ YAX86_PUBLIC void VideoInit(VideoState* video) {
 // Video mode
 // ============================================================================
 
-YAX86_PUBLIC YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
+YAX86_PUBLIC YAX86_HOT YVideoMode VideoGetMode(const YVideoState* video) {
   if (video->adapter == kVideoAdapterMDA) {
     // The MDA has only one mode.
     return kVideoModeMDAText80x25;
@@ -161,8 +162,8 @@ YAX86_PUBLIC YAX86_HOT VideoMode VideoGetMode(const VideoState* video) {
              : kVideoModeCGAGraphics320x200;
 }
 
-YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
-    const VideoState* video) {
+YAX86_PUBLIC const YVideoModeMetadata* VideoGetModeMetadata(
+    const YVideoState* video) {
   return &kVideoModeMetadata[VideoGetMode(video)];
 }
 
@@ -170,39 +171,41 @@ YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
 // 6845 CRT controller
 // ============================================================================
 
-YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const YVideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterStartAddressH] << 8) |
          video->registers[kCRTCRegisterStartAddressL];
 }
 
-YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const YVideoState* video) {
   return (uint16_t)(video->registers[kCRTCRegisterCursorH] << 8) |
          video->registers[kCRTCRegisterCursorL];
 }
 
-YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const YVideoState* video) {
   return (video->registers[kCRTCRegisterCursorStart] & kCRTCCursorModeMask) !=
          kCRTCCursorDisabled;
 }
 
-YAX86_MODULE_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint8_t
+VideoGetCursorStartScanLine(const YVideoState* video) {
   return video->registers[kCRTCRegisterCursorStart] & kCRTCCursorScanLineMask;
 }
 
-YAX86_MODULE_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video) {
+YAX86_MODULE_PRIVATE uint8_t
+VideoGetCursorEndScanLine(const YVideoState* video) {
   return video->registers[kCRTCRegisterCursorEnd] & kCRTCCursorScanLineMask;
 }
 
-YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const YVideoState* video) {
   return (video->frames / kVideoFramesPerCursorBlinkPhase) % 2 == 0;
 }
 
-YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video) {
+YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const YVideoState* video) {
   return (video->frames / kVideoFramesPerTextBlinkPhase) % 2 == 0;
 }
 
 YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
-    const VideoState* video, const VideoModeMetadata* metadata,
+    const YVideoState* video, const YVideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset) {
   if (!VideoIsCursorEnabled(video) || !VideoIsCursorBlinkOn(video)) {
     return false;
@@ -217,7 +220,7 @@ YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
 // ============================================================================
 
 YAX86_FILE_PRIVATE void VideoDirtyRangeAdd(
-    VideoDirtyRange* range, uint8_t start_column, uint8_t end_column) {
+    YVideoDirtyRange* range, uint8_t start_column, uint8_t end_column) {
   if (range->end_column == 0) {
     range->start_column = start_column;
     range->end_column = end_column;
@@ -232,17 +235,17 @@ YAX86_FILE_PRIVATE void VideoDirtyRangeAdd(
 }
 
 // The vertical unit of dirty tracking for the current mode.
-typedef struct VideoDirtyGeometry {
+typedef struct YVideoDirtyGeometry {
   // Number of dirty rows covering the display.
   uint8_t rows;
   // Physical scan lines per dirty row.
   uint8_t scan_lines_per_row;
-} VideoDirtyGeometry;
+} YVideoDirtyGeometry;
 
-YAX86_FILE_PRIVATE VideoDirtyGeometry
-VideoGetDirtyGeometry(const VideoState* video) {
-  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
-  VideoDirtyGeometry geometry;
+YAX86_FILE_PRIVATE YVideoDirtyGeometry
+VideoGetDirtyGeometry(const YVideoState* video) {
+  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
+  YVideoDirtyGeometry geometry;
   if (metadata->type == kVideoModeText) {
     geometry.rows = metadata->rows;
     geometry.scan_lines_per_row = metadata->char_height;
@@ -259,7 +262,7 @@ VideoGetDirtyGeometry(const VideoState* video) {
 }
 
 YAX86_MODULE_PRIVATE void VideoInvalidateRows(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
+    YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
   if (start_column >= end_column || end_column > kVideoDirtyColumns ||
       first_row >= end_row || first_row >= kVideoDirtyRowCount) {
@@ -280,12 +283,12 @@ YAX86_MODULE_PRIVATE void VideoInvalidateRows(
   }
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateAll(VideoState* video) {
+YAX86_FILE_PRIVATE void VideoInvalidateAll(YVideoState* video) {
   video->dirty_state.status = kVideoFullRedraw;
 }
 
 YAX86_FILE_PRIVATE void VideoInvalidateTextCell(
-    VideoState* video, const VideoModeMetadata* metadata,
+    YVideoState* video, const YVideoModeMetadata* metadata,
     uint16_t cell_offset) {
   if (cell_offset >= (uint16_t)metadata->columns * metadata->rows) {
     return;
@@ -310,8 +313,8 @@ YAX86_FILE_PRIVATE void VideoInvalidateTextCell(
 }
 
 YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
-    VideoState* video, uint32_t address) {
-  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+    YVideoState* video, uint32_t address) {
+  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type == kVideoModeText) {
     uint16_t character_mask = (uint16_t)(metadata->vram_size / 2 - 1);
     uint16_t character_address = (uint16_t)(address / 2);
@@ -341,8 +344,8 @@ YAX86_FILE_PRIVATE void VideoInvalidateVRAMAddress(
       video, byte_column, byte_column + 1, dirty_row, (uint8_t)(dirty_row + 1));
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateCursor(VideoState* video) {
-  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+YAX86_FILE_PRIVATE void VideoInvalidateCursor(YVideoState* video) {
+  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText) {
     return;
   }
@@ -353,8 +356,8 @@ YAX86_FILE_PRIVATE void VideoInvalidateCursor(VideoState* video) {
   VideoInvalidateTextCell(video, metadata, cursor_offset);
 }
 
-YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(VideoState* video) {
-  const VideoModeMetadata* metadata = VideoGetModeMetadata(video);
+YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(YVideoState* video) {
+  const YVideoModeMetadata* metadata = VideoGetModeMetadata(video);
   if (metadata->type != kVideoModeText ||
       !(video->control_register & kVideoControlEnableBlink)) {
     return;
@@ -401,8 +404,8 @@ YAX86_FILE_PRIVATE void VideoInvalidateBlinkingText(VideoState* video) {
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
 // incrementing frames, which VideoIsCursorBlinkOn() and VideoIsTextBlinkOn()
 // use to derive their blink phases.
-YAX86_PUBLIC YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+YAX86_PUBLIC YAX86_HOT void VideoTick(YVideoState* video, uint32_t cycles) {
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
       adapter->scan_lines_per_frame == 0) {
     // No adapter geometry to advance through.
@@ -437,8 +440,8 @@ YAX86_PUBLIC YAX86_HOT void VideoTick(VideoState* video, uint32_t cycles) {
 
 // The value the status port reads back, computed from where the CRT beam
 // currently is.
-YAX86_FILE_PRIVATE uint8_t VideoGetStatus(const VideoState* video) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+YAX86_FILE_PRIVATE uint8_t VideoGetStatus(const YVideoState* video) {
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
   bool in_horizontal_retrace =
       video->scan_line_cycles >= adapter->display_cycles_per_scan_line;
@@ -462,7 +465,7 @@ YAX86_FILE_PRIVATE uint8_t VideoGetStatus(const VideoState* video) {
 // ============================================================================
 
 // What an I/O port in the adapter's range does.
-typedef enum VideoPortFunction {
+typedef enum YVideoPortFunction {
   // Port is not decoded by the adapter.
   kVideoPortNone = 0,
   // 6845 register index.
@@ -475,11 +478,11 @@ typedef enum VideoPortFunction {
   kVideoPortColorSelect,
   // Status register.
   kVideoPortStatus,
-} VideoPortFunction;
+} YVideoPortFunction;
 
 // Decode an I/O port within the adapter's range.
-YAX86_FILE_PRIVATE VideoPortFunction
-VideoDecodePort(const VideoState* video, uint16_t port) {
+YAX86_FILE_PRIVATE YVideoPortFunction
+VideoDecodePort(const YVideoState* video, uint16_t port) {
   if (video->adapter == kVideoAdapterMDA) {
     switch (port) {
       case kMDAPortRegisterIndex:
@@ -515,7 +518,7 @@ VideoDecodePort(const VideoState* video, uint16_t port) {
   }
 }
 
-YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port) {
+YAX86_PUBLIC uint8_t VideoReadPort(YVideoState* video, uint16_t port) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       return video->selected_register;
@@ -536,7 +539,7 @@ YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port) {
 }
 
 YAX86_PUBLIC void VideoWritePort(
-    VideoState* video, uint16_t port, uint8_t value) {
+    YVideoState* video, uint16_t port, uint8_t value) {
   switch (VideoDecodePort(video, port)) {
     case kVideoPortRegisterIndex:
       video->selected_register = value & kCRTCRegisterIndexMask;
@@ -588,9 +591,10 @@ YAX86_PUBLIC void VideoWritePort(
 // ============================================================================
 
 YAX86_FILE_PRIVATE void VideoRenderBlankRegion(
-    VideoState* video, VideoPixelRun* run, VideoRegion region) {
-  RGB blank = video->adapter == kVideoAdapterCGA ? video->config.cga_palette[0]
-                                                 : video->config.background;
+    YVideoState* video, YVideoPixelRun* run, YVideoRegion region) {
+  YVideoRGB blank = video->adapter == kVideoAdapterCGA
+                        ? video->config.cga_palette[0]
+                        : video->config.background;
   uint16_t end_x = region.origin.x + region.width;
   uint16_t end_y = region.origin.y + region.height;
   for (uint16_t y = region.origin.y; y < end_y; ++y) {
@@ -602,13 +606,13 @@ YAX86_FILE_PRIVATE void VideoRenderBlankRegion(
 }
 
 YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
+    YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
   // Every mode divides the frame buffer into kVideoDirtyColumns equal columns,
   // so a dirty column is 9 pixels wide on the MDA and 8 on the CGA.
   uint16_t column_width =
       VideoGetAdapterMetadata(video)->frame_buffer_width / kVideoDirtyColumns;
-  VideoRegion region = {
+  YVideoRegion region = {
       .origin = {.x = start_column * column_width, .y = first_y},
       .width = (end_column - start_column) * column_width,
       .height = end_y - first_y,
@@ -622,7 +626,7 @@ YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
   // a span starts, and a pixel is stored before the count that exposes it to
   // the flush. Initializing the whole struct would clear the 96-byte batch on
   // every region, which a graphics frame can split into fifty of them.
-  VideoPixelRun run;
+  YVideoPixelRun run;
   run.video = video;
   run.count = 0;
 
@@ -655,19 +659,19 @@ YAX86_FILE_PRIVATE void VideoRenderDirtyRegion(
   }
 }
 
-YAX86_PUBLIC void VideoRender(VideoState* video) {
+YAX86_PUBLIC void VideoRender(YVideoState* video) {
   if (!video->config.write_pixels || video->dirty_state.status == kVideoClean) {
     return;
   }
 
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(video);
   if (video->dirty_state.status == kVideoFullRedraw) {
     VideoRenderDirtyRegion(
         video, 0, kVideoDirtyColumns, 0, adapter->frame_buffer_height);
   } else {
-    VideoDirtyGeometry geometry = VideoGetDirtyGeometry(video);
+    YVideoDirtyGeometry geometry = VideoGetDirtyGeometry(video);
     for (uint8_t row = 0; row < geometry.rows;) {
-      VideoDirtyRange range = video->dirty_state.ranges[row];
+      YVideoDirtyRange range = video->dirty_state.ranges[row];
       if (range.end_column == 0) {
         ++row;
         continue;
@@ -692,6 +696,6 @@ YAX86_PUBLIC void VideoRender(VideoState* video) {
     }
   }
 
-  static const VideoDirtyState kEmptyDirtyState = {0};
+  static const YVideoDirtyState kEmptyDirtyState = {0};
   video->dirty_state = kEmptyDirtyState;
 }

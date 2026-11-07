@@ -10,11 +10,11 @@
 // ============================================================================
 
 // LEA r16, m
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteLoadEffectiveAddress(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   ReadRegisterOperand(ctx, &dest);
-  MemoryAddress memory_address =
+  YCPUMemoryAddress memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
   // LEA yields the effective address - the offset within the segment - and
   // never resolves it against a segment or touches memory. Converting to a
@@ -29,24 +29,26 @@ ExecuteLoadEffectiveAddress(const InstructionContext* ctx) {
 // ============================================================================
 
 // Common logic for LES and LDS instructions.
-YAX86_FILE_PRIVATE InstructionResult ExecuteLoadSegmentWithPointer(
-    const InstructionContext* ctx, RegisterIndex segment_register_index) {
-  Operand destRegister;
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteLoadSegmentWithPointer(
+    const YCPUInstructionContext* ctx,
+    YCPURegisterIndex segment_register_index) {
+  YCPUOperand destRegister;
   ReadRegisterOperand(ctx, &destRegister);
-  Operand destSegmentRegister;
+  YCPUOperand destSegmentRegister;
   ReadRegisterOperandForRegisterIndex(
       ctx, segment_register_index, &destSegmentRegister);
 
-  const MemoryAddress src_memory_address =
+  const YCPUMemoryAddress src_memory_address =
       GetMemoryOperandAddress(ctx->cpu, ctx->instruction);
-  OperandAddress src_address = {
+  YCPUOperandAddress src_address = {
       .type = kOperandAddressTypeMemory,
       .register_index = (uint8_t)src_memory_address.segment_register_index,
       .offset = src_memory_address.offset,
   };
-  OperandValue src_offset_value = ReadMemoryOperandWord(ctx->cpu, &src_address);
+  YCPUOperandValue src_offset_value =
+      ReadMemoryOperandWord(ctx->cpu, &src_address);
   src_address.offset += 2;
-  OperandValue src_segment_value =
+  YCPUOperandValue src_segment_value =
       ReadMemoryOperandWord(ctx->cpu, &src_address);
 
   WriteOperand(ctx, &destRegister, FromOperandValue(src_offset_value));
@@ -55,13 +57,13 @@ YAX86_FILE_PRIVATE InstructionResult ExecuteLoadSegmentWithPointer(
 }
 
 // LES r16, m
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteLoadESWithPointer(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteLoadESWithPointer(const YCPUInstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kES);
 }
 
 // LDS r16, m
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteLoadDSWithPointer(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteLoadDSWithPointer(const YCPUInstructionContext* ctx) {
   return ExecuteLoadSegmentWithPointer(ctx, kDS);
 }

@@ -19,7 +19,7 @@ static void HardDiskWriteByte(
   }
 }
 
-bool HardDiskAttach(PlatformState* platform, const char* path) {
+bool HardDiskAttach(YPlatformState* platform, const char* path) {
   if (path) {
     FILE* file = fopen(path, "rb");
     if (!file) {

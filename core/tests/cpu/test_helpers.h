@@ -12,11 +12,11 @@
 // COM file load offset.
 constexpr uint16_t kCOMFileLoadOffset = 0x100;
 
-// Overload the << operator for Instruction to print its contents.
-std::ostream& operator<<(std::ostream& os, const Instruction& instruction);
+// Overload the << operator for YCPUInstruction to print its contents.
+std::ostream& operator<<(std::ostream& os, const YCPUInstruction& instruction);
 
 // Returns the name of a CPU flag for debugging.
-std::string GetFlagName(Flag flag);
+std::string GetFlagName(YCPUFlag flag);
 
 // Test helper to assemble instructions using NASM and return the machine code.
 std::vector<uint8_t> Assemble(
@@ -52,14 +52,14 @@ class CPUTestHelper {
   void ExecuteInstructions(int num_instructions);
 
   // Helper function to test the value of a list of flags.
-  void CheckFlags(const std::vector<std::pair<Flag, bool> >& flags);
+  void CheckFlags(const std::vector<std::pair<YCPUFlag, bool> >& flags);
 
   // Main memory size.
   const size_t memory_size_;
   // Main memory.
   const std::unique_ptr<uint8_t[]> memory_;
   // CPU state.
-  CPUState cpu_;
+  YCPUState cpu_;
 
   // Whether to print out debug information for memory accesses.
   bool enable_debug_memory_access_ = false;

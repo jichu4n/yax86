@@ -36,7 +36,7 @@ constexpr size_t kMemorySize = 1024 * 1024;
 
 // Registers in the order the suite's register bitmask uses them, mapped onto
 // this emulator's own ordering. The flags register is last and is not in
-// RegisterIndex, so it gets a sentinel.
+// YCPURegisterIndex, so it gets a sentinel.
 constexpr int kFlagsPseudoRegister = -1;
 constexpr int kMooRegisterOrder[] = {
     kAX, kBX, kCX, kDX, kCS, kSS, kDS,
@@ -240,12 +240,12 @@ bool LoadMooFile(const std::string& path, std::vector<MooTest>* tests) {
 
 uint8_t g_memory[kMemorySize];
 
-uint8_t TestReadMemoryByte(YAX86_UNUSED CPUState* cpu, uint32_t address) {
+uint8_t TestReadMemoryByte(YAX86_UNUSED YCPUState* cpu, uint32_t address) {
   return address < kMemorySize ? g_memory[address] : 0xFF;
 }
 
 void TestWriteMemoryByte(
-    YAX86_UNUSED CPUState* cpu, uint32_t address, uint8_t value) {
+    YAX86_UNUSED YCPUState* cpu, uint32_t address, uint8_t value) {
   if (address < kMemorySize) {
     g_memory[address] = value;
   }
@@ -258,8 +258,8 @@ void TestWriteMemoryByte(
 // encoding length, every prefix count and every segment wrap the 8088 can
 // produce, roughly three million times. The path taken when a host supplies no
 // window is what the mock configs in cpu_test.cpp use.
-void GetInstructionFetchWindow(CPUState* cpu, uint32_t address) {
-  CPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+void GetInstructionFetchWindow(YCPUState* cpu, uint32_t address) {
+  YCPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
   if (address >= kMemorySize) {
     window->data = NULL;
     return;
@@ -394,7 +394,7 @@ std::string RunMooTest(
     int* num_divergences) {
   memset(g_memory, 0, sizeof(g_memory));
 
-  CPUState cpu = {};
+  YCPUState cpu = {};
   cpu.config.read_memory_byte = TestReadMemoryByte;
   cpu.config.write_memory_byte = TestWriteMemoryByte;
   cpu.config.get_instruction_fetch_window = GetInstructionFetchWindow;
@@ -403,7 +403,7 @@ std::string RunMooTest(
   // provides it. Each test runs one instruction from a cold CPU, so nothing
   // here can be a hit - what three million encodings check is the fill. The
   // hit is covered by decode_cache_test.cpp and by the dos-boot invariant.
-  CPUDecodeCacheEntry decode_cache[kHardwareTestDecodeCacheEntries] = {};
+  YCPUDecodeCacheEntry decode_cache[kHardwareTestDecodeCacheEntries] = {};
   cpu.config.decode_cache = decode_cache;
   cpu.config.decode_cache_num_entries = kHardwareTestDecodeCacheEntries;
   CPUInit(&cpu);

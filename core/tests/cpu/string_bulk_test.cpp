@@ -225,7 +225,7 @@ class SplitMemoryHost {
   };
 
   SplitMemoryHost() {
-    cpu_ = CPUState{};
+    cpu_ = YCPUState{};
     cpu_.config.context = this;
     cpu_.config.read_memory_byte = TestReadMemoryByte;
     cpu_.config.write_memory_byte = TestWriteMemoryByte;
@@ -245,15 +245,15 @@ class SplitMemoryHost {
     return nowhere_;
   }
 
-  static uint8_t TestReadMemoryByte(CPUState* cpu, uint32_t address) {
+  static uint8_t TestReadMemoryByte(YCPUState* cpu, uint32_t address) {
     return static_cast<SplitMemoryHost*>(cpu->config.context)->At(address);
   }
   static void TestWriteMemoryByte(
-      CPUState* cpu, uint32_t address, uint8_t value) {
+      YCPUState* cpu, uint32_t address, uint8_t value) {
     static_cast<SplitMemoryHost*>(cpu->config.context)->At(address) = value;
   }
 
-  CPUState cpu_;
+  YCPUState cpu_;
   uint8_t ram_[kRamSize] = {};
   uint8_t device_[kDeviceSize] = {};
   uint8_t nowhere_ = 0;
@@ -397,7 +397,7 @@ TEST_F(StringBulkTest, ACopyOverCachedCodeDiscardsTheDecodes) {
       kMemorySize);
   helper->cpu_.registers[kDS] = 0;
   helper->cpu_.registers[kES] = 0;
-  CPUDecodeCacheEntry decode_cache[16] = {};
+  YCPUDecodeCacheEntry decode_cache[16] = {};
   helper->cpu_.config.decode_cache = decode_cache;
   helper->cpu_.config.decode_cache_num_entries = 16;
   // Only the flags and the cache fields, so the loaded program and where CS:IP

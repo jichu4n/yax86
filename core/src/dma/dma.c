@@ -5,14 +5,14 @@
 #define YAX86_DMA_LOG(level, ...) \
   YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
 
-YAX86_PUBLIC void DMAInit(DMAState* dma) {
+YAX86_PUBLIC void DMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.
   dma->mask_register = 0x0F;
 }
 
 // Helper to read a 16-bit value byte-by-byte using the flip-flop.
 YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
-    DMAState* dma, uint16_t value) {
+    YDMAState* dma, uint16_t value) {
   uint8_t byte;
   if (dma->rw_byte == kDMARegisterMSB) {
     byte = (value >> 8) & 0xFF;
@@ -24,7 +24,7 @@ YAX86_FILE_PRIVATE inline uint8_t DMAReadRegisterByte(
   return byte;
 }
 
-YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
+YAX86_PUBLIC uint8_t DMAReadPort(YDMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -37,7 +37,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
     case kDMAPortChannel3Count: {
       const int channel_index = port / 2;
       const bool is_count_register = port % 2;
-      const DMAChannelState* channel = &dma->channels[channel_index];
+      const YDMAChannelState* channel = &dma->channels[channel_index];
       return DMAReadRegisterByte(
           dma, is_count_register ? channel->current_count
                                  : channel->current_address);
@@ -59,7 +59,7 @@ YAX86_PUBLIC uint8_t DMAReadPort(DMAState* dma, uint16_t port) {
 // Helper to write a 16-bit value byte-by-byte using the flip-flop.
 // Note: Writes update both the 'base' and 'current' registers.
 YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
-    DMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
+    YDMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
   if (dma->rw_byte == kDMARegisterMSB) {
     // Second write sets the high byte.
     *base_reg = (*base_reg & 0x00FF) | ((uint16_t)value << 8);
@@ -73,7 +73,7 @@ YAX86_FILE_PRIVATE inline void DMAWriteRegisterByte(
   *current_reg = *base_reg;
 }
 
-YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
+YAX86_PUBLIC void DMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
     case kDMAPortChannel0Address:
@@ -86,7 +86,7 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
     case kDMAPortChannel3Count: {
       const int channel_index = port / 2;
       const bool is_count_register = port % 2;
-      DMAChannelState* channel = &dma->channels[channel_index];
+      YDMAChannelState* channel = &dma->channels[channel_index];
 
       if (is_count_register) {
         DMAWriteRegisterByte(
@@ -118,7 +118,7 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
         dma->mask_register &= ~(1 << channel_index);
         // Unmasking is the point at which a channel becomes live, so the
         // address, count and page registers are final here.
-        const DMAChannelState* channel = &dma->channels[channel_index];
+        const YDMAChannelState* channel = &dma->channels[channel_index];
         YAX86_DMA_LOG(
             kLogLevelDebug,
             "channel %d enabled: address %02X:%04X count %04X mode %02X",
@@ -147,7 +147,7 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
       // what the host wired up and survives - a reset is the chip's, not the
       // machine's. Members left out of an initializer are zeroed, so naming
       // the one that stays is the whole of it.
-      *dma = (DMAState){.config = dma->config};
+      *dma = (YDMAState){.config = dma->config};
       DMAInit(dma);
       break;
 
@@ -177,11 +177,11 @@ YAX86_PUBLIC void DMAWritePort(DMAState* dma, uint16_t port, uint8_t value) {
 }
 
 YAX86_PUBLIC YAX86_HOT void DMATransferByte(
-    DMAState* dma, uint8_t channel_index) {
+    YDMAState* dma, uint8_t channel_index) {
   if (channel_index >= kDMANumChannels) {
     return;
   }
-  DMAChannelState* channel = &dma->channels[channel_index];
+  YDMAChannelState* channel = &dma->channels[channel_index];
 
   // Check if controller is disabled (bit 2 of command register).
   if ((dma->command_register & 0x04) != 0) {

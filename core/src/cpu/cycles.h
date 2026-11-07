@@ -24,9 +24,9 @@ enum {
 
 // Cycles to compute the effective address of a ModR/M memory operand.
 YAX86_MODULE_PRIVATE uint8_t
-GetEffectiveAddressCycles(const Instruction* instruction);
+GetEffectiveAddressCycles(const YCPUInstruction* instruction);
 
 // Charge the instruction currently executing for time on the data bus.
-YAX86_MODULE_PRIVATE void AddBusCycles(CPUState* cpu, uint8_t num_bytes);
+YAX86_MODULE_PRIVATE void AddBusCycles(YCPUState* cpu, uint8_t num_bytes);
 
 #endif  // YAX86_CPU_CYCLES_H

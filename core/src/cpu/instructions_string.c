@@ -12,15 +12,15 @@
 
 // Get the repetition prefix of a string instruction, if any.
 YAX86_FILE_PRIVATE inline uint8_t GetRepetitionPrefix(
-    const InstructionContext* ctx) {
+    const YCPUInstructionContext* ctx) {
   return ctx->instruction->repetition_prefix;
 }
 
 // Get the source operand for string instructions. Typically DS:SI but can be
 // overridden by a segment override prefix.
 YAX86_FILE_PRIVATE void GetStringSourceOperand(
-    const InstructionContext* ctx, Operand* operand) {
-  OperandAddress address = {
+    const YCPUInstructionContext* ctx, YCPUOperand* operand) {
+  YCPUOperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kDS,
       .offset = ctx->cpu->registers[kSI],
@@ -31,9 +31,9 @@ YAX86_FILE_PRIVATE void GetStringSourceOperand(
 }
 
 // Get the destination operand address for string instructions. Always ES:DI.
-YAX86_FILE_PRIVATE OperandAddress
-GetStringDestinationOperandAddress(const InstructionContext* ctx) {
-  OperandAddress address = {
+YAX86_FILE_PRIVATE YCPUOperandAddress
+GetStringDestinationOperandAddress(const YCPUInstructionContext* ctx) {
+  YCPUOperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kES,
       .offset = ctx->cpu->registers[kDI],
@@ -43,15 +43,15 @@ GetStringDestinationOperandAddress(const InstructionContext* ctx) {
 
 // Get the destination operand for string instructions. Always ES:DI.
 YAX86_FILE_PRIVATE void GetStringDestinationOperand(
-    const InstructionContext* ctx, Operand* operand) {
-  OperandAddress address = GetStringDestinationOperandAddress(ctx);
+    const YCPUInstructionContext* ctx, YCPUOperand* operand) {
+  YCPUOperandAddress address = GetStringDestinationOperandAddress(ctx);
   operand->address = address;
   operand->value = ReadOperandValue(ctx, &address);
 }
 
 // Update the source address register (SI) after a string operation.
 YAX86_FILE_PRIVATE void UpdateStringSourceAddress(
-    const InstructionContext* ctx) {
+    const YCPUInstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -61,7 +61,7 @@ YAX86_FILE_PRIVATE void UpdateStringSourceAddress(
 
 // Update the destination address register (DI) after a string operation.
 YAX86_FILE_PRIVATE void UpdateStringDestinationAddress(
-    const InstructionContext* ctx) {
+    const YCPUInstructionContext* ctx) {
   if (CPUGetFlag(ctx->cpu, kDF)) {
     ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
   } else {
@@ -99,7 +99,7 @@ YAX86_FILE_PRIVATE void UpdateStringDestinationAddress(
 // may copy in any order, which is precisely what the overlapping cases depend
 // on it not doing, so specializing a loop on a forward direction would hand
 // the compiler the proof it needs to introduce one.
-typedef struct BulkStringRun {
+typedef struct YCPUBulkStringRun {
   // Linear address of the first element at each end. source is left alone for
   // STOS, which reads no memory.
   uint32_t source;
@@ -108,7 +108,7 @@ typedef struct BulkStringRun {
   int32_t step;
   uint16_t count;
   uint8_t element_size;
-} BulkStringRun;
+} YCPUBulkStringRun;
 
 // Whether every byte a run touches is reachable by indexing the direct data
 // window, starting from offset within its segment and linear within memory.
@@ -138,12 +138,13 @@ YAX86_FILE_PRIVATE bool IsBulkRunAddressable(
 
 // Works out whether a repeat can run in bulk, and describes it if so.
 YAX86_FILE_PRIVATE bool PlanBulkStringRun(
-    const InstructionContext* ctx, bool has_source, BulkStringRun* run) {
+    const YCPUInstructionContext* ctx, bool has_source,
+    YCPUBulkStringRun* run) {
   const uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
     return false;
   }
-  CPUState* const cpu = ctx->cpu;
+  YCPUState* const cpu = ctx->cpu;
   const uint16_t count = cpu->registers[kCX];
   // end is 0 exactly when the window is closed, so this is the whole test for
   // whether there is a window to index.
@@ -192,7 +193,7 @@ YAX86_FILE_PRIVATE bool PlanBulkStringRun(
 // thing - and leaves the counter coming back round after 256 runs rather than
 // after 256 bytes, which is a flush avoided rather than a flush missed.
 YAX86_FILE_PRIVATE void NotifyBulkStringWrite(
-    CPUState* cpu, const BulkStringRun* run) {
+    YCPUState* cpu, const YCPUBulkStringRun* run) {
   const uint32_t reach = (uint32_t)(run->count - 1) * run->element_size;
   const uint32_t low =
       run->step < 0 ? run->destination - reach : run->destination;
@@ -206,7 +207,7 @@ YAX86_FILE_PRIVATE void NotifyBulkStringWrite(
 // Leaves CX, SI and DI where the element path would have left them, and
 // charges what it would have charged.
 YAX86_FILE_PRIVATE void FinishBulkStringRun(
-    CPUState* cpu, const BulkStringRun* run, uint8_t bus_bytes_per_element,
+    YCPUState* cpu, const YCPUBulkStringRun* run, uint8_t bus_bytes_per_element,
     bool has_source) {
   const int32_t total = run->step * (int32_t)run->count;
   if (has_source) {
@@ -228,15 +229,15 @@ YAX86_FILE_PRIVATE void FinishBulkStringRun(
 // test and the 8086/8088 does not tell the two prefixes apart here: 0xF2
 // repeats exactly as 0xF3 does, counting CX down to zero. Only the comparison
 // string instructions read the prefix as a condition.
-YAX86_FILE_PRIVATE InstructionResult ExecuteStringInstructionWithREPPrefix(
-    const InstructionContext* ctx,
-    InstructionResult (*fn)(const InstructionContext*)) {
+YAX86_FILE_PRIVATE YCPUInstructionResult ExecuteStringInstructionWithREPPrefix(
+    const YCPUInstructionContext* ctx,
+    YCPUInstructionResult (*fn)(const YCPUInstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
     return fn(ctx);
   }
   while (ctx->cpu->registers[kCX]) {
-    InstructionResult status = fn(ctx);
+    YCPUInstructionResult status = fn(ctx);
     if (status != kInstructionExecuted) {
       return status;
     }
@@ -246,11 +247,11 @@ YAX86_FILE_PRIVATE InstructionResult ExecuteStringInstructionWithREPPrefix(
 }
 
 // Single MOVS iteration.
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteMovsIteration(const InstructionContext* ctx) {
-  Operand src;
+YAX86_FILE_PRIVATE YCPUInstructionResult
+ExecuteMovsIteration(const YCPUInstructionContext* ctx) {
+  YCPUOperand src;
   GetStringSourceOperand(ctx, &src);
-  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
+  YCPUOperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   UpdateStringSourceAddress(ctx);
   UpdateStringDestinationAddress(ctx);
@@ -259,12 +260,12 @@ ExecuteMovsIteration(const InstructionContext* ctx) {
 
 // A whole repeated MOVS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-YAX86_FILE_PRIVATE bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
-  BulkStringRun run;
+YAX86_FILE_PRIVATE bool ExecuteMovsBulkRun(const YCPUInstructionContext* ctx) {
+  YCPUBulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/true, &run)) {
     return false;
   }
-  CPUState* const cpu = ctx->cpu;
+  YCPUState* const cpu = ctx->cpu;
   uint8_t* const memory = cpu->direct_data_window.data;
   const uint8_t* source = memory + run.source;
   uint8_t* destination = memory + run.destination;
@@ -295,8 +296,8 @@ YAX86_FILE_PRIVATE bool ExecuteMovsBulkRun(const InstructionContext* ctx) {
 }
 
 // MOVS
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
-ExecuteMovs(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+ExecuteMovs(const YCPUInstructionContext* ctx) {
   if (ExecuteMovsBulkRun(ctx)) {
     return kInstructionExecuted;
   }
@@ -304,11 +305,11 @@ ExecuteMovs(const InstructionContext* ctx) {
 }
 
 // Single STOS iteration.
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteStosIteration(const InstructionContext* ctx) {
-  Operand src;
+YAX86_FILE_PRIVATE YCPUInstructionResult
+ExecuteStosIteration(const YCPUInstructionContext* ctx) {
+  YCPUOperand src;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
-  OperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
+  YCPUOperandAddress dest_address = GetStringDestinationOperandAddress(ctx);
   WriteOperandAddress(ctx, &dest_address, FromOperand(&src));
   UpdateStringDestinationAddress(ctx);
   return kInstructionExecuted;
@@ -316,12 +317,12 @@ ExecuteStosIteration(const InstructionContext* ctx) {
 
 // A whole repeated STOS as one run, where the repeat qualifies for one.
 // Returns whether it did.
-YAX86_FILE_PRIVATE bool ExecuteStosBulkRun(const InstructionContext* ctx) {
-  BulkStringRun run;
+YAX86_FILE_PRIVATE bool ExecuteStosBulkRun(const YCPUInstructionContext* ctx) {
+  YCPUBulkStringRun run;
   if (!PlanBulkStringRun(ctx, /*has_source=*/false, &run)) {
     return false;
   }
-  CPUState* const cpu = ctx->cpu;
+  YCPUState* const cpu = ctx->cpu;
   uint8_t* const memory = cpu->direct_data_window.data;
   const uint16_t value = cpu->registers[kAX];
   uint8_t* destination = memory + run.destination;
@@ -345,8 +346,8 @@ YAX86_FILE_PRIVATE bool ExecuteStosBulkRun(const InstructionContext* ctx) {
 }
 
 // STOS
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
-ExecuteStos(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+ExecuteStos(const YCPUInstructionContext* ctx) {
   if (ExecuteStosBulkRun(ctx)) {
     return kInstructionExecuted;
   }
@@ -354,11 +355,11 @@ ExecuteStos(const InstructionContext* ctx) {
 }
 
 // Single LODS iteration.
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteLodsIteration(const InstructionContext* ctx) {
-  Operand src;
+YAX86_FILE_PRIVATE YCPUInstructionResult
+ExecuteLodsIteration(const YCPUInstructionContext* ctx) {
+  YCPUOperand src;
   GetStringSourceOperand(ctx, &src);
-  Operand dest;
+  YCPUOperand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   WriteOperand(ctx, &dest, FromOperand(&src));
   UpdateStringSourceAddress(ctx);
@@ -366,23 +367,23 @@ ExecuteLodsIteration(const InstructionContext* ctx) {
 }
 
 // LODS
-YAX86_MODULE_PRIVATE YAX86_HOT InstructionResult
-ExecuteLods(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
+ExecuteLods(const YCPUInstructionContext* ctx) {
   return ExecuteStringInstructionWithREPPrefix(ctx, ExecuteLodsIteration);
 }
 
 // Execute a string instruction with optional REPZ/REPE or REPNZ/REPNE prefix.
-YAX86_FILE_PRIVATE InstructionResult
+YAX86_FILE_PRIVATE YCPUInstructionResult
 ExecuteStringInstructionWithREPZOrRepNZPrefix(
-    const InstructionContext* ctx,
-    InstructionResult (*fn)(const InstructionContext*)) {
+    const YCPUInstructionContext* ctx,
+    YCPUInstructionResult (*fn)(const YCPUInstructionContext*)) {
   uint8_t prefix = GetRepetitionPrefix(ctx);
   if (prefix != kPrefixREP && prefix != kPrefixREPNZ) {
     return fn(ctx);
   }
   bool terminate_zf_value = prefix == kPrefixREPNZ;
   while (ctx->cpu->registers[kCX]) {
-    InstructionResult status = fn(ctx);
+    YCPUInstructionResult status = fn(ctx);
     if (status != kInstructionExecuted) {
       return status;
     }
@@ -395,11 +396,11 @@ ExecuteStringInstructionWithREPZOrRepNZPrefix(
 }
 
 // Single SCAS iteration.
-YAX86_FILE_PRIVATE YAX86_HOT InstructionResult
-ExecuteScasIteration(const InstructionContext* ctx) {
-  Operand src;
+YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult
+ExecuteScasIteration(const YCPUInstructionContext* ctx) {
+  YCPUOperand src;
   GetStringDestinationOperand(ctx, &src);
-  Operand dest;
+  YCPUOperand dest;
   ReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   ExecuteCmp(ctx, &dest, src.value);
   UpdateStringDestinationAddress(ctx);
@@ -407,17 +408,18 @@ ExecuteScasIteration(const InstructionContext* ctx) {
 }
 
 // SCAS
-YAX86_MODULE_PRIVATE InstructionResult ExecuteScas(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteScas(const YCPUInstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteScasIteration);
 }
 
 // Single CMPS iteration.
-YAX86_FILE_PRIVATE InstructionResult
-ExecuteCmpsIteration(const InstructionContext* ctx) {
-  Operand dest;
+YAX86_FILE_PRIVATE YCPUInstructionResult
+ExecuteCmpsIteration(const YCPUInstructionContext* ctx) {
+  YCPUOperand dest;
   GetStringSourceOperand(ctx, &dest);
-  Operand src;
+  YCPUOperand src;
   GetStringDestinationOperand(ctx, &src);
   ExecuteCmp(ctx, &dest, src.value);
   UpdateStringSourceAddress(ctx);
@@ -426,7 +428,8 @@ ExecuteCmpsIteration(const InstructionContext* ctx) {
 }
 
 // CMPS
-YAX86_MODULE_PRIVATE InstructionResult ExecuteCmps(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteCmps(const YCPUInstructionContext* ctx) {
   return ExecuteStringInstructionWithREPZOrRepNZPrefix(
       ctx, ExecuteCmpsIteration);
 }

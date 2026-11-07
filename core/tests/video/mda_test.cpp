@@ -24,7 +24,7 @@ class MDATest : public VideoTestBase {
   }
 
   // Number of pixels of the given color within the first character cell.
-  int CountPixelsInFirstCell(RGB rgb) const {
+  int CountPixelsInFirstCell(YVideoRGB rgb) const {
     return CountPixels(0, 0, kCharWidth, kCharHeight, rgb);
   }
 };
@@ -43,7 +43,7 @@ TEST_F(MDATest, Initialization) {
 }
 
 TEST_F(MDATest, AdapterMetadata) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
   EXPECT_EQ(adapter->adapter, kVideoAdapterMDA);
   EXPECT_EQ(adapter->frame_buffer_width, 720);
   EXPECT_EQ(adapter->frame_buffer_height, 350);

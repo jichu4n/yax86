@@ -10,12 +10,13 @@
 // Read a byte from the emulated video RAM, or 0xFF if no callback is installed.
 // VRAM is aliased throughout the adapter's window, so an address past the end
 // wraps around.
-YAX86_MODULE_PRIVATE uint8_t VideoReadVRAMByte(VideoState* video, uint32_t address);
+YAX86_MODULE_PRIVATE uint8_t
+VideoReadVRAMByte(YVideoState* video, uint32_t address);
 
 // Write a byte to the emulated video RAM, ignored if no callback is installed.
 // The address wraps in the same way as for reads.
 YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
-    VideoState* video, uint32_t address, uint8_t value);
+    YVideoState* video, uint32_t address, uint8_t value);
 
 // A horizontal run of pixels on its way to the host, buffered so that the
 // callback is crossed once per batch rather than once per pixel.
@@ -25,16 +26,17 @@ YAX86_MODULE_PRIVATE void VideoWriteVRAMByte(
 // of each pixel implicit - it is wherever the run has got to - so nothing
 // here compares coordinates, and a renderer has no way to name a position at
 // all, let alone the wrong one.
-typedef struct VideoPixelRun {
-  VideoState* video;
+typedef struct YVideoPixelRun {
+  YVideoState* video;
   // Where the pixels currently buffered begin. Advances past each batch.
-  Position origin;
-  RGB pixels[kVideoPixelBatchSize];
+  YVideoPosition origin;
+  YVideoRGB pixels[kVideoPixelBatchSize];
   uint8_t count;
-} VideoPixelRun;
+} YVideoPixelRun;
 
 // Hand over what has been buffered and continue the run after it.
-YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunFlush(VideoPixelRun* run) {
+YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunFlush(
+    YVideoPixelRun* run) {
   if (run->count == 0) {
     return;
   }
@@ -50,14 +52,14 @@ YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunFlush(VideoPixelRun* run) {
 // Open a run at the leftmost pixel of a row. Any partial batch is handed over
 // first, so one call both ends the previous row and begins the next.
 YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunBegin(
-    VideoPixelRun* run, uint16_t x, uint16_t y) {
+    YVideoPixelRun* run, uint16_t x, uint16_t y) {
   VideoPixelRunFlush(run);
   run->origin.x = x;
   run->origin.y = y;
 }
 
 YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunPush(
-    VideoPixelRun* run, RGB rgb) {
+    YVideoPixelRun* run, YVideoRGB rgb) {
   run->pixels[run->count] = rgb;
   ++run->count;
   if (run->count == kVideoPixelBatchSize) {
@@ -70,56 +72,58 @@ YAX86_MODULE_PRIVATE_HEADER inline void VideoPixelRunPush(
 // text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
 // modes.
 YAX86_MODULE_PRIVATE void VideoInvalidateRows(
-    VideoState* video, uint8_t start_column, uint8_t end_column,
+    YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row);
 
 // Whether the text mode cursor is currently in the visible half of its blink
 // cycle.
-YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsCursorBlinkOn(const YVideoState* video);
 
 // Whether characters carrying the blink attribute are currently visible. This
 // runs at half the cursor's rate, so the two drift in and out of phase.
-YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsTextBlinkOn(const YVideoState* video);
 
 // Whether the text mode cursor is enabled in the 6845 registers.
-YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const VideoState* video);
+YAX86_MODULE_PRIVATE bool VideoIsCursorEnabled(const YVideoState* video);
 
 // The first scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor start register. May be out of range for the current
 // character height.
-YAX86_MODULE_PRIVATE uint8_t VideoGetCursorStartScanLine(const VideoState* video);
+YAX86_MODULE_PRIVATE uint8_t
+VideoGetCursorStartScanLine(const YVideoState* video);
 
 // The last scan line of the character cell covered by the text mode cursor,
 // from the 6845 cursor end register. May be out of range for the current
 // character height.
-YAX86_MODULE_PRIVATE uint8_t VideoGetCursorEndScanLine(const VideoState* video);
+YAX86_MODULE_PRIVATE uint8_t
+VideoGetCursorEndScanLine(const YVideoState* video);
 
 // The address of the first displayed character, in character units, from the
 // 6845 start address registers.
-YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const VideoState* video);
+YAX86_MODULE_PRIVATE uint16_t VideoGetStartAddress(const YVideoState* video);
 
 // The address of the text mode cursor, in character units, from the 6845 cursor
 // address registers.
-YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const VideoState* video);
+YAX86_MODULE_PRIVATE uint16_t VideoGetCursorAddress(const YVideoState* video);
 
 // Whether the text mode cursor is currently drawn, and if so where. The offset
 // is relative to start_address in character cells, and is only written when
 // this returns true. The cursor is not drawn when it is disabled, when its
 // blink phase is off, or when it addresses a cell outside the display.
 YAX86_MODULE_PRIVATE bool VideoGetVisibleCursorOffset(
-    const VideoState* video, const VideoModeMetadata* metadata,
+    const YVideoState* video, const YVideoModeMetadata* metadata,
     uint16_t start_address, uint16_t* cursor_offset);
 
 // Render a dirty region of the current MDA text display. Pixels are emitted in
 // row-major order.
 YAX86_MODULE_PRIVATE void MDARenderRegion(
-    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
 // Render a dirty region of the current CGA display. Pixels are emitted in
 // row-major order.
 YAX86_MODULE_PRIVATE void CGARenderRegion(
-    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y);
 
 #endif  // YAX86_VIDEO_INTERNAL_H

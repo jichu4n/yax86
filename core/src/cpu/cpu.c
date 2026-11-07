@@ -14,7 +14,7 @@
 // CPU state
 // ============================================================================
 
-YAX86_PUBLIC void CPUInit(CPUState* cpu) {
+YAX86_PUBLIC void CPUInit(YCPUState* cpu) {
   cpu->flags = kInitialFlags;
 
   // The only place the count is read, so a host gets told here or not at all.
@@ -77,7 +77,7 @@ YAX86_FILE_PRIVATE inline bool IsLockOrRepetitionPrefix(uint8_t byte) {
 // The cheaper test goes first. A byte that is not a prefix runs both, and that
 // is the common case by far - every instruction ends the loop with one.
 YAX86_FILE_PRIVATE bool ApplyPrefixByte(
-    Instruction* instruction, uint8_t byte) {
+    YCPUInstruction* instruction, uint8_t byte) {
   if (IsLockOrRepetitionPrefix(byte)) {
     // LOCK and its 0xF1 alias advance IP, but nothing acts on them, so only a
     // repetition prefix is worth recording.
@@ -101,7 +101,7 @@ YAX86_FILE_PRIVATE bool ApplyPrefixByte(
 // Where one call to CPUFetchNextInstruction() has got to.
 //
 // Scratch for a single decode, and nothing more. What survives between
-// instructions is the window itself, in CPUState.instruction_fetch_window;
+// instructions is the window itself, in YCPUState.instruction_fetch_window;
 // this is the cursor walking it, and it is thrown away when the instruction
 // has been decoded.
 //
@@ -128,14 +128,14 @@ YAX86_FILE_PRIVATE bool ApplyPrefixByte(
 // it is zero, and every byte takes the ordinary path through read_memory_byte
 // - an indirect call per byte, two to six times per instruction, which is what
 // the window exists to avoid.
-typedef struct CPUInstructionFetchState {
+typedef struct YCPUInstructionFetchState {
   // The offset within CS of the next byte to read.
   uint16_t next_byte_offset;
   // The next byte to read, and how many may be read directly from it. NULL and
   // zero where there is no window.
   const uint8_t* next_byte;
   uint32_t bytes_remaining;
-} CPUInstructionFetchState;
+} YCPUInstructionFetchState;
 
 // Reads the next instruction byte, from the window where one is open and from
 // the memory map where one is not.
@@ -147,7 +147,7 @@ typedef struct CPUInstructionFetchState {
 // executed - and the published per-instruction figures the cycle table is
 // built from assume the queue is full.
 YAX86_FILE_PRIVATE inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
-    CPUState* cpu, CPUInstructionFetchState* fetch_state) {
+    YCPUState* cpu, YCPUInstructionFetchState* fetch_state) {
   if (fetch_state->bytes_remaining > 0) {
     --fetch_state->bytes_remaining;
     ++fetch_state->next_byte_offset;
@@ -159,7 +159,7 @@ YAX86_FILE_PRIVATE inline YAX86_HOT uint8_t CPUFetchNextInstructionByte(
 
 // Points a fetch at whatever can be read directly from CS:ip.
 YAX86_FILE_PRIVATE YAX86_HOT void CPUInitInstructionFetchState(
-    CPUState* cpu, uint16_t ip, CPUInstructionFetchState* fetch_state) {
+    YCPUState* cpu, uint16_t ip, YCPUInstructionFetchState* fetch_state) {
   fetch_state->next_byte_offset = ip;
   fetch_state->next_byte = NULL;
   fetch_state->bytes_remaining = 0;
@@ -173,7 +173,7 @@ YAX86_FILE_PRIVATE YAX86_HOT void CPUInitInstructionFetchState(
   // CPUFetchNextInstruction by 11 bytes.
   const uint32_t raw_address = ToRawAddress(cpu, kCS, ip);
 
-  const CPUInstructionFetchWindow* const window =
+  const YCPUInstructionFetchWindow* const window =
       &cpu->instruction_fetch_window;
   if (window->data == NULL || raw_address < window->start ||
       raw_address >= window->end) {
@@ -222,8 +222,8 @@ YAX86_FILE_PRIVATE uint8_t GetDisplacementSize(uint8_t mod, uint8_t rm) {
 }
 
 // Returns the number of immediate bytes in an instruction.
-YAX86_FILE_PRIVATE uint8_t
-GetImmediateSize(const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
+YAX86_FILE_PRIVATE uint8_t GetImmediateSize(
+    const YCPUOpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
   switch (opcode) {
     // TEST r/m8, imm8
     case 0xF6:
@@ -238,8 +238,8 @@ GetImmediateSize(const OpcodeMetadata* metadata, uint8_t opcode, uint8_t reg) {
   }
 }
 
-YAX86_PUBLIC YAX86_HOT CPUFetchNextInstructionStatus
-CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
+YAX86_PUBLIC YAX86_HOT YCPUFetchNextInstructionStatus
+CPUFetchNextInstruction(YCPUState* cpu, YCPUInstruction* instruction) {
   // The prefix fields, which ApplyPrefixByte() writes only where a prefix is
   // actually present. Every other field a decode could leave behind is settled
   // where it becomes known rather than here: opcode, size and immediate_size
@@ -252,7 +252,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   uint8_t current_byte;
   const uint16_t original_ip = cpu->registers[kIP];
-  CPUInstructionFetchState fetch_state;
+  YCPUInstructionFetchState fetch_state;
   CPUInitInstructionFetchState(cpu, original_ip, &fetch_state);
 
   // Prefix
@@ -272,7 +272,7 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
 
   // Opcode
   instruction->opcode = current_byte;
-  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+  const YCPUOpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
   // ModR/M
   //
@@ -330,8 +330,8 @@ CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction) {
   return kFetchSuccess;
 }
 
-YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
-  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+YAX86_PUBLIC void CPUInvalidateDecodeCache(YCPUState* cpu) {
+  YCPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return;
   }
@@ -343,7 +343,7 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu) {
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
 YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
-    const CPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
+    const YCPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
   return entry->valid && entry->address == address &&
          entry->generation == generation;
 }
@@ -354,30 +354,32 @@ YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsDecodeCacheHit(
 // the cache entry on a hit, scratch where there is no cache, and on a miss the
 // entry the decode went straight into. Nothing is ever copied.
 //
-// Handing back the entry rather than the Instruction inside it is worth 0.68%
-// at -O3, even though CPUTick() reads nothing from an entry but ->instruction.
-// One entry pointer addresses both the key fields and every instruction field,
-// all inside the 5 bit immediate offset a Cortex-M0+ encodes; handing back the
-// Instruction makes the probe at the bottom of the run loop hold the entry for
-// its hit test and entry->instruction to carry across the back-edge, which is
-// two live pointers where there was one. CPUTick() has no register to spare
-// for that - its frame grows from 52 bytes to 60 and the loop picks up a spill
-// and reload - so the smaller-looking signature is the slower one.
+// Handing back the entry rather than the YCPUInstruction inside it is worth
+// 0.68% at -O3, even though CPUTick() reads nothing from an entry but
+// ->instruction. One entry pointer addresses both the key fields and every
+// instruction field, all inside the 5 bit immediate offset a Cortex-M0+
+// encodes; handing back the YCPUInstruction makes the probe at the bottom of
+// the run loop hold the entry for its hit test and entry->instruction to carry
+// across the back-edge, which is two live pointers where there was one.
+// CPUTick() has no register to spare for that - its frame grows from 52 bytes
+// to 60 and the loop picks up a spill and reload - so the smaller-looking
+// signature is the slower one.
 //
 // A caller must not hold the pointer across another fetch.
-YAX86_FILE_PRIVATE YAX86_HOT CPUFetchNextInstructionStatus
+YAX86_FILE_PRIVATE YAX86_HOT YCPUFetchNextInstructionStatus
 CPUFetchNextInstructionCached(
-    CPUState* cpu, CPUDecodeCacheEntry* scratch, CPUDecodeCacheEntry** entry) {
+    YCPUState* cpu, YCPUDecodeCacheEntry* scratch,
+    YCPUDecodeCacheEntry** entry) {
   const uint16_t ip = cpu->registers[kIP];
   // NULL covers both having no cache and having asked for an unusable one,
   // since CPUInit() clears its own copy of a count that did not pass.
-  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  YCPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
 
   // Where the decode is going to land, and the key it would be kept under. The
   // two paths below join up at the decode rather than each making their own
   // call, because a second call site is enough for GCC to stop inlining what
   // it inlines into one.
-  CPUDecodeCacheEntry* target = scratch;
+  YCPUDecodeCacheEntry* target = scratch;
   uint32_t address = 0;
   uint8_t generation = 0;
 
@@ -395,7 +397,7 @@ CPUFetchNextInstructionCached(
   }
 
   *entry = target;
-  const CPUFetchNextInstructionStatus status =
+  const YCPUFetchNextInstructionStatus status =
       CPUFetchNextInstruction(cpu, &target->instruction);
   if (status != kFetchSuccess) {
     return status;
@@ -428,11 +430,12 @@ CPUFetchNextInstructionCached(
 // Cortex-M0+: the execute path wants registers, the core has few, and folding
 // the two together makes both spill. It only shows up once the hot path is in
 // SRAM - from flash the XIP cache dominates and hides it.
-YAX86_FILE_PRIVATE YAX86_HOT YAX86_NOINLINE InstructionResult
+YAX86_FILE_PRIVATE YAX86_HOT YAX86_NOINLINE YCPUInstructionResult
 CPUExecuteDecodedInstruction(
-    CPUState* cpu, Instruction* instruction, const OpcodeMetadata* metadata) {
+    YCPUState* cpu, YCPUInstruction* instruction,
+    const YCPUOpcodeMetadata* metadata) {
   // Run the instruction handler.
-  InstructionContext context = {
+  YCPUInstructionContext context = {
       .cpu = cpu,
       .instruction = instruction,
       .metadata = metadata,
@@ -442,12 +445,12 @@ CPUExecuteDecodedInstruction(
 
 // Checks an instruction against the opcode table before running it.
 //
-// For a caller that built the Instruction itself rather than decoding one -
+// For a caller that built the YCPUInstruction itself rather than decoding one -
 // CPUTick() goes straight to CPUExecuteDecodedInstruction(), because its own
 // decode is what produced the encoding these checks would be re-examining.
-YAX86_PUBLIC YAX86_HOT InstructionResult
-CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
-  const OpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+YAX86_PUBLIC YAX86_HOT YCPUInstructionResult
+CPUExecuteInstruction(YCPUState* cpu, YCPUInstruction* instruction) {
+  const YCPUOpcodeMetadata* metadata = &opcode_table[instruction->opcode];
 
   // Check the encoded instruction against the expected format for its opcode.
   // Nothing checks that the opcode has a handler, because every entry in the
@@ -470,7 +473,7 @@ CPUExecuteInstruction(CPUState* cpu, Instruction* instruction) {
 
 // Save state and vector to the handler for an interrupt.
 YAX86_FILE_PRIVATE void DispatchInterrupt(
-    CPUState* cpu, uint8_t interrupt_number) {
+    YCPUState* cpu, uint8_t interrupt_number) {
   // Prepare for interrupt processing.
   cpu->is_halted = false;
   PushValue(cpu, cpu->flags);
@@ -482,7 +485,7 @@ YAX86_FILE_PRIVATE void DispatchInterrupt(
   // Invoke the interrupt handler callback first. If the caller did not provide
   // an interrupt handler callback, handle the interrupt within the VM using the
   // Interrupt Vector Table.
-  InterruptHandlerResult interrupt_handler_result =
+  YCPUInterruptHandlerResult interrupt_handler_result =
       cpu->config.handle_interrupt
           ? cpu->config.handle_interrupt(cpu, interrupt_number)
           : kInterruptHandlerUnhandled;
@@ -502,7 +505,7 @@ YAX86_FILE_PRIVATE void DispatchInterrupt(
 }
 
 // Take a pending interrupt, if any. Returns whether one was dispatched.
-YAX86_FILE_PRIVATE bool ExecutePendingInterrupt(CPUState* cpu) {
+YAX86_FILE_PRIVATE bool ExecutePendingInterrupt(YCPUState* cpu) {
   // An internal interrupt goes first. It was raised by the instruction that
   // just executed, and taking it clears IF, which correctly holds off any
   // external request until the handler re-enables interrupts.
@@ -564,7 +567,7 @@ YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool IsPortInstruction(uint8_t opcode) {
 // Everything here is something the end of a tick would otherwise have dealt
 // with, and which running another instruction first would deal with too late.
 YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
-    const CPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
+    const YCPUState* cpu, uint8_t opcode, uint16_t max_run_cycles) {
   return
       // A budget of zero is how a host asks for one instruction per tick.
       cpu->pending_cycles < max_run_cycles &&
@@ -592,14 +595,14 @@ YAX86_FILE_PRIVATE YAX86_ALWAYS_INLINE bool CPUCanContinueRun(
 //
 // A run carries on only into a cached instruction, which keeps a step cheap
 // and keeps a cold CPU to one instruction per tick however large its budget.
-YAX86_FILE_PRIVATE YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(
-    CPUState* cpu) {
-  CPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+YAX86_FILE_PRIVATE YAX86_HOT YCPUDecodeCacheEntry* CPUCachedEntryAtIP(
+    YCPUState* cpu) {
+  YCPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
   if (cache == NULL) {
     return NULL;
   }
   const uint32_t address = ToRawAddress(cpu, kCS, cpu->registers[kIP]);
-  CPUDecodeCacheEntry* const entry =
+  YCPUDecodeCacheEntry* const entry =
       &cache[address & cpu->decode_cache_index_mask];
   if (!IsDecodeCacheHit(
           entry, address,
@@ -609,8 +612,8 @@ YAX86_FILE_PRIVATE YAX86_HOT CPUDecodeCacheEntry* CPUCachedEntryAtIP(
   return entry;
 }
 
-YAX86_PUBLIC YAX86_HOT CPUTickResult
-CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
+YAX86_PUBLIC YAX86_HOT YCPUTickResult
+CPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
   bool executed_instruction = false;
@@ -632,11 +635,11 @@ CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
     //
     // The local entry is only where a decode lands when there is no cache to
     // decode into. What runs is whatever the fetch points at - the cost of the
-    // instruction rides in the Instruction, so nothing here reads the entry
+    // instruction rides in the YCPUInstruction, so nothing here reads the entry
     // for anything but that.
-    CPUDecodeCacheEntry scratch;
-    CPUDecodeCacheEntry* entry;
-    CPUFetchNextInstructionStatus fetch_status =
+    YCPUDecodeCacheEntry scratch;
+    YCPUDecodeCacheEntry* entry;
+    YCPUFetchNextInstructionStatus fetch_status =
         CPUFetchNextInstructionCached(cpu, &scratch, &entry);
     if (fetch_status != kFetchSuccess) {
       YAX86_CPU_LOG(
@@ -656,7 +659,7 @@ CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
         trap_flag_was_set ? 1 : (uint8_t)kMaxInstructionsPerTick;
 
     for (;;) {
-      Instruction* const instruction = &entry->instruction;
+      YCPUInstruction* const instruction = &entry->instruction;
       const uint16_t instruction_cs = cpu->registers[kCS];
       const uint16_t instruction_ip = cpu->registers[kIP];
       cpu->registers[kIP] += instruction->size;
@@ -670,7 +673,8 @@ CPUTick(CPUState* cpu, uint16_t max_run_cycles) {
       // Step 2: Execute the instruction. The fetch above derived has_mod_rm
       // and immediate_size from this same table entry, so the checks
       // CPUExecuteInstruction() makes cannot fail here.
-      const OpcodeMetadata* const metadata = &opcode_table[instruction->opcode];
+      const YCPUOpcodeMetadata* const metadata =
+          &opcode_table[instruction->opcode];
       if (CPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
           kInstructionExecuted) {
         YAX86_CPU_LOG(

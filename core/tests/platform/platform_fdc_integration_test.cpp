@@ -29,7 +29,7 @@ class PlatformFDCIntegrationTest : public ::testing::Test {
 
   uint8_t ReadPort(uint16_t port) { return ReadPortByte(&platform_, port); }
 
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
   uint8_t vram_[kCGAVRAMSize] = {0};
 };

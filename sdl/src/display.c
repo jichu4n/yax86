@@ -129,7 +129,7 @@ void DisplayRender(void) {
   g_frame_updated = false;
 }
 
-void DisplayPutPixels(int x, int y, const RGB* pixels, uint8_t count) {
+void DisplayPutPixels(int x, int y, const YVideoRGB* pixels, uint8_t count) {
   if (x < 0 || x >= g_width || y < 0 || y >= g_height) {
     return;
   }
@@ -143,7 +143,7 @@ void DisplayPutPixels(int x, int y, const RGB* pixels, uint8_t count) {
   }
   uint32_t* destination = &g_pixel_buffer[y * g_width + x];
   for (uint8_t i = 0; i < count; ++i) {
-    RGB rgb = pixels[i];
+    YVideoRGB rgb = pixels[i];
     // ARGB8888: A=255, R, G, B
     destination[i] = (0xFF << 24) | ((uint32_t)rgb.r << 16) |
                      ((uint32_t)rgb.g << 8) | (uint32_t)rgb.b;

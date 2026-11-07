@@ -14,10 +14,11 @@ enum {
   kDataPort = 0x21,
 };
 
-// PICState.has_unmasked_request is a cached derivation of irr & ~imr that a CPU
-// reads instead of running an acknowledge cycle it almost never needs. A stale
-// one is invisible in the registers and would strand an interrupt, so these
-// check it against the registers after every operation that can change either.
+// YPICState.has_unmasked_request is a cached derivation of irr & ~imr that a
+// CPU reads instead of running an acknowledge cycle it almost never needs. A
+// stale one is invisible in the registers and would strand an interrupt, so
+// these check it against the registers after every operation that can change
+// either.
 class InterruptRequestHintTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -34,12 +35,12 @@ class InterruptRequestHintTest : public ::testing::Test {
     EXPECT_EQ(pic_.has_unmasked_request, (pic_.irr & ~pic_.imr) != 0)
         << "irr " << (int)pic_.irr << " imr " << (int)pic_.imr;
   }
-  PICState pic_ = {0};
+  YPICState pic_ = {0};
 };
 
 // A PIC out of reset has everything masked, so nothing can be requested.
 TEST_F(InterruptRequestHintTest, StartsClear) {
-  PICState fresh = {0};
+  YPICState fresh = {0};
   PICInit(&fresh);
   EXPECT_FALSE(fresh.has_unmasked_request);
   EXPECT_EQ(fresh.imr, 0xFF);
@@ -138,7 +139,7 @@ TEST_F(InterruptRequestHintTest, ReinitializingClearsIt) {
 // A slave's request reaches the CPU as the master's cascade line, and the CPU
 // only ever reads the master's flag - so the master's has to rise with it.
 TEST_F(InterruptRequestHintTest, ASlaveRequestSetsTheMastersFlag) {
-  PICState slave = {0};
+  YPICState slave = {0};
   slave.config.sp = true;
   PICInit(&slave);
   PICWritePort(&slave, 0xA0, kTestICW1_INIT);

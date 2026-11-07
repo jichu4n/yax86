@@ -16,7 +16,7 @@ static void SetPCSpeakerFrequency(void* context, uint32_t frequency_hz) {
 
 class PCSpeakerTest : public ::testing::Test {
  protected:
-  PlatformState platform_ = {};
+  YPlatformState platform_ = {};
   // Never accessed - these tests drive the PIT and the PPI through I/O ports
   // only - but the platform needs memory in order to initialize.
   uint8_t ram_[64 * 1024] = {0};

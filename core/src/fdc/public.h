@@ -20,13 +20,13 @@ enum {
 };
 
 // Log module for the FDC.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleFDC = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
 
 // Floppy disk format configuration.
-typedef struct FDCDiskFormat {
+typedef struct YFDCDiskFormat {
   // Number of heads (1 or 2).
   uint8_t num_heads;
   // Number of tracks.
@@ -35,17 +35,17 @@ typedef struct FDCDiskFormat {
   uint8_t num_sectors_per_track;
   // Size of each sector in bytes.
   uint16_t sector_size;
-} FDCDiskFormat;
+} YFDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-YAX86_PUBLIC_HEADER const FDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const YFDCDiskFormat kFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,
     .sector_size = 512,
 };
 
-struct FDCState;
+struct YFDCState;
 
 enum {
   // Number of floppy drives supported by the FDC.
@@ -57,7 +57,7 @@ enum {
 };
 
 // Command phases of the FDC.
-typedef enum FDCCommandPhase {
+typedef enum YFDCCommandPhase {
   // No command in progress.
   kFDCPhaseIdle = 0,
   // Command has been issued, waiting for parameters.
@@ -66,17 +66,17 @@ typedef enum FDCCommandPhase {
   kFDCPhaseExecution,
   // Command execution complete, sending result bytes.
   kFDCPhaseResult,
-} FDCCommandPhase;
+} YFDCCommandPhase;
 
 // I/O ports for the FDC.
-typedef enum FDCPort {
+typedef enum YFDCPort {
   // Digital Output Register (write-only).
   kFDCPortDOR = 0x3F2,
   // Main Status Register (read-only).
   kFDCPortMSR = 0x3F4,
   // Data Register (read/write).
   kFDCPortData = 0x3F5,
-} FDCPort;
+} YFDCPort;
 
 // Flags for the Main Status Register (MSR).
 enum {
@@ -173,13 +173,13 @@ enum {
 };
 
 // State for a single floppy drive.
-typedef struct FDCDriveState {
+typedef struct YFDCDriveState {
   // Whether there is a disk inserted in the drive, i.e. whether an image is
   // mounted. The real hardware doesn't actually know this and will attempt to
   // access the disk and time out.
   bool present;
   // The format of the disk currently inserted in the drive.
-  const FDCDiskFormat* format;
+  const YFDCDiskFormat* format;
   // The track the read/write head is currently on.
   uint8_t track;
   // The currently active head (0 or 1).
@@ -192,15 +192,15 @@ typedef struct FDCDriveState {
   // Whether there is a pending interrupt from a completed Seek or Recalibrate
   // operation on this drive.
   bool has_pending_interrupt;
-} FDCDriveState;
+} YFDCDriveState;
 
 // Caller-provided runtime configuration for the FDC.
-typedef struct FDCConfig {
+typedef struct YFDCConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to raise an IRQ6 (FDC interrupt) to the CPU.
   void (*raise_irq6)(void* context);
@@ -226,37 +226,37 @@ typedef struct FDCConfig {
       uint32_t offset,
       // byte value to write
       uint8_t value);
-} FDCConfig;
+} YFDCConfig;
 
-STATIC_VECTOR_TYPE(FDCCommandBuffer, uint8_t, kFDCCommandBufferSize)
-STATIC_VECTOR_TYPE(FDCResultBuffer, uint8_t, kFDCResultBufferSize)
+STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, kFDCCommandBufferSize)
+STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, kFDCResultBufferSize)
 
-struct FDCCommandMetadata;
+struct YFDCCommandMetadata;
 
 // State of the Floppy Disk Controller.
-typedef struct FDCState {
+typedef struct YFDCState {
   // Pointer to the FDC configuration.
-  FDCConfig config;
+  YFDCConfig config;
 
   // Value of the Digital Output Register (DOR) from the last write to port
   // 0x3F2.
   uint8_t dor;
 
   // Per-drive state.
-  FDCDriveState drives[kFDCNumDrives];
+  YFDCDriveState drives[kFDCNumDrives];
 
   // Current command phase.
-  FDCCommandPhase phase;
+  YFDCCommandPhase phase;
 
   // Command buffer to receive command and parameters from the CPU.
-  FDCCommandBuffer command_buffer;
+  YFDCCommandBuffer command_buffer;
   // Metadata for the command currently being processed.
-  const struct FDCCommandMetadata* current_command;
+  const struct YFDCCommandMetadata* current_command;
   // How many ticks the current command has been executing.
   uint32_t current_command_ticks;
 
   // Result buffer to send to the CPU.
-  FDCResultBuffer result_buffer;
+  YFDCResultBuffer result_buffer;
   // Next index to read from result buffer.
   uint8_t next_result_byte_index;
 
@@ -281,29 +281,29 @@ typedef struct FDCState {
     bool dma_request_active;  // DREQ is asserted, waiting for DMA access.
     bool tc_received;         // TC (Terminal Count) signal received from DMA.
   } transfer;
-} FDCState;
+} YFDCState;
 
 // Initializes the FDC to its power-on state.
-YAX86_PUBLIC void FDCInit(FDCState* fdc);
+YAX86_PUBLIC void FDCInit(YFDCState* fdc);
 
 // Handles reads from the FDC's I/O ports.
-YAX86_PUBLIC uint8_t FDCReadPort(FDCState* fdc, uint16_t port);
+YAX86_PUBLIC uint8_t FDCReadPort(YFDCState* fdc, uint16_t port);
 
 // Handles writes to the FDC's I/O ports.
-YAX86_PUBLIC void FDCWritePort(FDCState* fdc, uint16_t port, uint8_t value);
+YAX86_PUBLIC void FDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value);
 
 // Signals to the FDC that the DMA controller has reached the terminal count.
 // This represents the TC signal.
-YAX86_PUBLIC void FDCHandleTC(FDCState* fdc);
+YAX86_PUBLIC void FDCHandleTC(YFDCState* fdc);
 
 // Inserts a disk with the given format into the specified drive.
 YAX86_PUBLIC void FDCInsertDisk(
-    FDCState* fdc, uint8_t drive, const FDCDiskFormat* format);
+    YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format);
 
 // Ejects the disk from the specified drive.
-YAX86_PUBLIC void FDCEjectDisk(FDCState* fdc, uint8_t drive);
+YAX86_PUBLIC void FDCEjectDisk(YFDCState* fdc, uint8_t drive);
 
 // Simulates a tick of the FDC, handling any timed operations.
-YAX86_PUBLIC void FDCTick(FDCState* fdc);
+YAX86_PUBLIC void FDCTick(YFDCState* fdc);
 
 #endif  // YAX86_FDC_PUBLIC_H

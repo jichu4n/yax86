@@ -11,16 +11,16 @@
 
 // Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
 // instructions, indexed by (opcode - 0xF8) / 2.
-YAX86_FILE_PRIVATE const Flag kFlagsForClearAndSetInstructions[] = {
+YAX86_FILE_PRIVATE const YCPUFlag kFlagsForClearAndSetInstructions[] = {
     kCF,  // CLC, STC
     kIF,  // CLI, STI
     kDF,  // CLD, STD
 };
 
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteClearOrSetFlag(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteClearOrSetFlag(const YCPUInstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
-  Flag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
+  YCPUFlag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
   CPUSetFlag(ctx->cpu, flag, value);
   return kInstructionExecuted;
@@ -31,8 +31,8 @@ ExecuteClearOrSetFlag(const InstructionContext* ctx) {
 // ============================================================================
 
 // CMC
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteComplementCarryFlag(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteComplementCarryFlag(const YCPUInstructionContext* ctx) {
   CPUSetFlag(ctx->cpu, kCF, !CPUGetFlag(ctx->cpu, kCF));
   return kInstructionExecuted;
 }
@@ -45,8 +45,8 @@ ExecuteComplementCarryFlag(const InstructionContext* ctx) {
 //
 // Undocumented on every x86 generation, but consistently implemented: AL
 // becomes 0xFF if CF is set and 0x00 otherwise. No flags are affected.
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteSetALFromCarry(const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteSetALFromCarry(const YCPUInstructionContext* ctx) {
   const uint8_t value = CPUGetFlag(ctx->cpu, kCF) ? 0xFF : 0x00;
   ctx->cpu->registers[kAX] = (ctx->cpu->registers[kAX] & 0xFF00) | value;
   return kInstructionExecuted;

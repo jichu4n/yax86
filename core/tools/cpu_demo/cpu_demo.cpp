@@ -48,8 +48,8 @@ vector<uint8_t> Assemble(const string& asm_file_name) {
 }
 
 // Interrupt handler for the demo.
-InterruptHandlerResult HandleInterrupt(
-    CPUState* cpu, uint8_t interrupt_number) {
+YCPUInterruptHandlerResult HandleInterrupt(
+    YCPUState* cpu, uint8_t interrupt_number) {
   // cout << "Handling interrupt: " << hex << (int)interrupt_number
   //      << "DX = " << hex << cpu->registers[kDX] << dec << endl;
   if (interrupt_number != 0x21) {
@@ -120,8 +120,9 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  CPUState cpu = {};
-  cpu.config.read_memory_byte = [](CPUState* cpu, uint32_t address) -> uint8_t {
+  YCPUState cpu = {};
+  cpu.config.read_memory_byte = [](YCPUState* cpu,
+                                   uint32_t address) -> uint8_t {
     if (address >= sizeof(memory)) {
       cerr << "Memory read out of bounds at address: " << hex << address
            << endl;
@@ -129,7 +130,7 @@ int main(int argc, char* argv[]) {
     }
     return memory[address];
   };
-  cpu.config.write_memory_byte = [](CPUState* cpu, uint32_t address,
+  cpu.config.write_memory_byte = [](YCPUState* cpu, uint32_t address,
                                     uint8_t value) {
     if (address >= sizeof(memory)) {
       cerr << "Memory write out of bounds at address: " << hex << address
@@ -154,7 +155,7 @@ int main(int argc, char* argv[]) {
   cpu.registers[kSP] = sizeof(memory);
 
   // Execute the program until it terminates, halts, or hits a bad instruction.
-  CPUTickResult status;
+  YCPUTickResult status;
   do {
     status = CPUTick(&cpu, 0);
   } while (status == kCPUTickExecuted && !program_finished);

@@ -14,25 +14,25 @@ enum {
   kMDAAttributeUnderline = 0x01,
 };
 
-typedef struct MDACellColors {
-  const RGB* foreground;
-  const RGB* background;
+typedef struct YVideoMDACellColors {
+  const YVideoRGB* foreground;
+  const YVideoRGB* background;
   bool underline;
-} MDACellColors;
+} YVideoMDACellColors;
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
 // blink combinations. Undefined combinations are rendered as normal text.
-YAX86_FILE_PRIVATE MDACellColors
-MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
-  const VideoConfig* config = &video->config;
-  MDACellColors colors = {
+YAX86_FILE_PRIVATE YVideoMDACellColors
+MDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
+  const YVideoConfig* config = &video->config;
+  YVideoMDACellColors colors = {
       .foreground = &config->foreground,
       .background = &config->background,
       .underline = false,
   };
 
   bool intense = (attr_value & kVideoAttributeIntenseForeground) != 0;
-  const RGB* intense_aware_foreground =
+  const YVideoRGB* intense_aware_foreground =
       intense ? &config->intense_foreground : &config->foreground;
   uint8_t background_attr = (attr_value & kVideoAttributeBackgroundMask) >>
                             kVideoAttributeBackgroundShift;
@@ -78,11 +78,11 @@ MDADecodeAttribute(VideoState* video, uint8_t attr_value) {
 // Render a rectangular slice directly from text VRAM. Iterating scan lines
 // first makes write_pixels a row-major stream suitable for an SPI window.
 YAX86_MODULE_PRIVATE void MDARenderRegion(
-    VideoState* video, VideoPixelRun* run, uint8_t start_column,
+    YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   // The MDA has exactly one mode, so its metadata is looked up directly
   // rather than derived from the mode control register.
-  const VideoModeMetadata* metadata =
+  const YVideoModeMetadata* metadata =
       &kVideoModeMetadata[kVideoModeMDAText80x25];
 
   // The cursor is resolved once for the region rather than per cell: it can
@@ -109,7 +109,7 @@ YAX86_MODULE_PRIVATE void MDARenderRegion(
       char_address &= metadata->vram_size - 1;
       uint8_t char_value = VideoReadVRAMByte(video, char_address);
       uint8_t attr_value = VideoReadVRAMByte(video, char_address + 1);
-      MDACellColors colors = MDADecodeAttribute(video, attr_value);
+      YVideoMDACellColors colors = MDADecodeAttribute(video, attr_value);
 
       // The underline is a solid rule across the cell, so it replaces the
       // glyph row outright on the one scan line it occupies. The glyph row is
@@ -127,9 +127,10 @@ YAX86_MODULE_PRIVATE void MDARenderRegion(
             (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
-        const RGB* rgb = cursor_scan_line ? &video->config.foreground
-                                          : (is_foreground ? colors.foreground
-                                                           : colors.background);
+        const YVideoRGB* rgb =
+            cursor_scan_line
+                ? &video->config.foreground
+                : (is_foreground ? colors.foreground : colors.background);
         VideoPixelRunPush(run, *rgb);
       }
     }

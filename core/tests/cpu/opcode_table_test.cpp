@@ -10,11 +10,11 @@ using namespace std;
 class OpcodeTableTest : public ::testing::Test {};
 
 TEST_F(OpcodeTableTest, MetadataIntegrity) {
-  EXPECT_EQ(sizeof(OpcodeMetadata), sizeof(void*) == 4 ? 8 : 16);
-  EXPECT_EQ(sizeof(opcode_table), 256 * sizeof(OpcodeMetadata));
+  EXPECT_EQ(sizeof(YCPUOpcodeMetadata), sizeof(void*) == 4 ? 8 : 16);
+  EXPECT_EQ(sizeof(opcode_table), 256 * sizeof(YCPUOpcodeMetadata));
 
   for (int i = 0; i < 256; ++i) {
-    const OpcodeMetadata& metadata = opcode_table[i];
+    const YCPUOpcodeMetadata& metadata = opcode_table[i];
 
     if (metadata.handler == ExecuteInvalidOpcode) {
       continue;
@@ -37,12 +37,12 @@ TEST_F(OpcodeTableTest, MetadataIntegrity) {
 }
 
 TEST_F(OpcodeTableTest, InstructionPrefixMetadataIntegrity) {
-  const vector<InstructionPrefix> prefixes = {
+  const vector<YCPUInstructionPrefix> prefixes = {
       kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
       kPrefixLOCK, kPrefixREPNZ, kPrefixREP,
   };
   for (const auto& prefix : prefixes) {
-    const OpcodeMetadata& metadata = opcode_table[prefix];
+    const YCPUOpcodeMetadata& metadata = opcode_table[prefix];
     EXPECT_EQ(metadata.handler, ExecuteInvalidOpcode)
         << "Prefix opcode 0x" << hex << prefix
         << " should be handled by ExecuteInvalidOpcode";

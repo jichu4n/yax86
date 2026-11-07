@@ -27,7 +27,7 @@ static void MockRaiseIRQ0(void*) {
 
 class AdvanceTest : public ::testing::Test {
  protected:
-  void InitPIT(PITState* pit, PITConfig* config) {
+  void InitPIT(YPITState* pit, YPITConfig* config) {
     config->context = nullptr;
     config->raise_irq_0 = MockRaiseIRQ0;
     config->set_pc_speaker_frequency = nullptr;
@@ -35,7 +35,7 @@ class AdvanceTest : public ::testing::Test {
   }
 
   // Programs a channel with the given mode and reload value.
-  void Program(PITState* pit, int channel, uint8_t mode, uint16_t reload) {
+  void Program(YPITState* pit, int channel, uint8_t mode, uint16_t reload) {
     const uint8_t control = static_cast<uint8_t>(
         (channel << 6) | (kPITAccessLSBThenMSB << 4) | (mode << 1));
     PITWritePort(pit, kPITPortControl, control);
@@ -50,13 +50,13 @@ class AdvanceTest : public ::testing::Test {
   // Runs the same program two ways - one tick at a time, and in a single
   // advance - and requires the resulting state and IRQ edges to match.
   void ExpectEquivalent(uint8_t mode, uint16_t reload, uint32_t ticks) {
-    PITConfig stepped_config = {0};
-    PITState stepped = {0};
+    YPITConfig stepped_config = {0};
+    YPITState stepped = {0};
     InitPIT(&stepped, &stepped_config);
     Program(&stepped, 0, mode, reload);
 
-    PITConfig advanced_config = {0};
-    PITState advanced = {0};
+    YPITConfig advanced_config = {0};
+    YPITState advanced = {0};
     InitPIT(&advanced, &advanced_config);
     Program(&advanced, 0, mode, reload);
 
@@ -125,8 +125,8 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
   // through that edge.
   for (uint8_t mode : {0, 2, 3}) {
     for (uint16_t reload : {1, 2, 3, 4, 5, 37, 4096}) {
-      PITConfig config = {0};
-      PITState pit = {0};
+      YPITConfig config = {0};
+      YPITState pit = {0};
       InitPIT(&pit, &config);
       Program(&pit, 0, mode, reload);
 
@@ -154,8 +154,8 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
 // free, because it truncates how far an idle machine may skip ahead.
 TEST_F(AdvanceTest, OnlyChannelZeroSchedulesADeadline) {
   for (int channel = 1; channel < kPITNumChannels; ++channel) {
-    PITConfig config = {0};
-    PITState pit = {0};
+    YPITConfig config = {0};
+    YPITState pit = {0};
     InitPIT(&pit, &config);
     // Mode 3 with a small count, which is what the BIOS leaves channel 2 in
     // after the POST beep, and would otherwise ask to be woken constantly.
@@ -170,8 +170,8 @@ TEST_F(AdvanceTest, OnlyChannelZeroSchedulesADeadline) {
 // The other half of the same invariant: channel 0 must still get one, or the
 // system timer would be late.
 TEST_F(AdvanceTest, ChannelZeroStillSchedulesADeadline) {
-  PITConfig config = {0};
-  PITState pit = {0};
+  YPITConfig config = {0};
+  YPITState pit = {0};
   InitPIT(&pit, &config);
   Program(&pit, 0, 3, 1356);
 
@@ -184,13 +184,13 @@ TEST_F(AdvanceTest, ChannelZeroStillSchedulesADeadline) {
 // output state is read on demand - the PPI exposes channel 2's on port 0x62.
 // Skipping its deadline must not skip its bookkeeping.
 TEST_F(AdvanceTest, UnscheduledChannelsStillAdvance) {
-  PITConfig stepped_config = {0};
-  PITState stepped = {0};
+  YPITConfig stepped_config = {0};
+  YPITState stepped = {0};
   InitPIT(&stepped, &stepped_config);
   Program(&stepped, 2, 3, 1356);
 
-  PITConfig advanced_config = {0};
-  PITState advanced = {0};
+  YPITConfig advanced_config = {0};
+  YPITState advanced = {0};
   InitPIT(&advanced, &advanced_config);
   Program(&advanced, 2, 3, 1356);
 

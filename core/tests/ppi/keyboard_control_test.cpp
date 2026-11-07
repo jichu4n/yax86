@@ -37,7 +37,7 @@ class KeyboardControlTest : public ::testing::Test {
     ppi_.config.set_keyboard_control = MockSetKeyboardControl;
   }
 
-  PPIState ppi_ = {0};
+  YPPIState ppi_ = {0};
 };
 
 TEST_F(KeyboardControlTest, NoChangeNoCallback) {

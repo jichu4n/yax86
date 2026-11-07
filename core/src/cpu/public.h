@@ -15,7 +15,7 @@ enum {
 };
 
 // Log module for the CPU.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleCPU = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleCPU = {
     .id = kLogModuleIDCPU,
     .name = "CPU",
 };
@@ -27,7 +27,7 @@ YAX86_PUBLIC_HEADER const LogModule kLogModuleCPU = {
 // CPU registers.
 // Note that the order / numeric values of these constants are important here as
 // they must match how the registers are encoded in the ModR/M byte.
-typedef enum RegisterIndex {
+typedef enum YCPURegisterIndex {
   // General-purpose and index registers.
 
   // Accumulator Register
@@ -60,7 +60,7 @@ typedef enum RegisterIndex {
 
   // Instruction Pointer Register
   kIP,
-} RegisterIndex;
+} YCPURegisterIndex;
 
 enum {
   // Number of registers.
@@ -68,7 +68,7 @@ enum {
 };
 
 // CPU flag masks.
-typedef enum Flag {
+typedef enum YCPUFlag {
   // Carry Flag
   kCF = (1 << 0),
   // Parity Flag
@@ -87,7 +87,7 @@ typedef enum Flag {
   kDF = (1 << 10),
   // Overflow Flag
   kOF = (1 << 11),
-} Flag;
+} YCPUFlag;
 
 enum {
   // Bits of the flags register that are not flags. The 8086/8088 does not
@@ -101,25 +101,25 @@ enum {
 };
 
 // Standard interrupts.
-typedef enum InterruptNumber {
+typedef enum YCPUInterruptNumber {
   kInterruptDivideError = 0,
   kInterruptSingleStep = 1,
   kInterruptNMI = 2,
   kInterruptBreakpoint = 3,
   kInterruptOverflow = 4,
-} InterruptNumber;
+} YCPUInterruptNumber;
 
 // Result of executing a single instruction.
-typedef enum InstructionResult {
+typedef enum YCPUInstructionResult {
   // The instruction was executed.
   kInstructionExecuted = 0,
   // The instruction could not be executed, because its opcode has no handler or
   // because its encoding does not match the expected format for its opcode.
   kInstructionInvalid,
-} InstructionResult;
+} YCPUInstructionResult;
 
 // Result of a single CPU tick.
-typedef enum CPUTickResult {
+typedef enum YCPUTickResult {
   // An instruction was executed. This includes HLT: the tick that halts the
   // CPU still ran an instruction.
   kCPUTickExecuted = 0,
@@ -131,30 +131,30 @@ typedef enum CPUTickResult {
   // halted until an interrupt wakes it, so the caller must keep ticking the
   // rest of the machine.
   kCPUTickHalted,
-} CPUTickResult;
+} YCPUTickResult;
 
 // Result of the handle_interrupt callback, directing how the CPU should
 // proceed with an interrupt.
-typedef enum InterruptHandlerResult {
+typedef enum YCPUInterruptHandlerResult {
   // The callback serviced the interrupt itself. The CPU restores the state
   // saved on entry and resumes at the interrupted instruction.
   kInterruptHandlerHandled = 0,
   // The callback did not service the interrupt. The CPU dispatches it through
   // the Interrupt Vector Table instead.
   kInterruptHandlerUnhandled,
-} InterruptHandlerResult;
+} YCPUInterruptHandlerResult;
 
-struct CPUState;
-struct Instruction;
-struct CPUDecodeCacheEntry;
+struct YCPUState;
+struct YCPUInstruction;
+struct YCPUDecodeCacheEntry;
 
 // Caller-provided runtime configuration.
-typedef struct CPUConfig {
+typedef struct YCPUConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // Callback to read a byte from memory.
   //
@@ -164,7 +164,7 @@ typedef struct CPUConfig {
   //
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
-  uint8_t (*read_memory_byte)(struct CPUState* cpu, uint32_t address);
+  uint8_t (*read_memory_byte)(struct YCPUState* cpu, uint32_t address);
 
   // Callback handing the CPU a run of bytes it may read directly, for
   // instruction fetch. Optional - when NULL, every instruction byte is read
@@ -172,7 +172,7 @@ typedef struct CPUConfig {
   // declines.
   //
   // Given a linear address the CPU wants to fetch from, fills in
-  // CPUState.instruction_fetch_window with a range covering it, or sets its
+  // YCPUState.instruction_fetch_window with a range covering it, or sets its
   // data to NULL to decline. A host must decline wherever a read has to be
   // observed or computed rather than loaded: a device region, unmapped memory,
   // or an address covered by anything the host has to be told about.
@@ -185,7 +185,7 @@ typedef struct CPUConfig {
   // need no invalidation, and self-modifying code keeps working, because the
   // window is a pointer into the host's own storage rather than a copy of it.
   // A host that wants it dropped clears data itself.
-  void (*get_instruction_fetch_window)(struct CPUState* cpu, uint32_t address);
+  void (*get_instruction_fetch_window)(struct YCPUState* cpu, uint32_t address);
 
   // Callback to write a byte to memory.
   //
@@ -196,7 +196,7 @@ typedef struct CPUConfig {
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
   void (*write_memory_byte)(
-      struct CPUState* cpu, uint32_t address, uint8_t value);
+      struct YCPUState* cpu, uint32_t address, uint8_t value);
 
   // Callback modeling the interrupt acknowledge cycle the CPU runs in response
   // to a request on its INTR pin. Returns false if no external interrupt is
@@ -208,7 +208,7 @@ typedef struct CPUConfig {
   // enabled, so acknowledging and taking the interrupt are a single step and
   // no request can be latched, stranded, or overwritten in between. If NULL,
   // the CPU takes no external interrupts.
-  bool (*acknowledge_interrupt)(struct CPUState* cpu, uint8_t* vector);
+  bool (*acknowledge_interrupt)(struct YCPUState* cpu, uint8_t* vector);
 
   // Optional flag saying whether acknowledge_interrupt could possibly have
   // anything to report. The CPU reads it at every instruction boundary with
@@ -232,14 +232,14 @@ typedef struct CPUConfig {
   //
   // Read only by CPUInit(), which checks the count and clears its own copy of
   // the pointer if it does not pass.
-  struct CPUDecodeCacheEntry* decode_cache;
+  struct YCPUDecodeCacheEntry* decode_cache;
   // Must be a power of two of at least two. See decode_cache_index_mask.
   uint32_t decode_cache_num_entries;
 
   // Callback to handle an interrupt. If NULL, every interrupt is dispatched
   // through the Interrupt Vector Table.
-  InterruptHandlerResult (*handle_interrupt)(
-      struct CPUState* cpu, uint8_t interrupt_number);
+  YCPUInterruptHandlerResult (*handle_interrupt)(
+      struct YCPUState* cpu, uint8_t interrupt_number);
 
   // Callback to read a byte from an I/O port.
   //
@@ -248,7 +248,7 @@ typedef struct CPUConfig {
   //
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
-  uint8_t (*read_port)(struct CPUState* cpu, uint16_t port);
+  uint8_t (*read_port)(struct YCPUState* cpu, uint16_t port);
 
   // Callback to write a byte to an I/O port.
   //
@@ -257,19 +257,19 @@ typedef struct CPUConfig {
   //
   // For simplicity, we use a single 8-bit interface for memory access, similar
   // to the real-life 8088.
-  void (*write_port)(struct CPUState* cpu, uint16_t port, uint8_t value);
-} CPUConfig;
+  void (*write_port)(struct YCPUState* cpu, uint16_t port, uint8_t value);
+} YCPUConfig;
 
 // A run of bytes instruction fetch may read directly, covering the linear
 // addresses [start, end), with data pointing at the byte at start.
 //
 // A NULL data means there is no window and every byte takes the ordinary path
-// through CPUConfig.read_memory_byte.
-typedef struct CPUInstructionFetchWindow {
+// through YCPUConfig.read_memory_byte.
+typedef struct YCPUInstructionFetchWindow {
   const uint8_t* data;
   uint32_t start;
   uint32_t end;
-} CPUInstructionFetchWindow;
+} YCPUInstructionFetchWindow;
 
 // Guest memory the CPU may read and write by indexing, covering the half-open
 // range of linear addresses [0, end), with data pointing at the byte at 0.
@@ -287,10 +287,10 @@ typedef struct CPUInstructionFetchWindow {
 // end is 0 exactly when data is NULL, which is what lets that compare stand
 // alone rather than needing a null check beside it.
 // CPUSetDirectDataWindow() is what keeps the two in step.
-typedef struct CPUDirectDataWindow {
+typedef struct YCPUDirectDataWindow {
   uint8_t* data;
   uint32_t end;
-} CPUDirectDataWindow;
+} YCPUDirectDataWindow;
 
 enum {
   // Granularity at which a write to guest memory discards decoded
@@ -309,7 +309,7 @@ enum {
 // calls CPUInit(). Everything outside config is the CPU's own. A register or
 // flag may be written directly, since nothing is derived from one; a field
 // another field depends on has a setter, which is its sole writer.
-typedef struct CPUState {
+typedef struct YCPUState {
   // Register values
   uint16_t registers[kNumRegisters];
   // Flag values
@@ -362,21 +362,21 @@ typedef struct CPUState {
   uint16_t cycles_this_tick;
 
   // The run of bytes instruction fetch is currently reading from, as handed
-  // over by CPUConfig.get_instruction_fetch_window.
+  // over by YCPUConfig.get_instruction_fetch_window.
   //
   // Kept across instructions rather than re-derived per instruction: execution
   // is sequential and a window spans a whole memory region, so the next
   // instruction is almost always inside the one already open.
-  CPUInstructionFetchWindow instruction_fetch_window;
+  YCPUInstructionFetchWindow instruction_fetch_window;
 
   // Guest memory the CPU reads and writes by indexing, as handed over by
   // CPUSetDirectDataWindow(). Unlike the fetch window this is not asked for
   // per access: data accesses are scattered rather than sequential, so there
   // is no locality for a per-access callback to exploit and the host sets it
   // once instead.
-  CPUDirectDataWindow direct_data_window;
+  YCPUDirectDataWindow direct_data_window;
 
-  // One less than CPUConfig.decode_cache_num_entries, so that an address
+  // One less than YCPUConfig.decode_cache_num_entries, so that an address
   // becomes an index with a mask rather than a remainder - a remainder by a
   // runtime value is a division, which this target has no instruction for.
   // Derived by CPUInit().
@@ -398,32 +398,33 @@ typedef struct CPUState {
   // Held by value rather than by pointer: a pointer cost 3.37% at -O2 on a
   // path that reads a config field every instruction, and made the config an
   // object the caller had to keep alive for as long as the CPU.
-  CPUConfig config;
-} CPUState;
+  YCPUConfig config;
+} YCPUState;
 
-// Initialize CPU state. The caller zero-initializes the CPUState and fills in
+// Initialize CPU state. The caller zero-initializes the YCPUState and fills in
 // the fields of its config first.
 //
 // This zeroes nothing - a struct the caller has already had to zero in order
 // to fill in its config does not want zeroing twice - and it is the only place
 // the config is checked, so a host is told about a mistake here or not at
 // all.
-YAX86_PUBLIC void CPUInit(CPUState* cpu);
+YAX86_PUBLIC void CPUInit(YCPUState* cpu);
 
 // Instructions retired since CPUInit(), as one number.
 YAX86_PUBLIC_HEADER inline uint64_t CPUInstructionsRetired(
-    const CPUState* cpu) {
+    const YCPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-YAX86_PUBLIC_HEADER inline bool CPUGetFlag(const CPUState* cpu, Flag flag) {
+YAX86_PUBLIC_HEADER inline bool CPUGetFlag(
+    const YCPUState* cpu, YCPUFlag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
 YAX86_PUBLIC_HEADER inline void CPUSetFlag(
-    CPUState* cpu, Flag flag, bool value) {
+    YCPUState* cpu, YCPUFlag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
   } else {
@@ -437,13 +438,13 @@ YAX86_PUBLIC_HEADER inline void CPUSetFlag(
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
 YAX86_PUBLIC_HEADER inline void CPURaiseInternalInterrupt(
-    CPUState* cpu, uint8_t interrupt_number) {
+    YCPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(CPUState* cpu) {
+YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(YCPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -452,12 +453,12 @@ YAX86_PUBLIC_HEADER inline void CPUClearInternalInterrupt(CPUState* cpu) {
 // Used by the instructions whose cost is not a property of the opcode alone -
 // a conditional jump that is taken, a shift by a count in CL, a multiply or a
 // divide.
-YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles);
+YAX86_PUBLIC void CPUAddCycles(YCPUState* cpu, uint16_t cycles);
 
 // Hands the CPU guest memory it may read and write by indexing, covering the
 // half-open range of linear addresses [0, end). Optional - a host that
-// supplies none has every access go through CPUConfig.read_memory_byte and
-// CPUConfig.write_memory_byte, which is also what happens for every address at
+// supplies none has every access go through YCPUConfig.read_memory_byte and
+// YCPUConfig.write_memory_byte, which is also what happens for every address at
 // or above end.
 //
 // The window must be plain storage whose reads and writes are the caller's
@@ -472,14 +473,14 @@ YAX86_PUBLIC void CPUAddCycles(CPUState* cpu, uint16_t cycles);
 // enabling something that has to observe accesses, calls
 // CPUInvalidateDirectDataWindow().
 YAX86_PUBLIC_HEADER inline void CPUSetDirectDataWindow(
-    CPUState* cpu, uint8_t* data, uint32_t end) {
+    YCPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
 }
 
 // Discards the direct data window, so that every access goes back through
-// CPUConfig.read_memory_byte and CPUConfig.write_memory_byte.
-YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
+// YCPUConfig.read_memory_byte and YCPUConfig.write_memory_byte.
+YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(YCPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -489,7 +490,7 @@ YAX86_PUBLIC_HEADER inline void CPUInvalidateDirectDataWindow(CPUState* cpu) {
 // A host calls this when it changes what an address means rather than what is
 // stored at it - remapping memory is the case that matters. Ordinary writes
 // are covered by CPUNotifyMemoryWrite() instead.
-YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu);
+YAX86_PUBLIC void CPUInvalidateDecodeCache(YCPUState* cpu);
 
 // Tells the CPU that the byte at a linear address has been written, so that
 // any decode taken from that page stops being used.
@@ -504,7 +505,7 @@ YAX86_PUBLIC void CPUInvalidateDecodeCache(CPUState* cpu);
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
 YAX86_PUBLIC_HEADER inline void CPUNotifyMemoryWrite(
-    CPUState* cpu, uint32_t address) {
+    YCPUState* cpu, uint32_t address) {
   const uint32_t page = (address >> kCodePageShift) & (kNumCodePages - 1);
   if (++cpu->code_page_generation[page] == 0) {
     CPUInvalidateDecodeCache(cpu);
@@ -529,7 +530,8 @@ enum {
   // they keep coming, and a stream of nothing but prefixes hangs it outright -
   // a prefix is not an instruction boundary, so no interrupt is ever
   // recognized. Two things here cannot follow it that far: the fetch loop has
-  // to hand control back to its caller, and Instruction.size is a uint8_t that
+  // to hand control back to its caller, and YCPUInstruction.size is a uint8_t
+  // that
   // CPUTick adds to IP. Accepting as many prefixes as still leave the whole
   // encoding addressable by size satisfies both, and is far past anything an
   // assembler emits.
@@ -548,12 +550,12 @@ typedef enum {
   kPrefixLOCKAlt = 0xF1,
   kPrefixREPNZ = 0xF2,  // REPNE/REPNZ
   kPrefixREP = 0xF3,    // REP/REPE/REPZ
-} InstructionPrefix;
+} YCPUInstructionPrefix;
 
 enum {
-  // Value of Instruction.segment_override when an instruction carries no
+  // Value of YCPUInstruction.segment_override when an instruction carries no
   // segment override prefix. Zero is kAX, which is never a segment register,
-  // so a zero-initialized Instruction correctly has no override.
+  // so a zero-initialized YCPUInstruction correctly has no override.
   kNoSegmentOverride = 0,
 };
 
@@ -564,14 +566,14 @@ enum {
 // emulator - GetMemoryOperandAddress() takes them for every memory operand and
 // GetEffectiveAddressCycles() for every instruction - while reg selects the
 // handler for all five instruction groups.
-typedef struct ModRM {
+typedef struct YCPUModRM {
   // Mod field - bits 6 and 7 of the ModR/M byte.
   uint8_t mod;
   // REG field - bits 3 to 5 of the ModR/M byte.
   uint8_t reg;
   // R/M field - bits 0 to 2 of the ModR/M byte.
   uint8_t rm;
-} ModRM;
+} YCPUModRM;
 
 // An encoded instruction.
 //
@@ -584,13 +586,13 @@ typedef struct ModRM {
 // undocumented 0xF1 alias are consumed but not recorded at all, because
 // nothing acts on them: the bus is not shared on a PC/XT.
 //
-// No field here is a bitfield, for the reason given at ModRM above. That puts
-// the struct at 16 bytes, which is what a decode cache entry is sized around -
-// so the size is worth watching again, though for how many decodes fit in a
-// given amount of memory rather than for what a fetch costs.
-typedef struct Instruction {
+// No field here is a bitfield, for the reason given at YCPUModRM above. That
+// puts the struct at 16 bytes, which is what a decode cache entry is sized
+// around - so the size is worth watching again, though for how many decodes fit
+// in a given amount of memory rather than for what a fetch costs.
+typedef struct YCPUInstruction {
   // The segment register selected by a segment override prefix, as a
-  // RegisterIndex, or kNoSegmentOverride if the instruction carries none. A
+  // YCPURegisterIndex, or kNoSegmentOverride if the instruction carries none. A
   // later override wins over an earlier one, as on hardware.
   uint8_t segment_override;
 
@@ -603,7 +605,7 @@ typedef struct Instruction {
 
   // The ModR/M byte, which specifies addressing modes. For some instructions,
   // the REG field within this byte acts as an opcode extension.
-  ModRM mod_rm;
+  YCPUModRM mod_rm;
 
   // Raw displacement bytes. If displacement_size is 1, only disp_bytes[0] is
   // valid (value is typically sign-extended). If displacement_size is 2,
@@ -633,7 +635,7 @@ typedef struct Instruction {
   // encoding, so the decode works them out once and every later run of the
   // same decode is charged from here.
   uint16_t base_cycles;
-} Instruction;
+} YCPUInstruction;
 
 // One cached decode.
 //
@@ -641,30 +643,30 @@ typedef struct Instruction {
 // inside the entry and nothing is copied. That is the whole of why caching
 // pays: copying the struct out measures 3.25% slower at -O3, because it costs
 // about what decoding a short instruction from an open fetch window costs. No
-// instruction handler writes through the Instruction it is given, so lending
-// out the entry is safe.
-typedef struct CPUDecodeCacheEntry {
+// instruction handler writes through the YCPUInstruction it is given, so
+// lending out the entry is safe.
+typedef struct YCPUDecodeCacheEntry {
   // The linear address the instruction starts at, which is the key. First so
-  // that the entry packs into 24 bytes: Instruction is 18 and needs 2-byte
+  // that the entry packs into 24 bytes: YCPUInstruction is 18 and needs 2-byte
   // alignment, where the key needs 4.
   uint32_t address;
-  Instruction instruction;
+  YCPUInstruction instruction;
   // What code_page_generation said for that address's page when the decode was
   // taken. A hit requires it to still say the same.
   uint8_t generation;
   bool valid;
-} CPUDecodeCacheEntry;
+} YCPUDecodeCacheEntry;
 
 // ============================================================================
 // Execution
 // ============================================================================
 
 // Result status from fetching the next instruction.
-typedef enum CPUFetchNextInstructionStatus {
+typedef enum YCPUFetchNextInstructionStatus {
   kFetchSuccess = 0,
   // Prefix exceeds maximum allowed size.
   kFetchPrefixTooLong = -1,
-} CPUFetchNextInstructionStatus;
+} YCPUFetchNextInstructionStatus;
 
 // Fetch the next instruction from CS:IP.
 //
@@ -673,12 +675,12 @@ typedef enum CPUFetchNextInstructionStatus {
 // Since this function is part of the core CPU execution loop, assembling and
 // copying a whole instruction struct would have a measurable impact on
 // performance.
-YAX86_PUBLIC CPUFetchNextInstructionStatus
-CPUFetchNextInstruction(CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC YCPUFetchNextInstructionStatus
+CPUFetchNextInstruction(YCPUState* cpu, YCPUInstruction* instruction);
 
 // Execute a single fetched instruction.
-YAX86_PUBLIC InstructionResult
-CPUExecuteInstruction(CPUState* cpu, Instruction* instruction);
+YAX86_PUBLIC YCPUInstructionResult
+CPUExecuteInstruction(YCPUState* cpu, YCPUInstruction* instruction);
 
 enum {
   // The most instructions one call to CPUTick() will run back to back.
@@ -708,6 +710,6 @@ enum {
 // Zero runs exactly one instruction. That is what a host stepping the machine
 // passes, and what a host that has to see every instruction boundary itself
 // passes, and it is the behaviour this had before there were runs at all.
-YAX86_PUBLIC CPUTickResult CPUTick(CPUState* cpu, uint16_t max_run_cycles);
+YAX86_PUBLIC YCPUTickResult CPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 
 #endif  // YAX86_CPU_PUBLIC_H

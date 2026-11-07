@@ -10,9 +10,9 @@ namespace {
 using namespace video_test;
 
 TEST(VideoDirtyStateTest, RangeStorageIsZeroInitializedAndCompact) {
-  VideoDirtyState dirty = {0};
+  YVideoDirtyState dirty = {0};
   EXPECT_EQ(sizeof(dirty.ranges), static_cast<size_t>(kVideoDirtyRowCount * 2));
-  EXPECT_EQ(sizeof(dirty), sizeof(dirty.ranges) + sizeof(VideoDirtyStatus));
+  EXPECT_EQ(sizeof(dirty), sizeof(dirty.ranges) + sizeof(YVideoDirtyStatus));
   // The tracker competes with the emulated guest for MCU SRAM, so its size is
   // part of the design rather than an implementation detail. 50 rows cover the
   // tallest graphics mode; the 25 rows of a text mode fit within that.
@@ -20,13 +20,13 @@ TEST(VideoDirtyStateTest, RangeStorageIsZeroInitializedAndCompact) {
   // Clearing the tracker is a zero initialization, which relies on the clean
   // state and the empty range both being zero.
   EXPECT_EQ(dirty.status, kVideoClean);
-  for (const VideoDirtyRange& range : dirty.ranges) {
+  for (const YVideoDirtyRange& range : dirty.ranges) {
     EXPECT_EQ(range.start_column, range.end_column);
   }
 }
 
 class VideoTimingTest : public VideoTestBase,
-                        public ::testing::WithParamInterface<VideoAdapter> {
+                        public ::testing::WithParamInterface<YVideoAdapter> {
  protected:
   void SetUp() override { Init(GetParam()); }
 
@@ -41,7 +41,7 @@ class VideoTimingTest : public VideoTestBase,
   // instruction's worth of cycles, so a whole frame has to be stepped a line
   // at a time.
   void AdvanceScanLines(uint16_t scan_lines) {
-    const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+    const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
     for (uint16_t i = 0; i < scan_lines; ++i) {
       VideoTick(&video_, adapter->cycles_per_scan_line);
     }
@@ -57,7 +57,7 @@ TEST_P(VideoTimingTest, StatusStartsInActiveDisplay) {
 }
 
 TEST_P(VideoTimingTest, HorizontalRetraceWithinAScanLine) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
 
   // Partway through the active part of a scan line the display is still on.
   VideoTick(&video_, adapter->display_cycles_per_scan_line - 1);
@@ -78,7 +78,7 @@ TEST_P(VideoTimingTest, HorizontalRetraceWithinAScanLine) {
 }
 
 TEST_P(VideoTimingTest, VerticalRetraceAtTheEndOfAFrame) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
 
   // Run to the last displayed scan line.
   AdvanceScanLines(adapter->displayed_scan_lines - 1);
@@ -103,7 +103,7 @@ TEST_P(VideoTimingTest, VerticalRetraceAtTheEndOfAFrame) {
 }
 
 TEST_P(VideoTimingTest, TickAccumulatesPartialScanLines) {
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
   // A cycle count that does not divide the scan line period still advances the
   // beam at the right average rate.
   const uint16_t kCyclesPerTick = 17;
@@ -120,7 +120,7 @@ TEST_P(VideoTimingTest, TickAccumulatesPartialScanLines) {
 TEST_P(VideoTimingTest, StatusHighBitsStayClear) {
   // Bit 7 in particular: the BIOS probes it on the MDA status port to detect a
   // Hercules adapter, which this is not.
-  const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+  const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
   for (uint16_t i = 0; i < adapter->scan_lines_per_frame; ++i) {
     EXPECT_EQ(Status() & 0xF0, 0);
     VideoTick(&video_, adapter->cycles_per_scan_line);
@@ -146,9 +146,9 @@ TEST_P(VideoTimingTest, RenderIsSafeWithoutCallbacks) {
   // A host that has not installed its callbacks yet must not crash the
   // renderer. The platform initializes the video module before the host has a
   // chance to install them.
-  VideoConfig bare_config = kDefaultVideoConfig;
+  YVideoConfig bare_config = kDefaultVideoConfig;
   bare_config.adapter = GetParam();
-  VideoState bare_video = {0};
+  YVideoState bare_video = {0};
   VideoInit(&bare_video);
   VideoRender(&bare_video);
   VideoTick(&bare_video, 1000);
@@ -158,7 +158,7 @@ TEST_P(VideoTimingTest, RenderIsSafeWithoutCallbacks) {
 INSTANTIATE_TEST_SUITE_P(
     Adapters, VideoTimingTest,
     ::testing::Values(kVideoAdapterMDA, kVideoAdapterCGA),
-    [](const ::testing::TestParamInfo<VideoAdapter>& info) {
+    [](const ::testing::TestParamInfo<YVideoAdapter>& info) {
       return info.param == kVideoAdapterCGA ? "CGA" : "MDA";
     });
 

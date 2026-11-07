@@ -10,8 +10,8 @@
 // - Sign flag (SF)
 // - Parity Flag (PF)
 YAX86_MODULE_PRIVATE YAX86_HOT void SetCommonFlagsAfterInstruction(
-    const InstructionContext* ctx, uint32_t result) {
-  Width width = ctx->metadata->width;
+    const YCPUInstructionContext* ctx, uint32_t result) {
+  YCPUWidth width = ctx->metadata->width;
   result &= kMaxValue[width];
   // Zero flag (ZF)
   CPUSetFlag(ctx->cpu, kZF, result == 0);
@@ -32,8 +32,9 @@ YAX86_MODULE_PRIVATE uint16_t ToFlagsRegisterValue(uint16_t value) {
 
 // Write a word where the stack pointer already points. The caller is
 // responsible for having made room for it.
-YAX86_FILE_PRIVATE void WriteToStackTop(CPUState* cpu, OperandValue value) {
-  OperandAddress address = {
+YAX86_FILE_PRIVATE void WriteToStackTop(
+    YCPUState* cpu, YCPUOperandValue value) {
+  YCPUOperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
       .offset = cpu->registers[kSP],
@@ -41,12 +42,13 @@ YAX86_FILE_PRIVATE void WriteToStackTop(CPUState* cpu, OperandValue value) {
   WriteMemoryOperandWord(cpu, &address, value);
 }
 
-YAX86_MODULE_PRIVATE void PushValue(CPUState* cpu, OperandValue value) {
+YAX86_MODULE_PRIVATE void PushValue(YCPUState* cpu, YCPUOperandValue value) {
   cpu->registers[kSP] -= 2;
   WriteToStackTop(cpu, value);
 }
 
-YAX86_MODULE_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
+YAX86_MODULE_PRIVATE void PushSourceOperand(
+    YCPUState* cpu, const YCPUOperand* src) {
   cpu->registers[kSP] -= 2;
   // The 8086/8088 moves the stack pointer before it reads the source, so
   // PUSH SP stores the value SP has after the decrement rather than the one it
@@ -55,25 +57,25 @@ YAX86_MODULE_PRIVATE void PushSourceOperand(CPUState* cpu, const Operand* src) {
   const bool source_is_stack_pointer =
       src->address.type == kOperandAddressTypeRegister &&
       src->address.register_index == kSP;
-  const OperandValue value =
+  const YCPUOperandValue value =
       source_is_stack_pointer ? cpu->registers[kSP] : src->value;
   WriteToStackTop(cpu, value);
 }
 
-YAX86_MODULE_PRIVATE OperandValue Pop(CPUState* cpu) {
-  OperandAddress address = {
+YAX86_MODULE_PRIVATE YCPUOperandValue Pop(YCPUState* cpu) {
+  YCPUOperandAddress address = {
       .type = kOperandAddressTypeMemory,
       .register_index = kSS,
       .offset = cpu->registers[kSP],
   };
-  OperandValue value = ReadMemoryOperandWord(cpu, &address);
+  YCPUOperandValue value = ReadMemoryOperandWord(cpu, &address);
   cpu->registers[kSP] += 2;
   return value;
 }
 
 // Dummy instruction for unsupported opcodes.
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteNoOp(YAX86_UNUSED const YCPUInstructionContext* ctx) {
   return kInstructionExecuted;
 }
 
@@ -83,7 +85,7 @@ ExecuteNoOp(YAX86_UNUSED const InstructionContext* ctx) {
 // from CPUTick(). It exists so that every entry in the opcode table is
 // callable, which is what lets the tick path dispatch without first checking
 // for a null handler.
-YAX86_MODULE_PRIVATE InstructionResult
-ExecuteInvalidOpcode(YAX86_UNUSED const InstructionContext* ctx) {
+YAX86_MODULE_PRIVATE YCPUInstructionResult
+ExecuteInvalidOpcode(YAX86_UNUSED const YCPUInstructionContext* ctx) {
   return kInstructionInvalid;
 }

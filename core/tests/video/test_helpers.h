@@ -7,14 +7,14 @@
 
 #include "video.h"
 
-// RGB is declared in the global namespace, so its comparison and printing
+// YVideoRGB is declared in the global namespace, so its comparison and printing
 // helpers have to be too for GoogleTest to find them.
-inline bool operator==(const RGB& a, const RGB& b) {
+inline bool operator==(const YVideoRGB& a, const YVideoRGB& b) {
   return a.r == b.r && a.g == b.g && a.b == b.b;
 }
 
 // Prints an RGB value on assertion failure rather than dumping its bytes.
-inline void PrintTo(const RGB& rgb, std::ostream* os) {
+inline void PrintTo(const YVideoRGB& rgb, std::ostream* os) {
   *os << "RGB(" << static_cast<int>(rgb.r) << ", " << static_cast<int>(rgb.g)
       << ", " << static_cast<int>(rgb.b) << ")";
 }
@@ -31,17 +31,17 @@ enum {
   kMaxFrameBufferWidth = 720,
   kMaxFrameBufferHeight = 350,
 };
-inline RGB mock_frame_buffer[kMaxFrameBufferHeight][kMaxFrameBufferWidth];
+inline YVideoRGB mock_frame_buffer[kMaxFrameBufferHeight][kMaxFrameBufferWidth];
 // Render activity since the last call to Render().
 inline int mock_pixel_write_count;
 inline int mock_pixel_span_count;
-inline VideoRegion mock_regions[kVideoDirtyRowCount];
+inline YVideoRegion mock_regions[kVideoDirtyRowCount];
 inline int mock_region_count;
 inline int mock_region_end_count;
 // The region currently open, and the pixels written into it so far. A real
 // windowed display positions pixels by counting them, so a region that does
 // not emit exactly the pixels it declared corrupts everything drawn after it.
-inline VideoRegion mock_open_region;
+inline YVideoRegion mock_open_region;
 inline int mock_open_region_pixels;
 // Regions whose pixel count did not match the area they declared. Checked in
 // the fixture's teardown, so every test enforces the invariant.
@@ -53,7 +53,8 @@ inline int mock_region_area_mismatches;
 inline int mock_pixels_outside_region;
 
 inline void MockWritePixels(
-    VideoState* video, Position origin, const RGB* pixels, uint8_t count) {
+    YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
+    uint8_t count) {
   EXPECT_GT(count, 0);
   EXPECT_LE(count, kVideoPixelBatchSize);
   EXPECT_LE(origin.x + count, kMaxFrameBufferWidth);
@@ -76,7 +77,7 @@ inline void MockWritePixels(
   }
 }
 
-inline void MockBeginRenderRegion(VideoState* video, VideoRegion region) {
+inline void MockBeginRenderRegion(YVideoState* video, YVideoRegion region) {
   if (mock_region_count < kVideoDirtyRowCount) {
     mock_regions[mock_region_count] = region;
   }
@@ -85,7 +86,7 @@ inline void MockBeginRenderRegion(VideoState* video, VideoRegion region) {
   mock_open_region_pixels = 0;
 }
 
-inline void MockEndRenderRegion(VideoState* video) {
+inline void MockEndRenderRegion(YVideoState* video) {
   ++mock_region_end_count;
   const int declared_pixels =
       static_cast<int>(mock_open_region.width) * mock_open_region.height;
@@ -98,7 +99,7 @@ inline void MockEndRenderRegion(VideoState* video) {
 inline int mock_log_error_count;
 
 inline void MockWriteLogLine(
-    void* context, const LogModule* module, LogLevel level, uint64_t tick,
+    void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
     const char* message, size_t length) {
   if (level == kLogLevelError) {
     ++mock_log_error_count;
@@ -109,7 +110,7 @@ inline void MockWriteLogLine(
 // they exercise.
 class VideoTestBase : public ::testing::Test {
  protected:
-  void Init(VideoAdapter adapter) {
+  void Init(YVideoAdapter adapter) {
     for (size_t i = 0; i < sizeof(mock_vram); ++i) {
       mock_vram[i] = 0;
     }
@@ -118,7 +119,7 @@ class VideoTestBase : public ::testing::Test {
     mock_pixels_outside_region = 0;
     mock_log_error_count = 0;
 
-    logger_config_ = LoggerConfig{};
+    logger_config_ = YLoggerConfig{};
     logger_config_.write_line = MockWriteLogLine;
     logger_config_.enabled_modules = LogModuleMask(&kLogModuleVideo);
     logger_config_.min_level = kLogLevelError;
@@ -150,7 +151,7 @@ class VideoTestBase : public ::testing::Test {
   }
 
   void ClearFrameBuffer() {
-    static const RGB kNoPixel = {.r = 0xDE, .g = 0xAD, .b = 0xBE};
+    static const YVideoRGB kNoPixel = {.r = 0xDE, .g = 0xAD, .b = 0xBE};
     for (int y = 0; y < kMaxFrameBufferHeight; ++y) {
       for (int x = 0; x < kMaxFrameBufferWidth; ++x) {
         mock_frame_buffer[y][x] = kNoPixel;
@@ -175,10 +176,10 @@ class VideoTestBase : public ::testing::Test {
     VideoRender(&video_);
   }
 
-  RGB Pixel(int x, int y) const { return mock_frame_buffer[y][x]; }
+  YVideoRGB Pixel(int x, int y) const { return mock_frame_buffer[y][x]; }
 
   // Number of pixels of the given color within a rectangle.
-  int CountPixels(int x, int y, int width, int height, RGB rgb) const {
+  int CountPixels(int x, int y, int width, int height, YVideoRGB rgb) const {
     int count = 0;
     for (int row = y; row < y + height; ++row) {
       for (int col = x; col < x + width; ++col) {
@@ -220,7 +221,7 @@ class VideoTestBase : public ::testing::Test {
   // instruction's worth of cycles, which is far less than a frame, so this
   // steps a scan line at a time.
   void AdvanceFrames(int frames) {
-    const VideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
+    const YVideoAdapterMetadata* adapter = VideoGetAdapterMetadata(&video_);
     for (int frame = 0; frame < frames; ++frame) {
       for (uint16_t i = 0; i < adapter->scan_lines_per_frame; ++i) {
         VideoTick(&video_, adapter->cycles_per_scan_line);
@@ -228,9 +229,9 @@ class VideoTestBase : public ::testing::Test {
     }
   }
 
-  LoggerConfig logger_config_ = {};
-  Logger logger_ = {};
-  VideoState video_ = {0};
+  YLoggerConfig logger_config_ = {};
+  YLogger logger_ = {};
+  YVideoState video_ = {0};
 };
 
 }  // namespace video_test

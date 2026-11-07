@@ -17,7 +17,7 @@ enum {
 };
 
 // Log module for the Video.
-YAX86_PUBLIC_HEADER const LogModule kLogModuleVideo = {
+YAX86_PUBLIC_HEADER const YLogModule kLogModuleVideo = {
     .id = kLogModuleIDVideo,
     .name = "VIDEO",
 };
@@ -27,42 +27,42 @@ YAX86_PUBLIC_HEADER const LogModule kLogModuleVideo = {
 // ============================================================================
 
 // RGB pixel value.
-typedef struct RGB {
+typedef struct YVideoRGB {
   // Red component (0-255).
   uint8_t r;
   // Green component (0-255).
   uint8_t g;
   // Blue component (0-255).
   uint8_t b;
-} RGB;
+} YVideoRGB;
 
 // Position in 2D space.
-typedef struct Position {
+typedef struct YVideoPosition {
   // X coordinate.
   uint16_t x;
   // Y coordinate.
   uint16_t y;
-} Position;
+} YVideoPosition;
 
 // A rectangular portion of the host frame buffer, in pixels.
-typedef struct VideoRegion {
-  Position origin;
+typedef struct YVideoRegion {
+  YVideoPosition origin;
   uint16_t width;
   uint16_t height;
-} VideoRegion;
+} YVideoRegion;
 
 // Text mode character position. We use a different structure to avoid confusion
-// with Position, which is used for pixel coordinates.
-typedef struct TextPosition {
+// with YVideoPosition, which is used for pixel coordinates.
+typedef struct YVideoTextPosition {
   // Column (0-based).
   uint8_t col;
   // Row (0-based).
   uint8_t row;
-} TextPosition;
+} YVideoTextPosition;
 
 // Video adapters supported by this module. Only one adapter is present in a
 // machine at a time, selected before initialization.
-typedef enum VideoAdapter {
+typedef enum YVideoAdapter {
   // Monochrome Display and Printer Adapter.
   kVideoAdapterMDA = 0,
   // Color Graphics Adapter.
@@ -70,10 +70,10 @@ typedef enum VideoAdapter {
 
   // Number of adapters supported.
   kNumVideoAdapters = 2,
-} VideoAdapter;
+} YVideoAdapter;
 
 // Video modes, numbered as in the BIOS INT 10h mode numbers.
-typedef enum VideoMode {
+typedef enum YVideoMode {
   // CGA text mode 0x00: Text, 40x25, color burst off, 8x8
   kVideoModeCGAText40x25Mono = 0x00,
   // CGA text mode 0x01: Text, 40x25, 16 colors, 8x8
@@ -93,10 +93,10 @@ typedef enum VideoMode {
 
   // Number of video modes supported.
   kNumVideoModes = 8,
-} VideoMode;
+} YVideoMode;
 
 // Text vs graphics modes.
-typedef enum VideoModeType {
+typedef enum YVideoModeType {
   // Invalid video mode. This is needed due to gap in the list of video mode
   // values.
   kVideoModeUnsupported = 0,
@@ -104,14 +104,14 @@ typedef enum VideoModeType {
   kVideoModeText,
   // Graphics mode.
   kVideoModeGraphics,
-} VideoModeType;
+} YVideoModeType;
 
 // Metadata for video modes.
-typedef struct VideoModeMetadata {
+typedef struct YVideoModeMetadata {
   // The video mode.
-  VideoMode mode;
+  YVideoMode mode;
   // Type of the video mode (text or graphics).
-  VideoModeType type;
+  YVideoModeType type;
   // Mapped memory address of video RAM.
   uint32_t vram_address;
   // Video RAM size in bytes.
@@ -131,7 +131,7 @@ typedef struct VideoModeMetadata {
   uint8_t char_width;
   // Text mode - character height in pixels.
   uint8_t char_height;
-} VideoModeMetadata;
+} YVideoModeMetadata;
 
 // ============================================================================
 // Monochrome Display and Printer Adapter (MDA)
@@ -423,7 +423,7 @@ enum {
 // ============================================================================
 
 // Metadata for each video mode, indexed by mode number.
-YAX86_PUBLIC_HEADER const VideoModeMetadata
+YAX86_PUBLIC_HEADER const YVideoModeMetadata
     kVideoModeMetadata[kNumVideoModes] = {
         // 0x00: CGA text, 40x25, color burst off
         {
@@ -529,9 +529,9 @@ YAX86_PUBLIC_HEADER const VideoModeMetadata
 
 // Metadata for a video adapter - the facts about an adapter that do not depend
 // on the current video mode.
-typedef struct VideoAdapterMetadata {
+typedef struct YVideoAdapterMetadata {
   // The adapter.
-  VideoAdapter adapter;
+  YVideoAdapter adapter;
 
   // Width of the frame buffer the host must provide, in pixels. This does not
   // change with the video mode: the CGA always scans the same number of dots
@@ -565,16 +565,16 @@ typedef struct VideoAdapterMetadata {
   // Number of scan lines at the start of a frame that are displayed. The
   // remainder of the frame is the vertical retrace.
   uint16_t displayed_scan_lines;
-} VideoAdapterMetadata;
+} YVideoAdapterMetadata;
 
-// Metadata for each video adapter, indexed by VideoAdapter.
+// Metadata for each video adapter, indexed by YVideoAdapter.
 //
 // The timing values are derived from the same 14.318MHz master crystal the CPU
 // clock comes from, so they are exact in CPU cycles. The MDA scans 882 dots per
 // line at 16.257MHz over 370 lines, which is 259 cycles per line and just under
 // 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
 // 304 cycles per line and just under 60Hz.
-YAX86_PUBLIC_HEADER const VideoAdapterMetadata
+YAX86_PUBLIC_HEADER const YVideoAdapterMetadata
     kVideoAdapterMetadata[kNumVideoAdapters] = {
         // MDA
         {
@@ -652,14 +652,14 @@ enum {
 
 // Half-open horizontal dirty range [start_column, end_column). Both fields are
 // zero when the range is empty.
-typedef struct VideoDirtyRange {
+typedef struct YVideoDirtyRange {
   uint8_t start_column;
   uint8_t end_column;
-} VideoDirtyRange;
+} YVideoDirtyRange;
 
 // What the next render has to do. The three states are mutually exclusive, so
 // they are one value rather than a pair of flags that could disagree.
-typedef enum VideoDirtyStatus {
+typedef enum YVideoDirtyStatus {
   // The host display already matches video state, so a render does nothing.
   // This is the zero value, which makes clearing the tracker a zero
   // initialization.
@@ -670,42 +670,42 @@ typedef enum VideoDirtyStatus {
   // cannot be represented as local VRAM damage, such as a mode or palette
   // change.
   kVideoFullRedraw,
-} VideoDirtyStatus;
+} YVideoDirtyStatus;
 
-typedef struct VideoDirtyState {
+typedef struct YVideoDirtyState {
   // One horizontal range per dirty row, indexed by dirty row. Only meaningful
   // when status is kVideoDirty.
-  VideoDirtyRange ranges[kVideoDirtyRowCount];
+  YVideoDirtyRange ranges[kVideoDirtyRowCount];
   // What the next render has to do.
-  VideoDirtyStatus status;
-} VideoDirtyState;
+  YVideoDirtyStatus status;
+} YVideoDirtyState;
 
 // ============================================================================
 // Video state
 // ============================================================================
 
-struct VideoState;
+struct YVideoState;
 
 // Caller-provided configuration for video rendering.
-typedef struct VideoConfig {
+typedef struct YVideoConfig {
   // Custom data passed through to callbacks.
   void* context;
 
   // Logger for this module. May be NULL.
-  Logger* logger;
+  YLogger* logger;
 
   // The video adapter to emulate.
-  VideoAdapter adapter;
+  YVideoAdapter adapter;
 
   // MDA - foreground color.
-  RGB foreground;
+  YVideoRGB foreground;
   // MDA - intense foreground color.
-  RGB intense_foreground;
+  YVideoRGB intense_foreground;
   // MDA - background color.
-  RGB background;
+  YVideoRGB background;
 
   // CGA - the 16 color RGBI palette.
-  RGB cga_palette[kNumCGAColors];
+  YVideoRGB cga_palette[kNumCGAColors];
 
   // The emulated video RAM, at least the adapter's vram_size bytes of it.
   // Required - the adapter reads and writes it directly.
@@ -722,17 +722,17 @@ typedef struct VideoConfig {
   // line, and are valid only for the duration of the synchronous callback.
   // count is between 1 and kVideoPixelBatchSize, inclusive.
   void (*write_pixels)(
-      struct VideoState* video, Position origin, const RGB* pixels,
+      struct YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
       uint8_t count);
   // Optional callbacks surrounding each dirty rectangular region emitted by
   // VideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
-  void (*begin_render_region)(struct VideoState* video, VideoRegion region);
-  void (*end_render_region)(struct VideoState* video);
-} VideoConfig;
+  void (*begin_render_region)(struct YVideoState* video, YVideoRegion region);
+  void (*end_render_region)(struct YVideoState* video);
+} YVideoConfig;
 
 // Default video config.
-YAX86_PUBLIC_HEADER const VideoConfig kDefaultVideoConfig = {
+YAX86_PUBLIC_HEADER const YVideoConfig kDefaultVideoConfig = {
     .context = NULL,
 
     .adapter = kVideoAdapterMDA,
@@ -768,12 +768,12 @@ YAX86_PUBLIC_HEADER const VideoConfig kDefaultVideoConfig = {
 };
 
 // Video state.
-typedef struct VideoState {
+typedef struct YVideoState {
   // Caller-provided runtime configuration.
-  VideoConfig config;
+  YVideoConfig config;
 
   // The video adapter being emulated, copied from the config at init time.
-  VideoAdapter adapter;
+  YVideoAdapter adapter;
 
   // Motorola 6845 CRT controller registers.
   uint8_t registers[kNumCRTCRegisters];
@@ -792,40 +792,40 @@ typedef struct VideoState {
   uint32_t frames;
 
   // Portions of the retained host display that no longer match video state.
-  VideoDirtyState dirty_state;
+  YVideoDirtyState dirty_state;
 
   // Pixels emitted so far for the region currently being rendered. A windowed
   // display places pixels by count rather than by coordinate, so a region that
   // emits a different number of pixels than it declared would corrupt it; this
   // is what the check at the end of each region compares.
   uint32_t num_pixels_emitted_for_region;
-} VideoState;
+} YVideoState;
 
 // Initialize video state with the provided configuration.
-YAX86_PUBLIC void VideoInit(VideoState* video);
+YAX86_PUBLIC void VideoInit(YVideoState* video);
 
 // Metadata for the adapter being emulated.
-YAX86_PUBLIC const VideoAdapterMetadata* VideoGetAdapterMetadata(
-    const VideoState* video);
+YAX86_PUBLIC const YVideoAdapterMetadata* VideoGetAdapterMetadata(
+    const YVideoState* video);
 
 // The current video mode, derived from the mode control register.
-YAX86_PUBLIC VideoMode VideoGetMode(const VideoState* video);
+YAX86_PUBLIC YVideoMode VideoGetMode(const YVideoState* video);
 
 // Metadata for the current video mode.
-YAX86_PUBLIC const VideoModeMetadata* VideoGetModeMetadata(
-    const VideoState* video);
+YAX86_PUBLIC const YVideoModeMetadata* VideoGetModeMetadata(
+    const YVideoState* video);
 
 // Read a byte from a video I/O port.
-YAX86_PUBLIC uint8_t VideoReadPort(VideoState* video, uint16_t port);
+YAX86_PUBLIC uint8_t VideoReadPort(YVideoState* video, uint16_t port);
 // Write a byte to a video I/O port.
 YAX86_PUBLIC void VideoWritePort(
-    VideoState* video, uint16_t port, uint8_t value);
+    YVideoState* video, uint16_t port, uint8_t value);
 
 // Read a byte from video RAM.
-YAX86_PUBLIC uint8_t VideoReadVRAM(VideoState* video, uint32_t address);
+YAX86_PUBLIC uint8_t VideoReadVRAM(YVideoState* video, uint32_t address);
 // Write a byte to video RAM.
 YAX86_PUBLIC void VideoWriteVRAM(
-    VideoState* video, uint32_t address, uint8_t value);
+    YVideoState* video, uint32_t address, uint8_t value);
 
 // Advance the CRT beam by the given number of CPU cycles. This drives the
 // retrace bits in the status register and the blink phase.
@@ -833,12 +833,12 @@ YAX86_PUBLIC void VideoWriteVRAM(
 // The cost does not depend on how many cycles are passed, so a caller that
 // advances the beam only when something is about to look at it may pass a
 // whole frame's worth at once.
-YAX86_PUBLIC void VideoTick(VideoState* video, uint32_t cycles);
+YAX86_PUBLIC void VideoTick(YVideoState* video, uint32_t cycles);
 
 // Bring dirty portions of the retained host display up to date. Each region is
 // bracketed by the optional region callbacks and its pixels are passed to
 // write_pixels in row-major horizontal spans. Does nothing when the display is
 // unchanged.
-YAX86_PUBLIC void VideoRender(VideoState* video);
+YAX86_PUBLIC void VideoRender(YVideoState* video);
 
 #endif  // YAX86_VIDEO_PUBLIC_H

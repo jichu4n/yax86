@@ -12,7 +12,7 @@ class PortCTest : public ::testing::Test {
     PPIInit(&ppi_);
   }
 
-  PPIState ppi_ = {0};
+  YPPIState ppi_ = {0};
 };
 
 TEST_F(PortCTest, ReadSwitches1to4) {
