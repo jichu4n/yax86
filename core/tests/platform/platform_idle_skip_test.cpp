@@ -20,7 +20,7 @@ constexpr uint8_t kDOSIdleVector = 0x28;
 constexpr uint8_t kOtherVector = 0x29;
 
 // What the SDL runtime gives the machine per display frame.
-constexpr uint32_t kCyclesPerFrame = kCPUCyclesPerSecond / 60;
+constexpr uint32_t kCyclesPerFrame = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 60;
 
 enum : uint8_t {
   kOpSti = 0xFB,
@@ -46,7 +46,7 @@ constexpr uint8_t kChannel0Mode2 = 0x34;
 struct IdleMachine {
   YPlatformState platform = {};
   uint8_t ram[64 * 1024] = {0};
-  uint8_t vram[kCGAVRAMSize] = {0};
+  uint8_t vram[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 
   // Returns false if the platform could not be initialized, which the caller
   // asserts on - a constructor cannot.
@@ -61,10 +61,10 @@ struct IdleMachine {
       return false;
     }
 
-    platform.cpu.registers[kCS] = 0;
-    platform.cpu.registers[kIP] = kProgramOffset;
-    platform.cpu.registers[kSS] = 0;
-    platform.cpu.registers[kSP] = 0xFFFE;
+    platform.cpu.registers[Y_CPU_CS] = 0;
+    platform.cpu.registers[Y_CPU_IP] = kProgramOffset;
+    platform.cpu.registers[Y_CPU_SS] = 0;
+    platform.cpu.registers[Y_CPU_SP] = 0xFFFE;
 
     // Every vector points at the same handler, which counts the call and
     // returns. Without this the guest would vector through a zeroed table.
@@ -104,9 +104,9 @@ struct IdleMachine {
 
   // Programs PIT channel 0 to produce an event reload_value ticks from now.
   void SetTimer(uint16_t reload_value) {
-    YPlatformWritePortByte(&platform, kPITPortControl, kChannel0Mode2);
-    YPlatformWritePortByte(&platform, kPITPortChannel0, reload_value & 0xFF);
-    YPlatformWritePortByte(&platform, kPITPortChannel0, reload_value >> 8);
+    YPlatformWritePortByte(&platform, Y_PIT_PORT_CONTROL, kChannel0Mode2);
+    YPlatformWritePortByte(&platform, Y_PIT_PORT_CHANNEL0, reload_value & 0xFF);
+    YPlatformWritePortByte(&platform, Y_PIT_PORT_CHANNEL0, reload_value >> 8);
   }
 
   // How many times the guest has been round its polling loop.
@@ -119,7 +119,7 @@ struct IdleMachine {
   // that actually took, which should be the budget and not much more.
   uint32_t RunOneFrame() {
     const uint32_t start = platform.ticks;
-    EXPECT_EQ(YPlatformRun(&platform, kCyclesPerFrame), kPlatformRunning);
+    EXPECT_EQ(YPlatformRun(&platform, kCyclesPerFrame), Y_PLATFORM_RUNNING);
     return platform.ticks - start;
   }
 };
@@ -188,7 +188,7 @@ TEST(PlatformIdleSkipTest, SkipStopsAtTheNextDeviceDeadline) {
   // Far enough out to be worth skipping to, well inside a frame.
   constexpr uint16_t kReloadTicks = 1000;
   machine.SetTimer(kReloadTicks);
-  ASSERT_LT(kReloadTicks * kCyclesPerPITTick, kCyclesPerFrame / 4);
+  ASSERT_LT(kReloadTicks * Y_PLATFORM_CYCLES_PER_PIT_TICK, kCyclesPerFrame / 4);
 
   machine.RunOneFrame();
 
@@ -248,21 +248,21 @@ TEST(PlatformIdleSkipTest, DevicesAreSyncedAcrossASkip) {
 // loop between each; without it, one skip swallows the lot.
 TEST(PlatformIdleSkipTest, LargeBudgetIsDeliveredInBoundedSteps) {
   // A second of emulated time in one call, ten times the skip ceiling.
-  constexpr uint32_t kBudget = kCPUCyclesPerSecond;
+  constexpr uint32_t kBudget = Y_PLATFORM_CPU_CYCLES_PER_SECOND;
 
   IdleMachine machine;
   ASSERT_TRUE(machine.Init(
       /*enable_idle_skip=*/true, kDOSIdleVector, /*program_timer=*/false));
-  ASSERT_EQ(YPITTicksUntilNextEvent(&machine.platform.pit), kPITNoEvent)
+  ASSERT_EQ(YPITTicksUntilNextEvent(&machine.platform.pit), Y_PIT_NO_EVENT)
       << "an unprogrammed PIT should schedule nothing";
 
   const uint32_t start = machine.platform.ticks;
-  ASSERT_EQ(YPlatformRun(&machine.platform, kBudget), kPlatformRunning);
+  ASSERT_EQ(YPlatformRun(&machine.platform, kBudget), Y_PLATFORM_RUNNING);
   const uint32_t elapsed = machine.platform.ticks - start;
 
   // Delivered in full, and not overshot.
   EXPECT_GE(elapsed, kBudget);
-  EXPECT_LT(elapsed - kBudget, kCyclesPerMillisecond);
+  EXPECT_LT(elapsed - kBudget, Y_PLATFORM_CYCLES_PER_MILLISECOND);
   // And delivered in several capped steps rather than one unbounded one.
   EXPECT_GT(machine.LoopCount(), 5u);
 }

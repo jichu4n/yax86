@@ -4,17 +4,17 @@
 
 // The mounted image, held in memory for the lifetime of the program. A blank
 // disk is all zeroes, which is what an unpartitioned drive looks like.
-static uint8_t g_hdd_image[kHDCGeometry10MBImageSize];
+static uint8_t g_hdd_image[Y_HDC_GEOMETRY_10MB_IMAGE_SIZE];
 
 static uint8_t HardDiskReadByte(
     YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive, uint32_t offset) {
-  return offset < kHDCGeometry10MBImageSize ? g_hdd_image[offset] : 0xFF;
+  return offset < Y_HDC_GEOMETRY_10MB_IMAGE_SIZE ? g_hdd_image[offset] : 0xFF;
 }
 
 static void HardDiskWriteByte(
     YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive, uint32_t offset,
     uint8_t value) {
-  if (offset < kHDCGeometry10MBImageSize) {
+  if (offset < Y_HDC_GEOMETRY_10MB_IMAGE_SIZE) {
     g_hdd_image[offset] = value;
   }
 }
@@ -27,12 +27,12 @@ bool HardDiskAttach(YPlatformState* platform, const char* path) {
       return false;
     }
     const size_t bytes_read =
-        fread(g_hdd_image, 1, kHDCGeometry10MBImageSize, file);
+        fread(g_hdd_image, 1, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE, file);
     // A well-formed image is exactly the size of the drive's geometry: a short
     // read means it is too small, and a successful extra byte means it is too
     // large.
     const bool is_expected_size =
-        bytes_read == kHDCGeometry10MBImageSize && fgetc(file) == EOF;
+        bytes_read == Y_HDC_GEOMETRY_10MB_IMAGE_SIZE && fgetc(file) == EOF;
     fclose(file);
 
     if (!is_expected_size) {
@@ -40,7 +40,7 @@ bool HardDiskAttach(YPlatformState* platform, const char* path) {
           stderr,
           "Hard disk image '%s' is not a %d MB image, which is the only "
           "geometry supported\n",
-          path, kHDCGeometry10MBImageSize / (1024 * 1024));
+          path, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE / (1024 * 1024));
       return false;
     }
   }

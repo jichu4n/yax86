@@ -10,15 +10,15 @@ class StringRepTest : public ::testing::Test {};
 TEST_F(StringRepTest, MOVSBBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-movsb-basic-test", "movsb\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -31,22 +31,22 @@ TEST_F(StringRepTest, MOVSBBasic) {
   EXPECT_EQ(helper->memory_[0x0500], 0x42);
 
   // Check that SI and DI were incremented by 1 (byte operation)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0401);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0501);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0401);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0501);
 }
 
 TEST_F(StringRepTest, MOVSWBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-movsw-basic-test", "movsw\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data (little-endian word)
   helper->memory_[0x0400] = 0x34;  // LSB
@@ -62,8 +62,8 @@ TEST_F(StringRepTest, MOVSWBasic) {
   EXPECT_EQ(helper->memory_[0x0501], 0x12);  // MSB
 
   // Check that SI and DI were incremented by 2 (word operation)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0402);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0502);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0402);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0502);
 }
 
 TEST_F(StringRepTest, MOVSBBackward) {
@@ -71,12 +71,12 @@ TEST_F(StringRepTest, MOVSBBackward) {
       "execute-movsb-backward-test",
       "std\n"  // Set direction flag for backward direction
       "movsb\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -89,11 +89,11 @@ TEST_F(StringRepTest, MOVSBBackward) {
   EXPECT_EQ(helper->memory_[0x0500], 0x42);
 
   // Check that SI and DI were decremented by 1 (byte operation, backward)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FF);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x04FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x03FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x04FF);
 
   // Check that direction flag is set
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_DF));
 }
 
 TEST_F(StringRepTest, MOVSWBackward) {
@@ -101,12 +101,12 @@ TEST_F(StringRepTest, MOVSWBackward) {
       "execute-movsw-backward-test",
       "std\n"  // Set direction flag for backward direction
       "movsw\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
 
   // Set up source data (little-endian word)
   helper->memory_[0x0400] = 0x34;  // LSB
@@ -122,26 +122,26 @@ TEST_F(StringRepTest, MOVSWBackward) {
   EXPECT_EQ(helper->memory_[0x0501], 0x12);  // MSB
 
   // Check that SI and DI were decremented by 2 (word operation, backward)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FE);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x04FE);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x03FE);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x04FE);
 
   // Check that direction flag is set
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_DF));
 }
 
 TEST_F(StringRepTest, REPMOVSBBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-rep-movsb-test", "rep movsb\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
-  helper->cpu_.registers[kCX] = 5;       // Repeat count
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_CX] = 5;       // Repeat count
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x10;
@@ -168,26 +168,26 @@ TEST_F(StringRepTest, REPMOVSBBasic) {
   EXPECT_EQ(helper->memory_[0x0504], 0x50);
 
   // Check that SI and DI were incremented by count (5 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0405);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0505);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0405);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0505);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPMOVSWBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-rep-movsw-test", "rep movsw\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
-  helper->cpu_.registers[kCX] = 3;       // Repeat count (3 words)
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_CX] = 3;       // Repeat count (3 words)
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data (little-endian words)
   helper->memory_[0x0400] = 0x34;  // Word 1 LSB
@@ -214,11 +214,11 @@ TEST_F(StringRepTest, REPMOVSWBasic) {
   EXPECT_EQ(helper->memory_[0x0505], 0x9A);  // Word 3 MSB
 
   // Check that SI and DI were incremented by count * 2 (3 words = 6 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0406);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0506);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0406);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0506);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPMOVSBBackward) {
@@ -226,13 +226,14 @@ TEST_F(StringRepTest, REPMOVSBBackward) {
       "execute-rep-movsb-backward-test",
       "std\n"  // Set direction flag for backward direction
       "rep movsb\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses (point to last byte)
-  helper->cpu_.registers[kSI] = 0x0404;  // Source at DS:SI (last byte)
-  helper->cpu_.registers[kDI] = 0x0504;  // Destination at ES:DI (last byte)
-  helper->cpu_.registers[kCX] = 5;       // Repeat count
+  helper->cpu_.registers[Y_CPU_SI] = 0x0404;  // Source at DS:SI (last byte)
+  helper->cpu_.registers[Y_CPU_DI] =
+      0x0504;                            // Destination at ES:DI (last byte)
+  helper->cpu_.registers[Y_CPU_CX] = 5;  // Repeat count
 
   // Set up source data
   helper->memory_[0x0400] = 0x10;
@@ -259,26 +260,26 @@ TEST_F(StringRepTest, REPMOVSBBackward) {
   EXPECT_EQ(helper->memory_[0x0504], 0x50);
 
   // Check that SI and DI were decremented by count (5 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FF);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x04FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x03FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x04FF);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPMOVSBZeroCount) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-rep-movsb-zero-test", "rep movsb\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
-  helper->cpu_.registers[kCX] = 0;       // Zero repeat count
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_CX] = 0;       // Zero repeat count
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -291,26 +292,26 @@ TEST_F(StringRepTest, REPMOVSBZeroCount) {
   EXPECT_EQ(helper->memory_[0x0500], 0x00);
 
   // Check that SI and DI were not modified
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0400);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0500);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0400);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0500);
 
   // Check that CX remains 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, MOVSBSegmentOverride) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-movsb-segment-test",
       "es movsb\n");  // ES segment override for source
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at ES:SI (with override)
-  helper->cpu_.registers[kDI] = 0x0500;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at ES:SI (with override)
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;  // Destination at ES:DI
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data at ES:SI
   helper->memory_[0x0400] = 0x42;  // Source data
@@ -323,28 +324,28 @@ TEST_F(StringRepTest, MOVSBSegmentOverride) {
   EXPECT_EQ(helper->memory_[0x0500], 0x42);
 
   // Check that SI and DI were incremented by 1
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0401);
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0501);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0401);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0501);
 }
 
 TEST_F(StringRepTest, MOVSBNoFlagsAffected) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-movsb-flags-test", "movsb\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source and destination addresses
-  helper->cpu_.registers[kSI] = 0x0400;
-  helper->cpu_.registers[kDI] = 0x0500;
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;
+  helper->cpu_.registers[Y_CPU_DI] = 0x0500;
 
   // Set various flags before the operation
-  YCPUSetFlag(&helper->cpu_, kCF, true);
-  YCPUSetFlag(&helper->cpu_, kZF, true);
-  YCPUSetFlag(&helper->cpu_, kSF, true);
-  YCPUSetFlag(&helper->cpu_, kPF, true);
-  YCPUSetFlag(&helper->cpu_, kOF, true);
-  YCPUSetFlag(&helper->cpu_, kAF, true);
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_ZF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_SF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_PF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_OF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_AF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -354,13 +355,13 @@ TEST_F(StringRepTest, MOVSBNoFlagsAffected) {
 
   // Check that MOVS instruction doesn't affect arithmetic flags
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true},
-       {kDF, false}});  // DF should remain unchanged
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true},
+       {Y_CPU_DF, false}});  // DF should remain unchanged
 }
 
 // ============================================================================
@@ -370,14 +371,14 @@ TEST_F(StringRepTest, MOVSBNoFlagsAffected) {
 TEST_F(StringRepTest, STOSBBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-stosb-basic-test", "stosb\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address and source value
-  helper->cpu_.registers[kDI] = 0x0400;  // Destination at ES:DI
-  helper->cpu_.registers[kAX] = 0x1242;  // AL = 0x42
+  helper->cpu_.registers[Y_CPU_DI] = 0x0400;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_AX] = 0x1242;  // AL = 0x42
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Clear destination
   helper->memory_[0x0400] = 0x00;
@@ -389,23 +390,23 @@ TEST_F(StringRepTest, STOSBBasic) {
   EXPECT_EQ(helper->memory_[0x0400], 0x42);
 
   // Check that DI was incremented by 1 (byte operation)
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0401);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0401);
 
   // Check that AL is unchanged
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0x42);
 }
 
 TEST_F(StringRepTest, STOSWBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-stosw-basic-test", "stosw\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address and source value
-  helper->cpu_.registers[kDI] = 0x0400;  // Destination at ES:DI
-  helper->cpu_.registers[kAX] = 0x1234;  // AX = 0x1234
+  helper->cpu_.registers[Y_CPU_DI] = 0x0400;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_AX] = 0x1234;  // AX = 0x1234
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Clear destination
   helper->memory_[0x0400] = 0x00;
@@ -419,10 +420,10 @@ TEST_F(StringRepTest, STOSWBasic) {
   EXPECT_EQ(helper->memory_[0x0401], 0x12);  // MSB
 
   // Check that DI was incremented by 2 (word operation)
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0402);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0402);
 
   // Check that AX is unchanged
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x1234);
 }
 
 TEST_F(StringRepTest, STOSBBackward) {
@@ -430,11 +431,11 @@ TEST_F(StringRepTest, STOSBBackward) {
       "execute-stosb-backward-test",
       "std\n"  // Set direction flag for backward direction
       "stosb\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address and source value
-  helper->cpu_.registers[kDI] = 0x0400;  // Destination at ES:DI
-  helper->cpu_.registers[kAX] = 0x5678;  // AL = 0x78
+  helper->cpu_.registers[Y_CPU_DI] = 0x0400;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_AX] = 0x5678;  // AL = 0x78
 
   // Clear destination
   helper->memory_[0x0400] = 0x00;
@@ -446,10 +447,10 @@ TEST_F(StringRepTest, STOSBBackward) {
   EXPECT_EQ(helper->memory_[0x0400], 0x78);
 
   // Check that DI was decremented by 1 (byte operation, backward)
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x03FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x03FF);
 
   // Check that direction flag is set
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_DF));
 }
 
 TEST_F(StringRepTest, STOSWBackward) {
@@ -457,11 +458,11 @@ TEST_F(StringRepTest, STOSWBackward) {
       "execute-stosw-backward-test",
       "std\n"  // Set direction flag for backward direction
       "stosw\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address and source value
-  helper->cpu_.registers[kDI] = 0x0400;  // Destination at ES:DI
-  helper->cpu_.registers[kAX] = 0x9ABC;  // AX = 0x9ABC
+  helper->cpu_.registers[Y_CPU_DI] = 0x0400;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_AX] = 0x9ABC;  // AX = 0x9ABC
 
   // Clear destination
   helper->memory_[0x0400] = 0x00;
@@ -475,24 +476,24 @@ TEST_F(StringRepTest, STOSWBackward) {
   EXPECT_EQ(helper->memory_[0x0401], 0x9A);  // MSB
 
   // Check that DI was decremented by 2 (word operation, backward)
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x03FE);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x03FE);
 
   // Check that direction flag is set
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_DF));
 }
 
 TEST_F(StringRepTest, REPSTOSBBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-rep-stosb-test", "rep stosb\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address, source value, and repeat count
-  helper->cpu_.registers[kDI] = 0x0300;  // Destination at ES:DI
-  helper->cpu_.registers[kAX] = 0x00AA;  // AL = 0xAA
-  helper->cpu_.registers[kCX] = 5;       // Repeat count
+  helper->cpu_.registers[Y_CPU_DI] = 0x0300;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_AX] = 0x00AA;  // AL = 0xAA
+  helper->cpu_.registers[Y_CPU_CX] = 5;       // Repeat count
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Clear destination
   for (int i = 0; i < 5; i++) {
@@ -510,24 +511,24 @@ TEST_F(StringRepTest, REPSTOSBBasic) {
   EXPECT_EQ(helper->memory_[0x0304], 0xAA);
 
   // Check that DI was incremented by count (5 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0305);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0305);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPSTOSWBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-rep-stosw-test", "rep stosw\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address, source value, and repeat count
-  helper->cpu_.registers[kDI] = 0x0300;  // Destination at ES:DI
-  helper->cpu_.registers[kAX] = 0xDEAD;  // AX = 0xDEAD
-  helper->cpu_.registers[kCX] = 3;       // Repeat count (3 words)
+  helper->cpu_.registers[Y_CPU_DI] = 0x0300;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_AX] = 0xDEAD;  // AX = 0xDEAD
+  helper->cpu_.registers[Y_CPU_CX] = 3;       // Repeat count (3 words)
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Clear destination
   for (int i = 0; i < 6; i++) {
@@ -546,10 +547,10 @@ TEST_F(StringRepTest, REPSTOSWBasic) {
   EXPECT_EQ(helper->memory_[0x0305], 0xDE);  // Word 3 MSB
 
   // Check that DI was incremented by count * 2 (3 words = 6 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0306);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0306);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPSTOSBBackward) {
@@ -557,13 +558,14 @@ TEST_F(StringRepTest, REPSTOSBBackward) {
       "execute-rep-stosb-backward-test",
       "std\n"  // Set direction flag for backward direction
       "rep stosb\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address (point to last byte), source value, and repeat
   // count
-  helper->cpu_.registers[kDI] = 0x0304;  // Destination at ES:DI (last byte)
-  helper->cpu_.registers[kAX] = 0x00BB;  // AL = 0xBB
-  helper->cpu_.registers[kCX] = 5;       // Repeat count
+  helper->cpu_.registers[Y_CPU_DI] =
+      0x0304;  // Destination at ES:DI (last byte)
+  helper->cpu_.registers[Y_CPU_AX] = 0x00BB;  // AL = 0xBB
+  helper->cpu_.registers[Y_CPU_CX] = 5;       // Repeat count
 
   // Clear destination
   for (int i = 0; i < 5; i++) {
@@ -581,24 +583,24 @@ TEST_F(StringRepTest, REPSTOSBBackward) {
   EXPECT_EQ(helper->memory_[0x0304], 0xBB);
 
   // Check that DI was decremented by count (5 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x02FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x02FF);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPSTOSBZeroCount) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-rep-stosb-zero-test", "rep stosb\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address and source value
-  helper->cpu_.registers[kDI] = 0x0300;  // Destination at ES:DI
-  helper->cpu_.registers[kAX] = 0x00CC;  // AL = 0xCC
-  helper->cpu_.registers[kCX] = 0;       // Zero repeat count
+  helper->cpu_.registers[Y_CPU_DI] = 0x0300;  // Destination at ES:DI
+  helper->cpu_.registers[Y_CPU_AX] = 0x00CC;  // AL = 0xCC
+  helper->cpu_.registers[Y_CPU_CX] = 0;       // Zero repeat count
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up destination data
   helper->memory_[0x0300] = 0x99;  // Should remain unchanged
@@ -610,42 +612,42 @@ TEST_F(StringRepTest, REPSTOSBZeroCount) {
   EXPECT_EQ(helper->memory_[0x0300], 0x99);
 
   // Check that DI was not modified
-  EXPECT_EQ(helper->cpu_.registers[kDI], 0x0300);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DI], 0x0300);
 
   // Check that CX remains 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, STOSBNoFlagsAffected) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-stosb-flags-test", "stosb\n");
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up destination address and source value
-  helper->cpu_.registers[kDI] = 0x0300;
-  helper->cpu_.registers[kAX] = 0x00DD;  // AL = 0xDD
+  helper->cpu_.registers[Y_CPU_DI] = 0x0300;
+  helper->cpu_.registers[Y_CPU_AX] = 0x00DD;  // AL = 0xDD
 
   // Set various flags before the operation
-  YCPUSetFlag(&helper->cpu_, kCF, true);
-  YCPUSetFlag(&helper->cpu_, kZF, true);
-  YCPUSetFlag(&helper->cpu_, kSF, true);
-  YCPUSetFlag(&helper->cpu_, kPF, true);
-  YCPUSetFlag(&helper->cpu_, kOF, true);
-  YCPUSetFlag(&helper->cpu_, kAF, true);
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_ZF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_SF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_PF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_OF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_AF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Execute STOSB
   helper->ExecuteInstructions(1);
 
   // Check that STOS instruction doesn't affect arithmetic flags
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true},
-       {kDF, false}});  // DF should remain unchanged
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true},
+       {Y_CPU_DF, false}});  // DF should remain unchanged
 }
 
 // ============================================================================
@@ -655,57 +657,58 @@ TEST_F(StringRepTest, STOSBNoFlagsAffected) {
 TEST_F(StringRepTest, LODSBBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-lodsb-basic-test", "lodsb\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
 
   // Clear AL register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute LODSB
   helper->ExecuteInstructions(1);
 
   // Check that data was loaded into AL
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);
-  EXPECT_EQ((helper->cpu_.registers[kAX] >> 8) & 0xFF, 0x00);  // AH unchanged
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0x42);
+  EXPECT_EQ(
+      (helper->cpu_.registers[Y_CPU_AX] >> 8) & 0xFF, 0x00);  // AH unchanged
 
   // Check that SI was incremented by 1 (byte operation)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0401);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0401);
 }
 
 TEST_F(StringRepTest, LODSWBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-lodsw-basic-test", "lodsw\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data (little-endian word)
   helper->memory_[0x0400] = 0x34;  // LSB
   helper->memory_[0x0401] = 0x12;  // MSB
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute LODSW
   helper->ExecuteInstructions(1);
 
   // Check that data was loaded into AX
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x1234);
 
   // Check that SI was incremented by 2 (word operation)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0402);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0402);
 }
 
 TEST_F(StringRepTest, LODSBBackward) {
@@ -713,28 +716,28 @@ TEST_F(StringRepTest, LODSBBackward) {
       "execute-lodsb-backward-test",
       "std\n"  // Set direction flag for backward direction
       "lodsb\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute STD then LODSB
   helper->ExecuteInstructions(2);
 
   // Check that data was loaded into AL
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0x42);
 
   // Check that SI was decremented by 1 (byte operation, backward)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x03FF);
 
   // Check that direction flag is set
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_DF));
 }
 
 TEST_F(StringRepTest, LODSWBackward) {
@@ -742,76 +745,76 @@ TEST_F(StringRepTest, LODSWBackward) {
       "execute-lodsw-backward-test",
       "std\n"  // Set direction flag for backward direction
       "lodsw\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
 
   // Set up source data (little-endian word)
   helper->memory_[0x0400] = 0x34;  // LSB
   helper->memory_[0x0401] = 0x12;  // MSB
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute STD then LODSW
   helper->ExecuteInstructions(2);
 
   // Check that data was loaded into AX
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x1234);
 
   // Check that SI was decremented by 2 (word operation, backward)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FE);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x03FE);
 
   // Check that direction flag is set
-  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, kDF));
+  EXPECT_TRUE(YCPUGetFlag(&helper->cpu_, Y_CPU_DF));
 }
 
 TEST_F(StringRepTest, LODSBSegmentOverride) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-lodsb-segment-test",
       "es lodsb\n");  // ES segment override for source
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at ES:SI (with override)
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at ES:SI (with override)
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data at ES:SI
   helper->memory_[0x0400] = 0x42;  // Source data
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute LODSB with ES segment override
   helper->ExecuteInstructions(1);
 
   // Check that data was loaded from ES:SI into AL
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x42);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0x42);
 
   // Check that SI was incremented by 1
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0401);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0401);
 }
 
 TEST_F(StringRepTest, LODSBNoFlagsAffected) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-lodsb-flags-test", "lodsb\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0400;
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;
 
   // Set various flags before the operation
-  YCPUSetFlag(&helper->cpu_, kCF, true);
-  YCPUSetFlag(&helper->cpu_, kZF, true);
-  YCPUSetFlag(&helper->cpu_, kSF, true);
-  YCPUSetFlag(&helper->cpu_, kPF, true);
-  YCPUSetFlag(&helper->cpu_, kOF, true);
-  YCPUSetFlag(&helper->cpu_, kAF, true);
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_ZF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_SF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_PF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_OF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_AF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
@@ -821,26 +824,26 @@ TEST_F(StringRepTest, LODSBNoFlagsAffected) {
 
   // Check that LODS instruction doesn't affect arithmetic flags
   helper->CheckFlags(
-      {{kCF, true},
-       {kZF, true},
-       {kSF, true},
-       {kPF, true},
-       {kOF, true},
-       {kAF, true},
-       {kDF, false}});  // DF should remain unchanged
+      {{Y_CPU_CF, true},
+       {Y_CPU_ZF, true},
+       {Y_CPU_SF, true},
+       {Y_CPU_PF, true},
+       {Y_CPU_OF, true},
+       {Y_CPU_AF, true},
+       {Y_CPU_DF, false}});  // DF should remain unchanged
 }
 
 TEST_F(StringRepTest, REPLODSBBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-rep-lodsb-test", "rep lodsb\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address and repeat count
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kCX] = 5;       // Repeat count
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_CX] = 5;       // Repeat count
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x10;
@@ -850,33 +853,33 @@ TEST_F(StringRepTest, REPLODSBBasic) {
   helper->memory_[0x0404] = 0x50;
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute REP LODSB
   helper->ExecuteInstructions(1);
 
   // Check that the last byte was loaded into AL (0x50)
   // Note: REP LODSB loads each byte but only the last one remains in AL
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x50);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0x50);
 
   // Check that SI was incremented by count (5 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0405);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0405);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPLODSWBasic) {
   auto helper =
       CPUTestHelper::CreateWithProgram("execute-rep-lodsw-test", "rep lodsw\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address and repeat count
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kCX] = 3;       // Repeat count (3 words)
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_CX] = 3;       // Repeat count (3 words)
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data (little-endian words)
   helper->memory_[0x0400] = 0x34;  // Word 1 LSB
@@ -887,20 +890,20 @@ TEST_F(StringRepTest, REPLODSWBasic) {
   helper->memory_[0x0405] = 0x9A;  // Word 3 MSB
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute REP LODSW
   helper->ExecuteInstructions(1);
 
   // Check that the last word was loaded into AX (0x9ABC)
   // Note: REP LODSW loads each word but only the last one remains in AX
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x9ABC);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x9ABC);
 
   // Check that SI was incremented by count * 2 (3 words = 6 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0406);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0406);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPLODSBBackward) {
@@ -908,11 +911,11 @@ TEST_F(StringRepTest, REPLODSBBackward) {
       "execute-rep-lodsb-backward-test",
       "std\n"  // Set direction flag for backward direction
       "rep lodsb\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address (point to last byte) and repeat count
-  helper->cpu_.registers[kSI] = 0x0404;  // Source at DS:SI (last byte)
-  helper->cpu_.registers[kCX] = 5;       // Repeat count
+  helper->cpu_.registers[Y_CPU_SI] = 0x0404;  // Source at DS:SI (last byte)
+  helper->cpu_.registers[Y_CPU_CX] = 5;       // Repeat count
 
   // Set up source data
   helper->memory_[0x0400] = 0x10;
@@ -922,51 +925,51 @@ TEST_F(StringRepTest, REPLODSBBackward) {
   helper->memory_[0x0404] = 0x50;
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute STD then REP LODSB
   helper->ExecuteInstructions(2);
 
   // Check that the last byte processed was loaded into AL (0x10)
   // Note: Processing backwards from 0x404 to 0x400, so last byte is 0x10
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0x10);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0x10);
 
   // Check that SI was decremented by count (5 bytes)
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x03FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x03FF);
 
   // Check that CX was decremented to 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, REPLODSBZeroCount) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-rep-lodsb-zero-test", "rep lodsb\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0400;  // Source at DS:SI
-  helper->cpu_.registers[kCX] = 0;       // Zero repeat count
+  helper->cpu_.registers[Y_CPU_SI] = 0x0400;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_CX] = 0;       // Zero repeat count
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0400] = 0x42;
 
   // Set AX register to a known value
-  helper->cpu_.registers[kAX] = 0x9999;
+  helper->cpu_.registers[Y_CPU_AX] = 0x9999;
 
   // Execute REP LODSB
   helper->ExecuteInstructions(1);
 
   // Check that AL was not changed (no iterations)
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x9999);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x9999);
 
   // Check that SI was not modified
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0400);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0400);
 
   // Check that CX remains 0
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0);
 }
 
 TEST_F(StringRepTest, LODSBMultipleOperations) {
@@ -975,13 +978,13 @@ TEST_F(StringRepTest, LODSBMultipleOperations) {
       "lodsb\n"
       "lodsb\n"
       "lodsb\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0300;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0300;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data
   helper->memory_[0x0300] = 0xAA;
@@ -989,22 +992,22 @@ TEST_F(StringRepTest, LODSBMultipleOperations) {
   helper->memory_[0x0302] = 0xCC;
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute first LODSB
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xAA);
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0301);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0xAA);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0301);
 
   // Execute second LODSB
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xBB);
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0302);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0xBB);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0302);
 
   // Execute third LODSB
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX] & 0xFF, 0xCC);
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0303);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX] & 0xFF, 0xCC);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0303);
 }
 
 TEST_F(StringRepTest, LODSWMultipleOperations) {
@@ -1012,13 +1015,13 @@ TEST_F(StringRepTest, LODSWMultipleOperations) {
       "execute-lodsw-multiple-test",
       "lodsw\n"
       "lodsw\n");
-  helper->cpu_.registers[kDS] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
 
   // Set up source address
-  helper->cpu_.registers[kSI] = 0x0300;  // Source at DS:SI
+  helper->cpu_.registers[Y_CPU_SI] = 0x0300;  // Source at DS:SI
 
   // Clear direction flag (forward direction)
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // Set up source data (little-endian words)
   helper->memory_[0x0300] = 0x11;  // Word 1 LSB
@@ -1027,17 +1030,17 @@ TEST_F(StringRepTest, LODSWMultipleOperations) {
   helper->memory_[0x0303] = 0x44;  // Word 2 MSB
 
   // Clear AX register
-  helper->cpu_.registers[kAX] = 0x0000;
+  helper->cpu_.registers[Y_CPU_AX] = 0x0000;
 
   // Execute first LODSW
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x2211);
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0302);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x2211);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0302);
 
   // Execute second LODSW
   helper->ExecuteInstructions(1);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x4433);
-  EXPECT_EQ(helper->cpu_.registers[kSI], 0x0304);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x4433);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SI], 0x0304);
 }
 
 // MOVS, STOS and LODS set no flags, so a repetition prefix has no zero flag to
@@ -1058,17 +1061,17 @@ TEST_F(StringRepTest, RepneRepeatsNonComparisonStringInstructions) {
     auto helper = make_unique<CPUTestHelper>();
     // 0xF2 is REPNZ, which on these instructions repeats just as REP does.
     helper->LoadCOM({0xF2, test_case.opcode});
-    helper->cpu_.registers[kDS] = 0;
-    helper->cpu_.registers[kES] = 0;
-    helper->cpu_.registers[kSI] = 0x0400;
-    helper->cpu_.registers[kDI] = 0x0600;
-    helper->cpu_.registers[kCX] = 3;
-    YCPUSetFlag(&helper->cpu_, kDF, false);
+    helper->cpu_.registers[Y_CPU_DS] = 0;
+    helper->cpu_.registers[Y_CPU_ES] = 0;
+    helper->cpu_.registers[Y_CPU_SI] = 0x0400;
+    helper->cpu_.registers[Y_CPU_DI] = 0x0600;
+    helper->cpu_.registers[Y_CPU_CX] = 3;
+    YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
     // A zero flag state that would stop a conditional repeat immediately.
-    YCPUSetFlag(&helper->cpu_, kZF, true);
+    YCPUSetFlag(&helper->cpu_, Y_CPU_ZF, true);
 
     helper->ExecuteInstructions(1);
 
-    EXPECT_EQ(helper->cpu_.registers[kCX], 0) << test_case.name;
+    EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0) << test_case.name;
   }
 }

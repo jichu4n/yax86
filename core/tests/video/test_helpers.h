@@ -22,7 +22,7 @@ inline void PrintTo(const YVideoRGB& rgb, std::ostream* os) {
 namespace video_test {
 
 // Mock VRAM, sized for the larger of the two adapters.
-inline uint8_t mock_vram[kCGAVRAMSize];
+inline uint8_t mock_vram[Y_VIDEO_CGA_VRAM_SIZE];
 
 // Mock frame buffer, sized for the larger of the two adapters. Rendering writes
 // into it the same way a real display would, so a test can simply ask what
@@ -35,7 +35,7 @@ inline YVideoRGB mock_frame_buffer[kMaxFrameBufferHeight][kMaxFrameBufferWidth];
 // Render activity since the last call to Render().
 inline int mock_pixel_write_count;
 inline int mock_pixel_span_count;
-inline YVideoRegion mock_regions[kVideoDirtyRowCount];
+inline YVideoRegion mock_regions[Y_VIDEO_DIRTY_ROW_COUNT];
 inline int mock_region_count;
 inline int mock_region_end_count;
 // The region currently open, and the pixels written into it so far. A real
@@ -56,7 +56,7 @@ inline void MockWritePixels(
     YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
     uint8_t count) {
   EXPECT_GT(count, 0);
-  EXPECT_LE(count, kVideoPixelBatchSize);
+  EXPECT_LE(count, Y_VIDEO_PIXEL_BATCH_SIZE);
   EXPECT_LE(origin.x + count, kMaxFrameBufferWidth);
   ++mock_pixel_span_count;
   mock_pixel_write_count += count;
@@ -78,7 +78,7 @@ inline void MockWritePixels(
 }
 
 inline void MockBeginRenderRegion(YVideoState* video, YVideoRegion region) {
-  if (mock_region_count < kVideoDirtyRowCount) {
+  if (mock_region_count < Y_VIDEO_DIRTY_ROW_COUNT) {
     mock_regions[mock_region_count] = region;
   }
   ++mock_region_count;
@@ -101,7 +101,7 @@ inline int mock_log_error_count;
 inline void MockWriteLogLine(
     void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
     const char* message, size_t length) {
-  if (level == kLogLevelError) {
+  if (level == Y_LOG_LEVEL_ERROR) {
     ++mock_log_error_count;
   }
 }
@@ -122,7 +122,7 @@ class VideoTestBase : public ::testing::Test {
     logger_config_ = YLoggerConfig{};
     logger_config_.write_line = MockWriteLogLine;
     logger_config_.enabled_modules = YLogModuleMask(&YVideoLogModule);
-    logger_config_.min_level = kLogLevelError;
+    logger_config_.min_level = Y_LOG_LEVEL_ERROR;
     YLoggerInit(&logger_, &logger_config_);
 
     video_.config = YVideoDefaultConfig;
@@ -199,12 +199,12 @@ class VideoTestBase : public ::testing::Test {
 
   // Set a 6845 register through the I/O ports.
   void WriteRegister(uint8_t index, uint8_t value) {
-    uint16_t index_port = video_.adapter == kVideoAdapterCGA
-                              ? uint16_t{kCGAPortRegisterIndex}
-                              : uint16_t{kMDAPortRegisterIndex};
-    uint16_t data_port = video_.adapter == kVideoAdapterCGA
-                             ? uint16_t{kCGAPortRegisterData}
-                             : uint16_t{kMDAPortRegisterData};
+    uint16_t index_port = video_.adapter == Y_VIDEO_ADAPTER_CGA
+                              ? uint16_t{Y_VIDEO_CGA_PORT_REGISTER_INDEX}
+                              : uint16_t{Y_VIDEO_MDA_PORT_REGISTER_INDEX};
+    uint16_t data_port = video_.adapter == Y_VIDEO_ADAPTER_CGA
+                             ? uint16_t{Y_VIDEO_CGA_PORT_REGISTER_DATA}
+                             : uint16_t{Y_VIDEO_MDA_PORT_REGISTER_DATA};
     YVideoWritePort(&video_, index_port, index);
     YVideoWritePort(&video_, data_port, value);
   }
@@ -213,7 +213,7 @@ class VideoTestBase : public ::testing::Test {
   // cell a test is inspecting.
   void DisableCursor() {
     uint8_t selected_register = video_.selected_register;
-    WriteRegister(kCRTCRegisterCursorStart, 0x20);
+    WriteRegister(Y_VIDEO_CRTC_REGISTER_CURSOR_START, 0x20);
     video_.selected_register = selected_register;
   }
 

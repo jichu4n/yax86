@@ -39,14 +39,14 @@ class PlatformDirectDataWindowTest : public ::testing::Test {
     platform_.config.vram = vram_;
     // Named rather than left to default, since kCGASegment below and the size
     // of vram_ both depend on which adapter is mapped.
-    platform_.config.video_adapter = kVideoAdapterCGA;
+    platform_.config.video_adapter = Y_VIDEO_ADAPTER_CGA;
 
     ASSERT_TRUE(YPlatformInit(&platform_));
-    platform_.cpu.registers[kCS] = 0;
-    platform_.cpu.registers[kIP] = kProgramOffset;
-    platform_.cpu.registers[kDS] = 0;
-    platform_.cpu.registers[kSS] = 0;
-    platform_.cpu.registers[kSP] = 0xFFFE;
+    platform_.cpu.registers[Y_CPU_CS] = 0;
+    platform_.cpu.registers[Y_CPU_IP] = kProgramOffset;
+    platform_.cpu.registers[Y_CPU_DS] = 0;
+    platform_.cpu.registers[Y_CPU_SS] = 0;
+    platform_.cpu.registers[Y_CPU_SP] = 0xFFFE;
   }
 
   void Load(const std::vector<uint8_t>& code) {
@@ -56,22 +56,22 @@ class PlatformDirectDataWindowTest : public ::testing::Test {
   }
 
   YPlatformRunStatus RunInstructions(int num_instructions) {
-    YPlatformRunStatus status = kPlatformRunning;
+    YPlatformRunStatus status = Y_PLATFORM_RUNNING;
     for (int i = 0; i < num_instructions; ++i) {
       status = YPlatformTick(&platform_);
-      if (status != kPlatformRunning) {
+      if (status != Y_PLATFORM_RUNNING) {
         return status;
       }
     }
     return status;
   }
 
-  uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
-  uint16_t ax() const { return platform_.cpu.registers[kAX]; }
+  uint8_t al() const { return platform_.cpu.registers[Y_CPU_AX] & 0xFF; }
+  uint16_t ax() const { return platform_.cpu.registers[Y_CPU_AX]; }
 
   YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 };
 
 TEST_F(PlatformDirectDataWindowTest, OpensAWindowOverConventionalMemory) {
@@ -90,7 +90,7 @@ TEST_F(PlatformDirectDataWindowTest, OperandReadsAndWritesGoThroughTheWindow) {
        kOpHlt});
   ram_[kDataOffset + 1] = 0x5A;
 
-  ASSERT_EQ(RunInstructions(3), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(3), Y_PLATFORM_RUNNING);
   EXPECT_EQ(ram_[kDataOffset], 0x42);
   EXPECT_EQ(al(), 0x5A);
 }
@@ -102,7 +102,7 @@ TEST_F(PlatformDirectDataWindowTest, HostWritesAreVisibleThroughTheWindow) {
   Load({kOpMovAlMoffs8, kDataOffset & 0xFF, kDataOffset >> 8, kOpHlt});
   ram_[kDataOffset] = 0x7E;
 
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   EXPECT_EQ(al(), 0x7E);
 }
 
@@ -111,9 +111,9 @@ TEST_F(PlatformDirectDataWindowTest, HostWritesAreVisibleThroughTheWindow) {
 TEST_F(
     PlatformDirectDataWindowTest, AddressesAboveTheWindowTakeTheOrdinaryPath) {
   Load({kOpMovAlImm8, 0x41, kOpMovMoffs8Al, 0x00, 0x00, kOpHlt});
-  platform_.cpu.registers[kDS] = kCGASegment;
+  platform_.cpu.registers[Y_CPU_DS] = kCGASegment;
 
-  ASSERT_EQ(RunInstructions(2), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(2), Y_PLATFORM_RUNNING);
   EXPECT_EQ(vram_[0], 0x41);
 }
 
@@ -122,10 +122,10 @@ TEST_F(
 // conventional memory is mapped here, so the high byte reads as open bus.
 TEST_F(PlatformDirectDataWindowTest, WordStraddlingTheTopOfTheWindow) {
   Load({kOpMovAxMoffs16, 0x0F, 0x00, kOpHlt});
-  platform_.cpu.registers[kDS] = kSegmentBelowTopOfRAM;
+  platform_.cpu.registers[Y_CPU_DS] = kSegmentBelowTopOfRAM;
   ram_[sizeof(ram_) - 1] = 0x34;
 
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   EXPECT_EQ(ax(), 0xFF34);
 }
 

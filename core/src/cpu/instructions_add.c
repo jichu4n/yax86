@@ -25,11 +25,12 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterInc(
   bool op2_sign = (op2 & sign_bit) != 0;
   bool result_sign = (result & sign_bit) != 0;
   YCPUSetFlag(
-      ctx->cpu, kOF, (op1_sign == op2_sign) && (result_sign != op1_sign));
+      ctx->cpu, Y_CPU_OF, (op1_sign == op2_sign) && (result_sign != op1_sign));
 
   // Auxiliary Carry Flag (AF) - carry from bit 3 to bit 4
   YCPUSetFlag(
-      ctx->cpu, kAF, ((op1 & 0xF) + (op2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
+      ctx->cpu, Y_CPU_AF,
+      ((op1 & 0xF) + (op2 & 0xF) + (did_carry ? 1 : 0)) > 0xF);
 }
 
 // Set CPU flags after an ADD or ADC instruction.
@@ -41,7 +42,7 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterAdd(
     uint32_t result, bool did_carry) {
   YCPUSetFlagsAfterInc(ctx, op1, op2, result, did_carry);
   // Carry Flag (CF)
-  YCPUSetFlag(ctx->cpu, kCF, result > YCPUMaxValue[ctx->metadata->width]);
+  YCPUSetFlag(ctx->cpu, Y_CPU_CF, result > YCPUMaxValue[ctx->metadata->width]);
 }
 
 // Common signature of YCPUSetFlagsAfterAdd and YCPUSetFlagsAfterInc.
@@ -56,12 +57,12 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteAddCommon(
     YCPUSetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = YCPUFromOperand(dest);
   uint32_t raw_src_value = YCPUFromOperandValue(src_value);
-  bool should_carry = carry && YCPUGetFlag(ctx->cpu, kCF);
+  bool should_carry = carry && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   uint32_t result = raw_dest_value + raw_src_value + (should_carry ? 1 : 0);
   YCPUWriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
       ctx, raw_dest_value, raw_src_value, result, should_carry);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // Common logic for ADD instructions
@@ -99,7 +100,7 @@ YCPUExecuteAddRegisterOrMemoryToRegister(const YCPUInstructionContext* ctx) {
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAddImmediateToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
   return YCPUExecuteAdd(ctx, &dest, src_value);
 }
@@ -140,7 +141,7 @@ YCPUExecuteAddRegisterOrMemoryToRegisterWithCarry(
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAddImmediateToALOrAXWithCarry(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
   return YCPUExecuteAddWithCarry(ctx, &dest, src_value);
 }

@@ -30,7 +30,7 @@ typedef struct YVideoPixelRun {
   YVideoState* video;
   // Where the pixels currently buffered begin. Advances past each batch.
   YVideoPosition origin;
-  YVideoRGB pixels[kVideoPixelBatchSize];
+  YVideoRGB pixels[Y_VIDEO_PIXEL_BATCH_SIZE];
   uint8_t count;
 } YVideoPixelRun;
 
@@ -62,15 +62,15 @@ YAX86_MODULE_PRIVATE_HEADER inline void YVideoPixelRunPush(
     YVideoPixelRun* run, YVideoRGB rgb) {
   run->pixels[run->count] = rgb;
   ++run->count;
-  if (run->count == kVideoPixelBatchSize) {
+  if (run->count == Y_VIDEO_PIXEL_BATCH_SIZE) {
     YVideoPixelRunFlush(run);
   }
 }
 
 // Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
 // natural columns; vertical coordinates are dirty rows - a character row in
-// text modes, a group of kVideoDirtyScanLinesPerGroup scan lines in graphics
-// modes.
+// text modes, a group of Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP scan lines in
+// graphics modes.
 YAX86_MODULE_PRIVATE void YVideoInvalidateRows(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row);

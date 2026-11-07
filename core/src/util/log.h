@@ -31,20 +31,20 @@
 typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
-  kLogLevelError = 0,
+  Y_LOG_LEVEL_ERROR = 0,
   // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
+  Y_LOG_LEVEL_WARN,
   // Diagnostic detail.
-  kLogLevelDebug,
+  Y_LOG_LEVEL_DEBUG,
 } YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
+  Y_LOG_MAX_LINE_LENGTH = 256,
   // Maximum number of distinct log modules, bounded by the width of
   // YLoggerConfig.enabled_modules.
-  kLogMaxModules = 32,
+  Y_LOG_MAX_MODULES = 32,
 };
 
 // Identifies the module a log message originated from.
@@ -53,7 +53,8 @@ enum {
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
 typedef struct YLogModule {
-  // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
+  // Bit index used for mask-based filtering. Must be less than
+  // Y_LOG_MAX_MODULES.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
@@ -100,7 +101,7 @@ typedef struct YLogger {
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
+  char buffer[Y_LOG_MAX_LINE_LENGTH];
 } YLogger;
 
 // Initialize a logger with the provided configuration.
@@ -155,16 +156,16 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
   va_list args;
   va_start(args, format);
   int formatted_length =
-      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, Y_LOG_MAX_LINE_LENGTH, format, args);
   va_end(args);
 
   // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
-    length = (size_t)formatted_length < kLogMaxLineLength
+    length = (size_t)formatted_length < Y_LOG_MAX_LINE_LENGTH
                  ? (size_t)formatted_length
-                 : kLogMaxLineLength - 1;
+                 : Y_LOG_MAX_LINE_LENGTH - 1;
   }
 
   uint64_t tick = logger->config->get_tick != NULL

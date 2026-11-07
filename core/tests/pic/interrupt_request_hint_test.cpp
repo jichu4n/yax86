@@ -26,7 +26,7 @@ class InterruptRequestHintTest : public ::testing::Test {
     YPICInit(&pic_);
     YPICWritePort(&pic_, kCommandPort, kTestICW1_INIT | kTestICW1_SNGL);
     YPICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
-    ASSERT_EQ(pic_.init_state, kPICReady);
+    ASSERT_EQ(pic_.init_state, Y_PIC_READY);
   }
 
   // What the flag is a cache of. Every check below compares the two rather
@@ -119,7 +119,7 @@ TEST_F(InterruptRequestHintTest, SetWhileALowerPriorityRequestIsHeldOff) {
   ASSERT_EQ(YPICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 1);
 
   YPICRaiseIRQ(&pic_, 6);
-  EXPECT_EQ(YPICGetPendingInterrupt(&pic_), kPICNoPendingInterrupt);
+  EXPECT_EQ(YPICGetPendingInterrupt(&pic_), Y_PIC_NO_PENDING_INTERRUPT);
   EXPECT_TRUE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
@@ -145,12 +145,12 @@ TEST_F(InterruptRequestHintTest, ASlaveRequestSetsTheMastersFlag) {
   YPICWritePort(&slave, 0xA0, kTestICW1_INIT);
   YPICWritePort(&slave, 0xA1, 0x70);
   YPICWritePort(&slave, 0xA1, 2);
-  ASSERT_EQ(slave.init_state, kPICReady);
+  ASSERT_EQ(slave.init_state, Y_PIC_READY);
 
   YPICWritePort(&pic_, kCommandPort, kTestICW1_INIT);
   YPICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
   YPICWritePort(&pic_, kDataPort, 1 << 2);
-  ASSERT_EQ(pic_.init_state, kPICReady);
+  ASSERT_EQ(pic_.init_state, Y_PIC_READY);
   YPICWritePort(&pic_, kDataPort, 0x00);
   YPICWritePort(&slave, 0xA1, 0x00);
   pic_.cascade_pic = &slave;

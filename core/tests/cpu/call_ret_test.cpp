@@ -16,25 +16,25 @@ TEST_F(CallRetTest, DirectNearCall) {
       "foo:\n"
       "  mov ax, 1234h\n"
       "  ret\n");
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = helper->memory_size_ - 2;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = helper->memory_size_ - 2;
 
-  helper->cpu_.registers[kAX] = 0;
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x00);
+  helper->cpu_.registers[Y_CPU_AX] = 0;
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x00);
 
   helper->ExecuteInstructions(1);  // call foo
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x06);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x06);
 
   helper->ExecuteInstructions(1);  // mov ax, 1234h
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x09);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x09);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x1234);
 
   helper->ExecuteInstructions(1);  // ret
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x03);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x03);
 
   helper->ExecuteInstructions(1);  // mov ax, 5555h
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x06);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x5555);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x06);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x5555);
 }
 
 TEST_F(CallRetTest, DirectFarCall) {
@@ -45,23 +45,23 @@ TEST_F(CallRetTest, DirectFarCall) {
       "foo:\n"
       "  mov ax, 1234h\n"
       "  retf\n");
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = helper->memory_size_ - 2;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = helper->memory_size_ - 2;
 
-  helper->cpu_.registers[kAX] = 0;
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x00);
+  helper->cpu_.registers[Y_CPU_AX] = 0;
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x00);
 
   helper->ExecuteInstructions(1);  // call $$foo
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x08);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x08);
 
   helper->ExecuteInstructions(1);  // mov ax, 1234h
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x0b);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1234);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x0b);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x1234);
 
   helper->ExecuteInstructions(1);  // retf
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x05);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x05);
 
   helper->ExecuteInstructions(1);  // mov ax, 5555h
-  EXPECT_EQ(helper->cpu_.registers[kIP], kCOMFileLoadOffset + 0x08);
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x5555);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], kCOMFileLoadOffset + 0x08);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x5555);
 }

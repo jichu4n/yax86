@@ -16,12 +16,12 @@
 
 enum {
   // Log module ID for the FDC.
-  kLogModuleIDFDC = 5,
+  Y_FDC_LOG_MODULE_ID = 5,
 };
 
 // Log module for the FDC.
 YAX86_PUBLIC_HEADER const YLogModule YFDCLogModule = {
-    .id = kLogModuleIDFDC,
+    .id = Y_FDC_LOG_MODULE_ID,
     .name = "FDC",
 };
 
@@ -49,68 +49,68 @@ struct YFDCState;
 
 enum {
   // Number of floppy drives supported by the FDC.
-  kFDCNumDrives = 4,
+  Y_FDC_NUM_DRIVES = 4,
   // Maximum size of a command request.
-  kFDCCommandBufferSize = 9,
+  Y_FDC_COMMAND_BUFFER_SIZE = 9,
   // Maximum size of a command result.
-  kFDCResultBufferSize = 7,
+  Y_FDC_RESULT_BUFFER_SIZE = 7,
 };
 
 // Command phases of the FDC.
 typedef enum YFDCCommandPhase {
   // No command in progress.
-  kFDCPhaseIdle = 0,
+  Y_FDC_PHASE_IDLE = 0,
   // Command has been issued, waiting for parameters.
-  kFDCPhaseCommand,
+  Y_FDC_PHASE_COMMAND,
   // Command parameters received, executing command.
-  kFDCPhaseExecution,
+  Y_FDC_PHASE_EXECUTION,
   // Command execution complete, sending result bytes.
-  kFDCPhaseResult,
+  Y_FDC_PHASE_RESULT,
 } YFDCCommandPhase;
 
 // I/O ports for the FDC.
 typedef enum YFDCPort {
   // Digital Output Register (write-only).
-  kFDCPortDOR = 0x3F2,
+  Y_FDC_PORT_DOR = 0x3F2,
   // Main Status Register (read-only).
-  kFDCPortMSR = 0x3F4,
+  Y_FDC_PORT_MSR = 0x3F4,
   // Data Register (read/write).
-  kFDCPortData = 0x3F5,
+  Y_FDC_PORT_DATA = 0x3F5,
 } YFDCPort;
 
 // Flags for the Main Status Register (MSR).
 enum {
   // Drive 0 is busy with a seek or recalibrate command.
-  kFDCMSRDrive0Busy = 1 << 0,
+  Y_FDC_MSR_DRIVE0_BUSY = 1 << 0,
   // Drive 1 is busy with a seek or recalibrate command.
-  kFDCMSRDrive1Busy = 1 << 1,
+  Y_FDC_MSR_DRIVE1_BUSY = 1 << 1,
   // Drive 2 is busy with a seek or recalibrate command.
-  kFDCMSRDrive2Busy = 1 << 2,
+  Y_FDC_MSR_DRIVE2_BUSY = 1 << 2,
   // Drive 3 is busy with a seek or recalibrate command.
-  kFDCMSRDrive3Busy = 1 << 3,
+  Y_FDC_MSR_DRIVE3_BUSY = 1 << 3,
   // A command is in progress.
-  kFDCMSRBusy = 1 << 4,
+  Y_FDC_MSR_BUSY = 1 << 4,
   // The FDC is in non-DMA mode.
-  kFDCMSRNonDMAMode = 1 << 5,
+  Y_FDC_MSR_NON_DMA_MODE = 1 << 5,
   // Indicates direction of data transfer. 0 = write to FDC, 1 = read from FDC.
-  kFDCMSRDataDirection = 1 << 6,
+  Y_FDC_MSR_DATA_DIRECTION = 1 << 6,
   // The Data Register is ready to send or receive data to/from the CPU.
-  kFDCMSRRequestForMaster = 1 << 7,
+  Y_FDC_MSR_REQUEST_FOR_MASTER = 1 << 7,
 };
 
 // Flags for the Digital Output Register (DOR).
 enum {
   // Drive selection (0-3).
-  kFDCDORDriveSelectMask = 0x03,
+  Y_FDC_DOR_DRIVE_SELECT_MASK = 0x03,
   // Controller reset (0 = Reset active, 1 = Controller enabled).
-  kFDCDORReset = 1 << 2,
+  Y_FDC_DOR_RESET = 1 << 2,
   // DMA and Interrupt enable (1 = enabled).
-  kFDCDORInterruptEnable = 1 << 3,
+  Y_FDC_DOR_INTERRUPT_ENABLE = 1 << 3,
   // Motor enable flags for drives 0-3.
-  kFDCDORMotor0Enable = 1 << 4,
-  kFDCDORMotor1Enable = 1 << 5,
-  kFDCDORMotor2Enable = 1 << 6,
-  kFDCDORMotor3Enable = 1 << 7,
+  Y_FDC_DOR_MOTOR0_ENABLE = 1 << 4,
+  Y_FDC_DOR_MOTOR1_ENABLE = 1 << 5,
+  Y_FDC_DOR_MOTOR2_ENABLE = 1 << 6,
+  Y_FDC_DOR_MOTOR3_ENABLE = 1 << 7,
 };
 
 // Flags for Status Register 0 (ST0).
@@ -120,56 +120,56 @@ enum {
   // 01 = Abnormal termination
   // 10 = Invalid command
   // 11 = Abnormal termination due to polling (Post-reset)
-  kFDCST0InterruptCodeMask = 0xC0,
-  kFDCST0NormalTermination = 0x00,
-  kFDCST0AbnormalTermination = 0x40,
-  kFDCST0InvalidCommand = 0x80,
-  kFDCST0AbnormalTerminationPolling = 0xC0,
+  Y_FDC_ST0_INTERRUPT_CODE_MASK = 0xC0,
+  Y_FDC_ST0_NORMAL_TERMINATION = 0x00,
+  Y_FDC_ST0_ABNORMAL_TERMINATION = 0x40,
+  Y_FDC_ST0_INVALID_COMMAND = 0x80,
+  Y_FDC_ST0_ABNORMAL_TERMINATION_POLLING = 0xC0,
 
   // Bit 5: Seek End
-  kFDCST0SeekEnd = 1 << 5,
+  Y_FDC_ST0_SEEK_END = 1 << 5,
   // Bit 4: Equipment Check
-  kFDCST0EquipmentCheck = 1 << 4,
+  Y_FDC_ST0_EQUIPMENT_CHECK = 1 << 4,
   // Bit 3: Not Ready
-  kFDCST0NotReady = 1 << 3,
+  Y_FDC_ST0_NOT_READY = 1 << 3,
   // Bit 2: Head Address
-  kFDCST0HeadAddress = 1 << 2,
+  Y_FDC_ST0_HEAD_ADDRESS = 1 << 2,
   // Bits 1-0: Drive Select
-  kFDCST0UnitSelectMask = 0x03,
+  Y_FDC_ST0_UNIT_SELECT_MASK = 0x03,
 };
 
 // Flags for Status Register 1 (ST1).
 enum {
   // Bit 7: End of Cylinder
-  kFDCST1EndOfCylinder = 1 << 7,
+  Y_FDC_ST1_END_OF_CYLINDER = 1 << 7,
   // Bit 5: Data Error
-  kFDCST1DataError = 1 << 5,
+  Y_FDC_ST1_DATA_ERROR = 1 << 5,
   // Bit 4: Overrun
-  kFDCST1Overrun = 1 << 4,
+  Y_FDC_ST1_OVERRUN = 1 << 4,
   // Bit 2: No Data
-  kFDCST1NoData = 1 << 2,
+  Y_FDC_ST1_NO_DATA = 1 << 2,
   // Bit 1: Not Writable
-  kFDCST1NotWritable = 1 << 1,
+  Y_FDC_ST1_NOT_WRITABLE = 1 << 1,
   // Bit 0: Missing Address Mark
-  kFDCST1MissingAddressMark = 1 << 0,
+  Y_FDC_ST1_MISSING_ADDRESS_MARK = 1 << 0,
 };
 
 // Flags for Status Register 2 (ST2).
 enum {
   // Bit 6: Control Mark
-  kFDCST2ControlMark = 1 << 6,
+  Y_FDC_ST2_CONTROL_MARK = 1 << 6,
   // Bit 5: Data Error in Data Field
-  kFDCST2DataErrorInDataField = 1 << 5,
+  Y_FDC_ST2_DATA_ERROR_IN_DATA_FIELD = 1 << 5,
   // Bit 4: Wrong Cylinder
-  kFDCST2WrongCylinder = 1 << 4,
+  Y_FDC_ST2_WRONG_CYLINDER = 1 << 4,
   // Bit 3: Scan Equal Hit
-  kFDCST2ScanEqualHit = 1 << 3,
+  Y_FDC_ST2_SCAN_EQUAL_HIT = 1 << 3,
   // Bit 2: Scan Not Satisfied
-  kFDCST2ScanNotSatisfied = 1 << 2,
+  Y_FDC_ST2_SCAN_NOT_SATISFIED = 1 << 2,
   // Bit 1: Bad Cylinder
-  kFDCST2BadCylinder = 1 << 1,
+  Y_FDC_ST2_BAD_CYLINDER = 1 << 1,
   // Bit 0: Missing Address Mark in Data Field
-  kFDCST2MissingAddressMarkInDataField = 1 << 0,
+  Y_FDC_ST2_MISSING_ADDRESS_MARK_IN_DATA_FIELD = 1 << 0,
 };
 
 // State for a single floppy drive.
@@ -212,7 +212,7 @@ typedef struct YFDCConfig {
   // Callback to read a byte from a floppy image.
   uint8_t (*read_image_byte)(
       void* context,
-      // 0 to kFDCNumDrives-1
+      // 0 to Y_FDC_NUM_DRIVES-1
       uint8_t drive,
       // byte offset within the image
       uint32_t offset);
@@ -220,7 +220,7 @@ typedef struct YFDCConfig {
   // Callback to write a byte to a floppy image.
   void (*write_image_byte)(
       void* context,
-      // 0 to kFDCNumDrives-1
+      // 0 to Y_FDC_NUM_DRIVES-1
       uint8_t drive,
       // byte offset within the image
       uint32_t offset,
@@ -228,8 +228,8 @@ typedef struct YFDCConfig {
       uint8_t value);
 } YFDCConfig;
 
-STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, kFDCCommandBufferSize)
-STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, kFDCResultBufferSize)
+STATIC_VECTOR_TYPE(YFDCCommandBuffer, uint8_t, Y_FDC_COMMAND_BUFFER_SIZE)
+STATIC_VECTOR_TYPE(YFDCResultBuffer, uint8_t, Y_FDC_RESULT_BUFFER_SIZE)
 
 struct YFDCCommandMetadata;
 
@@ -243,7 +243,7 @@ typedef struct YFDCState {
   uint8_t dor;
 
   // Per-drive state.
-  YFDCDriveState drives[kFDCNumDrives];
+  YFDCDriveState drives[Y_FDC_NUM_DRIVES];
 
   // Current command phase.
   YFDCCommandPhase phase;

@@ -62,45 +62,45 @@
 
 enum {
   // Log module ID for the PPI.
-  kLogModuleIDPPI = 4,
+  Y_PPI_LOG_MODULE_ID = 4,
 };
 
 // Log module for the PPI.
 YAX86_PUBLIC_HEADER const YLogModule YPPILogModule = {
-    .id = kLogModuleIDPPI,
+    .id = Y_PPI_LOG_MODULE_ID,
     .name = "PPI",
 };
 
 // I/O ports exposed by the PPI.
 typedef enum YPPIPort {
   // Keyboard scancode
-  kPPIPortA = 0x60,
+  Y_PPI_PORT_A = 0x60,
   // System control
-  kPPIPortB = 0x61,
+  Y_PPI_PORT_B = 0x61,
   // DIP switches
-  kPPIPortC = 0x62,
+  Y_PPI_PORT_C = 0x62,
   // Control word
-  kPPIPortControl = 0x63,
+  Y_PPI_PORT_CONTROL = 0x63,
 } YPPIPort;
 
-// Bit definitions for PPI Port B (kPPIPortB).
+// Bit definitions for PPI Port B (Y_PPI_PORT_B).
 enum {
   // Bit 0: Timer 2 signal gate (0 = disable, 1 = enable).
-  kPPIPortBTimer2Gate = (1 << 0),
+  Y_PPI_PORT_B_TIMER2_GATE = (1 << 0),
   // Bit 1: PC speaker enable/disable.
-  kPPIPortBSpeakerData = (1 << 1),
+  Y_PPI_PORT_B_SPEAKER_DATA = (1 << 1),
   // Bit 2: Turbo mode (0 = turbo, 1 = normal). Not supported.
-  kPPIPortBTurboMode = (1 << 2),
+  Y_PPI_PORT_B_TURBO_MODE = (1 << 2),
   // Bit 3: DIP switch select (0 = SW1-4, 1 = SW5-8).
-  kPPIPortBDipSwitchSelect = (1 << 3),
+  Y_PPI_PORT_B_DIP_SWITCH_SELECT = (1 << 3),
   // Bit 4: Memory parity check enable/disable. Not supported.
-  kPPIPortBMemoryParityCheck = (1 << 4),
+  Y_PPI_PORT_B_MEMORY_PARITY_CHECK = (1 << 4),
   // Bit 5: I/O channel check enable/disable. Not supported.
-  kPPIPortBIoChannelCheck = (1 << 5),
+  Y_PPI_PORT_B_IO_CHANNEL_CHECK = (1 << 5),
   // Bit 6: Keyboard clock control (0 = hold low, 1 = enable).
-  kPPIPortBKeyboardClockLow = (1 << 6),
+  Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW = (1 << 6),
   // Bit 7: Keyboard enable/clear (0 = enable read, 1 = clear).
-  kPPIPortBKeyboardEnableClear = (1 << 7),
+  Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR = (1 << 7),
 };
 
 // Memory sizes defined by DIP switches, corresponding to Port A bits 2-3.
@@ -108,25 +108,25 @@ enum {
 // and instead performs its own memory detection based on the video card type.
 typedef enum YPPIMemorySize {
   // 00 = 64KB
-  kPPIMemorySize64KB = 0,
+  Y_PPI_MEMORY_SIZE_64KB = 0,
   // 01 = 128KB
-  kPPIMemorySize128KB = 1,
+  Y_PPI_MEMORY_SIZE_128KB = 1,
   // 10 = 192KB
-  kPPIMemorySize192KB = 2,
+  Y_PPI_MEMORY_SIZE_192KB = 2,
   // 11 = 256KB
-  kPPIMemorySize256KB = 3,
+  Y_PPI_MEMORY_SIZE_256KB = 3,
 } YPPIMemorySize;
 
 // Display mode at boot time, corresponding to Port A bits 4-5.
 typedef enum YPPIDisplayMode {
   // 00 = EGA/VGA (ROM)
-  kPPIDisplayEGA = 0,
+  Y_PPI_DISPLAY_EGA = 0,
   // 01 = CGA 40x25
-  kPPIDisplayCGA40x25 = 1,
+  Y_PPI_DISPLAY_CGA_40X25 = 1,
   // 10 = CGA 80x25
-  kPPIDisplayCGA80x25 = 2,
+  Y_PPI_DISPLAY_CGA_80X25 = 2,
   // 11 = MDA 80x25
-  kPPIDisplayMDA = 3,
+  Y_PPI_DISPLAY_MDA = 3,
 } YPPIDisplayMode;
 
 struct YPPIState;

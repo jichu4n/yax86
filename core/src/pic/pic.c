@@ -11,38 +11,38 @@
 
 enum {
   // ICW bits
-  kICW1_IC4 = (1 << 0),   // 1 = ICW4 needed
-  kICW1_SNGL = (1 << 1),  // 1 = single PIC, 0 = cascaded
-  kICW1_INIT = (1 << 4),  // 1 = initialization mode
-  kICW2_BASE = 0xF8,      // Upper 5 bits of ICW2 = the interrupt vector base
+  Y_PIC_ICW1_IC4 = (1 << 0),   // 1 = ICW4 needed
+  Y_PIC_ICW1_SNGL = (1 << 1),  // 1 = single PIC, 0 = cascaded
+  Y_PIC_ICW1_INIT = (1 << 4),  // 1 = initialization mode
+  Y_PIC_ICW2_BASE = 0xF8,  // Upper 5 bits of ICW2 = the interrupt vector base
 
   // OCW bits
-  kOCW_SELECT = (1 << 3),  // 1 = OCW3, 0 = OCW2
-  kOCW2_EOI = (1 << 5),    // End of Interrupt
-  kOCW2_SL = (1 << 6),     // Specific Level
-  kOCW3_RR = (1 << 1),     // 1 = Read Register command
-  kOCW3_RIS = (1 << 0),    // 1 = Read ISR, 0 = Read IRR
+  Y_PIC_OCW_SELECT = (1 << 3),  // 1 = OCW3, 0 = OCW2
+  Y_PIC_OCW2_EOI = (1 << 5),    // End of Interrupt
+  Y_PIC_OCW2_SL = (1 << 6),     // Specific Level
+  Y_PIC_OCW3_RR = (1 << 1),     // 1 = Read Register command
+  Y_PIC_OCW3_RIS = (1 << 0),    // 1 = Read ISR, 0 = Read IRR
 
   // Master PIC cascade IRQ line
-  kMasterCascadeIRQ = 2,
+  Y_PIC_MASTER_CASCADE_IRQ = 2,
 };
 
 // The I/O port of a PIC.
 typedef enum YPICPort {
-  kPICPortCommand = 0,
-  kPICPortData = 1,
+  Y_PIC_PORT_COMMAND = 0,
+  Y_PIC_PORT_DATA = 1,
 
   // Number of PIC ports.
-  kNumPICPorts,
+  Y_PIC_NUM_PORTS,
   // Invalid port.
-  kPICPortInvalid = -1,
+  Y_PIC_PORT_INVALID = -1,
 } YPICPort;
 
 // Map a PIC mode to its base I/O port.
-YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[kPICNumModes] = {
-    0x20,  // kPICSingle
-    0x20,  // kPICMaster
-    0xA0,  // kPICSlave
+YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[Y_PIC_NUM_MODES] = {
+    0x20,  // Y_PIC_SINGLE
+    0x20,  // Y_PIC_MASTER
+    0xA0,  // Y_PIC_SLAVE
 };
 
 // ============================================================================
@@ -52,35 +52,35 @@ YAX86_FILE_PRIVATE const uint16_t YPICBasePorts[kPICNumModes] = {
 // Returns the mode of a PIC based on its ICWs.
 YAX86_FILE_PRIVATE inline YPICMode YPICGetMode(YPICState* pic) {
   // If SNGL bit set in ICW1, we are single PIC.
-  if (pic->icw1 & kICW1_SNGL) {
-    return kPICSingle;
+  if (pic->icw1 & Y_PIC_ICW1_SNGL) {
+    return Y_PIC_SINGLE;
   }
 
   // Otherwise, we are cascaded.
   // If SP pin is set, we are slave; otherwise, master.
-  return pic->config.sp ? kPICSlave : kPICMaster;
+  return pic->config.sp ? Y_PIC_SLAVE : Y_PIC_MASTER;
 }
 
 // Returns if the PIC is configured as a single PIC.
 YAX86_FILE_PRIVATE inline bool YPICIsSingle(YPICState* pic) {
-  return YPICGetMode(pic) == kPICSingle;
+  return YPICGetMode(pic) == Y_PIC_SINGLE;
 }
 
 // Returns if the PIC is a master PIC.
 YAX86_FILE_PRIVATE inline bool YPICIsMaster(YPICState* pic) {
-  return YPICGetMode(pic) == kPICMaster;
+  return YPICGetMode(pic) == Y_PIC_MASTER;
 }
 
 // Returns if the PIC is a slave PIC.
 YAX86_FILE_PRIVATE inline bool YPICIsSlave(YPICState* pic) {
-  return YPICGetMode(pic) == kPICSlave;
+  return YPICGetMode(pic) == Y_PIC_SLAVE;
 }
 
 // Returns the I/O port corresponding to a given port number.
 YAX86_FILE_PRIVATE inline YPICPort YPICGetPort(YPICState* pic, uint16_t port) {
   uint16_t port_offset = port - YPICBasePorts[YPICGetMode(pic)];
-  if (port_offset >= kNumPICPorts) {
-    return kPICPortInvalid;
+  if (port_offset >= Y_PIC_NUM_PORTS) {
+    return Y_PIC_PORT_INVALID;
   }
   return (YPICPort)port_offset;
 }
@@ -114,11 +114,11 @@ YAX86_PUBLIC void YPICInit(YPICState* pic) {
 
 YAX86_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
-    YAX86_PIC_LOG(kLogLevelWarn, "ignoring out of range IRQ %u", irq);
+    YAX86_PIC_LOG(Y_LOG_LEVEL_WARN, "ignoring out of range IRQ %u", irq);
     return;
   }
   YAX86_PIC_LOG(
-      kLogLevelDebug, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
+      Y_LOG_LEVEL_DEBUG, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
       pic->isr);
   pic->irr |= (1 << irq);
   YPICUpdateUnmaskedRequest(pic);
@@ -150,24 +150,24 @@ YAX86_PUBLIC void YPICLowerIRQ(YPICState* pic, uint8_t irq) {
 YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
   YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
-    case kPICPortCommand:
+    case Y_PIC_PORT_COMMAND:
       // Reading from the command port is not a defined operation.
       return 0x00;
 
-    case kPICPortData: {
+    case Y_PIC_PORT_DATA: {
       uint8_t value;
       switch (pic->read_register) {
-        case kPICReadIRR:
+        case Y_PIC_READ_IRR:
           value = pic->irr;
           break;
-        case kPICReadISR:
+        case Y_PIC_READ_ISR:
           value = pic->isr;
           break;
         default:
           value = pic->imr;
           break;
       }
-      pic->read_register = kPICReadIMR;
+      pic->read_register = Y_PIC_READ_IMR;
       return value;
     }
 
@@ -180,8 +180,8 @@ YAX86_PUBLIC uint8_t YPICReadPort(YPICState* pic, uint16_t port) {
 YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
   YPICPort pic_port = YPICGetPort(pic, port);
   switch (pic_port) {
-    case kPICPortCommand:
-      if (value & kICW1_INIT) {
+    case Y_PIC_PORT_COMMAND:
+      if (value & Y_PIC_ICW1_INIT) {
         // This is ICW1, which starts the initialization sequence.
         pic->icw1 = value;
         pic->irr = 0x00;
@@ -191,32 +191,33 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
         YPICUpdateUnmaskedRequest(pic);
 
         // The next write to the data port will be ICW2.
-        pic->init_state = kPICExpectICW2;
+        pic->init_state = Y_PIC_EXPECT_ICW2;
       } else {
         // This is an OCW (Operational Command Word).
-        if (value & kOCW_SELECT) {
+        if (value & Y_PIC_OCW_SELECT) {
           // This is OCW3.
-          if (value & kOCW3_RR) {
+          if (value & Y_PIC_OCW3_RR) {
             // This is a Read Register command.
-            pic->read_register = value & kOCW3_RIS ? kPICReadISR : kPICReadIRR;
+            pic->read_register =
+                value & Y_PIC_OCW3_RIS ? Y_PIC_READ_ISR : Y_PIC_READ_IRR;
           } else {
             // Other OCW3 commands (e.g. Special Mask Mode) are not
             // implemented.
           }
         } else {
           // This is OCW2.
-          if (value & kOCW2_EOI) {
-            if (value & kOCW2_SL) {
+          if (value & Y_PIC_OCW2_EOI) {
+            if (value & Y_PIC_OCW2_SL) {
               // Specific EOI: clear specified ISR bit.
               uint8_t irq = value & 0x07;
-              YAX86_PIC_LOG(kLogLevelDebug, "specific EOI for IRQ %u", irq);
+              YAX86_PIC_LOG(Y_LOG_LEVEL_DEBUG, "specific EOI for IRQ %u", irq);
               pic->isr &= ~(1 << irq);
             } else {
               // Non-Specific EOI: clear highest priority ISR bit.
               for (uint8_t i = 0, isr_mask = 1; i < 8; ++i, isr_mask <<= 1) {
                 if (pic->isr & isr_mask) {
                   YAX86_PIC_LOG(
-                      kLogLevelDebug, "non-specific EOI for IRQ %u", i);
+                      Y_LOG_LEVEL_DEBUG, "non-specific EOI for IRQ %u", i);
                   pic->isr &= ~isr_mask;
                   break;
                 }
@@ -230,34 +231,35 @@ YAX86_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
       }
       break;
 
-    case kPICPortData:
+    case Y_PIC_PORT_DATA:
       switch (pic->init_state) {
-        case kPICExpectICW2:
+        case Y_PIC_EXPECT_ICW2:
           // This is ICW2. It sets the interrupt vector base.
           // The PIC uses the upper 5 bits of this value.
           pic->icw2 = value;
           if (YPICIsSingle(pic)) {
             // Single mode -> no ICW3, ICW4 optional depending on ICW1.
             pic->init_state =
-                pic->icw1 & kICW1_IC4 ? kPICExpectICW4 : kPICReady;
+                pic->icw1 & Y_PIC_ICW1_IC4 ? Y_PIC_EXPECT_ICW4 : Y_PIC_READY;
           } else {
             // Cascaded mode. Expect ICW3 next.
-            pic->init_state = kPICExpectICW3;
+            pic->init_state = Y_PIC_EXPECT_ICW3;
           }
           break;
 
-        case kPICExpectICW3:
+        case Y_PIC_EXPECT_ICW3:
           // This is ICW3.
           // For master, it's a bitmask of slaves.
           // For slave, it's the 3-bit slave ID.
           pic->icw3 = value;
           // ICW4 is optional depending on ICW1.
-          pic->init_state = pic->icw1 & kICW1_IC4 ? kPICExpectICW4 : kPICReady;
+          pic->init_state =
+              pic->icw1 & Y_PIC_ICW1_IC4 ? Y_PIC_EXPECT_ICW4 : Y_PIC_READY;
           break;
 
-        case kPICExpectICW4:
+        case Y_PIC_EXPECT_ICW4:
           // This is ICW4.
-          pic->init_state = kPICReady;
+          pic->init_state = Y_PIC_READY;
           break;
 
         default:
@@ -282,7 +284,7 @@ YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
   // Find highest priority requested and unmasked interrupt.
   uint8_t irr = pic->irr & ~pic->imr;
   if (irr == 0) {
-    return kPICNoPendingInterrupt;
+    return Y_PIC_NO_PENDING_INTERRUPT;
   }
   uint8_t pending_irq = 0, pending_irq_mask = 1;
   for (; pending_irq < 8; ++pending_irq, pending_irq_mask <<= 1) {
@@ -302,16 +304,16 @@ YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
     }
     if (pending_irq >= in_service_irq) {
       // New interrupt does not have higher priority than in-service interrupt.
-      return kPICNoPendingInterrupt;
+      return Y_PIC_NO_PENDING_INTERRUPT;
     }
   }
 
   // If this is the master PIC and the interrupt is from the slave, return the
   // slave PIC's interrupt vector.
-  if (YPICIsMaster(pic) && pending_irq == kMasterCascadeIRQ &&
+  if (YPICIsMaster(pic) && pending_irq == Y_PIC_MASTER_CASCADE_IRQ &&
       pic->cascade_pic) {
     uint8_t slave_vector = YPICGetPendingInterrupt(pic->cascade_pic);
-    if (slave_vector != kPICNoPendingInterrupt) {
+    if (slave_vector != Y_PIC_NO_PENDING_INTERRUPT) {
       pic->isr |= pending_irq_mask;
     }
     return slave_vector;
@@ -322,5 +324,5 @@ YAX86_PUBLIC YAX86_HOT uint8_t YPICGetPendingInterrupt(YPICState* pic) {
   pic->irr &= ~pending_irq_mask;
   YPICUpdateUnmaskedRequest(pic);
 
-  return (pic->icw2 & kICW2_BASE) + pending_irq;
+  return (pic->icw2 & Y_PIC_ICW2_BASE) + pending_irq;
 }

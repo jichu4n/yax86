@@ -13,12 +13,12 @@
 
 enum {
   // Log module ID for the Video.
-  kLogModuleIDVideo = 8,
+  Y_VIDEO_LOG_MODULE_ID = 8,
 };
 
 // Log module for the Video.
 YAX86_PUBLIC_HEADER const YLogModule YVideoLogModule = {
-    .id = kLogModuleIDVideo,
+    .id = Y_VIDEO_LOG_MODULE_ID,
     .name = "VIDEO",
 };
 
@@ -64,46 +64,46 @@ typedef struct YVideoTextPosition {
 // machine at a time, selected before initialization.
 typedef enum YVideoAdapter {
   // Monochrome Display and Printer Adapter.
-  kVideoAdapterMDA = 0,
+  Y_VIDEO_ADAPTER_MDA = 0,
   // Color Graphics Adapter.
-  kVideoAdapterCGA = 1,
+  Y_VIDEO_ADAPTER_CGA = 1,
 
   // Number of adapters supported.
-  kNumVideoAdapters = 2,
+  Y_VIDEO_NUM_ADAPTERS = 2,
 } YVideoAdapter;
 
 // Video modes, numbered as in the BIOS INT 10h mode numbers.
 typedef enum YVideoMode {
   // CGA text mode 0x00: Text, 40x25, color burst off, 8x8
-  kVideoModeCGAText40x25Mono = 0x00,
+  Y_VIDEO_MODE_CGA_TEXT_40X25_MONO = 0x00,
   // CGA text mode 0x01: Text, 40x25, 16 colors, 8x8
-  kVideoModeCGAText40x25Color = 0x01,
+  Y_VIDEO_MODE_CGA_TEXT_40X25_COLOR = 0x01,
   // CGA text mode 0x02: Text, 80x25, color burst off, 8x8
-  kVideoModeCGAText80x25Mono = 0x02,
+  Y_VIDEO_MODE_CGA_TEXT_80X25_MONO = 0x02,
   // CGA text mode 0x03: Text, 80x25, 16 colors, 8x8
-  kVideoModeCGAText80x25Color = 0x03,
+  Y_VIDEO_MODE_CGA_TEXT_80X25_COLOR = 0x03,
   // CGA graphics mode 0x04: 320x200, 4 colors
-  kVideoModeCGAGraphics320x200 = 0x04,
+  Y_VIDEO_MODE_CGA_GRAPHICS_320X200 = 0x04,
   // CGA graphics mode 0x05: 320x200, 4 colors, alternate palette
-  kVideoModeCGAGraphics320x200Alt = 0x05,
+  Y_VIDEO_MODE_CGA_GRAPHICS_320X200_ALT = 0x05,
   // CGA graphics mode 0x06: 640x200, 2 colors
-  kVideoModeCGAGraphics640x200 = 0x06,
+  Y_VIDEO_MODE_CGA_GRAPHICS_640X200 = 0x06,
   // MDA text mode 0x07: Text, 80×25, monochrome, 720x350, 9x14
-  kVideoModeMDAText80x25 = 0x07,
+  Y_VIDEO_MODE_MDA_TEXT_80X25 = 0x07,
 
   // Number of video modes supported.
-  kNumVideoModes = 8,
+  Y_VIDEO_NUM_MODES = 8,
 } YVideoMode;
 
 // Text vs graphics modes.
 typedef enum YVideoModeType {
   // Invalid video mode. This is needed due to gap in the list of video mode
   // values.
-  kVideoModeUnsupported = 0,
+  Y_VIDEO_MODE_UNSUPPORTED = 0,
   // Text mode.
-  kVideoModeText,
+  Y_VIDEO_MODE_TEXT,
   // Graphics mode.
-  kVideoModeGraphics,
+  Y_VIDEO_MODE_GRAPHICS,
 } YVideoModeType;
 
 // Metadata for video modes.
@@ -185,25 +185,25 @@ typedef struct YVideoModeMetadata {
 
 // MDA I/O ports.
 enum {
-  kMDAPortRegisterIndex = 0x3B4,
-  kMDAPortRegisterData = 0x3B5,
-  kMDAPortControl = 0x3B8,
-  kMDAPortStatus = 0x3BA,
-  kMDAPortPrinterData = 0x3BC,
-  kMDAPortPrinterStatus = 0x3BD,
-  kMDAPortPrinterControl = 0x3BE,
+  Y_VIDEO_MDA_PORT_REGISTER_INDEX = 0x3B4,
+  Y_VIDEO_MDA_PORT_REGISTER_DATA = 0x3B5,
+  Y_VIDEO_MDA_PORT_CONTROL = 0x3B8,
+  Y_VIDEO_MDA_PORT_STATUS = 0x3BA,
+  Y_VIDEO_MDA_PORT_PRINTER_DATA = 0x3BC,
+  Y_VIDEO_MDA_PORT_PRINTER_STATUS = 0x3BD,
+  Y_VIDEO_MDA_PORT_PRINTER_CONTROL = 0x3BE,
 
   // Start of the MDA I/O port range.
-  kMDAPortStart = 0x3B0,
+  Y_VIDEO_MDA_PORT_START = 0x3B0,
   // Inclusive end of the MDA I/O port range.
-  kMDAPortEnd = 0x3BF,
+  Y_VIDEO_MDA_PORT_END = 0x3BF,
 };
 
 enum {
   // MDA VRAM address.
-  kMDAVRAMAddress = 0xB0000,
+  Y_VIDEO_MDA_VRAM_ADDRESS = 0xB0000,
   // MDA VRAM size.
-  kMDAVRAMSize = 4 * 1024,  // 4K
+  Y_VIDEO_MDA_VRAM_SIZE = 4 * 1024,  // 4K
 };
 
 // ============================================================================
@@ -269,33 +269,33 @@ enum {
 
 // CGA I/O ports.
 enum {
-  kCGAPortRegisterIndex = 0x3D4,
-  kCGAPortRegisterData = 0x3D5,
-  kCGAPortControl = 0x3D8,
-  kCGAPortColorSelect = 0x3D9,
-  kCGAPortStatus = 0x3DA,
-  kCGAPortClearLightPen = 0x3DB,
-  kCGAPortPresetLightPen = 0x3DC,
+  Y_VIDEO_CGA_PORT_REGISTER_INDEX = 0x3D4,
+  Y_VIDEO_CGA_PORT_REGISTER_DATA = 0x3D5,
+  Y_VIDEO_CGA_PORT_CONTROL = 0x3D8,
+  Y_VIDEO_CGA_PORT_COLOR_SELECT = 0x3D9,
+  Y_VIDEO_CGA_PORT_STATUS = 0x3DA,
+  Y_VIDEO_CGA_PORT_CLEAR_LIGHT_PEN = 0x3DB,
+  Y_VIDEO_CGA_PORT_PRESET_LIGHT_PEN = 0x3DC,
 
   // Start of the CGA I/O port range.
-  kCGAPortStart = 0x3D0,
+  Y_VIDEO_CGA_PORT_START = 0x3D0,
   // Inclusive end of the CGA I/O port range.
-  kCGAPortEnd = 0x3DF,
+  Y_VIDEO_CGA_PORT_END = 0x3DF,
 };
 
 enum {
   // CGA VRAM address.
-  kCGAVRAMAddress = 0xB8000,
+  Y_VIDEO_CGA_VRAM_ADDRESS = 0xB8000,
   // CGA VRAM size.
-  kCGAVRAMSize = 16 * 1024,  // 16K
+  Y_VIDEO_CGA_VRAM_SIZE = 16 * 1024,  // 16K
   // Byte offset of the odd scan lines in CGA graphics modes. Graphics VRAM is
   // interleaved - even scan lines live in the first half and odd scan lines in
   // the second.
-  kCGAGraphicsOddScanLineOffset = 0x2000,
+  Y_VIDEO_CGA_GRAPHICS_ODD_SCAN_LINE_OFFSET = 0x2000,
   // Number of bytes per scan line in CGA graphics modes.
-  kCGAGraphicsBytesPerScanLine = 80,
+  Y_VIDEO_CGA_GRAPHICS_BYTES_PER_SCAN_LINE = 80,
   // Number of colors in the CGA palette.
-  kNumCGAColors = 16,
+  Y_VIDEO_NUM_CGA_COLORS = 16,
 };
 
 // ============================================================================
@@ -332,27 +332,27 @@ enum {
 
 // 6845 CRT controller registers.
 enum {
-  kCRTCRegisterHorizontalTotal = 0,
-  kCRTCRegisterHorizontalDisplayed,
-  kCRTCRegisterHorizontalSyncPosition,
-  kCRTCRegisterHorizontalSyncWidth,
-  kCRTCRegisterVerticalTotal,
-  kCRTCRegisterVerticalTotalAdjust,
-  kCRTCRegisterVerticalDisplayed,
-  kCRTCRegisterVerticalSyncPosition,
-  kCRTCRegisterInterlaceMode,
-  kCRTCRegisterMaximumScanLine,
-  kCRTCRegisterCursorStart,
-  kCRTCRegisterCursorEnd,
-  kCRTCRegisterStartAddressH,
-  kCRTCRegisterStartAddressL,
-  kCRTCRegisterCursorH,
-  kCRTCRegisterCursorL,
-  kCRTCRegisterReserved16,
-  kCRTCRegisterReserved17,
+  Y_VIDEO_CRTC_REGISTER_HORIZONTAL_TOTAL = 0,
+  Y_VIDEO_CRTC_REGISTER_HORIZONTAL_DISPLAYED,
+  Y_VIDEO_CRTC_REGISTER_HORIZONTAL_SYNC_POSITION,
+  Y_VIDEO_CRTC_REGISTER_HORIZONTAL_SYNC_WIDTH,
+  Y_VIDEO_CRTC_REGISTER_VERTICAL_TOTAL,
+  Y_VIDEO_CRTC_REGISTER_VERTICAL_TOTAL_ADJUST,
+  Y_VIDEO_CRTC_REGISTER_VERTICAL_DISPLAYED,
+  Y_VIDEO_CRTC_REGISTER_VERTICAL_SYNC_POSITION,
+  Y_VIDEO_CRTC_REGISTER_INTERLACE_MODE,
+  Y_VIDEO_CRTC_REGISTER_MAXIMUM_SCAN_LINE,
+  Y_VIDEO_CRTC_REGISTER_CURSOR_START,
+  Y_VIDEO_CRTC_REGISTER_CURSOR_END,
+  Y_VIDEO_CRTC_REGISTER_START_ADDRESS_H,
+  Y_VIDEO_CRTC_REGISTER_START_ADDRESS_L,
+  Y_VIDEO_CRTC_REGISTER_CURSOR_H,
+  Y_VIDEO_CRTC_REGISTER_CURSOR_L,
+  Y_VIDEO_CRTC_REGISTER_RESERVED16,
+  Y_VIDEO_CRTC_REGISTER_RESERVED17,
 
   // Total number of 6845 CRT controller registers.
-  kNumCRTCRegisters,
+  Y_VIDEO_NUM_CRTC_REGISTERS,
 };
 
 // ============================================================================
@@ -363,59 +363,59 @@ enum {
 enum {
   // CGA only - 80x25 text mode. MDA uses the same bit for high resolution mode,
   // which it always is.
-  kVideoControlHighResolution = 1 << 0,
+  Y_VIDEO_CONTROL_HIGH_RESOLUTION = 1 << 0,
   // CGA only - graphics mode.
-  kVideoControlGraphics = 1 << 1,
+  Y_VIDEO_CONTROL_GRAPHICS = 1 << 1,
   // CGA only - black and white mode, i.e. the color burst is disabled. This has
   // no effect on an RGB monitor in text modes, but selects the third palette in
   // 320x200 graphics mode.
-  kVideoControlBlackAndWhite = 1 << 2,
+  Y_VIDEO_CONTROL_BLACK_AND_WHITE = 1 << 2,
   // Video signal enabled. When clear, the display is blank.
-  kVideoControlVideoEnable = 1 << 3,
+  Y_VIDEO_CONTROL_VIDEO_ENABLE = 1 << 3,
   // CGA only - 640x200 high resolution graphics mode.
-  kVideoControlHighResolutionGraphics = 1 << 4,
+  Y_VIDEO_CONTROL_HIGH_RESOLUTION_GRAPHICS = 1 << 4,
   // Attribute bit 7 means blinking rather than intense background.
-  kVideoControlEnableBlink = 1 << 5,
+  Y_VIDEO_CONTROL_ENABLE_BLINK = 1 << 5,
 };
 
 // Bits in the CGA color select register - I/O port 3D9.
 enum {
   // Background / border color, or the foreground color in 640x200 graphics.
-  kCGAColorSelectColorMask = 0x07,
+  Y_VIDEO_CGA_COLOR_SELECT_COLOR_MASK = 0x07,
   // Intensity of the background / border color.
-  kCGAColorSelectIntensity = 1 << 3,
+  Y_VIDEO_CGA_COLOR_SELECT_INTENSITY = 1 << 3,
   // Intensity of the 320x200 graphics palette.
-  kCGAColorSelectPaletteIntensity = 1 << 4,
+  Y_VIDEO_CGA_COLOR_SELECT_PALETTE_INTENSITY = 1 << 4,
   // 320x200 graphics palette selection.
-  kCGAColorSelectPalette = 1 << 5,
+  Y_VIDEO_CGA_COLOR_SELECT_PALETTE = 1 << 5,
 };
 
 // Bits in the status register - I/O port 3BA on MDA, 3DA on CGA.
 enum {
   // Display is disabled, i.e. a horizontal or vertical retrace is in progress,
   // so VRAM can be accessed without causing snow.
-  kVideoStatusDisplayDisabled = 1 << 0,
+  Y_VIDEO_STATUS_DISPLAY_DISABLED = 1 << 0,
   // Light pen trigger set. Always clear, as no light pen is emulated.
-  kVideoStatusLightPenTrigger = 1 << 1,
+  Y_VIDEO_STATUS_LIGHT_PEN_TRIGGER = 1 << 1,
   // Light pen switch is off. Always set, as no light pen is emulated.
-  kVideoStatusLightPenSwitchOff = 1 << 2,
+  Y_VIDEO_STATUS_LIGHT_PEN_SWITCH_OFF = 1 << 2,
   // Vertical retrace in progress.
-  kVideoStatusVerticalRetrace = 1 << 3,
+  Y_VIDEO_STATUS_VERTICAL_RETRACE = 1 << 3,
 };
 
 // Bits in a text mode attribute byte.
 enum {
   // Foreground color.
-  kVideoAttributeForegroundMask = 0x07,
+  Y_VIDEO_ATTRIBUTE_FOREGROUND_MASK = 0x07,
   // Intense foreground.
-  kVideoAttributeIntenseForeground = 1 << 3,
+  Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND = 1 << 3,
   // Background color.
-  kVideoAttributeBackgroundMask = 0x70,
+  Y_VIDEO_ATTRIBUTE_BACKGROUND_MASK = 0x70,
   // Number of bits to shift right to get the background color.
-  kVideoAttributeBackgroundShift = 4,
+  Y_VIDEO_ATTRIBUTE_BACKGROUND_SHIFT = 4,
   // Blinking foreground, or intense background if blinking is disabled in the
   // mode control register.
-  kVideoAttributeBlink = 1 << 7,
+  Y_VIDEO_ATTRIBUTE_BLINK = 1 << 7,
 };
 
 // ============================================================================
@@ -424,13 +424,13 @@ enum {
 
 // Metadata for each video mode, indexed by mode number.
 YAX86_PUBLIC_HEADER const YVideoModeMetadata
-    YVideoModeMetadataTable[kNumVideoModes] = {
+    YVideoModeMetadataTable[Y_VIDEO_NUM_MODES] = {
         // 0x00: CGA text, 40x25, color burst off
         {
-            .mode = kVideoModeCGAText40x25Mono,
-            .type = kVideoModeText,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
+            .mode = Y_VIDEO_MODE_CGA_TEXT_40X25_MONO,
+            .type = Y_VIDEO_MODE_TEXT,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
             .width = 320,
             .height = 200,
             .num_pages = 8,
@@ -441,10 +441,10 @@ YAX86_PUBLIC_HEADER const YVideoModeMetadata
         },
         // 0x01: CGA text, 40x25, 16 colors
         {
-            .mode = kVideoModeCGAText40x25Color,
-            .type = kVideoModeText,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
+            .mode = Y_VIDEO_MODE_CGA_TEXT_40X25_COLOR,
+            .type = Y_VIDEO_MODE_TEXT,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
             .width = 320,
             .height = 200,
             .num_pages = 8,
@@ -455,10 +455,10 @@ YAX86_PUBLIC_HEADER const YVideoModeMetadata
         },
         // 0x02: CGA text, 80x25, color burst off
         {
-            .mode = kVideoModeCGAText80x25Mono,
-            .type = kVideoModeText,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
+            .mode = Y_VIDEO_MODE_CGA_TEXT_80X25_MONO,
+            .type = Y_VIDEO_MODE_TEXT,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
             .width = 640,
             .height = 200,
             .num_pages = 4,
@@ -469,10 +469,10 @@ YAX86_PUBLIC_HEADER const YVideoModeMetadata
         },
         // 0x03: CGA text, 80x25, 16 colors
         {
-            .mode = kVideoModeCGAText80x25Color,
-            .type = kVideoModeText,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
+            .mode = Y_VIDEO_MODE_CGA_TEXT_80X25_COLOR,
+            .type = Y_VIDEO_MODE_TEXT,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
             .width = 640,
             .height = 200,
             .num_pages = 4,
@@ -483,40 +483,40 @@ YAX86_PUBLIC_HEADER const YVideoModeMetadata
         },
         // 0x04: CGA graphics, 320x200, 4 colors
         {
-            .mode = kVideoModeCGAGraphics320x200,
-            .type = kVideoModeGraphics,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
+            .mode = Y_VIDEO_MODE_CGA_GRAPHICS_320X200,
+            .type = Y_VIDEO_MODE_GRAPHICS,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
             .width = 320,
             .height = 200,
             .num_pages = 1,
         },
         // 0x05: CGA graphics, 320x200, 4 colors, alternate palette
         {
-            .mode = kVideoModeCGAGraphics320x200Alt,
-            .type = kVideoModeGraphics,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
+            .mode = Y_VIDEO_MODE_CGA_GRAPHICS_320X200_ALT,
+            .type = Y_VIDEO_MODE_GRAPHICS,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
             .width = 320,
             .height = 200,
             .num_pages = 1,
         },
         // 0x06: CGA graphics, 640x200, 2 colors
         {
-            .mode = kVideoModeCGAGraphics640x200,
-            .type = kVideoModeGraphics,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
+            .mode = Y_VIDEO_MODE_CGA_GRAPHICS_640X200,
+            .type = Y_VIDEO_MODE_GRAPHICS,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
             .width = 640,
             .height = 200,
             .num_pages = 1,
         },
         // 0x07: MDA text, 80x25, monochrome
         {
-            .mode = kVideoModeMDAText80x25,
-            .type = kVideoModeText,
-            .vram_address = kMDAVRAMAddress,
-            .vram_size = kMDAVRAMSize,
+            .mode = Y_VIDEO_MODE_MDA_TEXT_80X25,
+            .type = Y_VIDEO_MODE_TEXT,
+            .vram_address = Y_VIDEO_MDA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_MDA_VRAM_SIZE,
             .width = 720,
             .height = 350,
             .num_pages = 1,
@@ -575,16 +575,16 @@ typedef struct YVideoAdapterMetadata {
 // 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
 // 304 cycles per line and just under 60Hz.
 YAX86_PUBLIC_HEADER const YVideoAdapterMetadata
-    YVideoAdapterMetadataTable[kNumVideoAdapters] = {
+    YVideoAdapterMetadataTable[Y_VIDEO_NUM_ADAPTERS] = {
         // MDA
         {
-            .adapter = kVideoAdapterMDA,
+            .adapter = Y_VIDEO_ADAPTER_MDA,
             .frame_buffer_width = 720,
             .frame_buffer_height = 350,
-            .vram_address = kMDAVRAMAddress,
-            .vram_size = kMDAVRAMSize,
-            .port_start = kMDAPortStart,
-            .port_end = kMDAPortEnd,
+            .vram_address = Y_VIDEO_MDA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_MDA_VRAM_SIZE,
+            .port_start = Y_VIDEO_MDA_PORT_START,
+            .port_end = Y_VIDEO_MDA_PORT_END,
             // High resolution mode, video enable, blink enable.
             .default_control_register = 0x29,
             .cycles_per_scan_line = 259,
@@ -594,13 +594,13 @@ YAX86_PUBLIC_HEADER const YVideoAdapterMetadata
         },
         // CGA
         {
-            .adapter = kVideoAdapterCGA,
+            .adapter = Y_VIDEO_ADAPTER_CGA,
             .frame_buffer_width = 640,
             .frame_buffer_height = 200,
-            .vram_address = kCGAVRAMAddress,
-            .vram_size = kCGAVRAMSize,
-            .port_start = kCGAPortStart,
-            .port_end = kCGAPortEnd,
+            .vram_address = Y_VIDEO_CGA_VRAM_ADDRESS,
+            .vram_size = Y_VIDEO_CGA_VRAM_SIZE,
+            .port_start = Y_VIDEO_CGA_PORT_START,
+            .port_end = Y_VIDEO_CGA_PORT_END,
             // 80x25 text mode, video enable, blink enable.
             .default_control_register = 0x29,
             .cycles_per_scan_line = 304,
@@ -614,40 +614,41 @@ enum {
   // Number of frames between cursor blink phase changes. At roughly 50Hz this
   // gives a blink rate of about 3.1Hz, close to what the 6845 produces when it
   // is configured to blink at a sixteenth of the field rate.
-  kVideoFramesPerCursorBlinkPhase = 8,
+  Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE = 8,
   // Number of frames between character blink phase changes. Characters blink
   // half as fast as the cursor: the 6845 generates the cursor blink itself,
   // while the blink attribute is decoded by the adapter from a separate
   // divider running at a thirty-secondth of the field rate.
-  kVideoFramesPerTextBlinkPhase = 16,
+  Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE = 16,
 };
 
 enum {
   // Every supported mode divides horizontally into 80 natural rendering
   // units: text columns on the MDA and 80-column CGA, half-character cells in
   // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
-  kVideoDirtyColumns = 80,
+  Y_VIDEO_DIRTY_COLUMNS = 80,
   // Vertically, one horizontal range is tracked per dirty row. A text mode's
   // dirty row is one character row, which covers exactly the scan lines a
   // changed cell occupies. Graphics modes have no character rows, so
   // neighboring scan lines share a range instead.
-  kVideoDirtyScanLinesPerGroup = 4,
+  Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP = 4,
   // The tallest graphics mode is 200 lines.
-  kVideoMaxGraphicsHeight = 200,
+  Y_VIDEO_MAX_GRAPHICS_HEIGHT = 200,
   // The most character rows in any text mode.
-  kVideoMaxTextRows = 25,
+  Y_VIDEO_MAX_TEXT_ROWS = 25,
   // Dirty rows needed to cover the tallest graphics mode.
-  kVideoDirtyGraphicsRowCount =
-      (kVideoMaxGraphicsHeight + kVideoDirtyScanLinesPerGroup - 1) /
-      kVideoDirtyScanLinesPerGroup,
+  Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT = (
+      Y_VIDEO_MAX_GRAPHICS_HEIGHT + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
+      Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP,
   // The tracker is statically sized for whichever mode needs the most rows.
   // Graphics modes do, at 50 against a text mode's 25.
-  kVideoDirtyRowCount = kVideoDirtyGraphicsRowCount > kVideoMaxTextRows
-                            ? kVideoDirtyGraphicsRowCount
-                            : kVideoMaxTextRows,
+  Y_VIDEO_DIRTY_ROW_COUNT =
+              Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT > Y_VIDEO_MAX_TEXT_ROWS
+      ? Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT
+      : Y_VIDEO_MAX_TEXT_ROWS,
   // Pixels are transferred to the host in small horizontal spans. This removes
   // most callback overhead without requiring a frame or scan-line buffer.
-  kVideoPixelBatchSize = 32,
+  Y_VIDEO_PIXEL_BATCH_SIZE = 32,
 };
 
 // Half-open horizontal dirty range [start_column, end_column). Both fields are
@@ -663,19 +664,19 @@ typedef enum YVideoDirtyStatus {
   // The host display already matches video state, so a render does nothing.
   // This is the zero value, which makes clearing the tracker a zero
   // initialization.
-  kVideoClean = 0,
+  Y_VIDEO_CLEAN = 0,
   // Some rows carry a dirty range, and only those need to be redrawn.
-  kVideoDirty,
+  Y_VIDEO_DIRTY,
   // The next render must replace the complete frame buffer. Used when a change
   // cannot be represented as local VRAM damage, such as a mode or palette
   // change.
-  kVideoFullRedraw,
+  Y_VIDEO_FULL_REDRAW,
 } YVideoDirtyStatus;
 
 typedef struct YVideoDirtyState {
   // One horizontal range per dirty row, indexed by dirty row. Only meaningful
-  // when status is kVideoDirty.
-  YVideoDirtyRange ranges[kVideoDirtyRowCount];
+  // when status is Y_VIDEO_DIRTY.
+  YVideoDirtyRange ranges[Y_VIDEO_DIRTY_ROW_COUNT];
   // What the next render has to do.
   YVideoDirtyStatus status;
 } YVideoDirtyState;
@@ -705,7 +706,7 @@ typedef struct YVideoConfig {
   YVideoRGB background;
 
   // CGA - the 16 color RGBI palette.
-  YVideoRGB cga_palette[kNumCGAColors];
+  YVideoRGB cga_palette[Y_VIDEO_NUM_CGA_COLORS];
 
   // The emulated video RAM, at least the adapter's vram_size bytes of it.
   // Required - the adapter reads and writes it directly.
@@ -720,7 +721,7 @@ typedef struct YVideoConfig {
   // Callback to write a horizontal span of RGB pixels to the real display,
   // invoked from YVideoRender(). The pixels begin at origin, remain on one scan
   // line, and are valid only for the duration of the synchronous callback.
-  // count is between 1 and kVideoPixelBatchSize, inclusive.
+  // count is between 1 and Y_VIDEO_PIXEL_BATCH_SIZE, inclusive.
   void (*write_pixels)(
       struct YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
       uint8_t count);
@@ -735,7 +736,7 @@ typedef struct YVideoConfig {
 YAX86_PUBLIC_HEADER const YVideoConfig YVideoDefaultConfig = {
     .context = NULL,
 
-    .adapter = kVideoAdapterMDA,
+    .adapter = Y_VIDEO_ADAPTER_MDA,
 
     .foreground = {.r = 0xAA, .g = 0xAA, .b = 0xAA},
     .intense_foreground = {.r = 0xFF, .g = 0xFF, .b = 0xFF},
@@ -776,7 +777,7 @@ typedef struct YVideoState {
   YVideoAdapter adapter;
 
   // Motorola 6845 CRT controller registers.
-  uint8_t registers[kNumCRTCRegisters];
+  uint8_t registers[Y_VIDEO_NUM_CRTC_REGISTERS];
   // Currently selected 6845 CRT controller register index (I/O port 3B4/3D4).
   uint8_t selected_register;
   // Mode control register value (I/O port 3B8/3D8).

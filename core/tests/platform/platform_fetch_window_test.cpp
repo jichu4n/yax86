@@ -33,10 +33,10 @@ class PlatformFetchWindowTest : public ::testing::Test {
     platform_.config.vram = vram_;
 
     ASSERT_TRUE(YPlatformInit(&platform_));
-    platform_.cpu.registers[kCS] = 0;
-    platform_.cpu.registers[kIP] = kProgramOffset;
-    platform_.cpu.registers[kSS] = 0;
-    platform_.cpu.registers[kSP] = 0xFFFE;
+    platform_.cpu.registers[Y_CPU_CS] = 0;
+    platform_.cpu.registers[Y_CPU_IP] = kProgramOffset;
+    platform_.cpu.registers[Y_CPU_SS] = 0;
+    platform_.cpu.registers[Y_CPU_SP] = 0xFFFE;
   }
 
   void Load(const std::vector<uint8_t>& code) {
@@ -46,26 +46,26 @@ class PlatformFetchWindowTest : public ::testing::Test {
   }
 
   YPlatformRunStatus RunInstructions(int num_instructions) {
-    YPlatformRunStatus status = kPlatformRunning;
+    YPlatformRunStatus status = Y_PLATFORM_RUNNING;
     for (int i = 0; i < num_instructions; ++i) {
       status = YPlatformTick(&platform_);
-      if (status != kPlatformRunning) {
+      if (status != Y_PLATFORM_RUNNING) {
         return status;
       }
     }
     return status;
   }
 
-  uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
+  uint8_t al() const { return platform_.cpu.registers[Y_CPU_AX] & 0xFF; }
 
   YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 };
 
 TEST_F(PlatformFetchWindowTest, OpensAWindowOverConventionalMemory) {
   Load({kOpNop, kOpNop, kOpHlt});
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   EXPECT_NE(platform_.cpu.instruction_fetch_window.data, nullptr);
 }
 
@@ -74,14 +74,14 @@ TEST_F(PlatformFetchWindowTest, OpensAWindowOverConventionalMemory) {
 // invalidation at all. This is the case that would break if it were a copy.
 TEST_F(PlatformFetchWindowTest, SelfModifyingCodeIsVisibleThroughTheWindow) {
   Load({kOpNop, kOpNop, kOpNop, kOpHlt});
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   ASSERT_NE(platform_.cpu.instruction_fetch_window.data, nullptr);
 
   // Overwrite the two NOPs ahead of IP with MOV AL, 0x42.
   YPlatformWriteMemoryByte(&platform_, kProgramOffset + 1, kOpMovAlImm8);
   YPlatformWriteMemoryByte(&platform_, kProgramOffset + 2, 0x42);
 
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   EXPECT_EQ(al(), 0x42);
 }
 
@@ -93,11 +93,11 @@ TEST_F(
   // immediate at the first.
   ram_[0xFFFF] = kOpMovAlImm8;
   ram_[0x0000] = 0x42;
-  platform_.cpu.registers[kIP] = 0xFFFF;
+  platform_.cpu.registers[Y_CPU_IP] = 0xFFFF;
 
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   EXPECT_EQ(al(), 0x42);
-  EXPECT_EQ(platform_.cpu.registers[kIP], 0x0001);
+  EXPECT_EQ(platform_.cpu.registers[Y_CPU_IP], 0x0001);
 }
 
 // A window spans a whole memory region, so a jump backwards within that region
@@ -107,17 +107,17 @@ TEST_F(
 TEST_F(PlatformFetchWindowTest, BackwardJumpReusesTheSameWindow) {
   // DEC CX / JNZ -3 / HLT, run round the loop several times.
   Load({kOpDecCx, kOpJnzRel8, 0xFD, kOpHlt});
-  platform_.cpu.registers[kCX] = 4;
+  platform_.cpu.registers[Y_CPU_CX] = 4;
 
-  ASSERT_EQ(RunInstructions(2), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(2), Y_PLATFORM_RUNNING);
   const uint8_t* window_after_first_pass =
       platform_.cpu.instruction_fetch_window.data;
   ASSERT_NE(window_after_first_pass, nullptr);
 
   // Three more passes, each of which jumps back over the two instructions it
   // just fetched.
-  ASSERT_EQ(RunInstructions(6), kPlatformRunning);
-  EXPECT_EQ(platform_.cpu.registers[kCX], 0u);
+  ASSERT_EQ(RunInstructions(6), Y_PLATFORM_RUNNING);
+  EXPECT_EQ(platform_.cpu.registers[Y_CPU_CX], 0u);
   EXPECT_EQ(
       platform_.cpu.instruction_fetch_window.data, window_after_first_pass);
 }
@@ -131,7 +131,7 @@ TEST_F(PlatformFetchWindowTest, WindowCoversTheRegionBeforeTheFetchAddress) {
   ram_[0x00C0] = kOpNop;
   ram_[0x00C1] = kOpHlt;
 
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   const YCPUInstructionFetchWindow window =
       platform_.cpu.instruction_fetch_window;
   ASSERT_NE(window.data, nullptr);
@@ -139,10 +139,10 @@ TEST_F(PlatformFetchWindowTest, WindowCoversTheRegionBeforeTheFetchAddress) {
   // 0x0100 the first fetch asked for.
   EXPECT_EQ(window.start, 0u);
   EXPECT_LT(window.start, kProgramOffset);
-  ASSERT_EQ(platform_.cpu.registers[kIP], 0x00C0);
+  ASSERT_EQ(platform_.cpu.registers[Y_CPU_IP], 0x00C0);
 
   // The instruction at the jump target is fetched through the same window.
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   EXPECT_EQ(platform_.cpu.instruction_fetch_window.data, window.data);
   EXPECT_EQ(platform_.cpu.instruction_fetch_window.start, window.start);
 }
@@ -153,10 +153,11 @@ TEST_F(PlatformFetchWindowTest, FetchRunningOffTheEndOfMemoryStillDecodes) {
   // The last byte of RAM is an opcode whose immediate lies in unmapped memory,
   // which reads as 0xFF. Nothing here should crash or read out of bounds.
   ram_[sizeof(ram_) - 1] = kOpMovAlImm8;
-  platform_.cpu.registers[kCS] = 0x0FFF;
-  platform_.cpu.registers[kIP] = 0x000F;  // Linear 0xFFFF, the last RAM byte.
+  platform_.cpu.registers[Y_CPU_CS] = 0x0FFF;
+  platform_.cpu.registers[Y_CPU_IP] =
+      0x000F;  // Linear 0xFFFF, the last RAM byte.
 
-  ASSERT_EQ(RunInstructions(1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(1), Y_PLATFORM_RUNNING);
   EXPECT_EQ(al(), 0xFF);
 }
 

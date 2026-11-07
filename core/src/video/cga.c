@@ -5,25 +5,28 @@
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  kCGACharHeight = 8,
-  kCGA40ColumnCount = 40,
-  kCGA40ColumnScale = 2,
-  kCGA320x200HorizontalScale = 2,
+  Y_VIDEO_CGA_CHAR_HEIGHT = 8,
+  Y_VIDEO_CGA40_COLUMN_COUNT = 40,
+  Y_VIDEO_CGA40_COLUMN_SCALE = 2,
+  Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE = 2,
   // Number of pixels per byte in 320x200 graphics mode.
-  kCGAPixelsPerByte320x200 = 4,
+  Y_VIDEO_CGA_PIXELS_PER_BYTE_320X200 = 4,
   // Number of bits per pixel in 320x200 graphics mode.
-  kCGABitsPerPixel320x200 = 2,
+  Y_VIDEO_CGA_BITS_PER_PIXEL_320X200 = 2,
   // Mask of a single pixel in 320x200 graphics mode.
-  kCGAPixelMask320x200 = 0x03,
+  Y_VIDEO_CGA_PIXEL_MASK_320X200 = 0x03,
   // Number of frame buffer pixels per byte in 320x200 graphics mode, after
   // each pixel is doubled horizontally.
-  kCGAFrameBufferPixelsPerByte320x200 =
-      kCGAPixelsPerByte320x200 * kCGA320x200HorizontalScale,
+  Y_VIDEO_CGA_FRAME_BUFFER_PIXELS_PER_BYTE_320X200 =
+          Y_VIDEO_CGA_PIXELS_PER_BYTE_320X200 *
+      Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE,
   // Number of pixels per byte in 640x200 graphics mode.
-  kCGAPixelsPerByte640x200 = 8,
+  Y_VIDEO_CGA_PIXELS_PER_BYTE_640X200 = 8,
   // Mask of a graphics mode address within the half of VRAM holding either the
   // even or the odd scan lines.
-  kCGAGraphicsScanLineAddressMask = kCGAGraphicsOddScanLineOffset - 1,
+  Y_VIDEO_CGA_GRAPHICS_SCAN_LINE_ADDRESS_MASK =
+          Y_VIDEO_CGA_GRAPHICS_ODD_SCAN_LINE_OFFSET -
+      1,
 };
 
 // The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
@@ -40,17 +43,18 @@ YAX86_FILE_PRIVATE const uint8_t YVideoCGAGraphicsPalettes[3][3] = {
 
 YAX86_FILE_PRIVATE inline YVideoRGB YVideoCGAGetColor(
     const YVideoState* video, uint8_t color) {
-  return video->config.cga_palette[color & (kNumCGAColors - 1)];
+  return video->config.cga_palette[color & (Y_VIDEO_NUM_CGA_COLORS - 1)];
 }
 
 // Address of the first byte of a graphics mode scan line. Even and odd scan
 // lines occupy separate halves of CGA VRAM.
 YAX86_FILE_PRIVATE inline uint32_t YVideoCGAGetScanLineAddress(
     const YVideoState* video, uint16_t y) {
-  uint32_t address = ((uint32_t)YVideoGetStartAddress(video) * 2 +
-                      (uint32_t)(y / 2) * kCGAGraphicsBytesPerScanLine) &
-                     kCGAGraphicsScanLineAddressMask;
-  return address + (y & 1 ? kCGAGraphicsOddScanLineOffset : 0);
+  uint32_t address =
+      ((uint32_t)YVideoGetStartAddress(video) * 2 +
+       (uint32_t)(y / 2) * Y_VIDEO_CGA_GRAPHICS_BYTES_PER_SCAN_LINE) &
+      Y_VIDEO_CGA_GRAPHICS_SCAN_LINE_ADDRESS_MASK;
+  return address + (y & 1 ? Y_VIDEO_CGA_GRAPHICS_ODD_SCAN_LINE_OFFSET : 0);
 }
 
 YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
@@ -61,13 +65,15 @@ YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
   // and the range converts back to character cells by halving. Invalidation
   // always scales a character column by the same factor, so the range is
   // aligned to whole cells and neither end truncates.
-  uint8_t scale =
-      metadata->columns == kCGA40ColumnCount ? kCGA40ColumnScale : 1;
-  uint8_t first_char = scale == kCGA40ColumnScale
-                           ? start_column / kCGA40ColumnScale
+  uint8_t scale = metadata->columns == Y_VIDEO_CGA40_COLUMN_COUNT
+                      ? Y_VIDEO_CGA40_COLUMN_SCALE
+                      : 1;
+  uint8_t first_char = scale == Y_VIDEO_CGA40_COLUMN_SCALE
+                           ? start_column / Y_VIDEO_CGA40_COLUMN_SCALE
                            : start_column;
-  uint8_t end_char =
-      scale == kCGA40ColumnScale ? end_column / kCGA40ColumnScale : end_column;
+  uint8_t end_char = scale == Y_VIDEO_CGA40_COLUMN_SCALE
+                         ? end_column / Y_VIDEO_CGA40_COLUMN_SCALE
+                         : end_column;
 
   // The cursor is resolved once for the region rather than per cell: it can
   // only be in one place, so the loop just tests each cell against it.
@@ -85,8 +91,8 @@ YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
     // A 40-column cell is twice as wide but there are half as many, so a row
     // starts at the same pixel either way.
     YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
-    uint8_t row = (uint8_t)(y / kCGACharHeight);
-    uint8_t char_scan_line = (uint8_t)(y % kCGACharHeight);
+    uint8_t row = (uint8_t)(y / Y_VIDEO_CGA_CHAR_HEIGHT);
+    uint8_t char_scan_line = (uint8_t)(y % Y_VIDEO_CGA_CHAR_HEIGHT);
     for (uint8_t col = first_char; col < end_char; ++col) {
       // Character and attribute occupy consecutive bytes of a cell.
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
@@ -95,23 +101,24 @@ YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
       uint8_t attr_value = YVideoReadVRAMByte(video, char_address + 1);
 
       uint8_t foreground_color =
-          attr_value &
-          (kVideoAttributeForegroundMask | kVideoAttributeIntenseForeground);
+          attr_value & (Y_VIDEO_ATTRIBUTE_FOREGROUND_MASK |
+                        Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND);
       // The cursor uses the cell's foreground even when that cell's blinking
       // character is currently hidden.
       YVideoRGB cursor_foreground = YVideoCGAGetColor(video, foreground_color);
-      uint8_t background_color = (attr_value & kVideoAttributeBackgroundMask) >>
-                                 kVideoAttributeBackgroundShift;
+      uint8_t background_color =
+          (attr_value & Y_VIDEO_ATTRIBUTE_BACKGROUND_MASK) >>
+          Y_VIDEO_ATTRIBUTE_BACKGROUND_SHIFT;
       // Bit 7 is the blink attribute only while blinking is enabled. With it
       // disabled the same bit is the background's intensity, which is how the
       // CGA reaches all 16 background colors.
-      if (video->control_register & kVideoControlEnableBlink) {
-        if ((attr_value & kVideoAttributeBlink) &&
+      if (video->control_register & Y_VIDEO_CONTROL_ENABLE_BLINK) {
+        if ((attr_value & Y_VIDEO_ATTRIBUTE_BLINK) &&
             !YVideoIsTextBlinkOn(video)) {
           foreground_color = background_color;
         }
-      } else if (attr_value & kVideoAttributeBlink) {
-        background_color |= kNumCGAColors / 2;
+      } else if (attr_value & Y_VIDEO_ATTRIBUTE_BLINK) {
+        background_color |= Y_VIDEO_NUM_CGA_COLORS / 2;
       }
 
       YVideoRGB foreground = YVideoCGAGetColor(video, foreground_color);
@@ -140,20 +147,21 @@ YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
 YAX86_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
     YVideoState* video, YVideoRGB palette[4]) {
   const uint8_t* palette_colors;
-  if (video->control_register & kVideoControlBlackAndWhite) {
+  if (video->control_register & Y_VIDEO_CONTROL_BLACK_AND_WHITE) {
     palette_colors = YVideoCGAGraphicsPalettes[2];
-  } else if (video->color_select_register & kCGAColorSelectPalette) {
+  } else if (video->color_select_register & Y_VIDEO_CGA_COLOR_SELECT_PALETTE) {
     palette_colors = YVideoCGAGraphicsPalettes[1];
   } else {
     palette_colors = YVideoCGAGraphicsPalettes[0];
   }
-  uint8_t intensity =
-      (video->color_select_register & kCGAColorSelectPaletteIntensity)
-          ? kNumCGAColors / 2
-          : 0;
+  uint8_t intensity = (video->color_select_register &
+                       Y_VIDEO_CGA_COLOR_SELECT_PALETTE_INTENSITY)
+                          ? Y_VIDEO_NUM_CGA_COLORS / 2
+                          : 0;
   palette[0] = YVideoCGAGetColor(
-      video, video->color_select_register &
-                 (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
+      video,
+      video->color_select_register & (Y_VIDEO_CGA_COLOR_SELECT_COLOR_MASK |
+                                      Y_VIDEO_CGA_COLOR_SELECT_INTENSITY));
   for (uint8_t i = 0; i < 3; ++i) {
     palette[i + 1] = YVideoCGAGetColor(video, palette_colors[i] | intensity);
   }
@@ -167,18 +175,22 @@ YAX86_FILE_PRIVATE void YVideoCGARenderGraphics320x200Region(
 
   for (uint16_t y = first_y; y < end_y; ++y) {
     YVideoPixelRunBegin(
-        run, (uint16_t)start_column * kCGAFrameBufferPixelsPerByte320x200, y);
+        run,
+        (uint16_t)start_column *
+            Y_VIDEO_CGA_FRAME_BUFFER_PIXELS_PER_BYTE_320X200,
+        y);
     uint32_t scan_line_address = YVideoCGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
           YVideoReadVRAMByte(video, scan_line_address + byte_column);
-      for (uint8_t i = 0; i < kCGAPixelsPerByte320x200; ++i) {
-        uint8_t shift = (uint8_t)((kCGAPixelsPerByte320x200 - 1 - i) *
-                                  kCGABitsPerPixel320x200);
-        uint8_t color = (byte_value >> shift) & kCGAPixelMask320x200;
-        for (uint8_t scale_x = 0; scale_x < kCGA320x200HorizontalScale;
-             ++scale_x) {
+      for (uint8_t i = 0; i < Y_VIDEO_CGA_PIXELS_PER_BYTE_320X200; ++i) {
+        uint8_t shift =
+            (uint8_t)((Y_VIDEO_CGA_PIXELS_PER_BYTE_320X200 - 1 - i) *
+                      Y_VIDEO_CGA_BITS_PER_PIXEL_320X200);
+        uint8_t color = (byte_value >> shift) & Y_VIDEO_CGA_PIXEL_MASK_320X200;
+        for (uint8_t scale_x = 0;
+             scale_x < Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE; ++scale_x) {
           YVideoPixelRunPush(run, palette[color]);
         }
       }
@@ -190,20 +202,21 @@ YAX86_FILE_PRIVATE void YVideoCGARenderGraphics640x200Region(
     YVideoState* video, YVideoPixelRun* run, uint8_t start_column,
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   YVideoRGB foreground = YVideoCGAGetColor(
-      video, video->color_select_register &
-                 (kCGAColorSelectColorMask | kCGAColorSelectIntensity));
+      video,
+      video->color_select_register & (Y_VIDEO_CGA_COLOR_SELECT_COLOR_MASK |
+                                      Y_VIDEO_CGA_COLOR_SELECT_INTENSITY));
   YVideoRGB background = YVideoCGAGetColor(video, 0);
 
   for (uint16_t y = first_y; y < end_y; ++y) {
     YVideoPixelRunBegin(
-        run, (uint16_t)start_column * kCGAPixelsPerByte640x200, y);
+        run, (uint16_t)start_column * Y_VIDEO_CGA_PIXELS_PER_BYTE_640X200, y);
     uint32_t scan_line_address = YVideoCGAGetScanLineAddress(video, y);
     for (uint8_t byte_column = start_column; byte_column < end_column;
          ++byte_column) {
       uint8_t byte_value =
           YVideoReadVRAMByte(video, scan_line_address + byte_column);
-      for (uint8_t i = 0; i < kCGAPixelsPerByte640x200; ++i) {
-        uint8_t shift = (uint8_t)(kCGAPixelsPerByte640x200 - 1 - i);
+      for (uint8_t i = 0; i < Y_VIDEO_CGA_PIXELS_PER_BYTE_640X200; ++i) {
+        uint8_t shift = (uint8_t)(Y_VIDEO_CGA_PIXELS_PER_BYTE_640X200 - 1 - i);
         bool is_foreground = (byte_value >> shift) & 1;
         YVideoPixelRunPush(run, is_foreground ? foreground : background);
       }
@@ -216,19 +229,19 @@ YAX86_MODULE_PRIVATE void YVideoCGARenderRegion(
     uint8_t end_column, uint16_t first_y, uint16_t end_y) {
   const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   switch (metadata->mode) {
-    case kVideoModeCGAText40x25Mono:
-    case kVideoModeCGAText40x25Color:
-    case kVideoModeCGAText80x25Mono:
-    case kVideoModeCGAText80x25Color:
+    case Y_VIDEO_MODE_CGA_TEXT_40X25_MONO:
+    case Y_VIDEO_MODE_CGA_TEXT_40X25_COLOR:
+    case Y_VIDEO_MODE_CGA_TEXT_80X25_MONO:
+    case Y_VIDEO_MODE_CGA_TEXT_80X25_COLOR:
       YVideoCGARenderTextRegion(
           video, run, metadata, start_column, end_column, first_y, end_y);
       break;
-    case kVideoModeCGAGraphics320x200:
-    case kVideoModeCGAGraphics320x200Alt:
+    case Y_VIDEO_MODE_CGA_GRAPHICS_320X200:
+    case Y_VIDEO_MODE_CGA_GRAPHICS_320X200_ALT:
       YVideoCGARenderGraphics320x200Region(
           video, run, start_column, end_column, first_y, end_y);
       break;
-    case kVideoModeCGAGraphics640x200:
+    case Y_VIDEO_MODE_CGA_GRAPHICS_640X200:
       YVideoCGARenderGraphics640x200Region(
           video, run, start_column, end_column, first_y, end_y);
       break;

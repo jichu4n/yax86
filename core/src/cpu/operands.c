@@ -13,10 +13,10 @@
 // type has to return something.
 //
 // All ones in the low byte is what an 8086 reads from an address nothing
-// drives, and it is a legal value at either width. 0xFFFF is not: at kByte it
-// would break the zero high byte a byte-wide value is promised to have, which
-// is the invariant YCPUFromOperandValue() widens by doing nothing.
-enum { kUnreachableOperandValue = 0xFF };
+// drives, and it is a legal value at either width. 0xFFFF is not: at Y_CPU_BYTE
+// it would break the zero high byte a byte-wide value is promised to have,
+// which is the invariant YCPUFromOperandValue() widens by doing nothing.
+enum { Y_CPU_UNREACHABLE_OPERAND_VALUE = 0xFF };
 
 // Narrow a computed result to what an operand of the given width holds. A
 // byte keeps a zero high byte, which is what makes widening it again free.
@@ -37,13 +37,13 @@ YAX86_MODULE_PRIVATE uint32_t YCPUFromOperandValue(YCPUOperandValue value) {
 YAX86_MODULE_PRIVATE int32_t
 YCPUFromSignedOperandValue(YCPUWidth width, YCPUOperandValue value) {
   switch (width) {
-    case kByte:
+    case Y_CPU_BYTE:
       return (int32_t)((int8_t)value);
-    case kWord:
+    case Y_CPU_WORD:
       return (int32_t)((int16_t)value);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return kUnreachableOperandValue;
+  return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
 // Helper function to extract a zero-extended value from an operand.
@@ -61,14 +61,15 @@ enum {
   // The address bus is 20 bits wide. A segment base plus an offset can sum to
   // as much as 0x10FFEF, and the carry out of bit 19 goes nowhere, so an
   // address past the top of memory wraps around to the bottom.
-  kPhysicalAddressMask = 0xFFFFF,
+  Y_CPU_PHYSICAL_ADDRESS_MASK = 0xFFFFF,
 };
 
 // Computes the raw address a segment register and an offset address.
 YAX86_MODULE_PRIVATE uint32_t YCPUToRawAddress(
     const YCPUState* cpu, uint8_t segment_register_index, uint16_t offset) {
   uint16_t segment = cpu->registers[segment_register_index];
-  return ((((uint32_t)segment) << 4) + (uint32_t)offset) & kPhysicalAddressMask;
+  return ((((uint32_t)segment) << 4) + (uint32_t)offset) &
+         Y_CPU_PHYSICAL_ADDRESS_MASK;
 }
 
 // Read a byte from memory as a uint8_t.
@@ -121,13 +122,13 @@ YCPUReadMemoryOperandWord(YCPUState* cpu, const YCPUOperandAddress* address) {
 YAX86_FILE_PRIVATE YCPUOperandValue YCPUReadMemoryOperandValue(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUWidth width) {
   switch (width) {
-    case kByte:
+    case Y_CPU_BYTE:
       return YCPUReadMemoryOperandByte(cpu, address);
-    case kWord:
+    case Y_CPU_WORD:
       return YCPUReadMemoryOperandWord(cpu, address);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return kUnreachableOperandValue;
+  return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
 // Read a byte from a register to a YCPUOperandValue.
@@ -149,13 +150,13 @@ YCPUReadRegisterOperandWord(YCPUState* cpu, const YCPUOperandAddress* address) {
 YAX86_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUWidth width) {
   switch (width) {
-    case kByte:
+    case Y_CPU_BYTE:
       return YCPUReadRegisterOperandByte(cpu, address);
-    case kWord:
+    case Y_CPU_WORD:
       return YCPUReadRegisterOperandWord(cpu, address);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return kUnreachableOperandValue;
+  return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
 // Write a byte as uint8_t to memory.
@@ -203,10 +204,10 @@ YAX86_FILE_PRIVATE void YCPUWriteMemoryOperand(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value,
     YCPUWidth width) {
   switch (width) {
-    case kByte:
+    case Y_CPU_BYTE:
       YCPUWriteMemoryOperandByte(cpu, address, value);
       return;
-    case kWord:
+    case Y_CPU_WORD:
       YCPUWriteMemoryOperandWord(cpu, address, value);
       return;
   }
@@ -233,10 +234,10 @@ YAX86_FILE_PRIVATE void YCPUWriteRegisterOperand(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value,
     YCPUWidth width) {
   switch (width) {
-    case kByte:
+    case Y_CPU_BYTE:
       YCPUWriteRegisterOperandByte(cpu, address, value);
       return;
-    case kWord:
+    case Y_CPU_WORD:
       YCPUWriteRegisterOperandWord(cpu, address, value);
       return;
   }
@@ -296,15 +297,15 @@ YCPUGetRegisterAddressWord(YAX86_UNUSED YCPUState* cpu, uint8_t reg_or_rm) {
 YAX86_FILE_PRIVATE YCPURegisterAddress
 YCPUGetRegisterAddress(YCPUState* cpu, uint8_t reg_or_rm, YCPUWidth width) {
   switch (width) {
-    case kByte:
+    case Y_CPU_BYTE:
       return YCPUGetRegisterAddressByte(cpu, reg_or_rm);
-    case kWord:
+    case Y_CPU_WORD:
       return YCPUGetRegisterAddressWord(cpu, reg_or_rm);
   }
   // Should never reach here. AL is in range for both widths, so a caller that
   // somehow got here names a real register rather than running off the array.
   const YCPURegisterAddress fallback = {
-      .register_index = kAX, .byte_offset = 0};
+      .register_index = Y_CPU_AX, .byte_offset = 0};
   return fallback;
 }
 
@@ -312,7 +313,7 @@ YCPUGetRegisterAddress(YCPUState* cpu, uint8_t reg_or_rm, YCPUWidth width) {
 // override prefix names, if it carries one.
 YAX86_MODULE_PRIVATE void YCPUApplySegmentOverride(
     const YCPUInstruction* instruction, uint8_t* segment_register_index) {
-  if (instruction->segment_override != kNoSegmentOverride) {
+  if (instruction->segment_override != Y_CPU_NO_SEGMENT_OVERRIDE) {
     *segment_register_index = instruction->segment_override;
   }
 }
@@ -325,48 +326,48 @@ YAX86_MODULE_PRIVATE YAX86_HOT YCPUMemoryAddress YCPUGetMemoryOperandAddress(
   uint8_t rm = instruction->mod_rm.rm;
   switch (rm) {
     case 0:  // [BX + SI]
-      address.offset = cpu->registers[kBX] + cpu->registers[kSI];
-      address.segment_register_index = kDS;
+      address.offset = cpu->registers[Y_CPU_BX] + cpu->registers[Y_CPU_SI];
+      address.segment_register_index = Y_CPU_DS;
       break;
     case 1:  // [BX + DI]
-      address.offset = cpu->registers[kBX] + cpu->registers[kDI];
-      address.segment_register_index = kDS;
+      address.offset = cpu->registers[Y_CPU_BX] + cpu->registers[Y_CPU_DI];
+      address.segment_register_index = Y_CPU_DS;
       break;
     case 2:  // [BP + SI]
-      address.offset = cpu->registers[kBP] + cpu->registers[kSI];
-      address.segment_register_index = kSS;
+      address.offset = cpu->registers[Y_CPU_BP] + cpu->registers[Y_CPU_SI];
+      address.segment_register_index = Y_CPU_SS;
       break;
     case 3:  // [BP + DI]
-      address.offset = cpu->registers[kBP] + cpu->registers[kDI];
-      address.segment_register_index = kSS;
+      address.offset = cpu->registers[Y_CPU_BP] + cpu->registers[Y_CPU_DI];
+      address.segment_register_index = Y_CPU_SS;
       break;
     case 4:  // [SI]
-      address.offset = cpu->registers[kSI];
-      address.segment_register_index = kDS;
+      address.offset = cpu->registers[Y_CPU_SI];
+      address.segment_register_index = Y_CPU_DS;
       break;
     case 5:  // [DI]
-      address.offset = cpu->registers[kDI];
-      address.segment_register_index = kDS;
+      address.offset = cpu->registers[Y_CPU_DI];
+      address.segment_register_index = Y_CPU_DS;
       break;
     case 6:
       if (mod == 0) {
         // Direct memory address with 16-bit displacement
         address.offset = 0;
-        address.segment_register_index = kDS;
+        address.segment_register_index = Y_CPU_DS;
       } else {
         // [BP]
-        address.offset = cpu->registers[kBP];
-        address.segment_register_index = kSS;
+        address.offset = cpu->registers[Y_CPU_BP];
+        address.segment_register_index = Y_CPU_SS;
       }
       break;
     case 7:  // [BX]
-      address.offset = cpu->registers[kBX];
-      address.segment_register_index = kDS;
+      address.offset = cpu->registers[Y_CPU_BX];
+      address.segment_register_index = Y_CPU_DS;
       break;
     default:
       // Not possible as RM field is 3 bits (0-7).
       address.offset = 0xFFFF;
-      address.segment_register_index = kDS;  // Invalid RM field
+      address.segment_register_index = Y_CPU_DS;  // Invalid RM field
       break;
   }
 
@@ -420,14 +421,14 @@ YCPUGetRegisterOrMemoryOperandAddress(const YCPUInstructionContext* ctx) {
     // Register operand
     const YCPURegisterAddress register_address =
         YCPUGetRegisterAddress(cpu, rm, ctx->metadata->width);
-    address.type = kOperandAddressTypeRegister;
+    address.type = Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER;
     address.register_index = register_address.register_index;
     address.offset = register_address.byte_offset;
   } else {
     // Memory operand
     const YCPUMemoryAddress memory_address =
         YCPUGetMemoryOperandAddress(cpu, instruction);
-    address.type = kOperandAddressTypeMemory;
+    address.type = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY;
     address.register_index = (uint8_t)memory_address.segment_register_index;
     address.offset = memory_address.offset;
   }
@@ -451,13 +452,13 @@ YCPUReadImmediateOperandWord(const YCPUInstruction* instruction) {
 YAX86_FILE_PRIVATE YCPUOperandValue
 YCPUReadImmediateOperand(const YCPUInstruction* instruction, YCPUWidth width) {
   switch (width) {
-    case kByte:
+    case Y_CPU_BYTE:
       return YCPUReadImmediateOperandByte(instruction);
-    case kWord:
+    case Y_CPU_WORD:
       return YCPUReadImmediateOperandWord(instruction);
   }
   // Should never reach here, but return a default value to avoid warnings.
-  return kUnreachableOperandValue;
+  return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
 // Read a value from an operand address.
@@ -481,7 +482,7 @@ YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE YCPUOperandValue YCPUReadOperandValue(
   // Widening YCPUOpcodeMetadata.width to a byte would likewise put the width
   // switches in this same position; see AGENTS.md before doing either.
   const YCPUWidth width = ctx->metadata->width;
-  if (address->type == kOperandAddressTypeRegister) {
+  if (address->type == Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER) {
     return YCPUReadRegisterOperandValue(ctx->cpu, address, width);
   }
   return YCPUReadMemoryOperandValue(ctx->cpu, address, width);
@@ -502,7 +503,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUReadRegisterOperandForRegisterIndex(
   const YCPUWidth width = ctx->metadata->width;
   // Do not fold these into an initializer: C would zero the whole struct
   // before a single field of it is written.
-  operand->address.type = kOperandAddressTypeRegister;
+  operand->address.type = Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER;
   const YCPURegisterAddress register_address =
       YCPUGetRegisterAddress(ctx->cpu, register_index, width);
   operand->address.register_index = register_address.register_index;
@@ -528,7 +529,8 @@ YAX86_MODULE_PRIVATE void YCPUReadSegmentRegisterOperand(
   // value. Masking it also keeps the index inside the register array, which
   // REG 4 and above would otherwise run past the end of.
   YCPUReadRegisterOperandForRegisterIndex(
-      ctx, (YCPURegisterIndex)(kES + (ctx->instruction->mod_rm.reg & 0x03)),
+      ctx,
+      (YCPURegisterIndex)(Y_CPU_ES + (ctx->instruction->mod_rm.reg & 0x03)),
       operand);
 }
 
@@ -539,7 +541,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteOperandAddress(
   const YCPUWidth width = ctx->metadata->width;
   const YCPUOperandValue value = YCPUToOperandValue(width, raw_value);
   // See YCPUReadOperandValue() for why this one is not a switch.
-  if (address->type == kOperandAddressTypeRegister) {
+  if (address->type == Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER) {
     YCPUWriteRegisterOperand(ctx->cpu, address, value, width);
   } else {
     YCPUWriteMemoryOperand(ctx->cpu, address, value, width);

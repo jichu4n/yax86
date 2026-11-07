@@ -20,7 +20,7 @@ class PCSpeakerTest : public ::testing::Test {
   // Never accessed - these tests drive the PIT and the PPI through I/O ports
   // only - but the platform needs memory in order to initialize.
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 
   void SetUp() override {
     // Reset the captured frequency before each test.
@@ -47,31 +47,32 @@ class PCSpeakerTest : public ::testing::Test {
     }
 
     // Command to PIT: Channel 2, LSB then MSB, Mode 3 (Square Wave).
-    YPlatformWritePortByte(&platform_, kPITPortControl, 0b10110110);
+    YPlatformWritePortByte(&platform_, Y_PIT_PORT_CONTROL, 0b10110110);
     // Write reload value.
-    YPlatformWritePortByte(&platform_, kPITPortChannel2, reload_value & 0xFF);
     YPlatformWritePortByte(
-        &platform_, kPITPortChannel2, (reload_value >> 8) & 0xFF);
+        &platform_, Y_PIT_PORT_CHANNEL2, reload_value & 0xFF);
+    YPlatformWritePortByte(
+        &platform_, Y_PIT_PORT_CHANNEL2, (reload_value >> 8) & 0xFF);
   }
 
   // Helper to enable the speaker via PPI Port B.
   void EnableSpeaker() {
     // Set bits 0 (Timer 2 Gate) and 1 (Speaker Data)
-    YPlatformWritePortByte(&platform_, kPPIPortB, 0b00000011);
+    YPlatformWritePortByte(&platform_, Y_PPI_PORT_B, 0b00000011);
   }
 
   // Helper to disable the speaker via PPI Port B.
   void DisableSpeaker() {
     // Clear bit 1 (Speaker Data)
-    uint8_t port_b = YPlatformReadPortByte(&platform_, kPPIPortB);
-    YPlatformWritePortByte(&platform_, kPPIPortB, port_b & ~0b00000010);
+    uint8_t port_b = YPlatformReadPortByte(&platform_, Y_PPI_PORT_B);
+    YPlatformWritePortByte(&platform_, Y_PPI_PORT_B, port_b & ~0b00000010);
   }
 
   // Helper to disable the speaker gate via PPI Port B.
   void DisableSpeakerGate() {
     // Clear bit 0 (Timer 2 Gate)
-    uint8_t port_b = YPlatformReadPortByte(&platform_, kPPIPortB);
-    YPlatformWritePortByte(&platform_, kPPIPortB, port_b & ~0b00000001);
+    uint8_t port_b = YPlatformReadPortByte(&platform_, Y_PPI_PORT_B);
+    YPlatformWritePortByte(&platform_, Y_PPI_PORT_B, port_b & ~0b00000001);
   }
 
   // Helper to get the actual frequency the PIT will generate for a given

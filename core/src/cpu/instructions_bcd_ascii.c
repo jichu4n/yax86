@@ -25,47 +25,47 @@ YAX86_FILE_PRIVATE uint8_t YCPUGetBCDHighDigitLimit(bool auxiliary_carry) {
 // AAA
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAaa(const YCPUInstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || YCPUGetFlag(ctx->cpu, Y_CPU_AF)) {
     al += 6;
     ++ah;
-    YCPUSetFlag(ctx->cpu, kAF, true);
-    YCPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, true);
   } else {
-    YCPUSetFlag(ctx->cpu, kAF, false);
-    YCPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, false);
   }
   al &= 0x0F;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  return kInstructionExecuted;
+  ctx->cpu->registers[Y_CPU_AX] = (ah << 8) | al;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // AAS
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAas(const YCPUInstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
   uint8_t al_low = al & 0x0F;
-  if (al_low > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
+  if (al_low > 9 || YCPUGetFlag(ctx->cpu, Y_CPU_AF)) {
     al -= 6;
     --ah;
-    YCPUSetFlag(ctx->cpu, kAF, true);
-    YCPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, true);
   } else {
-    YCPUSetFlag(ctx->cpu, kAF, false);
-    YCPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, false);
   }
   al &= 0x0F;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
-  return kInstructionExecuted;
+  ctx->cpu->registers[Y_CPU_AX] = (ah << 8) | al;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // AAM
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAam(const YCPUInstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
+  uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
   YCPUOperandValue base = YCPUReadImmediate(ctx);
   uint16_t base_value = YCPUFromOperandValue(base);
   if (base_value == 0) {
@@ -74,83 +74,83 @@ YCPUExecuteAam(const YCPUInstructionContext* ctx) {
     // The division never produces a result, and the flags are left set as
     // though it had produced zero.
     YCPUSetCommonFlagsAfterInstruction(ctx, 0);
-    YCPUSetFlag(ctx->cpu, kCF, false);
-    YCPUSetFlag(ctx->cpu, kAF, false);
-    YCPUSetFlag(ctx->cpu, kOF, false);
-    YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
-    return kInstructionExecuted;
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_OF, false);
+    YCPURaiseInternalInterrupt(ctx->cpu, Y_CPU_INTERRUPT_DIVIDE_ERROR);
+    return Y_CPU_INSTRUCTION_EXECUTED;
   }
   uint8_t ah = al / base_value;
   al %= base_value;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  ctx->cpu->registers[Y_CPU_AX] = (ah << 8) | al;
   YCPUSetCommonFlagsAfterInstruction(ctx, al);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // AAD
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAad(const YCPUInstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
   YCPUOperandValue base = YCPUReadImmediate(ctx);
   uint8_t base_value = YCPUFromOperandValue(base);
   al += ah * base_value;
   ah = 0;
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  ctx->cpu->registers[Y_CPU_AX] = (ah << 8) | al;
   YCPUSetCommonFlagsAfterInstruction(ctx, al);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // DAA
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDaa(const YCPUInstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
   const uint8_t original_al = al;
-  const bool original_carry = YCPUGetFlag(ctx->cpu, kCF);
+  const bool original_carry = YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   const uint8_t high_digit_limit =
-      YCPUGetBCDHighDigitLimit(YCPUGetFlag(ctx->cpu, kAF));
+      YCPUGetBCDHighDigitLimit(YCPUGetFlag(ctx->cpu, Y_CPU_AF));
 
-  if ((al & 0x0F) > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
+  if ((al & 0x0F) > 9 || YCPUGetFlag(ctx->cpu, Y_CPU_AF)) {
     al += 6;
-    YCPUSetFlag(ctx->cpu, kAF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, true);
   } else {
-    YCPUSetFlag(ctx->cpu, kAF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, false);
   }
   if (original_al > high_digit_limit || original_carry) {
     al += 0x60;
-    YCPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, true);
   } else {
-    YCPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, false);
   }
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  ctx->cpu->registers[Y_CPU_AX] = (ah << 8) | al;
   YCPUSetCommonFlagsAfterInstruction(ctx, al);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // DAS
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDas(const YCPUInstructionContext* ctx) {
-  uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (ctx->cpu->registers[kAX] >> 8) & 0xFF;
+  uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
+  uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
   const uint8_t original_al = al;
-  const bool original_carry = YCPUGetFlag(ctx->cpu, kCF);
+  const bool original_carry = YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   const uint8_t high_digit_limit =
-      YCPUGetBCDHighDigitLimit(YCPUGetFlag(ctx->cpu, kAF));
+      YCPUGetBCDHighDigitLimit(YCPUGetFlag(ctx->cpu, Y_CPU_AF));
 
-  if ((al & 0x0F) > 9 || YCPUGetFlag(ctx->cpu, kAF)) {
+  if ((al & 0x0F) > 9 || YCPUGetFlag(ctx->cpu, Y_CPU_AF)) {
     al -= 6;
-    YCPUSetFlag(ctx->cpu, kAF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, true);
   } else {
-    YCPUSetFlag(ctx->cpu, kAF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_AF, false);
   }
   if (original_al > high_digit_limit || original_carry) {
     al -= 0x60;
-    YCPUSetFlag(ctx->cpu, kCF, true);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, true);
   } else {
-    YCPUSetFlag(ctx->cpu, kCF, false);
+    YCPUSetFlag(ctx->cpu, Y_CPU_CF, false);
   }
-  ctx->cpu->registers[kAX] = (ah << 8) | al;
+  ctx->cpu->registers[Y_CPU_AX] = (ah << 8) | al;
   YCPUSetCommonFlagsAfterInstruction(ctx, al);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }

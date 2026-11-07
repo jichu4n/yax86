@@ -668,7 +668,7 @@ Alongside the table, state:
   arrays, but nothing in the types says so, and `gcc -O3` warns about the
   writes once it can no longer see the bound through a pointer. The immediate
   loop bounds itself by the array for that reason, and with whole-byte size
-  fields that `kMaxImmediateBytes` clamp is load-bearing rather than
+  fields that `Y_CPU_MAX_IMMEDIATE_BYTES` clamp is load-bearing rather than
   belt-and-braces.
 
 ### cpu — instruction fetch
@@ -923,17 +923,17 @@ Alongside the table, state:
 - Both prefix groups are contiguous encoding families, so each is identified by
   one masked compare: segment overrides encode as `001ss110` and LOCK/REP as
   `111100rr`. The bits each mask leaves free are the selector — `ss` is in the
-  8086's sreg order, which is the order `kES` through `kDS` are numbered in, so
-  the segment register index is an offset from `kES`.
+  8086's sreg order, which is the order `Y_CPU_ES` through `Y_CPU_DS` are
+  numbered in, so the segment register index is an offset from `Y_CPU_ES`.
 - Testing for a prefix this way rather than scanning an eight-element array is
   worth 5–8% of host instructions below `gcc -O3` and `clang -O2`, and nothing
   at or above them, where both compilers derive their own equivalent — `clang`
   picks a 64-bit bitmap and a `bt`, which is arguably better than the mask.
 - Prefixes are decoded into fields on `YCPUInstruction` as they are fetched,
   rather than kept as raw bytes for each consumer to walk. `segment_override`
-  uses 0 (`kNoSegmentOverride`) for absent, which is `kAX` and never a segment,
-  so a zero-initialized `YCPUInstruction` is correct by construction. LOCK is
-  consumed but not recorded — nothing on a PC/XT acts on it.
+  uses 0 (`Y_CPU_NO_SEGMENT_OVERRIDE`) for absent, which is `Y_CPU_AX` and never
+  a segment, so a zero-initialized `YCPUInstruction` is correct by construction.
+  LOCK is consumed but not recorded — nothing on a PC/XT acts on it.
 - **Classify and record in one pass.** Deciding whether a byte is a prefix and
   deciding which group it belongs to are the same test, so
   `YCPUApplyPrefixByte()` does both and returns whether it consumed anything,
@@ -946,8 +946,8 @@ Alongside the table, state:
   to itself. Put it before the segment override test: bytes reaching here are
   usually not prefixes at all and so run both, making the combined cost what
   matters.
-- `kMaxPrefixBytes` is not a storage bound — nothing is stored per prefix and
-  the count is a local in the fetch loop. It exists because a run of prefix
+- `Y_CPU_MAX_PREFIX_BYTES` is not a storage bound — nothing is stored per prefix
+  and the count is a local in the fetch loop. It exists because a run of prefix
   bytes would otherwise fetch forever: a real 8086 hangs there too, since a
   prefix is not an instruction boundary and so no interrupt is ever recognized,
   but this has to hand control back to its caller. `YCPUInstruction.size` is a
@@ -974,10 +974,10 @@ Alongside the table, state:
   — the four segment overrides and `0xF0`–`0xF3` — are exactly the bytes
   `YCPUApplyPrefixByte()` consumes, so a successful fetch can never leave one in
   `opcode`; they point at `YCPUExecuteInvalidOpcode()`, which returns
-  `kInstructionInvalid` for the hand-built instruction that is the only way to
-  reach one. `EveryEntryHasAHandler` in `opcode_table_test.cpp` keeps it that
-  way — an entry added later with the field left out would be a call through
-  null rather than an invalid instruction.
+  `Y_CPU_INSTRUCTION_INVALID` for the hand-built instruction that is the only
+  way to reach one. `EveryEntryHasAHandler` in `opcode_table_test.cpp` keeps it
+  that way — an entry added later with the field left out would be a call
+  through null rather than an invalid instruction.
 - `YCPUExecuteDecodedInstruction()` is `YAX86_NOINLINE`. Inlined into
   `YCPUTick()` it measures 31% slower on a Cortex-M0+: the execute path wants
   registers, the core has few, and folding the two together makes both spill.
@@ -1004,8 +1004,8 @@ Alongside the table, state:
 - Before concluding a dispatch table has callers that need it, check whether
   they are really indexing. The one apparent external caller here was two sites
   in `instructions_mov.c` reading a 16-bit offset with
-  `kReadImmediateValueFn[kWord]` — a constant index, which is a direct call to
-  `YCPUReadImmediateOperandWord()` written the long way.
+  `kReadImmediateValueFn[Y_CPU_WORD]` — a constant index, which is a direct call
+  to `YCPUReadImmediateOperandWord()` written the long way.
 - **Switch on the width, but not on the operand address type.** The two look
   like the same dispatch and are not. `YCPUWidth width : 1` is a one-bit
   bitfield, so there is no representable value outside the enum: the compiler
@@ -1078,14 +1078,15 @@ Alongside the table, state:
   `YCPUReadRegisterOperandByte()`, where AH and the high half of a word register
   live in the bits the cast drops. Eight unit tests across `add_sub`, `group_2`
   and `mov_xchg_xlat` fail if that cast goes, and so does the hardware suite.
-- **The unreachable arm of a width dispatch returns `kUnreachableOperandValue`,
-  which is `0xFF`.** `YCPUWidth` names two values and every switch handles both,
-  so nothing reaches those arms; they exist because C does not promise an enum
-  object holds only named values. All ones in the low byte is what an 8086
-  reads from an address nothing drives, and it is legal at either width, where
-  `0xFFFF` is not - at `kByte` it would break the zero high byte the invariant
-  above promises. The arms cost nothing: naming them, and bringing the one that
-  said `0xFFFF` into line, leaves core `.text` unchanged at both levels.
+- **The unreachable arm of a width dispatch returns
+  `Y_CPU_UNREACHABLE_OPERAND_VALUE`, which is `0xFF`.** `YCPUWidth` names two
+  values and every switch handles both, so nothing reaches those arms; they
+  exist because C does not promise an enum object holds only named values. All
+  ones in the low byte is what an 8086 reads from an address nothing drives, and
+  it is legal at either width, where `0xFFFF` is not - at `Y_CPU_BYTE` it would
+  break the zero high byte the invariant above promises. The arms cost nothing:
+  naming them, and bringing the one that said `0xFFFF` into line, leaves core
+  `.text` unchanged at both levels.
 - What the type no longer carries is the width, so **sign extension takes one
   explicitly** — `YCPUFromSignedOperandValue(width, value)` and
   `YCPUFromSignedOperand(width, operand)`, from the opcode table entry the
@@ -1263,7 +1264,7 @@ Alongside the table, state:
   flushes mean more decode-cache hits, a run ends at a miss, so `YPlatformRun()`
   overshoots its budget by a different amount and the Enter answering DOS's
   date prompt lands at a different emulated time. Building both sides with
-  `kMaxInstructionsPerTick` set to 1 gives identical figures —
+  `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` set to 1 gives identical figures —
   2,328,015 / 27,701,507, the same pair #73 recorded — which is what says the
   emulation is unchanged. Reporting per byte instead restores the old invariant
   exactly and costs 0.13%.
@@ -1325,11 +1326,11 @@ Alongside the table, state:
 ### cpu — runs of instructions
 
 - A tick driven through `YPlatformRun()` executes up to
-  `kMaxInstructionsPerTick` instructions back to back. What that removes is not
-  the instruction, it is the round trip — `YPlatformTick()`'s deadline test and
-  stop checks, and `YCPUTick()`'s own prologue and epilogue, all of which are
-  per tick. Worth **9.17% at `-O3`** and 9.74% at `-O2`, which is the largest
-  win left after the decode cache and is only possible because of it.
+  `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` instructions back to back. What that removes
+  is not the instruction, it is the round trip — `YPlatformTick()`'s deadline
+  test and stop checks, and `YCPUTick()`'s own prologue and epilogue, all of
+  which are per tick. Worth **9.17% at `-O3`** and 9.74% at `-O2`, which is the
+  largest win left after the decode cache and is only possible because of it.
 - **Only the first instruction of a run is fetched**; every one after it comes
   from the decode cache, so a step in a run costs a probe rather than a decode.
   That is also what keeps a cold CPU to one instruction per tick however large
@@ -1347,8 +1348,8 @@ Alongside the table, state:
   every tick. Config is for what a host wires up once and `YCPUInit()` checks; a
   value that changes every call is an argument, and writing it into the state
   first would be poking the object to pass a parameter.
-- **`kMaxInstructionsPerTick` is a cap on how coarse a tick can be, not a
-  tuning knob for how long a run should be.** What governs that is
+- **`Y_CPU_MAX_INSTRUCTIONS_PER_TICK` is a cap on how coarse a tick can be, not
+  a tuning knob for how long a run should be.** What governs that is
   `max_run_cycles`, which is what keeps a device from being serviced late; the
   instruction count only bounds the case where the next deadline is far away,
   and what it costs is that `YPlatformRun()` overshoots its budget by up to one
@@ -1397,8 +1398,8 @@ Alongside the table, state:
   without that, alignment happens to place the read first in its tick and the
   test cannot see a stale clock.
 - **`dos-boot` moves by 107 instructions and 1,266 cycles, and none of it is
-  emulation.** Building the same branch with `kMaxInstructionsPerTick` set to 1
-  reproduces master's 2,328,015 / 27,701,507 exactly. What moves is the
+  emulation.** Building the same branch with `Y_CPU_MAX_INSTRUCTIONS_PER_TICK`
+  set to 1 reproduces master's 2,328,015 / 27,701,507 exactly. What moves is the
   harness: `YPlatformRun()` overshoots its budget by a run rather than by an
   instruction, so `result.cycles` crosses the screen-poll deadline at a
   different point and the Enter that answers DOS's date prompt is injected at a
@@ -1463,12 +1464,13 @@ Alongside the table, state:
   256 bytes of index answers a lookup with a shift, a load and a bounds
   compare. 4KB is not tuned — it is the coarsest page that leaves every region
   the machine registers aligned, and a finer one would only cost more memory.
-- Two index values are not entry indices. `kMemoryPageUnmapped` is a page no
-  entry covers, and answers `NULL` directly. `kMemoryPageStraddled` is a page
-  more than one entry has a share of, which the index cannot answer at all, so
-  the lookup falls back to a walk. Nothing registers a misaligned region today,
-  and that is exactly why the fallback needs its own test — see
-  `platform_memory_map_test.cpp`, which registers one deliberately.
+- Two index values are not entry indices. `Y_PLATFORM_MEMORY_PAGE_UNMAPPED` is a
+  page no entry covers, and answers `NULL` directly.
+  `Y_PLATFORM_MEMORY_PAGE_STRADDLED` is a page more than one entry has a share
+  of, which the index cannot answer at all, so the lookup falls back to a walk.
+  Nothing registers a misaligned region today, and that is exactly why the
+  fallback needs its own test — see `platform_memory_map_test.cpp`, which
+  registers one deliberately.
 - A region whose size is not a whole number of pages is handled by construction
   rather than by arithmetic: its last page comes out straddled and takes the
   fallback. That is the case for any option ROM whose size is not a multiple of

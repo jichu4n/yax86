@@ -13,8 +13,9 @@ TEST_F(Group1Test, AddImmediateByteToMemoryByte) {
   // Example: ADD byte [bx], 0x12
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-add-rm8-imm8-test", "add byte [bx], 0x12\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;  // Point BX to some memory location
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] =
+      0x0800;                            // Point BX to some memory location
   helper->memory_[0x0800] = 0x01;        // Initial value in memory
 
   helper->ExecuteInstructions(1);
@@ -27,8 +28,9 @@ TEST_F(Group1Test, AddImmediateWordToMemoryWord) {
   // Example: ADD word [bx], 0x1234
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-add-rm16-imm16-test", "add word [bx], 0x1234\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;  // Point BX to some memory location
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] =
+      0x0800;                            // Point BX to some memory location
   helper->memory_[0x0800] = 0x01;        // Low byte of initial value
   helper->memory_[0x0801] = 0x00;        // High byte of initial value (0x0001)
 
@@ -43,8 +45,9 @@ TEST_F(Group1Test, AddImmediateByteSignExtendedToMemoryWord) {
   // Example: ADD word [bx], 0x12
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-add-rm16-imm8-test", "add word [bx], 0x12\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;  // Point BX to some memory location
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] =
+      0x0800;                            // Point BX to some memory location
   helper->memory_[0x0800] = 0x01;        // Low byte of initial value
   helper->memory_[0x0801] = 0x00;        // High byte of initial value (0x0001)
 
@@ -59,8 +62,8 @@ TEST_F(Group1Test, OrImmediateByteWithMemoryByte) {
   // Opcode 80 /1 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-or-rm8-imm8-test", "or byte [bx], 0x0F\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xF0;  // 11110000b
 
   helper->ExecuteInstructions(1);
@@ -72,8 +75,8 @@ TEST_F(Group1Test, OrImmediateWordWithMemoryWord) {
   // Opcode 81 /1 iw
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-or-rm16-imm16-test", "or word [bx], 0x0F0F\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xF0;  // Low byte
   helper->memory_[0x0801] = 0xF0;  // High byte (0xF0F0)
 
@@ -86,8 +89,8 @@ TEST_F(Group1Test, OrImmediateByteSignExtendedWithMemoryWord) {
   // Opcode 83 /1 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-or-rm16-imm8-test", "or word [bx], 0x0F\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xF0;  // Low byte
   helper->memory_[0x0801] = 0x00;  // High byte (0x00F0)
                                    // Immediate 0x0F sign-extended is 0x000F
@@ -101,10 +104,10 @@ TEST_F(Group1Test, AddWithCarryImmediateByteToMemoryByte) {
   // Opcode 80 /2 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-adc-rm8-imm8-test", "adc byte [bx], 0x01\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xFE;     // 254
-  YCPUSetFlag(&helper->cpu_, kCF, true);  // Set Carry Flag
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);  // Set Carry Flag
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(
@@ -116,11 +119,11 @@ TEST_F(Group1Test, AddWithCarryImmediateWordToMemoryWord) {
   // Opcode 81 /2 iw
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-adc-rm16-imm16-test", "adc word [bx], 0x0001\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xFF;  // Low byte
   helper->memory_[0x0801] = 0xFF;  // High byte (0xFFFF)
-  YCPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
 
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
@@ -131,11 +134,11 @@ TEST_F(Group1Test, AddWithCarryImmediateByteSignExtendedToMemoryWord) {
   // Opcode 83 /2 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-adc-rm16-imm8-test", "adc word [bx], 0x01\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xFE;  // Low byte
   helper->memory_[0x0801] = 0xFF;  // High byte (0xFFFE)
-  YCPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
   // Immediate 0x01 sign-extended is 0x0001
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
@@ -147,10 +150,10 @@ TEST_F(Group1Test, SubtractWithBorrowImmediateByteFromMemoryByte) {
   // Opcode 80 /3 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-sbb-rm8-imm8-test", "sbb byte [bx], 0x01\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x02;
-  YCPUSetFlag(&helper->cpu_, kCF, true);  // Set Carry Flag (as borrow)
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);  // Set Carry Flag (as borrow)
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x00);  // 0x02 - 0x01 - 1 (CF) = 0x00
@@ -160,11 +163,11 @@ TEST_F(Group1Test, SubtractWithBorrowImmediateWordFromMemoryWord) {
   // Opcode 81 /3 iw
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-sbb-rm16-imm16-test", "sbb word [bx], 0x0001\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x02;  // Low byte
   helper->memory_[0x0801] = 0x00;  // High byte (0x0002)
-  YCPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
 
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
@@ -175,11 +178,11 @@ TEST_F(Group1Test, SubtractWithBorrowImmediateByteSignExtendedFromMemoryWord) {
   // Opcode 83 /3 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-sbb-rm16-imm8-test", "sbb word [bx], 0x01\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x02;  // Low byte
   helper->memory_[0x0801] = 0x00;  // High byte (0x0002)
-  YCPUSetFlag(&helper->cpu_, kCF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
   // Immediate 0x01 sign-extended is 0x0001
   helper->ExecuteInstructions(1);
   uint16_t result = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
@@ -191,8 +194,8 @@ TEST_F(Group1Test, AndImmediateByteWithMemoryByte) {
   // Opcode 80 /4 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-and-rm8-imm8-test", "and byte [bx], 0x0F\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x3A;  // 00111010b
 
   helper->ExecuteInstructions(1);
@@ -204,8 +207,8 @@ TEST_F(Group1Test, AndImmediateWordWithMemoryWord) {
   // Opcode 81 /4 iw
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-and-rm16-imm16-test", "and word [bx], 0x00FF\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x34;  // Low byte
   helper->memory_[0x0801] = 0x12;  // High byte (0x1234)
 
@@ -219,8 +222,8 @@ TEST_F(Group1Test, AndImmediateByteSignExtendedWithMemoryWord) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-and-rm16-imm8-test",
       "and word [bx], 0x0F\n");  // Immediate 0x0F sign-extended is 0x000F
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x3A;  // Low byte
   helper->memory_[0x0801] = 0x12;  // High byte (0x123A)
 
@@ -234,8 +237,8 @@ TEST_F(Group1Test, SubtractImmediateByteFromMemoryByte) {
   // Opcode 80 /5 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-sub-rm8-imm8-test", "sub byte [bx], 0x10\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x25;
 
   helper->ExecuteInstructions(1);
@@ -246,8 +249,8 @@ TEST_F(Group1Test, SubtractImmediateWordFromMemoryWord) {
   // Opcode 81 /5 iw
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-sub-rm16-imm16-test", "sub word [bx], 0x0110\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x25;  // Low byte
   helper->memory_[0x0801] = 0x02;  // High byte (0x0225)
 
@@ -261,8 +264,8 @@ TEST_F(Group1Test, SubtractImmediateByteSignExtendedFromMemoryWord) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-sub-rm16-imm8-test",
       "sub word [bx], 0x10\n");  // Immediate 0x10 sign-extended is 0x0010
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x25;  // Low byte
   helper->memory_[0x0801] = 0x00;  // High byte (0x0025)
 
@@ -276,8 +279,8 @@ TEST_F(Group1Test, XorImmediateByteWithMemoryByte) {
   // Opcode 80 /6 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-xor-rm8-imm8-test", "xor byte [bx], 0xFF\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xAA;  // 10101010b
 
   helper->ExecuteInstructions(1);
@@ -289,8 +292,8 @@ TEST_F(Group1Test, XorImmediateWordWithMemoryWord) {
   // Opcode 81 /6 iw
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-xor-rm16-imm16-test", "xor word [bx], 0xFFFF\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xAA;  // Low byte
   helper->memory_[0x0801] = 0x55;  // High byte (0x55AA)
 
@@ -304,8 +307,8 @@ TEST_F(Group1Test, XorImmediateByteSignExtendedWithMemoryWord) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-xor-rm16-imm8-test",
       "xor word [bx], 0xFF\n");  // Immediate 0xFF sign-extended is 0x00FF
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0xAA;  // Low byte
   helper->memory_[0x0801] = 0x55;  // High byte (0x55AA)
 
@@ -319,28 +322,28 @@ TEST_F(Group1Test, CompareImmediateByteWithMemoryByte) {
   // Opcode 80 /7 ib
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-cmp-rm8-imm8-test", "cmp byte [bx], 0x10\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x10;  // Value to compare
 
   helper->ExecuteInstructions(1);
   EXPECT_EQ(helper->memory_[0x0800], 0x10);  // CMP does not change destination
-  helper->CheckFlags({{kZF, true}});         // 0x10 - 0x10 = 0, so ZF is set
+  helper->CheckFlags({{Y_CPU_ZF, true}});    // 0x10 - 0x10 = 0, so ZF is set
 }
 
 TEST_F(Group1Test, CompareImmediateWordWithMemoryWord) {
   // Opcode 81 /7 iw
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-cmp-rm16-imm16-test", "cmp word [bx], 0x1234\n");
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x34;  // Low byte
   helper->memory_[0x0801] = 0x12;  // High byte (0x1234)
 
   helper->ExecuteInstructions(1);
   uint16_t value = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(value, 0x1234);
-  helper->CheckFlags({{kZF, true}});
+  helper->CheckFlags({{Y_CPU_ZF, true}});
 }
 
 TEST_F(Group1Test, CompareImmediateByteSignExtendedWithMemoryWord) {
@@ -348,13 +351,13 @@ TEST_F(Group1Test, CompareImmediateByteSignExtendedWithMemoryWord) {
   auto helper = CPUTestHelper::CreateWithProgram(
       "execute-group1-cmp-rm16-imm8-test",
       "cmp word [bx], 0x34\n");  // Immediate 0x34 sign-extended is 0x0034
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kBX] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_BX] = 0x0800;
   helper->memory_[0x0800] = 0x34;  // Low byte
   helper->memory_[0x0801] = 0x00;  // High byte (0x0034)
 
   helper->ExecuteInstructions(1);
   uint16_t value = helper->memory_[0x0800] | (helper->memory_[0x0801] << 8);
   EXPECT_EQ(value, 0x0034);
-  helper->CheckFlags({{kZF, true}});
+  helper->CheckFlags({{Y_CPU_ZF, true}});
 }

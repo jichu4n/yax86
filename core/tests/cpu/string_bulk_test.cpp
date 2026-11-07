@@ -53,8 +53,9 @@ bool operator==(const Outcome& a, const Outcome& b) {
 
 ostream& operator<<(ostream& os, const Outcome& outcome) {
   os << "{ cycles: " << dec << outcome.cycles << ", flags: 0x" << hex
-     << outcome.flags << ", SI: 0x" << outcome.registers[kSI] << ", DI: 0x"
-     << outcome.registers[kDI] << ", CX: 0x" << outcome.registers[kCX] << " }";
+     << outcome.flags << ", SI: 0x" << outcome.registers[Y_CPU_SI] << ", DI: 0x"
+     << outcome.registers[Y_CPU_DI] << ", CX: 0x" << outcome.registers[Y_CPU_CX]
+     << " }";
   return os;
 }
 
@@ -66,19 +67,19 @@ Outcome Run(
     const string& name, const string& asm_code, const SetUp& set_up,
     bool with_window) {
   auto helper = CPUTestHelper::CreateWithProgram(name, asm_code, kMemorySize);
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
   set_up(*helper);
   if (with_window) {
     YCPUSetDirectDataWindow(&helper->cpu_, helper->memory_.get(), kMemorySize);
   }
-  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted);
+  EXPECT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED);
 
   Outcome outcome;
   outcome.memory.assign(
       helper->memory_.get(), helper->memory_.get() + kMemorySize);
   outcome.registers.assign(
-      helper->cpu_.registers, helper->cpu_.registers + kNumRegisters);
+      helper->cpu_.registers, helper->cpu_.registers + Y_CPU_NUM_REGISTERS);
   outcome.flags = helper->cpu_.flags;
   outcome.cycles = helper->cpu_.cycles_this_tick;
   return outcome;
@@ -138,13 +139,13 @@ TEST_F(StringBulkTest, AgreesWithTheElementPathForEveryShapeOfRun) {
         test_case.name, test_case.asm_code,
         [count, backwards](CPUTestHelper& helper) {
           FillPattern(helper, 0x0400, 0x200);
-          helper.cpu_.registers[kAX] = 0x1234;
-          helper.cpu_.registers[kCX] = count;
+          helper.cpu_.registers[Y_CPU_AX] = 0x1234;
+          helper.cpu_.registers[Y_CPU_CX] = count;
           // Backwards runs start at the top of the same ranges, so that both
           // directions cover the same bytes.
-          helper.cpu_.registers[kSI] = backwards ? 0x05FE : 0x0400;
-          helper.cpu_.registers[kDI] = backwards ? 0x07FE : 0x0600;
-          YCPUSetFlag(&helper.cpu_, kDF, backwards);
+          helper.cpu_.registers[Y_CPU_SI] = backwards ? 0x05FE : 0x0400;
+          helper.cpu_.registers[Y_CPU_DI] = backwards ? 0x07FE : 0x0600;
+          YCPUSetFlag(&helper.cpu_, Y_CPU_DF, backwards);
         });
   }
 }
@@ -160,10 +161,10 @@ TEST_F(StringBulkTest, OverlappingCopiesPropagateAsTheyWouldOneAtATime) {
         for (uint16_t i = 1; i < 16; ++i) {
           helper.memory_[0x0400 + i] = 0x00;
         }
-        helper.cpu_.registers[kCX] = 15;
-        helper.cpu_.registers[kSI] = 0x0400;
-        helper.cpu_.registers[kDI] = 0x0401;
-        YCPUSetFlag(&helper.cpu_, kDF, false);
+        helper.cpu_.registers[Y_CPU_CX] = 15;
+        helper.cpu_.registers[Y_CPU_SI] = 0x0400;
+        helper.cpu_.registers[Y_CPU_DI] = 0x0401;
+        YCPUSetFlag(&helper.cpu_, Y_CPU_DF, false);
       });
   // Every byte of the range is the one the copy started from.
   for (uint16_t i = 0; i < 16; ++i) {
@@ -179,10 +180,10 @@ TEST_F(StringBulkTest, OverlappingWordCopiesReadBothBytesBeforeWritingEither) {
   ExpectBothPathsAgree(
       "movsw-overlap-by-one", "rep movsw\n", [](CPUTestHelper& helper) {
         FillPattern(helper, 0x0400, 64);
-        helper.cpu_.registers[kCX] = 16;
-        helper.cpu_.registers[kSI] = 0x0400;
-        helper.cpu_.registers[kDI] = 0x0401;
-        YCPUSetFlag(&helper.cpu_, kDF, false);
+        helper.cpu_.registers[Y_CPU_CX] = 16;
+        helper.cpu_.registers[Y_CPU_SI] = 0x0400;
+        helper.cpu_.registers[Y_CPU_DI] = 0x0401;
+        YCPUSetFlag(&helper.cpu_, Y_CPU_DF, false);
       });
 }
 
@@ -192,13 +193,13 @@ TEST_F(StringBulkTest, ARepeatOfZeroElementsDoesNothing) {
   const Outcome outcome = ExpectBothPathsAgree(
       "movsb-zero", "rep movsb\n", [](CPUTestHelper& helper) {
         FillPattern(helper, 0x0400, 16);
-        helper.cpu_.registers[kCX] = 0;
-        helper.cpu_.registers[kSI] = 0x0400;
-        helper.cpu_.registers[kDI] = 0x0500;
-        YCPUSetFlag(&helper.cpu_, kDF, false);
+        helper.cpu_.registers[Y_CPU_CX] = 0;
+        helper.cpu_.registers[Y_CPU_SI] = 0x0400;
+        helper.cpu_.registers[Y_CPU_DI] = 0x0500;
+        YCPUSetFlag(&helper.cpu_, Y_CPU_DF, false);
       });
-  EXPECT_EQ(outcome.registers[kSI], 0x0400);
-  EXPECT_EQ(outcome.registers[kDI], 0x0500);
+  EXPECT_EQ(outcome.registers[Y_CPU_SI], 0x0400);
+  EXPECT_EQ(outcome.registers[Y_CPU_DI], 0x0500);
   EXPECT_EQ(outcome.memory[0x0500], 0x00);
 }
 
@@ -266,14 +267,14 @@ TEST_F(StringBulkTest, ARunLeavingTheWindowReachesTheDeviceAboveIt) {
   // REP STOSB, fetched through the host's callback like any other byte.
   host.ram_[0x10] = 0xF3;
   host.ram_[0x11] = 0xAA;
-  host.cpu_.registers[kCS] = 0;
-  host.cpu_.registers[kIP] = 0x0010;
-  host.cpu_.registers[kES] = 0;
-  host.cpu_.registers[kAX] = 0x00CD;
-  host.cpu_.registers[kCX] = 16;
-  host.cpu_.registers[kDI] = SplitMemoryHost::kWindowEnd - 8;
-  YCPUSetFlag(&host.cpu_, kDF, false);
-  ASSERT_EQ(YCPUTick(&host.cpu_, 0), kCPUTickExecuted);
+  host.cpu_.registers[Y_CPU_CS] = 0;
+  host.cpu_.registers[Y_CPU_IP] = 0x0010;
+  host.cpu_.registers[Y_CPU_ES] = 0;
+  host.cpu_.registers[Y_CPU_AX] = 0x00CD;
+  host.cpu_.registers[Y_CPU_CX] = 16;
+  host.cpu_.registers[Y_CPU_DI] = SplitMemoryHost::kWindowEnd - 8;
+  YCPUSetFlag(&host.cpu_, Y_CPU_DF, false);
+  ASSERT_EQ(YCPUTick(&host.cpu_, 0), Y_CPU_TICK_EXECUTED);
 
   for (uint32_t i = 0; i < 8; ++i) {
     // Eight bytes inside the window, and eight that had to be handed over.
@@ -283,8 +284,8 @@ TEST_F(StringBulkTest, ARunLeavingTheWindowReachesTheDeviceAboveIt) {
     // them instead.
     EXPECT_EQ(host.ram_[SplitMemoryHost::kWindowEnd + i], 0x00) << i;
   }
-  EXPECT_EQ(host.cpu_.registers[kCX], 0);
-  EXPECT_EQ(host.cpu_.registers[kDI], SplitMemoryHost::kWindowEnd + 8);
+  EXPECT_EQ(host.cpu_.registers[Y_CPU_CX], 0);
+  EXPECT_EQ(host.cpu_.registers[Y_CPU_DI], SplitMemoryHost::kWindowEnd + 8);
 }
 
 // A run whose offset would wrap the top of its segment cannot be a straight
@@ -298,11 +299,11 @@ TEST_F(StringBulkTest, ARunLeavingTheWindowReachesTheDeviceAboveIt) {
 TEST_F(StringBulkTest, ARunWrappingTheTopOfItsSegmentFallsBack) {
   const Outcome outcome = ExpectBothPathsAgree(
       "stosb-segment-wrap", "rep stosb\n", [](CPUTestHelper& helper) {
-        helper.cpu_.registers[kES] = kWrapSegment;
-        helper.cpu_.registers[kAX] = 0x00CD;
-        helper.cpu_.registers[kCX] = 8;
-        helper.cpu_.registers[kDI] = 0xFFFC;
-        YCPUSetFlag(&helper.cpu_, kDF, false);
+        helper.cpu_.registers[Y_CPU_ES] = kWrapSegment;
+        helper.cpu_.registers[Y_CPU_AX] = 0x00CD;
+        helper.cpu_.registers[Y_CPU_CX] = 8;
+        helper.cpu_.registers[Y_CPU_DI] = 0xFFFC;
+        YCPUSetFlag(&helper.cpu_, Y_CPU_DF, false);
       });
   // Four bytes at the top of the segment, and four that wrapped to the bottom
   // of it - not the eight consecutive bytes a straight run would have left.
@@ -311,7 +312,7 @@ TEST_F(StringBulkTest, ARunWrappingTheTopOfItsSegmentFallsBack) {
     EXPECT_EQ(outcome.memory[0x1000 + i], 0xCD) << "at offset " << i;
     EXPECT_EQ(outcome.memory[0x11000 + i], 0x00) << "at offset " << i;
   }
-  EXPECT_EQ(outcome.registers[kDI], 0x0004);
+  EXPECT_EQ(outcome.registers[Y_CPU_DI], 0x0004);
 }
 
 // A backwards run stepping below offset 0 wraps the same way, to the top of
@@ -319,11 +320,11 @@ TEST_F(StringBulkTest, ARunWrappingTheTopOfItsSegmentFallsBack) {
 TEST_F(StringBulkTest, ABackwardRunWrappingBelowZeroFallsBackToo) {
   const Outcome outcome = ExpectBothPathsAgree(
       "stosb-wrap-below-zero", "rep stosb\n", [](CPUTestHelper& helper) {
-        helper.cpu_.registers[kES] = kWrapSegment;
-        helper.cpu_.registers[kAX] = 0x00CD;
-        helper.cpu_.registers[kCX] = 8;
-        helper.cpu_.registers[kDI] = 0x0003;
-        YCPUSetFlag(&helper.cpu_, kDF, true);
+        helper.cpu_.registers[Y_CPU_ES] = kWrapSegment;
+        helper.cpu_.registers[Y_CPU_AX] = 0x00CD;
+        helper.cpu_.registers[Y_CPU_CX] = 8;
+        helper.cpu_.registers[Y_CPU_DI] = 0x0003;
+        YCPUSetFlag(&helper.cpu_, Y_CPU_DF, true);
       });
   for (uint16_t i = 0; i < 4; ++i) {
     EXPECT_EQ(outcome.memory[0x1000 + i], 0xCD) << "at offset " << i;
@@ -332,7 +333,7 @@ TEST_F(StringBulkTest, ABackwardRunWrappingBelowZeroFallsBackToo) {
     // would have gone.
     EXPECT_EQ(outcome.memory[0x0FFC + i], 0x00) << "at offset " << i;
   }
-  EXPECT_EQ(outcome.registers[kDI], 0xFFFB);
+  EXPECT_EQ(outcome.registers[Y_CPU_DI], 0xFFFB);
 }
 
 // A segment override moves where a MOVS reads from, and the bulk path has to
@@ -344,13 +345,13 @@ TEST_F(StringBulkTest, ASegmentOverrideMovesWhereTheCopyReadsFrom) {
         // ES is a paragraph above DS, so the override moves the source up by
         // 16 bytes. Both ranges are filled so that reading the wrong one is
         // not a read of zeroes.
-        helper.cpu_.registers[kES] = 0x0001;
+        helper.cpu_.registers[Y_CPU_ES] = 0x0001;
         FillPattern(helper, 0x0400, 0x80);
-        helper.cpu_.registers[kCX] = 16;
-        helper.cpu_.registers[kSI] = 0x0400;
+        helper.cpu_.registers[Y_CPU_CX] = 16;
+        helper.cpu_.registers[Y_CPU_SI] = 0x0400;
         // The destination is ES:DI, which the override does not touch.
-        helper.cpu_.registers[kDI] = 0x0600;
-        YCPUSetFlag(&helper.cpu_, kDF, false);
+        helper.cpu_.registers[Y_CPU_DI] = 0x0600;
+        YCPUSetFlag(&helper.cpu_, Y_CPU_DF, false);
       });
   // Read from ES:SI = 0x0410, written to ES:DI = 0x0610.
   for (uint16_t i = 0; i < 16; ++i) {
@@ -368,14 +369,14 @@ TEST_F(StringBulkTest, ALongRunChargesWhatOneElementAtATimeWouldHave) {
   // once the base cost is added to it.
   const Outcome outcome = ExpectBothPathsAgree(
       "movsw-long", "rep movsw\n", [](CPUTestHelper& helper) {
-        helper.cpu_.registers[kCX] = 0x1000;
-        helper.cpu_.registers[kSI] = 0x0000;
-        helper.cpu_.registers[kDI] = 0x2000;
-        YCPUSetFlag(&helper.cpu_, kDF, false);
+        helper.cpu_.registers[Y_CPU_CX] = 0x1000;
+        helper.cpu_.registers[Y_CPU_SI] = 0x0000;
+        helper.cpu_.registers[Y_CPU_DI] = 0x2000;
+        YCPUSetFlag(&helper.cpu_, Y_CPU_DF, false);
       });
-  EXPECT_EQ(outcome.registers[kCX], 0);
-  EXPECT_EQ(outcome.registers[kSI], 0x2000);
-  EXPECT_EQ(outcome.registers[kDI], 0x4000);
+  EXPECT_EQ(outcome.registers[Y_CPU_CX], 0);
+  EXPECT_EQ(outcome.registers[Y_CPU_SI], 0x2000);
+  EXPECT_EQ(outcome.registers[Y_CPU_DI], 0x4000);
 }
 
 // A repeat that writes over code the CPU has already decoded has to discard
@@ -395,8 +396,8 @@ TEST_F(StringBulkTest, ACopyOverCachedCodeDiscardsTheDecodes) {
       "  rep movsb\n"
       "  jmp target\n",
       kMemorySize);
-  helper->cpu_.registers[kDS] = 0;
-  helper->cpu_.registers[kES] = 0;
+  helper->cpu_.registers[Y_CPU_DS] = 0;
+  helper->cpu_.registers[Y_CPU_ES] = 0;
   YCPUDecodeCacheEntry decode_cache[16] = {};
   helper->cpu_.config.decode_cache = decode_cache;
   helper->cpu_.config.decode_cache_num_entries = 16;
@@ -408,18 +409,18 @@ TEST_F(StringBulkTest, ACopyOverCachedCodeDiscardsTheDecodes) {
   // The copy replaces the INC AX at "target" with the INC BX at 0x0800.
   const uint16_t target = kCOMFileLoadOffset + 6;
   ASSERT_EQ(helper->memory_[target], 0x40);  // INC AX
-  helper->cpu_.registers[kCX] = 1;
-  helper->cpu_.registers[kSI] = 0x0800;
-  helper->cpu_.registers[kDI] = target;
-  YCPUSetFlag(&helper->cpu_, kDF, false);
+  helper->cpu_.registers[Y_CPU_CX] = 1;
+  helper->cpu_.registers[Y_CPU_SI] = 0x0800;
+  helper->cpu_.registers[Y_CPU_DI] = target;
+  YCPUSetFlag(&helper->cpu_, Y_CPU_DF, false);
 
   // MOV, INC AX, REP MOVSB, JMP, and then the instruction at "target" again -
   // which is now INC BX, and has to be decoded afresh rather than served from
   // the cache.
   for (int i = 0; i < 5; ++i) {
-    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), kCPUTickExecuted) << "tick " << i;
+    ASSERT_EQ(YCPUTick(&helper->cpu_, 0), Y_CPU_TICK_EXECUTED) << "tick " << i;
   }
   EXPECT_EQ(helper->memory_[target], 0x43);  // INC BX
-  EXPECT_EQ(helper->cpu_.registers[kAX], 1);
-  EXPECT_EQ(helper->cpu_.registers[kBX], 1);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 1);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_BX], 1);
 }

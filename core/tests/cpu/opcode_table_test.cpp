@@ -20,8 +20,8 @@ TEST_F(OpcodeTableTest, MetadataIntegrity) {
       continue;
     }
 
-    // Width should be either kByte or kWord
-    EXPECT_TRUE(metadata.width == kByte || metadata.width == kWord)
+    // Width should be either Y_CPU_BYTE or Y_CPU_WORD
+    EXPECT_TRUE(metadata.width == Y_CPU_BYTE || metadata.width == Y_CPU_WORD)
         << "Invalid width for opcode 0x" << hex << i;
 
     // Immediate size for all instructions should be between 0 and 2, except
@@ -38,8 +38,8 @@ TEST_F(OpcodeTableTest, MetadataIntegrity) {
 
 TEST_F(OpcodeTableTest, InstructionPrefixMetadataIntegrity) {
   const vector<YCPUInstructionPrefix> prefixes = {
-      kPrefixES,   kPrefixCS,    kPrefixSS,  kPrefixDS,
-      kPrefixLOCK, kPrefixREPNZ, kPrefixREP,
+      Y_CPU_PREFIX_ES,   Y_CPU_PREFIX_CS,    Y_CPU_PREFIX_SS,  Y_CPU_PREFIX_DS,
+      Y_CPU_PREFIX_LOCK, Y_CPU_PREFIX_REPNZ, Y_CPU_PREFIX_REP,
   };
   for (const auto& prefix : prefixes) {
     const YCPUOpcodeMetadata& metadata = YCPUOpcodeTable[prefix];

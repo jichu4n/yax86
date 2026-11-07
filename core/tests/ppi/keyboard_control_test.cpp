@@ -29,8 +29,8 @@ class KeyboardControlTest : public ::testing::Test {
     ppi_ = {};
     YPPIInit(&ppi_);
     // Explicitly reset port B to 0 for these tests. YPPIInit initializes it to
-    // a non-zero default (kPPIPortBKeyboardClockLow), but these tests assume
-    // a zero-initialized state to verify state transitions.
+    // a non-zero default (Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW), but these tests
+    // assume a zero-initialized state to verify state transitions.
     ppi_.port_b = 0;
 
     // Wire up the mock callback.
@@ -45,7 +45,7 @@ TEST_F(KeyboardControlTest, NoChangeNoCallback) {
   ASSERT_EQ(ppi_.port_b, 0);
 
   // Act: Write a value that doesn't affect bits 6 or 7.
-  YPPIWritePort(&ppi_, kPPIPortB, 0b00111111);
+  YPPIWritePort(&ppi_, Y_PPI_PORT_B, 0b00111111);
 
   // Assert: Callback should not have been called.
   EXPECT_EQ(g_callback_count, 0);
@@ -53,7 +53,7 @@ TEST_F(KeyboardControlTest, NoChangeNoCallback) {
 
 TEST_F(KeyboardControlTest, CallbackOnBit6Change) {
   // Act: Write a value to flip bit 6 on.
-  YPPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardClockLow);
+  YPPIWritePort(&ppi_, Y_PPI_PORT_B, Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW);
 
   // Assert: Callback was called once with the correct state.
   EXPECT_EQ(g_callback_count, 1);
@@ -63,7 +63,7 @@ TEST_F(KeyboardControlTest, CallbackOnBit6Change) {
 
 TEST_F(KeyboardControlTest, CallbackOnBit7Change) {
   // Act: Write a value to flip bit 7 on.
-  YPPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardEnableClear);
+  YPPIWritePort(&ppi_, Y_PPI_PORT_B, Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR);
 
   // Assert: Callback was called once with the correct state.
   EXPECT_EQ(g_callback_count, 1);
@@ -74,8 +74,8 @@ TEST_F(KeyboardControlTest, CallbackOnBit7Change) {
 TEST_F(KeyboardControlTest, CallbackOnBothBitsChange) {
   // Act: Write a value to flip both bits 6 and 7 on.
   const uint8_t both_bits =
-      kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow;
-  YPPIWritePort(&ppi_, kPPIPortB, both_bits);
+      Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR | Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW;
+  YPPIWritePort(&ppi_, Y_PPI_PORT_B, both_bits);
 
   // Assert: Callback was called once with the correct state.
   EXPECT_EQ(g_callback_count, 1);
@@ -86,13 +86,13 @@ TEST_F(KeyboardControlTest, CallbackOnBothBitsChange) {
 TEST_F(KeyboardControlTest, CallbackOnFlipOff) {
   // Arrange: Start with both bits on.
   const uint8_t both_bits =
-      kPPIPortBKeyboardEnableClear | kPPIPortBKeyboardClockLow;
-  YPPIWritePort(&ppi_, kPPIPortB, both_bits);
+      Y_PPI_PORT_B_KEYBOARD_ENABLE_CLEAR | Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW;
+  YPPIWritePort(&ppi_, Y_PPI_PORT_B, both_bits);
   // Reset trackers after setup.
   g_callback_count = 0;
 
   // Act: Write a value to flip both bits off.
-  YPPIWritePort(&ppi_, kPPIPortB, 0);
+  YPPIWritePort(&ppi_, Y_PPI_PORT_B, 0);
 
   // Assert: Callback was called once with the correct new state.
   EXPECT_EQ(g_callback_count, 1);
@@ -105,7 +105,7 @@ TEST_F(KeyboardControlTest, NoCallbackIfNull) {
   ppi_.config.set_keyboard_control = nullptr;
 
   // Act: Write a value that would normally trigger the callback.
-  YPPIWritePort(&ppi_, kPPIPortB, kPPIPortBKeyboardClockLow);
+  YPPIWritePort(&ppi_, Y_PPI_PORT_B, Y_PPI_PORT_B_KEYBOARD_CLOCK_LOW);
 
   // Assert: Callback was not called and the program did not crash.
   EXPECT_EQ(g_callback_count, 0);

@@ -22,13 +22,13 @@ class PlatformDecodeCacheTest : public ::testing::Test {
     platform_.config.context = this;
     platform_.config.physical_memory = ram_;
     platform_.config.vram = vram_;
-    platform_.config.video_adapter = kVideoAdapterCGA;
+    platform_.config.video_adapter = Y_VIDEO_ADAPTER_CGA;
 
     ASSERT_TRUE(YPlatformInit(&platform_));
-    platform_.cpu.registers[kCS] = 0;
-    platform_.cpu.registers[kDS] = 0;
-    platform_.cpu.registers[kSS] = 0;
-    platform_.cpu.registers[kSP] = 0xFFFE;
+    platform_.cpu.registers[Y_CPU_CS] = 0;
+    platform_.cpu.registers[Y_CPU_DS] = 0;
+    platform_.cpu.registers[Y_CPU_SS] = 0;
+    platform_.cpu.registers[Y_CPU_SP] = 0xFFFE;
   }
 
   // Writes straight into the host's buffer, which is what makes a reused
@@ -41,23 +41,27 @@ class PlatformDecodeCacheTest : public ::testing::Test {
   }
 
   void RunAt(uint16_t ip) {
-    platform_.cpu.registers[kIP] = ip;
-    ASSERT_EQ(YPlatformTick(&platform_), kPlatformRunning);
+    platform_.cpu.registers[Y_CPU_IP] = ip;
+    ASSERT_EQ(YPlatformTick(&platform_), Y_PLATFORM_RUNNING);
   }
 
-  uint8_t al() const { return platform_.cpu.registers[kAX] & 0xFF; }
+  uint8_t al() const { return platform_.cpu.registers[Y_CPU_AX] & 0xFF; }
 
   YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
   uint8_t rom_[0x800] = {0};
 };
 
 TEST_F(PlatformDecodeCacheTest, ThePlatformHandsTheCPUItsDecodeCache) {
   EXPECT_EQ(platform_.cpu.config.decode_cache, platform_.cpu_decode_cache);
-  EXPECT_EQ(platform_.cpu.config.decode_cache_num_entries, kDecodeCacheEntries);
+  EXPECT_EQ(
+      platform_.cpu.config.decode_cache_num_entries,
+      Y_PLATFORM_DECODE_CACHE_ENTRIES);
   // Which YCPUInit() accepted, rather than logging and running without one.
-  EXPECT_EQ(platform_.cpu.decode_cache_index_mask, kDecodeCacheEntries - 1);
+  EXPECT_EQ(
+      platform_.cpu.decode_cache_index_mask,
+      Y_PLATFORM_DECODE_CACHE_ENTRIES - 1);
 }
 
 // The path DMA takes. DOS loads itself over the boot sector this way, so an

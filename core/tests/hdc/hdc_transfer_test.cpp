@@ -12,7 +12,7 @@ constexpr YHDCDriveGeometry kTestGeometry = {
     /*num_heads=*/2,
     /*num_sectors_per_track=*/2,
 };
-constexpr uint32_t kTestImageSize = 2 * 2 * 2 * kHDCSectorSize;
+constexpr uint32_t kTestImageSize = 2 * 2 * 2 * Y_HDC_SECTOR_SIZE;
 
 class HDCTransferTest : public ::testing::Test {
  protected:
@@ -55,43 +55,43 @@ class HDCTransferTest : public ::testing::Test {
 
   uint8_t Read(YHDCRegister reg) {
     return YHDCReadPort(
-        &hdc_, kHDCPortBase + YHDCPortOffsetToRegister((uint8_t)reg));
+        &hdc_, Y_HDC_PORT_BASE + YHDCPortOffsetToRegister((uint8_t)reg));
   }
 
   void Write(YHDCRegister reg, uint8_t value) {
     YHDCWritePort(
-        &hdc_, kHDCPortBase + YHDCPortOffsetToRegister((uint8_t)reg), value);
+        &hdc_, Y_HDC_PORT_BASE + YHDCPortOffsetToRegister((uint8_t)reg), value);
   }
 
   void SelectDrive(uint8_t drive) {
     Write(
-        kHDCRegisterDriveHead,
-        drive == 0 ? 0 : (uint8_t)kHDCDriveHeadDriveSelect);
+        Y_HDC_REGISTER_DRIVE_HEAD,
+        drive == 0 ? 0 : (uint8_t)Y_HDC_DRIVE_HEAD_DRIVE_SELECT);
   }
 
   // Addresses a sector by cylinder/head/sector, sectors numbered from one.
   void SetChsAddress(
       uint16_t cylinder, uint8_t head, uint8_t sector, uint8_t count) {
-    Write(kHDCRegisterCylinderLow, (uint8_t)(cylinder & 0xFF));
-    Write(kHDCRegisterCylinderHigh, (uint8_t)(cylinder >> 8));
-    Write(kHDCRegisterDriveHead, head);
-    Write(kHDCRegisterSectorNumber, sector);
-    Write(kHDCRegisterSectorCount, count);
+    Write(Y_HDC_REGISTER_CYLINDER_LOW, (uint8_t)(cylinder & 0xFF));
+    Write(Y_HDC_REGISTER_CYLINDER_HIGH, (uint8_t)(cylinder >> 8));
+    Write(Y_HDC_REGISTER_DRIVE_HEAD, head);
+    Write(Y_HDC_REGISTER_SECTOR_NUMBER, sector);
+    Write(Y_HDC_REGISTER_SECTOR_COUNT, count);
   }
 
   void SetLbaAddress(uint32_t lba, uint8_t count) {
-    Write(kHDCRegisterSectorNumber, (uint8_t)(lba & 0xFF));
-    Write(kHDCRegisterCylinderLow, (uint8_t)((lba >> 8) & 0xFF));
-    Write(kHDCRegisterCylinderHigh, (uint8_t)((lba >> 16) & 0xFF));
+    Write(Y_HDC_REGISTER_SECTOR_NUMBER, (uint8_t)(lba & 0xFF));
+    Write(Y_HDC_REGISTER_CYLINDER_LOW, (uint8_t)((lba >> 8) & 0xFF));
+    Write(Y_HDC_REGISTER_CYLINDER_HIGH, (uint8_t)((lba >> 16) & 0xFF));
     Write(
-        kHDCRegisterDriveHead,
-        (uint8_t)(kHDCDriveHeadLBA | ((lba >> 24) & 0x0F)));
-    Write(kHDCRegisterSectorCount, count);
+        Y_HDC_REGISTER_DRIVE_HEAD,
+        (uint8_t)(Y_HDC_DRIVE_HEAD_LBA | ((lba >> 24) & 0x0F)));
+    Write(Y_HDC_REGISTER_SECTOR_COUNT, count);
   }
 
   uint8_t RunCommand(uint8_t opcode) {
-    Write(kHDCRegisterStatus, opcode);
-    return Read(kHDCRegisterStatus);
+    Write(Y_HDC_REGISTER_STATUS, opcode);
+    return Read(Y_HDC_REGISTER_STATUS);
   }
 
   // Drains bytes out of the data register, alternating the two data ports the
@@ -100,7 +100,7 @@ class HDCTransferTest : public ::testing::Test {
     std::vector<uint8_t> data;
     for (int i = 0; i < num_bytes; ++i) {
       data.push_back(
-          Read(i % 2 == 0 ? kHDCRegisterData : kHDCRegisterDataHigh));
+          Read(i % 2 == 0 ? Y_HDC_REGISTER_DATA : Y_HDC_REGISTER_DATA_HIGH));
     }
     return data;
   }
@@ -110,8 +110,8 @@ class HDCTransferTest : public ::testing::Test {
   // low byte commits the pair.
   void Fill(const std::vector<uint8_t>& data) {
     for (size_t i = 0; i + 1 < data.size(); i += 2) {
-      Write(kHDCRegisterDataHigh, data[i + 1]);
-      Write(kHDCRegisterData, data[i]);
+      Write(Y_HDC_REGISTER_DATA_HIGH, data[i + 1]);
+      Write(Y_HDC_REGISTER_DATA, data[i]);
     }
   }
   YHDCState hdc_ = {0};
@@ -124,86 +124,88 @@ class HDCTransferTest : public ::testing::Test {
 TEST_F(HDCTransferTest, ReadsASingleSector) {
   // Cylinder 1, head 0, sector 2 - LBA 3 with this geometry.
   SetChsAddress(1, 0, 2, 1);
-  const uint8_t status = RunCommand(kHDCCommandReadSectors);
-  ASSERT_TRUE(status & kHDCStatusDataRequest);
-  ASSERT_FALSE(status & kHDCStatusError);
+  const uint8_t status = RunCommand(Y_HDC_COMMAND_READ_SECTORS);
+  ASSERT_TRUE(status & Y_HDC_STATUS_DATA_REQUEST);
+  ASSERT_FALSE(status & Y_HDC_STATUS_ERROR);
 
-  const std::vector<uint8_t> data = Drain(kHDCSectorSize);
-  for (int i = 0; i < kHDCSectorSize; ++i) {
-    ASSERT_EQ(data[i], PatternAt(3 * kHDCSectorSize + i)) << "byte " << i;
+  const std::vector<uint8_t> data = Drain(Y_HDC_SECTOR_SIZE);
+  for (int i = 0; i < Y_HDC_SECTOR_SIZE; ++i) {
+    ASSERT_EQ(data[i], PatternAt(3 * Y_HDC_SECTOR_SIZE + i)) << "byte " << i;
   }
   // The transfer ends when the sector is drained.
-  EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
-  EXPECT_EQ(Read(kHDCRegisterSectorCount), 0);
+  EXPECT_FALSE(Read(Y_HDC_REGISTER_STATUS) & Y_HDC_STATUS_DATA_REQUEST);
+  EXPECT_EQ(Read(Y_HDC_REGISTER_SECTOR_COUNT), 0);
 }
 
 TEST_F(HDCTransferTest, ReadsConsecutiveSectorsInOneCommand) {
   SetLbaAddress(2, 3);
-  ASSERT_TRUE(RunCommand(kHDCCommandReadSectors) & kHDCStatusDataRequest);
+  ASSERT_TRUE(
+      RunCommand(Y_HDC_COMMAND_READ_SECTORS) & Y_HDC_STATUS_DATA_REQUEST);
 
-  const std::vector<uint8_t> data = Drain(3 * kHDCSectorSize);
-  for (int i = 0; i < 3 * kHDCSectorSize; ++i) {
-    ASSERT_EQ(data[i], PatternAt(2 * kHDCSectorSize + i)) << "byte " << i;
+  const std::vector<uint8_t> data = Drain(3 * Y_HDC_SECTOR_SIZE);
+  for (int i = 0; i < 3 * Y_HDC_SECTOR_SIZE; ++i) {
+    ASSERT_EQ(data[i], PatternAt(2 * Y_HDC_SECTOR_SIZE + i)) << "byte " << i;
   }
-  EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
+  EXPECT_FALSE(Read(Y_HDC_REGISTER_STATUS) & Y_HDC_STATUS_DATA_REQUEST);
 
   // Exactly the bytes of sectors 2, 3 and 4, in order.
-  ASSERT_EQ(read_offsets_.size(), 3u * kHDCSectorSize);
-  EXPECT_EQ(read_offsets_.front(), 2u * kHDCSectorSize);
-  EXPECT_EQ(read_offsets_.back(), 5u * kHDCSectorSize - 1);
+  ASSERT_EQ(read_offsets_.size(), 3u * Y_HDC_SECTOR_SIZE);
+  EXPECT_EQ(read_offsets_.front(), 2u * Y_HDC_SECTOR_SIZE);
+  EXPECT_EQ(read_offsets_.back(), 5u * Y_HDC_SECTOR_SIZE - 1);
 }
 
 TEST_F(HDCTransferTest, DataRequestStaysAssertedAcrossASectorBoundary) {
   SetLbaAddress(0, 2);
-  RunCommand(kHDCCommandReadSectors);
+  RunCommand(Y_HDC_COMMAND_READ_SECTORS);
 
   // A read of the low byte port takes a whole word off the card, so two
   // sectors are a sector's worth of words apiece rather than of reads.
-  const int num_words = 2 * kHDCSectorSize / 2;
+  const int num_words = 2 * Y_HDC_SECTOR_SIZE / 2;
   for (int i = 0; i < num_words - 1; ++i) {
-    Read(kHDCRegisterData);
-    Read(kHDCRegisterDataHigh);
-    ASSERT_TRUE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest)
+    Read(Y_HDC_REGISTER_DATA);
+    Read(Y_HDC_REGISTER_DATA_HIGH);
+    ASSERT_TRUE(Read(Y_HDC_REGISTER_STATUS) & Y_HDC_STATUS_DATA_REQUEST)
         << "cleared early after " << (i + 1) << " words";
   }
-  Read(kHDCRegisterData);
-  Read(kHDCRegisterDataHigh);
-  EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
+  Read(Y_HDC_REGISTER_DATA);
+  Read(Y_HDC_REGISTER_DATA_HIGH);
+  EXPECT_FALSE(Read(Y_HDC_REGISTER_STATUS) & Y_HDC_STATUS_DATA_REQUEST);
 }
 
 TEST_F(HDCTransferTest, SectorCountCountsDownAsSectorsComplete) {
   SetLbaAddress(0, 3);
-  RunCommand(kHDCCommandReadSectors);
-  EXPECT_EQ(Read(kHDCRegisterSectorCount), 3);
+  RunCommand(Y_HDC_COMMAND_READ_SECTORS);
+  EXPECT_EQ(Read(Y_HDC_REGISTER_SECTOR_COUNT), 3);
 
-  Drain(kHDCSectorSize);
-  EXPECT_EQ(Read(kHDCRegisterSectorCount), 2);
-  Drain(kHDCSectorSize);
-  EXPECT_EQ(Read(kHDCRegisterSectorCount), 1);
-  Drain(kHDCSectorSize);
-  EXPECT_EQ(Read(kHDCRegisterSectorCount), 0);
+  Drain(Y_HDC_SECTOR_SIZE);
+  EXPECT_EQ(Read(Y_HDC_REGISTER_SECTOR_COUNT), 2);
+  Drain(Y_HDC_SECTOR_SIZE);
+  EXPECT_EQ(Read(Y_HDC_REGISTER_SECTOR_COUNT), 1);
+  Drain(Y_HDC_SECTOR_SIZE);
+  EXPECT_EQ(Read(Y_HDC_REGISTER_SECTOR_COUNT), 0);
 }
 
 TEST_F(HDCTransferTest, WritesASingleSector) {
   std::vector<uint8_t> data;
-  for (int i = 0; i < kHDCSectorSize; ++i) {
+  for (int i = 0; i < Y_HDC_SECTOR_SIZE; ++i) {
     data.push_back(static_cast<uint8_t>(0xA0 + (i & 0x0F)));
   }
 
   SetLbaAddress(5, 1);
-  const uint8_t status = RunCommand(kHDCCommandWriteSectors);
-  ASSERT_TRUE(status & kHDCStatusDataRequest);
-  ASSERT_FALSE(status & kHDCStatusError);
+  const uint8_t status = RunCommand(Y_HDC_COMMAND_WRITE_SECTORS);
+  ASSERT_TRUE(status & Y_HDC_STATUS_DATA_REQUEST);
+  ASSERT_FALSE(status & Y_HDC_STATUS_ERROR);
 
   Fill(data);
-  EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
+  EXPECT_FALSE(Read(Y_HDC_REGISTER_STATUS) & Y_HDC_STATUS_DATA_REQUEST);
 
-  for (int i = 0; i < kHDCSectorSize; ++i) {
-    ASSERT_EQ(image_[5 * kHDCSectorSize + i], data[i]) << "byte " << i;
+  for (int i = 0; i < Y_HDC_SECTOR_SIZE; ++i) {
+    ASSERT_EQ(image_[5 * Y_HDC_SECTOR_SIZE + i], data[i]) << "byte " << i;
   }
   // Neighbouring sectors are untouched.
-  EXPECT_EQ(image_[5 * kHDCSectorSize - 1], PatternAt(5 * kHDCSectorSize - 1));
-  EXPECT_EQ(image_[6 * kHDCSectorSize], PatternAt(6 * kHDCSectorSize));
+  EXPECT_EQ(
+      image_[5 * Y_HDC_SECTOR_SIZE - 1], PatternAt(5 * Y_HDC_SECTOR_SIZE - 1));
+  EXPECT_EQ(image_[6 * Y_HDC_SECTOR_SIZE], PatternAt(6 * Y_HDC_SECTOR_SIZE));
 }
 
 TEST_F(HDCTransferTest, WordsLandOnTheDiskInTheRightByteOrder) {
@@ -212,54 +214,54 @@ TEST_F(HDCTransferTest, WordsLandOnTheDiskInTheRightByteOrder) {
   // A partition table's 0xAA55 signature ends up as 0x55AA, and DOS sees no
   // partition at all.
   SetLbaAddress(0, 1);
-  RunCommand(kHDCCommandWriteSectors);
+  RunCommand(Y_HDC_COMMAND_WRITE_SECTORS);
 
   // The last word of a boot sector, written high byte first.
-  std::vector<uint8_t> sector(kHDCSectorSize, 0);
-  sector[kHDCSectorSize - 2] = 0x55;
-  sector[kHDCSectorSize - 1] = 0xAA;
+  std::vector<uint8_t> sector(Y_HDC_SECTOR_SIZE, 0);
+  sector[Y_HDC_SECTOR_SIZE - 2] = 0x55;
+  sector[Y_HDC_SECTOR_SIZE - 1] = 0xAA;
   Fill(sector);
 
-  EXPECT_EQ(image_[kHDCSectorSize - 2], 0x55);
-  EXPECT_EQ(image_[kHDCSectorSize - 1], 0xAA);
+  EXPECT_EQ(image_[Y_HDC_SECTOR_SIZE - 2], 0x55);
+  EXPECT_EQ(image_[Y_HDC_SECTOR_SIZE - 1], 0xAA);
 }
 
 TEST_F(HDCTransferTest, WrittenSectorsReadBack) {
-  std::vector<uint8_t> data(2 * kHDCSectorSize);
+  std::vector<uint8_t> data(2 * Y_HDC_SECTOR_SIZE);
   for (size_t i = 0; i < data.size(); ++i) {
     data[i] = static_cast<uint8_t>(i * 3 + 1);
   }
 
   SetLbaAddress(1, 2);
-  RunCommand(kHDCCommandWriteSectors);
+  RunCommand(Y_HDC_COMMAND_WRITE_SECTORS);
   Fill(data);
 
   SetLbaAddress(1, 2);
-  RunCommand(kHDCCommandReadSectors);
-  EXPECT_EQ(Drain(2 * kHDCSectorSize), data);
+  RunCommand(Y_HDC_COMMAND_READ_SECTORS);
+  EXPECT_EQ(Drain(2 * Y_HDC_SECTOR_SIZE), data);
 }
 
 TEST_F(HDCTransferTest, ChsAndLbaAddressTheSameSector) {
   // Cylinder 1, head 1, sector 1 is LBA 6 with this geometry.
   SetChsAddress(1, 1, 1, 1);
-  RunCommand(kHDCCommandReadSectors);
-  const std::vector<uint8_t> via_chs = Drain(kHDCSectorSize);
+  RunCommand(Y_HDC_COMMAND_READ_SECTORS);
+  const std::vector<uint8_t> via_chs = Drain(Y_HDC_SECTOR_SIZE);
 
   SetLbaAddress(6, 1);
-  RunCommand(kHDCCommandReadSectors);
-  const std::vector<uint8_t> via_lba = Drain(kHDCSectorSize);
+  RunCommand(Y_HDC_COMMAND_READ_SECTORS);
+  const std::vector<uint8_t> via_lba = Drain(Y_HDC_SECTOR_SIZE);
 
   EXPECT_EQ(via_chs, via_lba);
-  EXPECT_EQ(via_chs[0], PatternAt(6 * kHDCSectorSize));
+  EXPECT_EQ(via_chs[0], PatternAt(6 * Y_HDC_SECTOR_SIZE));
 }
 
 TEST_F(HDCTransferTest, ReadPastTheEndOfTheDriveFails) {
   // The last sector is LBA 7, so LBA 8 is off the drive.
   SetLbaAddress(8, 1);
-  const uint8_t status = RunCommand(kHDCCommandReadSectors);
-  EXPECT_TRUE(status & kHDCStatusError);
-  EXPECT_FALSE(status & kHDCStatusDataRequest);
-  EXPECT_TRUE(Read(kHDCRegisterError) & kHDCErrorIDNotFound);
+  const uint8_t status = RunCommand(Y_HDC_COMMAND_READ_SECTORS);
+  EXPECT_TRUE(status & Y_HDC_STATUS_ERROR);
+  EXPECT_FALSE(status & Y_HDC_STATUS_DATA_REQUEST);
+  EXPECT_TRUE(Read(Y_HDC_REGISTER_ERROR) & Y_HDC_ERROR_ID_NOT_FOUND);
   EXPECT_TRUE(read_offsets_.empty());
 }
 
@@ -267,32 +269,32 @@ TEST_F(HDCTransferTest, MultiSectorRunPastTheEndOfTheDriveFails) {
   // Starts on the drive but runs off the end, which a check of only the first
   // sector would let through.
   SetLbaAddress(6, 4);
-  const uint8_t status = RunCommand(kHDCCommandReadSectors);
-  EXPECT_TRUE(status & kHDCStatusError);
-  EXPECT_TRUE(Read(kHDCRegisterError) & kHDCErrorIDNotFound);
+  const uint8_t status = RunCommand(Y_HDC_COMMAND_READ_SECTORS);
+  EXPECT_TRUE(status & Y_HDC_STATUS_ERROR);
+  EXPECT_TRUE(Read(Y_HDC_REGISTER_ERROR) & Y_HDC_ERROR_ID_NOT_FOUND);
   EXPECT_TRUE(read_offsets_.empty());
 }
 
 TEST_F(HDCTransferTest, WritePastTheEndOfTheDriveFails) {
   SetLbaAddress(8, 1);
-  const uint8_t status = RunCommand(kHDCCommandWriteSectors);
-  EXPECT_TRUE(status & kHDCStatusError);
-  EXPECT_FALSE(status & kHDCStatusDataRequest);
-  EXPECT_TRUE(Read(kHDCRegisterError) & kHDCErrorIDNotFound);
+  const uint8_t status = RunCommand(Y_HDC_COMMAND_WRITE_SECTORS);
+  EXPECT_TRUE(status & Y_HDC_STATUS_ERROR);
+  EXPECT_FALSE(status & Y_HDC_STATUS_DATA_REQUEST);
+  EXPECT_TRUE(Read(Y_HDC_REGISTER_ERROR) & Y_HDC_ERROR_ID_NOT_FOUND);
   EXPECT_TRUE(written_offsets_.empty());
 }
 
 TEST_F(HDCTransferTest, WriteWithNoTransferActiveIsDiscarded) {
-  Write(kHDCRegisterData, 0xFF);
+  Write(Y_HDC_REGISTER_DATA, 0xFF);
   EXPECT_TRUE(written_offsets_.empty());
 }
 
 TEST_F(HDCTransferTest, ReadDuringAWriteReturnsZero) {
   SetLbaAddress(0, 1);
-  RunCommand(kHDCCommandWriteSectors);
-  EXPECT_EQ(Read(kHDCRegisterData), 0);
+  RunCommand(Y_HDC_COMMAND_WRITE_SECTORS);
+  EXPECT_EQ(Read(Y_HDC_REGISTER_DATA), 0);
   // The transfer is not disturbed by the stray read.
-  EXPECT_TRUE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
+  EXPECT_TRUE(Read(Y_HDC_REGISTER_STATUS) & Y_HDC_STATUS_DATA_REQUEST);
   EXPECT_TRUE(read_offsets_.empty());
 }
 
@@ -300,12 +302,12 @@ TEST_F(HDCTransferTest, TransfersUseTheDriveSelectedWhenTheCommandStarted) {
   YHDCAttachDrive(&hdc_, 1, &kTestGeometry);
   SelectDrive(0);
   SetLbaAddress(0, 1);
-  RunCommand(kHDCCommandReadSectors);
+  RunCommand(Y_HDC_COMMAND_READ_SECTORS);
 
   // Selecting the other drive mid-transfer must not redirect the bytes still
   // in flight.
   SelectDrive(1);
-  Drain(kHDCSectorSize);
+  Drain(Y_HDC_SECTOR_SIZE);
   EXPECT_EQ(last_drive_, 0);
 }
 
@@ -317,9 +319,10 @@ TEST_F(HDCTransferTest, ADriveWithNoImageReadsAsZeroes) {
   SelectDrive(0);
 
   SetLbaAddress(0, 1);
-  ASSERT_TRUE(RunCommand(kHDCCommandReadSectors) & kHDCStatusDataRequest);
-  const std::vector<uint8_t> data = Drain(kHDCSectorSize);
-  EXPECT_EQ(data, std::vector<uint8_t>(kHDCSectorSize, 0));
+  ASSERT_TRUE(
+      RunCommand(Y_HDC_COMMAND_READ_SECTORS) & Y_HDC_STATUS_DATA_REQUEST);
+  const std::vector<uint8_t> data = Drain(Y_HDC_SECTOR_SIZE);
+  EXPECT_EQ(data, std::vector<uint8_t>(Y_HDC_SECTOR_SIZE, 0));
 }
 
 TEST_F(HDCTransferTest, ASectorCountOfZeroMeansTheLargestTransfer) {
@@ -327,14 +330,15 @@ TEST_F(HDCTransferTest, ASectorCountOfZeroMeansTheLargestTransfer) {
   // that, so the run does not fit and the command has to fail rather than read
   // a single sector.
   SetLbaAddress(0, 0);
-  EXPECT_TRUE(RunCommand(kHDCCommandReadSectors) & kHDCStatusError);
+  EXPECT_TRUE(RunCommand(Y_HDC_COMMAND_READ_SECTORS) & Y_HDC_STATUS_ERROR);
   EXPECT_TRUE(read_offsets_.empty());
 }
 
 TEST_F(HDCTransferTest, ReadVerifyDoesNotTouchTheImage) {
   SetLbaAddress(0, 1);
-  EXPECT_FALSE(RunCommand(kHDCCommandReadVerifySectors) & kHDCStatusError);
-  EXPECT_FALSE(Read(kHDCRegisterStatus) & kHDCStatusDataRequest);
+  EXPECT_FALSE(
+      RunCommand(Y_HDC_COMMAND_READ_VERIFY_SECTORS) & Y_HDC_STATUS_ERROR);
+  EXPECT_FALSE(Read(Y_HDC_REGISTER_STATUS) & Y_HDC_STATUS_DATA_REQUEST);
   EXPECT_TRUE(read_offsets_.empty());
 }
 

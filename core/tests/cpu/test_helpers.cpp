@@ -17,18 +17,19 @@ ostream& operator<<(ostream& os, const YCPUInstruction& instruction) {
   // Prefixes, as what they selected rather than as the bytes that encoded
   // them. A LOCK prefix selects nothing and is not recorded, so it does not
   // appear here - only the instruction's size shows it was there.
-  if (instruction.segment_override != kNoSegmentOverride ||
+  if (instruction.segment_override != Y_CPU_NO_SEGMENT_OVERRIDE ||
       instruction.repetition_prefix) {
     os << "p[";
     const char* separator = "";
-    if (instruction.segment_override != kNoSegmentOverride) {
+    if (instruction.segment_override != Y_CPU_NO_SEGMENT_OVERRIDE) {
       static const char* const kSegmentNames[] = {"es", "cs", "ss", "ds"};
-      os << kSegmentNames[instruction.segment_override - kES];
+      os << kSegmentNames[instruction.segment_override - Y_CPU_ES];
       separator = ",";
     }
     if (instruction.repetition_prefix) {
       os << separator
-         << (instruction.repetition_prefix == kPrefixREP ? "rep" : "repnz");
+         << (instruction.repetition_prefix == Y_CPU_PREFIX_REP ? "rep"
+                                                               : "repnz");
     }
     os << "] ";
   }
@@ -64,23 +65,23 @@ ostream& operator<<(ostream& os, const YCPUInstruction& instruction) {
 
 string GetFlagName(YCPUFlag flag) {
   switch (flag) {
-    case kCF:
+    case Y_CPU_CF:
       return "CF";
-    case kPF:
+    case Y_CPU_PF:
       return "PF";
-    case kAF:
+    case Y_CPU_AF:
       return "AF";
-    case kZF:
+    case Y_CPU_ZF:
       return "ZF";
-    case kSF:
+    case Y_CPU_SF:
       return "SF";
-    case kTF:
+    case Y_CPU_TF:
       return "TF";
-    case kIF:
+    case Y_CPU_IF:
       return "IF";
-    case kDF:
+    case Y_CPU_DF:
       return "DF";
-    case kOF:
+    case Y_CPU_OF:
       return "OF";
     default:
       return "Unknown flag";
@@ -183,8 +184,8 @@ void CPUTestHelper::Load(const vector<uint8_t>& data, uint16_t offset) {
 
 void CPUTestHelper::LoadCOM(const vector<uint8_t>& code) {
   Load(code, kCOMFileLoadOffset);
-  cpu_.registers[kCS] = 0;
-  cpu_.registers[kIP] = kCOMFileLoadOffset;
+  cpu_.registers[Y_CPU_CS] = 0;
+  cpu_.registers[Y_CPU_IP] = kCOMFileLoadOffset;
 }
 
 size_t CPUTestHelper::AssembleAndLoadProgram(
@@ -202,13 +203,13 @@ unique_ptr<CPUTestHelper> CPUTestHelper::CreateWithProgram(
 }
 
 void CPUTestHelper::ExecuteInstructions(int num_instructions) {
-  uint16_t* ip = &cpu_.registers[kIP];
+  uint16_t* ip = &cpu_.registers[Y_CPU_IP];
 
   cout << ">> Executing encoded instructions:" << endl;
   for (int i = 0; i < num_instructions; ++i) {
     YCPUInstruction instruction;
     auto fetch_status = YCPUFetchNextInstruction(&cpu_, &instruction);
-    if (fetch_status != kFetchSuccess) {
+    if (fetch_status != Y_CPU_FETCH_SUCCESS) {
       throw runtime_error(
           "Failed to fetch instruction at IP: " + to_string(*ip) +
           ", status: " + to_string(fetch_status));
@@ -217,7 +218,7 @@ void CPUTestHelper::ExecuteInstructions(int num_instructions) {
          << instruction << endl;
     *ip += instruction.size;
     auto execute_result = YCPUExecuteInstruction(&cpu_, &instruction);
-    if (execute_result != kInstructionExecuted) {
+    if (execute_result != Y_CPU_INSTRUCTION_EXECUTED) {
       cout << "Warning: Instruction execution returned result " << dec
            << execute_result << endl;
     }

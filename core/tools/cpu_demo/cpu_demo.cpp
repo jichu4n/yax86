@@ -51,34 +51,34 @@ vector<uint8_t> Assemble(const string& asm_file_name) {
 YCPUInterruptHandlerResult HandleInterrupt(
     YCPUState* cpu, uint8_t interrupt_number) {
   // cout << "Handling interrupt: " << hex << (int)interrupt_number
-  //      << "DX = " << hex << cpu->registers[kDX] << dec << endl;
+  //      << "DX = " << hex << cpu->registers[Y_CPU_DX] << dec << endl;
   if (interrupt_number != 0x21) {
-    return kInterruptHandlerUnhandled;
+    return Y_CPU_INTERRUPT_HANDLER_UNHANDLED;
   }
 
-  uint8_t ah = (cpu->registers[kAX] >> 8) & 0xFF;
-  uint16_t dx = cpu->registers[kDX];
+  uint8_t ah = (cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
+  uint16_t dx = cpu->registers[Y_CPU_DX];
   switch (ah) {
     case 0x01: {  // Read character
       char ch;
       cin.get(ch);
-      uint8_t ah = (cpu->registers[kAX] >> 8) & 0xFF;
-      cpu->registers[kAX] = (ah << 8) | static_cast<uint8_t>(ch);
-      return kInterruptHandlerHandled;
+      uint8_t ah = (cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
+      cpu->registers[Y_CPU_AX] = (ah << 8) | static_cast<uint8_t>(ch);
+      return Y_CPU_INTERRUPT_HANDLER_HANDLED;
     }
     case 0x02: {  // Print character
       cout << static_cast<char>(dx & 0xFF) << flush;
-      return kInterruptHandlerHandled;
+      return Y_CPU_INTERRUPT_HANDLER_HANDLED;
     }
     case 0x09: {  // Print string
       for (size_t i = dx; memory[i] != '$'; ++i) {
         cout << static_cast<char>(memory[i]);
       }
       cout << flush;
-      return kInterruptHandlerHandled;
+      return Y_CPU_INTERRUPT_HANDLER_HANDLED;
     }
     case 0x0A: {  // Read string
-      uint16_t dx = cpu->registers[kDX];
+      uint16_t dx = cpu->registers[Y_CPU_DX];
       uint8_t max_length = memory[dx];
       string input;
       getline(cin, input);
@@ -88,11 +88,11 @@ YCPUInterruptHandlerResult HandleInterrupt(
       memory[dx + 1] = input.size();
       input += '\n';
       memcpy(memory + dx + 2, input.c_str(), input.size());
-      return kInterruptHandlerHandled;
+      return Y_CPU_INTERRUPT_HANDLER_HANDLED;
     }
     case 0x4C:  // Terminate program
       program_finished = true;
-      return kInterruptHandlerHandled;
+      return Y_CPU_INTERRUPT_HANDLER_HANDLED;
     case 0x2C: {  // Get system time
       struct timeval tv;
       gettimeofday(&tv, nullptr);
@@ -101,16 +101,16 @@ YCPUInterruptHandlerResult HandleInterrupt(
       uint8_t cl = info->tm_min;
       uint8_t dh = info->tm_sec;
       uint8_t dl = tv.tv_usec / 10000;
-      cpu->registers[kCX] = (ch << 8) | cl;
-      cpu->registers[kDX] = (dh << 8) | dl;
-      return kInterruptHandlerHandled;
+      cpu->registers[Y_CPU_CX] = (ch << 8) | cl;
+      cpu->registers[Y_CPU_DX] = (dh << 8) | dl;
+      return Y_CPU_INTERRUPT_HANDLER_HANDLED;
     }
     default:
       cerr << "Unhandled DOS interrupt: " << hex
            << static_cast<int>(interrupt_number) << " AH = " << hex
            << static_cast<int>(ah) << endl;
       program_finished = true;
-      return kInterruptHandlerHandled;
+      return Y_CPU_INTERRUPT_HANDLER_HANDLED;
   }
 }
 
@@ -149,19 +149,19 @@ int main(int argc, char* argv[]) {
   memcpy(memory + 0x100, machine_code.data(), machine_code.size());
 
   // Set CS:IP to the start of the program
-  cpu.registers[kCS] = 0;
-  cpu.registers[kIP] = 0x100;
+  cpu.registers[Y_CPU_CS] = 0;
+  cpu.registers[Y_CPU_IP] = 0x100;
   // Set stack pointer to the top of the stack
-  cpu.registers[kSP] = sizeof(memory);
+  cpu.registers[Y_CPU_SP] = sizeof(memory);
 
   // Execute the program until it terminates, halts, or hits a bad instruction.
   YCPUTickResult status;
   do {
     status = YCPUTick(&cpu, 0);
-  } while (status == kCPUTickExecuted && !program_finished);
-  if (status == kCPUTickInvalid) {
-    cerr << "Program execution failed at " << hex << cpu.registers[kCS] << ":"
-         << cpu.registers[kIP] << dec << endl;
+  } while (status == Y_CPU_TICK_EXECUTED && !program_finished);
+  if (status == Y_CPU_TICK_INVALID) {
+    cerr << "Program execution failed at " << hex << cpu.registers[Y_CPU_CS]
+         << ":" << cpu.registers[Y_CPU_IP] << dec << endl;
     return EXIT_FAILURE;
   }
 

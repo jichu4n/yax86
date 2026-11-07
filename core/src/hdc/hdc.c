@@ -10,7 +10,7 @@
 
 // Status of a drive that is idle and has nothing to report.
 enum {
-  kHDCStatusIdle = kHDCStatusReady | kHDCStatusSeekComplete,
+  Y_HDC_STATUS_IDLE = Y_HDC_STATUS_READY | Y_HDC_STATUS_SEEK_COMPLETE,
 };
 
 // Word offsets into the Identify Device block. The block is 256 words, most
@@ -19,56 +19,56 @@ enum {
 typedef enum YHDCIdentifyWord {
   // General configuration. Bit 6 marks the device as a non-removable fixed
   // disk, which is the only kind this controller has.
-  kHDCIdentifyWordGeneralConfiguration = 0,
-  kHDCIdentifyWordNumCylinders = 1,
-  kHDCIdentifyWordNumHeads = 3,
-  kHDCIdentifyWordBytesPerTrack = 4,
-  kHDCIdentifyWordBytesPerSector = 5,
-  kHDCIdentifyWordNumSectorsPerTrack = 6,
-  kHDCIdentifyWordSerialNumber = 10,
-  kHDCIdentifyWordBufferType = 20,
-  kHDCIdentifyWordBufferSize = 21,
-  kHDCIdentifyWordNumECCBytes = 22,
-  kHDCIdentifyWordFirmwareRevision = 23,
-  kHDCIdentifyWordModelNumber = 27,
-  kHDCIdentifyWordMaxSectorsPerTransfer = 47,
-  kHDCIdentifyWordCapabilities = 49,
-  kHDCIdentifyWordPIOTiming = 51,
-  kHDCIdentifyWordFieldValidity = 53,
-  kHDCIdentifyWordCurrentNumCylinders = 54,
-  kHDCIdentifyWordCurrentNumHeads = 55,
-  kHDCIdentifyWordCurrentNumSectorsPerTrack = 56,
-  kHDCIdentifyWordCurrentCapacity = 57,
-  kHDCIdentifyWordNumUserAddressableSectors = 60,
+  Y_HDC_IDENTIFY_WORD_GENERAL_CONFIGURATION = 0,
+  Y_HDC_IDENTIFY_WORD_NUM_CYLINDERS = 1,
+  Y_HDC_IDENTIFY_WORD_NUM_HEADS = 3,
+  Y_HDC_IDENTIFY_WORD_BYTES_PER_TRACK = 4,
+  Y_HDC_IDENTIFY_WORD_BYTES_PER_SECTOR = 5,
+  Y_HDC_IDENTIFY_WORD_NUM_SECTORS_PER_TRACK = 6,
+  Y_HDC_IDENTIFY_WORD_SERIAL_NUMBER = 10,
+  Y_HDC_IDENTIFY_WORD_BUFFER_TYPE = 20,
+  Y_HDC_IDENTIFY_WORD_BUFFER_SIZE = 21,
+  Y_HDC_IDENTIFY_WORD_NUM_ECC_BYTES = 22,
+  Y_HDC_IDENTIFY_WORD_FIRMWARE_REVISION = 23,
+  Y_HDC_IDENTIFY_WORD_MODEL_NUMBER = 27,
+  Y_HDC_IDENTIFY_WORD_MAX_SECTORS_PER_TRANSFER = 47,
+  Y_HDC_IDENTIFY_WORD_CAPABILITIES = 49,
+  Y_HDC_IDENTIFY_WORD_PIO_TIMING = 51,
+  Y_HDC_IDENTIFY_WORD_FIELD_VALIDITY = 53,
+  Y_HDC_IDENTIFY_WORD_CURRENT_NUM_CYLINDERS = 54,
+  Y_HDC_IDENTIFY_WORD_CURRENT_NUM_HEADS = 55,
+  Y_HDC_IDENTIFY_WORD_CURRENT_NUM_SECTORS_PER_TRACK = 56,
+  Y_HDC_IDENTIFY_WORD_CURRENT_CAPACITY = 57,
+  Y_HDC_IDENTIFY_WORD_NUM_USER_ADDRESSABLE_SECTORS = 60,
 } YHDCIdentifyWord;
 
 // Lengths in words of the string fields of the Identify Device block.
 enum {
-  kHDCIdentifySerialNumberWords = 10,
-  kHDCIdentifyFirmwareRevisionWords = 4,
-  kHDCIdentifyModelNumberWords = 20,
+  Y_HDC_IDENTIFY_SERIAL_NUMBER_WORDS = 10,
+  Y_HDC_IDENTIFY_FIRMWARE_REVISION_WORDS = 4,
+  Y_HDC_IDENTIFY_MODEL_NUMBER_WORDS = 20,
 };
 
 enum {
   // Marks the device as a non-removable fixed disk.
-  kHDCIdentifyGeneralConfigurationFixedDisk = 1 << 6,
+  Y_HDC_IDENTIFY_GENERAL_CONFIGURATION_FIXED_DISK = 1 << 6,
   // The drive accepts logical block addresses as well as cylinder/head/sector
   // ones.
-  kHDCIdentifyCapabilitiesLBASupported = 1 << 9,
+  Y_HDC_IDENTIFY_CAPABILITIES_LBA_SUPPORTED = 1 << 9,
   // Words 54 through 58 hold the current translated geometry.
-  kHDCIdentifyFieldValidityCurrentGeometry = 1 << 0,
+  Y_HDC_IDENTIFY_FIELD_VALIDITY_CURRENT_GEOMETRY = 1 << 0,
   // PIO data transfer cycle timing mode, in the high byte.
-  kHDCIdentifyPIOTimingMode2 = 2 << 8,
+  Y_HDC_IDENTIFY_PIO_TIMING_MODE2 = 2 << 8,
   // Sectors moved per Read Multiple or Write Multiple. Zero is how ATA says
   // multiple mode is not supported, which matches Set Multiple Mode aborting.
-  kHDCIdentifyMaxSectorsPerTransfer = 0,
+  Y_HDC_IDENTIFY_MAX_SECTORS_PER_TRANSFER = 0,
   // A dual ported buffer with look-ahead, which is what an ATA drive of this
   // era reports.
-  kHDCIdentifyBufferTypeDualPorted = 3,
+  Y_HDC_IDENTIFY_BUFFER_TYPE_DUAL_PORTED = 3,
   // Buffer size in 512-byte increments.
-  kHDCIdentifyBufferSize = 1,
+  Y_HDC_IDENTIFY_BUFFER_SIZE = 1,
   // Bytes reserved for ECC on a long read or write.
-  kHDCIdentifyNumECCBytes = 4,
+  Y_HDC_IDENTIFY_NUM_ECC_BYTES = 4,
 };
 
 YAX86_FILE_PRIVATE const char* const YHDCModelNumber = "YAX86 HARD DISK";
@@ -77,20 +77,21 @@ YAX86_FILE_PRIVATE const char* const YHDCFirmwareRevision = "1.0";
 
 // Returns the drive the drive/head register currently selects.
 YAX86_FILE_PRIVATE YHDCDriveState* YHDCSelectedDrive(YHDCState* hdc) {
-  return &hdc->drives[(hdc->drive_head & kHDCDriveHeadDriveSelect) ? 1 : 0];
+  return &hdc->drives
+              [(hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0];
 }
 
 // Completes a command successfully.
 YAX86_FILE_PRIVATE void YHDCFinishCommand(YHDCState* hdc) {
   hdc->error = 0;
-  hdc->status = kHDCStatusIdle;
+  hdc->status = Y_HDC_STATUS_IDLE;
 }
 
 // Fails a command, leaving the given bits in the error register.
 YAX86_FILE_PRIVATE void YHDCFailCommand(YHDCState* hdc, uint8_t error) {
   hdc->error = error;
-  hdc->status = kHDCStatusIdle | kHDCStatusError;
-  hdc->transfer = kHDCTransferNone;
+  hdc->status = Y_HDC_STATUS_IDLE | Y_HDC_STATUS_ERROR;
+  hdc->transfer = Y_HDC_TRANSFER_NONE;
   hdc->transfer_byte_index = 0;
 }
 
@@ -112,14 +113,14 @@ YAX86_FILE_PRIVATE uint32_t YHDCDriveNumSectors(const YHDCDriveState* drive) {
 YAX86_FILE_PRIVATE bool YHDCComputeSectorNumber(
     YHDCState* hdc, const YHDCDriveState* drive, uint32_t* sector_number) {
   uint32_t lba;
-  if (hdc->drive_head & kHDCDriveHeadLBA) {
-    lba = ((uint32_t)(hdc->drive_head & kHDCDriveHeadHeadMask) << 24) |
+  if (hdc->drive_head & Y_HDC_DRIVE_HEAD_LBA) {
+    lba = ((uint32_t)(hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK) << 24) |
           ((uint32_t)hdc->cylinder_high << 16) |
           ((uint32_t)hdc->cylinder_low << 8) | (uint32_t)hdc->sector_number;
   } else {
     const uint32_t cylinder =
         ((uint32_t)hdc->cylinder_high << 8) | (uint32_t)hdc->cylinder_low;
-    const uint32_t head = hdc->drive_head & kHDCDriveHeadHeadMask;
+    const uint32_t head = hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK;
     const uint32_t sector = hdc->sector_number;
     // Sectors are numbered from one, and sector zero does not exist.
     if (sector == 0 || head >= drive->num_translated_heads ||
@@ -163,7 +164,7 @@ YAX86_FILE_PRIVATE void YHDCWriteIdentifyString(
 // Fills the sector buffer with the drive's Identify Device block.
 YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
     YHDCState* hdc, const YHDCDriveState* drive) {
-  for (uint16_t i = 0; i < kHDCSectorSize; ++i) {
+  for (uint16_t i = 0; i < Y_HDC_SECTOR_SIZE; ++i) {
     hdc->sector_buffer[i] = 0;
   }
 
@@ -189,62 +190,65 @@ YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
       (uint32_t)num_translated_cylinders * num_sectors_per_cylinder;
 
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordGeneralConfiguration,
-      kHDCIdentifyGeneralConfigurationFixedDisk);
+      hdc, Y_HDC_IDENTIFY_WORD_GENERAL_CONFIGURATION,
+      Y_HDC_IDENTIFY_GENERAL_CONFIGURATION_FIXED_DISK);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordNumCylinders, drive->geometry.num_cylinders);
+      hdc, Y_HDC_IDENTIFY_WORD_NUM_CYLINDERS, drive->geometry.num_cylinders);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordNumHeads, drive->geometry.num_heads);
+      hdc, Y_HDC_IDENTIFY_WORD_NUM_HEADS, drive->geometry.num_heads);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordBytesPerTrack,
-      (uint16_t)(kHDCSectorSize * drive->geometry.num_sectors_per_track));
-  YHDCWriteIdentifyWord(hdc, kHDCIdentifyWordBytesPerSector, kHDCSectorSize);
+      hdc, Y_HDC_IDENTIFY_WORD_BYTES_PER_TRACK,
+      (uint16_t)(Y_HDC_SECTOR_SIZE * drive->geometry.num_sectors_per_track));
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordNumSectorsPerTrack,
+      hdc, Y_HDC_IDENTIFY_WORD_BYTES_PER_SECTOR, Y_HDC_SECTOR_SIZE);
+  YHDCWriteIdentifyWord(
+      hdc, Y_HDC_IDENTIFY_WORD_NUM_SECTORS_PER_TRACK,
       drive->geometry.num_sectors_per_track);
   YHDCWriteIdentifyString(
-      hdc, kHDCIdentifyWordSerialNumber, YHDCSerialNumber,
-      kHDCIdentifySerialNumberWords);
+      hdc, Y_HDC_IDENTIFY_WORD_SERIAL_NUMBER, YHDCSerialNumber,
+      Y_HDC_IDENTIFY_SERIAL_NUMBER_WORDS);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordBufferType, kHDCIdentifyBufferTypeDualPorted);
+      hdc, Y_HDC_IDENTIFY_WORD_BUFFER_TYPE,
+      Y_HDC_IDENTIFY_BUFFER_TYPE_DUAL_PORTED);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordBufferSize, kHDCIdentifyBufferSize);
+      hdc, Y_HDC_IDENTIFY_WORD_BUFFER_SIZE, Y_HDC_IDENTIFY_BUFFER_SIZE);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordNumECCBytes, kHDCIdentifyNumECCBytes);
+      hdc, Y_HDC_IDENTIFY_WORD_NUM_ECC_BYTES, Y_HDC_IDENTIFY_NUM_ECC_BYTES);
   YHDCWriteIdentifyString(
-      hdc, kHDCIdentifyWordFirmwareRevision, YHDCFirmwareRevision,
-      kHDCIdentifyFirmwareRevisionWords);
+      hdc, Y_HDC_IDENTIFY_WORD_FIRMWARE_REVISION, YHDCFirmwareRevision,
+      Y_HDC_IDENTIFY_FIRMWARE_REVISION_WORDS);
   YHDCWriteIdentifyString(
-      hdc, kHDCIdentifyWordModelNumber, YHDCModelNumber,
-      kHDCIdentifyModelNumberWords);
+      hdc, Y_HDC_IDENTIFY_WORD_MODEL_NUMBER, YHDCModelNumber,
+      Y_HDC_IDENTIFY_MODEL_NUMBER_WORDS);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordMaxSectorsPerTransfer,
-      kHDCIdentifyMaxSectorsPerTransfer);
+      hdc, Y_HDC_IDENTIFY_WORD_MAX_SECTORS_PER_TRANSFER,
+      Y_HDC_IDENTIFY_MAX_SECTORS_PER_TRANSFER);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCapabilities, kHDCIdentifyCapabilitiesLBASupported);
+      hdc, Y_HDC_IDENTIFY_WORD_CAPABILITIES,
+      Y_HDC_IDENTIFY_CAPABILITIES_LBA_SUPPORTED);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordPIOTiming, kHDCIdentifyPIOTimingMode2);
+      hdc, Y_HDC_IDENTIFY_WORD_PIO_TIMING, Y_HDC_IDENTIFY_PIO_TIMING_MODE2);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordFieldValidity,
-      kHDCIdentifyFieldValidityCurrentGeometry);
+      hdc, Y_HDC_IDENTIFY_WORD_FIELD_VALIDITY,
+      Y_HDC_IDENTIFY_FIELD_VALIDITY_CURRENT_GEOMETRY);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentNumCylinders, num_translated_cylinders);
+      hdc, Y_HDC_IDENTIFY_WORD_CURRENT_NUM_CYLINDERS, num_translated_cylinders);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentNumHeads, drive->num_translated_heads);
+      hdc, Y_HDC_IDENTIFY_WORD_CURRENT_NUM_HEADS, drive->num_translated_heads);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentNumSectorsPerTrack,
+      hdc, Y_HDC_IDENTIFY_WORD_CURRENT_NUM_SECTORS_PER_TRACK,
       drive->num_translated_sectors_per_track);
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentCapacity,
+      hdc, Y_HDC_IDENTIFY_WORD_CURRENT_CAPACITY,
       (uint16_t)(num_translated_sectors & 0xFFFF));
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordCurrentCapacity + 1,
+      hdc, Y_HDC_IDENTIFY_WORD_CURRENT_CAPACITY + 1,
       (uint16_t)(num_translated_sectors >> 16));
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordNumUserAddressableSectors,
+      hdc, Y_HDC_IDENTIFY_WORD_NUM_USER_ADDRESSABLE_SECTORS,
       (uint16_t)(num_sectors & 0xFFFF));
   YHDCWriteIdentifyWord(
-      hdc, kHDCIdentifyWordNumUserAddressableSectors + 1,
+      hdc, Y_HDC_IDENTIFY_WORD_NUM_USER_ADDRESSABLE_SECTORS + 1,
       (uint16_t)(num_sectors >> 16));
 }
 
@@ -255,43 +259,44 @@ YAX86_FILE_PRIVATE void YHDCStartTransfer(
   hdc->transfer = transfer;
   hdc->transfer_byte_index = 0;
   hdc->transfer_offset = offset;
-  hdc->transfer_drive = (hdc->drive_head & kHDCDriveHeadDriveSelect) ? 1 : 0;
+  hdc->transfer_drive =
+      (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0;
   hdc->transfer_sectors_remaining = num_sectors;
   hdc->error = 0;
-  hdc->status = kHDCStatusIdle | kHDCStatusDataRequest;
+  hdc->status = Y_HDC_STATUS_IDLE | Y_HDC_STATUS_DATA_REQUEST;
 }
 
 // Advances past the byte just transferred, moving on to the next sector or
 // ending the transfer as needed.
 YAX86_FILE_PRIVATE void YHDCAdvanceTransfer(YHDCState* hdc) {
   ++hdc->transfer_byte_index;
-  if (hdc->transfer_byte_index < kHDCSectorSize) {
+  if (hdc->transfer_byte_index < Y_HDC_SECTOR_SIZE) {
     return;
   }
   hdc->transfer_byte_index = 0;
 
-  if (hdc->transfer == kHDCTransferIdentify) {
+  if (hdc->transfer == Y_HDC_TRANSFER_IDENTIFY) {
     // A single block, with no sector count behind it.
-    hdc->transfer = kHDCTransferNone;
-    hdc->status = kHDCStatusIdle;
+    hdc->transfer = Y_HDC_TRANSFER_NONE;
+    hdc->status = Y_HDC_STATUS_IDLE;
     return;
   }
 
-  hdc->transfer_offset += kHDCSectorSize;
+  hdc->transfer_offset += Y_HDC_SECTOR_SIZE;
   --hdc->transfer_sectors_remaining;
   // The guest reads the sector count register back to see how much of the
   // transfer got through, so it counts down as sectors complete.
   hdc->sector_count = (uint8_t)hdc->transfer_sectors_remaining;
   if (hdc->transfer_sectors_remaining == 0) {
-    hdc->transfer = kHDCTransferNone;
-    hdc->status = kHDCStatusIdle;
+    hdc->transfer = Y_HDC_TRANSFER_NONE;
+    hdc->status = Y_HDC_STATUS_IDLE;
   }
 }
 
 YAX86_FILE_PRIVATE void YHDCHandleIdentifyDevice(
     YHDCState* hdc, YHDCDriveState* drive) {
   YHDCBuildIdentifyBlock(hdc, drive);
-  YHDCStartTransfer(hdc, kHDCTransferIdentify, 0, 1);
+  YHDCStartTransfer(hdc, Y_HDC_TRANSFER_IDENTIFY, 0, 1);
 }
 
 // Works out the run of sectors a command addresses, and returns whether all of
@@ -318,25 +323,26 @@ YAX86_FILE_PRIVATE void YHDCHandleReadWriteSectors(
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
   if (!YHDCComputeSectorRange(hdc, drive, &sector_number, &num_sectors)) {
-    YHDCFailCommand(hdc, kHDCErrorIDNotFound);
+    YHDCFailCommand(hdc, Y_HDC_ERROR_ID_NOT_FOUND);
     return;
   }
-  YHDCStartTransfer(hdc, transfer, sector_number * kHDCSectorSize, num_sectors);
+  YHDCStartTransfer(
+      hdc, transfer, sector_number * Y_HDC_SECTOR_SIZE, num_sectors);
 }
 
 YAX86_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
     YHDCState* hdc, YHDCDriveState* drive) {
-  const uint8_t num_heads = (hdc->drive_head & kHDCDriveHeadHeadMask) + 1;
+  const uint8_t num_heads = (hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK) + 1;
   const uint8_t num_sectors_per_track = hdc->sector_count;
   if (num_sectors_per_track == 0) {
-    YHDCFailCommand(hdc, kHDCErrorAborted);
+    YHDCFailCommand(hdc, Y_HDC_ERROR_ABORTED);
     return;
   }
   drive->num_translated_heads = num_heads;
   drive->num_translated_sectors_per_track = num_sectors_per_track;
   YAX86_HDC_LOG(
-      kLogLevelDebug, "drive %u translated geometry set to %u heads, %u S/T",
-      (hdc->drive_head & kHDCDriveHeadDriveSelect) ? 1 : 0, num_heads,
+      Y_LOG_LEVEL_DEBUG, "drive %u translated geometry set to %u heads, %u S/T",
+      (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, num_heads,
       num_sectors_per_track);
   YHDCFinishCommand(hdc);
 }
@@ -349,7 +355,7 @@ YAX86_FILE_PRIVATE void YHDCHandleReadVerifySectors(
   uint32_t sector_number = 0;
   uint16_t num_sectors = 0;
   if (!YHDCComputeSectorRange(hdc, drive, &sector_number, &num_sectors)) {
-    YHDCFailCommand(hdc, kHDCErrorIDNotFound);
+    YHDCFailCommand(hdc, Y_HDC_ERROR_ID_NOT_FOUND);
     return;
   }
   YHDCFinishCommand(hdc);
@@ -366,53 +372,53 @@ YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
   }
 
   YAX86_HDC_LOG(
-      kLogLevelDebug, "drive %u command %02X, CHS %u/%u/%u, count %u",
-      (hdc->drive_head & kHDCDriveHeadDriveSelect) ? 1 : 0, opcode,
+      Y_LOG_LEVEL_DEBUG, "drive %u command %02X, CHS %u/%u/%u, count %u",
+      (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, opcode,
       ((uint16_t)hdc->cylinder_high << 8) | hdc->cylinder_low,
-      hdc->drive_head & kHDCDriveHeadHeadMask, hdc->sector_number,
+      hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK, hdc->sector_number,
       hdc->sector_count);
 
   // The low nibble of recalibrate and seek is a stepping rate, so the whole
   // range is one command.
-  const uint8_t command = ((opcode & 0xF0) == kHDCCommandRecalibrate ||
-                           (opcode & 0xF0) == kHDCCommandSeek)
+  const uint8_t command = ((opcode & 0xF0) == Y_HDC_COMMAND_RECALIBRATE ||
+                           (opcode & 0xF0) == Y_HDC_COMMAND_SEEK)
                               ? (uint8_t)(opcode & 0xF0)
                               : opcode;
 
   switch (command) {
-    case kHDCCommandRecalibrate:
-    case kHDCCommandSeek:
+    case Y_HDC_COMMAND_RECALIBRATE:
+    case Y_HDC_COMMAND_SEEK:
       // Seek time is not modelled, so the heads are already where they need
       // to be.
       YHDCFinishCommand(hdc);
       break;
 
-    case kHDCCommandReadVerifySectors:
-    case kHDCCommandReadVerifySectorsNoRetry:
+    case Y_HDC_COMMAND_READ_VERIFY_SECTORS:
+    case Y_HDC_COMMAND_READ_VERIFY_SECTORS_NO_RETRY:
       YHDCHandleReadVerifySectors(hdc, drive);
       break;
 
-    case kHDCCommandReadSectors:
-    case kHDCCommandReadSectorsNoRetry:
-      YHDCHandleReadWriteSectors(hdc, drive, kHDCTransferRead);
+    case Y_HDC_COMMAND_READ_SECTORS:
+    case Y_HDC_COMMAND_READ_SECTORS_NO_RETRY:
+      YHDCHandleReadWriteSectors(hdc, drive, Y_HDC_TRANSFER_READ);
       break;
 
-    case kHDCCommandWriteSectors:
-    case kHDCCommandWriteSectorsNoRetry:
-      YHDCHandleReadWriteSectors(hdc, drive, kHDCTransferWrite);
+    case Y_HDC_COMMAND_WRITE_SECTORS:
+    case Y_HDC_COMMAND_WRITE_SECTORS_NO_RETRY:
+      YHDCHandleReadWriteSectors(hdc, drive, Y_HDC_TRANSFER_WRITE);
       break;
 
-    case kHDCCommandInitializeDeviceParameters:
+    case Y_HDC_COMMAND_INITIALIZE_DEVICE_PARAMETERS:
       YHDCHandleInitializeDeviceParameters(hdc, drive);
       break;
 
-    case kHDCCommandIdentifyDevice:
+    case Y_HDC_COMMAND_IDENTIFY_DEVICE:
       YHDCHandleIdentifyDevice(hdc, drive);
       break;
 
     default:
-      YAX86_HDC_LOG(kLogLevelWarn, "unsupported command %02X", opcode);
-      YHDCFailCommand(hdc, kHDCErrorAborted);
+      YAX86_HDC_LOG(Y_LOG_LEVEL_WARN, "unsupported command %02X", opcode);
+      YHDCFailCommand(hdc, Y_HDC_ERROR_ABORTED);
       break;
   }
 }
@@ -420,9 +426,9 @@ YAX86_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
 // Returns the byte at the current transfer position, without advancing.
 YAX86_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
   switch (hdc->transfer) {
-    case kHDCTransferIdentify:
+    case Y_HDC_TRANSFER_IDENTIFY:
       return hdc->sector_buffer[hdc->transfer_byte_index];
-    case kHDCTransferRead:
+    case Y_HDC_TRANSFER_READ:
       if (hdc->config.read_image_byte) {
         return hdc->config.read_image_byte(
             hdc->config.context, hdc->transfer_drive,
@@ -443,12 +449,13 @@ YAX86_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
 // Reading the two ports is therefore not the same thing, and the card consumes
 // a word per low byte read rather than a byte per read of either port.
 YAX86_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
-  if (!(hdc->status & kHDCStatusDataRequest)) {
-    YAX86_HDC_LOG(kLogLevelWarn, "data register read with no transfer active");
+  if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST)) {
+    YAX86_HDC_LOG(
+        Y_LOG_LEVEL_WARN, "data register read with no transfer active");
     return 0;
   }
-  if (hdc->transfer == kHDCTransferWrite) {
-    YAX86_HDC_LOG(kLogLevelWarn, "data register read during a write");
+  if (hdc->transfer == Y_HDC_TRANSFER_WRITE) {
+    YAX86_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read during a write");
     return 0;
   }
 
@@ -493,9 +500,10 @@ YAX86_FILE_PRIVATE void YHDCWriteImageByte(YHDCState* hdc, uint8_t value) {
 // they arrive would put every word on the disk back to front.
 YAX86_FILE_PRIVATE void YHDCWriteDataRegister(
     YHDCState* hdc, bool is_high_byte, uint8_t value) {
-  if (!(hdc->status & kHDCStatusDataRequest) ||
-      hdc->transfer != kHDCTransferWrite) {
-    YAX86_HDC_LOG(kLogLevelWarn, "data register written with no write active");
+  if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST) ||
+      hdc->transfer != Y_HDC_TRANSFER_WRITE) {
+    YAX86_HDC_LOG(
+        Y_LOG_LEVEL_WARN, "data register written with no write active");
     return;
   }
 
@@ -527,74 +535,76 @@ YAX86_FILE_PRIVATE void YHDCWriteDeviceControlRegister(
   // guest could catch the drive busy. The device signature and diagnostic code
   // a reset leaves in the task file are not modelled, since nothing reads
   // them without an ATAPI device to tell apart.
-  if (value & kHDCDeviceControlSoftwareReset) {
-    hdc->transfer = kHDCTransferNone;
+  if (value & Y_HDC_DEVICE_CONTROL_SOFTWARE_RESET) {
+    hdc->transfer = Y_HDC_TRANSFER_NONE;
     hdc->transfer_byte_index = 0;
     hdc->transfer_sectors_remaining = 0;
     hdc->data_high_latch = 0;
     hdc->error = 0;
-    hdc->status = kHDCStatusIdle;
+    hdc->status = Y_HDC_STATUS_IDLE;
   }
 }
 
 YAX86_PUBLIC uint8_t YHDCReadPort(YHDCState* hdc, uint16_t port) {
-  const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
+  const uint8_t offset =
+      (uint8_t)((port - Y_HDC_PORT_BASE) & (Y_HDC_NUM_PORTS - 1));
   switch (YHDCPortOffsetToRegister(offset)) {
-    case kHDCRegisterData:
+    case Y_HDC_REGISTER_DATA:
       return YHDCReadDataRegister(hdc);
-    case kHDCRegisterDataHigh:
+    case Y_HDC_REGISTER_DATA_HIGH:
       return YHDCReadDataHighRegister(hdc);
-    case kHDCRegisterError:
+    case Y_HDC_REGISTER_ERROR:
       return hdc->error;
-    case kHDCRegisterSectorCount:
+    case Y_HDC_REGISTER_SECTOR_COUNT:
       return hdc->sector_count;
-    case kHDCRegisterSectorNumber:
+    case Y_HDC_REGISTER_SECTOR_NUMBER:
       return hdc->sector_number;
-    case kHDCRegisterCylinderLow:
+    case Y_HDC_REGISTER_CYLINDER_LOW:
       return hdc->cylinder_low;
-    case kHDCRegisterCylinderHigh:
+    case Y_HDC_REGISTER_CYLINDER_HIGH:
       return hdc->cylinder_high;
-    case kHDCRegisterDriveHead:
+    case Y_HDC_REGISTER_DRIVE_HEAD:
       return hdc->drive_head;
-    case kHDCRegisterStatus:
-    case kHDCRegisterDeviceControl:
+    case Y_HDC_REGISTER_STATUS:
+    case Y_HDC_REGISTER_DEVICE_CONTROL:
       return YHDCReadStatusRegister(hdc);
     default:
-      return kHDCOpenBusValue;
+      return Y_HDC_OPEN_BUS_VALUE;
   }
 }
 
 YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
-  const uint8_t offset = (uint8_t)((port - kHDCPortBase) & (kHDCNumPorts - 1));
+  const uint8_t offset =
+      (uint8_t)((port - Y_HDC_PORT_BASE) & (Y_HDC_NUM_PORTS - 1));
   switch (YHDCPortOffsetToRegister(offset)) {
-    case kHDCRegisterData:
+    case Y_HDC_REGISTER_DATA:
       YHDCWriteDataRegister(hdc, /*is_high_byte=*/false, value);
       break;
-    case kHDCRegisterDataHigh:
+    case Y_HDC_REGISTER_DATA_HIGH:
       YHDCWriteDataRegister(hdc, /*is_high_byte=*/true, value);
       break;
-    case kHDCRegisterError:
+    case Y_HDC_REGISTER_ERROR:
       hdc->features = value;
       break;
-    case kHDCRegisterSectorCount:
+    case Y_HDC_REGISTER_SECTOR_COUNT:
       hdc->sector_count = value;
       break;
-    case kHDCRegisterSectorNumber:
+    case Y_HDC_REGISTER_SECTOR_NUMBER:
       hdc->sector_number = value;
       break;
-    case kHDCRegisterCylinderLow:
+    case Y_HDC_REGISTER_CYLINDER_LOW:
       hdc->cylinder_low = value;
       break;
-    case kHDCRegisterCylinderHigh:
+    case Y_HDC_REGISTER_CYLINDER_HIGH:
       hdc->cylinder_high = value;
       break;
-    case kHDCRegisterDriveHead:
+    case Y_HDC_REGISTER_DRIVE_HEAD:
       hdc->drive_head = value;
       break;
-    case kHDCRegisterStatus:
+    case Y_HDC_REGISTER_STATUS:
       YHDCExecuteCommand(hdc, value);
       break;
-    case kHDCRegisterDeviceControl:
+    case Y_HDC_REGISTER_DEVICE_CONTROL:
       YHDCWriteDeviceControlRegister(hdc, value);
       break;
     default:
@@ -604,7 +614,7 @@ YAX86_PUBLIC void YHDCWritePort(YHDCState* hdc, uint16_t port, uint8_t value) {
 
 YAX86_PUBLIC void YHDCAttachDrive(
     YHDCState* hdc, uint8_t drive, const YHDCDriveGeometry* geometry) {
-  if (drive >= kHDCNumDrives) {
+  if (drive >= Y_HDC_NUM_DRIVES) {
     return;
   }
   YHDCDriveState* drive_state = &hdc->drives[drive];
@@ -618,14 +628,14 @@ YAX86_PUBLIC void YHDCAttachDrive(
 }
 
 YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
-  if (drive >= kHDCNumDrives) {
+  if (drive >= Y_HDC_NUM_DRIVES) {
     return;
   }
   static const YHDCDriveState empty_drive_state = {0};
   hdc->drives[drive] = empty_drive_state;
 }
 
-YAX86_PUBLIC void YHDCInit(YHDCState* hdc) { hdc->status = kHDCStatusIdle; }
+YAX86_PUBLIC void YHDCInit(YHDCState* hdc) { hdc->status = Y_HDC_STATUS_IDLE; }
 
 YAX86_PUBLIC uint32_t YHDCGetOptionROMSize(void) {
   return Y_HDC_OPTION_ROM_DATA_SIZE;

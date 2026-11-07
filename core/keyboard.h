@@ -436,20 +436,20 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
-  kLogLevelError = 0,
+  Y_LOG_LEVEL_ERROR = 0,
   // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
+  Y_LOG_LEVEL_WARN,
   // Diagnostic detail.
-  kLogLevelDebug,
+  Y_LOG_LEVEL_DEBUG,
 } YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
+  Y_LOG_MAX_LINE_LENGTH = 256,
   // Maximum number of distinct log modules, bounded by the width of
   // YLoggerConfig.enabled_modules.
-  kLogMaxModules = 32,
+  Y_LOG_MAX_MODULES = 32,
 };
 
 // Identifies the module a log message originated from.
@@ -458,7 +458,8 @@ enum {
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
 typedef struct YLogModule {
-  // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
+  // Bit index used for mask-based filtering. Must be less than
+  // Y_LOG_MAX_MODULES.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
@@ -505,7 +506,7 @@ typedef struct YLogger {
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
+  char buffer[Y_LOG_MAX_LINE_LENGTH];
 } YLogger;
 
 // Initialize a logger with the provided configuration.
@@ -560,16 +561,16 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
   va_list args;
   va_start(args, format);
   int formatted_length =
-      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, Y_LOG_MAX_LINE_LENGTH, format, args);
   va_end(args);
 
   // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
-    length = (size_t)formatted_length < kLogMaxLineLength
+    length = (size_t)formatted_length < Y_LOG_MAX_LINE_LENGTH
                  ? (size_t)formatted_length
-                 : kLogMaxLineLength - 1;
+                 : Y_LOG_MAX_LINE_LENGTH - 1;
   }
 
   uint64_t tick = logger->config->get_tick != NULL
@@ -759,12 +760,12 @@ typedef struct YStaticVectorHeader {
 
 enum {
   // Log module ID for the Keyboard.
-  kLogModuleIDKeyboard = 7,
+  Y_KEYBOARD_LOG_MODULE_ID = 7,
 };
 
 // Log module for the Keyboard.
 YAX86_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
-    .id = kLogModuleIDKeyboard,
+    .id = Y_KEYBOARD_LOG_MODULE_ID,
     .name = "KEYBOARD",
 };
 
@@ -786,11 +787,11 @@ typedef struct YKeyboardConfig {
 
 enum {
   // Maximum number of keys to buffer. Additional key presses will be dropped.
-  kKeyboardBufferSize = 16,
+  Y_KEYBOARD_BUFFER_SIZE = 16,
   // Threshold required to trigger keyboard reset when clock line is held low.
-  kKeyboardResetThresholdMs = 20,
+  Y_KEYBOARD_RESET_THRESHOLD_MS = 20,
 };
-STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, kKeyboardBufferSize)
+STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, Y_KEYBOARD_BUFFER_SIZE)
 
 // State of the Keyboard.
 typedef struct YKeyboardState {
@@ -859,9 +860,9 @@ YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard);
 
 enum {
   // Value for clock_low_ms indicating that a reset has already been triggered.
-  kKeyboardResetTriggered = 0xFF,
+  Y_KEYBOARD_RESET_TRIGGERED = 0xFF,
   // Scan code indicating successful self-test.
-  kKeyboardSelfTestOK = 0xAA,
+  Y_KEYBOARD_SELF_TEST_OK = 0xAA,
 };
 
 YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard) {
@@ -940,7 +941,7 @@ YAX86_PUBLIC void YKeyboardHandleKeyPress(
   // Queueing it would let it resurface once the reset ends, which lands it in
   // the middle of the BIOS's stuck key test.
   if (!keyboard->clock_low &&
-      keyboard->clock_low_ms == kKeyboardResetTriggered) {
+      keyboard->clock_low_ms == Y_KEYBOARD_RESET_TRIGGERED) {
     return;
   }
   YKeyboardBufferAppend(&keyboard->buffer, &scancode);
@@ -950,7 +951,7 @@ YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {
-    if (keyboard->clock_low_ms == kKeyboardResetTriggered) {
+    if (keyboard->clock_low_ms == Y_KEYBOARD_RESET_TRIGGERED) {
       // Reset already triggered, nothing to do.
       return;
     }
@@ -959,7 +960,7 @@ YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
     ++keyboard->clock_low_ms;
 
     // Haven't reached threshold yet, nothing to do.
-    if (keyboard->clock_low_ms < kKeyboardResetThresholdMs) {
+    if (keyboard->clock_low_ms < Y_KEYBOARD_RESET_THRESHOLD_MS) {
       return;
     }
 
@@ -967,9 +968,9 @@ YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
     YKeyboardBufferClear(&keyboard->buffer);
     keyboard->waiting_for_ack = false;
     // Set to special value indicating reset has been triggered.
-    keyboard->clock_low_ms = kKeyboardResetTriggered;
+    keyboard->clock_low_ms = Y_KEYBOARD_RESET_TRIGGERED;
     // Send self-test passed scancode on next falling edge of enable_clear.
-    uint8_t scancode = kKeyboardSelfTestOK;
+    uint8_t scancode = Y_KEYBOARD_SELF_TEST_OK;
     YKeyboardBufferAppend(&keyboard->buffer, &scancode);
     return;
   }

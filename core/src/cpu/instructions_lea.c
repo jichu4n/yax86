@@ -21,7 +21,7 @@ YCPUExecuteLoadEffectiveAddress(const YCPUInstructionContext* ctx) {
   // linear address here would fold the segment base into the result, which is
   // invisible only while the segment register happens to be zero.
   YCPUWriteOperandAddress(ctx, &dest.address, memory_address.offset);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // ============================================================================
@@ -41,7 +41,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteLoadSegmentWithPointer(
   const YCPUMemoryAddress src_memory_address =
       YCPUGetMemoryOperandAddress(ctx->cpu, ctx->instruction);
   YCPUOperandAddress src_address = {
-      .type = kOperandAddressTypeMemory,
+      .type = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY,
       .register_index = (uint8_t)src_memory_address.segment_register_index,
       .offset = src_memory_address.offset,
   };
@@ -54,17 +54,17 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteLoadSegmentWithPointer(
   YCPUWriteOperand(ctx, &destRegister, YCPUFromOperandValue(src_offset_value));
   YCPUWriteOperand(
       ctx, &destSegmentRegister, YCPUFromOperandValue(src_segment_value));
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // LES r16, m
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoadESWithPointer(const YCPUInstructionContext* ctx) {
-  return YCPUExecuteLoadSegmentWithPointer(ctx, kES);
+  return YCPUExecuteLoadSegmentWithPointer(ctx, Y_CPU_ES);
 }
 
 // LDS r16, m
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoadDSWithPointer(const YCPUInstructionContext* ctx) {
-  return YCPUExecuteLoadSegmentWithPointer(ctx, kDS);
+  return YCPUExecuteLoadSegmentWithPointer(ctx, Y_CPU_DS);
 }

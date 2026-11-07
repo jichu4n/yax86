@@ -41,7 +41,8 @@ TEST_F(UndocumentedOpcodesTest, ConditionalJumpAliasesDecodeAsTwoBytes) {
     auto helper = WithCode({opcode, 0x10});
     YCPUInstruction instruction;
     ASSERT_EQ(
-        YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess)
+        YCPUFetchNextInstruction(&helper->cpu_, &instruction),
+        Y_CPU_FETCH_SUCCESS)
         << "opcode " << hex << static_cast<int>(opcode);
     EXPECT_EQ(instruction.size, 2)
         << "opcode " << hex << static_cast<int>(opcode);
@@ -56,13 +57,13 @@ TEST_F(UndocumentedOpcodesTest, ConditionalJumpAliasesMatchTheirCounterparts) {
   // opcode.
   static const uint16_t kFlagValues[] = {
       0,
-      kCF,
-      kZF,
-      kSF,
-      kOF,
-      kPF,
-      static_cast<uint16_t>(kSF | kOF),
-      static_cast<uint16_t>(kZF | kCF),
+      Y_CPU_CF,
+      Y_CPU_ZF,
+      Y_CPU_SF,
+      Y_CPU_OF,
+      Y_CPU_PF,
+      static_cast<uint16_t>(Y_CPU_SF | Y_CPU_OF),
+      static_cast<uint16_t>(Y_CPU_ZF | Y_CPU_CF),
   };
 
   for (uint8_t low = 0; low <= 0x0F; ++low) {
@@ -75,7 +76,9 @@ TEST_F(UndocumentedOpcodesTest, ConditionalJumpAliasesMatchTheirCounterparts) {
       aliased->ExecuteInstructions(1);
       documented->ExecuteInstructions(1);
 
-      EXPECT_EQ(aliased->cpu_.registers[kIP], documented->cpu_.registers[kIP])
+      EXPECT_EQ(
+          aliased->cpu_.registers[Y_CPU_IP],
+          documented->cpu_.registers[Y_CPU_IP])
           << "opcode 0x" << hex << static_cast<int>(0x60 + low) << " vs 0x"
           << static_cast<int>(0x70 + low) << " with flags 0x" << flags;
     }
@@ -88,16 +91,16 @@ TEST_F(UndocumentedOpcodesTest, ConditionalJumpAliasesMatchTheirCounterparts) {
 
 TEST_F(UndocumentedOpcodesTest, PopCS) {
   auto helper = WithCode({0x0F});
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = 0x0800;
   // Value to be popped into CS.
   helper->memory_[0x0800] = 0x34;
   helper->memory_[0x0801] = 0x12;
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kCS], 0x1234);
-  EXPECT_EQ(helper->cpu_.registers[kSP], 0x0802);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CS], 0x1234);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SP], 0x0802);
 }
 
 // ============================================================================
@@ -107,42 +110,43 @@ TEST_F(UndocumentedOpcodesTest, PopCS) {
 TEST_F(UndocumentedOpcodesTest, NearReturnAliases) {
   // 0xC1 is RET with no immediate.
   auto helper = WithCode({0xC1});
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = 0x0800;
   helper->memory_[0x0800] = 0xCD;
   helper->memory_[0x0801] = 0xAB;
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0xABCD);
-  EXPECT_EQ(helper->cpu_.registers[kSP], 0x0802);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0xABCD);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SP], 0x0802);
 }
 
 TEST_F(UndocumentedOpcodesTest, NearReturnAndPopAliasDecodesImmediate) {
   // 0xC0 is RET imm16, so it must consume two immediate bytes.
   auto helper = WithCode({0xC0, 0x04, 0x00});
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = 0x0800;
   helper->memory_[0x0800] = 0xCD;
   helper->memory_[0x0801] = 0xAB;
 
   YCPUInstruction instruction;
   ASSERT_EQ(
-      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction),
+      Y_CPU_FETCH_SUCCESS);
   EXPECT_EQ(instruction.size, 3);
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0xABCD);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0xABCD);
   // Two bytes popped for the return address, plus the four requested.
-  EXPECT_EQ(helper->cpu_.registers[kSP], 0x0806);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SP], 0x0806);
 }
 
 TEST_F(UndocumentedOpcodesTest, FarReturnAliases) {
   // 0xC9 is RETF with no immediate.
   auto helper = WithCode({0xC9});
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = 0x0800;
   helper->memory_[0x0800] = 0xCD;
   helper->memory_[0x0801] = 0xAB;
   helper->memory_[0x0802] = 0x00;
@@ -150,8 +154,8 @@ TEST_F(UndocumentedOpcodesTest, FarReturnAliases) {
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kIP], 0xABCD);
-  EXPECT_EQ(helper->cpu_.registers[kSP], 0x0804);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_IP], 0xABCD);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SP], 0x0804);
 }
 
 TEST_F(UndocumentedOpcodesTest, FarReturnAndPopAliasDecodesImmediate) {
@@ -159,7 +163,8 @@ TEST_F(UndocumentedOpcodesTest, FarReturnAndPopAliasDecodesImmediate) {
   auto helper = WithCode({0xC8, 0x02, 0x00});
   YCPUInstruction instruction;
   ASSERT_EQ(
-      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction),
+      Y_CPU_FETCH_SUCCESS);
   EXPECT_EQ(instruction.size, 3);
 }
 
@@ -169,26 +174,26 @@ TEST_F(UndocumentedOpcodesTest, FarReturnAndPopAliasDecodesImmediate) {
 
 TEST_F(UndocumentedOpcodesTest, SetALFromCarry) {
   auto helper = WithCode({0xD6});
-  helper->cpu_.registers[kAX] = 0x1234;
-  YCPUSetFlag(&helper->cpu_, kCF, true);
+  helper->cpu_.registers[Y_CPU_AX] = 0x1234;
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
 
   helper->ExecuteInstructions(1);
 
   // AL becomes 0xFF, AH is untouched.
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x12FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x12FF);
   // SALC affects no flags.
-  helper->CheckFlags({{kCF, true}});
+  helper->CheckFlags({{Y_CPU_CF, true}});
 }
 
 TEST_F(UndocumentedOpcodesTest, SetALFromCarryWhenClear) {
   auto helper = WithCode({0xD6});
-  helper->cpu_.registers[kAX] = 0x12AB;
-  YCPUSetFlag(&helper->cpu_, kCF, false);
+  helper->cpu_.registers[Y_CPU_AX] = 0x12AB;
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, false);
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x1200);
-  helper->CheckFlags({{kCF, false}});
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x1200);
+  helper->CheckFlags({{Y_CPU_CF, false}});
 }
 
 // ============================================================================
@@ -201,13 +206,14 @@ TEST_F(UndocumentedOpcodesTest, LockPrefixAliasIsConsumedAsAPrefix) {
 
   YCPUInstruction instruction;
   ASSERT_EQ(
-      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction),
+      Y_CPU_FETCH_SUCCESS);
   // 0xF1 aliases LOCK, which selects nothing, so what shows it was consumed as
   // a prefix rather than treated as an opcode in its own right is that 0x90
   // decoded as the opcode behind it and the whole thing measured two bytes.
   EXPECT_EQ(instruction.size, 2);
   EXPECT_EQ(instruction.opcode, 0x90);
-  EXPECT_EQ(instruction.segment_override, kNoSegmentOverride);
+  EXPECT_EQ(instruction.segment_override, Y_CPU_NO_SEGMENT_OVERRIDE);
   EXPECT_EQ(instruction.repetition_prefix, 0);
 }
 
@@ -219,31 +225,32 @@ TEST_F(UndocumentedOpcodesTest, Group3Reg1IsTestAndDecodesImmediate) {
   // 0xF6 /1 aliases 0xF6 /0 (TEST r/m8, imm8), so it carries an immediate.
   // YCPUModRM 0xC8 = mod 11, reg 001, rm 000 -> AL.
   auto helper = WithCode({0xF6, 0xC8, 0x0F});
-  helper->cpu_.registers[kAX] = 0x00F0;
+  helper->cpu_.registers[Y_CPU_AX] = 0x00F0;
 
   YCPUInstruction instruction;
   ASSERT_EQ(
-      YCPUFetchNextInstruction(&helper->cpu_, &instruction), kFetchSuccess);
+      YCPUFetchNextInstruction(&helper->cpu_, &instruction),
+      Y_CPU_FETCH_SUCCESS);
   EXPECT_EQ(instruction.size, 3);
 
   helper->ExecuteInstructions(1);
 
   // 0xF0 & 0x0F == 0, so ZF is set and AL is unchanged.
-  EXPECT_EQ(helper->cpu_.registers[kAX], 0x00F0);
-  helper->CheckFlags({{kZF, true}, {kCF, false}, {kOF, false}});
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], 0x00F0);
+  helper->CheckFlags({{Y_CPU_ZF, true}, {Y_CPU_CF, false}, {Y_CPU_OF, false}});
 }
 
 TEST_F(UndocumentedOpcodesTest, Group5Reg7IsPush) {
   // 0xFF /7 aliases 0xFF /6 (PUSH r/m16).
   // YCPUModRM 0xFB = mod 11, reg 111, rm 011 -> BX.
   auto helper = WithCode({0xFF, 0xFB});
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = 0x0800;
-  helper->cpu_.registers[kBX] = 0x5678;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = 0x0800;
+  helper->cpu_.registers[Y_CPU_BX] = 0x5678;
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kSP], 0x07FE);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SP], 0x07FE);
   EXPECT_EQ(helper->memory_[0x07FE], 0x78);
   EXPECT_EQ(helper->memory_[0x07FF], 0x56);
 }
@@ -252,15 +259,15 @@ TEST_F(UndocumentedOpcodesTest, PopRegisterOrMemoryIgnoresRegField) {
   // 0x8F with a non-zero REG field still pops. YCPUModRM 0xCB = mod 11, reg
   // 001, rm 011 -> BX.
   auto helper = WithCode({0x8F, 0xCB});
-  helper->cpu_.registers[kSS] = 0;
-  helper->cpu_.registers[kSP] = 0x0800;
+  helper->cpu_.registers[Y_CPU_SS] = 0;
+  helper->cpu_.registers[Y_CPU_SP] = 0x0800;
   helper->memory_[0x0800] = 0x21;
   helper->memory_[0x0801] = 0x43;
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kBX], 0x4321);
-  EXPECT_EQ(helper->cpu_.registers[kSP], 0x0802);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_BX], 0x4321);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_SP], 0x0802);
 }
 
 // ============================================================================
@@ -272,34 +279,34 @@ TEST_F(UndocumentedOpcodesTest, PopRegisterOrMemoryIgnoresRegField) {
 TEST_F(UndocumentedOpcodesTest, SetMinusOneByte) {
   // D0 /6 with mod=11, rm=011: SETMO BL
   auto helper = WithCode({0xD0, 0xF3});
-  helper->cpu_.registers[kBX] = 0x1234;
-  YCPUSetFlag(&helper->cpu_, kCF, true);
-  YCPUSetFlag(&helper->cpu_, kOF, true);
-  YCPUSetFlag(&helper->cpu_, kAF, true);
+  helper->cpu_.registers[Y_CPU_BX] = 0x1234;
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_OF, true);
+  YCPUSetFlag(&helper->cpu_, Y_CPU_AF, true);
 
   helper->ExecuteInstructions(1);
 
   // BL becomes 0xFF, BH is untouched.
-  EXPECT_EQ(helper->cpu_.registers[kBX], 0x12FF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_BX], 0x12FF);
   // Carry, overflow and auxiliary carry are cleared, and sign, zero and parity
   // follow the all-ones result.
   helper->CheckFlags(
-      {{kCF, false},
-       {kOF, false},
-       {kAF, false},
-       {kSF, true},
-       {kZF, false},
-       {kPF, true}});
+      {{Y_CPU_CF, false},
+       {Y_CPU_OF, false},
+       {Y_CPU_AF, false},
+       {Y_CPU_SF, true},
+       {Y_CPU_ZF, false},
+       {Y_CPU_PF, true}});
 }
 
 TEST_F(UndocumentedOpcodesTest, SetMinusOneWord) {
   // D1 /6 with mod=11, rm=010: SETMO DX
   auto helper = WithCode({0xD1, 0xF2});
-  helper->cpu_.registers[kDX] = 0x1234;
+  helper->cpu_.registers[Y_CPU_DX] = 0x1234;
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kDX], 0xFFFF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_DX], 0xFFFF);
 }
 
 // The count still gates the operation, so the CL forms do nothing at all when
@@ -307,25 +314,25 @@ TEST_F(UndocumentedOpcodesTest, SetMinusOneWord) {
 TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalByCL) {
   // D3 /6 with mod=11, rm=001: SETMOC CX, CL
   auto helper = WithCode({0xD3, 0xF1});
-  helper->cpu_.registers[kCX] = 0x1234;
+  helper->cpu_.registers[Y_CPU_CX] = 0x1234;
 
   helper->ExecuteInstructions(1);
 
-  EXPECT_EQ(helper->cpu_.registers[kCX], 0xFFFF);
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_CX], 0xFFFF);
 }
 
 TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalIsNoOpWhenCountIsZero) {
   // D2 /6 with mod=11, rm=011: SETMOC BL, CL
   auto helper = WithCode({0xD2, 0xF3});
-  helper->cpu_.registers[kBX] = 0x1234;
-  helper->cpu_.registers[kCX] = 0x0000;
-  YCPUSetFlag(&helper->cpu_, kCF, true);
+  helper->cpu_.registers[Y_CPU_BX] = 0x1234;
+  helper->cpu_.registers[Y_CPU_CX] = 0x0000;
+  YCPUSetFlag(&helper->cpu_, Y_CPU_CF, true);
 
   helper->ExecuteInstructions(1);
 
   // Neither the operand nor the flags are touched.
-  EXPECT_EQ(helper->cpu_.registers[kBX], 0x1234);
-  helper->CheckFlags({{kCF, true}});
+  EXPECT_EQ(helper->cpu_.registers[Y_CPU_BX], 0x1234);
+  helper->CheckFlags({{Y_CPU_CF, true}});
 }
 
 // ============================================================================
@@ -335,35 +342,37 @@ TEST_F(UndocumentedOpcodesTest, SetMinusOneConditionalIsNoOpWhenCountIsZero) {
 // The segment register field is only two bits wide. The 8086/8088 does not
 // decode the third bit, so REG 4 through 7 name ES, CS, SS and DS over again.
 TEST_F(UndocumentedOpcodesTest, MoveFromSegmentRegisterIgnoresTheThirdRegBit) {
-  static const YCPURegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
+  static const YCPURegisterIndex kSegmentRegisters[] = {
+      Y_CPU_ES, Y_CPU_CS, Y_CPU_SS, Y_CPU_DS};
   for (uint8_t reg = 4; reg <= 7; ++reg) {
     // 8C /reg with mod=11, rm=000: MOV AX, sreg
     auto helper = WithCode({0x8C, static_cast<uint8_t>(0xC0 | (reg << 3))});
     const YCPURegisterIndex expected = kSegmentRegisters[reg & 0x03];
     uint16_t expected_value = 0xBEEF;
-    if (expected == kCS) {
+    if (expected == Y_CPU_CS) {
       // The instruction is fetched through CS, so it has to keep pointing at
       // the code. 0010:0000 is the same address as the 0000:0100 it loaded at.
       expected_value = 0x0010;
-      helper->cpu_.registers[kIP] = 0x0000;
+      helper->cpu_.registers[Y_CPU_IP] = 0x0000;
     }
     helper->cpu_.registers[expected] = expected_value;
-    helper->cpu_.registers[kAX] = 0;
+    helper->cpu_.registers[Y_CPU_AX] = 0;
 
     helper->ExecuteInstructions(1);
 
-    EXPECT_EQ(helper->cpu_.registers[kAX], expected_value)
+    EXPECT_EQ(helper->cpu_.registers[Y_CPU_AX], expected_value)
         << "reg " << static_cast<int>(reg);
   }
 }
 
 TEST_F(UndocumentedOpcodesTest, MoveToSegmentRegisterIgnoresTheThirdRegBit) {
-  static const YCPURegisterIndex kSegmentRegisters[] = {kES, kCS, kSS, kDS};
+  static const YCPURegisterIndex kSegmentRegisters[] = {
+      Y_CPU_ES, Y_CPU_CS, Y_CPU_SS, Y_CPU_DS};
   for (uint8_t reg = 4; reg <= 7; ++reg) {
     // 8E /reg with mod=11, rm=000: MOV sreg, AX
     auto helper = WithCode({0x8E, static_cast<uint8_t>(0xC0 | (reg << 3))});
     const YCPURegisterIndex expected = kSegmentRegisters[reg & 0x03];
-    helper->cpu_.registers[kAX] = 0xBEEF;
+    helper->cpu_.registers[Y_CPU_AX] = 0xBEEF;
     helper->cpu_.registers[expected] = 0;
 
     helper->ExecuteInstructions(1);

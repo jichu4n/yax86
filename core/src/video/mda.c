@@ -5,13 +5,13 @@
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  kMDACharHeight = 14,
+  Y_VIDEO_MDA_CHAR_HEIGHT = 14,
   // Position of the underline within an MDA character cell.
-  kMDAUnderlinePosition = 12,
+  Y_VIDEO_MDA_UNDERLINE_POSITION = 12,
   // Documented three-bit foreground and background combinations.
-  kMDAAttributeNormal = 0x07,
-  kMDAAttributeInverse = 0x00,
-  kMDAAttributeUnderline = 0x01,
+  Y_VIDEO_MDA_ATTRIBUTE_NORMAL = 0x07,
+  Y_VIDEO_MDA_ATTRIBUTE_INVERSE = 0x00,
+  Y_VIDEO_MDA_ATTRIBUTE_UNDERLINE = 0x01,
 };
 
 typedef struct YVideoMDACellColors {
@@ -31,31 +31,31 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
       .underline = false,
   };
 
-  bool intense = (attr_value & kVideoAttributeIntenseForeground) != 0;
+  bool intense = (attr_value & Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND) != 0;
   const YVideoRGB* intense_aware_foreground =
       intense ? &config->intense_foreground : &config->foreground;
-  uint8_t background_attr = (attr_value & kVideoAttributeBackgroundMask) >>
-                            kVideoAttributeBackgroundShift;
-  uint8_t foreground_attr = attr_value & kVideoAttributeForegroundMask;
+  uint8_t background_attr = (attr_value & Y_VIDEO_ATTRIBUTE_BACKGROUND_MASK) >>
+                            Y_VIDEO_ATTRIBUTE_BACKGROUND_SHIFT;
+  uint8_t foreground_attr = attr_value & Y_VIDEO_ATTRIBUTE_FOREGROUND_MASK;
 
-  if (background_attr == kMDAAttributeInverse &&
-      foreground_attr == kMDAAttributeNormal) {
+  if (background_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE &&
+      foreground_attr == Y_VIDEO_MDA_ATTRIBUTE_NORMAL) {
     // Normal video mode.
     colors.foreground = intense_aware_foreground;
   } else if (
-      background_attr == kMDAAttributeNormal &&
-      foreground_attr == kMDAAttributeInverse) {
+      background_attr == Y_VIDEO_MDA_ATTRIBUTE_NORMAL &&
+      foreground_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE) {
     // Inverse video mode.
     colors.foreground = &config->background;
     colors.background = &config->foreground;
   } else if (
-      background_attr == kMDAAttributeInverse &&
-      foreground_attr == kMDAAttributeInverse) {
+      background_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE &&
+      foreground_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE) {
     // Invisible mode.
     colors.foreground = &config->background;
   } else if (
-      background_attr == kMDAAttributeInverse &&
-      foreground_attr == kMDAAttributeUnderline) {
+      background_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE &&
+      foreground_attr == Y_VIDEO_MDA_ATTRIBUTE_UNDERLINE) {
     // Underline mode.
     colors.underline = true;
     colors.foreground = intense_aware_foreground;
@@ -66,8 +66,8 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
 
   // Blinking characters alternate between the character and blank. The blink
   // attribute only applies if blinking is enabled in the mode control register.
-  if ((attr_value & kVideoAttributeBlink) &&
-      (video->control_register & kVideoControlEnableBlink) &&
+  if ((attr_value & Y_VIDEO_ATTRIBUTE_BLINK) &&
+      (video->control_register & Y_VIDEO_CONTROL_ENABLE_BLINK) &&
       !YVideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
     colors.underline = false;
@@ -83,7 +83,7 @@ YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
   // The MDA has exactly one mode, so its metadata is looked up directly
   // rather than derived from the mode control register.
   const YVideoModeMetadata* metadata =
-      &YVideoModeMetadataTable[kVideoModeMDAText80x25];
+      &YVideoModeMetadataTable[Y_VIDEO_MODE_MDA_TEXT_80X25];
 
   // The cursor is resolved once for the region rather than per cell: it can
   // only be in one place, so the loop just tests each cell against it.
@@ -99,8 +99,8 @@ YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
     YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
-    uint8_t row = (uint8_t)(y / kMDACharHeight);
-    uint8_t char_scan_line = (uint8_t)(y % kMDACharHeight);
+    uint8_t row = (uint8_t)(y / Y_VIDEO_MDA_CHAR_HEIGHT);
+    uint8_t char_scan_line = (uint8_t)(y % Y_VIDEO_MDA_CHAR_HEIGHT);
     for (uint8_t col = start_column; col < end_column; ++col) {
       // Character and attribute occupy consecutive bytes of a cell. The 6845
       // start address can push a cell past the end of VRAM, which wraps.
@@ -116,7 +116,7 @@ YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
       // a bitmap with the leftmost pixel in the high bit, and is 16 bits wide
       // because an MDA cell is 9 pixels across.
       uint16_t row_bitmap =
-          char_scan_line == kMDAUnderlinePosition && colors.underline
+          char_scan_line == Y_VIDEO_MDA_UNDERLINE_POSITION && colors.underline
               ? 0xFFFF
               : YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&

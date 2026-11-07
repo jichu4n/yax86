@@ -32,7 +32,7 @@ class TestLogger {
     config_.get_tick = GetTick;
     config_.enabled_modules =
         YLogModuleMask(&kModuleA) | YLogModuleMask(&kModuleB);
-    config_.min_level = kLogLevelDebug;
+    config_.min_level = Y_LOG_LEVEL_DEBUG;
     YLoggerInit(&logger_, &config_);
   }
 
@@ -69,13 +69,13 @@ TEST_F(LoggerTest, WritesFormattedMessage) {
   test_logger.tick_ = 12345;
 
   YAX86_LOG(
-      test_logger.logger(), &kModuleA, kLogLevelWarn, "value=%04X n=%d", 0x1234,
-      -7);
+      test_logger.logger(), &kModuleA, Y_LOG_LEVEL_WARN, "value=%04X n=%d",
+      0x1234, -7);
 
   ASSERT_EQ(test_logger.messages().size(), 1u);
   const CapturedMessage& message = test_logger.messages()[0];
   EXPECT_EQ(message.module_name, "A");
-  EXPECT_EQ(message.level, kLogLevelWarn);
+  EXPECT_EQ(message.level, Y_LOG_LEVEL_WARN);
   EXPECT_EQ(message.tick, 12345u);
   // No prefix and no trailing newline - the host composes the output line.
   EXPECT_EQ(message.message, "value=1234 n=-7");
@@ -86,65 +86,68 @@ TEST_F(LoggerTest, SuppressesDisabledModule) {
   TestLogger test_logger;
   test_logger.config()->enabled_modules = YLogModuleMask(&kModuleB);
 
-  YAX86_LOG(test_logger.logger(), &kModuleA, kLogLevelError, "suppressed");
+  YAX86_LOG(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_ERROR, "suppressed");
   EXPECT_TRUE(test_logger.messages().empty());
   EXPECT_FALSE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelError));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_ERROR));
 
-  YAX86_LOG(test_logger.logger(), &kModuleB, kLogLevelError, "emitted");
+  YAX86_LOG(test_logger.logger(), &kModuleB, Y_LOG_LEVEL_ERROR, "emitted");
   ASSERT_EQ(test_logger.messages().size(), 1u);
   EXPECT_EQ(test_logger.messages()[0].message, "emitted");
   EXPECT_TRUE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleB, kLogLevelError));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleB, Y_LOG_LEVEL_ERROR));
 }
 
 TEST_F(LoggerTest, SuppressesMessagesAboveMinLevel) {
   TestLogger test_logger;
-  test_logger.config()->min_level = kLogLevelWarn;
+  test_logger.config()->min_level = Y_LOG_LEVEL_WARN;
 
-  YAX86_LOG(test_logger.logger(), &kModuleA, kLogLevelError, "error");
-  YAX86_LOG(test_logger.logger(), &kModuleA, kLogLevelWarn, "warn");
-  YAX86_LOG(test_logger.logger(), &kModuleA, kLogLevelDebug, "debug");
+  YAX86_LOG(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_ERROR, "error");
+  YAX86_LOG(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_WARN, "warn");
+  YAX86_LOG(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "debug");
 
   ASSERT_EQ(test_logger.messages().size(), 2u);
   EXPECT_EQ(test_logger.messages()[0].message, "error");
   EXPECT_EQ(test_logger.messages()[1].message, "warn");
 
   EXPECT_TRUE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelError));
-  EXPECT_TRUE(YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelWarn));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_ERROR));
+  EXPECT_TRUE(
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_WARN));
   EXPECT_FALSE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelDebug));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG));
 }
 
 TEST_F(LoggerTest, TruncatesLongMessages) {
   TestLogger test_logger;
-  const string long_message(kLogMaxLineLength * 2, 'x');
+  const string long_message(Y_LOG_MAX_LINE_LENGTH * 2, 'x');
 
   YAX86_LOG(
-      test_logger.logger(), &kModuleA, kLogLevelDebug, "%s",
+      test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "%s",
       long_message.c_str());
 
   ASSERT_EQ(test_logger.messages().size(), 1u);
   const CapturedMessage& message = test_logger.messages()[0];
   // Truncated to the buffer size, leaving room for the terminating null byte.
-  EXPECT_EQ(message.message.size(), static_cast<size_t>(kLogMaxLineLength - 1));
-  EXPECT_EQ(message.length, static_cast<size_t>(kLogMaxLineLength - 1));
-  EXPECT_EQ(message.message, long_message.substr(0, kLogMaxLineLength - 1));
+  EXPECT_EQ(
+      message.message.size(), static_cast<size_t>(Y_LOG_MAX_LINE_LENGTH - 1));
+  EXPECT_EQ(message.length, static_cast<size_t>(Y_LOG_MAX_LINE_LENGTH - 1));
+  EXPECT_EQ(message.message, long_message.substr(0, Y_LOG_MAX_LINE_LENGTH - 1));
 }
 
 TEST_F(LoggerTest, ExactlyFillsBuffer) {
   TestLogger test_logger;
-  const string message(kLogMaxLineLength - 1, 'y');
+  const string message(Y_LOG_MAX_LINE_LENGTH - 1, 'y');
 
   YAX86_LOG(
-      test_logger.logger(), &kModuleA, kLogLevelDebug, "%s", message.c_str());
+      test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "%s",
+      message.c_str());
 
   ASSERT_EQ(test_logger.messages().size(), 1u);
   EXPECT_EQ(test_logger.messages()[0].message, message);
   EXPECT_EQ(
       test_logger.messages()[0].length,
-      static_cast<size_t>(kLogMaxLineLength - 1));
+      static_cast<size_t>(Y_LOG_MAX_LINE_LENGTH - 1));
 }
 
 TEST_F(LoggerTest, ToleratesMissingCallbacksAndState) {
@@ -153,24 +156,24 @@ TEST_F(LoggerTest, ToleratesMissingCallbacksAndState) {
   // No get_tick callback - the reported tick is 0.
   test_logger.tick_ = 99;
   test_logger.config()->get_tick = NULL;
-  YAX86_LOG(test_logger.logger(), &kModuleA, kLogLevelDebug, "no tick");
+  YAX86_LOG(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "no tick");
   ASSERT_EQ(test_logger.messages().size(), 1u);
   EXPECT_EQ(test_logger.messages()[0].tick, 0u);
 
   // No write_line callback - nothing is emitted and nothing crashes.
   test_logger.config()->write_line = NULL;
-  YAX86_LOG(test_logger.logger(), &kModuleA, kLogLevelDebug, "no sink");
+  YAX86_LOG(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "no sink");
   EXPECT_EQ(test_logger.messages().size(), 1u);
   EXPECT_FALSE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelDebug));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG));
 
   // A logger with no config, and no logger at all.
   YLogger unconfigured = {};
   YLoggerInit(&unconfigured, NULL);
-  YAX86_LOG(&unconfigured, &kModuleA, kLogLevelError, "no config");
-  YAX86_LOG(NULL, &kModuleA, kLogLevelError, "no logger");
-  EXPECT_FALSE(YLoggerIsEnabled(&unconfigured, &kModuleA, kLogLevelError));
-  EXPECT_FALSE(YLoggerIsEnabled(NULL, &kModuleA, kLogLevelError));
+  YAX86_LOG(&unconfigured, &kModuleA, Y_LOG_LEVEL_ERROR, "no config");
+  YAX86_LOG(NULL, &kModuleA, Y_LOG_LEVEL_ERROR, "no logger");
+  EXPECT_FALSE(YLoggerIsEnabled(&unconfigured, &kModuleA, Y_LOG_LEVEL_ERROR));
+  EXPECT_FALSE(YLoggerIsEnabled(NULL, &kModuleA, Y_LOG_LEVEL_ERROR));
 }
 
 TEST_F(LoggerTest, LoggersAreIndependent) {
@@ -178,9 +181,9 @@ TEST_F(LoggerTest, LoggersAreIndependent) {
   TestLogger second;
   second.config()->enabled_modules = YLogModuleMask(&kModuleB);
 
-  YAX86_LOG(first.logger(), &kModuleA, kLogLevelDebug, "first");
-  YAX86_LOG(second.logger(), &kModuleA, kLogLevelDebug, "dropped");
-  YAX86_LOG(second.logger(), &kModuleB, kLogLevelDebug, "second");
+  YAX86_LOG(first.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "first");
+  YAX86_LOG(second.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "dropped");
+  YAX86_LOG(second.logger(), &kModuleB, Y_LOG_LEVEL_DEBUG, "second");
 
   ASSERT_EQ(first.messages().size(), 1u);
   EXPECT_EQ(first.messages()[0].message, "first");
@@ -193,18 +196,18 @@ TEST_F(LoggerTest, EnableAndDisableModule) {
   test_logger.config()->enabled_modules = 0;
 
   EXPECT_FALSE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelDebug));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG));
 
   YLoggerEnableModule(test_logger.logger(), &kModuleA);
   EXPECT_TRUE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelDebug));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG));
   // Enabling one module leaves the others alone.
   EXPECT_FALSE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleB, kLogLevelDebug));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleB, Y_LOG_LEVEL_DEBUG));
 
   YLoggerDisableModule(test_logger.logger(), &kModuleA);
   EXPECT_FALSE(
-      YLoggerIsEnabled(test_logger.logger(), &kModuleA, kLogLevelDebug));
+      YLoggerIsEnabled(test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG));
 
   // Safe on a logger with no config, and on no logger at all.
   YLogger unconfigured = {};
@@ -227,11 +230,11 @@ TEST_F(LoggerTest, DoesNotFormatSuppressedMessages) {
     return 0;
   };
   YAX86_LOG(
-      test_logger.logger(), &kModuleA, kLogLevelDebug, "%d", count_call());
+      test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "%d", count_call());
   EXPECT_EQ(calls, 0);
 
   YLoggerEnableModule(test_logger.logger(), &kModuleA);
   YAX86_LOG(
-      test_logger.logger(), &kModuleA, kLogLevelDebug, "%d", count_call());
+      test_logger.logger(), &kModuleA, Y_LOG_LEVEL_DEBUG, "%d", count_call());
   EXPECT_EQ(calls, 1);
 }

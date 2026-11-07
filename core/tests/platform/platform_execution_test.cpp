@@ -42,10 +42,10 @@ class PlatformExecutionTest : public ::testing::Test {
     ASSERT_TRUE(YPlatformInit(&platform_));
 
     // Run test programs out of RAM rather than the BIOS entry point.
-    platform_.cpu.registers[kCS] = 0;
-    platform_.cpu.registers[kIP] = kProgramOffset;
-    platform_.cpu.registers[kSS] = 0;
-    platform_.cpu.registers[kSP] = 0xFFFE;
+    platform_.cpu.registers[Y_CPU_CS] = 0;
+    platform_.cpu.registers[Y_CPU_IP] = kProgramOffset;
+    platform_.cpu.registers[Y_CPU_SS] = 0;
+    platform_.cpu.registers[Y_CPU_SP] = 0xFFFE;
   }
 
   void Load(const std::vector<uint8_t>& code) {
@@ -54,7 +54,7 @@ class PlatformExecutionTest : public ::testing::Test {
     }
   }
 
-  uint16_t ip() const { return platform_.cpu.registers[kIP]; }
+  uint16_t ip() const { return platform_.cpu.registers[Y_CPU_IP]; }
 
   // Runs up to num_instructions instructions, stopping early if the platform
   // does. YPlatformRun takes a budget in CPU cycles, but what most of these
@@ -62,10 +62,10 @@ class PlatformExecutionTest : public ::testing::Test {
   // and what stopped them - so they count instructions instead and stay
   // independent of what any one of them costs.
   YPlatformRunStatus RunInstructions(int num_instructions) {
-    YPlatformRunStatus status = kPlatformRunning;
+    YPlatformRunStatus status = Y_PLATFORM_RUNNING;
     for (int i = 0; i < num_instructions; ++i) {
       status = YPlatformTick(&platform_);
-      if (status != kPlatformRunning) {
+      if (status != Y_PLATFORM_RUNNING) {
         return status;
       }
     }
@@ -74,27 +74,27 @@ class PlatformExecutionTest : public ::testing::Test {
 
   YPlatformState platform_ = {};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 };
 
 TEST_F(PlatformExecutionTest, TickReportsRunning) {
   Load({kOpNop, kOpNop});
 
-  EXPECT_EQ(YPlatformTick(&platform_), kPlatformRunning);
+  EXPECT_EQ(YPlatformTick(&platform_), Y_PLATFORM_RUNNING);
   EXPECT_EQ(ip(), kProgramOffset + 1);
 }
 
 TEST_F(PlatformExecutionTest, RunConsumesFullBudget) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop});
 
-  EXPECT_EQ(RunInstructions(4), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(4), Y_PLATFORM_RUNNING);
   EXPECT_EQ(ip(), kProgramOffset + 4);
 }
 
 TEST_F(PlatformExecutionTest, UnimplementedEncodingIsReportedAsInvalid) {
   Load({kOpNop, kOpGroup4, kModRMGroup4Reg2, kOpNop});
 
-  EXPECT_EQ(RunInstructions(8), kPlatformInvalid);
+  EXPECT_EQ(RunInstructions(8), Y_PLATFORM_INVALID);
   // IP has advanced past the offending instruction, so the caller can choose
   // to keep going.
   EXPECT_EQ(ip(), kProgramOffset + 3);
@@ -103,11 +103,11 @@ TEST_F(PlatformExecutionTest, UnimplementedEncodingIsReportedAsInvalid) {
 TEST_F(PlatformExecutionTest, RunResumesAfterInvalidInstruction) {
   Load({kOpNop, kOpGroup4, kModRMGroup4Reg2, kOpNop, kOpNop});
 
-  ASSERT_EQ(RunInstructions(4), kPlatformInvalid);
+  ASSERT_EQ(RunInstructions(4), Y_PLATFORM_INVALID);
   // The offending tick is counted, so a host that treats an invalid
   // instruction as non-fatal can resume and make progress.
   const uint32_t ticks_before = platform_.ticks;
-  EXPECT_EQ(RunInstructions(2), kPlatformRunning);
+  EXPECT_EQ(RunInstructions(2), Y_PLATFORM_RUNNING);
   EXPECT_GT(platform_.ticks, ticks_before);
   EXPECT_EQ(ip(), kProgramOffset + 5);
 }
@@ -115,7 +115,7 @@ TEST_F(PlatformExecutionTest, RunResumesAfterInvalidInstruction) {
 TEST_F(PlatformExecutionTest, HaltWithInterruptsDisabledIsReportedAsHung) {
   Load({kOpCli, kOpHlt});
 
-  EXPECT_EQ(RunInstructions(8), kPlatformHung);
+  EXPECT_EQ(RunInstructions(8), Y_PLATFORM_HUNG);
   EXPECT_TRUE(platform_.cpu.is_halted);
 }
 
@@ -124,7 +124,7 @@ TEST_F(PlatformExecutionTest, HaltWithInterruptsEnabledKeepsRunning) {
 
   // A halted CPU that can still be woken is not a stop: the rest of the
   // machine has to keep ticking so that an interrupt can arrive.
-  EXPECT_EQ(YPlatformRun(&platform_, 64), kPlatformRunning);
+  EXPECT_EQ(YPlatformRun(&platform_, 64), Y_PLATFORM_RUNNING);
   EXPECT_TRUE(platform_.cpu.is_halted);
   // Time keeps passing even though the CPU is halted, which is what lets the
   // timer that would wake it keep running. A halted tick is charged a fixed
@@ -153,16 +153,16 @@ TEST_F(PlatformExecutionTest, PlatformRunBatchesCachedInstructions) {
   Load(std::vector<uint8_t>(kNumProgramInstructions, kOpNop));
 
   // What one instruction costs, from a tick that runs exactly one.
-  ASSERT_EQ(YPlatformTick(&platform_), kPlatformRunning);
+  ASSERT_EQ(YPlatformTick(&platform_), Y_PLATFORM_RUNNING);
   const uint16_t one_instruction = platform_.cpu.cycles_this_tick;
   ASSERT_GT(one_instruction, 0);
-  ASSERT_EQ(RunInstructions(kNumProgramInstructions - 1), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(kNumProgramInstructions - 1), Y_PLATFORM_RUNNING);
 
   // All cached and none needing the host's attention, so one tick runs the
   // lot - which holds only while the program is shorter than a run may be.
-  ASSERT_LE(kNumProgramInstructions, kMaxInstructionsPerTick);
-  platform_.cpu.registers[kIP] = kProgramOffset;
-  ASSERT_EQ(YPlatformRun(&platform_, one_instruction), kPlatformRunning);
+  ASSERT_LE(kNumProgramInstructions, Y_CPU_MAX_INSTRUCTIONS_PER_TICK);
+  platform_.cpu.registers[Y_CPU_IP] = kProgramOffset;
+  ASSERT_EQ(YPlatformRun(&platform_, one_instruction), Y_PLATFORM_RUNNING);
   // One tick did all of them, so the clock was charged for all at once.
   EXPECT_EQ(
       platform_.cpu.cycles_this_tick,
@@ -174,11 +174,11 @@ TEST_F(PlatformExecutionTest, PlatformRunBatchesCachedInstructions) {
 // point to step a machine with. A warm cache must not change that.
 TEST_F(PlatformExecutionTest, PlatformTickRunsOneInstructionWithAWarmCache) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop});
-  ASSERT_EQ(RunInstructions(4), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(4), Y_PLATFORM_RUNNING);
 
-  platform_.cpu.registers[kIP] = kProgramOffset;
+  platform_.cpu.registers[Y_CPU_IP] = kProgramOffset;
   const uint64_t before = YCPUInstructionsRetired(&platform_.cpu);
-  ASSERT_EQ(YPlatformTick(&platform_), kPlatformRunning);
+  ASSERT_EQ(YPlatformTick(&platform_), Y_PLATFORM_RUNNING);
   EXPECT_EQ(YCPUInstructionsRetired(&platform_.cpu) - before, 1u);
   EXPECT_EQ(ip(), kProgramOffset + 1);
 }
@@ -187,7 +187,7 @@ TEST_F(PlatformExecutionTest, PlatformTickRunsOneInstructionWithAWarmCache) {
 struct Machine {
   YPlatformState platform = {};
   uint8_t ram[64 * 1024] = {0};
-  uint8_t vram[kCGAVRAMSize] = {0};
+  uint8_t vram[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 };
 
 // What a run of the program below came to. Exact, so that any difference at
@@ -253,10 +253,10 @@ Outcome RunTimerProgram(bool batched) {
   YPlatformWritePortByte(platform, 0x40, 0x00);
   YPlatformWritePortByte(platform, 0x40, 0x10);
 
-  platform->cpu.registers[kCS] = 0;
-  platform->cpu.registers[kIP] = kProgramOffset;
-  platform->cpu.registers[kSS] = 0;
-  platform->cpu.registers[kSP] = 0xFFFE;
+  platform->cpu.registers[Y_CPU_CS] = 0;
+  platform->cpu.registers[Y_CPU_IP] = kProgramOffset;
+  platform->cpu.registers[Y_CPU_SS] = 0;
+  platform->cpu.registers[Y_CPU_SP] = 0xFFFE;
 
   // A budget of one cycle runs exactly one tick, so the batched machine takes
   // the same number of steps as the stepped one and neither runs on past the
@@ -272,9 +272,9 @@ Outcome RunTimerProgram(bool batched) {
   Outcome outcome = {};
   outcome.ticks = platform->ticks;
   outcome.retired = YCPUInstructionsRetired(&platform->cpu);
-  outcome.ax = platform->cpu.registers[kAX];
-  outcome.bx = platform->cpu.registers[kBX];
-  outcome.cx = platform->cpu.registers[kCX];
+  outcome.ax = platform->cpu.registers[Y_CPU_AX];
+  outcome.bx = platform->cpu.registers[Y_CPU_BX];
+  outcome.cx = platform->cpu.registers[Y_CPU_CX];
   outcome.halted = platform->cpu.is_halted;
   return outcome;
 }
@@ -309,7 +309,7 @@ TEST_F(PlatformExecutionTest, CountsRetiredInstructions) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop});
 
   EXPECT_EQ(YCPUInstructionsRetired(&platform_.cpu), 0u);
-  ASSERT_EQ(RunInstructions(4), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(4), Y_PLATFORM_RUNNING);
   EXPECT_EQ(YCPUInstructionsRetired(&platform_.cpu), 4u);
 }
 
@@ -317,11 +317,11 @@ TEST_F(PlatformExecutionTest, CountsRetiredInstructions) {
 // clock still advances, which is what lets an interrupt arrive and wake it.
 TEST_F(PlatformExecutionTest, HaltedTicksRetireNoInstructions) {
   Load({kOpSti, kOpHlt});
-  ASSERT_EQ(RunInstructions(2), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(2), Y_PLATFORM_RUNNING);
   const uint64_t retired_at_halt = YCPUInstructionsRetired(&platform_.cpu);
   const uint32_t ticks_at_halt = platform_.ticks;
 
-  ASSERT_EQ(RunInstructions(100), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(100), Y_PLATFORM_RUNNING);
 
   EXPECT_EQ(YCPUInstructionsRetired(&platform_.cpu), retired_at_halt);
   EXPECT_GT(platform_.ticks, ticks_at_halt);
@@ -331,25 +331,25 @@ TEST_F(PlatformExecutionTest, HaltedTicksRetireNoInstructions) {
 // or the count would depend on how the caller chose to drive the machine.
 TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
   Load({kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop, kOpNop});
-  ASSERT_EQ(RunInstructions(8), kPlatformRunning);
+  ASSERT_EQ(RunInstructions(8), Y_PLATFORM_RUNNING);
   const uint64_t stepped = YCPUInstructionsRetired(&platform_.cpu);
 
   YPlatformState batched = {};
   static uint8_t batched_ram[64 * 1024] = {0};
-  static uint8_t batched_vram[kCGAVRAMSize] = {0};
+  static uint8_t batched_vram[Y_VIDEO_CGA_VRAM_SIZE] = {0};
   batched.config.physical_memory_size = sizeof(batched_ram);
   batched.config.physical_memory = batched_ram;
   batched.config.vram = batched_vram;
   ASSERT_TRUE(YPlatformInit(&batched));
-  batched.cpu.registers[kCS] = 0;
-  batched.cpu.registers[kIP] = kProgramOffset;
-  batched.cpu.registers[kSS] = 0;
-  batched.cpu.registers[kSP] = 0xFFFE;
+  batched.cpu.registers[Y_CPU_CS] = 0;
+  batched.cpu.registers[Y_CPU_IP] = kProgramOffset;
+  batched.cpu.registers[Y_CPU_SS] = 0;
+  batched.cpu.registers[Y_CPU_SP] = 0xFFFE;
   for (int i = 0; i < 8; ++i) {
     batched_ram[kProgramOffset + i] = kOpNop;
   }
   // A NOP is three cycles, so this is comfortably eight of them and no more.
-  ASSERT_EQ(YPlatformRun(&batched, 8 * 3), kPlatformRunning);
+  ASSERT_EQ(YPlatformRun(&batched, 8 * 3), Y_PLATFORM_RUNNING);
 
   EXPECT_EQ(YCPUInstructionsRetired(&batched.cpu), stepped);
 }

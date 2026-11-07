@@ -17,65 +17,70 @@ class PlatformVideoTest : public ::testing::Test {
 
   YPlatformState platform_ = {0};
   uint8_t ram_[64 * 1024] = {0};
-  uint8_t vram_[kCGAVRAMSize] = {0};
+  uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
 };
 
 TEST_F(PlatformVideoTest, DefaultsToMDA) {
   Init(static_cast<YVideoAdapter>(0));
-  EXPECT_EQ(platform_.video.adapter, kVideoAdapterMDA);
-  EXPECT_EQ(platform_.ppi.config.display_mode, kPPIDisplayMDA);
+  EXPECT_EQ(platform_.video.adapter, Y_VIDEO_ADAPTER_MDA);
+  EXPECT_EQ(platform_.ppi.config.display_mode, Y_PPI_DISPLAY_MDA);
 
-  YPlatformMemoryMapEntry* vram =
-      YPlatformGetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);
+  YPlatformMemoryMapEntry* vram = YPlatformGetMemoryMapEntryByType(
+      &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM);
   ASSERT_NE(vram, nullptr);
-  EXPECT_EQ(vram->start, static_cast<uint32_t>(kMDAVRAMAddress));
+  EXPECT_EQ(vram->start, static_cast<uint32_t>(Y_VIDEO_MDA_VRAM_ADDRESS));
   EXPECT_EQ(
-      vram->end, static_cast<uint32_t>(kMDAVRAMAddress + kMDAVRAMSize - 1));
+      vram->end, static_cast<uint32_t>(
+                     Y_VIDEO_MDA_VRAM_ADDRESS + Y_VIDEO_MDA_VRAM_SIZE - 1));
 
-  YPlatformPortMapEntry* ports =
-      YPlatformGetPortMapEntryByType(&platform_, kPortMapEntryVideo);
+  YPlatformPortMapEntry* ports = YPlatformGetPortMapEntryByType(
+      &platform_, Y_PLATFORM_PORT_MAP_ENTRY_VIDEO);
   ASSERT_NE(ports, nullptr);
-  EXPECT_EQ(ports->start, kMDAPortStart);
-  EXPECT_EQ(ports->end, kMDAPortEnd);
+  EXPECT_EQ(ports->start, Y_VIDEO_MDA_PORT_START);
+  EXPECT_EQ(ports->end, Y_VIDEO_MDA_PORT_END);
 }
 
 TEST_F(PlatformVideoTest, RegistersCGA) {
-  Init(kVideoAdapterCGA);
-  EXPECT_EQ(platform_.video.adapter, kVideoAdapterCGA);
+  Init(Y_VIDEO_ADAPTER_CGA);
+  EXPECT_EQ(platform_.video.adapter, Y_VIDEO_ADAPTER_CGA);
   // The BIOS branches on the DIP switches to decide which adapter to program,
   // so they have to agree with what the platform registered.
-  EXPECT_EQ(platform_.ppi.config.display_mode, kPPIDisplayCGA80x25);
+  EXPECT_EQ(platform_.ppi.config.display_mode, Y_PPI_DISPLAY_CGA_80X25);
 
-  YPlatformMemoryMapEntry* vram =
-      YPlatformGetMemoryMapEntryByType(&platform_, kMemoryMapEntryVRAM);
+  YPlatformMemoryMapEntry* vram = YPlatformGetMemoryMapEntryByType(
+      &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM);
   ASSERT_NE(vram, nullptr);
-  EXPECT_EQ(vram->start, static_cast<uint32_t>(kCGAVRAMAddress));
+  EXPECT_EQ(vram->start, static_cast<uint32_t>(Y_VIDEO_CGA_VRAM_ADDRESS));
   EXPECT_EQ(
-      vram->end, static_cast<uint32_t>(kCGAVRAMAddress + kCGAVRAMSize - 1));
+      vram->end, static_cast<uint32_t>(
+                     Y_VIDEO_CGA_VRAM_ADDRESS + Y_VIDEO_CGA_VRAM_SIZE - 1));
 
-  YPlatformPortMapEntry* ports =
-      YPlatformGetPortMapEntryByType(&platform_, kPortMapEntryVideo);
+  YPlatformPortMapEntry* ports = YPlatformGetPortMapEntryByType(
+      &platform_, Y_PLATFORM_PORT_MAP_ENTRY_VIDEO);
   ASSERT_NE(ports, nullptr);
-  EXPECT_EQ(ports->start, kCGAPortStart);
-  EXPECT_EQ(ports->end, kCGAPortEnd);
+  EXPECT_EQ(ports->start, Y_VIDEO_CGA_PORT_START);
+  EXPECT_EQ(ports->end, Y_VIDEO_CGA_PORT_END);
 }
 
 TEST_F(PlatformVideoTest, VideoPortsAreRoutedThroughTheMap) {
-  Init(kVideoAdapterCGA);
+  Init(Y_VIDEO_ADAPTER_CGA);
   // The 6845 index register is reachable at the CGA's port addresses, and the
   // MDA's are not mapped at all.
   YPlatformWritePortByte(
-      &platform_, kCGAPortRegisterIndex, kCRTCRegisterCursorL);
-  EXPECT_EQ(platform_.video.selected_register, kCRTCRegisterCursorL);
-  YPlatformWritePortByte(&platform_, kCGAPortRegisterData, 0x23);
-  EXPECT_EQ(YPlatformReadPortByte(&platform_, kCGAPortRegisterData), 0x23);
+      &platform_, Y_VIDEO_CGA_PORT_REGISTER_INDEX,
+      Y_VIDEO_CRTC_REGISTER_CURSOR_L);
+  EXPECT_EQ(platform_.video.selected_register, Y_VIDEO_CRTC_REGISTER_CURSOR_L);
+  YPlatformWritePortByte(&platform_, Y_VIDEO_CGA_PORT_REGISTER_DATA, 0x23);
   EXPECT_EQ(
-      YPlatformGetPortMapEntryForPort(&platform_, kMDAPortRegisterIndex),
+      YPlatformReadPortByte(&platform_, Y_VIDEO_CGA_PORT_REGISTER_DATA), 0x23);
+  EXPECT_EQ(
+      YPlatformGetPortMapEntryForPort(
+          &platform_, Y_VIDEO_MDA_PORT_REGISTER_INDEX),
       nullptr);
 }
 
 TEST_F(PlatformVideoTest, TicksAdvanceTheBeam) {
-  Init(kVideoAdapterCGA);
+  Init(Y_VIDEO_ADAPTER_CGA);
   const YVideoAdapterMetadata* adapter =
       YVideoGetAdapterMetadata(&platform_.video);
   uint32_t start_ticks = platform_.ticks;

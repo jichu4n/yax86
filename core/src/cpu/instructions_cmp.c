@@ -17,7 +17,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteCmp(
   uint32_t raw_src_value = YCPUFromOperandValue(src_value);
   uint32_t result = raw_dest_value - raw_src_value;
   YCPUSetFlagsAfterSub(ctx, raw_dest_value, raw_src_value, result, false);
-  return kInstructionExecuted;
+  return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
 // CMP r/m8, r8
@@ -47,7 +47,7 @@ YCPUExecuteCmpRegisterOrMemoryToRegister(const YCPUInstructionContext* ctx) {
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteCmpImmediateToALOrAX(const YCPUInstructionContext* ctx) {
   YCPUOperand dest;
-  YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
+  YCPUReadRegisterOperandForRegisterIndex(ctx, Y_CPU_AX, &dest);
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
   return YCPUExecuteCmp(ctx, &dest, src_value);
 }

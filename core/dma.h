@@ -436,20 +436,20 @@ YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
 typedef enum YLogLevel {
   // Emulation is likely incorrect, e.g. an invalid opcode or an unmapped
   // memory access.
-  kLogLevelError = 0,
+  Y_LOG_LEVEL_ERROR = 0,
   // Suspicious but handled, e.g. a read from an unmapped I/O port.
-  kLogLevelWarn,
+  Y_LOG_LEVEL_WARN,
   // Diagnostic detail.
-  kLogLevelDebug,
+  Y_LOG_LEVEL_DEBUG,
 } YLogLevel;
 
 enum {
   // Maximum length of a formatted log message, including the terminating null
   // byte. Longer messages are truncated.
-  kLogMaxLineLength = 256,
+  Y_LOG_MAX_LINE_LENGTH = 256,
   // Maximum number of distinct log modules, bounded by the width of
   // YLoggerConfig.enabled_modules.
-  kLogMaxModules = 32,
+  Y_LOG_MAX_MODULES = 32,
 };
 
 // Identifies the module a log message originated from.
@@ -458,7 +458,8 @@ enum {
 // modules do not need to know about one another. IDs must be unique across
 // modules - see the module ID test in core/tests/util.
 typedef struct YLogModule {
-  // Bit index used for mask-based filtering. Must be less than kLogMaxModules.
+  // Bit index used for mask-based filtering. Must be less than
+  // Y_LOG_MAX_MODULES.
   uint8_t id;
   // Human-readable module name, e.g. "FDC".
   const char* name;
@@ -505,7 +506,7 @@ typedef struct YLogger {
 
   // Scratch buffer used to format a single message. A logger is therefore not
   // reentrant: a write_line callback must never log.
-  char buffer[kLogMaxLineLength];
+  char buffer[Y_LOG_MAX_LINE_LENGTH];
 } YLogger;
 
 // Initialize a logger with the provided configuration.
@@ -560,16 +561,16 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
   va_list args;
   va_start(args, format);
   int formatted_length =
-      YVSNPrintF(logger->buffer, kLogMaxLineLength, format, args);
+      YVSNPrintF(logger->buffer, Y_LOG_MAX_LINE_LENGTH, format, args);
   va_end(args);
 
   // YVSNPrintF returns the length the message would have had, which may exceed
   // the buffer. Report the length actually written instead.
   size_t length = 0;
   if (formatted_length > 0) {
-    length = (size_t)formatted_length < kLogMaxLineLength
+    length = (size_t)formatted_length < Y_LOG_MAX_LINE_LENGTH
                  ? (size_t)formatted_length
-                 : kLogMaxLineLength - 1;
+                 : Y_LOG_MAX_LINE_LENGTH - 1;
   }
 
   uint64_t tick = logger->config->get_tick != NULL
@@ -636,12 +637,12 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 
 enum {
   // Log module ID for the DMA.
-  kLogModuleIDDMA = 6,
+  Y_DMA_LOG_MODULE_ID = 6,
 };
 
 // Log module for the DMA.
 YAX86_PUBLIC_HEADER const YLogModule YDMALogModule = {
-    .id = kLogModuleIDDMA,
+    .id = Y_DMA_LOG_MODULE_ID,
     .name = "DMA",
 };
 
@@ -649,89 +650,89 @@ YAX86_PUBLIC_HEADER const YLogModule YDMALogModule = {
 typedef enum YDMAPort {
   // --- 8237 DMA Controller ---
   // Channel 0 base and current address
-  kDMAPortChannel0Address = 0x00,
+  Y_DMA_PORT_CHANNEL0_ADDRESS = 0x00,
   // Channel 0 base and current word count
-  kDMAPortChannel0Count = 0x01,
+  Y_DMA_PORT_CHANNEL0_COUNT = 0x01,
   // Channel 1 base and current address
-  kDMAPortChannel1Address = 0x02,
+  Y_DMA_PORT_CHANNEL1_ADDRESS = 0x02,
   // Channel 1 base and current word count
-  kDMAPortChannel1Count = 0x03,
+  Y_DMA_PORT_CHANNEL1_COUNT = 0x03,
   // Channel 2 base and current address
-  kDMAPortChannel2Address = 0x04,
+  Y_DMA_PORT_CHANNEL2_ADDRESS = 0x04,
   // Channel 2 base and current word count
-  kDMAPortChannel2Count = 0x05,
+  Y_DMA_PORT_CHANNEL2_COUNT = 0x05,
   // Channel 3 base and current address
-  kDMAPortChannel3Address = 0x06,
+  Y_DMA_PORT_CHANNEL3_ADDRESS = 0x06,
   // Channel 3 base and current word count
-  kDMAPortChannel3Count = 0x07,
+  Y_DMA_PORT_CHANNEL3_COUNT = 0x07,
   // Read: Status Register / Write: Command Register
-  kDMAPortCommandStatus = 0x08,
+  Y_DMA_PORT_COMMAND_STATUS = 0x08,
   // Write: Request Register
-  kDMAPortRequest = 0x09,
+  Y_DMA_PORT_REQUEST = 0x09,
   // Write: Set/Clear a single channel's mask bit
-  kDMAPortSingleMask = 0x0A,
+  Y_DMA_PORT_SINGLE_MASK = 0x0A,
   // Write: Mode Register
-  kDMAPortMode = 0x0B,
+  Y_DMA_PORT_MODE = 0x0B,
   // Write: Clear Byte Pointer Flip-Flop
-  kDMAPortFlipFlopReset = 0x0C,
+  Y_DMA_PORT_FLIP_FLOP_RESET = 0x0C,
   // Write: Master Reset
-  kDMAPortMasterReset = 0x0D,
+  Y_DMA_PORT_MASTER_RESET = 0x0D,
   // Write: Mask Register (for all channels)
-  kDMAPortAllMask = 0x0F,
+  Y_DMA_PORT_ALL_MASK = 0x0F,
 
   // --- 74LS670 Page Registers ---
   // Page register for Channel 2 (Floppy)
-  kDMAPortPageChannel2 = 0x81,
+  Y_DMA_PORT_PAGE_CHANNEL2 = 0x81,
   // Page register for Channel 3 (Hard Drive)
-  kDMAPortPageChannel3 = 0x82,
+  Y_DMA_PORT_PAGE_CHANNEL3 = 0x82,
   // Page register for Channel 1
-  kDMAPortPageChannel1 = 0x83,
+  Y_DMA_PORT_PAGE_CHANNEL1 = 0x83,
   // Page register for Channel 0
-  kDMAPortPageChannel0 = 0x87,
+  Y_DMA_PORT_PAGE_CHANNEL0 = 0x87,
 } YDMAPort;
 
 // Bit definitions for the Mode Register (Port 0x0B)
 enum {
   // --- Channel Select (bits 0-1) ---
   // Select channel 0
-  kDMAModeSelectChannel0 = 0x00,
+  Y_DMA_MODE_SELECT_CHANNEL0 = 0x00,
   // Select channel 1
-  kDMAModeSelectChannel1 = 0x01,
+  Y_DMA_MODE_SELECT_CHANNEL1 = 0x01,
   // Select channel 2
-  kDMAModeSelectChannel2 = 0x02,
+  Y_DMA_MODE_SELECT_CHANNEL2 = 0x02,
   // Select channel 3
-  kDMAModeSelectChannel3 = 0x03,
+  Y_DMA_MODE_SELECT_CHANNEL3 = 0x03,
 
   // --- Transfer Type (bits 2-3) ---
   // Verify transfer (no data is moved)
-  kDMAModeTransferTypeVerify = 0x00,
+  Y_DMA_MODE_TRANSFER_TYPE_VERIFY = 0x00,
   // Write to memory (device -> memory)
-  kDMAModeTransferTypeWrite = 0x04,
+  Y_DMA_MODE_TRANSFER_TYPE_WRITE = 0x04,
   // Read from memory (memory -> device)
-  kDMAModeTransferTypeRead = 0x08,
+  Y_DMA_MODE_TRANSFER_TYPE_READ = 0x08,
 
   // --- Auto-initialization (bit 4) ---
   // If set, the channel reloads its base address and count after a transfer.
-  kDMAModeAutoInitialize = 0x10,
+  Y_DMA_MODE_AUTO_INITIALIZE = 0x10,
 
   // --- Address Direction (bit 5) ---
   // If set, the memory address is decremented; otherwise, it is incremented.
-  kDMAModeAddressDecrement = 0x20,
+  Y_DMA_MODE_ADDRESS_DECREMENT = 0x20,
 
   // --- Transfer Mode (bits 6-7) ---
   // Demand mode: transfer bytes until the DREQ line becomes inactive.
-  kDMAModeDemand = 0x00,
+  Y_DMA_MODE_DEMAND = 0x00,
   // Single mode: transfer one byte for each DREQ signal.
-  kDMAModeSingle = 0x40,
+  Y_DMA_MODE_SINGLE = 0x40,
   // Block mode: transfer an entire block of data in response to a single DREQ.
-  kDMAModeBlock = 0x80,
+  Y_DMA_MODE_BLOCK = 0x80,
   // Cascade mode: used for chaining multiple DMA controllers (not supported).
-  kDMAModeCascade = 0xC0,
+  Y_DMA_MODE_CASCADE = 0xC0,
 };
 
 enum {
   // Number of DMA channels in the controller.
-  kDMANumChannels = 4,
+  Y_DMA_NUM_CHANNELS = 4,
 };
 
 // ============================================================================
@@ -783,9 +784,9 @@ typedef struct YDMAChannelState {
 // Which register byte to read/write next.
 typedef enum YDMARegisterByte {
   // Read or write the lower byte next.
-  kDMARegisterLSB = 0,
+  Y_DMA_REGISTER_LSB = 0,
   // Read or write the upper byte next.
-  kDMARegisterMSB = 1,
+  Y_DMA_REGISTER_MSB = 1,
 } YDMARegisterByte;
 
 // State for the entire 8237 DMA controller.
@@ -794,7 +795,7 @@ typedef struct YDMAState {
   YDMAConfig config;
 
   // The four DMA channels.
-  YDMAChannelState channels[kDMANumChannels];
+  YDMAChannelState channels[Y_DMA_NUM_CHANNELS];
 
   // Command register for the controller.
   uint8_t command_register;
@@ -858,12 +859,12 @@ YAX86_PUBLIC void YDMAInit(YDMAState* dma) {
 YAX86_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
     YDMAState* dma, uint16_t value) {
   uint8_t byte;
-  if (dma->rw_byte == kDMARegisterMSB) {
+  if (dma->rw_byte == Y_DMA_REGISTER_MSB) {
     byte = (value >> 8) & 0xFF;
-    dma->rw_byte = kDMARegisterLSB;
+    dma->rw_byte = Y_DMA_REGISTER_LSB;
   } else {
     byte = value & 0xFF;
-    dma->rw_byte = kDMARegisterMSB;
+    dma->rw_byte = Y_DMA_REGISTER_MSB;
   }
   return byte;
 }
@@ -871,14 +872,14 @@ YAX86_FILE_PRIVATE inline uint8_t YDMAReadRegisterByte(
 YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
-    case kDMAPortChannel0Address:
-    case kDMAPortChannel0Count:
-    case kDMAPortChannel1Address:
-    case kDMAPortChannel1Count:
-    case kDMAPortChannel2Address:
-    case kDMAPortChannel2Count:
-    case kDMAPortChannel3Address:
-    case kDMAPortChannel3Count: {
+    case Y_DMA_PORT_CHANNEL0_ADDRESS:
+    case Y_DMA_PORT_CHANNEL0_COUNT:
+    case Y_DMA_PORT_CHANNEL1_ADDRESS:
+    case Y_DMA_PORT_CHANNEL1_COUNT:
+    case Y_DMA_PORT_CHANNEL2_ADDRESS:
+    case Y_DMA_PORT_CHANNEL2_COUNT:
+    case Y_DMA_PORT_CHANNEL3_ADDRESS:
+    case Y_DMA_PORT_CHANNEL3_COUNT: {
       const int channel_index = port / 2;
       const bool is_count_register = port % 2;
       const YDMAChannelState* channel = &dma->channels[channel_index];
@@ -888,7 +889,7 @@ YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
     }
 
     // Status Register (port 0x08)
-    case kDMAPortCommandStatus: {
+    case Y_DMA_PORT_COMMAND_STATUS: {
       uint8_t status = dma->status_register;
       dma->status_register = 0;  // Clear TC flags on read
       return status;
@@ -904,14 +905,14 @@ YAX86_PUBLIC uint8_t YDMAReadPort(YDMAState* dma, uint16_t port) {
 // Note: Writes update both the 'base' and 'current' registers.
 YAX86_FILE_PRIVATE inline void YDMAWriteRegisterByte(
     YDMAState* dma, uint16_t* base_reg, uint16_t* current_reg, uint8_t value) {
-  if (dma->rw_byte == kDMARegisterMSB) {
+  if (dma->rw_byte == Y_DMA_REGISTER_MSB) {
     // Second write sets the high byte.
     *base_reg = (*base_reg & 0x00FF) | ((uint16_t)value << 8);
-    dma->rw_byte = kDMARegisterLSB;
+    dma->rw_byte = Y_DMA_REGISTER_LSB;
   } else {
     // First write sets the low byte.
     *base_reg = (*base_reg & 0xFF00) | value;
-    dma->rw_byte = kDMARegisterMSB;
+    dma->rw_byte = Y_DMA_REGISTER_MSB;
   }
   // The 'current' register always mirrors the 'base' register after a write.
   *current_reg = *base_reg;
@@ -920,14 +921,14 @@ YAX86_FILE_PRIVATE inline void YDMAWriteRegisterByte(
 YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
   switch (port) {
     // Channel Address and Count Registers (ports 0x00-0x07)
-    case kDMAPortChannel0Address:
-    case kDMAPortChannel0Count:
-    case kDMAPortChannel1Address:
-    case kDMAPortChannel1Count:
-    case kDMAPortChannel2Address:
-    case kDMAPortChannel2Count:
-    case kDMAPortChannel3Address:
-    case kDMAPortChannel3Count: {
+    case Y_DMA_PORT_CHANNEL0_ADDRESS:
+    case Y_DMA_PORT_CHANNEL0_COUNT:
+    case Y_DMA_PORT_CHANNEL1_ADDRESS:
+    case Y_DMA_PORT_CHANNEL1_COUNT:
+    case Y_DMA_PORT_CHANNEL2_ADDRESS:
+    case Y_DMA_PORT_CHANNEL2_COUNT:
+    case Y_DMA_PORT_CHANNEL3_ADDRESS:
+    case Y_DMA_PORT_CHANNEL3_COUNT: {
       const int channel_index = port / 2;
       const bool is_count_register = port % 2;
       YDMAChannelState* channel = &dma->channels[channel_index];
@@ -943,17 +944,17 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
     }
 
     // Command Register (port 0x08)
-    case kDMAPortCommandStatus:
+    case Y_DMA_PORT_COMMAND_STATUS:
       dma->command_register = value;
       break;
 
     // Request Register (port 0x09)
-    case kDMAPortRequest:
+    case Y_DMA_PORT_REQUEST:
       dma->request_register = value;
       break;
 
     // Single Mask Register (port 0x0A)
-    case kDMAPortSingleMask: {
+    case Y_DMA_PORT_SINGLE_MASK: {
       const int channel_index = value & 0x03;
       const bool should_mask = (value >> 2) & 1;
       if (should_mask) {
@@ -964,7 +965,7 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
         // address, count and page registers are final here.
         const YDMAChannelState* channel = &dma->channels[channel_index];
         YAX86_DMA_LOG(
-            kLogLevelDebug,
+            Y_LOG_LEVEL_DEBUG,
             "channel %d enabled: address %02X:%04X count %04X mode %02X",
             channel_index, channel->page_register, channel->current_address,
             channel->current_count, channel->mode);
@@ -973,19 +974,19 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
     }
 
     // Mode Register (port 0x0B)
-    case kDMAPortMode: {
+    case Y_DMA_PORT_MODE: {
       const int channel_index = value & 0x03;
       dma->channels[channel_index].mode = value;
       break;
     }
 
     // Clear Byte Pointer Flip-Flop (port 0x0C)
-    case kDMAPortFlipFlopReset:
-      dma->rw_byte = kDMARegisterLSB;
+    case Y_DMA_PORT_FLIP_FLOP_RESET:
+      dma->rw_byte = Y_DMA_REGISTER_LSB;
       break;
 
     // Master Reset (port 0x0D)
-    case kDMAPortMasterReset:
+    case Y_DMA_PORT_MASTER_RESET:
       // A master reset returns the controller to its power-on state, so
       // unlike YDMAInit() this does have to clear what is there. The config is
       // what the host wired up and survives - a reset is the chip's, not the
@@ -996,21 +997,21 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
       break;
 
     // Mask Register for all channels (port 0x0F)
-    case kDMAPortAllMask:
+    case Y_DMA_PORT_ALL_MASK:
       dma->mask_register = value & 0x0F;
       break;
 
     // Page Registers
-    case kDMAPortPageChannel0:
+    case Y_DMA_PORT_PAGE_CHANNEL0:
       dma->channels[0].page_register = value;
       break;
-    case kDMAPortPageChannel1:
+    case Y_DMA_PORT_PAGE_CHANNEL1:
       dma->channels[1].page_register = value;
       break;
-    case kDMAPortPageChannel2:
+    case Y_DMA_PORT_PAGE_CHANNEL2:
       dma->channels[2].page_register = value;
       break;
-    case kDMAPortPageChannel3:
+    case Y_DMA_PORT_PAGE_CHANNEL3:
       dma->channels[3].page_register = value;
       break;
 
@@ -1022,7 +1023,7 @@ YAX86_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
 
 YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
     YDMAState* dma, uint8_t channel_index) {
-  if (channel_index >= kDMANumChannels) {
+  if (channel_index >= Y_DMA_NUM_CHANNELS) {
     return;
   }
   YDMAChannelState* channel = &dma->channels[channel_index];
@@ -1044,16 +1045,16 @@ YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
   // Perform transfer based on type (bits 2-3 of mode register)
   const uint8_t transfer_type = channel->mode & (0x03 << 2);
   switch (transfer_type) {
-    case kDMAModeTransferTypeVerify:  // Verify - no actual transfer
+    case Y_DMA_MODE_TRANSFER_TYPE_VERIFY:  // Verify - no actual transfer
       break;
-    case kDMAModeTransferTypeWrite:  // Write to memory (device -> memory)
+    case Y_DMA_MODE_TRANSFER_TYPE_WRITE:  // Write to memory (device -> memory)
       if (dma->config.read_device_byte && dma->config.write_memory_byte) {
         const uint8_t data =
             dma->config.read_device_byte(dma->config.context, channel_index);
         dma->config.write_memory_byte(dma->config.context, address, data);
       }
       break;
-    case kDMAModeTransferTypeRead:  // Read from memory (memory -> device)
+    case Y_DMA_MODE_TRANSFER_TYPE_READ:  // Read from memory (memory -> device)
       if (dma->config.read_memory_byte && dma->config.write_device_byte) {
         const uint8_t data =
             dma->config.read_memory_byte(dma->config.context, address);
@@ -1066,7 +1067,7 @@ YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
   }
 
   // Update address register
-  if ((channel->mode & kDMAModeAddressDecrement) == 0) {
+  if ((channel->mode & Y_DMA_MODE_ADDRESS_DECREMENT) == 0) {
     ++channel->current_address;
   } else {
     --channel->current_address;
@@ -1084,7 +1085,7 @@ YAX86_PUBLIC YAX86_HOT void YDMATransferByte(
     }
 
     // Handle auto-initialization or mask the channel
-    if ((channel->mode & kDMAModeAutoInitialize) != 0) {
+    if ((channel->mode & Y_DMA_MODE_AUTO_INITIALIZE) != 0) {
       channel->current_address = channel->base_address;
       channel->current_count = channel->base_count;
     } else {
