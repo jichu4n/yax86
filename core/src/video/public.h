@@ -17,7 +17,7 @@ enum {
 };
 
 // Log module for the Video.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleVideo = {
+YAX86_PUBLIC_HEADER const YLogModule YVideoLogModule = {
     .id = kLogModuleIDVideo,
     .name = "VIDEO",
 };
@@ -424,7 +424,7 @@ enum {
 
 // Metadata for each video mode, indexed by mode number.
 YAX86_PUBLIC_HEADER const YVideoModeMetadata
-    kVideoModeMetadata[kNumVideoModes] = {
+    YVideoModeMetadataTable[kNumVideoModes] = {
         // 0x00: CGA text, 40x25, color burst off
         {
             .mode = kVideoModeCGAText40x25Mono,
@@ -575,7 +575,7 @@ typedef struct YVideoAdapterMetadata {
 // 50Hz. The CGA scans 912 dots per line at 14.318MHz over 262 lines, which is
 // 304 cycles per line and just under 60Hz.
 YAX86_PUBLIC_HEADER const YVideoAdapterMetadata
-    kVideoAdapterMetadata[kNumVideoAdapters] = {
+    YVideoAdapterMetadataTable[kNumVideoAdapters] = {
         // MDA
         {
             .adapter = kVideoAdapterMDA,
@@ -732,7 +732,7 @@ typedef struct YVideoConfig {
 } YVideoConfig;
 
 // Default video config.
-YAX86_PUBLIC_HEADER const YVideoConfig kDefaultVideoConfig = {
+YAX86_PUBLIC_HEADER const YVideoConfig YVideoDefaultConfig = {
     .context = NULL,
 
     .adapter = kVideoAdapterMDA,

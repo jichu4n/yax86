@@ -62,7 +62,7 @@ typedef YCPUInstructionResult (*YCPUGroup5ExecuteInstructionFn)(
 // Group 5 instruction implementations, indexed by the corresponding REG
 // field value in the YCPUModRM byte.
 YAX86_FILE_PRIVATE const YCPUGroup5ExecuteInstructionFn
-    kGroup5ExecuteInstructionFns[] = {
+    YCPUGroup5ExecuteInstructionFns[] = {
         YCPUExecuteInc,               // 0 - INC r/m8/r/m16
         YCPUExecuteDec,               // 1 - DEC r/m8/r/m16
         YCPUExecuteIndirectNearCall,  // 2 - CALL rel16
@@ -80,7 +80,7 @@ YAX86_FILE_PRIVATE const YCPUGroup5ExecuteInstructionFn
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup5ExecuteInstructionFn fn =
-      kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);

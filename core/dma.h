@@ -640,7 +640,7 @@ enum {
 };
 
 // Log module for the DMA.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleDMA = {
+YAX86_PUBLIC_HEADER const YLogModule YDMALogModule = {
     .id = kLogModuleIDDMA,
     .name = "DMA",
 };
@@ -847,7 +847,7 @@ YAX86_PUBLIC void YDMATransferByte(YDMAState* dma, uint8_t channel_index);
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_DMA_LOG(level, ...) \
-  YAX86_LOG(dma->config.logger, &kLogModuleDMA, level, __VA_ARGS__)
+  YAX86_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)
 
 YAX86_PUBLIC void YDMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.

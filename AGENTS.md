@@ -332,18 +332,19 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
 - **The macro names the tier and nothing else.** `inline`, `const` and the
   return type are written out after it, exactly as they would be without it:
   `YAX86_PUBLIC_HEADER inline bool YCPUGetFlag(...)`, `YAX86_FILE_PRIVATE const
-  YCPUFlag kFlagsForClearAndSetInstructions[]`. Folding a keyword into a macro
-  name needs one macro per tier per declaration shape, and the shapes do not
-  stop at `inline` - a header-defined public function that is not inline has
+  YCPUFlag YCPUFlagsForClearAndSetInstructions[]`. Folding a keyword into a
+  macro name needs one macro per tier per declaration shape, and the shapes do
+  not stop at `inline` - a header-defined public function that is not inline has
   nowhere to go in such a scheme, which `YLoggerWrite()` is.
 - A separate macro is warranted where the **expansion** differs, never where a
   keyword does. That is why `YAX86_PUBLIC` and `YAX86_PUBLIC_HEADER` are two
   macros: a definition in a header needs internal linkage and one in a source
   file must not have it.
 - **Public means reachable through the interface, not referenced by a host
-  today.** The eleven `kLogModule*` descriptors are used only inside `core/src`,
-  and are public because `YLoggerEnableModule()` is public and takes one - a
-  host turning on the CPU's logging has nothing else to pass. `YSNPrintF()` is
+  today.** The ten log module descriptors, `YCPULogModule` and its siblings,
+  are used only inside `core/src`, and are public because
+  `YLoggerEnableModule()` is public and takes one - a host turning on the CPU's
+  logging has nothing else to pass. `YSNPrintF()` is
   the other way round: it sits in every module's public half because `log.h`
   needs it, and nothing outside the core calls it.
 - `static` alone says a symbol has internal linkage, which in the bundled build
@@ -543,10 +544,15 @@ Alongside the table, state:
   declaration is guarded by the module's bundle include guard, preventing
   linkage conflicts with the bundle's `static` definition.
 - **Module-private generation is opt-in via `--module`.** `core/CMakeLists.txt`
-  passes `--module <name>`, which marks the array `YAX86_MODULE_PRIVATE` and
-  adds bundle guards. In contrast, `pico/bench` invokes the generator without
-  `--module` for its boot floppy image, producing a standalone translation unit
-  with external linkage that `pico/bench/src/main.c` can link against.
+  passes `--module <name>`, which marks the array `YAX86_MODULE_PRIVATE`, adds
+  bundle guards, and names both identifiers in the core's namespace: the symbol
+  `BIOSROMData` in `bios` gives the array `YBIOSROMData` and its size
+  `Y_BIOS_ROM_DATA_SIZE`. The symbol has to begin with the module's owner, and
+  the generator refuses one that does not. In contrast, `pico/bench` invokes the
+  generator without `--module` for its boot floppy image, producing a
+  standalone translation unit with external linkage that
+  `pico/bench/src/main.c` can link against, under the harness's own names
+  `kDOSFloppyData` and `kDOSFloppyDataSize`.
 
 ### cpu — state and config
 
@@ -762,7 +768,7 @@ Alongside the table, state:
   two bytes of padding, so `base_cycles` lives there for free and there is no
   second table — but only because the decoder reads it through the `metadata`
   pointer it already holds. Reading it from the caller instead, by indexing
-  `opcode_table[opcode].base_cycles`, measures **0.63% slower at `-O3` and
+  `YCPUOpcodeTable[opcode].base_cycles`, measures **0.63% slower at `-O3` and
   0.65% at `-O2`**: it is one index either way, but a 1-byte field at an 8-byte
   stride spreads 256 costs over 2KB where a packed array keeps them in a couple
   of XIP lines. Caching the cost is what made that read cold — it happens once

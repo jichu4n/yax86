@@ -27,7 +27,8 @@ YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteRelativeJumpWord(
 }
 
 // Table of relative jump instructions, indexed by width.
-YAX86_FILE_PRIVATE YCPUInstructionResult (*const kRelativeJumpFn[kNumWidths])(
+YAX86_FILE_PRIVATE
+YCPUInstructionResult (*const YCPURelativeJumpFn[kNumWidths])(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) = {
   YCPUExecuteRelativeJumpByte,  // kByte
   YCPUExecuteRelativeJumpWord,  // kWord
@@ -36,7 +37,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult (*const kRelativeJumpFn[kNumWidths])(
 // Common logic for JMP instructions.
 YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteRelativeJump(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) {
-  return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
+  return YCPURelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
 // JMP rel8
@@ -88,7 +89,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteConditionalJump(
 // Table of flag register bitmasks for conditional jumps. The index corresponds
 // to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
 // entries of their 0x70-0x7F counterparts.
-YAX86_FILE_PRIVATE const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
+YAX86_FILE_PRIVATE const uint16_t YCPUUnsignedConditionalJumpFlagBitmasks[] = {
     kOF,        // 0x70 - JO, 0x71 - JNO
     kCF,        // 0x72 - JC, 0x73 - JNC
     kZF,        // 0x74 - JE, 0x75 - JNE
@@ -102,7 +103,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteUnsignedConditionalJump(const YCPUInstructionContext* ctx) {
   // Masking off the high nibble handles both 0x70-0x7F and their undocumented
   // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
-  uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
+  uint16_t flag_mask = YCPUUnsignedConditionalJumpFlagBitmasks
       [(ctx->instruction->opcode & 0x0F) / 2];
   bool flag_value = (ctx->cpu->flags & flag_mask) != 0;
   // Even opcode => jump if the flag is set

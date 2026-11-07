@@ -633,7 +633,7 @@ enum {
 };
 
 // Log module for the HDC.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleHDC = {
+YAX86_PUBLIC_HEADER const YLogModule YHDCLogModule = {
     .id = kLogModuleIDHDC,
     .name = "HDC",
 };
@@ -783,7 +783,7 @@ enum {
       kHDCGeometry10MBNumCylinders * kHDCGeometry10MBNumHeads *
       kHDCGeometry10MBNumSectorsPerTrack * kHDCSectorSize,
 };
-YAX86_PUBLIC_HEADER const YHDCDriveGeometry kHDCGeometry10MB = {
+YAX86_PUBLIC_HEADER const YHDCDriveGeometry YHDCGeometry10MB = {
     .num_cylinders = kHDCGeometry10MBNumCylinders,
     .num_heads = kHDCGeometry10MBNumHeads,
     .num_sectors_per_track = kHDCGeometry10MBNumSectorsPerTrack,
@@ -936,7 +936,7 @@ YAX86_PUBLIC_HEADER inline uint8_t YHDCPortOffsetToRegister(uint8_t offset) {
 #include <stdint.h>
 
 enum {
-  kHDCOptionROMDataSize = 12288,
+  Y_HDC_OPTION_ROM_DATA_SIZE = 12288,
 };
 
 // In unbundled builds, external callers within the module need an extern
@@ -944,7 +944,7 @@ enum {
 // the same translation unit (via bundle.json), so an extern declaration
 // would conflict and is omitted.
 #ifndef YAX86_HDC_BUNDLE_H
-extern const uint8_t kHDCOptionROMData[kHDCOptionROMDataSize];
+extern const uint8_t YHDCOptionROMData[Y_HDC_OPTION_ROM_DATA_SIZE];
 #endif // YAX86_HDC_BUNDLE_H
 
 #endif // YAX86_HDC_OPTION_ROM_DATA_H
@@ -968,7 +968,7 @@ extern const uint8_t kHDCOptionROMData[kHDCOptionROMDataSize];
 #include "../util/common.h"
 #endif // YAX86_HDC_BUNDLE_H
 
-YAX86_MODULE_PRIVATE const uint8_t kHDCOptionROMData[] = {
+YAX86_MODULE_PRIVATE const uint8_t YHDCOptionROMData[] = {
 0x55,0xaa,0x18,0xe9,0xe4,0x0a,0x58,0x55,0x42,0x32,0x31,0x30,0x2d,0x3d,0x58,0x54,
 0x49,0x44,0x45,0x20,0x55,0x6e,0x69,0x76,0x65,0x72,0x73,0x61,0x6c,0x20,0x42,0x49,
 0x4f,0x53,0x20,0x28,0x58,0x54,0x29,0x3d,0x2d,0x00,0x00,0x00,0x72,0x36,0x33,0x31,
@@ -1755,7 +1755,7 @@ YAX86_MODULE_PRIVATE const uint8_t kHDCOptionROMData[] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_HDC_LOG(level, ...) \
-  YAX86_LOG(hdc->config.logger, &kLogModuleHDC, level, __VA_ARGS__)
+  YAX86_LOG(hdc->config.logger, &YHDCLogModule, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -1822,9 +1822,9 @@ enum {
   kHDCIdentifyNumECCBytes = 4,
 };
 
-YAX86_FILE_PRIVATE const char* const kHDCModelNumber = "YAX86 HARD DISK";
-YAX86_FILE_PRIVATE const char* const kHDCSerialNumber = "YAX86-0000001";
-YAX86_FILE_PRIVATE const char* const kHDCFirmwareRevision = "1.0";
+YAX86_FILE_PRIVATE const char* const YHDCModelNumber = "YAX86 HARD DISK";
+YAX86_FILE_PRIVATE const char* const YHDCSerialNumber = "YAX86-0000001";
+YAX86_FILE_PRIVATE const char* const YHDCFirmwareRevision = "1.0";
 
 // Returns the drive the drive/head register currently selects.
 YAX86_FILE_PRIVATE YHDCDriveState* YHDCSelectedDrive(YHDCState* hdc) {
@@ -1954,7 +1954,7 @@ YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
       hdc, kHDCIdentifyWordNumSectorsPerTrack,
       drive->geometry.num_sectors_per_track);
   YHDCWriteIdentifyString(
-      hdc, kHDCIdentifyWordSerialNumber, kHDCSerialNumber,
+      hdc, kHDCIdentifyWordSerialNumber, YHDCSerialNumber,
       kHDCIdentifySerialNumberWords);
   YHDCWriteIdentifyWord(
       hdc, kHDCIdentifyWordBufferType, kHDCIdentifyBufferTypeDualPorted);
@@ -1963,10 +1963,10 @@ YAX86_FILE_PRIVATE void YHDCBuildIdentifyBlock(
   YHDCWriteIdentifyWord(
       hdc, kHDCIdentifyWordNumECCBytes, kHDCIdentifyNumECCBytes);
   YHDCWriteIdentifyString(
-      hdc, kHDCIdentifyWordFirmwareRevision, kHDCFirmwareRevision,
+      hdc, kHDCIdentifyWordFirmwareRevision, YHDCFirmwareRevision,
       kHDCIdentifyFirmwareRevisionWords);
   YHDCWriteIdentifyString(
-      hdc, kHDCIdentifyWordModelNumber, kHDCModelNumber,
+      hdc, kHDCIdentifyWordModelNumber, YHDCModelNumber,
       kHDCIdentifyModelNumberWords);
   YHDCWriteIdentifyWord(
       hdc, kHDCIdentifyWordMaxSectorsPerTransfer,
@@ -2379,11 +2379,11 @@ YAX86_PUBLIC void YHDCDetachDrive(YHDCState* hdc, uint8_t drive) {
 YAX86_PUBLIC void YHDCInit(YHDCState* hdc) { hdc->status = kHDCStatusIdle; }
 
 YAX86_PUBLIC uint32_t YHDCGetOptionROMSize(void) {
-  return kHDCOptionROMDataSize;
+  return Y_HDC_OPTION_ROM_DATA_SIZE;
 }
 
 YAX86_PUBLIC const uint8_t* YHDCGetOptionROMData(void) {
-  return kHDCOptionROMData;
+  return YHDCOptionROMData;
 }
 
 

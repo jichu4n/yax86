@@ -226,7 +226,7 @@ int main(int argc, char* argv[]) {
       floppy_path = argv[i];
     }
   }
-  g_video_adapter_metadata = &kVideoAdapterMetadata[g_video_adapter];
+  g_video_adapter_metadata = &YVideoAdapterMetadataTable[g_video_adapter];
 
   if (!DisplayInit(
           g_video_adapter_metadata->frame_buffer_width,

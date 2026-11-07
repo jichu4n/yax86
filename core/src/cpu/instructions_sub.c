@@ -18,8 +18,8 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterDec(
     uint32_t result, bool did_borrow) {
   YCPUSetCommonFlagsAfterInstruction(ctx, result);
 
-  uint32_t sign_bit = kSignBit[ctx->metadata->width];
-  uint32_t max_val = kMaxValue[ctx->metadata->width];
+  uint32_t sign_bit = YCPUSignBit[ctx->metadata->width];
+  uint32_t max_val = YCPUMaxValue[ctx->metadata->width];
 
   // Overflow Flag (OF)
   // A subtraction overflows when the operands have different signs and the
@@ -49,7 +49,7 @@ YAX86_MODULE_PRIVATE void YCPUSetFlagsAfterSub(
   // Carry Flag (CF) - Set when a borrow is generated
   // CF is set if op1 < (op2 + did_borrow) (unsigned comparison)
   uint32_t val_being_subtracted =
-      (op2 & kMaxValue[ctx->metadata->width]) + (did_borrow ? 1 : 0);
+      (op2 & YCPUMaxValue[ctx->metadata->width]) + (did_borrow ? 1 : 0);
   YCPUSetFlag(ctx->cpu, kCF, op1 < val_being_subtracted);
 }
 

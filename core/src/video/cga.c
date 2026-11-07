@@ -29,7 +29,7 @@ enum {
 // The three 320x200 graphics palettes, each holding colors 1 to 3. Color 0
 // comes from the color select register instead. The palette-select bit chooses
 // the first two, unless black-and-white mode selects the third.
-YAX86_FILE_PRIVATE const uint8_t kCGAGraphicsPalettes[3][3] = {
+YAX86_FILE_PRIVATE const uint8_t YVideoCGAGraphicsPalettes[3][3] = {
     // Palette 0: green, red, brown.
     {2, 4, 6},
     // Palette 1: cyan, magenta, light gray.
@@ -120,7 +120,7 @@ YAX86_FILE_PRIVATE void YVideoCGARenderTextRegion(
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
       // The glyph row is a bitmap with the leftmost pixel in the high bit.
-      uint8_t row_bitmap = kFontCGA8x8Bitmap[char_value][char_scan_line];
+      uint8_t row_bitmap = YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
       for (uint8_t x = 0; x < metadata->char_width; ++x) {
         bool is_foreground =
             (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
@@ -141,11 +141,11 @@ YAX86_FILE_PRIVATE void YVideoCGAResolve320x200Palette(
     YVideoState* video, YVideoRGB palette[4]) {
   const uint8_t* palette_colors;
   if (video->control_register & kVideoControlBlackAndWhite) {
-    palette_colors = kCGAGraphicsPalettes[2];
+    palette_colors = YVideoCGAGraphicsPalettes[2];
   } else if (video->color_select_register & kCGAColorSelectPalette) {
-    palette_colors = kCGAGraphicsPalettes[1];
+    palette_colors = YVideoCGAGraphicsPalettes[1];
   } else {
-    palette_colors = kCGAGraphicsPalettes[0];
+    palette_colors = YVideoCGAGraphicsPalettes[0];
   }
   uint8_t intensity =
       (video->color_select_register & kCGAColorSelectPaletteIntensity)

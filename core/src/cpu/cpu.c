@@ -8,7 +8,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config.logger, &kLogModuleCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config.logger, &YCPULogModule, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state
@@ -272,7 +272,7 @@ YCPUFetchNextInstruction(YCPUState* cpu, YCPUInstruction* instruction) {
 
   // Opcode
   instruction->opcode = current_byte;
-  const YCPUOpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+  const YCPUOpcodeMetadata* metadata = &YCPUOpcodeTable[instruction->opcode];
 
   // ModR/M
   //
@@ -451,7 +451,7 @@ YCPUExecuteDecodedInstruction(
 // decode is what produced the encoding these checks would be re-examining.
 YAX86_PUBLIC YAX86_HOT YCPUInstructionResult
 YCPUExecuteInstruction(YCPUState* cpu, YCPUInstruction* instruction) {
-  const YCPUOpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+  const YCPUOpcodeMetadata* metadata = &YCPUOpcodeTable[instruction->opcode];
 
   // Check the encoded instruction against the expected format for its opcode.
   // Nothing checks that the opcode has a handler, because every entry in the
@@ -676,7 +676,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
       // and immediate_size from this same table entry, so the checks
       // YCPUExecuteInstruction() makes cannot fail here.
       const YCPUOpcodeMetadata* const metadata =
-          &opcode_table[instruction->opcode];
+          &YCPUOpcodeTable[instruction->opcode];
       if (YCPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
           kInstructionExecuted) {
         YAX86_CPU_LOG(

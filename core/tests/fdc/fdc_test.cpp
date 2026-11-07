@@ -75,7 +75,7 @@ class FDCTest : public ::testing::Test {
 
 TEST_F(FDCTest, ReadData) {
   // Insert a disk into Drive 0.
-  YFDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
 
   // Issue Read Data command (0x06).
   // Parameters: Head/Drive, C, H, R, N, EOT, GPL, DTL.
@@ -152,7 +152,7 @@ TEST_F(FDCTest, ReadData) {
 
 TEST_F(FDCTest, WriteData) {
   // Insert a disk into Drive 0.
-  YFDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
 
   irq6_raised_ = false;
   dma_requested_ = false;
@@ -206,7 +206,7 @@ TEST_F(FDCTest, WriteData) {
 
 TEST_F(FDCTest, ReadTrackEnd) {
   // Insert a disk into Drive 0.
-  YFDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
 
   // Issue Read Data command for Sector 9 (End of Track).
   irq6_raised_ = false;
@@ -257,7 +257,7 @@ TEST_F(FDCTest, ReadTrackEnd) {
 
 TEST_F(FDCTest, ReadDataMultiTrack) {
   // Insert a disk into Drive 0.
-  YFDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
 
   // Issue Read Data command (0x06) with MT bit set.
   irq6_raised_ = false;
@@ -324,7 +324,7 @@ TEST_F(FDCTest, GLaBIOSBootSequence) {
   // 0. Initial State: No disk, Reset active?
   // We assume power-on state.
   YFDCInit(&fdc_);
-  YFDCInsertDisk(&fdc_, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
 
   // 1. Reset FDC (GLaBIOS FDC_RESET)
   // Disable FDC, Disable DMA/IRQ (Bit 3=0), Reset (Bit 2=0) -> 0x00

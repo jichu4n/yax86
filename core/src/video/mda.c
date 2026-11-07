@@ -83,7 +83,7 @@ YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
   // The MDA has exactly one mode, so its metadata is looked up directly
   // rather than derived from the mode control register.
   const YVideoModeMetadata* metadata =
-      &kVideoModeMetadata[kVideoModeMDAText80x25];
+      &YVideoModeMetadataTable[kVideoModeMDAText80x25];
 
   // The cursor is resolved once for the region rather than per cell: it can
   // only be in one place, so the loop just tests each cell against it.
@@ -118,7 +118,7 @@ YAX86_MODULE_PRIVATE void YVideoMDARenderRegion(
       uint16_t row_bitmap =
           char_scan_line == kMDAUnderlinePosition && colors.underline
               ? 0xFFFF
-              : kFontMDA9x14Bitmap[char_value][char_scan_line];
+              : YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;

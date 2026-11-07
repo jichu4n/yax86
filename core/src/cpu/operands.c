@@ -22,7 +22,7 @@ enum { kUnreachableOperandValue = 0xFF };
 // byte keeps a zero high byte, which is what makes widening it again free.
 YAX86_MODULE_PRIVATE YCPUOperandValue
 YCPUToOperandValue(YCPUWidth width, uint32_t raw_value) {
-  return (YCPUOperandValue)(raw_value & kMaxValue[width]);
+  return (YCPUOperandValue)(raw_value & YCPUMaxValue[width]);
 }
 
 // Widen an operand value for arithmetic, which is done in 32 bits so that

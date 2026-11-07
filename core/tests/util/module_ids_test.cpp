@@ -15,9 +15,9 @@ using namespace std;
 namespace {
 
 const vector<const YLogModule*> kAllModules = {
-    &kLogModulePlatform, &kLogModuleCPU, &kLogModulePIC, &kLogModulePIT,
-    &kLogModulePPI,      &kLogModuleFDC, &kLogModuleDMA, &kLogModuleKeyboard,
-    &kLogModuleVideo,    &kLogModuleHDC,
+    &YPlatformLogModule, &YCPULogModule, &YPICLogModule, &YPITLogModule,
+    &YPPILogModule,      &YFDCLogModule, &YDMALogModule, &YKeyboardLogModule,
+    &YVideoLogModule,    &YHDCLogModule,
 };
 
 }  // namespace

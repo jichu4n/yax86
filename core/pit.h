@@ -630,7 +630,7 @@ enum {
 };
 
 // Log module for the PIT.
-YAX86_PUBLIC_HEADER const YLogModule kLogModulePIT = {
+YAX86_PUBLIC_HEADER const YLogModule YPITLogModule = {
     .id = kLogModuleIDPIT,
     .name = "PIT",
 };
@@ -821,7 +821,7 @@ typedef struct YPITModeMetadata {
 } YPITModeMetadata;
 
 // Metadata for unsupported modes (1, 4, 5).
-YAX86_FILE_PRIVATE const YPITModeMetadata kPITUnsupportedMode = {0};
+YAX86_FILE_PRIVATE const YPITModeMetadata YPITUnsupportedMode = {0};
 
 // Handles a channel reaching terminal count.
 YAX86_FILE_PRIVATE inline void YPITChannelSetOutputState(
@@ -878,7 +878,7 @@ YPITMode0TicksUntilEvent(const YPITChannelState* channel) {
 }
 
 // Metadata for Mode 0: Interrupt on Terminal Count.
-YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode0Metadata = {
+YAX86_FILE_PRIVATE const YPITModeMetadata YPITMode0Metadata = {
     .initial_output_state = false,
     .handle_tick = YPITMode0HandleTick,
     .counter_step = 1,
@@ -922,7 +922,7 @@ YPITMode2TicksUntilEvent(const YPITChannelState* channel) {
 }
 
 // Metadata for Mode 2: Rate Generator.
-YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode2Metadata = {
+YAX86_FILE_PRIVATE const YPITModeMetadata YPITMode2Metadata = {
     .initial_output_state = true,
     .handle_tick = YPITMode2HandleTick,
     .counter_step = 1,
@@ -968,7 +968,7 @@ YPITMode3TicksUntilEvent(const YPITChannelState* channel) {
 }
 
 // Metadata for Mode 3: Square Wave Generator.
-YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode3Metadata = {
+YAX86_FILE_PRIVATE const YPITModeMetadata YPITMode3Metadata = {
     .initial_output_state = true,
     .handle_tick = YPITMode3HandleTick,
     .counter_step = 2,
@@ -977,13 +977,14 @@ YAX86_FILE_PRIVATE const YPITModeMetadata kPITMode3Metadata = {
 };
 
 // Array of mode metadata indexed by mode number.
-YAX86_FILE_PRIVATE const YPITModeMetadata* kPITModeMetadata[kPITNumModes] = {
-    &kPITMode0Metadata,    // Mode 0
-    &kPITUnsupportedMode,  // Mode 1 (unsupported)
-    &kPITMode2Metadata,    // Mode 2
-    &kPITMode3Metadata,    // Mode 3
-    &kPITUnsupportedMode,  // Mode 4 (unsupported)
-    &kPITUnsupportedMode,  // Mode 5 (unsupported)
+YAX86_FILE_PRIVATE const YPITModeMetadata* YPITModeMetadataTable[kPITNumModes] =
+    {
+        &YPITMode0Metadata,    // Mode 0
+        &YPITUnsupportedMode,  // Mode 1 (unsupported)
+        &YPITMode2Metadata,    // Mode 2
+        &YPITMode3Metadata,    // Mode 3
+        &YPITUnsupportedMode,  // Mode 4 (unsupported)
+        &YPITUnsupportedMode,  // Mode 5 (unsupported)
 };
 
 YAX86_PUBLIC void YPITInit(YPITState* pit) {
@@ -1104,7 +1105,7 @@ YAX86_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
         channel->rw_byte = kPITByteLSB;
         YPITChannelSetOutputState(
             pit, channel, channel_index,
-            kPITModeMetadata[channel->mode]->initial_output_state);
+            YPITModeMetadataTable[channel->mode]->initial_output_state);
         // A reprogrammed channel is silent until its count arrives, so a tone
         // playing on channel 2 stops here and resumes on the next counter
         // load.
@@ -1193,7 +1194,8 @@ YAX86_PUBLIC YAX86_HOT void YPITTick(YPITState* pit) {
       // Invalid mode - ignore.
       continue;
     }
-    const YPITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+    const YPITModeMetadata* mode_metadata =
+        YPITModeMetadataTable[channel->mode];
     if (mode_metadata->handle_tick) {
       mode_metadata->handle_tick(pit, channel, i);
     }
@@ -1214,7 +1216,7 @@ YAX86_FILE_PRIVATE void YPITAdvanceChannel(
     // Invalid mode - ignore.
     return;
   }
-  const YPITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+  const YPITModeMetadata* mode_metadata = YPITModeMetadataTable[channel->mode];
   if (!mode_metadata->handle_tick) {
     // A mode that does nothing on a tick cannot be moved on by one.
     return;
@@ -1273,7 +1275,8 @@ YAX86_PUBLIC uint32_t YPITTicksUntilNextEvent(const YPITState* pit) {
     if (channel->mode >= kPITNumModes) {
       continue;
     }
-    const YPITModeMetadata* mode_metadata = kPITModeMetadata[channel->mode];
+    const YPITModeMetadata* mode_metadata =
+        YPITModeMetadataTable[channel->mode];
     if (!mode_metadata->ticks_until_event) {
       continue;
     }

@@ -11,10 +11,10 @@ class OpcodeTableTest : public ::testing::Test {};
 
 TEST_F(OpcodeTableTest, MetadataIntegrity) {
   EXPECT_EQ(sizeof(YCPUOpcodeMetadata), sizeof(void*) == 4 ? 8 : 16);
-  EXPECT_EQ(sizeof(opcode_table), 256 * sizeof(YCPUOpcodeMetadata));
+  EXPECT_EQ(sizeof(YCPUOpcodeTable), 256 * sizeof(YCPUOpcodeMetadata));
 
   for (int i = 0; i < 256; ++i) {
-    const YCPUOpcodeMetadata& metadata = opcode_table[i];
+    const YCPUOpcodeMetadata& metadata = YCPUOpcodeTable[i];
 
     if (metadata.handler == YCPUExecuteInvalidOpcode) {
       continue;
@@ -42,7 +42,7 @@ TEST_F(OpcodeTableTest, InstructionPrefixMetadataIntegrity) {
       kPrefixLOCK, kPrefixREPNZ, kPrefixREP,
   };
   for (const auto& prefix : prefixes) {
-    const YCPUOpcodeMetadata& metadata = opcode_table[prefix];
+    const YCPUOpcodeMetadata& metadata = YCPUOpcodeTable[prefix];
     EXPECT_EQ(metadata.handler, YCPUExecuteInvalidOpcode)
         << "Prefix opcode 0x" << hex << prefix
         << " should be handled by YCPUExecuteInvalidOpcode";
@@ -61,7 +61,7 @@ TEST_F(OpcodeTableTest, EveryOpcodeByteDecodes) {
     const bool is_prefix =
         find(begin(kPrefixes), end(kPrefixes), opcode) != end(kPrefixes);
     EXPECT_EQ(
-        opcode_table[opcode].handler == YCPUExecuteInvalidOpcode, is_prefix)
+        YCPUOpcodeTable[opcode].handler == YCPUExecuteInvalidOpcode, is_prefix)
         << "opcode 0x" << hex << opcode;
   }
 }
@@ -71,7 +71,7 @@ TEST_F(OpcodeTableTest, EveryEntryHasAHandler) {
   // only safe because every entry in the table has one. A new entry that left
   // the field out would be a null call rather than an invalid instruction.
   for (int opcode = 0; opcode < 256; ++opcode) {
-    EXPECT_NE(opcode_table[opcode].handler, nullptr)
+    EXPECT_NE(YCPUOpcodeTable[opcode].handler, nullptr)
         << "opcode 0x" << hex << opcode;
   }
 }

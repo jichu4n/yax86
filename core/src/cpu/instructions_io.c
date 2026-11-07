@@ -29,7 +29,7 @@ YCPUReadWordFromPort(YCPUState* cpu, uint16_t port) {
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
-YAX86_FILE_PRIVATE YCPUOperandValue (*const kReadFromPortFns[])(
+YAX86_FILE_PRIVATE YCPUOperandValue (*const YCPUReadFromPortFns[])(
     YCPUState*, uint16_t) = {
   YCPUReadByteFromPort,  // kByte
   YCPUReadWordFromPort,  // kWord
@@ -39,7 +39,7 @@ YAX86_FILE_PRIVATE YCPUOperandValue (*const kReadFromPortFns[])(
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteIn(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperandValue value =
-      kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
+      YCPUReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperandValue(value));
@@ -81,7 +81,7 @@ YAX86_FILE_PRIVATE void YCPUWriteWordToPort(
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
-YAX86_FILE_PRIVATE void (*const kWriteToPortFns[])(
+YAX86_FILE_PRIVATE void (*const YCPUWriteToPortFns[])(
     YCPUState*, uint16_t, YCPUOperandValue) = {
     YCPUWriteByteToPort,  // kByte
     YCPUWriteWordToPort,  // kWord
@@ -92,7 +92,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperand src;
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
-  kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
+  YCPUWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
   return kInstructionExecuted;
 }
 

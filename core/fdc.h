@@ -731,7 +731,7 @@ enum {
 };
 
 // Log module for the FDC.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const YLogModule YFDCLogModule = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
@@ -749,7 +749,7 @@ typedef struct YFDCDiskFormat {
 } YFDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-YAX86_PUBLIC_HEADER const YFDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,
@@ -1038,7 +1038,7 @@ YAX86_PUBLIC void YFDCTick(YFDCState* fdc);
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_FDC_LOG(level, ...) \
-  YAX86_LOG(fdc->config.logger, &kLogModuleFDC, level, __VA_ARGS__)
+  YAX86_LOG(fdc->config.logger, &YFDCLogModule, level, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -1537,7 +1537,7 @@ YAX86_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
 
 // List of supported FDC commands.
 // The opcodes here represent the base 5-bit command.
-YAX86_FILE_PRIVATE const YFDCCommandMetadata kFDCCommandMetadataTable[] = {
+YAX86_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
     // Read a Track
     {.opcode = kFDCCmdReadTrack, .num_param_bytes = 8, .handler = NULL},
     // Specify
@@ -1590,10 +1590,10 @@ YAX86_PUBLIC void YFDCInit(YAX86_UNUSED YFDCState* fdc) {}
 YAX86_FILE_PRIVATE const YFDCCommandMetadata* YFDCFindCommandMetadata(
     uint8_t opcode) {
   for (size_t i = 0;
-       i < sizeof(kFDCCommandMetadataTable) / sizeof(YFDCCommandMetadata);
+       i < sizeof(YFDCCommandMetadataTable) / sizeof(YFDCCommandMetadata);
        ++i) {
-    if (kFDCCommandMetadataTable[i].opcode == opcode) {
-      return &kFDCCommandMetadataTable[i];
+    if (YFDCCommandMetadataTable[i].opcode == opcode) {
+      return &YFDCCommandMetadataTable[i];
     }
   }
   return NULL;

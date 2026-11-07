@@ -763,7 +763,7 @@ enum {
 };
 
 // Log module for the Keyboard.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleKeyboard = {
+YAX86_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
     .id = kLogModuleIDKeyboard,
     .name = "KEYBOARD",
 };

@@ -20,7 +20,7 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterInc(
 
   // Overflow Flag (OF) Set when result has wrong sign (both operands have same
   // sign but result has different sign)
-  uint32_t sign_bit = kSignBit[ctx->metadata->width];
+  uint32_t sign_bit = YCPUSignBit[ctx->metadata->width];
   bool op1_sign = (op1 & sign_bit) != 0;
   bool op2_sign = (op2 & sign_bit) != 0;
   bool result_sign = (result & sign_bit) != 0;
@@ -41,7 +41,7 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterAdd(
     uint32_t result, bool did_carry) {
   YCPUSetFlagsAfterInc(ctx, op1, op2, result, did_carry);
   // Carry Flag (CF)
-  YCPUSetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
+  YCPUSetFlag(ctx->cpu, kCF, result > YCPUMaxValue[ctx->metadata->width]);
 }
 
 // Common signature of YCPUSetFlagsAfterAdd and YCPUSetFlagsAfterInc.

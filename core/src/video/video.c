@@ -4,19 +4,21 @@
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_VIDEO_LOG(level, ...) \
-  YAX86_LOG(video->config.logger, &kLogModuleVideo, level, __VA_ARGS__)
+  YAX86_LOG(video->config.logger, &YVideoLogModule, level, __VA_ARGS__)
 
 // Power-on 6845 register values for the IBM Monochrome Display.
-YAX86_FILE_PRIVATE const uint8_t kDefaultMDARegisters[kNumCRTCRegisters] = {
-    0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
-    0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+YAX86_FILE_PRIVATE const uint8_t
+    YVideoDefaultMDARegisters[kNumCRTCRegisters] = {
+        0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02,
+        0x0D, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 // Power-on 6845 register values for the CGA in 80x25 text mode, matching the
 // values GLaBIOS programs for that mode.
-YAX86_FILE_PRIVATE const uint8_t kDefaultCGARegisters[kNumCRTCRegisters] = {
-    0x71, 0x50, 0x5A, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02,
-    0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+YAX86_FILE_PRIVATE const uint8_t
+    YVideoDefaultCGARegisters[kNumCRTCRegisters] = {
+        0x71, 0x50, 0x5A, 0x0A, 0x1F, 0x06, 0x19, 0x1C, 0x02,
+        0x07, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 enum {
@@ -47,7 +49,7 @@ YAX86_FILE_PRIVATE void YVideoInvalidateAll(YVideoState* video);
 
 YAX86_PUBLIC const YVideoAdapterMetadata* YVideoGetAdapterMetadata(
     const YVideoState* video) {
-  return &kVideoAdapterMetadata[video->adapter];
+  return &YVideoAdapterMetadataTable[video->adapter];
 }
 
 // ============================================================================
@@ -113,8 +115,8 @@ YAX86_PUBLIC void YVideoInit(YVideoState* video) {
 
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == kVideoAdapterCGA
-                                         ? kDefaultCGARegisters
-                                         : kDefaultMDARegisters;
+                                         ? YVideoDefaultCGARegisters
+                                         : YVideoDefaultMDARegisters;
   for (uint8_t i = 0; i < kNumCRTCRegisters; ++i) {
     video->registers[i] = default_registers[i];
   }
@@ -164,7 +166,7 @@ YAX86_PUBLIC YAX86_HOT YVideoMode YVideoGetMode(const YVideoState* video) {
 
 YAX86_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video) {
-  return &kVideoModeMetadata[YVideoGetMode(video)];
+  return &YVideoModeMetadataTable[YVideoGetMode(video)];
 }
 
 // ============================================================================

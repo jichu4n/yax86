@@ -53,9 +53,9 @@ YAX86_FILE_PRIVATE void YCPUGetStringDestinationOperand(
 YAX86_FILE_PRIVATE void YCPUUpdateStringSourceAddress(
     const YCPUInstructionContext* ctx) {
   if (YCPUGetFlag(ctx->cpu, kDF)) {
-    ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kSI] -= YCPUNumBytes[ctx->metadata->width];
   } else {
-    ctx->cpu->registers[kSI] += kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kSI] += YCPUNumBytes[ctx->metadata->width];
   }
 }
 
@@ -63,9 +63,9 @@ YAX86_FILE_PRIVATE void YCPUUpdateStringSourceAddress(
 YAX86_FILE_PRIVATE void YCPUUpdateStringDestinationAddress(
     const YCPUInstructionContext* ctx) {
   if (YCPUGetFlag(ctx->cpu, kDF)) {
-    ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kDI] -= YCPUNumBytes[ctx->metadata->width];
   } else {
-    ctx->cpu->registers[kDI] += kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kDI] += YCPUNumBytes[ctx->metadata->width];
   }
 }
 
@@ -152,7 +152,7 @@ YAX86_FILE_PRIVATE bool YCPUPlanBulkStringRun(
   if (count == 0 || window_end == 0) {
     return false;
   }
-  const uint8_t element_size = kNumBytes[ctx->metadata->width];
+  const uint8_t element_size = YCPUNumBytes[ctx->metadata->width];
   const bool backwards = YCPUGetFlag(cpu, kDF);
 
   const uint16_t destination_offset = cpu->registers[kDI];
@@ -272,7 +272,7 @@ YAX86_FILE_PRIVATE bool YCPUExecuteMovsBulkRun(
   uint8_t* const memory = cpu->direct_data_window.data;
   const uint8_t* source = memory + run.source;
   uint8_t* destination = memory + run.destination;
-  if (run.element_size == kNumBytes[kWord]) {
+  if (run.element_size == YCPUNumBytes[kWord]) {
     for (uint16_t remaining = run.count; remaining > 0; --remaining) {
       // Both bytes are read before either is written, which is the order the
       // element path reads and writes a word in - and is what a copy whose
@@ -331,7 +331,7 @@ YAX86_FILE_PRIVATE bool YCPUExecuteStosBulkRun(
   uint8_t* const memory = cpu->direct_data_window.data;
   const uint16_t value = cpu->registers[kAX];
   uint8_t* destination = memory + run.destination;
-  if (run.element_size == kNumBytes[kWord]) {
+  if (run.element_size == YCPUNumBytes[kWord]) {
     for (uint16_t remaining = run.count; remaining > 0; --remaining) {
       destination[0] = (uint8_t)value;
       destination[1] = (uint8_t)(value >> 8);

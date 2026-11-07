@@ -13,7 +13,7 @@
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteCbw(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
+  uint8_t ah = (al & YCPUSignBit[kByte]) ? 0xFF : 0x00;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   return kInstructionExecuted;
 }
@@ -22,6 +22,6 @@ YCPUExecuteCbw(const YCPUInstructionContext* ctx) {
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteCwd(const YCPUInstructionContext* ctx) {
   ctx->cpu->registers[kDX] =
-      (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
+      (ctx->cpu->registers[kAX] & YCPUSignBit[kWord]) ? 0xFFFF : 0x0000;
   return kInstructionExecuted;
 }

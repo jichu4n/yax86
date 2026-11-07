@@ -32,7 +32,7 @@ enum {
 };
 
 // Log module for the PIC.
-YAX86_PUBLIC_HEADER const YLogModule kLogModulePIC = {
+YAX86_PUBLIC_HEADER const YLogModule YPICLogModule = {
     .id = kLogModuleIDPIC,
     .name = "PIC",
 };

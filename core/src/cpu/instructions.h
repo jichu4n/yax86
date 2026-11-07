@@ -43,12 +43,12 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteInvalidOpcode(const YCPUInstructionContext* ctx);
 
 // ============================================================================
-// Opcode table - opcode_table.h
+// Opcode table - YCPUOpcodeTable.h
 // ============================================================================
 
 // Global opcode metadata lookup table.
 #ifndef YAX86_IMPLEMENTATION
-extern const YCPUOpcodeMetadata opcode_table[256];
+extern const YCPUOpcodeMetadata YCPUOpcodeTable[256];
 #endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================

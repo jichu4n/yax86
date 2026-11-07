@@ -671,7 +671,7 @@ enum {
 };
 
 // Log module for the PPI.
-YAX86_PUBLIC_HEADER const YLogModule kLogModulePPI = {
+YAX86_PUBLIC_HEADER const YLogModule YPPILogModule = {
     .id = kLogModuleIDPPI,
     .name = "PPI",
 };

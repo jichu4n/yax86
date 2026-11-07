@@ -185,7 +185,7 @@ static bool ResetMachine(void) {
   }
   g_platform.fdc.config.read_image_byte = FloppyReadByte;
   g_platform.fdc.config.write_image_byte = FloppyWriteByte;
-  YFDCInsertDisk(&g_platform.fdc, 0, &kFDCFormat360KB);
+  YFDCInsertDisk(&g_platform.fdc, 0, &YFDCFormat360KB);
   return true;
 }
 

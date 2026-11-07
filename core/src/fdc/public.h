@@ -20,7 +20,7 @@ enum {
 };
 
 // Log module for the FDC.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleFDC = {
+YAX86_PUBLIC_HEADER const YLogModule YFDCLogModule = {
     .id = kLogModuleIDFDC,
     .name = "FDC",
 };
@@ -38,7 +38,7 @@ typedef struct YFDCDiskFormat {
 } YFDCDiskFormat;
 
 // 5.25" 360KB double-sided double-density floppy disk format.
-YAX86_PUBLIC_HEADER const YFDCDiskFormat kFDCFormat360KB = {
+YAX86_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
     .num_heads = 2,
     .num_tracks = 40,
     .num_sectors_per_track = 9,

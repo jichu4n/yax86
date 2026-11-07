@@ -15,7 +15,7 @@ enum {
 };
 
 // Log module for the CPU.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleCPU = {
+YAX86_PUBLIC_HEADER const YLogModule YCPULogModule = {
     .id = kLogModuleIDCPU,
     .name = "CPU",
 };

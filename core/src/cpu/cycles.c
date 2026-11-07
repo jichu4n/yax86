@@ -20,7 +20,7 @@
 // The cost of an instruction is built from three parts.
 //
 // 1. A base cost per opcode, which is YCPUOpcodeMetadata.base_cycles in
-//    opcode_table.c. These are the published 8086 figures for the register
+//    YCPUOpcodeTable.c. These are the published 8086 figures for the register
 //    form, less the time the figure already accounts for on the bus, which is
 //    charged separately in part 3. Where the published figure covers an
 //    instruction that necessarily touches memory - the stack instructions, the

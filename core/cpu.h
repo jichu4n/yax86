@@ -620,7 +620,7 @@ enum {
 };
 
 // Log module for the CPU.
-YAX86_PUBLIC_HEADER const YLogModule kLogModuleCPU = {
+YAX86_PUBLIC_HEADER const YLogModule YCPULogModule = {
     .id = kLogModuleIDCPU,
     .name = "CPU",
 };
@@ -1462,37 +1462,37 @@ enum {
 };
 
 // Bitmask to extract the sign bit of a value.
-YAX86_MODULE_PRIVATE_HEADER const uint32_t kSignBit[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUSignBit[kNumWidths] = {
     1 << 7,   // kByte
     1 << 15,  // kWord
 };
 
 // Maximum unsigned value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint32_t kMaxValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint32_t YCPUMaxValue[kNumWidths] = {
     0xFF,   // kByte
     0xFFFF  // kWord
 };
 
 // Maximum signed value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const int32_t kMaxSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t YCPUMaxSignedValue[kNumWidths] = {
     0x7F,   // kByte
     0x7FFF  // kWord
 };
 
 // Minimum signed value for each data width.
-YAX86_MODULE_PRIVATE_HEADER const int32_t kMinSignedValue[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const int32_t YCPUMinSignedValue[kNumWidths] = {
     -0x80,   // kByte
     -0x8000  // kWord
 };
 
 // Number of bytes in each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBytes[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBytes[kNumWidths] = {
     1,  // kByte
     2,  // kWord
 };
 
 // Number of bits in each data width.
-YAX86_MODULE_PRIVATE_HEADER const uint8_t kNumBits[kNumWidths] = {
+YAX86_MODULE_PRIVATE_HEADER const uint8_t YCPUNumBits[kNumWidths] = {
     8,   // kByte
     16,  // kWord
 };
@@ -1846,7 +1846,7 @@ YCPUReadImmediate(const YCPUInstructionContext* ctx);
 // The cost of an instruction is built from three parts.
 //
 // 1. A base cost per opcode, which is YCPUOpcodeMetadata.base_cycles in
-//    opcode_table.c. These are the published 8086 figures for the register
+//    YCPUOpcodeTable.c. These are the published 8086 figures for the register
 //    form, less the time the figure already accounts for on the bus, which is
 //    charged separately in part 3. Where the published figure covers an
 //    instruction that necessarily touches memory - the stack instructions, the
@@ -1967,7 +1967,7 @@ enum { kUnreachableOperandValue = 0xFF };
 // byte keeps a zero high byte, which is what makes widening it again free.
 YAX86_MODULE_PRIVATE YCPUOperandValue
 YCPUToOperandValue(YCPUWidth width, uint32_t raw_value) {
-  return (YCPUOperandValue)(raw_value & kMaxValue[width]);
+  return (YCPUOperandValue)(raw_value & YCPUMaxValue[width]);
 }
 
 // Widen an operand value for arithmetic, which is done in 32 bits so that
@@ -2559,12 +2559,12 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteInvalidOpcode(const YCPUInstructionContext* ctx);
 
 // ============================================================================
-// Opcode table - opcode_table.h
+// Opcode table - YCPUOpcodeTable.h
 // ============================================================================
 
 // Global opcode metadata lookup table.
 #ifndef YAX86_IMPLEMENTATION
-extern const YCPUOpcodeMetadata opcode_table[256];
+extern const YCPUOpcodeMetadata YCPUOpcodeTable[256];
 #endif  // YAX86_IMPLEMENTATION
 
 // ============================================================================
@@ -3093,11 +3093,11 @@ YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx);
 YAX86_MODULE_PRIVATE YAX86_HOT void YCPUSetCommonFlagsAfterInstruction(
     const YCPUInstructionContext* ctx, uint32_t result) {
   YCPUWidth width = ctx->metadata->width;
-  result &= kMaxValue[width];
+  result &= YCPUMaxValue[width];
   // Zero flag (ZF)
   YCPUSetFlag(ctx->cpu, kZF, result == 0);
   // Sign flag (SF)
-  YCPUSetFlag(ctx->cpu, kSF, result & kSignBit[width]);
+  YCPUSetFlag(ctx->cpu, kSF, result & YCPUSignBit[width]);
   // Parity flag (PF)
   // Set if the number of set bits in the least significant byte is even
   uint8_t parity = result & 0xFF;  // Check only the low byte for parity
@@ -3486,7 +3486,7 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterInc(
 
   // Overflow Flag (OF) Set when result has wrong sign (both operands have same
   // sign but result has different sign)
-  uint32_t sign_bit = kSignBit[ctx->metadata->width];
+  uint32_t sign_bit = YCPUSignBit[ctx->metadata->width];
   bool op1_sign = (op1 & sign_bit) != 0;
   bool op2_sign = (op2 & sign_bit) != 0;
   bool result_sign = (result & sign_bit) != 0;
@@ -3507,7 +3507,7 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterAdd(
     uint32_t result, bool did_carry) {
   YCPUSetFlagsAfterInc(ctx, op1, op2, result, did_carry);
   // Carry Flag (CF)
-  YCPUSetFlag(ctx->cpu, kCF, result > kMaxValue[ctx->metadata->width]);
+  YCPUSetFlag(ctx->cpu, kCF, result > YCPUMaxValue[ctx->metadata->width]);
 }
 
 // Common signature of YCPUSetFlagsAfterAdd and YCPUSetFlagsAfterInc.
@@ -3659,8 +3659,8 @@ YAX86_FILE_PRIVATE void YCPUSetFlagsAfterDec(
     uint32_t result, bool did_borrow) {
   YCPUSetCommonFlagsAfterInstruction(ctx, result);
 
-  uint32_t sign_bit = kSignBit[ctx->metadata->width];
-  uint32_t max_val = kMaxValue[ctx->metadata->width];
+  uint32_t sign_bit = YCPUSignBit[ctx->metadata->width];
+  uint32_t max_val = YCPUMaxValue[ctx->metadata->width];
 
   // Overflow Flag (OF)
   // A subtraction overflows when the operands have different signs and the
@@ -3690,7 +3690,7 @@ YAX86_MODULE_PRIVATE void YCPUSetFlagsAfterSub(
   // Carry Flag (CF) - Set when a borrow is generated
   // CF is set if op1 < (op2 + did_borrow) (unsigned comparison)
   uint32_t val_being_subtracted =
-      (op2 & kMaxValue[ctx->metadata->width]) + (did_borrow ? 1 : 0);
+      (op2 & YCPUMaxValue[ctx->metadata->width]) + (did_borrow ? 1 : 0);
   YCPUSetFlag(ctx->cpu, kCF, op1 < val_being_subtracted);
 }
 
@@ -3839,7 +3839,7 @@ YCPUExecuteDecRegister(const YCPUInstructionContext* ctx) {
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteCbw(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[kAX] & 0xFF;
-  uint8_t ah = (al & kSignBit[kByte]) ? 0xFF : 0x00;
+  uint8_t ah = (al & YCPUSignBit[kByte]) ? 0xFF : 0x00;
   ctx->cpu->registers[kAX] = (ah << 8) | al;
   return kInstructionExecuted;
 }
@@ -3848,7 +3848,7 @@ YCPUExecuteCbw(const YCPUInstructionContext* ctx) {
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteCwd(const YCPUInstructionContext* ctx) {
   ctx->cpu->registers[kDX] =
-      (ctx->cpu->registers[kAX] & kSignBit[kWord]) ? 0xFFFF : 0x0000;
+      (ctx->cpu->registers[kAX] & YCPUSignBit[kWord]) ? 0xFFFF : 0x0000;
   return kInstructionExecuted;
 }
 
@@ -4151,7 +4151,8 @@ YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteRelativeJumpWord(
 }
 
 // Table of relative jump instructions, indexed by width.
-YAX86_FILE_PRIVATE YCPUInstructionResult (*const kRelativeJumpFn[kNumWidths])(
+YAX86_FILE_PRIVATE
+YCPUInstructionResult (*const YCPURelativeJumpFn[kNumWidths])(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) = {
   YCPUExecuteRelativeJumpByte,  // kByte
   YCPUExecuteRelativeJumpWord,  // kWord
@@ -4160,7 +4161,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult (*const kRelativeJumpFn[kNumWidths])(
 // Common logic for JMP instructions.
 YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteRelativeJump(
     const YCPUInstructionContext* ctx, YCPUOperandValue offset_value) {
-  return kRelativeJumpFn[ctx->metadata->width](ctx, offset_value);
+  return YCPURelativeJumpFn[ctx->metadata->width](ctx, offset_value);
 }
 
 // JMP rel8
@@ -4212,7 +4213,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteConditionalJump(
 // Table of flag register bitmasks for conditional jumps. The index corresponds
 // to (opcode & 0x0F) / 2, so that the undocumented 0x60-0x6F aliases share the
 // entries of their 0x70-0x7F counterparts.
-YAX86_FILE_PRIVATE const uint16_t kUnsignedConditionalJumpFlagBitmasks[] = {
+YAX86_FILE_PRIVATE const uint16_t YCPUUnsignedConditionalJumpFlagBitmasks[] = {
     kOF,        // 0x70 - JO, 0x71 - JNO
     kCF,        // 0x72 - JC, 0x73 - JNC
     kZF,        // 0x74 - JE, 0x75 - JNE
@@ -4226,7 +4227,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteUnsignedConditionalJump(const YCPUInstructionContext* ctx) {
   // Masking off the high nibble handles both 0x70-0x7F and their undocumented
   // 0x60-0x6F aliases, which the 8086/8088 decodes identically.
-  uint16_t flag_mask = kUnsignedConditionalJumpFlagBitmasks
+  uint16_t flag_mask = YCPUUnsignedConditionalJumpFlagBitmasks
       [(ctx->instruction->opcode & 0x0F) / 2];
   bool flag_value = (ctx->cpu->flags & flag_mask) != 0;
   // Even opcode => jump if the flag is set
@@ -4575,7 +4576,7 @@ YCPUExecuteStoreAHToFlags(const YCPUInstructionContext* ctx) {
 
 // Table of flags corresponding to the CLC, STC, CLI, STI, CLD, and STD
 // instructions, indexed by (opcode - 0xF8) / 2.
-YAX86_FILE_PRIVATE const YCPUFlag kFlagsForClearAndSetInstructions[] = {
+YAX86_FILE_PRIVATE const YCPUFlag YCPUFlagsForClearAndSetInstructions[] = {
     kCF,  // CLC, STC
     kIF,  // CLI, STI
     kDF,  // CLD, STD
@@ -4584,7 +4585,7 @@ YAX86_FILE_PRIVATE const YCPUFlag kFlagsForClearAndSetInstructions[] = {
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteClearOrSetFlag(const YCPUInstructionContext* ctx) {
   uint8_t opcode_index = ctx->instruction->opcode - 0xF8;
-  YCPUFlag flag = kFlagsForClearAndSetInstructions[opcode_index / 2];
+  YCPUFlag flag = YCPUFlagsForClearAndSetInstructions[opcode_index / 2];
   bool value = (opcode_index & 0x1) != 0;
   YCPUSetFlag(ctx->cpu, flag, value);
   return kInstructionExecuted;
@@ -4657,7 +4658,7 @@ YCPUReadWordFromPort(YCPUState* cpu, uint16_t port) {
 }
 
 // Table of functions to read from an I/O port, indexed by data width.
-YAX86_FILE_PRIVATE YCPUOperandValue (*const kReadFromPortFns[])(
+YAX86_FILE_PRIVATE YCPUOperandValue (*const YCPUReadFromPortFns[])(
     YCPUState*, uint16_t) = {
   YCPUReadByteFromPort,  // kByte
   YCPUReadWordFromPort,  // kWord
@@ -4667,7 +4668,7 @@ YAX86_FILE_PRIVATE YCPUOperandValue (*const kReadFromPortFns[])(
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteIn(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperandValue value =
-      kReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
+      YCPUReadFromPortFns[ctx->metadata->width](ctx->cpu, port);
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   YCPUWriteOperand(ctx, &dest, YCPUFromOperandValue(value));
@@ -4709,7 +4710,7 @@ YAX86_FILE_PRIVATE void YCPUWriteWordToPort(
 }
 
 // Table of functions to write to an I/O port, indexed by data width.
-YAX86_FILE_PRIVATE void (*const kWriteToPortFns[])(
+YAX86_FILE_PRIVATE void (*const YCPUWriteToPortFns[])(
     YCPUState*, uint16_t, YCPUOperandValue) = {
     YCPUWriteByteToPort,  // kByte
     YCPUWriteWordToPort,  // kWord
@@ -4720,7 +4721,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteOut(const YCPUInstructionContext* ctx, uint16_t port) {
   YCPUOperand src;
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &src);
-  kWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
+  YCPUWriteToPortFns[ctx->metadata->width](ctx->cpu, port, src.value);
   return kInstructionExecuted;
 }
 
@@ -4804,9 +4805,9 @@ YAX86_FILE_PRIVATE void YCPUGetStringDestinationOperand(
 YAX86_FILE_PRIVATE void YCPUUpdateStringSourceAddress(
     const YCPUInstructionContext* ctx) {
   if (YCPUGetFlag(ctx->cpu, kDF)) {
-    ctx->cpu->registers[kSI] -= kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kSI] -= YCPUNumBytes[ctx->metadata->width];
   } else {
-    ctx->cpu->registers[kSI] += kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kSI] += YCPUNumBytes[ctx->metadata->width];
   }
 }
 
@@ -4814,9 +4815,9 @@ YAX86_FILE_PRIVATE void YCPUUpdateStringSourceAddress(
 YAX86_FILE_PRIVATE void YCPUUpdateStringDestinationAddress(
     const YCPUInstructionContext* ctx) {
   if (YCPUGetFlag(ctx->cpu, kDF)) {
-    ctx->cpu->registers[kDI] -= kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kDI] -= YCPUNumBytes[ctx->metadata->width];
   } else {
-    ctx->cpu->registers[kDI] += kNumBytes[ctx->metadata->width];
+    ctx->cpu->registers[kDI] += YCPUNumBytes[ctx->metadata->width];
   }
 }
 
@@ -4903,7 +4904,7 @@ YAX86_FILE_PRIVATE bool YCPUPlanBulkStringRun(
   if (count == 0 || window_end == 0) {
     return false;
   }
-  const uint8_t element_size = kNumBytes[ctx->metadata->width];
+  const uint8_t element_size = YCPUNumBytes[ctx->metadata->width];
   const bool backwards = YCPUGetFlag(cpu, kDF);
 
   const uint16_t destination_offset = cpu->registers[kDI];
@@ -5023,7 +5024,7 @@ YAX86_FILE_PRIVATE bool YCPUExecuteMovsBulkRun(
   uint8_t* const memory = cpu->direct_data_window.data;
   const uint8_t* source = memory + run.source;
   uint8_t* destination = memory + run.destination;
-  if (run.element_size == kNumBytes[kWord]) {
+  if (run.element_size == YCPUNumBytes[kWord]) {
     for (uint16_t remaining = run.count; remaining > 0; --remaining) {
       // Both bytes are read before either is written, which is the order the
       // element path reads and writes a word in - and is what a copy whose
@@ -5082,7 +5083,7 @@ YAX86_FILE_PRIVATE bool YCPUExecuteStosBulkRun(
   uint8_t* const memory = cpu->direct_data_window.data;
   const uint16_t value = cpu->registers[kAX];
   uint8_t* destination = memory + run.destination;
-  if (run.element_size == kNumBytes[kWord]) {
+  if (run.element_size == YCPUNumBytes[kWord]) {
     for (uint16_t remaining = run.count; remaining > 0; --remaining) {
       destination[0] = (uint8_t)value;
       destination[1] = (uint8_t)(value >> 8);
@@ -5386,7 +5387,7 @@ typedef YCPUInstructionResult (*YCPUGroup1ExecuteInstructionFn)(
 // Group 1 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte.
 YAX86_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
-    kGroup1ExecuteInstructionFns[] = {
+    YCPUGroup1ExecuteInstructionFns[] = {
         YCPUExecuteAdd,            // 0 - ADD
         YCPUExecuteBooleanOr,      // 1 - OR
         YCPUExecuteAddWithCarry,   // 2 - ADC
@@ -5401,7 +5402,7 @@ YAX86_FILE_PRIVATE const YCPUGroup1ExecuteInstructionFn
 YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteGroup1Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =
-      kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   YCPUOperandValue src_value = YCPUReadImmediate(ctx);
@@ -5413,7 +5414,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT YCPUInstructionResult
 YCPUExecuteGroup1InstructionWithSignExtension(
     const YCPUInstructionContext* ctx) {
   const YCPUGroup1ExecuteInstructionFn fn =
-      kGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup1ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   YCPUOperandValue src_value = YCPUReadImmediateOperandByte(
@@ -5459,7 +5460,7 @@ typedef YCPUInstructionResult (*YCPUGroup2ExecuteInstructionFn)(
 // the sign of the value.
 YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterLeftShift(
     const YCPUInstructionContext* ctx, uint32_t result, bool carry) {
-  const bool result_sign = (result & kSignBit[ctx->metadata->width]) != 0;
+  const bool result_sign = (result & YCPUSignBit[ctx->metadata->width]) != 0;
   YCPUSetFlag(ctx->cpu, kOF, carry != result_sign);
 }
 
@@ -5468,7 +5469,7 @@ YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterLeftShift(
 // pass changed the sign of the value.
 YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterRightRotate(
     const YCPUInstructionContext* ctx, uint32_t result) {
-  const uint32_t sign_bit = kSignBit[ctx->metadata->width];
+  const uint32_t sign_bit = YCPUSignBit[ctx->metadata->width];
   const bool result_sign = (result & sign_bit) != 0;
   const bool below_sign = (result & (sign_bit >> 1)) != 0;
   YCPUSetFlag(ctx->cpu, kOF, result_sign != below_sign);
@@ -5482,7 +5483,7 @@ YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterRightRotate(
 // intermediate they are computed in, where C leaves them undefined.
 YAX86_FILE_PRIVATE uint8_t
 YCPUClampShiftCount(const YCPUInstructionContext* ctx, uint8_t count) {
-  const uint8_t limit = kNumBits[ctx->metadata->width] + 1;
+  const uint8_t limit = YCPUNumBits[ctx->metadata->width] + 1;
   return count > limit ? limit : count;
 }
 
@@ -5498,10 +5499,10 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Shl(
   }
   count = YCPUClampShiftCount(ctx, count);
   uint32_t value = YCPUFromOperand(op);
-  uint32_t result = (value << count) & kMaxValue[ctx->metadata->width];
+  uint32_t result = (value << count) & YCPUMaxValue[ctx->metadata->width];
   YCPUWriteOperand(ctx, op, result);
   bool last_msb =
-      ((value << (count - 1)) & kSignBit[ctx->metadata->width]) != 0;
+      ((value << (count - 1)) & YCPUSignBit[ctx->metadata->width]) != 0;
   YCPUSetFlag(ctx->cpu, kCF, last_msb);
   YCPUSetOverflowFlagAfterLeftShift(ctx, result, last_msb);
   YCPUSetCommonFlagsAfterInstruction(ctx, result);
@@ -5526,7 +5527,7 @@ YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteGroup2Shr(
   YCPUSetFlag(ctx->cpu, kCF, last_lsb);
   // A right shift clears the sign bit on its first pass, so only a shift by
   // one can leave a sign change behind.
-  bool original_msb = ((value & kSignBit[ctx->metadata->width]) != 0);
+  bool original_msb = ((value & YCPUSignBit[ctx->metadata->width]) != 0);
   YCPUSetFlag(ctx->cpu, kOF, count == 1 && original_msb);
   YCPUSetCommonFlagsAfterInstruction(ctx, result);
   return kInstructionExecuted;
@@ -5567,11 +5568,11 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rol(
   }
   // The 8086 computes the modulus of the count after the zero check, which is
   // different than the 80286 and later processors.
-  uint8_t effective_count = count % kNumBits[ctx->metadata->width];
+  uint8_t effective_count = count % YCPUNumBits[ctx->metadata->width];
   uint32_t value = YCPUFromOperand(op);
   uint32_t result =
       (value << effective_count) |
-      (value >> (kNumBits[ctx->metadata->width] - effective_count));
+      (value >> (YCPUNumBits[ctx->metadata->width] - effective_count));
   YCPUWriteOperand(ctx, op, result);
   bool last_msb = (result & 1) != 0;
   YCPUSetFlag(ctx->cpu, kCF, last_msb);
@@ -5591,13 +5592,13 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Ror(
   }
   // The 8086 computes the modulus of the count after the zero check, which is
   // different than the 80286 and later processors.
-  uint8_t effective_count = count % kNumBits[ctx->metadata->width];
+  uint8_t effective_count = count % YCPUNumBits[ctx->metadata->width];
   uint32_t value = YCPUFromOperand(op);
   uint32_t result =
       (value >> effective_count) |
-      (value << (kNumBits[ctx->metadata->width] - effective_count));
+      (value << (YCPUNumBits[ctx->metadata->width] - effective_count));
   YCPUWriteOperand(ctx, op, result);
-  bool last_lsb = (result & kSignBit[ctx->metadata->width]) != 0;
+  bool last_lsb = (result & YCPUSignBit[ctx->metadata->width]) != 0;
   YCPUSetFlag(ctx->cpu, kCF, last_lsb);
   YCPUSetOverflowFlagAfterRightRotate(ctx, result);
   return kInstructionExecuted;
@@ -5618,17 +5619,17 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcl(
   // is wide. A whole number of cycles puts the value and the carry back the
   // way they were, but the passes still happened, so the overflow flag is
   // still left over from the last one.
-  uint8_t effective_count = count % (kNumBits[width] + 1);
+  uint8_t effective_count = count % (YCPUNumBits[width] + 1);
   uint32_t value = YCPUFromOperand(op);
   uint32_t result = value;
   bool last_msb = YCPUGetFlag(ctx->cpu, kCF);
   if (effective_count > 0) {
     uint32_t cf_value = last_msb ? (1 << (effective_count - 1)) : 0;
     result = ((value << effective_count) | cf_value |
-              (value >> (kNumBits[width] - (effective_count - 1)))) &
-             kMaxValue[width];
+              (value >> (YCPUNumBits[width] - (effective_count - 1)))) &
+             YCPUMaxValue[width];
     YCPUWriteOperand(ctx, op, result);
-    last_msb = ((value << (effective_count - 1)) & kSignBit[width]) != 0;
+    last_msb = ((value << (effective_count - 1)) & YCPUSignBit[width]) != 0;
   }
   YCPUSetFlag(ctx->cpu, kCF, last_msb);
   YCPUSetOverflowFlagAfterLeftShift(ctx, result, last_msb);
@@ -5648,16 +5649,16 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcr(
   const YCPUWidth width = ctx->metadata->width;
   // As with RCL, a whole number of cycles restores the value and the carry but
   // still leaves the overflow flag from the last pass.
-  uint8_t effective_count = count % (kNumBits[width] + 1);
+  uint8_t effective_count = count % (YCPUNumBits[width] + 1);
   uint32_t value = YCPUFromOperand(op);
   uint32_t result = value;
   bool last_lsb = YCPUGetFlag(ctx->cpu, kCF);
   if (effective_count > 0) {
     uint32_t cf_value =
-        last_lsb ? (kSignBit[width] >> (effective_count - 1)) : 0;
+        last_lsb ? (YCPUSignBit[width] >> (effective_count - 1)) : 0;
     result = ((value >> effective_count) | cf_value |
-              (value << (kNumBits[width] - (effective_count - 1)))) &
-             kMaxValue[width];
+              (value << (YCPUNumBits[width] - (effective_count - 1)))) &
+             YCPUMaxValue[width];
     YCPUWriteOperand(ctx, op, result);
     last_lsb = ((value >> (effective_count - 1)) & 1) != 0;
   }
@@ -5685,7 +5686,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Setmo(
   if (count == 0) {
     return kInstructionExecuted;
   }
-  const uint32_t result = kMaxValue[ctx->metadata->width];
+  const uint32_t result = YCPUMaxValue[ctx->metadata->width];
   YCPUWriteOperand(ctx, op, result);
   YCPUSetFlag(ctx->cpu, kCF, false);
   YCPUSetFlag(ctx->cpu, kAF, false);
@@ -5695,7 +5696,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Setmo(
 }
 
 YAX86_FILE_PRIVATE const YCPUGroup2ExecuteInstructionFn
-    kGroup2ExecuteInstructionFns[] = {
+    YCPUGroup2ExecuteInstructionFns[] = {
         YCPUExecuteGroup2Rol,    // 0 - ROL
         YCPUExecuteGroup2Ror,    // 1 - ROR
         YCPUExecuteGroup2Rcl,    // 2 - RCL
@@ -5711,7 +5712,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup2ShiftOrRotateBy1Instruction(
     const YCPUInstructionContext* ctx) {
   const YCPUGroup2ExecuteInstructionFn fn =
-      kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand op;
   YCPUReadRegisterOrMemoryOperand(ctx, &op);
   return fn(ctx, &op, 1);
@@ -5722,7 +5723,7 @@ YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup2ShiftOrRotateByCLInstruction(
     const YCPUInstructionContext* ctx) {
   const YCPUGroup2ExecuteInstructionFn fn =
-      kGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup2ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand op;
   YCPUReadRegisterOrMemoryOperand(ctx, &op);
   const uint8_t count = ctx->cpu->registers[kCX] & 0xFF;
@@ -5785,7 +5786,7 @@ YCPUExecuteNeg(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 // Table of where to store the higher half of the result for
 // MUL, IMUL, DIV, and IDIV instructions, indexed by the data width.
 YAX86_FILE_PRIVATE const YCPUOperandAddress
-    kMulDivResultHighHalfAddress[kNumWidths] = {
+    YCPUMulDivResultHighHalfAddress[kNumWidths] = {
         {.type = kOperandAddressTypeRegister,
          .register_index = kAX,
          .offset = 8},
@@ -5796,9 +5797,10 @@ YAX86_FILE_PRIVATE const YCPUOperandAddress
 
 // Number of bits to shift to extract the high part of the result of MUL, IMUL,
 // DIV, and IDIV instructions, indexed by the data width.
-YAX86_FILE_PRIVATE const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
-    8,   // kByte
-    16,  // kWord
+YAX86_FILE_PRIVATE const uint8_t
+    YCPUMulDivResultHighHalfShiftWidth[kNumWidths] = {
+        8,   // kByte
+        16,  // kWord
 };
 
 // What the multiply and divide instructions cost. These dominate their own
@@ -5806,7 +5808,7 @@ YAX86_FILE_PRIVATE const uint8_t kMulDivResultHighHalfShiftWidth[kNumWidths] = {
 // a time in microcode - so unlike everything else in the cycle table they are
 // worth charging individually. The published figures are ranges that depend on
 // the operands; these are the low end of each.
-YAX86_FILE_PRIVATE const uint16_t kMulDivCycles[kNumWidths][2] = {
+YAX86_FILE_PRIVATE const uint16_t YCPUMulDivCycles[kNumWidths][2] = {
     // kByte: unsigned, signed
     {70, 80},
     // kWord: unsigned, signed
@@ -5819,13 +5821,14 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
     bool overflow) {
   YCPUWidth width = ctx->metadata->width;
 
-  uint32_t result_low_half = result & kMaxValue[width];
+  uint32_t result_low_half = result & YCPUMaxValue[width];
   YCPUWriteOperand(ctx, dest, result_low_half);
 
   uint32_t result_high_half =
-      (result >> kMulDivResultHighHalfShiftWidth[width]) & kMaxValue[width];
+      (result >> YCPUMulDivResultHighHalfShiftWidth[width]) &
+      YCPUMaxValue[width];
   YCPUWriteOperandAddress(
-      ctx, &kMulDivResultHighHalfAddress[width], result_high_half);
+      ctx, &YCPUMulDivResultHighHalfAddress[width], result_high_half);
 
   YCPUSetFlag(ctx->cpu, kCF, overflow);
   YCPUSetFlag(ctx->cpu, kOF, overflow);
@@ -5837,19 +5840,19 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
 // MUL r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteMul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
+  YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][0]);
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   uint32_t result = YCPUFromOperand(&dest) * YCPUFromOperand(op);
   return YCPUExecuteMulCommon(
-      ctx, &dest, result, result > kMaxValue[ctx->metadata->width]);
+      ctx, &dest, result, result > YCPUMaxValue[ctx->metadata->width]);
 }
 
 // IMUL r/m8
 // IMUL r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteImul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
+  YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][1]);
   YCPUOperand dest;
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
   const YCPUWidth width = ctx->metadata->width;
@@ -5857,8 +5860,8 @@ YCPUExecuteImul(const YCPUInstructionContext* ctx, YCPUOperand* op) {
       YCPUFromSignedOperand(width, &dest) * YCPUFromSignedOperand(width, op);
   return YCPUExecuteMulCommon(
       ctx, &dest, result,
-      result > kMaxSignedValue[ctx->metadata->width] ||
-          result < kMinSignedValue[ctx->metadata->width]);
+      result > YCPUMaxSignedValue[ctx->metadata->width] ||
+          result < YCPUMinSignedValue[ctx->metadata->width]);
 }
 
 YAX86_FILE_PRIVATE YCPUInstructionResult YCPUWriteDivResult(
@@ -5866,7 +5869,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUWriteDivResult(
     uint32_t remainder) {
   YCPUWriteOperand(ctx, dest, quotient);
   YCPUWriteOperandAddress(
-      ctx, &kMulDivResultHighHalfAddress[ctx->metadata->width], remainder);
+      ctx, &YCPUMulDivResultHighHalfAddress[ctx->metadata->width], remainder);
   return kInstructionExecuted;
 }
 
@@ -5874,7 +5877,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUWriteDivResult(
 // DIV r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteDiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][0]);
+  YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][0]);
   uint32_t divisor = YCPUFromOperand(op);
   if (divisor == 0) {
     YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
@@ -5886,12 +5889,12 @@ YCPUExecuteDiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
 
   YCPUOperandValue dest_high_half =
-      YCPUReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
+      YCPUReadOperandValue(ctx, &YCPUMulDivResultHighHalfAddress[width]);
   uint32_t dividend =
       YCPUFromOperand(&dest) | (YCPUFromOperandValue(dest_high_half)
-                                << kMulDivResultHighHalfShiftWidth[width]);
+                                << YCPUMulDivResultHighHalfShiftWidth[width]);
   uint32_t quotient = dividend / divisor;
-  if (quotient > kMaxValue[ctx->metadata->width]) {
+  if (quotient > YCPUMaxValue[ctx->metadata->width]) {
     YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
@@ -5902,7 +5905,7 @@ YCPUExecuteDiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 // IDIV r/m16
 YAX86_FILE_PRIVATE YCPUInstructionResult
 YCPUExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
-  YCPUAddCycles(ctx->cpu, kMulDivCycles[ctx->metadata->width][1]);
+  YCPUAddCycles(ctx->cpu, YCPUMulDivCycles[ctx->metadata->width][1]);
   int32_t divisor = YCPUFromSignedOperand(ctx->metadata->width, op);
   if (divisor == 0) {
     YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
@@ -5914,17 +5917,17 @@ YCPUExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
   YCPUReadRegisterOperandForRegisterIndex(ctx, kAX, &dest);
 
   YCPUOperandValue dest_high_half =
-      YCPUReadOperandValue(ctx, &kMulDivResultHighHalfAddress[width]);
+      YCPUReadOperandValue(ctx, &YCPUMulDivResultHighHalfAddress[width]);
   int32_t dividend = YCPUFromOperand(&dest) |
                      (YCPUFromSignedOperandValue(width, dest_high_half)
-                      << kMulDivResultHighHalfShiftWidth[width]);
+                      << YCPUMulDivResultHighHalfShiftWidth[width]);
   int32_t quotient = dividend / divisor;
   // The 8086/8088 divides the magnitudes and checks the result against the
   // largest quotient that fits, so it rejects a quotient of -128 or -32768
   // even though those are representable. The valid range is symmetric, one
   // narrower at the bottom than the operand's own range.
-  if (quotient > kMaxSignedValue[ctx->metadata->width] ||
-      quotient < -kMaxSignedValue[ctx->metadata->width]) {
+  if (quotient > YCPUMaxSignedValue[ctx->metadata->width] ||
+      quotient < -YCPUMaxSignedValue[ctx->metadata->width]) {
     YCPURaiseInternalInterrupt(ctx->cpu, kInterruptDivideError);
     return kInstructionExecuted;
   }
@@ -5934,7 +5937,7 @@ YCPUExecuteIdiv(const YCPUInstructionContext* ctx, YCPUOperand* op) {
 // Group 3 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte and data width.
 YAX86_FILE_PRIVATE const YCPUGroup3ExecuteInstructionFn
-    kGroup3ExecuteInstructionFns[] = {
+    YCPUGroup3ExecuteInstructionFns[] = {
         YCPUExecuteGroup3Test,  // 0 - TEST
         // REG 1 is an undocumented alias of REG 0: the 8086/8088 does not
         // decode bit 0 of the REG field for this group.
@@ -5951,7 +5954,7 @@ YAX86_FILE_PRIVATE const YCPUGroup3ExecuteInstructionFn
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup3Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup3ExecuteInstructionFn fn =
-      kGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup3ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);
@@ -5984,7 +5987,7 @@ typedef YCPUInstructionResult (*YCPUGroup4ExecuteInstructionFn)(
 // Group 4 instruction implementations, indexed by the corresponding REG field
 // value in the YCPUModRM byte.
 YAX86_FILE_PRIVATE const YCPUGroup4ExecuteInstructionFn
-    kGroup4ExecuteInstructionFns[] = {
+    YCPUGroup4ExecuteInstructionFns[] = {
         YCPUExecuteInc,  // 0 - INC
         YCPUExecuteDec,  // 1 - DEC
 };
@@ -6006,7 +6009,7 @@ YCPUExecuteGroup4Instruction(const YCPUInstructionContext* ctx) {
     return kInstructionInvalid;
   }
   const YCPUGroup4ExecuteInstructionFn fn =
-      kGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup4ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);
@@ -6086,7 +6089,7 @@ typedef YCPUInstructionResult (*YCPUGroup5ExecuteInstructionFn)(
 // Group 5 instruction implementations, indexed by the corresponding REG
 // field value in the YCPUModRM byte.
 YAX86_FILE_PRIVATE const YCPUGroup5ExecuteInstructionFn
-    kGroup5ExecuteInstructionFns[] = {
+    YCPUGroup5ExecuteInstructionFns[] = {
         YCPUExecuteInc,               // 0 - INC r/m8/r/m16
         YCPUExecuteDec,               // 1 - DEC r/m8/r/m16
         YCPUExecuteIndirectNearCall,  // 2 - CALL rel16
@@ -6104,7 +6107,7 @@ YAX86_FILE_PRIVATE const YCPUGroup5ExecuteInstructionFn
 YAX86_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx) {
   const YCPUGroup5ExecuteInstructionFn fn =
-      kGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
+      YCPUGroup5ExecuteInstructionFns[ctx->instruction->mod_rm.reg];
   YCPUOperand dest;
   YCPUReadRegisterOrMemoryOperand(ctx, &dest);
   return fn(ctx, &dest);
@@ -6140,7 +6143,7 @@ YCPUExecuteGroup5Instruction(const YCPUInstructionContext* ctx) {
 // instruction costs before it runs - cycles.c has the other half and the
 // rules these figures were derived under, which is where to read them
 // against.
-YAX86_MODULE_PRIVATE const YCPUOpcodeMetadata opcode_table[256] = {
+YAX86_MODULE_PRIVATE const YCPUOpcodeMetadata YCPUOpcodeTable[256] = {
     // ADD r/m8, r8
     {.base_cycles = 3,
      .has_modrm = true,
@@ -7670,7 +7673,7 @@ YAX86_MODULE_PRIVATE const YCPUOpcodeMetadata opcode_table[256] = {
 #endif  // YAX86_IMPLEMENTATION
 
 #define YAX86_CPU_LOG(level, ...) \
-  YAX86_LOG(cpu->config.logger, &kLogModuleCPU, level, __VA_ARGS__)
+  YAX86_LOG(cpu->config.logger, &YCPULogModule, level, __VA_ARGS__)
 
 // ============================================================================
 // CPU state
@@ -7934,7 +7937,7 @@ YCPUFetchNextInstruction(YCPUState* cpu, YCPUInstruction* instruction) {
 
   // Opcode
   instruction->opcode = current_byte;
-  const YCPUOpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+  const YCPUOpcodeMetadata* metadata = &YCPUOpcodeTable[instruction->opcode];
 
   // ModR/M
   //
@@ -8113,7 +8116,7 @@ YCPUExecuteDecodedInstruction(
 // decode is what produced the encoding these checks would be re-examining.
 YAX86_PUBLIC YAX86_HOT YCPUInstructionResult
 YCPUExecuteInstruction(YCPUState* cpu, YCPUInstruction* instruction) {
-  const YCPUOpcodeMetadata* metadata = &opcode_table[instruction->opcode];
+  const YCPUOpcodeMetadata* metadata = &YCPUOpcodeTable[instruction->opcode];
 
   // Check the encoded instruction against the expected format for its opcode.
   // Nothing checks that the opcode has a handler, because every entry in the
@@ -8338,7 +8341,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
       // and immediate_size from this same table entry, so the checks
       // YCPUExecuteInstruction() makes cannot fail here.
       const YCPUOpcodeMetadata* const metadata =
-          &opcode_table[instruction->opcode];
+          &YCPUOpcodeTable[instruction->opcode];
       if (YCPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
           kInstructionExecuted) {
         YAX86_CPU_LOG(
