@@ -6,12 +6,12 @@ namespace {
 
 // Per the spec, bits for commands.
 enum {
-  kICW1_INIT = (1 << 4),   // 1 = initialization mode
-  kICW1_SNGL = (1 << 1),   // 1 = single PIC, 0 = cascaded
-  kOCW2_EOI = (1 << 5),    // End of Interrupt
-  kICW2_BASE_XT = 0x08,    // Base for IBM PC/XT
-  kICW2_BASE_AT_M = 0x08,  // Base for IBM PC/AT Master
-  kICW2_BASE_AT_S = 0x70,  // Base for IBM PC/AT Slave
+  kTestICW1_INIT = (1 << 4),  // 1 = initialization mode
+  kTestICW1_SNGL = (1 << 1),  // 1 = single PIC, 0 = cascaded
+  kTestOCW2_EOI = (1 << 5),   // End of Interrupt
+  kICW2_BASE_XT = 0x08,       // Base for IBM PC/XT
+  kICW2_BASE_AT_M = 0x08,     // Base for IBM PC/AT Master
+  kICW2_BASE_AT_S = 0x70,     // Base for IBM PC/AT Slave
 };
 
 class IRQTest : public ::testing::Test {
@@ -21,7 +21,7 @@ class IRQTest : public ::testing::Test {
     PICInit(&master_);
 
     // ICW1: single PIC, no ICW4 needed.
-    PICWritePort(&master_, 0x20, kICW1_INIT | kICW1_SNGL);
+    PICWritePort(&master_, 0x20, kTestICW1_INIT | kTestICW1_SNGL);
     // ICW2: interrupt vector base 0x08.
     PICWritePort(&master_, 0x21, kICW2_BASE_XT);
 
@@ -36,7 +36,7 @@ class IRQTest : public ::testing::Test {
     // Master PIC setup
     master_.config.sp = false;
     PICInit(&master_);
-    PICWritePort(&master_, 0x20, kICW1_INIT);  // Cascaded, ICW4 not needed
+    PICWritePort(&master_, 0x20, kTestICW1_INIT);  // Cascaded, ICW4 not needed
     PICWritePort(&master_, 0x21, kICW2_BASE_AT_M);
     PICWritePort(&master_, 0x21, 1 << 2);  // Slave is on IRQ 2
     ASSERT_EQ(master_.init_state, kPICReady);
@@ -44,7 +44,7 @@ class IRQTest : public ::testing::Test {
     // Slave PIC setup
     slave_.config.sp = true;
     PICInit(&slave_);
-    PICWritePort(&slave_, 0xA0, kICW1_INIT);  // Cascaded, ICW4 not needed
+    PICWritePort(&slave_, 0xA0, kTestICW1_INIT);  // Cascaded, ICW4 not needed
     PICWritePort(&slave_, 0xA1, kICW2_BASE_AT_S);
     PICWritePort(&slave_, 0xA1, 2);  // Slave ID is 2
     ASSERT_EQ(slave_.init_state, kPICReady);
@@ -127,7 +127,7 @@ TEST_F(IRQTest, SinglePIC_EOIInteraction) {
   EXPECT_EQ(PICGetPendingInterrupt(&master_), kPICNoPendingInterrupt);
 
   // Issue an EOI for IRQ 4.
-  PICWritePort(&master_, 0x20, kOCW2_EOI);
+  PICWritePort(&master_, 0x20, kTestOCW2_EOI);
 
   // Now IRQ 5 should be serviced.
   EXPECT_EQ(PICGetPendingInterrupt(&master_), kICW2_BASE_XT + 5);

@@ -27,8 +27,6 @@ enum : uint8_t {
   // ModR/M byte selecting AL as the destination and [BX] as the source, which
   // is an address the CPU has to compute rather than a register.
   kModRmAlFromBx = 0x07,
-  // ES segment override prefix
-  kPrefixES = 0x26,
 };
 
 // A cached decode is not observable from the outside, so every test here makes

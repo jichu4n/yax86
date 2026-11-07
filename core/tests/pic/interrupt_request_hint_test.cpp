@@ -5,9 +5,9 @@
 namespace {
 
 enum {
-  kICW1_INIT = (1 << 4),
-  kICW1_SNGL = (1 << 1),
-  kOCW2_EOI = (1 << 5),
+  kTestICW1_INIT = (1 << 4),
+  kTestICW1_SNGL = (1 << 1),
+  kTestOCW2_EOI = (1 << 5),
   kICW2_BASE_XT = 0x08,
 
   kCommandPort = 0x20,
@@ -23,7 +23,7 @@ class InterruptRequestHintTest : public ::testing::Test {
   void SetUp() override {
     pic_.config.sp = false;
     PICInit(&pic_);
-    PICWritePort(&pic_, kCommandPort, kICW1_INIT | kICW1_SNGL);
+    PICWritePort(&pic_, kCommandPort, kTestICW1_INIT | kTestICW1_SNGL);
     PICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
     ASSERT_EQ(pic_.init_state, kPICReady);
   }
@@ -103,7 +103,7 @@ TEST_F(InterruptRequestHintTest, StaysSetWhileAnotherRequestRemains) {
   EXPECT_TRUE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 
-  PICWritePort(&pic_, kCommandPort, kOCW2_EOI);
+  PICWritePort(&pic_, kCommandPort, kTestOCW2_EOI);
   EXPECT_EQ(PICGetPendingInterrupt(&pic_), kICW2_BASE_XT + 5);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
@@ -130,7 +130,7 @@ TEST_F(InterruptRequestHintTest, ReinitializingClearsIt) {
   PICRaiseIRQ(&pic_, 7);
   ASSERT_TRUE(pic_.has_unmasked_request);
 
-  PICWritePort(&pic_, kCommandPort, kICW1_INIT | kICW1_SNGL);
+  PICWritePort(&pic_, kCommandPort, kTestICW1_INIT | kTestICW1_SNGL);
   EXPECT_FALSE(pic_.has_unmasked_request);
   ExpectHintMatchesRegisters();
 }
@@ -141,12 +141,12 @@ TEST_F(InterruptRequestHintTest, ASlaveRequestSetsTheMastersFlag) {
   PICState slave = {0};
   slave.config.sp = true;
   PICInit(&slave);
-  PICWritePort(&slave, 0xA0, kICW1_INIT);
+  PICWritePort(&slave, 0xA0, kTestICW1_INIT);
   PICWritePort(&slave, 0xA1, 0x70);
   PICWritePort(&slave, 0xA1, 2);
   ASSERT_EQ(slave.init_state, kPICReady);
 
-  PICWritePort(&pic_, kCommandPort, kICW1_INIT);
+  PICWritePort(&pic_, kCommandPort, kTestICW1_INIT);
   PICWritePort(&pic_, kDataPort, kICW2_BASE_XT);
   PICWritePort(&pic_, kDataPort, 1 << 2);
   ASSERT_EQ(pic_.init_state, kPICReady);
