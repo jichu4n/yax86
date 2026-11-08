@@ -2020,12 +2020,13 @@ SRAM, at #89:
 ## pico/picocalc — the PicoCalc runtime
 
 - The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld
-  with a 320x320 LCD, a keyboard, an SD card slot and a battery. It brings up
-  the LCD and the keyboard controller and boots MS-DOS 3.30 off the floppy
-  image in flash to the `A>` prompt, drawing the guest's text screen on the
-  LCD with status lines below it. The keyboard is not read yet, so DOS's date
-  and time questions are answered by watching the screen, the way `pico/bench`
-  does it.
+  with a 320x320 LCD, a keyboard, an SD card slot and a battery. It raises the
+  system clock to 250MHz, brings up the LCD and the keyboard controller, and
+  boots MS-DOS 3.30 off the floppy image in flash, drawing the guest's text
+  screen on the LCD with status lines below it. The machine is paced to real
+  time and keeps running once it reaches the `A>` prompt. The keyboard is not
+  read yet, so DOS's date and time questions are answered by watching the
+  screen, the way `pico/bench` does it.
 - Like `pico/bench` it is a consumer of the core, uses only the public
   interface, and is not built in CI.
 
@@ -2067,6 +2068,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - `YAX86_PICOCALC_DRAW_SCREEN=0 ./pico/picocalc/build.sh` builds an image
   that does not draw the guest's screen, into `build-pico/picocalc-no-draw`.
   It is otherwise identical, which is what measures what drawing costs.
+- `YAX86_PICOCALC_SYS_CLK_KHZ` sets the system clock, 250000 by default.
+  Empty builds for the stock 125MHz, and anything past 400000 is refused, for
+  the reason under `pico/bench`'s overclocking notes.
 - **The factory firmware has no picotool reset interface**, so `picotool -f`,
   and with it `run.js`, cannot reboot it into BOOTSEL. Opening its USB serial
   port at 1200 baud does: `stty -F /dev/ttyACM0 1200`.
@@ -2076,27 +2080,82 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The boot reaches `A>` having retired **2,328,128 instructions**, the same
   count `pico/bench` reports for `dos-boot`. That is what says this runtime and
   the benchmark run the same machine, so a figure measured on one stands for
-  the other. At the stock 125MHz it takes 9.44 seconds without drawing the
-  guest's screen and 9.90 seconds with it.
+  the other. At 250MHz it takes 4.78 seconds of processor time without
+  drawing the guest's screen and 5.06 with it - 121% and 115% of a real
+  PC/XT. At the stock 125MHz, 9.93 seconds with drawing, which is 58.5%.
+  Processor time rather than how long it took, because the boot is paced -
+  see below.
 - If the count moves while the bench's does not, the runtime has stopped
   running the machine the benchmark measures.
+
+### Running in real time
+
+- **The machine is paced between batches, and nothing else.** After each
+  batch of 48,000 emulated cycles, `PaceToRealTime()` sleeps until real time
+  has caught up with the emulated time reached. The batches are the same
+  whether or not there is time to spare, so pacing cannot move anything the
+  guest sees, and the invariant is the same paced or not.
+- When a batch is due is worked out from an anchor - a point at which the two
+  clocks agreed - which moves forward a whole emulated second at a time. That
+  keeps the multiplication from overflowing however long the machine runs,
+  and loses nothing to rounding.
+- **A machine that falls behind catches up, but only by 100ms.** A short stall,
+  such as a screen that scrolls, is made up by running flat out afterwards. A
+  longer one is dropped and the anchor moved to the present, so that it is not
+  followed by a burst of emulation at full speed - the same limit the SDL
+  runtime uses. What is dropped is lost from the guest's clock. The report
+  counts it as `dropped_us`.
+- **Speed is measured as processor time, not as how long the boot took.**
+  Paced, the boot takes as long as on a real PC/XT however fast the emulator
+  is, so the runtime records the time it spent running the machine - elapsed
+  less waited - as `boot_busy_us`. That is what an unpaced boot takes: a build
+  with the pacing taken out measured 5.0569 and 5.0567 seconds against 5.0574
+  and 5.0578 paced, 0.01% apart.
+- **Faster on average is not faster throughout.** At 250MHz the boot drops
+  0.56 seconds, 0.30 without drawing: part of the stretch before the date
+  prompt, and the one from the time prompt to `A>`, run slower than real time.
+  The second is DOS printing and scrolling, and runs at 60% of real time with
+  drawing - 0.25 emulated seconds took 0.42 of processor time, 0.13 of it
+  drawing. At the stock 125MHz the boot drops 4.15 seconds.
+- **The idle skip is turned on at the prompt**, with
+  `YPlatformSetDOSIdleSkip()` - see the core's idle skipping section for why
+  through that and not the config. Without it the prompt's polling loop runs
+  at about 83% of real time at 250MHz, slower than the boot does on average,
+  and the machine never once waits. With it the processor is busy about 19% of
+  the time at the prompt, and emulated time tracks real time exactly: 24.439
+  seconds of each over a 24 second sample.
+- The Clock status line sets the guest's own time of day, the BIOS tick count
+  at `0040:006C`, against real time since power on. It starts about a quarter
+  of a second behind, which is POST's time before it starts counting, and
+  falls further behind only by what was dropped.
+- **The overclock is made with the watchdog armed**, after USB is up, the way
+  `pico/bench` makes it and with the same marker in uninitialized RAM: a clock
+  the chip cannot take reboots it, and the next boot runs at the stock clock
+  and reports `overclock skipped - the last attempt hung`. It matters more
+  here than on a bare Pico, whose BOOTSEL button is not inside a case. The
+  watchdog stays armed, fed once a batch, so a hang under load reboots the
+  board too; its 8 seconds outlast the keyboard controller's 3 second retry
+  at startup. The core voltage goes to 1.20V first, as in `pico/bench`.
 
 ### The LCD
 
 - The register values are ClockworkPi's, except that the pixel format is
   RGB565 rather than the samples' 18-bit RGB666, which is two bytes a pixel
   rather than three. The datasheet's serial interface takes both.
-- **The SPI clock is 62.5MHz**, half the peripheral clock and the fastest the
-  SPI block runs. The datasheet rates writes at a 66ns cycle, about 15MHz, and
-  ClockworkPi's samples ask for 25MHz, which 125MHz divides to 20.83MHz. The
-  panel draws cleanly at 62.5MHz, checked by eye, and it takes the cost of
+- **The SPI clock is 62.5MHz**: a quarter of the peripheral clock at 250MHz,
+  and half of it - the fastest the SPI block runs - at the stock 125MHz. The
+  datasheet rates writes at a 66ns cycle, about 15MHz, and ClockworkPi's
+  samples ask for 25MHz, which 125MHz divides to 20.83MHz. The panel draws
+  cleanly at 62.5MHz, checked by eye, and at 125MHz it takes the cost of
   drawing during `dos-boot` from 7.4% of the run to 5.2%.
-- **An overclock moves the SPI clock's source.** At power on the peripheral
-  clock is the system clock, but `set_sys_clock_khz()` switches it to the
-  48MHz USB PLL unless `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK` is
-  defined - see `set_sys_clock_pll()` in the SDK's `clocks.c` - which would
-  leave the LCD at 24MHz at most. With it defined, the peripheral clock is the
-  system clock again, and the SPI divider has to be chosen against that.
+- **An overclock would move the SPI clock's source**, and the build stops it.
+  At power on the peripheral clock is the system clock, but
+  `set_sys_clock_khz()` switches it to the 48MHz USB PLL unless
+  `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK` is defined - see
+  `set_sys_clock_pll()` in the SDK's `clocks.c` - which would leave the LCD at
+  24MHz at most. `CMakeLists.txt` defines it, so the peripheral clock follows
+  the system clock, and the overclock is made before the SPI and I2C blocks
+  are brought up, since each works out its divider from it then.
 - A write is `LcdBeginWrite()`, then any number of `LcdWritePixels()`, then
   `LcdEndWrite()`. The window commands, the switch to 16-bit frames and CS all
   happen once per window rather than per call, because the core hands pixels
@@ -2116,11 +2175,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   into it. Graphics modes render 640 pixels across and are not drawn yet.
 - It renders once per emulated frame, 60 times an emulated second, on core 0
   between batches. Drawing more often shows nothing new.
-- **Drawing costs 4.8% of `dos-boot`** at the stock 125MHz: 9.4443 seconds
-  without drawing against 9.8999 with, the same 2,328,128 instructions either
-  way, two runs each with a spread under 0.01%. 0.436 seconds of that is
-  inside `YVideoRender()`, over 73 frames and 368,960 pixels, about 4.6
-  screens' worth.
+- **Drawing costs 5.7% of `dos-boot`** at 250MHz: 4.7843 seconds of
+  processor time without drawing against 5.0576 with, the same 2,328,128
+  instructions either way, two runs each with a spread under 0.01%. 0.273
+  seconds of that is inside `YVideoRender()`, over 73 frames and 368,960
+  pixels, about 4.6 screens' worth. At the stock 125MHz it measured 4.8%:
+  9.4443 seconds against 9.8999, with 0.436 inside `YVideoRender()`.
 - **That figure moves with where the code lands in flash.** Adding the
   screen blanking below, which runs only after the boot, took the drawing
   build from 9.9509 seconds to 9.8999 and the cost from 5.2% to 4.8%, with
@@ -2134,12 +2194,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   and the conversion to RGB565 - which runs from flash, since none of it is in
   SRAM.
 - `dos-boot` draws little. A screen that scrolls redraws all 80,000 of its
-  pixels each line, about 95ms at this rate, during which the emulator does
-  not run.
+  pixels each line, about 59ms at 250MHz and 95ms at 125MHz, during which the
+  emulator does not run.
 - **The screen is blanked 30 seconds after the boot**, with the panel's
-  display off and sleep in commands - `LcdSetDisplayOn(false)`. Nothing
-  changes on it after the boot, and a static image left showing for hours can
-  leave its mark on the panel. The backlight is the controller's, and its
+  display off and sleep in commands - `LcdSetDisplayOn(false)`. Nothing but
+  the cursor changes on it after the boot, and a static image left showing
+  for hours can leave its mark on the panel. The guest's screen is not
+  rendered while it is blank. The backlight is the controller's, and its
   firmware will not dim the LCD's below 16 of 255, so blanking is the panel's
   job rather than the backlight's.
 

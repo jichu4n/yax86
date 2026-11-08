@@ -16,6 +16,22 @@ if(NOT YAX86_PICOCALC_DRAW_SCREEN MATCHES "^[01]$")
         "'${YAX86_PICOCALC_DRAW_SCREEN}'")
 endif()
 
+# The system clock, in kHz, or empty for the stock 125MHz. 250MHz is what the
+# emulator needs to run faster than a real PC/XT, and is what pico/bench
+# reports at.
+set(YAX86_PICOCALC_SYS_CLK_KHZ "250000" CACHE STRING
+    "System clock in kHz, empty for stock")
+if(YAX86_PICOCALC_SYS_CLK_KHZ STREQUAL "")
+    set(sys_clk_khz 0)
+elseif(YAX86_PICOCALC_SYS_CLK_KHZ MATCHES "^[0-9]+$"
+       AND NOT YAX86_PICOCALC_SYS_CLK_KHZ GREATER 400000)
+    set(sys_clk_khz ${YAX86_PICOCALC_SYS_CLK_KHZ})
+else()
+    message(FATAL_ERROR
+        "YAX86_PICOCALC_SYS_CLK_KHZ must be empty or at most 400000, not "
+        "'${YAX86_PICOCALC_SYS_CLK_KHZ}'")
+endif()
+
 # =============================================================================
 # Pico SDK
 # =============================================================================
@@ -43,6 +59,20 @@ set(CMAKE_ASM_FLAGS_RELEASE "")
 # The whole 4KB scratch bank for the stack, as in pico/bench: -O3 inlines the
 # CPU's instruction handlers into deep frames.
 add_compile_definitions(PICO_STACK_SIZE=4096)
+
+# The flash's SPI divider is against clk_sys, so an overclock raises it with
+# the clock, as in pico/bench. It goes in the second stage bootloader, a
+# target of the SDK's own, which only add_compile_definitions() reaches.
+if(sys_clk_khz GREATER 250000)
+    add_compile_definitions(PICO_FLASH_SPI_CLKDIV=6)
+elseif(sys_clk_khz GREATER 125000)
+    add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
+endif()
+
+# Keep the peripheral clock on the system clock through an overclock. Left
+# alone, set_sys_clock_khz() moves it to the 48MHz USB PLL, which caps the
+# LCD's SPI clock at 24MHz.
+add_compile_definitions(PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1)
 
 pico_sdk_init()
 
@@ -88,6 +118,7 @@ target_include_directories(yax86_picocalc PRIVATE
 
 target_compile_definitions(yax86_picocalc PRIVATE
     YAX86_PICOCALC_DRAW_SCREEN=${YAX86_PICOCALC_DRAW_SCREEN}
+    YAX86_PICOCALC_SYS_CLK_KHZ=${sys_clk_khz}
 )
 
 # Place the emulator's hot path in SRAM, with the same header pico/bench
@@ -101,6 +132,8 @@ target_link_libraries(yax86_picocalc PRIVATE
     pico_stdlib
     hardware_i2c
     hardware_spi
+    hardware_vreg
+    hardware_watchdog
 )
 
 target_link_options(yax86_picocalc PRIVATE -Wl,--print-memory-usage)

@@ -1,8 +1,9 @@
 // yax86 on the ClockworkPi PicoCalc.
 //
-// The runtime brings up the LCD and the keyboard controller and boots MS-DOS
-// 3.30 off the floppy image in flash to the command prompt, drawing the
-// guest's text screen on the LCD as it goes. The keyboard is not read yet, so
+// The runtime raises the system clock, brings up the LCD and the keyboard
+// controller, and boots MS-DOS 3.30 off the floppy image in flash, drawing the
+// guest's text screen on the LCD as it goes. The machine is paced to real
+// time and keeps running past the prompt. The keyboard is not read yet, so
 // DOS's date and time questions are answered by watching the screen, the way
 // pico/bench does it.
 //
@@ -20,6 +21,8 @@
 #include "core/video.h"
 #include "font_4x10.h"
 #include "hardware/clocks.h"
+#include "hardware/vreg.h"
+#include "hardware/watchdog.h"
 #include "lcd.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
@@ -33,6 +36,11 @@
 // identical but for that, which is what measures what drawing costs.
 #ifndef YAX86_PICOCALC_DRAW_SCREEN
 #define YAX86_PICOCALC_DRAW_SCREEN 1
+#endif
+
+// The system clock in kHz, or 0 for the stock 125MHz. Set by CMakeLists.txt.
+#ifndef YAX86_PICOCALC_SYS_CLK_KHZ
+#define YAX86_PICOCALC_SYS_CLK_KHZ 0
 #endif
 
 enum {
@@ -60,12 +68,39 @@ enum {
   // wrong. Reaching the prompt takes under six emulated seconds.
   kBootMaxEmulatedSeconds = 30,
 
-  // How often the idle loop looks for a newly attached host.
-  kIdlePollMs = 100,
   // How long the screen stays on once the boot is over, before it is blanked.
-  // Nothing changes on it after the boot, and a static image left showing for
-  // hours can leave its mark on the panel.
+  // Nothing the guest does changes it after the boot but the cursor, and a
+  // static image left showing for hours can leave its mark on the panel.
   kScreenOnAfterBootMs = 30 * 1000,
+  // How often the status lines are brought up to date once the boot is over.
+  kStatusUpdateMs = 1000,
+  // How often the loop looks for a newly attached host once the machine has
+  // stopped.
+  kStoppedPollMs = 100,
+
+  // How far behind real time the machine may fall and still make it up by
+  // running flat out. Past this the lag is dropped instead, so that a long
+  // stall is not followed by a burst of emulation at full speed.
+  kMaxLagMs = 100,
+
+  // How long the watchdog waits before deciding the chip has hung, and
+  // rebooting it. Long enough to outlast the keyboard controller's three
+  // second retry at startup, and within the 8.3 seconds the RP2040's watchdog
+  // can count.
+  kWatchdogTimeoutMs = 8000,
+  // Written to g_overclock_marker across the clock change, and cleared once it
+  // is survived. Any value does, as long as uninitialized RAM is unlikely to
+  // hold it.
+  kOverclockAttemptMarker = 0x0C10C4ED,
+  // How long the core voltage is given to settle before the clock is raised.
+  kVoltageSettleUs = 10 * 1000,
+
+  // The BIOS's count of timer ticks since midnight, in the BIOS data area,
+  // which is the time of day DOS reports. A tick is 65,536 counts of the
+  // PIT's 1,193,182Hz input clock, about 18.2 a second.
+  kBIOSTickCountAddress = 0x46C,
+  kPITInputHz = 1193182,
+  kPITCountsPerBIOSTick = 65536,
 
   // Emulated cycles between renders: once a frame of the CGA's 60Hz display.
   // Drawing more often shows nothing new, since a frame is the most often the
@@ -74,6 +109,8 @@ enum {
 
   kMicrosecondsPerMillisecond = 1000,
   kMillisecondsPerSecond = 1000,
+  kMicrosecondsPerSecond = 1000 * 1000,
+  kMaxLagUs = kMaxLagMs * kMicrosecondsPerMillisecond,
   kHzPerKHz = 1000,
 
   // The guest's screen: 80 by 25 cells of the 4x10 font, at the top of the
@@ -94,8 +131,25 @@ enum {
 typedef enum StatusLine {
   kStatusLineSystem = 0,
   kStatusLineBoot,
+  kStatusLineSpeed,
+  kStatusLineClock,
   kStatusLineDisplay,
 } StatusLine;
+
+// What became of the request to raise the system clock.
+typedef enum OverclockResult {
+  kOverclockNotRequested = 0,
+  kOverclockApplied,
+  kOverclockPLLCannot,
+  kOverclockSkippedAfterHang,
+} OverclockResult;
+
+static const char* const kOverclockNames[] = {
+    [kOverclockNotRequested] = "not requested",
+    [kOverclockApplied] = "applied",
+    [kOverclockPLLCannot] = "PLL cannot produce that clock",
+    [kOverclockSkippedAfterHang] = "skipped - the last attempt hung",
+};
 
 // How far the boot has got. DOS asks for the date and then the time before it
 // gives a prompt.
@@ -118,6 +172,7 @@ static const char* const kBootStageNames[] = {
 // What the runtime found and how far it has got, for the LCD and for the
 // report a host is sent.
 typedef struct RuntimeStatus {
+  OverclockResult overclock;
   uint32_t lcd_spi_hz;
   bool southbridge_answered;
   uint8_t southbridge_version;
@@ -125,6 +180,10 @@ typedef struct RuntimeStatus {
   // Emulated and host time at the point boot_stage was last changed.
   uint64_t boot_cycles;
   uint64_t boot_elapsed_us;
+  // Host time spent running the machine up to then, which is the elapsed time
+  // less the time spent waiting for real time to catch up. It is what the
+  // boot would have taken unpaced.
+  uint64_t boot_busy_us;
   uint64_t instructions;
   // What drawing the guest's screen has cost: renders that drew something,
   // the pixels they drew, and the host time spent in YVideoRender().
@@ -145,6 +204,33 @@ static bool g_host_attached;
 static bool g_region_on_panel;
 static uint16_t g_pixel_batch[Y_VIDEO_PIXEL_BATCH_SIZE];
 
+// How far the machine has got in emulated time, and what pacing it against
+// real time has cost.
+typedef struct RunClock {
+  // Emulated cycles since power on. The platform's own counter is 32 bits, so
+  // this is accumulated from per-batch deltas, which unsigned subtraction
+  // keeps right across a wrap.
+  uint64_t cycles;
+  uint32_t last_ticks;
+  // Host time at power on.
+  uint64_t start_us;
+  // A point at which emulated and real time agreed. Emulated time from there
+  // on is due to take as long in real time.
+  uint64_t anchor_us;
+  uint64_t anchor_cycles;
+  // Host time spent waiting for real time to catch up with the machine.
+  uint64_t waited_us;
+  // Real time the machine fell behind by and did not make up.
+  uint64_t dropped_us;
+} RunClock;
+
+static RunClock g_clock;
+
+#if YAX86_PICOCALC_SYS_CLK_KHZ
+// Deliberately not zeroed at startup - see Overclock().
+static uint32_t __uninitialized_ram(g_overclock_marker);
+#endif
+
 // ============================================================================
 // Reporting
 // ============================================================================
@@ -158,6 +244,38 @@ static void WriteLogLine(
 static uint16_t CGAColor(uint8_t index) {
   const YVideoRGB rgb = YVideoDefaultConfig.cga_palette[index];
   return LcdRGB565(rgb.r, rgb.g, rgb.b);
+}
+
+static bool BootIsOver(void) {
+  return g_status.boot_stage == kBootStagePrompt ||
+         g_status.boot_stage == kBootStageFailed;
+}
+
+// Host time since power on, and how much of it went to running the machine
+// rather than waiting for real time to catch up with it.
+static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
+
+static uint64_t BusyUs(void) { return ElapsedUs() - g_clock.waited_us; }
+
+// The time of day the guest's BIOS keeps, which is what DOS reports, in
+// milliseconds. It counts from POST, since the date and time questions are
+// answered with Enter.
+static uint64_t GuestClockMs(void) {
+  const uint8_t* const count = &g_guest_ram[kBIOSTickCountAddress];
+  const uint64_t ticks = (uint64_t)count[0] | (uint64_t)count[1] << 8 |
+                         (uint64_t)count[2] << 16 | (uint64_t)count[3] << 24;
+  return ticks * kPITCountsPerBIOSTick * kMillisecondsPerSecond / kPITInputHz;
+}
+
+// How fast the boot ran, as tenths of a percent of a real PC/XT's speed.
+// Taken from the host time spent running it rather than the time it took,
+// which pacing holds to real time.
+static uint32_t BootSpeedPermille(void) {
+  if (g_status.boot_busy_us == 0) {
+    return 0;
+  }
+  return (uint32_t)(g_status.boot_cycles * 1000 * kMicrosecondsPerSecond /
+                    Y_PLATFORM_CPU_CYCLES_PER_SECOND / g_status.boot_busy_us);
 }
 
 static void FormatSouthbridgeVersion(char* buffer, size_t size) {
@@ -190,6 +308,58 @@ static void FormatBootLine(char* buffer, size_t size) {
       (unsigned long long)(host_ms % kMillisecondsPerSecond));
 }
 
+static void FormatSpeedLine(char* buffer, size_t size) {
+  const uint32_t permille = BootSpeedPermille();
+  if (permille == 0) {
+    snprintf(buffer, size, "measured once DOS asks for the date");
+    return;
+  }
+  snprintf(
+      buffer, size, "%lu.%lu%% of a real PC/XT, so %s",
+      (unsigned long)(permille / 10), (unsigned long)(permille % 10),
+      permille >= 1000 ? "paced to real time" : "slower than real time");
+}
+
+// The guest's clock against the real one, and how busy the host has been
+// since the last time the line was drawn.
+static void FormatClockLine(char* buffer, size_t size) {
+  static uint64_t window_start_us;
+  static uint64_t window_waited_us;
+  const uint64_t now_us = ElapsedUs();
+  const uint64_t window_us = now_us - window_start_us;
+  const uint64_t waited_us = g_clock.waited_us - window_waited_us;
+  const uint32_t busy_percent =
+      window_us > 0 && waited_us <= window_us
+          ? (uint32_t)((window_us - waited_us) * 100 / window_us)
+          : 0;
+  window_start_us = now_us;
+  window_waited_us = g_clock.waited_us;
+
+  const uint64_t guest_ds = GuestClockMs() / 100;
+  const uint64_t real_ds = now_us / (100 * kMicrosecondsPerMillisecond);
+  snprintf(
+      buffer, size,
+      "guest %llu.%llus, real %llu.%llus since power on, %lu%% busy",
+      (unsigned long long)(guest_ds / 10), (unsigned long long)(guest_ds % 10),
+      (unsigned long long)(real_ds / 10), (unsigned long long)(real_ds % 10),
+      (unsigned long)busy_percent);
+}
+
+static void FormatDisplayLine(char* buffer, size_t size) {
+  if (!YAX86_PICOCALC_DRAW_SCREEN) {
+    snprintf(buffer, size, "not drawn in this build");
+    return;
+  }
+  const uint64_t render_ms = g_status.render_us / kMicrosecondsPerMillisecond;
+  const uint64_t busy_us = BusyUs() > 0 ? BusyUs() : 1;
+  snprintf(
+      buffer, size, "%lu frames, %llu.%03llus drawing, %llu%% of the work",
+      (unsigned long)g_status.frames_drawn,
+      (unsigned long long)(render_ms / kMillisecondsPerSecond),
+      (unsigned long long)(render_ms % kMillisecondsPerSecond),
+      (unsigned long long)(g_status.render_us * 100 / busy_us));
+}
+
 // Draw one status line, padded out to the right edge so that a shorter value
 // covers a longer one.
 static void DrawStatusLine(
@@ -202,26 +372,15 @@ static void DrawStatusLine(
   TextDrawString(kStatusValueColumn, row, padded, CGAColor(15), CGAColor(0));
 }
 
-static void FormatDisplayLine(char* buffer, size_t size) {
-  if (!YAX86_PICOCALC_DRAW_SCREEN) {
-    snprintf(buffer, size, "not drawn in this build");
-    return;
-  }
-  const uint64_t render_ms = g_status.render_us / kMicrosecondsPerMillisecond;
-  const uint64_t elapsed_us =
-      g_status.boot_elapsed_us > 0 ? g_status.boot_elapsed_us : 1;
-  snprintf(
-      buffer, size, "%lu frames, %llu.%03llus drawing, %llu%% of the run",
-      (unsigned long)g_status.frames_drawn,
-      (unsigned long long)(render_ms / kMillisecondsPerSecond),
-      (unsigned long long)(render_ms % kMillisecondsPerSecond),
-      (unsigned long long)(g_status.render_us * 100 / elapsed_us));
-}
-
-static void DrawBootAndDisplayStatus(void) {
+// Everything on the status screen that changes as the machine runs.
+static void DrawRunStatus(void) {
   char value[kTextColumns + 1];
   FormatBootLine(value, sizeof(value));
   DrawStatusLine(kStatusLineBoot, "Boot", value);
+  FormatSpeedLine(value, sizeof(value));
+  DrawStatusLine(kStatusLineSpeed, "Speed", value);
+  FormatClockLine(value, sizeof(value));
+  DrawStatusLine(kStatusLineClock, "Clock", value);
   FormatDisplayLine(value, sizeof(value));
   DrawStatusLine(kStatusLineDisplay, "Display", value);
 }
@@ -242,7 +401,7 @@ static void DrawStatusScreen(void) {
       (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
       (unsigned)(kGuestRAMSize / 1024));
   DrawStatusLine(kStatusLineSystem, "System", value);
-  DrawBootAndDisplayStatus();
+  DrawRunStatus();
 }
 
 // The same facts as the status screen, as key and value lines.
@@ -254,6 +413,7 @@ static void PrintReport(void) {
   printf(
       "%-14s %u\n", "sys_clk_khz",
       (unsigned)(clock_get_hz(clk_sys) / kHzPerKHz));
+  printf("%-14s %s\n", "overclock", kOverclockNames[g_status.overclock]);
   printf("%-14s %u\n", "lcd_spi_hz", (unsigned)g_status.lcd_spi_hz);
   char version[16];
   FormatSouthbridgeVersion(version, sizeof(version));
@@ -263,23 +423,43 @@ static void PrintReport(void) {
   printf(
       "%-14s %llu\n", "instructions",
       (unsigned long long)g_status.instructions);
+  printf(
+      "%-14s %llu\n", "boot_cycles", (unsigned long long)g_status.boot_cycles);
+  printf(
+      "%-14s %llu\n", "boot_us", (unsigned long long)g_status.boot_elapsed_us);
+  printf(
+      "%-14s %llu\n", "boot_busy_us",
+      (unsigned long long)g_status.boot_busy_us);
+  printf("%-14s %lu\n", "boot_speed_pm", (unsigned long)BootSpeedPermille());
   printf("%-14s %d\n", "draw_screen", YAX86_PICOCALC_DRAW_SCREEN);
   printf("%-14s %lu\n", "frames_drawn", (unsigned long)g_status.frames_drawn);
   printf(
       "%-14s %llu\n", "pixels_drawn",
       (unsigned long long)g_status.pixels_drawn);
   printf("%-14s %llu\n", "render_us", (unsigned long long)g_status.render_us);
+  printf("%-14s %llu\n", "real_us", (unsigned long long)ElapsedUs());
   printf(
-      "%-14s %llu\n", "boot_us", (unsigned long long)g_status.boot_elapsed_us);
+      "%-14s %llu\n", "emulated_us",
+      (unsigned long long)(g_clock.cycles * kMicrosecondsPerSecond /
+                           Y_PLATFORM_CPU_CYCLES_PER_SECOND));
+  printf("%-14s %llu\n", "guest_clock_ms", (unsigned long long)GuestClockMs());
+  printf("%-14s %llu\n", "waited_us", (unsigned long long)g_clock.waited_us);
+  printf("%-14s %llu\n", "dropped_us", (unsigned long long)g_clock.dropped_us);
+  printf(
+      "%-14s %d\n", "idle_skip", (int)g_platform.config.enable_dos_idle_skip);
   printf("\n");
 }
 
-// Send a report if a host has attached since the last look. Cheap enough to
-// call every batch: it reads a flag the USB stack keeps.
+// Send a report if a host has attached since the last look, ending with the
+// marker run.js waits for once the boot is over. Cheap enough to call every
+// batch: it reads a flag the USB stack keeps.
 static void ReportIfHostAttached(void) {
   const bool attached = stdio_usb_connected();
   if (attached && !g_host_attached) {
     PrintReport();
+    if (BootIsOver()) {
+      printf("done\n");
+    }
   }
   g_host_attached = attached;
 }
@@ -424,83 +604,188 @@ static BootStage AdvanceBoot(BootStage stage) {
   return stage;
 }
 
-static void SetBootStage(BootStage stage, uint64_t cycles, uint64_t start_us) {
+static void SetBootStage(BootStage stage) {
   g_status.boot_stage = stage;
-  g_status.boot_cycles = cycles;
-  g_status.boot_elapsed_us = time_us_64() - start_us;
+  g_status.boot_cycles = g_clock.cycles;
+  g_status.boot_elapsed_us = ElapsedUs();
+  g_status.boot_busy_us = BusyUs();
   g_status.instructions = YCPUInstructionsRetired(&g_platform.cpu);
-  DrawBootAndDisplayStatus();
+  DrawRunStatus();
   if (g_host_attached) {
     PrintReport();
   }
 }
 
-// Run the machine until DOS gives a prompt, or until it is clear it will not.
-static void BootToPrompt(void) {
-  const uint64_t max_cycles =
-      (uint64_t)kBootMaxEmulatedSeconds * Y_PLATFORM_CPU_CYCLES_PER_SECOND;
-  uint64_t cycles = 0;
-  uint64_t next_poll_cycles = kBootPollCycles;
-  uint64_t next_render_cycles = kCyclesPerRender;
-  // The platform's cycle counter is 32 bits, so the total is accumulated from
-  // per-batch deltas, which unsigned subtraction keeps right across a wrap.
-  uint32_t last_ticks = g_platform.ticks;
-  const uint64_t start_us = time_us_64();
-
-  while (cycles < max_cycles) {
-    // An invalid opcode is not a stop: the 8088 has no invalid opcode
-    // exception, so a real machine would carry on.
-    YPlatformRunStatus status = Y_PLATFORM_RUNNING;
-    for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
-      const uint32_t batch_start = g_platform.ticks;
-      status = YPlatformRun(&g_platform, remaining);
-      const uint32_t consumed = g_platform.ticks - batch_start;
-      remaining -= consumed < remaining ? consumed : remaining;
-      if (status != Y_PLATFORM_INVALID) {
-        break;
-      }
-    }
-    cycles += (uint32_t)(g_platform.ticks - last_ticks);
-    last_ticks = g_platform.ticks;
-    if (status != Y_PLATFORM_RUNNING && status != Y_PLATFORM_INVALID) {
-      printf("machine stopped with status %d\n", (int)status);
+// Run a batch of emulated cycles, and return how the machine stands after it.
+static YPlatformRunStatus RunBatch(void) {
+  // An invalid opcode is not a stop: the 8088 has no invalid opcode
+  // exception, so a real machine would carry on.
+  YPlatformRunStatus status = Y_PLATFORM_RUNNING;
+  for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
+    const uint32_t batch_start = g_platform.ticks;
+    status = YPlatformRun(&g_platform, remaining);
+    const uint32_t consumed = g_platform.ticks - batch_start;
+    remaining -= consumed < remaining ? consumed : remaining;
+    if (status != Y_PLATFORM_INVALID) {
       break;
     }
+  }
+  g_clock.cycles += (uint32_t)(g_platform.ticks - g_clock.last_ticks);
+  g_clock.last_ticks = g_platform.ticks;
+  return status;
+}
+
+// Wait until real time has caught up with the emulated time the machine has
+// reached, which is what keeps it from running faster than a real PC/XT.
+//
+// Only ever waits between batches, never changes them, so pacing cannot move
+// anything the guest sees: the same batches run whether or not there is time
+// to spare.
+static void PaceToRealTime(void) {
+  // The anchor moves a whole emulated second at a time, which keeps the
+  // product below from overflowing however long the machine runs, and loses
+  // nothing to rounding.
+  while (g_clock.cycles - g_clock.anchor_cycles >=
+         Y_PLATFORM_CPU_CYCLES_PER_SECOND) {
+    g_clock.anchor_cycles += Y_PLATFORM_CPU_CYCLES_PER_SECOND;
+    g_clock.anchor_us += kMicrosecondsPerSecond;
+  }
+  const uint64_t due_us =
+      g_clock.anchor_us + (g_clock.cycles - g_clock.anchor_cycles) *
+                              kMicrosecondsPerSecond /
+                              Y_PLATFORM_CPU_CYCLES_PER_SECOND;
+  const uint64_t now_us = time_us_64();
+  if (now_us < due_us) {
+    sleep_until(from_us_since_boot(due_us));
+    g_clock.waited_us += time_us_64() - now_us;
+  } else if (now_us - due_us > kMaxLagUs) {
+    g_clock.dropped_us += now_us - due_us;
+    g_clock.anchor_us = now_us;
+    g_clock.anchor_cycles = g_clock.cycles;
+  }
+}
+
+// Run the machine, paced to real time, for as long as the board has power.
+// The boot is watched on the way, and DOS's questions answered.
+static void RunMachine(bool machine_ready) {
+  const uint64_t max_boot_cycles =
+      (uint64_t)kBootMaxEmulatedSeconds * Y_PLATFORM_CPU_CYCLES_PER_SECOND;
+  uint64_t next_poll_cycles = kBootPollCycles;
+  uint64_t next_render_cycles = kCyclesPerRender;
+  bool running = machine_ready;
+  bool screen_on = true;
+  absolute_time_t blank_at = at_the_end_of_time;
+  absolute_time_t next_status_at = at_the_end_of_time;
+  g_clock.last_ticks = g_platform.ticks;
+  g_clock.start_us = time_us_64();
+  g_clock.anchor_us = g_clock.start_us;
+
+  for (;;) {
+    // Once a batch, so that a hang under load, which an overclock makes
+    // possible, reboots the board rather than leaving it stuck.
+    watchdog_update();
     ReportIfHostAttached();
 
-    if (cycles >= next_render_cycles) {
+    if (running && RunBatch() == Y_PLATFORM_HUNG) {
+      printf("machine stopped: the CPU halted with nothing to wake it\n");
+      running = false;
+    }
+
+    if (screen_on && g_clock.cycles >= next_render_cycles) {
       do {
         next_render_cycles += kCyclesPerRender;
-      } while (next_render_cycles <= cycles);
+      } while (next_render_cycles <= g_clock.cycles);
       DrawGuestScreen();
     }
 
-    if (cycles < next_poll_cycles) {
-      continue;
-    }
-    do {
-      next_poll_cycles += kBootPollCycles;
-    } while (next_poll_cycles <= cycles);
-    const BootStage stage = AdvanceBoot(g_status.boot_stage);
-    if (stage != g_status.boot_stage) {
-      // Drawn first, so that the screen shows what the stage was decided from
-      // and the time recorded for it includes drawing that.
-      DrawGuestScreen();
-      SetBootStage(stage, cycles, start_us);
-      if (stage == kBootStagePrompt) {
-        return;
+    if (!BootIsOver()) {
+      BootStage stage = g_status.boot_stage;
+      if (!running || g_clock.cycles >= max_boot_cycles) {
+        stage = kBootStageFailed;
+      } else if (g_clock.cycles >= next_poll_cycles) {
+        do {
+          next_poll_cycles += kBootPollCycles;
+        } while (next_poll_cycles <= g_clock.cycles);
+        stage = AdvanceBoot(stage);
+      }
+      if (stage != g_status.boot_stage) {
+        // Drawn first, so that the screen shows what the stage was decided
+        // from and the time recorded for it includes drawing that.
+        DrawGuestScreen();
+        SetBootStage(stage);
+      }
+      if (BootIsOver()) {
+        // DOS polls for a key at the prompt rather than halting, and the
+        // idle skip is what keeps that from costing a real time loop's worth
+        // of emulation. Not before now: DOS idles at the date and time
+        // prompts too, and skipping there would move the dos-boot invariant.
+        YPlatformSetDOSIdleSkip(&g_platform, true);
+        blank_at = make_timeout_time_ms(kScreenOnAfterBootMs);
+        next_status_at = make_timeout_time_ms(kStatusUpdateMs);
+        // So that a host that watched the boot gets the final report too.
+        g_host_attached = false;
       }
     }
+
+    if (screen_on && time_reached(next_status_at)) {
+      next_status_at = delayed_by_ms(next_status_at, kStatusUpdateMs);
+      DrawRunStatus();
+    }
+    if (screen_on && time_reached(blank_at)) {
+      LcdSetDisplayOn(false);
+      screen_on = false;
+    }
+
+    if (running) {
+      PaceToRealTime();
+    } else {
+      sleep_ms(kStoppedPollMs);
+    }
   }
-  SetBootStage(kBootStageFailed, cycles, start_us);
 }
 
 // ============================================================================
 // Startup
 // ============================================================================
 
+#if YAX86_PICOCALC_SYS_CLK_KHZ
+// Raise the system clock, after USB is up and with the watchdog armed, as
+// pico/bench does. A clock the chip cannot take hangs it, and the watchdog
+// turns that into a reboot rather than a board with no way in but the BOOTSEL
+// button, which on a PicoCalc is inside the case. The reboot lands here again,
+// where the marker says not to try the same clock twice.
+//
+// watchdog_caused_reboot() alone is not evidence of a hang: picotool reboots
+// the chip through the watchdog too. The marker lives in RAM that startup does
+// not clear, so it survives a reset but not a power cycle, and it is only ever
+// left set across the window where a hang is possible.
+static OverclockResult Overclock(void) {
+  if (g_overclock_marker == kOverclockAttemptMarker) {
+    g_overclock_marker = 0;
+    return kOverclockSkippedAfterHang;
+  }
+  g_overclock_marker = kOverclockAttemptMarker;
+  if (YAX86_PICOCALC_SYS_CLK_KHZ > 250000) {
+    vreg_set_voltage(VREG_VOLTAGE_1_30);
+  } else if (YAX86_PICOCALC_SYS_CLK_KHZ > 125000) {
+    vreg_set_voltage(VREG_VOLTAGE_1_20);
+  }
+  busy_wait_us(kVoltageSettleUs);
+  const bool applied = set_sys_clock_khz(YAX86_PICOCALC_SYS_CLK_KHZ, false);
+  g_overclock_marker = 0;
+  return applied ? kOverclockApplied : kOverclockPLLCannot;
+}
+#endif
+
 int main(void) {
   stdio_init_all();
+  watchdog_enable(kWatchdogTimeoutMs, true);
+#if YAX86_PICOCALC_SYS_CLK_KHZ
+  // Before anything else is brought up: the SPI and I2C blocks work out their
+  // dividers from the peripheral clock when they are initialized, and it
+  // moves with the system clock.
+  g_status.overclock = Overclock();
+#endif
 
   g_logger_config.write_line = WriteLogLine;
   g_logger_config.enabled_modules = 0xFFFFFFFF;
@@ -512,34 +797,6 @@ int main(void) {
       SouthbridgeReadVersion(&g_status.southbridge_version);
   DrawStatusScreen();
 
-  if (!InitMachine()) {
-    g_status.boot_stage = kBootStageFailed;
-    DrawBootAndDisplayStatus();
-  } else {
-    BootToPrompt();
-  }
-
-  // The machine is not run past the prompt yet: there is no keyboard to type
-  // at it, and nothing to pace it against real time. What is left is to tell
-  // any host that attaches how the boot went, ending with the marker run.js
-  // waits for.
-  // Starting from detached makes a host that watched the whole boot get the
-  // final report too.
-  g_host_attached = false;
-  const absolute_time_t blank_at = make_timeout_time_ms(kScreenOnAfterBootMs);
-  bool screen_on = true;
-  for (;;) {
-    const bool attached = stdio_usb_connected();
-    if (attached && !g_host_attached) {
-      PrintReport();
-      printf("done\n");
-    }
-    g_host_attached = attached;
-    if (screen_on && time_reached(blank_at)) {
-      LcdSetDisplayOn(false);
-      screen_on = false;
-    }
-    sleep_ms(kIdlePollMs);
-  }
+  RunMachine(InitMachine());
   return 0;
 }
