@@ -11,7 +11,7 @@ const path = require('path');
 //   - If provided: The identifiers are in the core's namespace, which AGENTS.md
 //     describes under "Naming", so symbol must begin with the module's owner:
 //     BIOSROMData -> YBIOSROMData, Y_BIOS_ROM_DATA_SIZE. The array is marked
-//     YAX86_MODULE_PRIVATE (static in bundled builds) and the header's extern
+//     Y_MODULE_PRIVATE (static in bundled builds) and the header's extern
 //     declaration is suppressed inside the bundle.
 //   - If omitted: Generated as a standalone translation unit with external
 //     linkage (e.g. for the pico/bench boot floppy image), and the identifiers
@@ -71,7 +71,7 @@ async function generateRomDataFiles(romFilePath, outputFilePath, symbol, moduleN
       `#endif // ${bundleGuard}`,
       '',
     ];
-    definitionModifier = 'YAX86_MODULE_PRIVATE ';
+    definitionModifier = 'Y_MODULE_PRIVATE ';
   } else {
     headerDeclaration = [`extern const uint8_t ${dataSymbol}[${sizeSymbol}];`];
     sourcePreamble = [];

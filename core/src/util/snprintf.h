@@ -23,15 +23,15 @@
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
-    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) Y_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
-    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
+    char* buffer, size_t size, const char* format, ...) Y_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t
+Y_MODULE_PRIVATE_HEADER size_t
 YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
@@ -40,7 +40,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -61,7 +61,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
@@ -113,7 +113,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
@@ -264,7 +264,7 @@ YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);

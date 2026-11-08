@@ -137,9 +137,8 @@ typedef struct BenchResult {
 // Only errors are logged, and only outside a run: anything chattier would put
 // host I/O in the measured path.
 static void BenchWriteLogLine(
-    YAX86_UNUSED void* context, const YLogModule* module,
-    YAX86_UNUSED YLogLevel level, YAX86_UNUSED uint64_t tick,
-    const char* message, YAX86_UNUSED size_t length) {
+    Y_UNUSED void* context, const YLogModule* module, Y_UNUSED YLogLevel level,
+    Y_UNUSED uint64_t tick, const char* message, Y_UNUSED size_t length) {
   printf("[%s] %s\n", module->name, message);
 }
 
@@ -149,13 +148,13 @@ static void BenchWriteLogLine(
 // booting to a command prompt writes to the disk, and a run starts from the
 // same image every time either way.
 static uint8_t FloppyReadByte(
-    YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive, uint32_t offset) {
+    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset) {
   return offset < kDOSFloppyDataSize ? kDOSFloppyData[offset] : 0xFF;
 }
 
 static void FloppyWriteByte(
-    YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive,
-    YAX86_UNUSED uint32_t offset, YAX86_UNUSED uint8_t value) {}
+    Y_UNUSED void* context, Y_UNUSED uint8_t drive, Y_UNUSED uint32_t offset,
+    Y_UNUSED uint8_t value) {}
 
 // Bring the machine up as if it had just been switched on, with the boot
 // floppy in drive A. Done afresh for each run so that two runs in a session

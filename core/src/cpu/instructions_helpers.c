@@ -9,7 +9,7 @@
 // - Zero flag (ZF)
 // - Sign flag (SF)
 // - Parity Flag (PF)
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUSetCommonFlagsAfterInstruction(
+Y_MODULE_PRIVATE Y_HOT void YCPUSetCommonFlagsAfterInstruction(
     const YCPUInstructionContext* ctx, uint32_t result) {
   YCPUWidth width = ctx->metadata->width;
   result &= YCPUMaxValue[width];
@@ -26,14 +26,14 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUSetCommonFlagsAfterInstruction(
   YCPUSetFlag(ctx->cpu, Y_CPU_PF, (parity & 1) == 0);
 }
 
-YAX86_MODULE_PRIVATE uint16_t YCPUToFlagsRegisterValue(uint16_t value) {
+Y_MODULE_PRIVATE uint16_t YCPUToFlagsRegisterValue(uint16_t value) {
   return (value | (uint16_t)Y_CPU_FLAGS_ALWAYS_SET) &
          ~(uint16_t)Y_CPU_FLAGS_ALWAYS_CLEAR;
 }
 
 // Write a word where the stack pointer already points. The caller is
 // responsible for having made room for it.
-YAX86_FILE_PRIVATE void YCPUWriteToStackTop(
+Y_FILE_PRIVATE void YCPUWriteToStackTop(
     YCPUState* cpu, YCPUOperandValue value) {
   YCPUOperandAddress address = {
       .type = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY,
@@ -43,13 +43,12 @@ YAX86_FILE_PRIVATE void YCPUWriteToStackTop(
   YCPUWriteMemoryOperandWord(cpu, &address, value);
 }
 
-YAX86_MODULE_PRIVATE void YCPUPushValue(
-    YCPUState* cpu, YCPUOperandValue value) {
+Y_MODULE_PRIVATE void YCPUPushValue(YCPUState* cpu, YCPUOperandValue value) {
   cpu->registers[Y_CPU_SP] -= 2;
   YCPUWriteToStackTop(cpu, value);
 }
 
-YAX86_MODULE_PRIVATE void YCPUPushSourceOperand(
+Y_MODULE_PRIVATE void YCPUPushSourceOperand(
     YCPUState* cpu, const YCPUOperand* src) {
   cpu->registers[Y_CPU_SP] -= 2;
   // The 8086/8088 moves the stack pointer before it reads the source, so
@@ -64,7 +63,7 @@ YAX86_MODULE_PRIVATE void YCPUPushSourceOperand(
   YCPUWriteToStackTop(cpu, value);
 }
 
-YAX86_MODULE_PRIVATE YCPUOperandValue YCPUPop(YCPUState* cpu) {
+Y_MODULE_PRIVATE YCPUOperandValue YCPUPop(YCPUState* cpu) {
   YCPUOperandAddress address = {
       .type = Y_CPU_OPERAND_ADDRESS_TYPE_MEMORY,
       .register_index = Y_CPU_SS,
@@ -76,8 +75,8 @@ YAX86_MODULE_PRIVATE YCPUOperandValue YCPUPop(YCPUState* cpu) {
 }
 
 // Dummy instruction for unsupported opcodes.
-YAX86_MODULE_PRIVATE YCPUInstructionResult
-YCPUExecuteNoOp(YAX86_UNUSED const YCPUInstructionContext* ctx) {
+Y_MODULE_PRIVATE YCPUInstructionResult
+YCPUExecuteNoOp(Y_UNUSED const YCPUInstructionContext* ctx) {
   return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
@@ -87,7 +86,7 @@ YCPUExecuteNoOp(YAX86_UNUSED const YCPUInstructionContext* ctx) {
 // from YCPUTick(). It exists so that every entry in the opcode table is
 // callable, which is what lets the tick path dispatch without first checking
 // for a null handler.
-YAX86_MODULE_PRIVATE YCPUInstructionResult
-YCPUExecuteInvalidOpcode(YAX86_UNUSED const YCPUInstructionContext* ctx) {
+Y_MODULE_PRIVATE YCPUInstructionResult
+YCPUExecuteInvalidOpcode(Y_UNUSED const YCPUInstructionContext* ctx) {
   return Y_CPU_INSTRUCTION_INVALID;
 }

@@ -20,7 +20,7 @@ enum { Y_CPU_UNREACHABLE_OPERAND_VALUE = 0xFF };
 
 // Narrow a computed result to what an operand of the given width holds. A
 // byte keeps a zero high byte, which is what makes widening it again free.
-YAX86_MODULE_PRIVATE YCPUOperandValue
+Y_MODULE_PRIVATE YCPUOperandValue
 YCPUToOperandValue(YCPUWidth width, uint32_t raw_value) {
   return (YCPUOperandValue)(raw_value & YCPUMaxValue[width]);
 }
@@ -28,13 +28,13 @@ YCPUToOperandValue(YCPUWidth width, uint32_t raw_value) {
 // Widen an operand value for arithmetic, which is done in 32 bits so that
 // nothing overflows on the way. A byte value already has a zero high byte, so
 // this is where that invariant is spent rather than a width being consulted.
-YAX86_MODULE_PRIVATE uint32_t YCPUFromOperandValue(YCPUOperandValue value) {
+Y_MODULE_PRIVATE uint32_t YCPUFromOperandValue(YCPUOperandValue value) {
   return value;
 }
 
 // The same, sign-extended. This one does need the width, since which bit is
 // the sign bit is exactly what the value no longer says.
-YAX86_MODULE_PRIVATE int32_t
+Y_MODULE_PRIVATE int32_t
 YCPUFromSignedOperandValue(YCPUWidth width, YCPUOperandValue value) {
   switch (width) {
     case Y_CPU_BYTE:
@@ -47,12 +47,12 @@ YCPUFromSignedOperandValue(YCPUWidth width, YCPUOperandValue value) {
 }
 
 // Helper function to extract a zero-extended value from an operand.
-YAX86_MODULE_PRIVATE uint32_t YCPUFromOperand(const YCPUOperand* operand) {
+Y_MODULE_PRIVATE uint32_t YCPUFromOperand(const YCPUOperand* operand) {
   return YCPUFromOperandValue(operand->value);
 }
 
 // Helper function to extract a sign-extended value from an operand.
-YAX86_MODULE_PRIVATE int32_t
+Y_MODULE_PRIVATE int32_t
 YCPUFromSignedOperand(YCPUWidth width, const YCPUOperand* operand) {
   return YCPUFromSignedOperandValue(width, operand->value);
 }
@@ -65,7 +65,7 @@ enum {
 };
 
 // Computes the raw address a segment register and an offset address.
-YAX86_MODULE_PRIVATE uint32_t YCPUToRawAddress(
+Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
     const YCPUState* cpu, uint8_t segment_register_index, uint16_t offset) {
   uint16_t segment = cpu->registers[segment_register_index];
   return ((((uint32_t)segment) << 4) + (uint32_t)offset) &
@@ -73,7 +73,7 @@ YAX86_MODULE_PRIVATE uint32_t YCPUToRawAddress(
 }
 
 // Read a byte from memory as a uint8_t.
-YAX86_MODULE_PRIVATE uint8_t
+Y_MODULE_PRIVATE uint8_t
 YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
   // Guest RAM, where nearly every operand lands, is reached by indexing. The
   // call below ends up indexing an array too, having gone through a function
@@ -87,7 +87,7 @@ YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
 }
 
 // Read a word from memory as a uint16_t.
-YAX86_MODULE_PRIVATE uint16_t
+Y_MODULE_PRIVATE uint16_t
 YCPUReadRawMemoryWord(YCPUState* cpu, uint32_t raw_address) {
   uint8_t low_byte_value = YCPUReadRawMemoryByte(cpu, raw_address);
   uint8_t high_byte_value = YCPUReadRawMemoryByte(cpu, raw_address + 1);
@@ -95,7 +95,7 @@ YCPUReadRawMemoryWord(YCPUState* cpu, uint32_t raw_address) {
 }
 
 // Read a byte from memory to a YCPUOperandValue.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUOperandValue
+Y_MODULE_PRIVATE Y_HOT YCPUOperandValue
 YCPUReadMemoryOperandByte(YCPUState* cpu, const YCPUOperandAddress* address) {
   YCPUAddBusCycles(cpu, 1);
   return YCPUReadRawMemoryByte(
@@ -103,7 +103,7 @@ YCPUReadMemoryOperandByte(YCPUState* cpu, const YCPUOperandAddress* address) {
 }
 
 // Read a word from memory to a YCPUOperandValue.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUOperandValue
+Y_MODULE_PRIVATE Y_HOT YCPUOperandValue
 YCPUReadMemoryOperandWord(YCPUState* cpu, const YCPUOperandAddress* address) {
   YCPUAddBusCycles(cpu, 2);
   // The offset is 16 bits wide and wraps within the segment, so the high byte
@@ -119,7 +119,7 @@ YCPUReadMemoryOperandWord(YCPUState* cpu, const YCPUOperandAddress* address) {
 }
 
 // Read a memory operand of the given width to a YCPUOperandValue.
-YAX86_FILE_PRIVATE YCPUOperandValue YCPUReadMemoryOperandValue(
+Y_FILE_PRIVATE YCPUOperandValue YCPUReadMemoryOperandValue(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUWidth width) {
   switch (width) {
     case Y_CPU_BYTE:
@@ -132,7 +132,7 @@ YAX86_FILE_PRIVATE YCPUOperandValue YCPUReadMemoryOperandValue(
 }
 
 // Read a byte from a register to a YCPUOperandValue.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUOperandValue
+Y_MODULE_PRIVATE Y_HOT YCPUOperandValue
 YCPUReadRegisterOperandByte(YCPUState* cpu, const YCPUOperandAddress* address) {
   // Truncated to a byte, which is the invariant every consumer widens by
   // doing nothing: AH and the high half of a word register live in the bits
@@ -141,13 +141,13 @@ YCPUReadRegisterOperandByte(YCPUState* cpu, const YCPUOperandAddress* address) {
 }
 
 // Read a word from a register to a YCPUOperandValue.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUOperandValue
+Y_MODULE_PRIVATE Y_HOT YCPUOperandValue
 YCPUReadRegisterOperandWord(YCPUState* cpu, const YCPUOperandAddress* address) {
   return cpu->registers[address->register_index];
 }
 
 // Read a register operand of the given width to a YCPUOperandValue.
-YAX86_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
+Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUWidth width) {
   switch (width) {
     case Y_CPU_BYTE:
@@ -160,7 +160,7 @@ YAX86_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
 }
 
 // Write a byte as uint8_t to memory.
-YAX86_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
+Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     YCPUState* cpu, uint32_t address, uint8_t value) {
   // Every write the CPU makes comes through here - operands, stack pushes and
   // the interrupt vector alike - which is what lets a host report only the
@@ -177,7 +177,7 @@ YAX86_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
 }
 
 // Write a byte to memory.
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteMemoryOperandByte(
+Y_MODULE_PRIVATE Y_HOT void YCPUWriteMemoryOperandByte(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value) {
   YCPUAddBusCycles(cpu, 1);
   YCPUWriteRawMemoryByte(
@@ -186,7 +186,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteMemoryOperandByte(
 }
 
 // Write a word to memory.
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteMemoryOperandWord(
+Y_MODULE_PRIVATE Y_HOT void YCPUWriteMemoryOperandWord(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value) {
   YCPUAddBusCycles(cpu, 2);
   // See YCPUReadMemoryOperandWord() for why the high byte's offset wraps within
@@ -200,7 +200,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteMemoryOperandWord(
 }
 
 // Write a memory operand of the given width.
-YAX86_FILE_PRIVATE void YCPUWriteMemoryOperand(
+Y_FILE_PRIVATE void YCPUWriteMemoryOperand(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value,
     YCPUWidth width) {
   switch (width) {
@@ -215,7 +215,7 @@ YAX86_FILE_PRIVATE void YCPUWriteMemoryOperand(
 }
 
 // Write a byte to a register.
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteRegisterOperandByte(
+Y_MODULE_PRIVATE Y_HOT void YCPUWriteRegisterOperandByte(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value) {
   const uint16_t updated_byte = ((uint16_t)(uint8_t)value) << address->offset;
   const uint16_t other_byte = cpu->registers[address->register_index] &
@@ -224,13 +224,13 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteRegisterOperandByte(
 }
 
 // Write a word to a register.
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteRegisterOperandWord(
+Y_MODULE_PRIVATE Y_HOT void YCPUWriteRegisterOperandWord(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value) {
   cpu->registers[address->register_index] = value;
 }
 
 // Write a register operand of the given width.
-YAX86_FILE_PRIVATE void YCPUWriteRegisterOperand(
+Y_FILE_PRIVATE void YCPUWriteRegisterOperand(
     YCPUState* cpu, const YCPUOperandAddress* address, YCPUOperandValue value,
     YCPUWidth width) {
   switch (width) {
@@ -245,7 +245,7 @@ YAX86_FILE_PRIVATE void YCPUWriteRegisterOperand(
 }
 
 // Add an 8-bit signed relative offset to a 16-bit unsigned base address.
-YAX86_MODULE_PRIVATE uint16_t
+Y_MODULE_PRIVATE uint16_t
 YCPUAddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
   // Sign-extend the offset to 32 bits
   int32_t signed_offset = (int32_t)((int8_t)raw_offset);
@@ -256,7 +256,7 @@ YCPUAddSignedOffsetByte(uint16_t base, uint8_t raw_offset) {
 }
 
 // Add a 16-bit signed relative offset to a 16-bit unsigned base address.
-YAX86_MODULE_PRIVATE uint16_t
+Y_MODULE_PRIVATE uint16_t
 YCPUAddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
   // Sign-extend the offset to 32 bits
   int32_t signed_offset = (int32_t)((int16_t)raw_offset);
@@ -268,8 +268,8 @@ YCPUAddSignedOffsetWord(uint16_t base, uint16_t raw_offset) {
 
 // Get the register operand for a byte instruction based on the ModR/M byte's
 // reg or R/M field.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPURegisterAddress
-YCPUGetRegisterAddressByte(YAX86_UNUSED YCPUState* cpu, uint8_t reg_or_rm) {
+Y_MODULE_PRIVATE Y_HOT YCPURegisterAddress
+YCPUGetRegisterAddressByte(Y_UNUSED YCPUState* cpu, uint8_t reg_or_rm) {
   YCPURegisterAddress address;
   if (reg_or_rm < 4) {
     // AL, CL, DL, BL
@@ -285,8 +285,8 @@ YCPUGetRegisterAddressByte(YAX86_UNUSED YCPUState* cpu, uint8_t reg_or_rm) {
 
 // Get the register operand for a word instruction based on the ModR/M byte's
 // reg or R/M field.
-YAX86_MODULE_PRIVATE YCPURegisterAddress
-YCPUGetRegisterAddressWord(YAX86_UNUSED YCPUState* cpu, uint8_t reg_or_rm) {
+Y_MODULE_PRIVATE YCPURegisterAddress
+YCPUGetRegisterAddressWord(Y_UNUSED YCPUState* cpu, uint8_t reg_or_rm) {
   const YCPURegisterAddress address = {
       .register_index = reg_or_rm, .byte_offset = 0};
   return address;
@@ -294,7 +294,7 @@ YCPUGetRegisterAddressWord(YAX86_UNUSED YCPUState* cpu, uint8_t reg_or_rm) {
 
 // Get the register operand of the given width from the ModR/M byte's reg or
 // R/M field.
-YAX86_FILE_PRIVATE YCPURegisterAddress
+Y_FILE_PRIVATE YCPURegisterAddress
 YCPUGetRegisterAddress(YCPUState* cpu, uint8_t reg_or_rm, YCPUWidth width) {
   switch (width) {
     case Y_CPU_BYTE:
@@ -311,7 +311,7 @@ YCPUGetRegisterAddress(YCPUState* cpu, uint8_t reg_or_rm, YCPUWidth width) {
 
 // Replace a segment register index with whatever the instruction's segment
 // override prefix names, if it carries one.
-YAX86_MODULE_PRIVATE void YCPUApplySegmentOverride(
+Y_MODULE_PRIVATE void YCPUApplySegmentOverride(
     const YCPUInstruction* instruction, uint8_t* segment_register_index) {
   if (instruction->segment_override != Y_CPU_NO_SEGMENT_OVERRIDE) {
     *segment_register_index = instruction->segment_override;
@@ -319,7 +319,7 @@ YAX86_MODULE_PRIVATE void YCPUApplySegmentOverride(
 }
 
 // Compute the memory address for an instruction.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUMemoryAddress YCPUGetMemoryOperandAddress(
+Y_MODULE_PRIVATE Y_HOT YCPUMemoryAddress YCPUGetMemoryOperandAddress(
     YCPUState* cpu, const YCPUInstruction* instruction) {
   YCPUMemoryAddress address;
   uint8_t mod = instruction->mod_rm.mod;
@@ -410,7 +410,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT YCPUMemoryAddress YCPUGetMemoryOperandAddress(
 // Always inlined. With more than one caller, -Os and -O2 emit it out of line,
 // which puts a call and its register shuffling on the hottest path in the
 // emulator - 3.6% at -O2.
-YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE YCPUOperandAddress
+Y_MODULE_PRIVATE Y_ALWAYS_INLINE YCPUOperandAddress
 YCPUGetRegisterOrMemoryOperandAddress(const YCPUInstructionContext* ctx) {
   YCPUState* cpu = ctx->cpu;
   const YCPUInstruction* instruction = ctx->instruction;
@@ -436,20 +436,20 @@ YCPUGetRegisterOrMemoryOperandAddress(const YCPUInstructionContext* ctx) {
 }
 
 // Read an 8-bit immediate value.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUOperandValue
+Y_MODULE_PRIVATE Y_HOT YCPUOperandValue
 YCPUReadImmediateOperandByte(const YCPUInstruction* instruction) {
   return instruction->immediate[0];
 }
 
 // Read a 16-bit immediate value.
-YAX86_MODULE_PRIVATE YAX86_HOT YCPUOperandValue
+Y_MODULE_PRIVATE Y_HOT YCPUOperandValue
 YCPUReadImmediateOperandWord(const YCPUInstruction* instruction) {
   return (YCPUOperandValue)(((uint16_t)instruction->immediate[0]) |
                             (((uint16_t)instruction->immediate[1]) << 8));
 }
 
 // Read an immediate value of the given width.
-YAX86_FILE_PRIVATE YCPUOperandValue
+Y_FILE_PRIVATE YCPUOperandValue
 YCPUReadImmediateOperand(const YCPUInstruction* instruction, YCPUWidth width) {
   switch (width) {
     case Y_CPU_BYTE:
@@ -465,7 +465,7 @@ YCPUReadImmediateOperand(const YCPUInstruction* instruction, YCPUWidth width) {
 //
 // Always inlined. Left to itself GCC emits this out of line, in flash, and
 // puts a veneer and an XIP fetch on every operand read - 5.4% at -O3.
-YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE YCPUOperandValue YCPUReadOperandValue(
+Y_MODULE_PRIVATE Y_ALWAYS_INLINE YCPUOperandValue YCPUReadOperandValue(
     const YCPUInstructionContext* ctx, const YCPUOperandAddress* address) {
   // Not a switch, unlike the width dispatch it calls into.
   // YCPUOperandAddressType is a plain enum field rather than a bitfield, so
@@ -490,14 +490,14 @@ YAX86_MODULE_PRIVATE YAX86_ALWAYS_INLINE YCPUOperandValue YCPUReadOperandValue(
 
 // Get a register or memory operand for an instruction based on the ModR/M
 // byte and displacement.
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUReadRegisterOrMemoryOperand(
+Y_MODULE_PRIVATE Y_HOT void YCPUReadRegisterOrMemoryOperand(
     const YCPUInstructionContext* ctx, YCPUOperand* operand) {
   operand->address = YCPUGetRegisterOrMemoryOperandAddress(ctx);
   operand->value = YCPUReadOperandValue(ctx, &operand->address);
 }
 
 // Get a register operand for an instruction.
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUReadRegisterOperandForRegisterIndex(
+Y_MODULE_PRIVATE Y_HOT void YCPUReadRegisterOperandForRegisterIndex(
     const YCPUInstructionContext* ctx, YCPURegisterIndex register_index,
     YCPUOperand* operand) {
   const YCPUWidth width = ctx->metadata->width;
@@ -513,7 +513,7 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUReadRegisterOperandForRegisterIndex(
 
 // Get a register operand for an instruction from the REG field of the Mod/RM
 // byte.
-YAX86_MODULE_PRIVATE void YCPUReadRegisterOperand(
+Y_MODULE_PRIVATE void YCPUReadRegisterOperand(
     const YCPUInstructionContext* ctx, YCPUOperand* operand) {
   YCPUReadRegisterOperandForRegisterIndex(
       ctx, (YCPURegisterIndex)ctx->instruction->mod_rm.reg, operand);
@@ -521,7 +521,7 @@ YAX86_MODULE_PRIVATE void YCPUReadRegisterOperand(
 
 // Get a segment register operand for an instruction from the REG field of the
 // Mod/RM byte.
-YAX86_MODULE_PRIVATE void YCPUReadSegmentRegisterOperand(
+Y_MODULE_PRIVATE void YCPUReadSegmentRegisterOperand(
     const YCPUInstructionContext* ctx, YCPUOperand* operand) {
   // The segment register field is only two bits wide. The 8086/8088 does not
   // decode the third bit at all, so REG 4 through 7 name the same four
@@ -535,7 +535,7 @@ YAX86_MODULE_PRIVATE void YCPUReadSegmentRegisterOperand(
 }
 
 // Write a value to a register or memory operand address.
-YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteOperandAddress(
+Y_MODULE_PRIVATE Y_HOT void YCPUWriteOperandAddress(
     const YCPUInstructionContext* ctx, const YCPUOperandAddress* address,
     uint32_t raw_value) {
   const YCPUWidth width = ctx->metadata->width;
@@ -549,14 +549,14 @@ YAX86_MODULE_PRIVATE YAX86_HOT void YCPUWriteOperandAddress(
 }
 
 // Write a value to a register or memory operand.
-YAX86_MODULE_PRIVATE void YCPUWriteOperand(
+Y_MODULE_PRIVATE void YCPUWriteOperand(
     const YCPUInstructionContext* ctx, const YCPUOperand* operand,
     uint32_t raw_value) {
   YCPUWriteOperandAddress(ctx, &operand->address, raw_value);
 }
 
 // Read an immediate value from the instruction.
-YAX86_MODULE_PRIVATE YCPUOperandValue
+Y_MODULE_PRIVATE YCPUOperandValue
 YCPUReadImmediate(const YCPUInstructionContext* ctx) {
   return YCPUReadImmediateOperand(ctx->instruction, ctx->metadata->width);
 }

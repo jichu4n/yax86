@@ -61,7 +61,7 @@ struct FakeController {
 };
 FakeController g_controller;
 
-bool AcknowledgeInterrupt(YAX86_UNUSED YCPUState* cpu, uint8_t* vector) {
+bool AcknowledgeInterrupt(Y_UNUSED YCPUState* cpu, uint8_t* vector) {
   if (!g_controller.requesting) {
     return false;
   }

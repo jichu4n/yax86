@@ -21,7 +21,7 @@ typedef YCPUInstructionResult (*YCPUGroup2ExecuteInstructionFn)(
 // Overflow after a left shift or rotate: the bit shifted out of the top
 // differs from the sign bit left behind, which is to say the last pass changed
 // the sign of the value.
-YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterLeftShift(
+Y_FILE_PRIVATE void YCPUSetOverflowFlagAfterLeftShift(
     const YCPUInstructionContext* ctx, uint32_t result, bool carry) {
   const bool result_sign = (result & YCPUSignBit[ctx->metadata->width]) != 0;
   YCPUSetFlag(ctx->cpu, Y_CPU_OF, carry != result_sign);
@@ -30,7 +30,7 @@ YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterLeftShift(
 // Overflow after a right rotate: the top two bits of the result differ. The
 // bit rotated into the top came from the bottom, so this again says the last
 // pass changed the sign of the value.
-YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterRightRotate(
+Y_FILE_PRIVATE void YCPUSetOverflowFlagAfterRightRotate(
     const YCPUInstructionContext* ctx, uint32_t result) {
   const uint32_t sign_bit = YCPUSignBit[ctx->metadata->width];
   const bool result_sign = (result & sign_bit) != 0;
@@ -44,7 +44,7 @@ YAX86_FILE_PRIVATE void YCPUSetOverflowFlagAfterRightRotate(
 // fall out of it, so every larger count behaves alike. Clamping to just past
 // the width keeps that true while holding the shifts below the width of the
 // intermediate they are computed in, where C leaves them undefined.
-YAX86_FILE_PRIVATE uint8_t
+Y_FILE_PRIVATE uint8_t
 YCPUClampShiftCount(const YCPUInstructionContext* ctx, uint8_t count) {
   const uint8_t limit = YCPUNumBits[ctx->metadata->width] + 1;
   return count > limit ? limit : count;
@@ -54,7 +54,7 @@ YCPUClampShiftCount(const YCPUInstructionContext* ctx, uint8_t count) {
 // SHL r/m16, 1
 // SHL r/m8, CL
 // SHL r/m16, CL
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Shl(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Shl(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -76,7 +76,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Shl(
 // SHR r/m16, 1
 // SHR r/m8, CL
 // SHR r/m16, CL
-YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteGroup2Shr(
+Y_FILE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteGroup2Shr(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -100,7 +100,7 @@ YAX86_FILE_PRIVATE YAX86_HOT YCPUInstructionResult YCPUExecuteGroup2Shr(
 // SAR r/m16, 1
 // SAR r/m8, CL
 // SAR r/m16, CL
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Sar(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Sar(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -123,7 +123,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Sar(
 // ROL r/m16, 1
 // ROL r/m8, CL
 // ROL r/m16, CL
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rol(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rol(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -147,7 +147,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rol(
 // ROR r/m16, 1
 // ROR r/m8, CL
 // ROR r/m16, CL
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Ror(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Ror(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -171,7 +171,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Ror(
 // RCL r/m16, 1
 // RCL r/m8, CL
 // RCL r/m16, CL
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcl(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcl(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -203,7 +203,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcl(
 // RCR r/m16, 1
 // RCR r/m8, CL
 // RCR r/m16, CL
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcr(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcr(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -243,7 +243,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Rcr(
 // Nothing an IBM PC/XT runs uses this, but leaving REG 6 aliased to SAL would
 // silently give a different answer than the hardware for the same encoding,
 // and the operation is a single store.
-YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Setmo(
+Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Setmo(
     const YCPUInstructionContext* ctx, YCPUOperand* op, uint8_t count) {
   // Return early if count is 0, so as to not affect flags.
   if (count == 0) {
@@ -258,7 +258,7 @@ YAX86_FILE_PRIVATE YCPUInstructionResult YCPUExecuteGroup2Setmo(
   return Y_CPU_INSTRUCTION_EXECUTED;
 }
 
-YAX86_FILE_PRIVATE const YCPUGroup2ExecuteInstructionFn
+Y_FILE_PRIVATE const YCPUGroup2ExecuteInstructionFn
     YCPUGroup2ExecuteInstructionFns[] = {
         YCPUExecuteGroup2Rol,    // 0 - ROL
         YCPUExecuteGroup2Ror,    // 1 - ROR
@@ -271,7 +271,7 @@ YAX86_FILE_PRIVATE const YCPUGroup2ExecuteInstructionFn
 };
 
 // Group 2 shift / rotate by 1.
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup2ShiftOrRotateBy1Instruction(
     const YCPUInstructionContext* ctx) {
   const YCPUGroup2ExecuteInstructionFn fn =
@@ -282,7 +282,7 @@ YCPUExecuteGroup2ShiftOrRotateBy1Instruction(
 }
 
 // Group 2 shift / rotate by CL.
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteGroup2ShiftOrRotateByCLInstruction(
     const YCPUInstructionContext* ctx) {
   const YCPUGroup2ExecuteInstructionFn fn =

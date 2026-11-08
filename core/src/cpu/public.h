@@ -15,7 +15,7 @@ enum {
 };
 
 // Log module for the CPU.
-YAX86_PUBLIC_HEADER const YLogModule YCPULogModule = {
+Y_PUBLIC_HEADER const YLogModule YCPULogModule = {
     .id = Y_CPU_LOG_MODULE_ID,
     .name = "CPU",
 };
@@ -408,22 +408,20 @@ typedef struct YCPUState {
 // to fill in its config does not want zeroing twice - and it is the only place
 // the config is checked, so a host is told about a mistake here or not at
 // all.
-YAX86_PUBLIC void YCPUInit(YCPUState* cpu);
+Y_PUBLIC void YCPUInit(YCPUState* cpu);
 
 // Instructions retired since YCPUInit(), as one number.
-YAX86_PUBLIC_HEADER inline uint64_t YCPUInstructionsRetired(
-    const YCPUState* cpu) {
+Y_PUBLIC_HEADER inline uint64_t YCPUInstructionsRetired(const YCPUState* cpu) {
   return ((uint64_t)cpu->instructions_retired_high << 32) |
          cpu->instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
-YAX86_PUBLIC_HEADER inline bool YCPUGetFlag(
-    const YCPUState* cpu, YCPUFlag flag) {
+Y_PUBLIC_HEADER inline bool YCPUGetFlag(const YCPUState* cpu, YCPUFlag flag) {
   return (cpu->flags & flag) != 0;
 }
 // Set a CPU flag.
-YAX86_PUBLIC_HEADER inline void YCPUSetFlag(
+Y_PUBLIC_HEADER inline void YCPUSetFlag(
     YCPUState* cpu, YCPUFlag flag, bool value) {
   if (value) {
     cpu->flags |= flag;
@@ -437,14 +435,14 @@ YAX86_PUBLIC_HEADER inline void YCPUSetFlag(
 // internal - INT n, INT 3, INTO, a divide error, a single-step trap - which
 // are not maskable by IF. External requests arrive on the INTR pin instead,
 // via the acknowledge_interrupt callback.
-YAX86_PUBLIC_HEADER inline void YCPURaiseInternalInterrupt(
+Y_PUBLIC_HEADER inline void YCPURaiseInternalInterrupt(
     YCPUState* cpu, uint8_t interrupt_number) {
   cpu->has_pending_internal_interrupt = true;
   cpu->pending_internal_interrupt_number = interrupt_number;
 }
 
 // Discard a pending internal interrupt without taking it.
-YAX86_PUBLIC_HEADER inline void YCPUClearInternalInterrupt(YCPUState* cpu) {
+Y_PUBLIC_HEADER inline void YCPUClearInternalInterrupt(YCPUState* cpu) {
   cpu->has_pending_internal_interrupt = false;
   cpu->pending_internal_interrupt_number = 0;
 }
@@ -453,7 +451,7 @@ YAX86_PUBLIC_HEADER inline void YCPUClearInternalInterrupt(YCPUState* cpu) {
 // Used by the instructions whose cost is not a property of the opcode alone -
 // a conditional jump that is taken, a shift by a count in CL, a multiply or a
 // divide.
-YAX86_PUBLIC void YCPUAddCycles(YCPUState* cpu, uint16_t cycles);
+Y_PUBLIC void YCPUAddCycles(YCPUState* cpu, uint16_t cycles);
 
 // Hands the CPU guest memory it may read and write by indexing, covering the
 // half-open range of linear addresses [0, end). Optional - a host that
@@ -472,7 +470,7 @@ YAX86_PUBLIC void YCPUAddCycles(YCPUState* cpu, uint16_t cycles);
 // need a call is a change to what an address means: remapping memory, or
 // enabling something that has to observe accesses, calls
 // YCPUInvalidateDirectDataWindow().
-YAX86_PUBLIC_HEADER inline void YCPUSetDirectDataWindow(
+Y_PUBLIC_HEADER inline void YCPUSetDirectDataWindow(
     YCPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
@@ -480,7 +478,7 @@ YAX86_PUBLIC_HEADER inline void YCPUSetDirectDataWindow(
 
 // Discards the direct data window, so that every access goes back through
 // YCPUConfig.read_memory_byte and YCPUConfig.write_memory_byte.
-YAX86_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
+Y_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
 }
@@ -490,7 +488,7 @@ YAX86_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
 // A host calls this when it changes what an address means rather than what is
 // stored at it - remapping memory is the case that matters. Ordinary writes
 // are covered by YCPUNotifyMemoryWrite() instead.
-YAX86_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
+Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 
 // Tells the CPU that the byte at a linear address has been written, so that
 // any decode taken from that page stops being used.
@@ -504,7 +502,7 @@ YAX86_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 // hence the flush. The address is masked rather than range checked: aliasing
 // onto a page costs a spurious invalidation, where indexing past the array
 // would corrupt whatever follows it.
-YAX86_PUBLIC_HEADER inline void YCPUNotifyMemoryWrite(
+Y_PUBLIC_HEADER inline void YCPUNotifyMemoryWrite(
     YCPUState* cpu, uint32_t address) {
   const uint32_t page =
       (address >> Y_CPU_CODE_PAGE_SHIFT) & (Y_CPU_NUM_CODE_PAGES - 1);
@@ -678,11 +676,11 @@ typedef enum YCPUFetchNextInstructionStatus {
 // Since this function is part of the core CPU execution loop, assembling and
 // copying a whole instruction struct would have a measurable impact on
 // performance.
-YAX86_PUBLIC YCPUFetchNextInstructionStatus
+Y_PUBLIC YCPUFetchNextInstructionStatus
 YCPUFetchNextInstruction(YCPUState* cpu, YCPUInstruction* instruction);
 
 // Execute a single fetched instruction.
-YAX86_PUBLIC YCPUInstructionResult
+Y_PUBLIC YCPUInstructionResult
 YCPUExecuteInstruction(YCPUState* cpu, YCPUInstruction* instruction);
 
 enum {
@@ -713,6 +711,6 @@ enum {
 // Zero runs exactly one instruction. That is what a host stepping the machine
 // passes, and what a host that has to see every instruction boundary itself
 // passes, and it is the behaviour this had before there were runs at all.
-YAX86_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
+Y_PUBLIC YCPUTickResult YCPUTick(YCPUState* cpu, uint16_t max_run_cycles);
 
 #endif  // YAX86_CPU_PUBLIC_H

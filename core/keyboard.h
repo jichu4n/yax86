@@ -19,11 +19,11 @@ extern "C" {
 
 // Part of a module's public interface. Declared in the module's public.h and
 // defined in one of its source files.
-#define YAX86_PUBLIC
+#define Y_PUBLIC
 
 // Part of a module's public interface, defined in a header rather than in a
 // source file: one copy per translation unit.
-#define YAX86_PUBLIC_HEADER static
+#define Y_PUBLIC_HEADER static
 
 // Visible to other files within the same module, but not publicly to users of
 // the bundled library.
@@ -34,25 +34,25 @@ extern "C" {
 #ifdef YAX86_IMPLEMENTATION
 // When bundled, static linkage so that the symbol is only visible within the
 // implementation file.
-#define YAX86_MODULE_PRIVATE static
+#define Y_MODULE_PRIVATE static
 #else
 // When unbundled, use default linkage.
-#define YAX86_MODULE_PRIVATE
+#define Y_MODULE_PRIVATE
 #endif  // YAX86_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
 // in a source file: one copy per translation unit. Also used for internal
 // utilities (like snprintf) that are included into multiple module bundles.
-#define YAX86_MODULE_PRIVATE_HEADER static
+#define Y_MODULE_PRIVATE_HEADER static
 
 // Visible only within the source file that defines it.
-#define YAX86_FILE_PRIVATE static
+#define Y_FILE_PRIVATE static
 
 // Macro to mark a function or parameter as unused.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_UNUSED __attribute__((unused))
+#define Y_UNUSED __attribute__((unused))
 #else
-#define YAX86_UNUSED
+#define Y_UNUSED
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function out of line.
@@ -61,25 +61,25 @@ extern "C" {
 // with few registers, folding a large callee into an already register-hungry
 // caller makes both spill.
 #if defined(__GNUC__) || defined(__clang__)
-#define YAX86_NOINLINE __attribute__((noinline))
+#define Y_NOINLINE __attribute__((noinline))
 #else
-#define YAX86_NOINLINE
+#define Y_NOINLINE
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Macro to keep a function inlined.
 //
-// Like YAX86_NOINLINE, only worth reaching for against a measurement. The case
+// Like Y_NOINLINE, only worth reaching for against a measurement. The case
 // it exists for is a small helper on the hot path that the compiler inlines
 // while it has a single caller and emits out of line once it has several - a
 // change to the hot path that nothing in the source shows.
 #if defined(__GNUC__) || defined(__clang__)
 #if !defined(YAX86_IMPLEMENTATION)
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline))
+#define Y_ALWAYS_INLINE __attribute__((always_inline))
 #else
-#define YAX86_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 #else
-#define YAX86_ALWAYS_INLINE inline
+#define Y_ALWAYS_INLINE inline
 #endif  // defined(__GNUC__) || defined(__clang__)
 
 // Marks a function as being on the per-instruction hot path.
@@ -91,18 +91,18 @@ extern "C" {
 // path in SRAM instead takes that cache out of the picture.
 //
 // Define it before including this header, or on the command line.
-#ifndef YAX86_HOT
-#define YAX86_HOT
-#endif  // YAX86_HOT
+#ifndef Y_HOT
+#define Y_HOT
+#endif  // Y_HOT
 
 // The same, for data rather than code.
 //
-// Separate from YAX86_HOT because a compiler will not put executable code and
+// Separate from Y_HOT because a compiler will not put executable code and
 // read-only data in one section, and because a target may well want to place
 // them differently even where it could.
-#ifndef YAX86_HOT_DATA
-#define YAX86_HOT_DATA
-#endif  // YAX86_HOT_DATA
+#ifndef Y_HOT_DATA
+#define Y_HOT_DATA
+#endif  // Y_HOT_DATA
 
 #endif  // YAX86_UTIL_COMMON_H
 
@@ -141,15 +141,15 @@ extern "C" {
 // - Zero padding (e.g., %05d)
 // - Length modifiers: 'l' (long), 'll' (long long), 'z' (size_t)
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
-    char* buffer, size_t size, const char* format, va_list args) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
+    char* buffer, size_t size, const char* format, va_list args) Y_UNUSED;
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
-    char* buffer, size_t size, const char* format, ...) YAX86_UNUSED;
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
+    char* buffer, size_t size, const char* format, ...) Y_UNUSED;
 
 // Helper to put a character into the buffer safely.
 // Returns 1 (always counts the character, even if not written).
-YAX86_MODULE_PRIVATE_HEADER size_t
+Y_MODULE_PRIVATE_HEADER size_t
 YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   if (*pos < size) {
     buffer[*pos] = c;
@@ -158,7 +158,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
   return 1;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
   size_t count = 0;
   size_t len = 0;
@@ -179,7 +179,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
+Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
@@ -231,7 +231,7 @@ YAX86_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   return count;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     char* buffer, size_t size, const char* format, va_list args) {
   size_t pos = 0;
 
@@ -382,7 +382,7 @@ YAX86_MODULE_PRIVATE_HEADER int YVSNPrintF(
   return (int)pos;
 }
 
-YAX86_MODULE_PRIVATE_HEADER int YSNPrintF(
+Y_MODULE_PRIVATE_HEADER int YSNPrintF(
     char* buffer, size_t size, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -466,7 +466,7 @@ typedef struct YLogModule {
 } YLogModule;
 
 // Returns the filter mask bit for a module.
-YAX86_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
+Y_PUBLIC_HEADER inline uint32_t YLogModuleMask(const YLogModule* module) {
   return (uint32_t)1 << module->id;
 }
 
@@ -510,7 +510,7 @@ typedef struct YLogger {
 } YLogger;
 
 // Initialize a logger with the provided configuration.
-YAX86_PUBLIC_HEADER inline void YLoggerInit(
+Y_PUBLIC_HEADER inline void YLoggerInit(
     YLogger* logger, YLoggerConfig* config) {
   logger->config = config;
   logger->buffer[0] = '\0';
@@ -519,7 +519,7 @@ YAX86_PUBLIC_HEADER inline void YLoggerInit(
 // Whether a message with the given module and level would be emitted. This is
 // checked before a message is formatted, so that disabled log statements cost
 // only a few comparisons.
-YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
+Y_PUBLIC_HEADER inline bool YLoggerIsEnabled(
     const YLogger* logger, const YLogModule* module, YLogLevel level) {
   return logger != NULL && logger->config != NULL &&
          logger->config->write_line != NULL &&
@@ -528,7 +528,7 @@ YAX86_PUBLIC_HEADER inline bool YLoggerIsEnabled(
 }
 
 // Enable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
+Y_PUBLIC_HEADER inline void YLoggerEnableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules |= YLogModuleMask(module);
@@ -536,23 +536,23 @@ YAX86_PUBLIC_HEADER inline void YLoggerEnableModule(
 }
 
 // Disable a module on a logger.
-YAX86_PUBLIC_HEADER inline void YLoggerDisableModule(
+Y_PUBLIC_HEADER inline void YLoggerDisableModule(
     YLogger* logger, const YLogModule* module) {
   if (logger != NULL && logger->config != NULL) {
     logger->config->enabled_modules &= ~YLogModuleMask(module);
   }
 }
 
-// Format and emit a log message. Prefer the YAX86_LOG macro, which skips
+// Format and emit a log message. Prefer the Y_LOG macro, which skips
 // formatting when the message would be suppressed.
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
-    const char* format, ...) YAX86_UNUSED;
+    const char* format, ...) Y_UNUSED;
 
-YAX86_PUBLIC_HEADER void YLoggerWrite(
+Y_PUBLIC_HEADER void YLoggerWrite(
     YLogger* logger, const YLogModule* module, YLogLevel level,
     const char* format, ...) {
-  // Callers normally go through YAX86_LOG, which has already checked this, but
+  // Callers normally go through Y_LOG, which has already checked this, but
   // YLoggerWrite is also callable directly.
   if (!YLoggerIsEnabled(logger, module, level)) {
     return;
@@ -585,7 +585,7 @@ YAX86_PUBLIC_HEADER void YLoggerWrite(
 // This is a macro rather than a function because it takes a variable number of
 // arguments and must avoid the cost of formatting a message that will be
 // discarded.
-#define YAX86_LOG(logger, module, level, ...)                 \
+#define Y_LOG(logger, module, level, ...)                     \
   do {                                                        \
     if (YLoggerIsEnabled((logger), (module), (level))) {      \
       YLoggerWrite((logger), (module), (level), __VA_ARGS__); \
@@ -632,7 +632,7 @@ typedef struct YStaticVectorHeader {
 // macro because this macro is instantiated across different headers and tiers
 // (both public headers and internal source files); its output's tier depends
 // on the instantiation site.
-#define STATIC_VECTOR_TYPE(name, element_type, max_length_value)          \
+#define Y_STATIC_VECTOR_TYPE(name, element_type, max_length_value)        \
   typedef struct name {                                                   \
     YStaticVectorHeader header;                                           \
     element_type elements[max_length_value];                              \
@@ -764,7 +764,7 @@ enum {
 };
 
 // Log module for the Keyboard.
-YAX86_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
+Y_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
     .id = Y_KEYBOARD_LOG_MODULE_ID,
     .name = "KEYBOARD",
 };
@@ -791,7 +791,7 @@ enum {
   // Threshold required to trigger keyboard reset when clock line is held low.
   Y_KEYBOARD_RESET_THRESHOLD_MS = 20,
 };
-STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, Y_KEYBOARD_BUFFER_SIZE)
+Y_STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, Y_KEYBOARD_BUFFER_SIZE)
 
 // State of the Keyboard.
 typedef struct YKeyboardState {
@@ -825,19 +825,19 @@ typedef struct YKeyboardState {
 } YKeyboardState;
 
 // Initializes the keyboard to its power-on state.
-YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard);
+Y_PUBLIC void YKeyboardInit(YKeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
-YAX86_PUBLIC void YKeyboardHandleControl(
+Y_PUBLIC void YKeyboardHandleControl(
     YKeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
-YAX86_PUBLIC void YKeyboardHandleKeyPress(
+Y_PUBLIC void YKeyboardHandleKeyPress(
     YKeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
-YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard);
+Y_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H
 
@@ -865,7 +865,7 @@ enum {
   Y_KEYBOARD_SELF_TEST_OK = 0xAA,
 };
 
-YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard) {
+Y_PUBLIC void YKeyboardInit(YKeyboardState* keyboard) {
   // Default to keyboard enabled (enable_clear = false) with clock held low
   // (clock_low = true). This allows us to detect a falling edge on clock_low
   // which triggers the reset timer.
@@ -877,7 +877,7 @@ YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard) {
 }
 
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
-YAX86_FILE_PRIVATE inline void YKeyboardSendScancode(
+Y_FILE_PRIVATE inline void YKeyboardSendScancode(
     YKeyboardState* keyboard, uint8_t scancode) {
   if (keyboard->config.send_scancode) {
     keyboard->config.send_scancode(keyboard->config.context, scancode);
@@ -889,8 +889,7 @@ YAX86_FILE_PRIVATE inline void YKeyboardSendScancode(
 }
 
 // Helper to send the next scancode in the buffer if available.
-YAX86_FILE_PRIVATE inline void YKeyboardSendNextScancode(
-    YKeyboardState* keyboard) {
+Y_FILE_PRIVATE inline void YKeyboardSendNextScancode(YKeyboardState* keyboard) {
   // Can only send in state [0, 1], i.e. enable_clear = false clock_low = true
   if (!(keyboard->enable_clear == false && keyboard->clock_low == true)) {
     return;
@@ -910,7 +909,7 @@ YAX86_FILE_PRIVATE inline void YKeyboardSendNextScancode(
   YKeyboardSendScancode(keyboard, scancode);
 }
 
-YAX86_PUBLIC void YKeyboardHandleControl(
+Y_PUBLIC void YKeyboardHandleControl(
     YKeyboardState* keyboard, bool enable_clear, bool clock_low) {
   // Save previous state.
   bool old_clock_low = keyboard->clock_low;
@@ -935,7 +934,7 @@ YAX86_PUBLIC void YKeyboardHandleControl(
   }
 }
 
-YAX86_PUBLIC void YKeyboardHandleKeyPress(
+Y_PUBLIC void YKeyboardHandleKeyPress(
     YKeyboardState* keyboard, uint8_t scancode) {
   // Drop key presses that occur while the keyboard is running its self test.
   // Queueing it would let it resurface once the reset ends, which lands it in
@@ -947,7 +946,7 @@ YAX86_PUBLIC void YKeyboardHandleKeyPress(
   YKeyboardBufferAppend(&keyboard->buffer, &scancode);
 }
 
-YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
+Y_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
   // If clock_low line is being held low, update timer and trigger reset if
   // reached threshold.
   if (keyboard->clock_low == false) {

@@ -52,7 +52,7 @@ enum {
 };
 
 // Log module for the Keyboard.
-YAX86_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
+Y_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
     .id = Y_KEYBOARD_LOG_MODULE_ID,
     .name = "KEYBOARD",
 };
@@ -79,7 +79,7 @@ enum {
   // Threshold required to trigger keyboard reset when clock line is held low.
   Y_KEYBOARD_RESET_THRESHOLD_MS = 20,
 };
-STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, Y_KEYBOARD_BUFFER_SIZE)
+Y_STATIC_VECTOR_TYPE(YKeyboardBuffer, uint8_t, Y_KEYBOARD_BUFFER_SIZE)
 
 // State of the Keyboard.
 typedef struct YKeyboardState {
@@ -113,18 +113,18 @@ typedef struct YKeyboardState {
 } YKeyboardState;
 
 // Initializes the keyboard to its power-on state.
-YAX86_PUBLIC void YKeyboardInit(YKeyboardState* keyboard);
+Y_PUBLIC void YKeyboardInit(YKeyboardState* keyboard);
 
 // Receive keyboard control bits from the PPI (bits 6 and 7 of Port B).
-YAX86_PUBLIC void YKeyboardHandleControl(
+Y_PUBLIC void YKeyboardHandleControl(
     YKeyboardState* keyboard, bool enable_clear, bool clock_low);
 
 // Handles a real key press event.
-YAX86_PUBLIC void YKeyboardHandleKeyPress(
+Y_PUBLIC void YKeyboardHandleKeyPress(
     YKeyboardState* keyboard, uint8_t scancode);
 
 // Simulates a 1ms tick. This is needed to respond to reset commands and to
 // send buffered scancodes.
-YAX86_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard);
+Y_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard);
 
 #endif  // YAX86_KEYBOARD_PUBLIC_H

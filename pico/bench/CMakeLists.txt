@@ -142,7 +142,7 @@ if(YAX86_PICO_SYS_CLK_KHZ)
 endif()
 
 # Place the emulator's per-instruction hot path in SRAM. The core marks it with
-# YAX86_HOT, which expands to nothing unless something defines it; this is where
+# Y_HOT, which expands to nothing unless something defines it; this is where
 # this target does. Force-included rather than included from the core, so that
 # the core knows nothing about this target.
 target_compile_options(yax86_pico_bench PRIVATE

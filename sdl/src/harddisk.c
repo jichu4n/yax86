@@ -7,12 +7,12 @@
 static uint8_t g_hdd_image[Y_HDC_GEOMETRY_10MB_IMAGE_SIZE];
 
 static uint8_t HardDiskReadByte(
-    YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive, uint32_t offset) {
+    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset) {
   return offset < Y_HDC_GEOMETRY_10MB_IMAGE_SIZE ? g_hdd_image[offset] : 0xFF;
 }
 
 static void HardDiskWriteByte(
-    YAX86_UNUSED void* context, YAX86_UNUSED uint8_t drive, uint32_t offset,
+    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset,
     uint8_t value) {
   if (offset < Y_HDC_GEOMETRY_10MB_IMAGE_SIZE) {
     g_hdd_image[offset] = value;

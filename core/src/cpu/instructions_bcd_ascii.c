@@ -18,12 +18,12 @@
 // entry. That is not what Intel's published pseudocode says, which uses 0x99
 // throughout, but it is what the 8086/8088 does - and with AL between 0x9A and
 // 0x9F it is the difference between adjusting and not.
-YAX86_FILE_PRIVATE uint8_t YCPUGetBCDHighDigitLimit(bool auxiliary_carry) {
+Y_FILE_PRIVATE uint8_t YCPUGetBCDHighDigitLimit(bool auxiliary_carry) {
   return auxiliary_carry ? 0x9F : 0x99;
 }
 
 // AAA
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAaa(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
@@ -43,7 +43,7 @@ YCPUExecuteAaa(const YCPUInstructionContext* ctx) {
 }
 
 // AAS
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAas(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
@@ -63,7 +63,7 @@ YCPUExecuteAas(const YCPUInstructionContext* ctx) {
 }
 
 // AAM
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAam(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
   YCPUOperandValue base = YCPUReadImmediate(ctx);
@@ -88,7 +88,7 @@ YCPUExecuteAam(const YCPUInstructionContext* ctx) {
 }
 
 // AAD
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteAad(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
@@ -102,7 +102,7 @@ YCPUExecuteAad(const YCPUInstructionContext* ctx) {
 }
 
 // DAA
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDaa(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
@@ -129,7 +129,7 @@ YCPUExecuteDaa(const YCPUInstructionContext* ctx) {
 }
 
 // DAS
-YAX86_MODULE_PRIVATE YCPUInstructionResult
+Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDas(const YCPUInstructionContext* ctx) {
   uint8_t al = ctx->cpu->registers[Y_CPU_AX] & 0xFF;
   uint8_t ah = (ctx->cpu->registers[Y_CPU_AX] >> 8) & 0xFF;
