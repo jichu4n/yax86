@@ -24,11 +24,13 @@ enum {
   kLcdPinDC = 14,
   kLcdPinReset = 15,
 
-  // ClockworkPi's samples run the panel at 25MHz, which is what this starts
-  // from. The datasheet rates writes at a 66ns cycle, about 15MHz, so that is
-  // already above the rating. How far it will go is a measurement for when
-  // rendering is on the screen.
-  kLcdSPIHz = 25 * 1000 * 1000,
+  // Half the peripheral clock, the fastest the SPI block runs: 62.5MHz at
+  // the stock 125MHz. The datasheet rates writes at a 66ns cycle, about 15MHz,
+  // and ClockworkPi's samples run at 25MHz, which a 125MHz peripheral clock
+  // divides to 20.83MHz. The panel draws cleanly at 62.5MHz, and against
+  // 20.83MHz it takes drawing the guest's screen during dos-boot from 7.4% of
+  // the run to 5.2%.
+  kLcdSPIHz = 62500 * 1000,
 
   // Commands, from the ST7365P datasheet.
   kCmdSoftwareReset = 0x01,
@@ -154,7 +156,7 @@ uint32_t LcdInit(void) {
   return actual_hz;
 }
 
-void LcdSetWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
+void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   const uint16_t right = (uint16_t)(x + width - 1);
   const uint16_t bottom = (uint16_t)(y + height - 1);
   const uint8_t columns[] = {
@@ -164,17 +166,22 @@ void LcdSetWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   LcdSendCommand(kCmdColumnAddressSet, columns, sizeof(columns));
   LcdSendCommand(kCmdRowAddressSet, rows, sizeof(rows));
   LcdSendCommand(kCmdMemoryWrite, NULL, 0);
-}
 
-// Raising CS between transfers does not end a memory write - only the next
-// command does - so each call can be a transfer of its own.
-void LcdWritePixels(const uint16_t* pixels, uint32_t count) {
-  // Sent as 16-bit frames, which go out most significant bit first: the byte
-  // order the panel expects, with no swapping in between.
+  // Pixels go as 16-bit frames, which leave most significant bit first: the
+  // byte order the panel expects, with no swapping in between. The format,
+  // DC and CS are set once here rather than per call, since the core hands
+  // pixels over 32 at a time and a format switch per batch would cost more
+  // than the batch.
   spi_set_format(kLcdSPI, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
   gpio_put(kLcdPinDC, 1);
   gpio_put(kLcdPinCS, 0);
+}
+
+void LcdWritePixels(const uint16_t* pixels, uint32_t count) {
   spi_write16_blocking(kLcdSPI, pixels, count);
+}
+
+void LcdEndWrite(void) {
   gpio_put(kLcdPinCS, 1);
   spi_set_format(kLcdSPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 }
@@ -187,8 +194,9 @@ void LcdFillRect(
   for (uint16_t i = 0; i < width; ++i) {
     g_fill_row[i] = color;
   }
-  LcdSetWindow(x, y, width, height);
+  LcdBeginWrite(x, y, width, height);
   for (uint16_t row = 0; row < height; ++row) {
     LcdWritePixels(g_fill_row, width);
   }
+  LcdEndWrite();
 }

@@ -20,7 +20,7 @@ void TextDrawString(
   }
 
   const uint16_t width = (uint16_t)(length * kFont4x10Width);
-  LcdSetWindow(
+  LcdBeginWrite(
       (uint16_t)(column * kFont4x10Width), (uint16_t)(row * kFont4x10Height),
       width, kFont4x10Height);
   for (uint8_t y = 0; y < kFont4x10Height; ++y) {
@@ -34,4 +34,5 @@ void TextDrawString(
     }
     LcdWritePixels(g_text_line, width);
   }
+  LcdEndWrite();
 }
