@@ -2082,9 +2082,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   SPI block runs. The datasheet rates writes at a 66ns cycle, about 15MHz, and
   ClockworkPi's samples ask for 25MHz, which 125MHz divides to 20.83MHz. The
   panel draws cleanly at 62.5MHz, checked by eye, and it takes the cost of
-  drawing during `dos-boot` from 7.4% of the run to 5.2%. The peripheral
-  clock follows the system clock, so an overclock changes the SPI clock with
-  it - recheck the panel when the runtime overclocks.
+  drawing during `dos-boot` from 7.4% of the run to 5.2%.
+- **An overclock moves the SPI clock's source.** At power on the peripheral
+  clock is the system clock, but `set_sys_clock_khz()` switches it to the
+  48MHz USB PLL unless `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK` is
+  defined - see `set_sys_clock_pll()` in the SDK's `clocks.c` - which would
+  leave the LCD at 24MHz at most. With it defined, the peripheral clock is the
+  system clock again, and the SPI divider has to be chosen against that.
 - A write is `LcdBeginWrite()`, then any number of `LcdWritePixels()`, then
   `LcdEndWrite()`. The window commands, the switch to 16-bit frames and CS all
   happen once per window rather than per call, because the core hands pixels
