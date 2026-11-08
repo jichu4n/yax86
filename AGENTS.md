@@ -1594,6 +1594,44 @@ Alongside the table, state:
   unanswered alternate status reads as 0xFF, which decodes as a drive that is
   permanently busy.
 
+### video — host text fonts
+
+- The adapters draw text in 8x8 (CGA) or 9x14 (MDA) cells, 640 or 720 pixels
+  across. A display narrower than that cannot show 80 columns by shrinking
+  those glyphs, which makes them unreadable, so a host can supply a font drawn
+  for a narrower cell - `YVideoConfig.text_font`, or
+  `YPlatformConfig.video_text_font` through the platform, since
+  `YPlatformInit()` replaces the video config wholesale. All zeros is the
+  default and keeps the adapter's font.
+- **With a host font the frame size follows the mode.** Text modes render in
+  the font's cells, so an 80-column text frame is 80 * width by rows * height
+  pixels, and a 40-column cell is drawn twice the font's width to come to the
+  same total. Graphics modes keep the adapter's frame. A host asks with
+  `YVideoGetFrameSize()` rather than reading `frame_buffer_width` from the
+  adapter metadata, which is now only the frame without a font. A mode change
+  already forces a full redraw, so a host sees the new size with a region
+  covering all of it.
+- **Nothing the guest can observe changes.** Emulated timing reads only the
+  adapter's `cycles_per_scan_line` and `scan_lines_per_frame`. A mode's
+  `char_height` reaches only `YVideoGetDirtyGeometry()`, which is render-side
+  and follows the font.
+- **The cursor and the MDA underline are placed by scan line of the adapter's
+  cell, and are scaled to the font's.** A scan line of the adapter's cell
+  covers a span of the font's rows. A range maps from the first row its first
+  line covers to the last row its last line covers - rounding the start down
+  and the end up. That keeps a range that is not empty in the adapter's cell
+  from coming out empty in the font's: the CGA's underline cursor, lines 6-7
+  of 8, becomes rows 7-9 of 10, where rounding both ends down would leave the
+  bottom row bare. A single line - the underline - takes the start, so the
+  MDA's line 12 of 14 lands on row 8 of 10, second from the bottom in both.
+- `YVideoInit()` refuses a font wider than a byte or with no height, logs it,
+  and draws in the adapter's font. What it records is `has_text_font`, a flag,
+  rather than a pointer to the font in the config, so that a copy of the state
+  does not point back into the original.
+- `core/tests/video/text_font_test.cpp` covers it. Rounding the cursor's end
+  down, leaving dirty rows at the adapter's cell height, and taking the region
+  column width from the adapter's frame are each caught there.
+
 ### util — hot path placement
 
 - `Y_HOT` marks a function as being on the per-instruction hot path. It is

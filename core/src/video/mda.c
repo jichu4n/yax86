@@ -5,8 +5,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  Y_VIDEO_MDA_CHAR_HEIGHT = 14,
-  // Position of the underline within an MDA character cell.
+  // Scan line of the underline within an MDA character cell.
   Y_VIDEO_MDA_UNDERLINE_POSITION = 12,
   // Documented three-bit foreground and background combinations.
   Y_VIDEO_MDA_ATTRIBUTE_NORMAL = 0x07,
@@ -91,16 +90,25 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
   uint16_t cursor_offset = 0;
   bool cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
-  uint8_t cursor_start = YVideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = YVideoGetCursorEndScanLine(video);
+  uint16_t cursor_start = YVideoScaleTextScanLineStart(
+      video, metadata, YVideoGetCursorStartScanLine(video));
+  uint16_t cursor_end = YVideoScaleTextScanLineEnd(
+      video, metadata, YVideoGetCursorEndScanLine(video));
+
+  // The adapter's own 9x14 cell, or a host text font's, with the underline
+  // moved to match.
+  const uint8_t cell_width = YVideoGetTextCellWidth(video, metadata);
+  const uint8_t cell_height = YVideoGetTextCellHeight(video, metadata);
+  const uint16_t underline_scan_line = YVideoScaleTextScanLineStart(
+      video, metadata, Y_VIDEO_MDA_UNDERLINE_POSITION);
 
   // Scan lines are the outer loop so that pixels leave in row-major order,
   // which is what a display addressed by transfer window expects. The cost is
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
-    YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
-    uint8_t row = (uint8_t)(y / Y_VIDEO_MDA_CHAR_HEIGHT);
-    uint8_t char_scan_line = (uint8_t)(y % Y_VIDEO_MDA_CHAR_HEIGHT);
+    YVideoPixelRunBegin(run, (uint16_t)start_column * cell_width, y);
+    uint8_t row = (uint8_t)(y / cell_height);
+    uint8_t char_scan_line = (uint8_t)(y % cell_height);
     for (uint8_t col = start_column; col < end_column; ++col) {
       // Character and attribute occupy consecutive bytes of a cell. The 6845
       // start address can push a cell past the end of VRAM, which wraps.
@@ -115,16 +123,19 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
       // glyph row outright on the one scan line it occupies. The glyph row is
       // a bitmap with the leftmost pixel in the high bit, and is 16 bits wide
       // because an MDA cell is 9 pixels across.
-      uint16_t row_bitmap =
-          char_scan_line == Y_VIDEO_MDA_UNDERLINE_POSITION && colors.underline
-              ? 0xFFFF
-              : YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
+      uint16_t row_bitmap;
+      if (char_scan_line == underline_scan_line && colors.underline) {
+        row_bitmap = 0xFFFF;
+      } else if (video->has_text_font) {
+        row_bitmap = YVideoGetTextFontRow(video, char_value, char_scan_line);
+      } else {
+        row_bitmap = YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
+      }
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
-      for (uint8_t x = 0; x < metadata->char_width; ++x) {
-        bool is_foreground =
-            (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+      for (uint8_t x = 0; x < cell_width; ++x) {
+        bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
         const YVideoRGB* rgb =

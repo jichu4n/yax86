@@ -64,6 +64,7 @@ T YPlatformUpdateAfterMemoryMapChange
 T YPlatformWriteMemoryByte
 T YPlatformWritePortByte
 T YVideoGetAdapterMetadata
+T YVideoGetFrameSize
 T YVideoGetMode
 T YVideoGetModeMetadata
 T YVideoInit

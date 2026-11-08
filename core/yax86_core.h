@@ -19024,6 +19024,12 @@ typedef struct YPlatformConfig {
   // The caller owns the buffer and it must outlive the platform.
   uint8_t* vram;
 
+  // The font text modes are drawn in, for a display too narrow for the
+  // adapter's own - see YVideoTextFont. All zeros, the default, keeps the
+  // adapter's font. The caller owns the glyphs and they must outlive the
+  // platform.
+  YVideoTextFont video_text_font;
+
   // Callback invoked when the PC speaker's output changes. frequency_hz is the
   // square wave frequency the speaker should emit, or 0 to turn it off. May be
   // NULL, in which case the speaker is silent.
@@ -20107,6 +20113,7 @@ Y_FILE_PRIVATE void YPlatformInitVideo(YPlatformState* platform) {
   platform->video.config.logger = &platform->logger;
   platform->video.config.adapter = platform->config.video_adapter;
   platform->video.config.vram = platform->config.vram;
+  platform->video.config.text_font = platform->config.video_text_font;
   YVideoInit(&platform->video);
 
   const YVideoAdapterMetadata* adapter =
@@ -22087,6 +22094,12 @@ typedef struct YVideoRegion {
   uint16_t height;
 } YVideoRegion;
 
+// The size of a frame, in pixels.
+typedef struct YVideoSize {
+  uint16_t width;
+  uint16_t height;
+} YVideoSize;
+
 // Text mode character position. We use a different structure to avoid confusion
 // with YVideoPosition, which is used for pixel coordinates.
 typedef struct YVideoTextPosition {
@@ -22687,6 +22700,41 @@ enum {
   Y_VIDEO_PIXEL_BATCH_SIZE = 32,
 };
 
+// ============================================================================
+// Host text font
+// ============================================================================
+
+enum {
+  // Widest cell a host text font may have. A glyph row is one byte.
+  Y_VIDEO_TEXT_FONT_MAX_WIDTH = 8,
+  // Characters a text font covers: every value of a character byte.
+  Y_VIDEO_TEXT_FONT_GLYPHS = 256,
+};
+
+// A font for text modes, in place of the adapter's own.
+//
+// The adapters draw text in 8x8 (CGA) or 9x14 (MDA) cells, 640 or 720 pixels
+// across. A display narrower than that cannot show 80 columns by shrinking
+// those glyphs, which makes them unreadable; it needs glyphs drawn for a
+// narrower cell, such as 4x10 for 80 columns across 320 pixels. With a host
+// font, text modes render in the font's cells, so an 80-column text frame is
+// 80 * width by rows * height pixels - see YVideoGetFrameSize(). Graphics
+// modes and everything the guest can observe are unaffected: the font changes
+// what is drawn, not the CRTC or its timing.
+//
+// The cursor and the MDA underline, which the adapter places by scan line of
+// its own cell, are scaled to the font's cell height.
+typedef struct YVideoTextFont {
+  // Glyph rows for all Y_VIDEO_TEXT_FONT_GLYPHS characters, height rows a
+  // character, top to bottom. Bit (width - 1) of a row is its leftmost pixel,
+  // the same layout as the adapters' own fonts. NULL for no host font.
+  const uint8_t* glyphs;
+  // Cell width in pixels, 1 to Y_VIDEO_TEXT_FONT_MAX_WIDTH.
+  uint8_t width;
+  // Cell height in pixels, at least 1.
+  uint8_t height;
+} YVideoTextFont;
+
 // Half-open horizontal dirty range [start_column, end_column). Both fields are
 // zero when the range is empty.
 typedef struct YVideoDirtyRange {
@@ -22744,6 +22792,11 @@ typedef struct YVideoConfig {
   // CGA - the 16 color RGBI palette.
   YVideoRGB cga_palette[Y_VIDEO_NUM_CGA_COLORS];
 
+  // The font text modes are drawn in. All zeros, the default, draws them in
+  // the adapter's own font. Checked by YVideoInit(); a font whose size the
+  // renderer cannot draw is logged and the adapter's font used instead.
+  YVideoTextFont text_font;
+
   // The emulated video RAM, at least the adapter's vram_size bytes of it.
   // Required - the adapter reads and writes it directly.
   //
@@ -22798,6 +22851,8 @@ Y_PUBLIC_HEADER const YVideoConfig YVideoDefaultConfig = {
             {.r = 0xFF, .g = 0xFF, .b = 0xFF},  // 15 white
         },
 
+    .text_font = {.glyphs = NULL, .width = 0, .height = 0},
+
     .vram = NULL,
     .write_pixels = NULL,
     .begin_render_region = NULL,
@@ -22811,6 +22866,10 @@ typedef struct YVideoState {
 
   // The video adapter being emulated, copied from the config at init time.
   YVideoAdapter adapter;
+  // Whether text modes are drawn in config.text_font, decided by YVideoInit().
+  // A flag rather than a pointer to the font, so that a copy of the state does
+  // not point back into the original.
+  bool has_text_font;
 
   // Motorola 6845 CRT controller registers.
   uint8_t registers[Y_VIDEO_NUM_CRTC_REGISTERS];
@@ -22851,6 +22910,13 @@ Y_PUBLIC YVideoMode YVideoGetMode(const YVideoState* video);
 // Metadata for the current video mode.
 Y_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video);
+
+// The size of the frame the current mode renders. Without a host text font
+// this is the adapter's frame buffer in every mode. With one, text modes
+// render at the font's cell size instead, so the size changes when the guest
+// switches between a text and a graphics mode; a mode change always renders
+// the whole frame afresh.
+Y_PUBLIC YVideoSize YVideoGetFrameSize(const YVideoState* video);
 
 // Read a byte from a video I/O port.
 Y_PUBLIC uint8_t YVideoReadPort(YVideoState* video, uint16_t port);
@@ -22984,6 +23050,62 @@ Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunPush(
   if (run->count == Y_VIDEO_PIXEL_BATCH_SIZE) {
     YVideoPixelRunFlush(run);
   }
+}
+
+// The width of the cell a text mode draws a character in: the host text font's
+// if there is one, otherwise the mode's own.
+Y_MODULE_PRIVATE_HEADER inline uint8_t YVideoGetTextCellWidth(
+    const YVideoState* video, const YVideoModeMetadata* metadata) {
+  return video->has_text_font ? video->config.text_font.width
+                              : metadata->char_width;
+}
+
+// The height of the cell a text mode draws a character in.
+Y_MODULE_PRIVATE_HEADER inline uint8_t YVideoGetTextCellHeight(
+    const YVideoState* video, const YVideoModeMetadata* metadata) {
+  return video->has_text_font ? video->config.text_font.height
+                              : metadata->char_height;
+}
+
+// A row of a character in the host text font.
+Y_MODULE_PRIVATE_HEADER inline uint8_t YVideoGetTextFontRow(
+    const YVideoState* video, uint8_t character, uint8_t row) {
+  const YVideoTextFont* font = &video->config.text_font;
+  return font->glyphs[(uint16_t)character * font->height + row];
+}
+
+// The adapter places the cursor and the MDA underline by scan line of its own
+// character cell, so with a host text font of a different height they have to
+// move with it. A scan line of the adapter's cell covers a span of the drawn
+// cell's rows, which these two take the ends of: a range of scan lines maps to
+// the first row its first line covers through the last row its last line
+// covers, so a range that is not empty in the adapter's cell is not empty in
+// the drawn one. A scan line past the adapter's cell maps past the drawn one,
+// so an out of range cursor register still draws nothing.
+
+// The first row of the drawn cell that a scan line of the adapter's covers.
+Y_MODULE_PRIVATE_HEADER inline uint16_t YVideoScaleTextScanLineStart(
+    const YVideoState* video, const YVideoModeMetadata* metadata,
+    uint8_t scan_line) {
+  if (!video->has_text_font) {
+    return scan_line;
+  }
+  return (uint16_t)((uint16_t)scan_line * video->config.text_font.height /
+                    metadata->char_height);
+}
+
+// The last row of the drawn cell that a scan line of the adapter's covers.
+Y_MODULE_PRIVATE_HEADER inline uint16_t YVideoScaleTextScanLineEnd(
+    const YVideoState* video, const YVideoModeMetadata* metadata,
+    uint8_t scan_line) {
+  if (!video->has_text_font) {
+    return scan_line;
+  }
+  return (
+      uint16_t)(((uint16_t)(scan_line + 1) * video->config.text_font.height +
+                 metadata->char_height - 1) /
+                    metadata->char_height -
+                1);
 }
 
 // Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
@@ -23861,8 +23983,7 @@ Y_MODULE_PRIVATE const uint8_t YVideoFontCGA8x8Bitmap[256][8] = {
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  Y_VIDEO_MDA_CHAR_HEIGHT = 14,
-  // Position of the underline within an MDA character cell.
+  // Scan line of the underline within an MDA character cell.
   Y_VIDEO_MDA_UNDERLINE_POSITION = 12,
   // Documented three-bit foreground and background combinations.
   Y_VIDEO_MDA_ATTRIBUTE_NORMAL = 0x07,
@@ -23947,16 +24068,25 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
   uint16_t cursor_offset = 0;
   bool cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
-  uint8_t cursor_start = YVideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = YVideoGetCursorEndScanLine(video);
+  uint16_t cursor_start = YVideoScaleTextScanLineStart(
+      video, metadata, YVideoGetCursorStartScanLine(video));
+  uint16_t cursor_end = YVideoScaleTextScanLineEnd(
+      video, metadata, YVideoGetCursorEndScanLine(video));
+
+  // The adapter's own 9x14 cell, or a host text font's, with the underline
+  // moved to match.
+  const uint8_t cell_width = YVideoGetTextCellWidth(video, metadata);
+  const uint8_t cell_height = YVideoGetTextCellHeight(video, metadata);
+  const uint16_t underline_scan_line = YVideoScaleTextScanLineStart(
+      video, metadata, Y_VIDEO_MDA_UNDERLINE_POSITION);
 
   // Scan lines are the outer loop so that pixels leave in row-major order,
   // which is what a display addressed by transfer window expects. The cost is
   // re-reading a cell's character and attribute once per scan line it covers.
   for (uint16_t y = first_y; y < end_y; ++y) {
-    YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
-    uint8_t row = (uint8_t)(y / Y_VIDEO_MDA_CHAR_HEIGHT);
-    uint8_t char_scan_line = (uint8_t)(y % Y_VIDEO_MDA_CHAR_HEIGHT);
+    YVideoPixelRunBegin(run, (uint16_t)start_column * cell_width, y);
+    uint8_t row = (uint8_t)(y / cell_height);
+    uint8_t char_scan_line = (uint8_t)(y % cell_height);
     for (uint8_t col = start_column; col < end_column; ++col) {
       // Character and attribute occupy consecutive bytes of a cell. The 6845
       // start address can push a cell past the end of VRAM, which wraps.
@@ -23971,16 +24101,19 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
       // glyph row outright on the one scan line it occupies. The glyph row is
       // a bitmap with the leftmost pixel in the high bit, and is 16 bits wide
       // because an MDA cell is 9 pixels across.
-      uint16_t row_bitmap =
-          char_scan_line == Y_VIDEO_MDA_UNDERLINE_POSITION && colors.underline
-              ? 0xFFFF
-              : YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
+      uint16_t row_bitmap;
+      if (char_scan_line == underline_scan_line && colors.underline) {
+        row_bitmap = 0xFFFF;
+      } else if (video->has_text_font) {
+        row_bitmap = YVideoGetTextFontRow(video, char_value, char_scan_line);
+      } else {
+        row_bitmap = YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
+      }
       bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
-      for (uint8_t x = 0; x < metadata->char_width; ++x) {
-        bool is_foreground =
-            (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+      for (uint8_t x = 0; x < cell_width; ++x) {
+        bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
         const YVideoRGB* rgb =
@@ -24010,7 +24143,6 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  Y_VIDEO_CGA_CHAR_HEIGHT = 8,
   Y_VIDEO_CGA40_COLUMN_COUNT = 40,
   Y_VIDEO_CGA40_COLUMN_SCALE = 2,
   Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE = 2,
@@ -24086,8 +24218,14 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   uint16_t cursor_offset = 0;
   bool cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
-  uint8_t cursor_start = YVideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = YVideoGetCursorEndScanLine(video);
+  uint16_t cursor_start = YVideoScaleTextScanLineStart(
+      video, metadata, YVideoGetCursorStartScanLine(video));
+  uint16_t cursor_end = YVideoScaleTextScanLineEnd(
+      video, metadata, YVideoGetCursorEndScanLine(video));
+
+  // The adapter's own 8x8 cell, or a host text font's.
+  const uint8_t cell_width = YVideoGetTextCellWidth(video, metadata);
+  const uint8_t cell_height = YVideoGetTextCellHeight(video, metadata);
 
   // Scan lines are the outer loop so that pixels leave in row-major order,
   // which is what a display addressed by transfer window expects. The cost is
@@ -24095,9 +24233,9 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   for (uint16_t y = first_y; y < end_y; ++y) {
     // A 40-column cell is twice as wide but there are half as many, so a row
     // starts at the same pixel either way.
-    YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
-    uint8_t row = (uint8_t)(y / Y_VIDEO_CGA_CHAR_HEIGHT);
-    uint8_t char_scan_line = (uint8_t)(y % Y_VIDEO_CGA_CHAR_HEIGHT);
+    YVideoPixelRunBegin(run, (uint16_t)start_column * cell_width, y);
+    uint8_t row = (uint8_t)(y / cell_height);
+    uint8_t char_scan_line = (uint8_t)(y % cell_height);
     for (uint8_t col = first_char; col < end_char; ++col) {
       // Character and attribute occupy consecutive bytes of a cell.
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
@@ -24132,10 +24270,12 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
       // The glyph row is a bitmap with the leftmost pixel in the high bit.
-      uint8_t row_bitmap = YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
-      for (uint8_t x = 0; x < metadata->char_width; ++x) {
-        bool is_foreground =
-            (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+      uint8_t row_bitmap =
+          video->has_text_font
+              ? YVideoGetTextFontRow(video, char_value, char_scan_line)
+              : YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
+      for (uint8_t x = 0; x < cell_width; ++x) {
+        bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
         YVideoRGB rgb = cursor_scan_line
                             ? cursor_foreground
                             : (is_foreground ? foreground : background);
@@ -24376,10 +24516,29 @@ Y_PUBLIC void YVideoWriteVRAM(
 // Initialization
 // ============================================================================
 
+// Whether a host text font is one the renderer can draw. A glyph row is a
+// byte, which bounds the width; the height only has to be non-zero.
+Y_FILE_PRIVATE bool YVideoIsTextFontDrawable(const YVideoTextFont* font) {
+  return font->width >= 1 && font->width <= Y_VIDEO_TEXT_FONT_MAX_WIDTH &&
+         font->height >= 1;
+}
+
 Y_PUBLIC void YVideoInit(YVideoState* video) {
   video->adapter = video->config.adapter == Y_VIDEO_ADAPTER_CGA
                        ? Y_VIDEO_ADAPTER_CGA
                        : Y_VIDEO_ADAPTER_MDA;
+
+  video->has_text_font = false;
+  if (video->config.text_font.glyphs) {
+    if (YVideoIsTextFontDrawable(&video->config.text_font)) {
+      video->has_text_font = true;
+    } else {
+      Y_VIDEO_LOG(
+          Y_LOG_LEVEL_ERROR,
+          "text font of %ux%u cells cannot be drawn, using the adapter's own",
+          video->config.text_font.width, video->config.text_font.height);
+    }
+  }
 
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == Y_VIDEO_ADAPTER_CGA
@@ -24435,6 +24594,23 @@ Y_PUBLIC Y_HOT YVideoMode YVideoGetMode(const YVideoState* video) {
 Y_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video) {
   return &YVideoModeMetadataTable[YVideoGetMode(video)];
+}
+
+Y_PUBLIC YVideoSize YVideoGetFrameSize(const YVideoState* video) {
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
+  YVideoSize size;
+  if (video->has_text_font && metadata->type == Y_VIDEO_MODE_TEXT) {
+    // A 40-column cell is drawn twice as wide, so both text widths come to
+    // the same 80 font cells across.
+    size.width =
+        (uint16_t)(Y_VIDEO_DIRTY_COLUMNS * video->config.text_font.width);
+    size.height = (uint16_t)(metadata->rows * video->config.text_font.height);
+    return size;
+  }
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
+  size.width = adapter->frame_buffer_width;
+  size.height = adapter->frame_buffer_height;
+  return size;
 }
 
 // ============================================================================
@@ -24520,7 +24696,7 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
   YVideoDirtyGeometry geometry;
   if (metadata->type == Y_VIDEO_MODE_TEXT) {
     geometry.rows = metadata->rows;
-    geometry.scan_lines_per_row = metadata->char_height;
+    geometry.scan_lines_per_row = YVideoGetTextCellHeight(video, metadata);
   } else {
     geometry.rows =
         (uint8_t)((metadata->height + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
@@ -24884,10 +25060,11 @@ Y_FILE_PRIVATE void YVideoRenderBlankRegion(
 Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
-  // Every mode divides the frame buffer into Y_VIDEO_DIRTY_COLUMNS equal
-  // columns, so a dirty column is 9 pixels wide on the MDA and 8 on the CGA.
-  uint16_t column_width = YVideoGetAdapterMetadata(video)->frame_buffer_width /
-                          Y_VIDEO_DIRTY_COLUMNS;
+  // Every mode divides the frame into Y_VIDEO_DIRTY_COLUMNS equal columns, so
+  // a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host text
+  // font's width in a text mode drawn in one.
+  uint16_t column_width =
+      YVideoGetFrameSize(video).width / Y_VIDEO_DIRTY_COLUMNS;
   YVideoRegion region = {
       .origin = {.x = start_column * column_width, .y = first_y},
       .width = (end_column - start_column) * column_width,
@@ -24943,10 +25120,9 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
     return;
   }
 
-  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
+  const YVideoSize frame = YVideoGetFrameSize(video);
   if (video->dirty_state.status == Y_VIDEO_FULL_REDRAW) {
-    YVideoRenderDirtyRegion(
-        video, 0, Y_VIDEO_DIRTY_COLUMNS, 0, adapter->frame_buffer_height);
+    YVideoRenderDirtyRegion(video, 0, Y_VIDEO_DIRTY_COLUMNS, 0, frame.height);
   } else {
     YVideoDirtyGeometry geometry = YVideoGetDirtyGeometry(video);
     for (uint8_t row = 0; row < geometry.rows;) {
@@ -24966,8 +25142,8 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
       }
       uint16_t first_y = (uint16_t)row * geometry.scan_lines_per_row;
       uint16_t end_y = (uint16_t)end_row * geometry.scan_lines_per_row;
-      if (end_y > adapter->frame_buffer_height) {
-        end_y = adapter->frame_buffer_height;
+      if (end_y > frame.height) {
+        end_y = frame.height;
       }
       YVideoRenderDirtyRegion(
           video, range.start_column, range.end_column, first_y, end_y);

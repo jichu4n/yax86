@@ -109,10 +109,29 @@ Y_PUBLIC void YVideoWriteVRAM(
 // Initialization
 // ============================================================================
 
+// Whether a host text font is one the renderer can draw. A glyph row is a
+// byte, which bounds the width; the height only has to be non-zero.
+Y_FILE_PRIVATE bool YVideoIsTextFontDrawable(const YVideoTextFont* font) {
+  return font->width >= 1 && font->width <= Y_VIDEO_TEXT_FONT_MAX_WIDTH &&
+         font->height >= 1;
+}
+
 Y_PUBLIC void YVideoInit(YVideoState* video) {
   video->adapter = video->config.adapter == Y_VIDEO_ADAPTER_CGA
                        ? Y_VIDEO_ADAPTER_CGA
                        : Y_VIDEO_ADAPTER_MDA;
+
+  video->has_text_font = false;
+  if (video->config.text_font.glyphs) {
+    if (YVideoIsTextFontDrawable(&video->config.text_font)) {
+      video->has_text_font = true;
+    } else {
+      Y_VIDEO_LOG(
+          Y_LOG_LEVEL_ERROR,
+          "text font of %ux%u cells cannot be drawn, using the adapter's own",
+          video->config.text_font.width, video->config.text_font.height);
+    }
+  }
 
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   const uint8_t* default_registers = video->adapter == Y_VIDEO_ADAPTER_CGA
@@ -168,6 +187,23 @@ Y_PUBLIC Y_HOT YVideoMode YVideoGetMode(const YVideoState* video) {
 Y_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video) {
   return &YVideoModeMetadataTable[YVideoGetMode(video)];
+}
+
+Y_PUBLIC YVideoSize YVideoGetFrameSize(const YVideoState* video) {
+  const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
+  YVideoSize size;
+  if (video->has_text_font && metadata->type == Y_VIDEO_MODE_TEXT) {
+    // A 40-column cell is drawn twice as wide, so both text widths come to
+    // the same 80 font cells across.
+    size.width =
+        (uint16_t)(Y_VIDEO_DIRTY_COLUMNS * video->config.text_font.width);
+    size.height = (uint16_t)(metadata->rows * video->config.text_font.height);
+    return size;
+  }
+  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
+  size.width = adapter->frame_buffer_width;
+  size.height = adapter->frame_buffer_height;
+  return size;
 }
 
 // ============================================================================
@@ -253,7 +289,7 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
   YVideoDirtyGeometry geometry;
   if (metadata->type == Y_VIDEO_MODE_TEXT) {
     geometry.rows = metadata->rows;
-    geometry.scan_lines_per_row = metadata->char_height;
+    geometry.scan_lines_per_row = YVideoGetTextCellHeight(video, metadata);
   } else {
     geometry.rows =
         (uint8_t)((metadata->height + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
@@ -617,10 +653,11 @@ Y_FILE_PRIVATE void YVideoRenderBlankRegion(
 Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
-  // Every mode divides the frame buffer into Y_VIDEO_DIRTY_COLUMNS equal
-  // columns, so a dirty column is 9 pixels wide on the MDA and 8 on the CGA.
-  uint16_t column_width = YVideoGetAdapterMetadata(video)->frame_buffer_width /
-                          Y_VIDEO_DIRTY_COLUMNS;
+  // Every mode divides the frame into Y_VIDEO_DIRTY_COLUMNS equal columns, so
+  // a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host text
+  // font's width in a text mode drawn in one.
+  uint16_t column_width =
+      YVideoGetFrameSize(video).width / Y_VIDEO_DIRTY_COLUMNS;
   YVideoRegion region = {
       .origin = {.x = start_column * column_width, .y = first_y},
       .width = (end_column - start_column) * column_width,
@@ -676,10 +713,9 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
     return;
   }
 
-  const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
+  const YVideoSize frame = YVideoGetFrameSize(video);
   if (video->dirty_state.status == Y_VIDEO_FULL_REDRAW) {
-    YVideoRenderDirtyRegion(
-        video, 0, Y_VIDEO_DIRTY_COLUMNS, 0, adapter->frame_buffer_height);
+    YVideoRenderDirtyRegion(video, 0, Y_VIDEO_DIRTY_COLUMNS, 0, frame.height);
   } else {
     YVideoDirtyGeometry geometry = YVideoGetDirtyGeometry(video);
     for (uint8_t row = 0; row < geometry.rows;) {
@@ -699,8 +735,8 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
       }
       uint16_t first_y = (uint16_t)row * geometry.scan_lines_per_row;
       uint16_t end_y = (uint16_t)end_row * geometry.scan_lines_per_row;
-      if (end_y > adapter->frame_buffer_height) {
-        end_y = adapter->frame_buffer_height;
+      if (end_y > frame.height) {
+        end_y = frame.height;
       }
       YVideoRenderDirtyRegion(
           video, range.start_column, range.end_column, first_y, end_y);
