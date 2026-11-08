@@ -83,11 +83,9 @@ enum {
   // stall is not followed by a burst of emulation at full speed.
   kMaxLagMs = 100,
 
-  // How long the watchdog waits before deciding the chip has hung, and
-  // rebooting it. Long enough to outlast the keyboard controller's three
-  // second retry at startup, and within the 8.3 seconds the RP2040's watchdog
-  // can count.
-  kWatchdogTimeoutMs = 8000,
+  // How long the watchdog waits, across the clock change, before deciding the
+  // chip has hung and rebooting it.
+  kWatchdogTimeoutMs = 4000,
   // Written to g_overclock_marker across the clock change, and cleared once it
   // is survived. Any value does, as long as uninitialized RAM is unlikely to
   // hold it.
@@ -681,9 +679,6 @@ static void RunMachine(bool machine_ready) {
   g_clock.anchor_us = g_clock.start_us;
 
   for (;;) {
-    // Once a batch, so that a hang under load, which an overclock makes
-    // possible, reboots the board rather than leaving it stuck.
-    watchdog_update();
     ReportIfHostAttached();
 
     if (running && RunBatch() == Y_PLATFORM_HUNG) {
@@ -759,12 +754,19 @@ static void RunMachine(bool machine_ready) {
 // the chip through the watchdog too. The marker lives in RAM that startup does
 // not clear, so it survives a reset but not a power cycle, and it is only ever
 // left set across the window where a hang is possible.
+//
+// The watchdog is disarmed again once the change is survived, and must not be
+// left running and fed. The SDK carries out picotool's reboot request with
+// watchdog_reboot(), which only shortens the watchdog's countdown, so feeding
+// it would put the reboot off indefinitely. A hang after this is a power
+// button press away from recovery, since the keyboard controller cuts power.
 static OverclockResult Overclock(void) {
   if (g_overclock_marker == kOverclockAttemptMarker) {
     g_overclock_marker = 0;
     return kOverclockSkippedAfterHang;
   }
   g_overclock_marker = kOverclockAttemptMarker;
+  watchdog_enable(kWatchdogTimeoutMs, true);
   if (YAX86_PICOCALC_SYS_CLK_KHZ > 250000) {
     vreg_set_voltage(VREG_VOLTAGE_1_30);
   } else if (YAX86_PICOCALC_SYS_CLK_KHZ > 125000) {
@@ -772,6 +774,7 @@ static OverclockResult Overclock(void) {
   }
   busy_wait_us(kVoltageSettleUs);
   const bool applied = set_sys_clock_khz(YAX86_PICOCALC_SYS_CLK_KHZ, false);
+  watchdog_disable();
   g_overclock_marker = 0;
   return applied ? kOverclockApplied : kOverclockPLLCannot;
 }
@@ -779,7 +782,6 @@ static OverclockResult Overclock(void) {
 
 int main(void) {
   stdio_init_all();
-  watchdog_enable(kWatchdogTimeoutMs, true);
 #if YAX86_PICOCALC_SYS_CLK_KHZ
   // Before anything else is brought up: the SPI and I2C blocks work out their
   // dividers from the peripheral clock when they are initialized, and it

@@ -2133,9 +2133,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the chip cannot take reboots it, and the next boot runs at the stock clock
   and reports `overclock skipped - the last attempt hung`. It matters more
   here than on a bare Pico, whose BOOTSEL button is not inside a case. The
-  watchdog stays armed, fed once a batch, so a hang under load reboots the
-  board too; its 8 seconds outlast the keyboard controller's 3 second retry
-  at startup. The core voltage goes to 1.20V first, as in `pico/bench`.
+  core voltage goes to 1.20V first, as in `pico/bench`.
+- **The watchdog is disarmed once the clock change is survived, and must not
+  be left running and fed.** The SDK carries out `picotool reboot` with
+  `watchdog_reboot()`, which only shortens the watchdog's countdown to 100ms,
+  and feeding it every batch reloads the count: the reboot is put off for as
+  long as the machine runs, and `picotool` reports success all the same. A
+  hang after the clock change is recovered with the power button, since the
+  keyboard controller cuts the power.
 
 ### The LCD
 
