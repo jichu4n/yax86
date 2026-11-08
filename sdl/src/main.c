@@ -189,7 +189,7 @@ void MainTick(void) {
   // this the blink phase would lag by however long the frame took.
   YPlatformSync(&g_platform);
   YVideoRender(&g_platform.video);  // Update virtual buffer
-  DisplayRender();                 // Update screen
+  DisplayRender();                  // Update screen
 }
 
 int main(int argc, char* argv[]) {
@@ -264,11 +264,6 @@ int main(int argc, char* argv[]) {
     config->set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
   }
   config->video_adapter = g_video_adapter;
-  // An idle DOS prompt otherwise costs a full frame's worth of emulation to
-  // produce nothing, because DOS waits for a keystroke by polling rather than
-  // halting. This machine has a host to be a good citizen on - in the browser
-  // it is a background tab's share of a laptop - so it takes the skip.
-  config->enable_dos_idle_skip = true;
 
   if (!YPlatformInit(&g_platform)) {
     fprintf(stderr, "Failed to init platform\n");
@@ -276,6 +271,11 @@ int main(int argc, char* argv[]) {
     DisplayQuit();
     return 1;
   }
+  // An idle DOS prompt otherwise costs a full frame's worth of emulation to
+  // produce nothing, because DOS waits for a keystroke by polling rather than
+  // halting. This machine has a host to be a good citizen on - in the browser
+  // it is a background tab's share of a laptop - so it takes the skip.
+  YPlatformSetDOSIdleSkip(&g_platform, true);
 
   Y_LOG(
       &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,

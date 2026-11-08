@@ -9,6 +9,8 @@
 #   YAX86_PICOCALC_DRAW_SCREEN   0 to build an image that does not draw the
 #                                guest's screen, into build-pico/picocalc-no-draw,
 #                                for measuring what drawing costs. Defaults to 1.
+#   YAX86_PICOCALC_SYS_CLK_KHZ   The system clock. Defaults to 250000; empty
+#                                for the stock 125MHz.
 #
 # Flash and capture with pico/bench's run.js, which works for any image that
 # reports over USB serial and ends with a line saying "done":
@@ -19,6 +21,7 @@ set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 DRAW_SCREEN="${YAX86_PICOCALC_DRAW_SCREEN:-1}"
+SYS_CLK_KHZ="${YAX86_PICOCALC_SYS_CLK_KHZ-250000}"
 BUILD_DIR="$(cd ../.. && pwd)/build-pico/picocalc"
 if [ "$DRAW_SCREEN" = 0 ]; then
     BUILD_DIR="$BUILD_DIR-no-draw"
@@ -30,7 +33,8 @@ if [ -z "${PICO_SDK_PATH:-}" ]; then
 fi
 
 cmake -S . -B "$BUILD_DIR" \
-    -DYAX86_PICOCALC_DRAW_SCREEN="$DRAW_SCREEN" >/dev/null
+    -DYAX86_PICOCALC_DRAW_SCREEN="$DRAW_SCREEN" \
+    -DYAX86_PICOCALC_SYS_CLK_KHZ="$SYS_CLK_KHZ" >/dev/null
 cmake --build "$BUILD_DIR" -j"$(nproc)"
 
 echo

@@ -58,6 +58,7 @@ T YPlatformReadPortByte
 T YPlatformRegisterMemoryMapEntry
 T YPlatformRegisterPortMapEntry
 T YPlatformRun
+T YPlatformSetDOSIdleSkip
 T YPlatformSync
 T YPlatformTick
 T YPlatformUpdateAfterMemoryMapChange
