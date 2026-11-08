@@ -1642,6 +1642,29 @@ Alongside the table, state:
   down, leaving dirty rows at the adapter's cell height, and taking the region
   column width from the adapter's frame are each caught there.
 
+### video — rendering from a copy
+
+- `YVideoCopyForRender()` is for a host that renders somewhere the machine is
+  not running - the PicoCalc renders on its second core. Rendering the live
+  state there would read video memory and registers while the CPU writes them,
+  and would clear the record of what changed while the machine adds to it.
+- It copies the state and the adapter's video memory into the host's buffers
+  and moves the record of what changed with them, leaving the live state
+  marked up to date. Rendering the copy draws exactly what rendering the live
+  state would have, and a change made after the copy is drawn from the next
+  one. A host whose renderer is still busy simply does not copy, and the
+  changes pile up in the live state until it does.
+- **The copy loop keeps its pointers in locals.** Read through
+  `video->config.vram`, the pointer is reloaded for every byte, because the
+  compiler cannot rule out that `frame_vram` overlaps the state, and the loop
+  copies a byte at a time: 46ms over `dos-boot` on the PicoCalc, against
+  9.7ms with locals, where GCC copies a word at a time. Copying the state
+  itself is a `memcpy()` call the compiler emits, like the `memset()` in
+  `YVideoRender()` - once a frame, off the hot path.
+- `core/tests/video/copy_for_render_test.cpp` covers it. Leaving the live
+  record set, and pointing the copy at the live video memory, are each caught
+  there.
+
 ### util — hot path placement
 
 - `Y_HOT` marks a function as being on the per-instruction hot path. It is
@@ -2023,9 +2046,10 @@ SRAM, at #89:
 
 - The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld
   with a 320x320 LCD, a keyboard, an SD card slot and a battery. It raises the
-  system clock to 250MHz, brings up the LCD and the keyboard controller, and
-  boots MS-DOS 3.30 off the floppy image in flash, drawing the guest's text
-  screen on the LCD with status lines below it. The machine is paced to real
+  system clock to 250MHz, brings up the keyboard controller, and boots MS-DOS
+  3.30 off the floppy image in flash, with the guest's text screen on the LCD
+  and status lines below it - drawn by the second core, while the first runs
+  the machine. The machine is paced to real
   time and keeps running once it reaches the `A>` prompt. The keyboard is not
   read yet, so DOS's date and time questions are answered by watching the
   screen, the way `pico/bench` does it.
@@ -2082,9 +2106,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The boot reaches `A>` having retired **2,328,128 instructions**, the same
   count `pico/bench` reports for `dos-boot`. That is what says this runtime and
   the benchmark run the same machine, so a figure measured on one stands for
-  the other. At 250MHz it takes 4.76 seconds of processor time without
-  drawing the guest's screen and 5.01 with it - 122% and 116% of a real
-  PC/XT. At the stock 125MHz, 9.88 seconds with drawing, which is 58.8%.
+  the other. At 250MHz it takes 4.73 seconds of processor time without
+  drawing the guest's screen and 4.80 with it - 123% and 121% of a real
+  PC/XT. At the stock 125MHz, 9.44 seconds with drawing, which is 61.5%.
   Processor time rather than how long it took, because the boot is paced -
   see below.
 - If the count moves while the bench's does not, the runtime has stopped
@@ -2114,11 +2138,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   within 0.1%: a build with the pacing taken out measured 5.0105 and 5.0107
   seconds, against 5.0147 to 5.0149 paced.
 - **Faster on average is not faster throughout.** At 250MHz the boot drops
-  0.54 seconds, 0.30 without drawing: part of the stretch before the date
+  0.40 seconds, 0.30 without drawing: part of the stretch before the date
   prompt, and the one from the time prompt to `A>`, run slower than real time.
-  The second is DOS printing and scrolling, and runs at 63% of real time with
-  drawing - 0.25 emulated seconds took 0.40 of processor time, 0.12 of it
-  drawing. At the stock 125MHz the boot drops 4.13 seconds.
+  The second is DOS printing and scrolling, and runs at 85% of real time, 91%
+  without drawing - so what holds it back is emulation, not drawing. At the
+  stock 125MHz the boot drops 3.67 seconds.
+- **What is dropped moves in steps of about 100ms**, because a lag is
+  dropped only once it passes 100ms, so each drop is just over that. Two
+  builds a few milliseconds apart can drop a step apart - 0.20 and 0.30
+  seconds before the date prompt, two drops against three - with neither
+  slower there. Compare processor time, and how fast each stage ran, rather
+  than what was dropped.
 - **The idle skip is turned on at the prompt**, with
   `YPlatformSetDOSIdleSkip()` - not from power on, which would move the
   `dos-boot` invariant. Without it the prompt's polling loop runs
@@ -2195,13 +2225,36 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   own frame memory, so each region goes straight to the panel as a window of
   its own: `begin_render_region` opens it and `write_pixels` streams RGB565
   into it. Graphics modes render 640 pixels across and are not drawn yet.
-- It renders once per emulated frame, 60 times an emulated second, on core 0
-  between batches. Drawing more often shows nothing new.
-- **Drawing costs 5.3% of `dos-boot`** at 250MHz: 4.7610 seconds of
-  processor time without drawing against 5.0149 with, the same 2,328,128
-  instructions either way, two and three runs with a spread under 0.01%.
-  0.245 seconds of that is inside `YVideoRender()`, over 73 frames and
-  368,960 pixels, about 4.6 screens' worth.
+- **Core 1 draws everything on the LCD, and core 0 never touches it** -
+  `src/display.c`. Core 0 runs the machine and hands core 1 what to draw: a
+  copy of the guest's screen from `YVideoCopyForRender()`, the status line
+  values as text, and the request to turn the panel off, one word through the
+  inter-core FIFO each.
+- **Each buffer handed over has a flag that only core 0 sets and only core 1
+  clears.** Core 0 sets it once the buffer is filled in, core 1 clears it once
+  the buffer is drawn, and while it is set core 0 leaves the buffer alone, so
+  the two cores never use one at once and neither waits for the other. The
+  drawing figures, which both cores write, are kept under a lock.
+- Core 0 offers a frame once per emulated frame, 60 times an emulated second,
+  between batches. Drawing more often shows nothing new. A frame offered while
+  core 1 is still drawing the last one is not copied, and is counted as late:
+  what changed waits in the live state and goes with the next. Four frames
+  are late during `dos-boot`.
+- **Drawing costs core 0 1.5% of `dos-boot`** at 250MHz: 4.7975 seconds of
+  processor time against 4.7267 without drawing, the same 2,328,128
+  instructions either way, three and two runs with a spread under 0.01%. On
+  core 0 it cost 5.3%, measured against a build of the commit before it.
+  Of the 0.071 seconds:
+  - 0.010 is copying the guest's screen, 16KB of video memory, 70 times.
+  - 0.037 is core 1 drawing at the same time: the two share the 16KB XIP
+    cache and the SRAM, and the code core 1 draws with runs from flash. A
+    build in which core 1 takes each frame and skips drawing it, with the
+    drawing code still linked, measured 4.7607.
+  - The other 0.024 is where the code lands in flash, which the build without
+    drawing does not share.
+- Core 1 spends 0.271 seconds inside `YVideoRender()` over 70 frames and
+  366,320 pixels, about 4.6 screens' worth, against 0.245 when core 0 drew
+  them alone - slower for the same sharing.
 - **That figure moves with where the code lands in flash.** Adding the
   screen blanking below, which runs only after the boot, once took the cost
   at 125MHz from 5.2% to 4.8%, with the time inside `YVideoRender()`
@@ -2215,10 +2268,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   callback per 32 pixels, and the conversion to RGB565 - which runs from
   flash, since none of it is in SRAM.
 - `dos-boot` draws little. A screen that scrolls redraws all 80,000 of its
-  pixels each line, about 53ms at 250MHz and 88ms at 125MHz, during which the
-  emulator does not run.
+  pixels each line, about 53ms at 250MHz and 88ms at 125MHz. The machine
+  keeps running meanwhile, and the frames that come due are drawn together in
+  the next. Putting the drawing code in SRAM, so that core 1 shares less of
+  the XIP cache with core 0, has not been tried.
 - **The screen is blanked 30 seconds after the boot**, with the panel's
-  display off and sleep in commands - `LcdSetDisplayOn(false)`. Nothing but
+  display off and sleep in commands - `LcdSetDisplayOn(false)`, which core 1
+  carries out after whatever it was handed before. Nothing but
   the cursor changes on it after the boot, and a static image left showing
   for hours can leave its mark on the panel. The guest's screen is not
   rendered while it is blank. The backlight is the controller's, and its
