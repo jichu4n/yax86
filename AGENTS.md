@@ -2068,8 +2068,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The boot reaches `A>` having retired **2,328,128 instructions**, the same
   count `pico/bench` reports for `dos-boot`. That is what says this runtime and
   the benchmark run the same machine, so a figure measured on one stands for
-  the other. At the stock 125MHz it takes 9.46 seconds without drawing the
-  guest's screen and 9.95 seconds with it.
+  the other. At the stock 125MHz it takes 9.44 seconds without drawing the
+  guest's screen and 9.90 seconds with it.
 - If the count moves while the bench's does not, the runtime has stopped
   running the machine the benchmark measures.
 
@@ -2104,11 +2104,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   into it. Graphics modes render 640 pixels across and are not drawn yet.
 - It renders once per emulated frame, 60 times an emulated second, on core 0
   between batches. Drawing more often shows nothing new.
-- **Drawing costs 5.2% of `dos-boot`** at the stock 125MHz: 9.4605 seconds
-  without drawing against 9.9509 with, the same 2,328,128 instructions either
-  way, two and three runs each with a spread under 0.01%. 0.436 seconds of
-  that is inside `YVideoRender()`, over 73 frames and 368,960 pixels, about
-  4.6 screens' worth.
+- **Drawing costs 4.8% of `dos-boot`** at the stock 125MHz: 9.4443 seconds
+  without drawing against 9.8999 with, the same 2,328,128 instructions either
+  way, two runs each with a spread under 0.01%. 0.436 seconds of that is
+  inside `YVideoRender()`, over 73 frames and 368,960 pixels, about 4.6
+  screens' worth.
+- **That figure moves with where the code lands in flash.** Adding the
+  screen blanking below, which runs only after the boot, took the drawing
+  build from 9.9509 seconds to 9.8999 and the cost from 5.2% to 4.8%, with
+  the time inside `YVideoRender()` unchanged. Compare a change against a
+  baseline built from the same code, never against these figures.
 - **Most of what is left is processor time, not the bus.** 368,960 pixels of
   16 bits take 0.094 seconds on the wire at 62.5MHz and took 0.283 at
   20.83MHz, while the time in `YVideoRender()` fell only from 0.647 to 0.436
@@ -2119,6 +2124,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - `dos-boot` draws little. A screen that scrolls redraws all 80,000 of its
   pixels each line, about 95ms at this rate, during which the emulator does
   not run.
+- **The screen is blanked 30 seconds after the boot**, with the panel's
+  display off and sleep in commands - `LcdSetDisplayOn(false)`. Nothing
+  changes on it after the boot, and a static image left showing for hours can
+  leave its mark on the panel. The backlight is the controller's, and its
+  firmware will not dim the LCD's below 16 of 255, so blanking is the panel's
+  job rather than the backlight's.
 
 ### The keyboard controller
 

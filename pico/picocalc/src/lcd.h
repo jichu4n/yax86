@@ -6,6 +6,7 @@
 #ifndef YAX86_PICOCALC_LCD_H
 #define YAX86_PICOCALC_LCD_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 enum {
@@ -30,6 +31,12 @@ void LcdWritePixels(const uint16_t* pixels, uint32_t count);
 
 // End the write LcdBeginWrite() began.
 void LcdEndWrite(void);
+
+// Turn the panel's output on or off. Off shows a blank page and puts the
+// panel to sleep, at its lowest power; what it last held is kept, so turning
+// it back on shows that again. A static image left showing for hours can
+// leave its mark on the panel, which is what turning it off is for.
+void LcdSetDisplayOn(bool on);
 
 // Fill a rectangle with one color.
 void LcdFillRect(

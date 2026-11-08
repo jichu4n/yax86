@@ -62,6 +62,10 @@ enum {
 
   // How often the idle loop looks for a newly attached host.
   kIdlePollMs = 100,
+  // How long the screen stays on once the boot is over, before it is blanked.
+  // Nothing changes on it after the boot, and a static image left showing for
+  // hours can leave its mark on the panel.
+  kScreenOnAfterBootMs = 30 * 1000,
 
   // Emulated cycles between renders: once a frame of the CGA's 60Hz display.
   // Drawing more often shows nothing new, since a frame is the most often the
@@ -522,6 +526,8 @@ int main(void) {
   // Starting from detached makes a host that watched the whole boot get the
   // final report too.
   g_host_attached = false;
+  const absolute_time_t blank_at = make_timeout_time_ms(kScreenOnAfterBootMs);
+  bool screen_on = true;
   for (;;) {
     const bool attached = stdio_usb_connected();
     if (attached && !g_host_attached) {
@@ -529,6 +535,10 @@ int main(void) {
       printf("done\n");
     }
     g_host_attached = attached;
+    if (screen_on && time_reached(blank_at)) {
+      LcdSetDisplayOn(false);
+      screen_on = false;
+    }
     sleep_ms(kIdlePollMs);
   }
   return 0;

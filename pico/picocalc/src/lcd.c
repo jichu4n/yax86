@@ -34,8 +34,10 @@ enum {
 
   // Commands, from the ST7365P datasheet.
   kCmdSoftwareReset = 0x01,
+  kCmdSleepIn = 0x10,
   kCmdSleepOut = 0x11,
   kCmdInversionOn = 0x21,
+  kCmdDisplayOff = 0x28,
   kCmdDisplayOn = 0x29,
   kCmdColumnAddressSet = 0x2A,
   kCmdRowAddressSet = 0x2B,
@@ -63,10 +65,11 @@ enum {
   kPixelFormatRGB565 = 0x55,
 
   // Delays the datasheet asks for: 120ms after a reset or leaving sleep before
-  // the next command.
+  // the next command, and 5ms after entering sleep.
   kResetPulseMs = 10,
   kResetRecoveryMs = 120,
   kSleepOutMs = 120,
+  kSleepInMs = 5,
 };
 
 // A command and its parameters. Kept as a table so that the init sequence
@@ -154,6 +157,20 @@ uint32_t LcdInit(void) {
   LcdFillRect(0, 0, kLcdWidth, kLcdHeight, 0);
   LcdSendCommand(kCmdDisplayOn, NULL, 0);
   return actual_hz;
+}
+
+void LcdSetDisplayOn(bool on) {
+  if (on) {
+    LcdSendCommand(kCmdSleepOut, NULL, 0);
+    sleep_ms(kSleepOutMs);
+    LcdSendCommand(kCmdDisplayOn, NULL, 0);
+  } else {
+    // Blank first, so that the panel never shows what it looks like while it
+    // goes to sleep.
+    LcdSendCommand(kCmdDisplayOff, NULL, 0);
+    LcdSendCommand(kCmdSleepIn, NULL, 0);
+    sleep_ms(kSleepInMs);
+  }
 }
 
 void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
