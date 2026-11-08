@@ -783,9 +783,10 @@ static OverclockResult Overclock(void) {
 int main(void) {
   stdio_init_all();
 #if YAX86_PICOCALC_SYS_CLK_KHZ
-  // Before anything else is brought up: the SPI and I2C blocks work out their
-  // dividers from the peripheral clock when they are initialized, and it
-  // moves with the system clock.
+  // Before anything else is brought up, since each works out its clock
+  // divider when it is: the LCD's from the system clock, and the keyboard
+  // controller's I2C from the peripheral clock, which the overclock moves to
+  // the 48MHz USB PLL.
   g_status.overclock = Overclock();
 #endif
 

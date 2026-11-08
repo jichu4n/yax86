@@ -69,10 +69,6 @@ elseif(sys_clk_khz GREATER 125000)
     add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
 endif()
 
-# Keep the peripheral clock on the system clock through an overclock. Left
-# alone, set_sys_clock_khz() moves it to the 48MHz USB PLL, which caps the
-# LCD's SPI clock at 24MHz.
-add_compile_definitions(PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1)
 
 pico_sdk_init()
 
@@ -131,7 +127,7 @@ target_compile_options(yax86_picocalc PRIVATE -Wall -Wextra)
 target_link_libraries(yax86_picocalc PRIVATE
     pico_stdlib
     hardware_i2c
-    hardware_spi
+    hardware_pio
     hardware_vreg
     hardware_watchdog
 )
@@ -141,5 +137,8 @@ target_link_options(yax86_picocalc PRIVATE -Wl,--print-memory-usage)
 # Reports go out over USB CDC. GP0 and GP1, the UART's pins, are left alone.
 pico_enable_stdio_usb(yax86_picocalc 1)
 pico_enable_stdio_uart(yax86_picocalc 0)
+
+# The LCD's serial interface - see src/lcd.c.
+pico_generate_pio_header(yax86_picocalc "${CMAKE_CURRENT_SOURCE_DIR}/src/lcd.pio")
 
 pico_add_extra_outputs(yax86_picocalc)

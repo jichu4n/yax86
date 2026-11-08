@@ -2040,7 +2040,7 @@ a search result.
 
 | part | connection |
 | --- | --- |
-| LCD: ST7365P, 320x320 | SPI1. SCK 10, MOSI 11, MISO 12, CS 13, DC 14, RST 15 |
+| LCD: ST7365P, 320x320 | SPI1's pins, driven by PIO. SCK 10, MOSI 11, MISO 12, CS 13, DC 14, RST 15 |
 | Keyboard and power: an STM32 | I2C1. SDA 6, SCL 7, address `0x1F` |
 | SD card | SPI0. MISO 16, CS 17, SCK 18, MOSI 19; card detect 22 |
 | PSRAM, 8MB | PIO SPI. CS 20, SCK 21, MOSI 2, MISO 3 |
@@ -2080,9 +2080,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The boot reaches `A>` having retired **2,328,128 instructions**, the same
   count `pico/bench` reports for `dos-boot`. That is what says this runtime and
   the benchmark run the same machine, so a figure measured on one stands for
-  the other. At 250MHz it takes 4.78 seconds of processor time without
-  drawing the guest's screen and 5.06 with it - 121% and 115% of a real
-  PC/XT. At the stock 125MHz, 9.93 seconds with drawing, which is 58.5%.
+  the other. At 250MHz it takes 4.76 seconds of processor time without
+  drawing the guest's screen and 5.01 with it - 122% and 116% of a real
+  PC/XT. At the stock 125MHz, 9.88 seconds with drawing, which is 58.8%.
   Processor time rather than how long it took, because the boot is paced -
   see below.
 - If the count moves while the bench's does not, the runtime has stopped
@@ -2108,15 +2108,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Speed is measured as processor time, not as how long the boot took.**
   Paced, the boot takes as long as on a real PC/XT however fast the emulator
   is, so the runtime records the time it spent running the machine - elapsed
-  less waited - as `boot_busy_us`. That is what an unpaced boot takes: a build
-  with the pacing taken out measured 5.0569 and 5.0567 seconds against 5.0574
-  and 5.0578 paced, 0.01% apart.
+  less waited - as `boot_busy_us`. That is what an unpaced boot takes, to
+  within 0.1%: a build with the pacing taken out measured 5.0105 and 5.0107
+  seconds, against 5.0147 to 5.0149 paced.
 - **Faster on average is not faster throughout.** At 250MHz the boot drops
-  0.56 seconds, 0.30 without drawing: part of the stretch before the date
+  0.54 seconds, 0.30 without drawing: part of the stretch before the date
   prompt, and the one from the time prompt to `A>`, run slower than real time.
-  The second is DOS printing and scrolling, and runs at 60% of real time with
-  drawing - 0.25 emulated seconds took 0.42 of processor time, 0.13 of it
-  drawing. At the stock 125MHz the boot drops 4.15 seconds.
+  The second is DOS printing and scrolling, and runs at 63% of real time with
+  drawing - 0.25 emulated seconds took 0.40 of processor time, 0.12 of it
+  drawing. At the stock 125MHz the boot drops 4.13 seconds.
 - **The idle skip is turned on at the prompt**, with
   `YPlatformSetDOSIdleSkip()` - see the core's idle skipping section for why
   through that and not the config. Without it the prompt's polling loop runs
@@ -2147,26 +2147,41 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The register values are ClockworkPi's, except that the pixel format is
   RGB565 rather than the samples' 18-bit RGB666, which is two bytes a pixel
   rather than three. The datasheet's serial interface takes both.
-- **The SPI clock is 62.5MHz**: a quarter of the peripheral clock at 250MHz,
-  and half of it - the fastest the SPI block runs - at the stock 125MHz. The
-  datasheet rates writes at a 66ns cycle, about 15MHz, and ClockworkPi's
-  samples ask for 25MHz, which 125MHz divides to 20.83MHz. The panel draws
-  cleanly at 62.5MHz, checked by eye, and at 125MHz it takes the cost of
-  drawing during `dos-boot` from 7.4% of the run to 5.2%.
-- **An overclock would move the SPI clock's source**, and the build stops it.
-  At power on the peripheral clock is the system clock, but
-  `set_sys_clock_khz()` switches it to the 48MHz USB PLL unless
-  `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK` is defined - see
-  `set_sys_clock_pll()` in the SDK's `clocks.c` - which would leave the LCD at
-  24MHz at most. `CMakeLists.txt` defines it, so the peripheral clock follows
-  the system clock, and the overclock is made before the SPI and I2C blocks
-  are brought up, since each works out its divider from it then.
+- **The serial interface is driven by PIO, not the SPI block.**
+  `src/lcd.pio` is two instructions, a bit every two cycles, with the clock
+  on a side-set pin. The SPI block runs from the peripheral clock, and
+  `set_sys_clock_khz()` moves that to the 48MHz USB PLL on an overclock -
+  see `set_sys_clock_pll()` in the SDK's `clocks.c` - which caps the LCD at
+  24MHz. `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK` would keep it on the
+  system clock, and the SPI block does draw at 62.5MHz like that, but it
+  takes every peripheral to 250MHz with it - the keyboard controller's I2C
+  and, later, the SD card's SPI. PIO runs from the system clock, which the
+  overclock raises anyway, and it is what ClockworkPi's own NES build drives
+  this panel with at 250MHz.
+- **The serial clock is 62.5MHz** at both 125MHz and 250MHz, the system clock
+  divided by 1 and by 2. The datasheet rates writes at a 66ns cycle, about
+  15MHz, and ClockworkPi's samples ask for 25MHz. The panel draws cleanly at
+  62.5MHz, checked by eye, and at 125MHz it took the cost of drawing during
+  `dos-boot` from 7.4% of the run at 20.83MHz to 5.2%.
+- **The control lines are held 50ns around every transfer**, which covers
+  each write timing in the datasheet's serial interface section, the
+  tightest being CS high for 40ns between transfers. At 125MHz the code took
+  long enough between changes that nothing broke. At 250MHz it does not:
+  through PIO, grey text came out green - as it would with every pixel's
+  bytes swapped - and through the SPI block the panel took no new image at
+  all. That reads as the SPI block or the bit rate failing at 250MHz, and is
+  neither: with the hold, the SPI block draws at every rate tried from 31.25
+  to 62.5MHz.
+- **`LcdWaitIdle()` waits for the FIFO to empty before it clears the stall
+  flag.** The state machine was already stalled before the last byte was
+  queued, and stays so until it pulls that byte, so a flag cleared any
+  earlier can be set again by the old stall, ending the wait while the byte
+  is still going out.
 - A write is `LcdBeginWrite()`, then any number of `LcdWritePixels()`, then
-  `LcdEndWrite()`. The window commands, the switch to 16-bit frames and CS all
-  happen once per window rather than per call, because the core hands pixels
-  over 32 at a time and a format switch per batch would cost more than the
-  batch. Raising CS between transfers does not end a memory write - only the
-  next command does.
+  `LcdEndWrite()`. The window commands, DC and CS happen once per window
+  rather than per call, because the core hands pixels over 32 at a time.
+  Raising CS between transfers does not end a memory write - only the next
+  command does.
 
 ### The guest's screen, and what drawing it costs
 
@@ -2180,26 +2195,25 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   into it. Graphics modes render 640 pixels across and are not drawn yet.
 - It renders once per emulated frame, 60 times an emulated second, on core 0
   between batches. Drawing more often shows nothing new.
-- **Drawing costs 5.7% of `dos-boot`** at 250MHz: 4.7843 seconds of
-  processor time without drawing against 5.0576 with, the same 2,328,128
-  instructions either way, two runs each with a spread under 0.01%. 0.273
-  seconds of that is inside `YVideoRender()`, over 73 frames and 368,960
-  pixels, about 4.6 screens' worth. At the stock 125MHz it measured 4.8%:
-  9.4443 seconds against 9.8999, with 0.436 inside `YVideoRender()`.
+- **Drawing costs 5.3% of `dos-boot`** at 250MHz: 4.7610 seconds of
+  processor time without drawing against 5.0149 with, the same 2,328,128
+  instructions either way, two and three runs with a spread under 0.01%.
+  0.245 seconds of that is inside `YVideoRender()`, over 73 frames and
+  368,960 pixels, about 4.6 screens' worth.
 - **That figure moves with where the code lands in flash.** Adding the
-  screen blanking below, which runs only after the boot, took the drawing
-  build from 9.9509 seconds to 9.8999 and the cost from 5.2% to 4.8%, with
-  the time inside `YVideoRender()` unchanged. Compare a change against a
-  baseline built from the same code, never against these figures.
+  screen blanking below, which runs only after the boot, once took the cost
+  at 125MHz from 5.2% to 4.8%, with the time inside `YVideoRender()`
+  unchanged. Compare a change against a baseline built from the same code,
+  never against these figures.
 - **Most of what is left is processor time, not the bus.** 368,960 pixels of
-  16 bits take 0.094 seconds on the wire at 62.5MHz and took 0.283 at
-  20.83MHz, while the time in `YVideoRender()` fell only from 0.647 to 0.436
-  seconds. That leaves about 0.34 seconds, or roughly 115 cycles a pixel, in
-  producing each pixel - the core's text renderer, a callback per 32 pixels,
-  and the conversion to RGB565 - which runs from flash, since none of it is in
-  SRAM.
+  16 bits take 0.094 seconds on the wire at 62.5MHz and 0.283 at 20.83MHz,
+  and at 125MHz the time in `YVideoRender()` fell only from 0.647 to 0.436
+  seconds between the two. That leaves about 0.34 seconds, or roughly 115
+  cycles a pixel, in producing each pixel - the core's text renderer, a
+  callback per 32 pixels, and the conversion to RGB565 - which runs from
+  flash, since none of it is in SRAM.
 - `dos-boot` draws little. A screen that scrolls redraws all 80,000 of its
-  pixels each line, about 59ms at 250MHz and 95ms at 125MHz, during which the
+  pixels each line, about 53ms at 250MHz and 88ms at 125MHz, during which the
   emulator does not run.
 - **The screen is blanked 30 seconds after the boot**, with the panel's
   display off and sleep in commands - `LcdSetDisplayOn(false)`. Nothing but

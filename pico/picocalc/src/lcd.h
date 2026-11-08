@@ -1,4 +1,5 @@
-// The PicoCalc's LCD: a 320x320 IPS panel with an ST7365P controller, on SPI1.
+// The PicoCalc's LCD: a 320x320 IPS panel with an ST7365P controller, on a
+// serial interface driven by PIO.
 //
 // Written to rather than scanned out: the controller keeps its own frame
 // memory, so a host only sends what changed, as a rectangular window followed
@@ -14,9 +15,9 @@ enum {
   kLcdHeight = 320,
 };
 
-// Bring the panel up in RGB565 and clear it to black. Returns the SPI clock
+// Bring the panel up in RGB565 and clear it to black. Returns the serial clock
 // actually achieved, in Hz, which is the requested one rounded down to what
-// the peripheral clock divides to.
+// the system clock divides to.
 uint32_t LcdInit(void);
 
 // Begin a write to the rectangle at (x, y), width by height pixels. Pixels

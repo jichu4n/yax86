@@ -1,21 +1,31 @@
-// ST7365P driver for the PicoCalc's LCD, over the RP2040's hardware SPI.
+// ST7365P driver for the PicoCalc's LCD.
 //
 // The register values are ClockworkPi's, from the PicoCalc sample code
 // (Code/picocalc_helloworld/lcdspi/lcdspi.c), with one change: the pixel
 // format is RGB565 rather than the samples' 18-bit RGB666. The ST7365P's serial
 // interface accepts both (3Ah = 55h in the datasheet's serial interface
 // section), so it is two bytes a pixel rather than three.
+//
+// The serial interface is driven by a PIO state machine rather than the
+// RP2040's SPI block. The SPI block runs from the peripheral clock, which the
+// SDK moves to the 48MHz USB PLL on an overclock, capping the LCD at 24MHz.
+// Keeping it fast would mean overclocking the peripheral clock as well, and
+// every peripheral on it with it. PIO runs from the system clock, which is
+// overclocked already, and it is what ClockworkPi's own NES build drives this
+// panel with at 250MHz.
 
 #include "lcd.h"
 
 #include <stddef.h>
 
+#include "hardware/clocks.h"
 #include "hardware/gpio.h"
-#include "hardware/spi.h"
+#include "hardware/pio.h"
+#include "lcd.pio.h"
 #include "pico/time.h"
 
-// The SPI block the panel is wired to.
-static spi_inst_t* const kLcdSPI = spi1;
+// The PIO block the serial interface runs on.
+static PIO const kLcdPIO = pio0;
 
 enum {
   kLcdPinSCK = 10,
@@ -24,13 +34,23 @@ enum {
   kLcdPinDC = 14,
   kLcdPinReset = 15,
 
-  // Half the peripheral clock, the fastest the SPI block runs: 62.5MHz at
-  // the stock 125MHz. The datasheet rates writes at a 66ns cycle, about 15MHz,
-  // and ClockworkPi's samples run at 25MHz, which a 125MHz peripheral clock
-  // divides to 20.83MHz. The panel draws cleanly at 62.5MHz, and against
-  // 20.83MHz it takes drawing the guest's screen during dos-boot from 7.4% of
-  // the run to 5.2%.
+  // The serial clock: a bit every two system clock cycles at the stock
+  // 125MHz, and every four at 250MHz. The datasheet rates writes at a 66ns
+  // cycle, about 15MHz, and ClockworkPi's samples run at 25MHz. The panel
+  // draws cleanly at 62.5MHz, and at 125MHz against 20.83MHz it takes drawing
+  // the guest's screen during dos-boot from 7.4% of the run to 5.2%.
   kLcdSPIHz = 62500 * 1000,
+  // The state machine takes two cycles a bit.
+  kLcdCyclesPerBit = 2,
+  // How long the control lines are held around a transfer, which covers every
+  // write timing in the datasheet's serial interface section: CS set up 15ns
+  // before the first clock and held 15ns after the last, CS high for 40ns
+  // between transfers, and DC set up and held 10ns either side of a clock.
+  // At 250MHz the code between two control line changes can take as little
+  // as a few nanoseconds, and without the hold the panel misreads writes: grey
+  // text comes out green, as it would with every pixel's bytes swapped, and
+  // through the SPI block it took no new image at all.
+  kLcdGuardNs = 50,
 
   // Commands, from the ST7365P datasheet.
   kCmdSoftwareReset = 0x01,
@@ -109,25 +129,94 @@ static const LcdCommand kInitSequence[] = {
 // One row of the panel, for fills.
 static uint16_t g_fill_row[kLcdWidth];
 
-// Send a command byte and then its parameters. The SPI write functions return
-// only once the last bit has left the shifter, so the control lines can change
-// as soon as they return.
+static uint g_lcd_sm;
+// kLcdGuardNs in system clock cycles.
+static uint32_t g_lcd_guard_cycles;
+
+// Hold the control lines where they are for kLcdGuardNs.
+static inline void LcdGuard(void) {
+  busy_wait_at_least_cycles(g_lcd_guard_cycles);
+}
+
+// Queue a byte for the panel. The state machine pulls 8 bits at a time from
+// the top of the word, and a byte-wide write to the FIFO is replicated across
+// all four bytes of it, so the byte lands where it is taken from.
+static inline void LcdPutByte(uint8_t value) {
+  while (pio_sm_is_tx_fifo_full(kLcdPIO, g_lcd_sm)) {
+  }
+  *(volatile uint8_t*)&kLcdPIO->txf[g_lcd_sm] = value;
+}
+
+// Wait until the last bit queued has been clocked out, so that the control
+// lines can change. The state machine stalls on an empty FIFO only once it has
+// finished with what it had - but it was already stalled before the last byte
+// was queued, and it can still be until it pulls that byte, so the stall flag
+// is cleared only once the FIFO is empty. Cleared any earlier, it can be set
+// again by the old stall and end the wait while the byte is still going out.
+static void LcdWaitIdle(void) {
+  while (!pio_sm_is_tx_fifo_empty(kLcdPIO, g_lcd_sm)) {
+  }
+  const uint32_t stall_mask = 1u << (PIO_FDEBUG_TXSTALL_LSB + g_lcd_sm);
+  kLcdPIO->fdebug = stall_mask;
+  while (!(kLcdPIO->fdebug & stall_mask)) {
+  }
+}
+
+// Send a command byte and then its parameters.
 static void LcdSendCommand(
     uint8_t command, const uint8_t* params, size_t num_params) {
   gpio_put(kLcdPinDC, 0);
   gpio_put(kLcdPinCS, 0);
-  spi_write_blocking(kLcdSPI, &command, 1);
+  LcdGuard();
+  LcdPutByte(command);
+  LcdWaitIdle();
+  LcdGuard();
   if (num_params > 0) {
     gpio_put(kLcdPinDC, 1);
-    spi_write_blocking(kLcdSPI, params, num_params);
+    LcdGuard();
+    for (size_t i = 0; i < num_params; ++i) {
+      LcdPutByte(params[i]);
+    }
+    LcdWaitIdle();
+    LcdGuard();
   }
   gpio_put(kLcdPinCS, 1);
+  LcdGuard();
+}
+
+// Start the state machine, at the fastest clock no faster than kLcdSPIHz
+// that the system clock divides to, and return that clock.
+static uint32_t LcdInitSerial(void) {
+  const uint32_t sys_hz = clock_get_hz(clk_sys);
+  g_lcd_guard_cycles = sys_hz / (1000 * 1000) * kLcdGuardNs / 1000 + 1;
+  const uint32_t cycles_per_bit_at_rate = kLcdCyclesPerBit * kLcdSPIHz;
+  uint32_t divider =
+      (sys_hz + cycles_per_bit_at_rate - 1) / cycles_per_bit_at_rate;
+  if (divider == 0) {
+    divider = 1;
+  }
+
+  const uint offset = (uint)pio_add_program(kLcdPIO, &lcd_serial_program);
+  g_lcd_sm = (uint)pio_claim_unused_sm(kLcdPIO, true);
+  pio_sm_config config = lcd_serial_program_get_default_config(offset);
+  sm_config_set_out_pins(&config, kLcdPinMOSI, 1);
+  sm_config_set_sideset_pins(&config, kLcdPinSCK);
+  sm_config_set_fifo_join(&config, PIO_FIFO_JOIN_TX);
+  // Shifted out of the top of the word, most significant bit first, pulled
+  // automatically a byte at a time.
+  sm_config_set_out_shift(&config, false, true, 8);
+  sm_config_set_clkdiv_int_frac8(&config, divider, 0);
+  pio_gpio_init(kLcdPIO, kLcdPinMOSI);
+  pio_gpio_init(kLcdPIO, kLcdPinSCK);
+  pio_sm_set_consecutive_pindirs(kLcdPIO, g_lcd_sm, kLcdPinMOSI, 1, true);
+  pio_sm_set_consecutive_pindirs(kLcdPIO, g_lcd_sm, kLcdPinSCK, 1, true);
+  pio_sm_init(kLcdPIO, g_lcd_sm, offset, &config);
+  pio_sm_set_enabled(kLcdPIO, g_lcd_sm, true);
+  return sys_hz / (kLcdCyclesPerBit * divider);
 }
 
 uint32_t LcdInit(void) {
-  const uint32_t actual_hz = spi_init(kLcdSPI, kLcdSPIHz);
-  gpio_set_function(kLcdPinSCK, GPIO_FUNC_SPI);
-  gpio_set_function(kLcdPinMOSI, GPIO_FUNC_SPI);
+  const uint32_t actual_hz = LcdInitSerial();
 
   const uint32_t control_pins[] = {kLcdPinCS, kLcdPinDC, kLcdPinReset};
   for (size_t i = 0; i < sizeof(control_pins) / sizeof(control_pins[0]); ++i) {
@@ -184,23 +273,26 @@ void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   LcdSendCommand(kCmdRowAddressSet, rows, sizeof(rows));
   LcdSendCommand(kCmdMemoryWrite, NULL, 0);
 
-  // Pixels go as 16-bit frames, which leave most significant bit first: the
-  // byte order the panel expects, with no swapping in between. The format,
   // DC and CS are set once here rather than per call, since the core hands
-  // pixels over 32 at a time and a format switch per batch would cost more
-  // than the batch.
-  spi_set_format(kLcdSPI, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+  // pixels over 32 at a time.
   gpio_put(kLcdPinDC, 1);
   gpio_put(kLcdPinCS, 0);
+  LcdGuard();
 }
 
 void LcdWritePixels(const uint16_t* pixels, uint32_t count) {
-  spi_write16_blocking(kLcdSPI, pixels, count);
+  // High byte first, which is the order the panel expects.
+  for (uint32_t i = 0; i < count; ++i) {
+    LcdPutByte((uint8_t)(pixels[i] >> 8));
+    LcdPutByte((uint8_t)pixels[i]);
+  }
 }
 
 void LcdEndWrite(void) {
+  LcdWaitIdle();
+  LcdGuard();
   gpio_put(kLcdPinCS, 1);
-  spi_set_format(kLcdSPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+  LcdGuard();
 }
 
 void LcdFillRect(
