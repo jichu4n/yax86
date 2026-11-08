@@ -144,9 +144,10 @@ endif()
 # Place the emulator's per-instruction hot path in SRAM. The core marks it with
 # Y_HOT, which expands to nothing unless something defines it; this is where
 # this target does. Force-included rather than included from the core, so that
-# the core knows nothing about this target.
+# the core knows nothing about this target. Shared with pico/picocalc, so that
+# the benchmark measures the placement the runtime ships with.
 target_compile_options(yax86_pico_bench PRIVATE
-    -include "${CMAKE_CURRENT_SOURCE_DIR}/src/yax86_hot.h")
+    -include "${CMAKE_CURRENT_SOURCE_DIR}/../common/yax86_hot.h")
 
 target_compile_options(yax86_pico_bench PRIVATE -Wall -Wextra)
 

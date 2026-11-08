@@ -9,6 +9,8 @@ Pico, and for the browser via SDL and Emscripten.
 - Runs MS-DOS 3.3 on top of GLaBIOS.
 - Fits and runs well on an RP2040: no dynamic allocation, no file system, no
   libc dependencies, and a hot path chosen against on-target measurements.
+- Runs as a real machine on the ClockworkPi PicoCalc, an RP2040 handheld with
+  a 320x320 LCD and a keyboard - see `pico/picocalc` below.
 
 ## Repository layout
 
@@ -19,6 +21,8 @@ Pico, and for the browser via SDL and Emscripten.
 | `core/tests/` | Unit tests per module, C++14 and Google Test. |
 | `sdl/` | SDL3 runtime, native and Emscripten. |
 | `pico/bench/` | RP2040 benchmark harness. Standalone CMake project. |
+| `pico/picocalc/` | The runtime for the ClockworkPi PicoCalc. Standalone CMake project. |
+| `pico/common/` | What both Pico targets compile in. |
 | `tools/` | Build and test scripts for the native and Emscripten builds. |
 | `resources/` | Floppy and disk images. |
 | `.cache/` | Downloaded references — GLaBIOS source, the 8088 test suite, other emulators. Not in the repository. |
@@ -26,7 +30,7 @@ Pico, and for the browser via SDL and Emscripten.
 ## Building, testing and debugging
 
 The project uses CMake. Native and Emscripten output go to `build-native` and
-`build-emscripten`; the Pico harness builds into `build-pico`.
+`build-emscripten`; the Pico targets build into `build-pico`.
 
 ### Building
 
@@ -304,6 +308,15 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
   collision can only be with a name this project owns. The guide is also
   written for C++, where `enum class` and namespaces scope an enumerator, and C
   has neither.
+- **The rule covers the core, not the hosts.** `sdl/`, `pico/bench` and
+  `pico/picocalc` define nothing that anything else includes, so the reason for
+  the namespace does not reach them, and they keep the Google style guide's
+  names: `kName` for constants and enumerators, `g_name` for file-scope
+  variables, and CamelCase for functions, led by the host's own module word as
+  in `DisplayPutPixels()` or `LcdInit()`. The same goes for the visibility
+  macros below: a host file-scope definition is plain `static` or nothing. A
+  host must not take the `Y` prefix for its own names. The namespace is the
+  core's, and a host name in it could collide with one the core adds later.
 
 ### Visibility
 
@@ -1818,10 +1831,13 @@ Notes on the machinery:
   root, since CMake names an object after the absolute path of its source.
   `build.sh` spells the path out rather than searching, so its `core_text`
   column always refers to the core just built.
-- `src/yax86_hot.h` is force-included into every translation unit, and is where
-  this target defines `Y_HOT` to `__not_in_flash()`. Force-included rather
-  than included from the core, so that the core knows nothing about this
-  target, and inert against a core revision that does not use the mark.
+- `pico/common/yax86_hot.h` is force-included into every translation unit, and
+  is where this target defines `Y_HOT` to `__not_in_flash()`. Force-included
+  rather than included from the core, so that the core knows nothing about this
+  target, and inert against a core revision that does not use the mark. It is
+  shared with `pico/picocalc` rather than copied, so that the benchmark
+  measures the placement the runtime ships with: a copy that drifted would cost
+  the 1.59x with nothing to say so.
 - The optimization level is applied through `CMAKE_C_FLAGS_RELEASE` rather than
   to the emulator's target alone, so the SDK and the C library are compiled the
   same way. What is being measured is how a whole image behaves in the XIP
@@ -1954,6 +1970,136 @@ SRAM, at #89:
   not trustworthy below the top few entries: several small functions share a
   bucket and only the first is named, so a bucket can be credited to a function
   the workload never executes. Verify anything in the tail before acting on it.
+
+## pico/picocalc — the PicoCalc runtime
+
+- The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld
+  with a 320x320 LCD, a keyboard, an SD card slot and a battery. It brings up
+  the LCD and the keyboard controller, shows a status screen saying what it
+  found, and boots MS-DOS 3.30 off the floppy image in flash to the `A>`
+  prompt. The guest's screen is not drawn and the keyboard is not read yet, so
+  DOS's date and time questions are answered by watching the screen, the way
+  `pico/bench` does it.
+- Like `pico/bench` it is a consumer of the core, uses only the public
+  interface, and is not built in CI.
+
+### The hardware
+
+From ClockworkPi's own repository, <https://github.com/clockworkpi/PicoCalc>:
+the mainboard schematic, the sample code under `Code/`, and the ST7365P
+datasheet. Third-party pinouts online disagree with each other, and one has
+the audio pins wrong, so check a new pin against that repository rather than
+a search result.
+
+| part | connection |
+| --- | --- |
+| LCD: ST7365P, 320x320 | SPI1. SCK 10, MOSI 11, MISO 12, CS 13, DC 14, RST 15 |
+| Keyboard and power: an STM32 | I2C1. SDA 6, SCL 7, address `0x1F` |
+| SD card | SPI0. MISO 16, CS 17, SCK 18, MOSI 19; card detect 22 |
+| PSRAM, 8MB | PIO SPI. CS 20, SCK 21, MOSI 2, MISO 3 |
+| Speaker | PWM on GP26 and GP27 |
+
+### Building and flashing
+
+```sh
+PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
+./pico/bench/run.js build-pico/picocalc/yax86_picocalc.uf2
+```
+
+- Everything the status screen shows is also sent over USB serial, as a report
+  each time a host attaches - USB CDC drops what is written before then - and
+  `done` once the boot is over. That is the shape `run.js` captures, so it
+  flashes and reads this image unchanged.
+- **Flashing an image directly replaces ClockworkPi's factory firmware.** That
+  is a boot loader at offset 0, which offers an SD card menu or else starts the
+  default app; PicoMite as the default app at 200KB; and PicoMite's own storage
+  at 968KB. Back it up before the first flash, and put it back the same way:
+  ```sh
+  picotool save -a picocalc-factory-flash.bin
+  picotool load -f -x -o 0x10000000 picocalc-factory-flash.bin
+  ```
+- **The factory firmware has no picotool reset interface**, so `picotool -f`,
+  and with it `run.js`, cannot reboot it into BOOTSEL. Opening its USB serial
+  port at 1200 baud does: `stty -F /dev/ttyACM0 1200`.
+
+### The dos-boot invariant holds here too
+
+- The boot reaches `A>` having retired **2,328,128 instructions**, the same
+  count `pico/bench` reports for `dos-boot`. That is what says this runtime and
+  the benchmark run the same machine, so a figure measured on one stands for
+  the other. It takes 9.4 seconds at the stock 125MHz.
+- If the count moves while the bench's does not, the runtime has stopped
+  running the machine the benchmark measures.
+
+### The LCD
+
+- The register values are ClockworkPi's, except that the pixel format is
+  RGB565 rather than the samples' 18-bit RGB666, which is two bytes a pixel
+  rather than three. The datasheet's serial interface takes both.
+- The SPI clock asks for 25MHz, ClockworkPi's figure, and gets 20.83MHz: a
+  125MHz peripheral clock divides to 125/6. The datasheet rates writes at a
+  66ns cycle, about 15MHz, so that is already above the rating, and how fast
+  the panel will go is a measurement for when the guest's screen is drawn.
+- Raising CS between transfers does not end a memory write - only the next
+  command does - so a window can be filled over as many transfers as suits the
+  caller.
+
+### The keyboard controller
+
+- It answers a register at a time: write the register number, wait, then read
+  two bytes. ClockworkPi's samples wait 16ms and run the bus at 10kHz, and so
+  does this for now.
+- **Write a register number before every read.** Firmware older than April
+  2025 (ClockworkPi commit `f58e85e`) freezes SCL if a read arrives with no
+  register number before it, which is exactly what a bus scan does.
+- **The version register only answers from v1.6 on** (`410f8fc`, March 2026).
+  Earlier firmware answers any register it does not know with two zero bytes,
+  so a version of 0 is reported as "older than v1.6". **v1.7 reports itself as
+  v1.6**: its one change did not touch `BIOSVERSION`, so the register cannot
+  tell the two apart. The battery register answers `[0B, percent]` - the
+  register number first, then the value.
+- **The controller can stop acknowledging for minutes at a time.** On the
+  development unit it acknowledged nothing for two boots in a row, then
+  answered every read on every boot after - including straight after the
+  factory firmware had been polling it, which was the obvious suspect and did
+  not reproduce it. The cause is not known, and that unit's firmware is older
+  than v1.6, which is the release that added an I2C restart after 2.5 quiet
+  seconds "indicating a possible I2C malfunction". The boot-time read retries
+  for three seconds, which spans one such restart on v1.6 and later; reading
+  the keyboard continuously will need more than that.
+- **Flashing the controller** is ClockworkPi's procedure, in the PicoCalc
+  repository's wiki: set DIP switch 1 on the back of the mainboard, power on,
+  and `stm32flash` its serial bootloader through the USB-C port, which is a
+  CH340 adapter (`1a86:7523`). Read the old firmware back first - `stm32flash
+  -r old.bin -S 0x08000000:131072 /dev/ttyUSB0` - and read the new one back
+  afterwards to compare, since that is a check `-v` alone does not make of the
+  whole image. The development unit came with v1.4, which is byte for byte
+  ClockworkPi's `Bin/PicoCalc_BIOS_v1.4.bin`, and now runs v1.7.
+- **After flashing, it may not power on again until it loses power
+  completely.** With DIP 1 back off, the power button did nothing until both
+  cables and the batteries were removed and put back. A long press is the
+  wrong way to try in any case: the firmware shuts the device down on a long
+  press, and has since at least v1.4.
+
+### The 4x10 font
+
+- 80 columns across 320 pixels leaves four pixels a character, and **no
+  emulator that has tried shrinking a 640 pixel text screen to fit has found it
+  readable** - DOSBox users on 320x240 devices and on the PocketCHIP said the
+  same. What works is a font drawn for the cell: C64 80-column software used
+  4x8, and pico-286's HDMI path 4x6.
+- `src/font_4x10.c` is the only complete code page 437 font of that width
+  with glyphs taller than five rows that turned up. Its ASCII glyphs are
+  rugosi's, from picocalc_runCPM, under MIT - the notice is in the file - and
+  the rest of code page 437, every box drawing and block character included,
+  is Serg Podtynnyi's under GPLv3-or-later.
+- Every glyph outside the box drawing range sits one row lower in its cell
+  than the box drawing characters do, which leaves a blank row between lines
+  of text while box drawing characters fill the cell and join. The shift is in
+  the table rather than left to a renderer, so it is a plain font any renderer
+  can draw. The three glyphs that use the bottom row - `0x02`, `0x0F` and
+  `0x16`, cell-filling patterns - are not shifted, so that it does not clip
+  them.
 
 ## What to emulate, and what not to
 
