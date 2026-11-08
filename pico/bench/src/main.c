@@ -175,7 +175,7 @@ static bool ResetMachine(void) {
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
-  // enable_dos_idle_skip is left off. The run stops at the command prompt,
+  // The DOS idle skip is left off. The run stops at the command prompt,
   // which is where DOS starts idling, so the skip would have nothing to skip -
   // and leaving it off keeps the workload a measurement of how fast guest
   // instructions execute rather than of how many of them are elided.

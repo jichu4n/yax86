@@ -618,8 +618,7 @@ enum {
 // own handler runs as usual - so this only ever reports the interrupt onwards.
 //
 // Only installed while the idle skip is enabled, so a machine without it pays
-// nothing per interrupt. YPlatformInitCPU() installs it, and
-// YPlatformSetDOSIdleSkip() is the sole writer afterwards.
+// nothing per interrupt. YPlatformSetDOSIdleSkip() is what installs it.
 Y_FILE_PRIVATE Y_HOT YCPUInterruptHandlerResult
 YPlatformCPUCallbackHandleInterrupt(YCPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == Y_PLATFORM_DOS_IDLE_INTERRUPT) {
@@ -673,9 +672,6 @@ Y_FILE_PRIVATE void YPlatformInitCPU(YPlatformState* platform) {
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
   platform->cpu.config.decode_cache_num_entries =
       Y_PLATFORM_DECODE_CACHE_ENTRIES;
-  if (platform->config.enable_dos_idle_skip) {
-    platform->cpu.config.handle_interrupt = YPlatformCPUCallbackHandleInterrupt;
-  }
   platform->cpu.config.read_port = YPlatformCPUCallbackReadPortByte;
   platform->cpu.config.write_port = YPlatformCPUCallbackWritePortByte;
   YCPUInit(&platform->cpu);
@@ -1181,7 +1177,7 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles) {
 }
 
 Y_PUBLIC void YPlatformSetDOSIdleSkip(YPlatformState* platform, bool enable) {
-  platform->config.enable_dos_idle_skip = enable;
+  platform->is_dos_idle_skip_enabled = enable;
   platform->cpu.config.handle_interrupt =
       enable ? YPlatformCPUCallbackHandleInterrupt : NULL;
   // An idle declared before the skip went off must not be acted on after it.

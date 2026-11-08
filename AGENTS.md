@@ -1519,8 +1519,8 @@ Alongside the table, state:
   never once halts, all of it the same loop through the `INT 21h` dispatcher
   and the CON driver into `INT 16h`.
 - It does announce itself: DOS issues `INT 28h`, the documented DOS idle
-  interrupt, 783 times a second while it waits. `YPlatformConfig`'s
-  `enable_dos_idle_skip` makes `YPlatformRun()` treat that as a signal to
+  interrupt, 783 times a second while it waits. `YPlatformSetDOSIdleSkip()`
+  makes `YPlatformRun()` treat that as a signal to
   advance the clock to whichever comes first, the next device deadline or the
   end of the budget it was given, instead of executing the loop until it gets
   there. The guest's own handler still runs; only the waiting is skipped.
@@ -1532,14 +1532,16 @@ Alongside the table, state:
 - It is opt in because it is not free of consequence: a program timing a loop
   from inside its own `INT 28h` handler would see time jump. The SDL runtime
   turns it on; the tests leave it off.
-- **`YPlatformInit()` is the only reader of `enable_dos_idle_skip`.** What the
-  skip needs is the CPU's `handle_interrupt` callback, installed alongside the
-  flag, so on a running machine it is switched with
-  `YPlatformSetDOSIdleSkip()`, which is the sole writer of both after init.
-  Writing the flag afterwards changes nothing and says nothing. The PicoCalc
-  runtime is the caller: it turns the skip on at the prompt, because on from
-  power on it would move the `dos-boot` invariant - DOS issues `INT 28h` at
-  the date and time prompts as well.
+- **The skip is switched by a setter, not configured.** It is off after
+  `YPlatformInit()`, and `YPlatformSetDOSIdleSkip()` turns it on or off at
+  any point after that - the SDL runtime straight after init, the PicoCalc
+  runtime once DOS reaches its prompt, because on from power on it would move
+  the `dos-boot` invariant: DOS issues `INT 28h` at the date and time prompts
+  as well. What the skip takes is the CPU's `handle_interrupt` callback as
+  well as a flag, and the setter is the sole writer of both, the coupled state
+  rule from the CPU's state and config section. A config field read at init
+  would be a second way to set the same thing, and one that silently stops
+  working once the machine is up.
 - What the skip is worth is capped by the nearest device deadline, which is why
   `YPITTicksUntilNextEvent()` schedules one for channel 0 alone. After POST the
   BIOS leaves channel 2 programmed at a reload of 1356 with the speaker gated
@@ -1826,7 +1828,7 @@ Alongside the table, state:
   the image is a couple of megabytes of C source. Guest writes are discarded:
   360KB of writable copy is several times the SRAM left over, and nothing on
   the way to a command prompt writes to the disk.
-- `enable_dos_idle_skip` is deliberately left off. The run stops at the prompt,
+- The DOS idle skip is deliberately left off. The run stops at the prompt,
   which is where DOS starts idling, so the skip would have nothing to skip —
   and leaving it off keeps the workload a measure of how fast guest
   instructions execute rather than of how many are elided.
@@ -2118,8 +2120,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   drawing - 0.25 emulated seconds took 0.40 of processor time, 0.12 of it
   drawing. At the stock 125MHz the boot drops 4.13 seconds.
 - **The idle skip is turned on at the prompt**, with
-  `YPlatformSetDOSIdleSkip()` - see the core's idle skipping section for why
-  through that and not the config. Without it the prompt's polling loop runs
+  `YPlatformSetDOSIdleSkip()` - not from power on, which would move the
+  `dos-boot` invariant. Without it the prompt's polling loop runs
   at about 83% of real time at 250MHz, slower than the boot does on average,
   and the machine never once waits. With it the processor is busy about 19% of
   the time at the prompt, and emulated time tracks real time exactly: 24.439

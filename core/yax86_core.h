@@ -19050,27 +19050,6 @@ typedef struct YPlatformConfig {
   void (*set_pc_speaker_frequency)(
       struct YPlatformState* platform, uint32_t frequency_hz);
 
-  // Whether to skip emulated time when the guest says it has nothing to do.
-  //
-  // MS-DOS waits for a keystroke by polling, not by halting, so an idle command
-  // prompt costs exactly as much to emulate as a running program - about
-  // 390,000 guest instructions a second, all of them the same loop. It does
-  // however issue INT 28h, the documented DOS idle interrupt, on each pass:
-  // measured at the MS-DOS 3.30 prompt, 783 times a second.
-  //
-  // With this on, that interrupt makes YPlatformRun() advance the clock
-  // straight to whichever comes first, the next device deadline or the end of
-  // the budget it was given, instead of executing the loop until it gets there.
-  // The guest's own handler still runs; only the waiting is skipped.
-  //
-  // Time is advanced rather than discarded, so every device still sees every
-  // cycle and the guest's timer tick count is unchanged. What does change is
-  // that a program timing a loop from inside its own INT 28h handler would see
-  // time jump, which is why this is opt in.
-  //
-  // YPlatformInit() reads this. On a running machine, change it with
-  // YPlatformSetDOSIdleSkip() rather than by writing it.
-  bool enable_dos_idle_skip;
 } YPlatformConfig;
 
 Y_STATIC_VECTOR_TYPE(
@@ -19166,9 +19145,12 @@ typedef struct YPlatformState {
   // that device up to date first, which is what the YPlatformSync* functions
   // do.
 
+  // Whether the DOS idle skip is on - see YPlatformSetDOSIdleSkip(), which is
+  // its sole writer. Off after YPlatformInit().
+  bool is_dos_idle_skip_enabled;
   // Set when the guest has said it has nothing to do, and cleared by
-  // YPlatformRun() once it has skipped the idle time. Only ever set when
-  // YPlatformConfig.enable_dos_idle_skip is on.
+  // YPlatformRun() once it has skipped the idle time. Only ever set while the
+  // idle skip is on.
   bool is_guest_idle;
 
   // Value of ticks when the devices were last brought up to date.
@@ -19231,14 +19213,29 @@ Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 Y_PUBLIC YPlatformRunStatus
 YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
 
-// Turn the DOS idle skip on or off on a running machine - see
-// YPlatformConfig.enable_dos_idle_skip. What it takes is a callback on the
-// CPU's interrupt path as well as the flag, which is why there is a setter:
-// writing the flag after YPlatformInit() changes nothing.
+// Turn on or off skipping emulated time when the guest says it has nothing to
+// do. Off after YPlatformInit(), and may be switched at any point after it.
 //
-// A host that wants the skip only once DOS has reached its prompt turns it on
-// from here, which leaves everything before that exactly as it would be
-// without it.
+// MS-DOS waits for a keystroke by polling, not by halting, so an idle command
+// prompt costs exactly as much to emulate as a running program - about 390,000
+// guest instructions a second, all of them the same loop. It does however
+// issue INT 28h, the documented DOS idle interrupt, on each pass: measured at
+// the MS-DOS 3.30 prompt, 783 times a second.
+//
+// With this on, that interrupt makes YPlatformRun() advance the clock straight
+// to whichever comes first, the next device deadline or the end of the budget
+// it was given, instead of executing the loop until it gets there. The guest's
+// own handler still runs; only the waiting is skipped.
+//
+// Time is advanced rather than discarded, so every device still sees every
+// cycle and the guest's timer tick count is unchanged. What does change is
+// that a program timing a loop from inside its own INT 28h handler would see
+// time jump, which is why this is opt in.
+//
+// A setter rather than a config field, because the skip is a callback on the
+// CPU's interrupt path as well as a flag, and a host may want it only once DOS
+// has reached its prompt, which leaves everything before that exactly as it
+// would be without it.
 Y_PUBLIC void YPlatformSetDOSIdleSkip(YPlatformState* platform, bool enable);
 
 // Bring every device up to date with the cycles that have run so far.
@@ -19886,8 +19883,7 @@ enum {
 // own handler runs as usual - so this only ever reports the interrupt onwards.
 //
 // Only installed while the idle skip is enabled, so a machine without it pays
-// nothing per interrupt. YPlatformInitCPU() installs it, and
-// YPlatformSetDOSIdleSkip() is the sole writer afterwards.
+// nothing per interrupt. YPlatformSetDOSIdleSkip() is what installs it.
 Y_FILE_PRIVATE Y_HOT YCPUInterruptHandlerResult
 YPlatformCPUCallbackHandleInterrupt(YCPUState* cpu, uint8_t interrupt_number) {
   if (interrupt_number == Y_PLATFORM_DOS_IDLE_INTERRUPT) {
@@ -19941,9 +19937,6 @@ Y_FILE_PRIVATE void YPlatformInitCPU(YPlatformState* platform) {
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
   platform->cpu.config.decode_cache_num_entries =
       Y_PLATFORM_DECODE_CACHE_ENTRIES;
-  if (platform->config.enable_dos_idle_skip) {
-    platform->cpu.config.handle_interrupt = YPlatformCPUCallbackHandleInterrupt;
-  }
   platform->cpu.config.read_port = YPlatformCPUCallbackReadPortByte;
   platform->cpu.config.write_port = YPlatformCPUCallbackWritePortByte;
   YCPUInit(&platform->cpu);
@@ -20449,7 +20442,7 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles) {
 }
 
 Y_PUBLIC void YPlatformSetDOSIdleSkip(YPlatformState* platform, bool enable) {
-  platform->config.enable_dos_idle_skip = enable;
+  platform->is_dos_idle_skip_enabled = enable;
   platform->cpu.config.handle_interrupt =
       enable ? YPlatformCPUCallbackHandleInterrupt : NULL;
   // An idle declared before the skip went off must not be acted on after it.

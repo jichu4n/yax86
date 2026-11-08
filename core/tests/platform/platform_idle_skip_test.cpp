@@ -56,10 +56,10 @@ struct IdleMachine {
     platform.config.physical_memory_size = sizeof(ram);
     platform.config.physical_memory = ram;
     platform.config.vram = vram;
-    platform.config.enable_dos_idle_skip = enable_idle_skip;
     if (!YPlatformInit(&platform)) {
       return false;
     }
+    YPlatformSetDOSIdleSkip(&platform, enable_idle_skip);
 
     platform.cpu.registers[Y_CPU_CS] = 0;
     platform.cpu.registers[Y_CPU_IP] = kProgramOffset;
@@ -192,7 +192,7 @@ TEST(PlatformIdleSkipTest, TurningItOnWhileRunningSkips) {
   YPlatformSetDOSIdleSkip(&machine.platform, true);
   const uint32_t elapsed = machine.RunOneFrame();
 
-  EXPECT_TRUE(machine.platform.config.enable_dos_idle_skip);
+  EXPECT_TRUE(machine.platform.is_dos_idle_skip_enabled);
   EXPECT_GE(elapsed, kCyclesPerFrame);
   EXPECT_LE(machine.LoopCount() - loops_before, 2u);
 }
@@ -206,7 +206,7 @@ TEST(PlatformIdleSkipTest, TurningItOffWhileRunningStopsSkipping) {
   YPlatformSetDOSIdleSkip(&machine.platform, false);
   machine.RunOneFrame();
 
-  EXPECT_FALSE(machine.platform.config.enable_dos_idle_skip);
+  EXPECT_FALSE(machine.platform.is_dos_idle_skip_enabled);
   EXPECT_GT(machine.LoopCount() - loops_before, 100u);
   EXPECT_FALSE(machine.platform.is_guest_idle);
 }

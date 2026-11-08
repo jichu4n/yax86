@@ -443,8 +443,7 @@ static void PrintReport(void) {
   printf("%-14s %llu\n", "guest_clock_ms", (unsigned long long)GuestClockMs());
   printf("%-14s %llu\n", "waited_us", (unsigned long long)g_clock.waited_us);
   printf("%-14s %llu\n", "dropped_us", (unsigned long long)g_clock.dropped_us);
-  printf(
-      "%-14s %d\n", "idle_skip", (int)g_platform.config.enable_dos_idle_skip);
+  printf("%-14s %d\n", "idle_skip", (int)g_platform.is_dos_idle_skip_enabled);
   printf("\n");
 }
 
