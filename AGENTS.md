@@ -2013,11 +2013,11 @@ SRAM, at #89:
 
 - The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld
   with a 320x320 LCD, a keyboard, an SD card slot and a battery. It brings up
-  the LCD and the keyboard controller, shows a status screen saying what it
-  found, and boots MS-DOS 3.30 off the floppy image in flash to the `A>`
-  prompt. The guest's screen is not drawn and the keyboard is not read yet, so
-  DOS's date and time questions are answered by watching the screen, the way
-  `pico/bench` does it.
+  the LCD and the keyboard controller and boots MS-DOS 3.30 off the floppy
+  image in flash to the `A>` prompt, drawing the guest's text screen on the
+  LCD with status lines below it. The keyboard is not read yet, so DOS's date
+  and time questions are answered by watching the screen, the way `pico/bench`
+  does it.
 - Like `pico/bench` it is a consumer of the core, uses only the public
   interface, and is not built in CI.
 
@@ -2056,6 +2056,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   picotool save -a picocalc-factory-flash.bin
   picotool load -f -x -o 0x10000000 picocalc-factory-flash.bin
   ```
+- `YAX86_PICOCALC_DRAW_SCREEN=0 ./pico/picocalc/build.sh` builds an image
+  that does not draw the guest's screen, into `build-pico/picocalc-no-draw`.
+  It is otherwise identical, which is what measures what drawing costs.
 - **The factory firmware has no picotool reset interface**, so `picotool -f`,
   and with it `run.js`, cannot reboot it into BOOTSEL. Opening its USB serial
   port at 1200 baud does: `stty -F /dev/ttyACM0 1200`.
@@ -2065,7 +2068,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The boot reaches `A>` having retired **2,328,128 instructions**, the same
   count `pico/bench` reports for `dos-boot`. That is what says this runtime and
   the benchmark run the same machine, so a figure measured on one stands for
-  the other. It takes 9.4 seconds at the stock 125MHz.
+  the other. At the stock 125MHz it takes 9.44 seconds without drawing the
+  guest's screen and 9.90 seconds with it.
 - If the count moves while the bench's does not, the runtime has stopped
   running the machine the benchmark measures.
 
@@ -2074,13 +2078,62 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The register values are ClockworkPi's, except that the pixel format is
   RGB565 rather than the samples' 18-bit RGB666, which is two bytes a pixel
   rather than three. The datasheet's serial interface takes both.
-- The SPI clock asks for 25MHz, ClockworkPi's figure, and gets 20.83MHz: a
-  125MHz peripheral clock divides to 125/6. The datasheet rates writes at a
-  66ns cycle, about 15MHz, so that is already above the rating, and how fast
-  the panel will go is a measurement for when the guest's screen is drawn.
-- Raising CS between transfers does not end a memory write - only the next
-  command does - so a window can be filled over as many transfers as suits the
-  caller.
+- **The SPI clock is 62.5MHz**, half the peripheral clock and the fastest the
+  SPI block runs. The datasheet rates writes at a 66ns cycle, about 15MHz, and
+  ClockworkPi's samples ask for 25MHz, which 125MHz divides to 20.83MHz. The
+  panel draws cleanly at 62.5MHz, checked by eye, and it takes the cost of
+  drawing during `dos-boot` from 7.4% of the run to 5.2%.
+- **An overclock moves the SPI clock's source.** At power on the peripheral
+  clock is the system clock, but `set_sys_clock_khz()` switches it to the
+  48MHz USB PLL unless `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK` is
+  defined - see `set_sys_clock_pll()` in the SDK's `clocks.c` - which would
+  leave the LCD at 24MHz at most. With it defined, the peripheral clock is the
+  system clock again, and the SPI divider has to be chosen against that.
+- A write is `LcdBeginWrite()`, then any number of `LcdWritePixels()`, then
+  `LcdEndWrite()`. The window commands, the switch to 16-bit frames and CS all
+  happen once per window rather than per call, because the core hands pixels
+  over 32 at a time and a format switch per batch would cost more than the
+  batch. Raising CS between transfers does not end a memory write - only the
+  next command does.
+
+### The guest's screen, and what drawing it costs
+
+- The runtime hands the core the 4x10 font through
+  `YPlatformConfig.video_text_font`, so a text mode renders 320x250, and the
+  guest's screen takes the top 250 rows of the panel. Status lines take the
+  rows below.
+- The core renders only what changed, as rectangles, and the panel keeps its
+  own frame memory, so each region goes straight to the panel as a window of
+  its own: `begin_render_region` opens it and `write_pixels` streams RGB565
+  into it. Graphics modes render 640 pixels across and are not drawn yet.
+- It renders once per emulated frame, 60 times an emulated second, on core 0
+  between batches. Drawing more often shows nothing new.
+- **Drawing costs 4.8% of `dos-boot`** at the stock 125MHz: 9.4443 seconds
+  without drawing against 9.8999 with, the same 2,328,128 instructions either
+  way, two runs each with a spread under 0.01%. 0.436 seconds of that is
+  inside `YVideoRender()`, over 73 frames and 368,960 pixels, about 4.6
+  screens' worth.
+- **That figure moves with where the code lands in flash.** Adding the
+  screen blanking below, which runs only after the boot, took the drawing
+  build from 9.9509 seconds to 9.8999 and the cost from 5.2% to 4.8%, with
+  the time inside `YVideoRender()` unchanged. Compare a change against a
+  baseline built from the same code, never against these figures.
+- **Most of what is left is processor time, not the bus.** 368,960 pixels of
+  16 bits take 0.094 seconds on the wire at 62.5MHz and took 0.283 at
+  20.83MHz, while the time in `YVideoRender()` fell only from 0.647 to 0.436
+  seconds. That leaves about 0.34 seconds, or roughly 115 cycles a pixel, in
+  producing each pixel - the core's text renderer, a callback per 32 pixels,
+  and the conversion to RGB565 - which runs from flash, since none of it is in
+  SRAM.
+- `dos-boot` draws little. A screen that scrolls redraws all 80,000 of its
+  pixels each line, about 95ms at this rate, during which the emulator does
+  not run.
+- **The screen is blanked 30 seconds after the boot**, with the panel's
+  display off and sleep in commands - `LcdSetDisplayOn(false)`. Nothing
+  changes on it after the boot, and a static image left showing for hours can
+  leave its mark on the panel. The backlight is the controller's, and its
+  firmware will not dim the LCD's below 16 of 255, so blanking is the panel's
+  job rather than the backlight's.
 
 ### The keyboard controller
 

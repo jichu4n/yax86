@@ -7,6 +7,15 @@ cmake_minimum_required(VERSION 3.17)
 
 get_filename_component(YAX86_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 
+# Whether the guest's screen is drawn on the LCD. Off gives an image identical
+# but for that, which is how what drawing costs is measured.
+set(YAX86_PICOCALC_DRAW_SCREEN "1" CACHE STRING "Draw the guest's screen: 1 or 0")
+if(NOT YAX86_PICOCALC_DRAW_SCREEN MATCHES "^[01]$")
+    message(FATAL_ERROR
+        "YAX86_PICOCALC_DRAW_SCREEN must be 1 or 0, not "
+        "'${YAX86_PICOCALC_DRAW_SCREEN}'")
+endif()
+
 # =============================================================================
 # Pico SDK
 # =============================================================================
@@ -75,6 +84,10 @@ target_include_directories(yax86_picocalc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     # Where the generated boot floppy header lands.
     "${CMAKE_CURRENT_BINARY_DIR}"
+)
+
+target_compile_definitions(yax86_picocalc PRIVATE
+    YAX86_PICOCALC_DRAW_SCREEN=${YAX86_PICOCALC_DRAW_SCREEN}
 )
 
 # Place the emulator's hot path in SRAM, with the same header pico/bench

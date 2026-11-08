@@ -6,6 +6,7 @@
 #ifndef YAX86_PICOCALC_LCD_H
 #define YAX86_PICOCALC_LCD_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 enum {
@@ -19,12 +20,23 @@ enum {
 uint32_t LcdInit(void);
 
 // Begin a write to the rectangle at (x, y), width by height pixels. Pixels
-// written afterwards fill it left to right, top to bottom.
-void LcdSetWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+// written afterwards fill it left to right, top to bottom, until
+// LcdEndWrite(). No other LCD call may come in between.
+void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
-// Write pixels into the current window. A window may be filled over several
-// calls.
+// Write pixels into the window LcdBeginWrite() opened. A window may be filled
+// over any number of calls, and each one costs only the transfer: the bus is
+// set up for pixels once, when the write begins.
 void LcdWritePixels(const uint16_t* pixels, uint32_t count);
+
+// End the write LcdBeginWrite() began.
+void LcdEndWrite(void);
+
+// Turn the panel's output on or off. Off shows a blank page and puts the
+// panel to sleep, at its lowest power; what it last held is kept, so turning
+// it back on shows that again. A static image left showing for hours can
+// leave its mark on the panel, which is what turning it off is for.
+void LcdSetDisplayOn(bool on);
 
 // Fill a rectangle with one color.
 void LcdFillRect(
