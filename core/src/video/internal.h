@@ -66,6 +66,62 @@ Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunPush(
   }
 }
 
+// The width of the cell a text mode draws a character in: the host text font's
+// if there is one, otherwise the mode's own.
+Y_MODULE_PRIVATE_HEADER inline uint8_t YVideoGetTextCellWidth(
+    const YVideoState* video, const YVideoModeMetadata* metadata) {
+  return video->has_text_font ? video->config.text_font.width
+                              : metadata->char_width;
+}
+
+// The height of the cell a text mode draws a character in.
+Y_MODULE_PRIVATE_HEADER inline uint8_t YVideoGetTextCellHeight(
+    const YVideoState* video, const YVideoModeMetadata* metadata) {
+  return video->has_text_font ? video->config.text_font.height
+                              : metadata->char_height;
+}
+
+// A row of a character in the host text font.
+Y_MODULE_PRIVATE_HEADER inline uint8_t YVideoGetTextFontRow(
+    const YVideoState* video, uint8_t character, uint8_t row) {
+  const YVideoTextFont* font = &video->config.text_font;
+  return font->glyphs[(uint16_t)character * font->height + row];
+}
+
+// The adapter places the cursor and the MDA underline by scan line of its own
+// character cell, so with a host text font of a different height they have to
+// move with it. A scan line of the adapter's cell covers a span of the drawn
+// cell's rows, which these two take the ends of: a range of scan lines maps to
+// the first row its first line covers through the last row its last line
+// covers, so a range that is not empty in the adapter's cell is not empty in
+// the drawn one. A scan line past the adapter's cell maps past the drawn one,
+// so an out of range cursor register still draws nothing.
+
+// The first row of the drawn cell that a scan line of the adapter's covers.
+Y_MODULE_PRIVATE_HEADER inline uint16_t YVideoScaleTextScanLineStart(
+    const YVideoState* video, const YVideoModeMetadata* metadata,
+    uint8_t scan_line) {
+  if (!video->has_text_font) {
+    return scan_line;
+  }
+  return (uint16_t)((uint16_t)scan_line * video->config.text_font.height /
+                    metadata->char_height);
+}
+
+// The last row of the drawn cell that a scan line of the adapter's covers.
+Y_MODULE_PRIVATE_HEADER inline uint16_t YVideoScaleTextScanLineEnd(
+    const YVideoState* video, const YVideoModeMetadata* metadata,
+    uint8_t scan_line) {
+  if (!video->has_text_font) {
+    return scan_line;
+  }
+  return (
+      uint16_t)(((uint16_t)(scan_line + 1) * video->config.text_font.height +
+                 metadata->char_height - 1) /
+                    metadata->char_height -
+                1);
+}
+
 // Mark a half-open rectangle dirty. Horizontal coordinates use the mode's 80
 // natural columns; vertical coordinates are dirty rows - a character row in
 // text modes, a group of Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP scan lines in

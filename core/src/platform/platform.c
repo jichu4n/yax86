@@ -858,6 +858,7 @@ Y_FILE_PRIVATE void YPlatformInitVideo(YPlatformState* platform) {
   platform->video.config.logger = &platform->logger;
   platform->video.config.adapter = platform->config.video_adapter;
   platform->video.config.vram = platform->config.vram;
+  platform->video.config.text_font = platform->config.video_text_font;
   YVideoInit(&platform->video);
 
   const YVideoAdapterMetadata* adapter =

@@ -51,6 +51,12 @@ typedef struct YVideoRegion {
   uint16_t height;
 } YVideoRegion;
 
+// The size of a frame, in pixels.
+typedef struct YVideoSize {
+  uint16_t width;
+  uint16_t height;
+} YVideoSize;
+
 // Text mode character position. We use a different structure to avoid confusion
 // with YVideoPosition, which is used for pixel coordinates.
 typedef struct YVideoTextPosition {
@@ -651,6 +657,41 @@ enum {
   Y_VIDEO_PIXEL_BATCH_SIZE = 32,
 };
 
+// ============================================================================
+// Host text font
+// ============================================================================
+
+enum {
+  // Widest cell a host text font may have. A glyph row is one byte.
+  Y_VIDEO_TEXT_FONT_MAX_WIDTH = 8,
+  // Characters a text font covers: every value of a character byte.
+  Y_VIDEO_TEXT_FONT_GLYPHS = 256,
+};
+
+// A font for text modes, in place of the adapter's own.
+//
+// The adapters draw text in 8x8 (CGA) or 9x14 (MDA) cells, 640 or 720 pixels
+// across. A display narrower than that cannot show 80 columns by shrinking
+// those glyphs, which makes them unreadable; it needs glyphs drawn for a
+// narrower cell, such as 4x10 for 80 columns across 320 pixels. With a host
+// font, text modes render in the font's cells, so an 80-column text frame is
+// 80 * width by rows * height pixels - see YVideoGetFrameSize(). Graphics
+// modes and everything the guest can observe are unaffected: the font changes
+// what is drawn, not the CRTC or its timing.
+//
+// The cursor and the MDA underline, which the adapter places by scan line of
+// its own cell, are scaled to the font's cell height.
+typedef struct YVideoTextFont {
+  // Glyph rows for all Y_VIDEO_TEXT_FONT_GLYPHS characters, height rows a
+  // character, top to bottom. Bit (width - 1) of a row is its leftmost pixel,
+  // the same layout as the adapters' own fonts. NULL for no host font.
+  const uint8_t* glyphs;
+  // Cell width in pixels, 1 to Y_VIDEO_TEXT_FONT_MAX_WIDTH.
+  uint8_t width;
+  // Cell height in pixels, at least 1.
+  uint8_t height;
+} YVideoTextFont;
+
 // Half-open horizontal dirty range [start_column, end_column). Both fields are
 // zero when the range is empty.
 typedef struct YVideoDirtyRange {
@@ -708,6 +749,11 @@ typedef struct YVideoConfig {
   // CGA - the 16 color RGBI palette.
   YVideoRGB cga_palette[Y_VIDEO_NUM_CGA_COLORS];
 
+  // The font text modes are drawn in. All zeros, the default, draws them in
+  // the adapter's own font. Checked by YVideoInit(); a font whose size the
+  // renderer cannot draw is logged and the adapter's font used instead.
+  YVideoTextFont text_font;
+
   // The emulated video RAM, at least the adapter's vram_size bytes of it.
   // Required - the adapter reads and writes it directly.
   //
@@ -762,6 +808,8 @@ Y_PUBLIC_HEADER const YVideoConfig YVideoDefaultConfig = {
             {.r = 0xFF, .g = 0xFF, .b = 0xFF},  // 15 white
         },
 
+    .text_font = {.glyphs = NULL, .width = 0, .height = 0},
+
     .vram = NULL,
     .write_pixels = NULL,
     .begin_render_region = NULL,
@@ -775,6 +823,10 @@ typedef struct YVideoState {
 
   // The video adapter being emulated, copied from the config at init time.
   YVideoAdapter adapter;
+  // Whether text modes are drawn in config.text_font, decided by YVideoInit().
+  // A flag rather than a pointer to the font, so that a copy of the state does
+  // not point back into the original.
+  bool has_text_font;
 
   // Motorola 6845 CRT controller registers.
   uint8_t registers[Y_VIDEO_NUM_CRTC_REGISTERS];
@@ -815,6 +867,13 @@ Y_PUBLIC YVideoMode YVideoGetMode(const YVideoState* video);
 // Metadata for the current video mode.
 Y_PUBLIC const YVideoModeMetadata* YVideoGetModeMetadata(
     const YVideoState* video);
+
+// The size of the frame the current mode renders. Without a host text font
+// this is the adapter's frame buffer in every mode. With one, text modes
+// render at the font's cell size instead, so the size changes when the guest
+// switches between a text and a graphics mode; a mode change always renders
+// the whole frame afresh.
+Y_PUBLIC YVideoSize YVideoGetFrameSize(const YVideoState* video);
 
 // Read a byte from a video I/O port.
 Y_PUBLIC uint8_t YVideoReadPort(YVideoState* video, uint16_t port);

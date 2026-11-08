@@ -107,10 +107,10 @@ inline void MockWriteLogLine(
 }
 
 // Base fixture for the video tests. Subclasses call Init() with the adapter
-// they exercise.
+// they exercise, and a host text font to draw text modes in, if any.
 class VideoTestBase : public ::testing::Test {
  protected:
-  void Init(YVideoAdapter adapter) {
+  void Init(YVideoAdapter adapter, YVideoTextFont text_font = {}) {
     for (size_t i = 0; i < sizeof(mock_vram); ++i) {
       mock_vram[i] = 0;
     }
@@ -132,6 +132,7 @@ class VideoTestBase : public ::testing::Test {
     video_.config.write_pixels = MockWritePixels;
     video_.config.begin_render_region = MockBeginRenderRegion;
     video_.config.end_render_region = MockEndRenderRegion;
+    video_.config.text_font = text_font;
 
     YVideoInit(&video_);
   }

@@ -62,6 +62,21 @@ TEST_F(PlatformVideoTest, RegistersCGA) {
   EXPECT_EQ(ports->end, Y_VIDEO_CGA_PORT_END);
 }
 
+// YPlatformInit() replaces the video config wholesale, so a font only reaches
+// the adapter if the platform passes it on.
+TEST_F(PlatformVideoTest, PassesTheTextFontToTheAdapter) {
+  static const uint8_t kGlyphs[Y_VIDEO_TEXT_FONT_GLYPHS * 10] = {0};
+  platform_.config.video_text_font.glyphs = kGlyphs;
+  platform_.config.video_text_font.width = 4;
+  platform_.config.video_text_font.height = 10;
+  Init(Y_VIDEO_ADAPTER_CGA);
+
+  EXPECT_TRUE(platform_.video.has_text_font);
+  const YVideoSize frame = YVideoGetFrameSize(&platform_.video);
+  EXPECT_EQ(frame.width, 320);
+  EXPECT_EQ(frame.height, 250);
+}
+
 TEST_F(PlatformVideoTest, VideoPortsAreRoutedThroughTheMap) {
   Init(Y_VIDEO_ADAPTER_CGA);
   // The 6845 index register is reachable at the CGA's port addresses, and the

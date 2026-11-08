@@ -327,6 +327,12 @@ typedef struct YPlatformConfig {
   // The caller owns the buffer and it must outlive the platform.
   uint8_t* vram;
 
+  // The font text modes are drawn in, for a display too narrow for the
+  // adapter's own - see YVideoTextFont. All zeros, the default, keeps the
+  // adapter's font. The caller owns the glyphs and they must outlive the
+  // platform.
+  YVideoTextFont video_text_font;
+
   // Callback invoked when the PC speaker's output changes. frequency_hz is the
   // square wave frequency the speaker should emit, or 0 to turn it off. May be
   // NULL, in which case the speaker is silent.

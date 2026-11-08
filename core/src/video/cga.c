@@ -5,7 +5,6 @@
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  Y_VIDEO_CGA_CHAR_HEIGHT = 8,
   Y_VIDEO_CGA40_COLUMN_COUNT = 40,
   Y_VIDEO_CGA40_COLUMN_SCALE = 2,
   Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE = 2,
@@ -81,8 +80,14 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   uint16_t cursor_offset = 0;
   bool cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
-  uint8_t cursor_start = YVideoGetCursorStartScanLine(video);
-  uint8_t cursor_end = YVideoGetCursorEndScanLine(video);
+  uint16_t cursor_start = YVideoScaleTextScanLineStart(
+      video, metadata, YVideoGetCursorStartScanLine(video));
+  uint16_t cursor_end = YVideoScaleTextScanLineEnd(
+      video, metadata, YVideoGetCursorEndScanLine(video));
+
+  // The adapter's own 8x8 cell, or a host text font's.
+  const uint8_t cell_width = YVideoGetTextCellWidth(video, metadata);
+  const uint8_t cell_height = YVideoGetTextCellHeight(video, metadata);
 
   // Scan lines are the outer loop so that pixels leave in row-major order,
   // which is what a display addressed by transfer window expects. The cost is
@@ -90,9 +95,9 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   for (uint16_t y = first_y; y < end_y; ++y) {
     // A 40-column cell is twice as wide but there are half as many, so a row
     // starts at the same pixel either way.
-    YVideoPixelRunBegin(run, (uint16_t)start_column * metadata->char_width, y);
-    uint8_t row = (uint8_t)(y / Y_VIDEO_CGA_CHAR_HEIGHT);
-    uint8_t char_scan_line = (uint8_t)(y % Y_VIDEO_CGA_CHAR_HEIGHT);
+    YVideoPixelRunBegin(run, (uint16_t)start_column * cell_width, y);
+    uint8_t row = (uint8_t)(y / cell_height);
+    uint8_t char_scan_line = (uint8_t)(y % cell_height);
     for (uint8_t col = first_char; col < end_char; ++col) {
       // Character and attribute occupy consecutive bytes of a cell.
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
@@ -127,10 +132,12 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
                               char_scan_line >= cursor_start &&
                               char_scan_line <= cursor_end;
       // The glyph row is a bitmap with the leftmost pixel in the high bit.
-      uint8_t row_bitmap = YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
-      for (uint8_t x = 0; x < metadata->char_width; ++x) {
-        bool is_foreground =
-            (row_bitmap & (1 << (metadata->char_width - 1 - x))) != 0;
+      uint8_t row_bitmap =
+          video->has_text_font
+              ? YVideoGetTextFontRow(video, char_value, char_scan_line)
+              : YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
+      for (uint8_t x = 0; x < cell_width; ++x) {
+        bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
         YVideoRGB rgb = cursor_scan_line
                             ? cursor_foreground
                             : (is_foreground ? foreground : background);
