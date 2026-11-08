@@ -1532,6 +1532,14 @@ Alongside the table, state:
 - It is opt in because it is not free of consequence: a program timing a loop
   from inside its own `INT 28h` handler would see time jump. The SDL runtime
   turns it on; the tests leave it off.
+- **`YPlatformInit()` is the only reader of `enable_dos_idle_skip`.** What the
+  skip needs is the CPU's `handle_interrupt` callback, installed alongside the
+  flag, so on a running machine it is switched with
+  `YPlatformSetDOSIdleSkip()`, which is the sole writer of both after init.
+  Writing the flag afterwards changes nothing and says nothing. The PicoCalc
+  runtime is the caller: it turns the skip on at the prompt, because on from
+  power on it would move the `dos-boot` invariant - DOS issues `INT 28h` at
+  the date and time prompts as well.
 - What the skip is worth is capped by the nearest device deadline, which is why
   `YPITTicksUntilNextEvent()` schedules one for channel 0 alone. After POST the
   BIOS leaves channel 2 programmed at a reload of 1356 with the speaker gated

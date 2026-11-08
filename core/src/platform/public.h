@@ -370,6 +370,9 @@ typedef struct YPlatformConfig {
   // cycle and the guest's timer tick count is unchanged. What does change is
   // that a program timing a loop from inside its own INT 28h handler would see
   // time jump, which is why this is opt in.
+  //
+  // YPlatformInit() reads this. On a running machine, change it with
+  // YPlatformSetDOSIdleSkip() rather than by writing it.
   bool enable_dos_idle_skip;
 } YPlatformConfig;
 
@@ -530,6 +533,16 @@ Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 // is nowhere near this.
 Y_PUBLIC YPlatformRunStatus
 YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
+
+// Turn the DOS idle skip on or off on a running machine - see
+// YPlatformConfig.enable_dos_idle_skip. What it takes is a callback on the
+// CPU's interrupt path as well as the flag, which is why there is a setter:
+// writing the flag after YPlatformInit() changes nothing.
+//
+// A host that wants the skip only once DOS has reached its prompt turns it on
+// from here, which leaves everything before that exactly as it would be
+// without it.
+Y_PUBLIC void YPlatformSetDOSIdleSkip(YPlatformState* platform, bool enable);
 
 // Bring every device up to date with the cycles that have run so far.
 //

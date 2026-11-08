@@ -180,6 +180,51 @@ TEST(PlatformIdleSkipTest, OtherInterruptsDoNotSkip) {
   EXPECT_FALSE(machine.platform.is_guest_idle);
 }
 
+// A host can turn the skip on once the machine is running - after the boot,
+// say - and it takes effect, rather than only the flag changing.
+TEST(PlatformIdleSkipTest, TurningItOnWhileRunningSkips) {
+  IdleMachine machine;
+  ASSERT_TRUE(machine.Init(/*enable_idle_skip=*/false));
+  machine.RunOneFrame();
+  const uint16_t loops_before = machine.LoopCount();
+  ASSERT_GT(loops_before, 100u);
+
+  YPlatformSetDOSIdleSkip(&machine.platform, true);
+  const uint32_t elapsed = machine.RunOneFrame();
+
+  EXPECT_TRUE(machine.platform.config.enable_dos_idle_skip);
+  EXPECT_GE(elapsed, kCyclesPerFrame);
+  EXPECT_LE(machine.LoopCount() - loops_before, 2u);
+}
+
+TEST(PlatformIdleSkipTest, TurningItOffWhileRunningStopsSkipping) {
+  IdleMachine machine;
+  ASSERT_TRUE(machine.Init(/*enable_idle_skip=*/true));
+  machine.RunOneFrame();
+  const uint16_t loops_before = machine.LoopCount();
+
+  YPlatformSetDOSIdleSkip(&machine.platform, false);
+  machine.RunOneFrame();
+
+  EXPECT_FALSE(machine.platform.config.enable_dos_idle_skip);
+  EXPECT_GT(machine.LoopCount() - loops_before, 100u);
+  EXPECT_FALSE(machine.platform.is_guest_idle);
+}
+
+// The guest can declare itself idle in the last instruction of a run, leaving
+// the skip pending for the next. Turning the skip off in between must drop it.
+// Checked on the flag itself: a stale skip runs only to the next device
+// deadline, which is too short a jump to show in the loop count.
+TEST(PlatformIdleSkipTest, TurningItOffDropsAPendingIdle) {
+  IdleMachine machine;
+  ASSERT_TRUE(machine.Init(/*enable_idle_skip=*/true));
+  machine.platform.is_guest_idle = true;
+
+  YPlatformSetDOSIdleSkip(&machine.platform, false);
+
+  EXPECT_FALSE(machine.platform.is_guest_idle);
+}
+
 // A skip stops at the next device deadline rather than running to the end of
 // the budget, so a device with something to do still gets it done on time.
 TEST(PlatformIdleSkipTest, SkipStopsAtTheNextDeviceDeadline) {
