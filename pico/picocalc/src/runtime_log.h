@@ -3,7 +3,7 @@
 // module and level.
 //
 // Everything the runtime and the machine say goes out over USB serial as one
-// logfmt line each - see "util — logging" in AGENTS.md. A line written while
+// logfmt line each - see "util - logging" in core/AGENTS.md. A line written while
 // no host is attached is dropped, as USB CDC would drop it anyway.
 #ifndef YAX86_PICOCALC_RUNTIME_LOG_H
 #define YAX86_PICOCALC_RUNTIME_LOG_H
