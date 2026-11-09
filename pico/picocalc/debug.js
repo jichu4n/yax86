@@ -219,28 +219,29 @@ class Board {
     const width = toNumber(lines[0].width);
     const height = toNumber(lines[0].height);
     const rgb = Buffer.alloc(width * height * 3);
-    let received = 0;
+    // Runs of one color: RGB565, then how many pixels less one.
+    let offset = 0;
     for (const line of lines) {
-      if (line.pixels === undefined) {
+      if (line.runs === undefined) {
         continue;
       }
-      const pixels = Buffer.from(line.pixels, 'hex');
-      let offset = (toNumber(line.row) * width + toNumber(line.x)) * 3;
-      for (let i = 0; i + 1 < pixels.length; i += 2) {
-        // RGB565, each channel widened to 8 bits by repeating its top bits.
-        const pixel = pixels.readUInt16BE(i);
+      const runs = Buffer.from(line.runs, 'hex');
+      for (let i = 0; i + 2 < runs.length; i += 3) {
+        // Each channel widened to 8 bits by repeating its top bits.
+        const pixel = runs.readUInt16BE(i);
         const r = pixel >> 11;
         const g = (pixel >> 5) & 0x3f;
         const b = pixel & 0x1f;
-        rgb[offset++] = (r << 3) | (r >> 2);
-        rgb[offset++] = (g << 2) | (g >> 4);
-        rgb[offset++] = (b << 3) | (b >> 2);
-        ++received;
+        for (let n = runs[i + 2]; n >= 0 && offset < rgb.length; --n) {
+          rgb[offset++] = (r << 3) | (r >> 2);
+          rgb[offset++] = (g << 2) | (g >> 4);
+          rgb[offset++] = (b << 3) | (b >> 2);
+        }
       }
     }
-    if (received !== width * height) {
+    if (offset !== rgb.length) {
       throw new Error(
-        `screenshot: ${received} of ${width * height} pixels arrived`
+        `screenshot: ${offset / 3} of ${width * height} pixels arrived`
       );
     }
     return encodePNG(width, height, rgb);
