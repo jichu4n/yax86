@@ -1,0 +1,11 @@
+# Generated files that are committed, so that a host can include the core
+# without running the generators. Marked generated so that GitHub collapses
+# them in a pull request's diff; the change worth reviewing is in the sources
+# they are generated from.
+
+# The header bundles, from core/src/*/bundle.json.
+core/*.h linguist-generated=true
+
+# The ROM images as C arrays, from core/tools/generate-rom-data-files.js.
+core/src/*/*_rom_data.c linguist-generated=true
+core/src/*/*_rom_data.h linguist-generated=true
