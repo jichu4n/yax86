@@ -5,111 +5,13 @@
 #ifndef YAX86_BIOS_BUNDLE_H
 #define YAX86_BIOS_BUNDLE_H
 
+#ifndef YAX86_UTIL_BUNDLE_H
+#include "util.h"
+#endif  // YAX86_UTIL_BUNDLE_H
+
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
-
-// ==============================================================================
-// src/util/common.h start
-// ==============================================================================
-
-#line 1 "./src/util/common.h"
-#ifndef YAX86_UTIL_COMMON_H
-#define YAX86_UTIL_COMMON_H
-
-// Part of a module's public interface. Declared in the module's public.h and
-// defined in one of its source files.
-#define Y_PUBLIC
-
-// Part of a module's public interface, defined in a header rather than in a
-// source file: one copy per translation unit.
-#define Y_PUBLIC_HEADER static
-
-// Visible to other files within the same module, but not publicly to users of
-// the bundled library.
-//
-// This enables better IDE integration as it allows each source file to be
-// compiled independently in unbundled form, but still keeps the symbols private
-// when bundled.
-#ifdef YAX86_IMPLEMENTATION
-// When bundled, static linkage so that the symbol is only visible within the
-// implementation file.
-#define Y_MODULE_PRIVATE static
-#else
-// When unbundled, use default linkage.
-#define Y_MODULE_PRIVATE
-#endif  // YAX86_IMPLEMENTATION
-
-// Shared between a module's source files, but defined in a header rather than
-// in a source file: one copy per translation unit. Also used for internal
-// utilities (like snprintf) that are included into multiple module bundles.
-#define Y_MODULE_PRIVATE_HEADER static
-
-// Visible only within the source file that defines it.
-#define Y_FILE_PRIVATE static
-
-// Macro to mark a function or parameter as unused.
-#if defined(__GNUC__) || defined(__clang__)
-#define Y_UNUSED __attribute__((unused))
-#else
-#define Y_UNUSED
-#endif  // defined(__GNUC__) || defined(__clang__)
-
-// Macro to keep a function out of line.
-//
-// Only worth reaching for where inlining has been measured to hurt. On a core
-// with few registers, folding a large callee into an already register-hungry
-// caller makes both spill.
-#if defined(__GNUC__) || defined(__clang__)
-#define Y_NOINLINE __attribute__((noinline))
-#else
-#define Y_NOINLINE
-#endif  // defined(__GNUC__) || defined(__clang__)
-
-// Macro to keep a function inlined.
-//
-// Like Y_NOINLINE, only worth reaching for against a measurement. The case
-// it exists for is a small helper on the hot path that the compiler inlines
-// while it has a single caller and emits out of line once it has several - a
-// change to the hot path that nothing in the source shows.
-#if defined(__GNUC__) || defined(__clang__)
-#if !defined(YAX86_IMPLEMENTATION)
-#define Y_ALWAYS_INLINE __attribute__((always_inline))
-#else
-#define Y_ALWAYS_INLINE __attribute__((always_inline)) inline
-#endif
-#else
-#define Y_ALWAYS_INLINE inline
-#endif  // defined(__GNUC__) || defined(__clang__)
-
-// Marks a function as being on the per-instruction hot path.
-//
-// Empty by default, because on a machine with a normal cache hierarchy there is
-// nothing useful to say. A target whose fastest memory has to be chosen
-// explicitly can define it to whatever placement attribute it needs - on an
-// RP2040, code runs from QSPI flash through a 16KB cache, and putting the hot
-// path in SRAM instead takes that cache out of the picture.
-//
-// Define it before including this header, or on the command line.
-#ifndef Y_HOT
-#define Y_HOT
-#endif  // Y_HOT
-
-// The same, for data rather than code.
-//
-// Separate from Y_HOT because a compiler will not put executable code and
-// read-only data in one section, and because a target may well want to place
-// them differently even where it could.
-#ifndef Y_HOT_DATA
-#define Y_HOT_DATA
-#endif  // Y_HOT_DATA
-
-#endif  // YAX86_UTIL_COMMON_H
-
-
-// ==============================================================================
-// src/util/common.h end
-// ==============================================================================
 
 // ==============================================================================
 // src/bios/public.h start

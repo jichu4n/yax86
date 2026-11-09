@@ -1,13 +1,9 @@
 {
+  "requires": ["util"],
   "public": [
-    "../util/common.h",
-    "../util/snprintf.h",
-    "../util/logfmt.h",
-    "../util/log.h",
     "public.h"
   ],
   "private": [
-    "../util/common.h",
     "types.h",
     "cycles.h",
     "operands.h",

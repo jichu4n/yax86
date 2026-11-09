@@ -1,0 +1,4 @@
+{
+  "public": ["common.h", "snprintf.h", "logfmt.h", "log.h", "static_vector.h"],
+  "private": []
+}
