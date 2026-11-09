@@ -34,16 +34,18 @@ Y_MODULE_PRIVATE uint32_t YCPUFromOperandValue(YCPUOperandValue value) {
 
 // The same, sign-extended. This one does need the width, since which bit is
 // the sign bit is exactly what the value no longer says.
+//
+// One test, byte or not, rather than a switch with a return after it for the
+// values outside the enum that a width can still hold. That return is a third
+// path, and once this is inlined GCC carries it on to the caller's next
+// lookup in a table indexed by width - YCPUMaxSignedValue in IMUL and
+// YCPUMulDivResultHighHalfAddress in IDIV - and warns that the index can be 2.
 Y_MODULE_PRIVATE int32_t
 YCPUFromSignedOperandValue(YCPUWidth width, YCPUOperandValue value) {
-  switch (width) {
-    case Y_CPU_BYTE:
-      return (int32_t)((int8_t)value);
-    case Y_CPU_WORD:
-      return (int32_t)((int16_t)value);
+  if (width == Y_CPU_BYTE) {
+    return (int32_t)((int8_t)value);
   }
-  // Should never reach here, but return a default value to avoid warnings.
-  return Y_CPU_UNREACHABLE_OPERAND_VALUE;
+  return (int32_t)((int16_t)value);
 }
 
 // Helper function to extract a zero-extended value from an operand.
