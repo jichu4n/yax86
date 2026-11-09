@@ -2291,12 +2291,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ### The keyboard controller
 
 - It answers a register at a time: write the register number, then read two
-  bytes. ClockworkPi's samples wait 16ms between the two and run the bus at
-  10kHz. Neither is needed: the controller prepares its answer as the
-  register number arrives, and answered every read straight on, at 10, 100
-  and 400kHz alike - about 6,000 reads a minute at each without an error. The
-  bus runs at 100kHz, standard mode. The one read made at startup, of the
+  bytes. ClockworkPi's samples wait 16ms between the two. That is not
+  needed: the controller prepares its answer as the register number arrives,
+  and answered every read straight on. The one read made at startup, of the
   version, still waits.
+- **The bus runs at 10kHz**, as in ClockworkPi's samples and its PicoMite
+  build, whose headers say the keyboard's should be 10kHz without saying
+  why, though some of its other builds run it at 400kHz. The controller answered
+  every read at 10, 100 and 400kHz alike, about 6,000 reads a minute at each
+  without an error. A faster bus would only shorten each read, and a read at
+  10kHz, about 5ms, finishes well within the batch that collects it, so
+  nothing here gains from one.
 - **The key FIFO is read without waiting, once a batch, on core 0.**
   `SouthbridgePollKey()` queues a whole read - the register number, then a
   two byte read, each ending in a STOP - in the I2C block's own FIFO, and the

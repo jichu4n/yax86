@@ -18,14 +18,15 @@ enum {
   kSouthbridgePinSCL = 7,
   kSouthbridgeAddress = 0x1F,
 
-  // ClockworkPi's samples run the bus at 10kHz. The controller answers every
-  // read at 10, 100 and 400kHz alike, and the key FIFO is read once a batch
-  // whatever the rate, so this is standard mode: well within both parts, and
-  // a tenth of the time on the bus that 10kHz takes.
-  kSouthbridgeI2CHz = 100 * 1000,
+  // ClockworkPi's samples and its PicoMite build run the bus at 10kHz, and
+  // their headers say the keyboard's should be 10kHz, without saying why. The
+  // controller answers every read at 10, 100 and 400kHz alike, but the key
+  // FIFO is read once a batch whatever the rate, and a read at 10kHz is done
+  // well within one, so a faster bus would buy nothing.
+  kSouthbridgeI2CHz = 10 * 1000,
 
   // How long a transfer may take before the controller is taken to be absent.
-  // A two byte read at 100kHz is about 0.3ms, so this is generous.
+  // A two byte read at 10kHz is about 3ms, so this is generous.
   kSouthbridgeTimeoutUs = 50 * 1000,
   // ClockworkPi's samples wait this long between writing a register number and
   // reading its value. The controller prepares its answer as the register
@@ -42,8 +43,8 @@ enum {
   kSouthbridgeRetryMs = 250,
 
   // How long a read of the key FIFO may take before the bus is taken to be
-  // stuck and the I2C block is reset. A read is about 50 bit times, 0.5ms at
-  // 100kHz.
+  // stuck and the I2C block is reset. A read is about 50 bit times, 5ms at
+  // 10kHz.
   kSouthbridgePollTimeoutUs = 50 * 1000,
 
   kRegisterVersion = 0x01,
