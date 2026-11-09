@@ -52,9 +52,6 @@ const kCP437Characters = [...kCP437];
 // How long a command may take to be answered, and how often a wait looks at
 // the screen.
 const kReplyTimeoutMs = 5000;
-// How long to give each ping of the handshake, and how long to keep trying.
-const kHandshakeTryMs = 300;
-const kHandshakeTimeoutMs = 5000;
 const kWaitPollMs = 250;
 const kDefaultWaitSeconds = 30;
 
@@ -155,23 +152,6 @@ class Board {
       text: rows.map((bytes) => [...bytes].map((b) => kCP437Characters[b]).join('')),
       attributes,
     };
-  }
-
-  // Wait for the board to answer before sending anything that matters. What
-  // is sent in the moment after the port opens can be lost, so pings are sent
-  // until one is answered: losing a ping costs nothing, where losing a type
-  // command would lose the keys, and resending it could type them twice.
-  async handshake() {
-    const end = Date.now() + kHandshakeTimeoutMs;
-    while (Date.now() < end) {
-      try {
-        await this.command('ping', {}, kHandshakeTryMs);
-        return;
-      } catch (e) {
-        // Not answered in time; try again.
-      }
-    }
-    throw new Error('the board did not answer');
   }
 
   // Wait for the keys a type or key command queued to have been sent.
@@ -292,7 +272,6 @@ async function main() {
   }
   const board = new Board(port, values.quiet);
   try {
-    await board.handshake();
     if (positionals[0] !== 'run') {
       const [verb, ...rest] = positionals;
       return (await runStep(board, verb, rest.join(' '), values)) ? 0 : 1;

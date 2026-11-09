@@ -2630,11 +2630,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   ```
 
   A wait sees the whole screen, old output included, so a script clears it
-  first. The tool opens the port once for the session, and pings until it
-  is answered before anything else: a command sent in the moment after the
-  port opens is sometimes lost - two runs in five, sending a command at
-  once - and losing a ping costs nothing where resending a `type` could type
-  it twice. Why the first bytes go missing is not known.
+  first. The tool opens the port once for the session.
+- **A command goes out with a newline before it as well as after.** The
+  port opens with echo on, as any tty does, until it is made raw, so what
+  the board says while it is open that way - to `serial.js` in the moment
+  before it is raw, or to `stty` or anything else that opens it - is echoed
+  back, and arrives without the end of its line. Sent at once, the next
+  command was read as the rest of that line and lost, two runs in five. The
+  newline in front ends the echo's line instead: the board answers it with
+  an error under id 0, which nothing waits for, and ignores an empty line.
 
 ### The 4x10 font
 

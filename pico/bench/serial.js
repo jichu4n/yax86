@@ -75,8 +75,17 @@ function openPort(port, onLine, onClose = () => {}) {
   stream.on('close', () => onClose());
   // The stream puts the descriptor in non-blocking mode, so a write the port
   // has no room for fails with EAGAIN rather than waiting, and is tried again.
+  //
+  // A line is sent with a newline before it as well as after, so that it
+  // starts a line of its own on the board whatever came before it. The port
+  // opens with echo on, as a tty does, until it is made raw: what the board
+  // says while it is open that way - to this, or to anything else that opens
+  // it, such as stty - is echoed back, and lands in the board's command line
+  // without the end of the line. The next command would be read as the rest
+  // of that line and lost. The board ignores an empty line, and answers the
+  // echo with an error under id 0, which nothing waits for.
   const write = async (line) => {
-    let data = Buffer.from(line + '\n', 'latin1');
+    let data = Buffer.from('\n' + line + '\n', 'latin1');
     const end = Date.now() + kWriteTimeoutMs;
     while (data.length > 0) {
       try {
