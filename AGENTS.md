@@ -11,17 +11,26 @@ Pico, and for the browser via SDL and Emscripten.
 
 ## Where the notes are
 
-This file holds what applies everywhere. Each part of the tree has its own
-`AGENTS.md`, with a `CLAUDE.md` link to it, holding what applies there. Read
-the one for the directory you are changing before you change it.
+This file holds what applies everywhere. Each part of the tree below has an
+`AGENTS.md` of its own with what applies there: why the code is shaped as it
+is, and the alternatives that were measured and lost. **Read the file for a
+path before changing anything under it**, and before proposing a change
+there - most of what looks like an easy improvement in these directories has
+been tried. A child file is loaded only once a file in its directory has
+been opened with Read, so do not count on it arriving by itself.
 
-| file | covers |
-| --- | --- |
-| `core/AGENTS.md` | how the core fits together; platform, hdc, video and util, including logging and hot path placement |
-| `core/src/cpu/AGENTS.md` | the CPU: decoding, fetch, the decode cache, operands, runs, and what each measured |
-| `sdl/AGENTS.md` | the SDL runtime, native and Emscripten |
-| `pico/bench/AGENTS.md` | the RP2040 benchmark harness: building, running, figures, profiling |
-| `pico/picocalc/AGENTS.md` | the PicoCalc runtime: hardware, display, keyboard, storage, sound, commands |
+| before working on | read | which covers |
+| --- | --- | --- |
+| anything under `core/`, other than the CPU | `core/AGENTS.md` | how the modules fit together and are brought up, bundling and ROMs, the memory map, idle skipping, the hard disk controller, host text fonts, rendering from a copy, logging, and `Y_HOT` placement |
+| `core/src/cpu/` | `core/src/cpu/AGENTS.md` - and `core/AGENTS.md` | decoding, instruction fetch, the decode cache, the data window, prefixes, operand dispatch and values, cycle costs, string runs, the interrupt hint, runs of instructions, and what each measured |
+| `sdl/` | `sdl/AGENTS.md` | the SDL runtime: pacing to the wall clock, disks, video adapters, audio, logs |
+| `pico/bench/` or `pico/common/`, or any measurement on hardware | `pico/bench/AGENTS.md` | the `dos-boot` workload and its invariant, building and running on a board, current figures, timing, overclocking, profiling |
+| `pico/picocalc/` | `pico/picocalc/AGENTS.md` - and `pico/bench/AGENTS.md` to measure | the PicoCalc's hardware, pacing, LCD, drawing, keyboard, SD card and disks, speaker, the commands over USB and `debug.js` |
+
+Logging - the logfmt format, log levels and modules, and replies to
+commands - is in `core/AGENTS.md` for every host. A change to the core's
+public interface reaches every host, so read the files for the hosts it
+touches too.
 
 ## Repository layout
 
