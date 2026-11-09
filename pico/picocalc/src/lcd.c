@@ -21,15 +21,20 @@
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
+#include "hardware/spi.h"
 #include "lcd.pio.h"
 #include "pico/time.h"
 
 // The PIO block the serial interface runs on.
 static PIO const kLcdPIO = pio0;
+// The SPI block the panel's frame memory is read back through. SCK, MOSI and
+// MISO are SPI1's pins, so a read hands them to it and back.
+static spi_inst_t* const kLcdReadSPI = spi1;
 
 enum {
   kLcdPinSCK = 10,
   kLcdPinMOSI = 11,
+  kLcdPinMISO = 12,
   kLcdPinCS = 13,
   kLcdPinDC = 14,
   kLcdPinReset = 15,
@@ -51,6 +56,17 @@ enum {
   // text comes out green, as it would with every pixel's bytes swapped, and
   // through the SPI block it took no new image at all.
   kLcdGuardNs = 50,
+  // The serial clock for reads. The datasheet's read cycle is at least 150ns,
+  // under 6.67MHz, and ClockworkPi's samples read at 6MHz. The SPI block runs
+  // from the 48MHz peripheral clock, which divides to 6MHz exactly.
+  kLcdReadHz = 6000 * 1000,
+  // Bytes a pixel read back. A read answers in the pixel format writes are
+  // in, RGB565 high byte first, so a pixel reads back exactly as it was
+  // written. ClockworkPi's samples read three bytes a pixel because they
+  // write in RGB666.
+  kLcdReadBytesPerPixel = 2,
+  // How many pixels LcdReadPixels() reads from the SPI block at once.
+  kLcdReadChunkPixels = 32,
 
   // Commands, from the ST7365P datasheet.
   kCmdSoftwareReset = 0x01,
@@ -62,6 +78,7 @@ enum {
   kCmdColumnAddressSet = 0x2A,
   kCmdRowAddressSet = 0x2B,
   kCmdMemoryWrite = 0x2C,
+  kCmdMemoryRead = 0x2E,
   kCmdMemoryAccessControl = 0x36,
   kCmdPixelFormat = 0x3A,
   kCmdInterfaceModeControl = 0xB0,
@@ -262,7 +279,9 @@ void LcdSetDisplayOn(bool on) {
   }
 }
 
-void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
+// Set the window the next memory write or read covers.
+static void LcdSetWindow(
+    uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   const uint16_t right = (uint16_t)(x + width - 1);
   const uint16_t bottom = (uint16_t)(y + height - 1);
   const uint8_t columns[] = {
@@ -271,6 +290,10 @@ void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
       (uint8_t)(y >> 8), (uint8_t)y, (uint8_t)(bottom >> 8), (uint8_t)bottom};
   LcdSendCommand(kCmdColumnAddressSet, columns, sizeof(columns));
   LcdSendCommand(kCmdRowAddressSet, rows, sizeof(rows));
+}
+
+void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
+  LcdSetWindow(x, y, width, height);
   LcdSendCommand(kCmdMemoryWrite, NULL, 0);
 
   // DC and CS are set once here rather than per call, since the core hands
@@ -292,6 +315,56 @@ void LcdEndWrite(void) {
   LcdWaitIdle();
   LcdGuard();
   gpio_put(kLcdPinCS, 1);
+  LcdGuard();
+}
+
+void LcdBeginRead(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
+  LcdSetWindow(x, y, width, height);
+  // The command goes out through the state machine like any other, and CS
+  // stays low after it: what follows is the command's answer.
+  gpio_put(kLcdPinDC, 0);
+  gpio_put(kLcdPinCS, 0);
+  LcdGuard();
+  LcdPutByte(kCmdMemoryRead);
+  LcdWaitIdle();
+  LcdGuard();
+  gpio_put(kLcdPinDC, 1);
+  // The answer is read through the SPI block, at a clock slow enough for a
+  // read. Both idle with the clock low, so handing the pins over moves
+  // nothing the panel sees.
+  spi_init(kLcdReadSPI, kLcdReadHz);
+  gpio_set_function(kLcdPinSCK, GPIO_FUNC_SPI);
+  gpio_set_function(kLcdPinMOSI, GPIO_FUNC_SPI);
+  gpio_set_function(kLcdPinMISO, GPIO_FUNC_SPI);
+  LcdGuard();
+  // The first byte of the answer is a dummy.
+  uint8_t dummy;
+  spi_read_blocking(kLcdReadSPI, 0xFF, &dummy, 1);
+}
+
+void LcdReadPixels(uint16_t* pixels, uint32_t count) {
+  uint8_t bytes[kLcdReadChunkPixels * kLcdReadBytesPerPixel];
+  while (count > 0) {
+    const uint32_t chunk =
+        count < kLcdReadChunkPixels ? count : kLcdReadChunkPixels;
+    spi_read_blocking(kLcdReadSPI, 0xFF, bytes, chunk * kLcdReadBytesPerPixel);
+    const uint8_t* byte = bytes;
+    for (uint32_t i = 0; i < chunk; ++i) {
+      *pixels++ = (uint16_t)((byte[0] << 8) | byte[1]);
+      byte += kLcdReadBytesPerPixel;
+    }
+    count -= chunk;
+  }
+}
+
+void LcdEndRead(void) {
+  LcdGuard();
+  gpio_put(kLcdPinCS, 1);
+  // Back to the state machine, and MISO back to an input nothing drives.
+  pio_gpio_init(kLcdPIO, kLcdPinSCK);
+  pio_gpio_init(kLcdPIO, kLcdPinMOSI);
+  gpio_set_function(kLcdPinMISO, GPIO_FUNC_NULL);
+  spi_deinit(kLcdReadSPI);
   LcdGuard();
 }
 

@@ -29,14 +29,20 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // node than it left on.
 async function waitForPort(timeoutMs = kPortWaitMs) {
   const end = Date.now() + timeoutMs;
+  let first = true;
   while (Date.now() < end) {
     const ports = (await fs.readdir('/dev'))
       .filter((name) => name.startsWith('ttyACM'))
       .sort();
     if (ports.length > 0) {
-      await delay(kPortSettleMs);
+      // A port that was already there has settled long since; one that has
+      // just appeared, after a flash or a reset, is given time to.
+      if (!first) {
+        await delay(kPortSettleMs);
+      }
       return path.join('/dev', ports[ports.length - 1]);
     }
+    first = false;
     await delay(kPortPollMs);
   }
   return null;

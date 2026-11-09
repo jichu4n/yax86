@@ -2595,12 +2595,33 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | `ping` | answers, and nothing else |
   | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
+  | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
 
 - **A screen row is hex, not text.** Text escaped as logfmt would not fit on
   a line: a row of box drawing characters is 80 bytes outside ASCII, which
   escape to 320 characters, against the logger's 256-byte line. `debug.js`
   turns the hex back into code page 437, as Unicode.
+- **A screenshot is the panel's frame memory read back**, not the screen
+  drawn again, so it shows what the panel holds - the guest's screen and the
+  status lines, drawn right or wrong. Core 1 owns the panel, so it does the
+  read and sends the reply, and draws nothing for the half second it takes:
+  the frames that come due meanwhile are counted late, and what changed is
+  drawn once it is done. The read goes through the SPI block at 6MHz,
+  since the datasheet's read cycle is 150ns, with the pins handed to it from
+  PIO and back. The panel answers in the pixel format it is written in,
+  RGB565, so a pixel reads back as it was written, after a dummy byte.
+  `debug.js screenshot FILE.png` writes it as a PNG.
+- **A screenshot is sent as runs of one color**, `runs=` lines of six hex
+  digits a run: the color in RGB565, then how many pixels it covers less
+  one. A screen is a handful of colors in long runs, so a text screen is
+  29KB of runs against 205KB of pixels. Sent as a pixel at a time in hex it
+  took 1.41 seconds on the board - 0.33 reading the panel, 0.34 formatting
+  and 0.73 sending 546KB - and as runs it takes about half a second, most
+  of it the read, which the panel's read cycle bounds. Keeping a table of
+  recent colors as well, as QOI does, would halve what is sent again but
+  save little time, and deflate would need more RAM than the board has to
+  spare.
 - **`key` is the only way in, and a host can do with it exactly what a hand
   on the keyboard can.** A key is the keyboard controller's: a character
   names the key that types it, and `shift`, `ctrl` and `alt` are keys of
@@ -2621,8 +2642,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the boot 3.5ms - 5.0755 seconds of processor time against 5.0721, 0.07%.
   The time commands take is counted in the report as `command_us`, which a
   boot that took commands is that much slower for.
-- **`debug.js` is the host's side**: `screen`, `type`, `key`, `wait`,
-  `report` and `ping`, or `run` with a script of them, a step a line.
+- **`debug.js` is the host's side**: `screen`, `screenshot`, `type`, `key`,
+  `wait`, `report` and `ping`, or `run` with a script of them, a step a line.
   `wait` polls the screen until a regular expression matches it, and a
   timeout fails the script, which is what makes a script a test:
 
@@ -2637,7 +2658,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   keys, so it waits for something only the new input can produce. After
   CLS that is the prompt alone on a blank screen, rather than any prompt,
   which the screen from before could already show. The tool opens the port
-  once for the session.
+  once for the session. A port that is already there when it
+  looks is used at once; one that has only just appeared, after a flash,
+  is given 800ms to settle first.
 - **A command goes out with a newline before it as well as after.** The
   port opens with echo on, as any tty does, until it is made raw, so what
   the board says while it is open that way - to `serial.js` in the moment

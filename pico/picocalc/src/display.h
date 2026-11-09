@@ -3,9 +3,9 @@
 //
 // Core 0 runs the machine and never touches the LCD. It hands core 1 what to
 // draw: a copy of the guest's screen once a frame, the status line values,
-// and the requests to turn the panel off and on. Each is handed over only
-// while core 1 is not using the last one, so the two cores never share
-// anything either of them is changing.
+// and the requests to turn the panel off and on, and to read it back. Each is
+// handed over only while core 1 is not using the last one, so the two cores
+// never share anything either of them is changing.
 //
 // Every function here is called from core 0.
 #ifndef YAX86_PICOCALC_DISPLAY_H
@@ -66,6 +66,13 @@ void DisplayEndStatus(void);
 // 120ms, which core 0 does not wait for.
 void DisplayTurnOff(void);
 void DisplayTurnOn(void);
+
+// Have core 1 read the panel back and send it to the host as the reply to the
+// screenshot command with this id, which it ends with status=ok. Returns
+// false, doing nothing, while it is still sending the last one. Core 1 draws
+// nothing meanwhile, for about two seconds, and what changes on the guest's
+// screen is drawn once it is done.
+bool DisplaySendScreenshot(uint32_t id);
 
 DisplayStats DisplayGetStats(void);
 

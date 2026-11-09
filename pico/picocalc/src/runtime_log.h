@@ -21,9 +21,10 @@ extern YLoggerConfig g_machine_log_config;
 // instruction the guest was running.
 extern YLogger g_runtime_logger;
 
-// What the copy of the guest's screen core 1 renders logs through, with the
-// machine's configuration. A logger builds each line in a buffer of its own,
-// so the two cores cannot share one.
+// What core 1 logs through, with the machine's configuration: the copy of the
+// guest's screen it renders, and the screenshot it sends, whose replies are
+// never filtered. A logger builds each line in a buffer of its own, so the
+// two cores cannot share one.
 extern YLogger g_render_logger;
 
 extern const YLogModule kSystemLogModule;

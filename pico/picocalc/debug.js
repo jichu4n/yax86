@@ -5,6 +5,7 @@
 // src/command.h.
 //
 //   ./debug.js screen [--attrs]
+//   ./debug.js screenshot screen.png
 //   ./debug.js type 'DIR C:\r'
 //   ./debug.js key f6 [--state press|release]
 //   ./debug.js wait 'A>' [--timeout SECONDS]
@@ -32,12 +33,16 @@
 // after "type CLS\r", the prompt alone on a blank screen -
 // "wait ^A> *\n(?![\s\S]*\S)" - rather than any prompt.
 //
+// A screenshot is the panel read back, all 320x320 of it - the guest's screen
+// and the status lines below it, as the panel holds them - written as a PNG.
+//
 // The port is opened once for the whole session, for the reason in
 // ../bench/serial.js. Lines the board sends unasked - its logs - are shown as
 // they come.
 
 const fs = require('fs/promises');
 const {parseArgs} = require('util');
+const zlib = require('zlib');
 const {parseLine, formatLine, formatValue, toNumber} = require('../bench/logfmt');
 const {delay, waitForPort, openPort} = require('../bench/serial');
 
@@ -76,6 +81,8 @@ const kShiftedSymbols = '~!@#$%^&*()_+{}|:"<>?';
 const kReplyTimeoutMs = 5000;
 const kWaitPollMs = 250;
 const kDefaultWaitSeconds = 30;
+// Reading the panel back and sending it takes about two seconds.
+const kScreenshotTimeoutMs = 30000;
 
 // Undo the escapes text to type is given with.
 function unescape(text) {
@@ -95,6 +102,36 @@ function unescape(text) {
         return code;
     }
   });
+}
+
+// An image as a PNG: 8-bit RGB, from rows of RGB triples.
+function encodePNG(width, height, rgb) {
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  // 8 bits a channel, truecolor, and the standard compression, filter and
+  // (no) interlace methods.
+  header.set([8, 2, 0, 0, 0], 8);
+  // Each row is led by its filter type, 0 for none.
+  const stride = width * 3;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; ++y) {
+    rgb.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 // A connection to the board: sends commands and collects their replies.
@@ -176,6 +213,40 @@ class Board {
     };
   }
 
+  // The panel, as a PNG.
+  async screenshot() {
+    const lines = await this.command('screenshot', {}, kScreenshotTimeoutMs);
+    const width = toNumber(lines[0].width);
+    const height = toNumber(lines[0].height);
+    const rgb = Buffer.alloc(width * height * 3);
+    // Runs of one color: RGB565, then how many pixels less one.
+    let offset = 0;
+    for (const line of lines) {
+      if (line.runs === undefined) {
+        continue;
+      }
+      const runs = Buffer.from(line.runs, 'hex');
+      for (let i = 0; i + 2 < runs.length; i += 3) {
+        // Each channel widened to 8 bits by repeating its top bits.
+        const pixel = runs.readUInt16BE(i);
+        const r = pixel >> 11;
+        const g = (pixel >> 5) & 0x3f;
+        const b = pixel & 0x1f;
+        for (let n = runs[i + 2]; n >= 0 && offset < rgb.length; --n) {
+          rgb[offset++] = (r << 3) | (r >> 2);
+          rgb[offset++] = (g << 2) | (g >> 4);
+          rgb[offset++] = (b << 3) | (b >> 2);
+        }
+      }
+    }
+    if (offset !== rgb.length) {
+      throw new Error(
+        `screenshot: ${offset / 3} of ${width * height} pixels arrived`
+      );
+    }
+    return encodePNG(width, height, rgb);
+  }
+
   // Press, release or tap a key by name. A key the board has no room for
   // is refused and not queued, so it is sent again until there is room.
   async key(name, state) {
@@ -243,6 +314,13 @@ async function runStep(board, verb, argument, options) {
     case 'screen':
       printScreen(await board.screen(options.attrs));
       return true;
+    case 'screenshot': {
+      if (rest.length !== 1) {
+        throw new Error('screenshot needs a file to write the PNG to');
+      }
+      await fs.writeFile(rest[0], await board.screenshot());
+      return true;
+    }
     case 'type':
       await board.type(unescape(argument));
       return true;
@@ -306,8 +384,8 @@ async function main() {
   });
   if (positionals.length === 0) {
     console.error(
-      'Usage: debug.js [--quiet] screen [--attrs] | type TEXT | ' +
-        'key NAME [--state press|release] | ' +
+      'Usage: debug.js [--quiet] screen [--attrs] | screenshot FILE.png | ' +
+        'type TEXT | key NAME [--state press|release] | ' +
         'wait PATTERN [--timeout SECONDS] | report | ping | run SCRIPT'
     );
     return 2;
