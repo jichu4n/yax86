@@ -1,8 +1,9 @@
 // yax86 on the ClockworkPi PicoCalc.
 //
 // The runtime raises the system clock, starts core 1 drawing on the LCD, brings
-// up the keyboard controller, and boots MS-DOS 3.30 off the floppy image in
-// flash, with the guest's text screen on the LCD as it goes. The machine is
+// up the keyboard controller, and boots MS-DOS 3.30 off the floppy in drive A -
+// an image on the SD card, or the one built into flash without it - with the
+// guest's text screen on the LCD as it goes. The machine is
 // paced to real time and keeps running past the prompt, with the PicoCalc's
 // keyboard as its own. DOS's date and time questions are still answered by
 // watching the screen, the way pico/bench does it, which keeps the boot the
@@ -23,16 +24,15 @@
 #include "core/platform.h"
 #include "core/video.h"
 #include "display.h"
+#include "floppy.h"
 #include "hardware/clocks.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
 #include "keymap.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "sdcard.h"
 #include "southbridge.h"
-// Generated into the build directory - see the floppy image section of
-// CMakeLists.txt.
-#include "generated/dos_floppy_data.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
 // identical but for that, which is what measures what drawing costs.
@@ -338,6 +338,21 @@ static void FormatDisplayLine(char* buffer, size_t size) {
       (unsigned long)stats.frames_late);
 }
 
+static void FormatDiskLine(char* buffer, size_t size) {
+  const FloppyStats stats = FloppyGetStats();
+  if (stats.source != kFloppySourceSDCard) {
+    snprintf(buffer, size, "A: %s", FloppyDescribeSource(stats.source));
+    return;
+  }
+  const uint64_t card_ms =
+      (stats.read_us + stats.write_us) / kMicrosecondsPerMillisecond;
+  snprintf(
+      buffer, size, "A: SD card, %lu sectors read, %lu written, %llu.%03llus",
+      (unsigned long)stats.sector_reads, (unsigned long)stats.sector_writes,
+      (unsigned long long)(card_ms / kMillisecondsPerSecond),
+      (unsigned long long)(card_ms % kMillisecondsPerSecond));
+}
+
 // Hand core 1 the status lines, unless it is still drawing the last ones.
 // Returns whether it took them.
 static bool HandOverStatus(void) {
@@ -351,6 +366,7 @@ static bool HandOverStatus(void) {
   FormatSpeedLine(status->values[kDisplayStatusSpeed], size);
   FormatClockLine(status->values[kDisplayStatusClock], size);
   FormatDisplayLine(status->values[kDisplayStatusDisplay], size);
+  FormatDiskLine(status->values[kDisplayStatusDisk], size);
   DisplayEndStatus();
   return true;
 }
@@ -391,6 +407,14 @@ static void PrintReport(void) {
   printf("%-14s %lu\n", "frames_late", (unsigned long)display.frames_late);
   printf("%-14s %llu\n", "copy_us", (unsigned long long)display.copy_us);
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
+  const FloppyStats floppy = FloppyGetStats();
+  printf("%-14s %s\n", "floppy", FloppyDescribeSource(floppy.source));
+  printf("%-14s %lu\n", "sd_clock_hz", (unsigned long)SdcardGetClockHz());
+  printf("%-14s %lu\n", "fd_reads", (unsigned long)floppy.sector_reads);
+  printf("%-14s %lu\n", "fd_writes", (unsigned long)floppy.sector_writes);
+  printf("%-14s %lu\n", "fd_errors", (unsigned long)floppy.errors);
+  printf("%-14s %llu\n", "fd_read_us", (unsigned long long)floppy.read_us);
+  printf("%-14s %llu\n", "fd_write_us", (unsigned long long)floppy.write_us);
   printf("%-14s %lu\n", "key_reads", (unsigned long)keyboard.reads);
   printf("%-14s %lu\n", "keys", (unsigned long)keyboard.keys);
   printf("%-14s %lu\n", "stale_keys", (unsigned long)keyboard.stale_keys);
@@ -426,18 +450,6 @@ static void ReportIfHostAttached(void) {
 // The machine
 // ============================================================================
 
-// Serve the boot floppy straight out of flash. Guest writes are discarded:
-// 360KB is several times the SRAM left over, and booting to a prompt writes
-// nothing.
-static uint8_t FloppyReadByte(
-    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset) {
-  return offset < kDOSFloppyDataSize ? kDOSFloppyData[offset] : 0xFF;
-}
-
-static void FloppyWriteByte(
-    Y_UNUSED void* context, Y_UNUSED uint8_t drive, Y_UNUSED uint32_t offset,
-    Y_UNUSED uint8_t value) {}
-
 static bool InitMachine(void) {
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_logger_config;
@@ -451,9 +463,7 @@ static bool InitMachine(void) {
   if (!YPlatformInit(&g_platform)) {
     return false;
   }
-  g_platform.fdc.config.read_image_byte = FloppyReadByte;
-  g_platform.fdc.config.write_image_byte = FloppyWriteByte;
-  YFDCInsertDisk(&g_platform.fdc, 0, &YFDCFormat360KB);
+  FloppyInsert(&g_platform.fdc);
   return true;
 }
 
@@ -738,6 +748,7 @@ int main(void) {
   SouthbridgeInit();
   g_status.southbridge_answered =
       SouthbridgeReadVersion(&g_status.southbridge_version);
+  FloppyOpen();
   HandOverStatus();
 
   RunMachine(InitMachine());

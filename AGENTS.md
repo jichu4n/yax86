@@ -24,7 +24,7 @@ Pico, and for the browser via SDL and Emscripten.
 | `pico/picocalc/` | The runtime for the ClockworkPi PicoCalc. Standalone CMake project. |
 | `pico/common/` | What both Pico targets compile in. |
 | `tools/` | Build and test scripts for the native and Emscripten builds. |
-| `resources/` | Floppy and disk images. |
+| `resources/` | Floppy and disk images, and third-party code kept as released. |
 | `.cache/` | Downloaded references — GLaBIOS source, the 8088 test suite, other emulators. Not in the repository. |
 
 ## Building, testing and debugging
@@ -2047,8 +2047,8 @@ SRAM, at #89:
 - The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld
   with a 320x320 LCD, a keyboard, an SD card slot and a battery. It raises the
   system clock to 250MHz, brings up the keyboard controller, and boots MS-DOS
-  3.30 off the floppy image in flash, with the guest's text screen on the LCD
-  and status lines below it - drawn by the second core, while the first runs
+  3.30 off an image on the SD card, or off the one in flash without it, with
+  the guest's text screen on the LCD and status lines below it - drawn by the second core, while the first runs
   the machine. The machine is paced to real
   time, keeps running once it reaches the `A>` prompt, and takes the
   PicoCalc's keyboard as its own. DOS's date and time questions are still
@@ -2109,14 +2109,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the benchmark run the same machine, so a figure measured on one stands for
   the other. At 250MHz it takes 4.72 seconds of processor time without
   drawing the guest's screen and 4.82 with it - 123% and 121% of a real
-  PC/XT. At the stock 125MHz, 9.44 seconds with drawing, which is 61.5%.
-  Processor time rather than how long it took, because the boot is paced -
-  see below.
+  PC/XT - off the floppy in flash, and 4.89 off the card. At the stock
+  125MHz, 9.44 seconds with drawing, which is 61.5%. Processor time rather
+  than how long it took, because the boot is paced - see below.
 - If the count moves while the bench's does not, the runtime has stopped
   running the machine the benchmark measures. A key pressed during the boot
   moves it too, which is the guest being typed at rather than anything
   broken - and the reason the keys the controller queued before the firmware
-  started are dropped.
+  started are dropped. So does booting off a floppy on the card that is not
+  the one in `resources` byte for byte - see the SD card section.
 
 ### Running in real time
 
@@ -2191,7 +2192,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   24MHz. `PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK` would keep it on the
   system clock, and the SPI block does draw at 62.5MHz like that, but it
   takes every peripheral to 250MHz with it - the keyboard controller's I2C
-  and, later, the SD card's SPI. PIO runs from the system clock, which the
+  and the SD card's SPI. PIO runs from the system clock, which the
   overclock raises anyway, and it is what ClockworkPi's own NES build drives
   this panel with at 250MHz.
 - **The serial clock is 62.5MHz** at both 125MHz and 250MHz, the system clock
@@ -2388,6 +2389,50 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The controller keeps Alt with comma, full stop, space and B for the
   backlights and the battery, and never reports them, and Shift with Left
   or Right reports nothing at all.
+
+### The SD card and drive A
+
+- **Drive A is `yax86/floppy_a.img` on the card**, a 360KB image on its FAT
+  volume, and what the guest writes to it is written to the card. Without
+  one, it is the floppy built into flash, which takes no writes, and the
+  Disk status line says why: no card, a card that did not answer, no FAT
+  volume, no image, or an image that is not 360KB. The card is looked at
+  once, at power on.
+- `src/sdcard.c` drives the card in its SPI mode on SPI0, from the SD
+  Association's simplified physical layer specification: 400kHz to bring it
+  up, then 24MHz. The SPI block runs from the 48MHz peripheral clock - see
+  the LCD section - and divides by an even number, so 25MHz, the most a card
+  takes in its default speed mode, comes out at 24. Every command starts
+  from a fresh select that waits for the card to be ready, and blocks move
+  one at a time, CMD17 and CMD24.
+- **The filesystem is FatFs R0.16**, ChaN's. `resources/FatFs/ff16.zip` is
+  the release exactly as elm-chan.org serves it, and the build unpacks it
+  into the build directory with `FetchContent`, which checks it against its
+  SHA-256. Keeping the release rather than its sources says it is unchanged
+  by a hash anyone can check against the download, and leaves the source
+  tree holding only our own code. To move to a new release, replace the zip
+  and its hash, and carry our settings over to the new `ffconf.h`.
+- **`src/ffconf.h` is the release's, with three settings changed**: code page
+  437, `FF_FS_TINY`, and `FF_FS_NORTC`. Long names and exFAT are off. The
+  build copies it over the stock one, since `ff.h` includes it from its own
+  directory before any include path, and does so with `configure_file()`, so
+  that a change to it reconfigures the build.
+- FatFs is the one thing in the image that calls `memcpy()` and `memset()`
+  itself; the runtime's own code calls neither.
+- **The floppy controller moves a byte at a time, and `src/floppy.c` keeps one
+  sector of the image in memory**, so each sector the guest reads or writes
+  costs one card access. A sector the guest writes goes to the card as soon
+  as its last byte is in, so nothing it wrote waits in memory to be lost when
+  the power goes.
+- **The card costs 1.5% of `dos-boot`**: 4.8896 seconds of processor time
+  against 4.8171 off the floppy in flash, two runs each with a spread under
+  0.01%. DOS reads 214 sectors on the way to `A>`, which take 75ms - about
+  0.35ms a sector, for which the machine waits.
+- **The invariant holds only off an image identical to the one in
+  `resources`.** A copy of `DISK01.IMG` boots in the same 2,328,128
+  instructions. The same image with one file added to its root directory
+  took 2,328,239, so an image the guest has written to is not one to measure
+  with.
 
 ### The 4x10 font
 
