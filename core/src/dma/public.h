@@ -37,7 +37,7 @@ enum {
 // Log module for the DMA.
 Y_PUBLIC_HEADER const YLogModule YDMALogModule = {
     .id = Y_DMA_LOG_MODULE_ID,
-    .name = "DMA",
+    .name = "dma",
 };
 
 // I/O ports for the 8237 DMA Controller and Page Registers.

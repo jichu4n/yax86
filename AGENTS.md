@@ -274,8 +274,8 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
   apart from each other in the one translation unit they compile into, where
   eleven init functions would otherwise all be called Init.
 - **util is not a module**, and each of its headers is its own owner: `Log`
-  (whose state and config are `YLogger` and `YLoggerConfig`), `StaticVector`,
-  and `YSNPrintF`, whose `va_list` form keeps C's prefix at the front as
+  (whose state and config are `YLogger` and `YLoggerConfig`), `Logfmt` (the
+  line writer, `YLogfmtLine`), `StaticVector`, and `YSNPrintF`, whose `va_list` form keeps C's prefix at the front as
   `YVSNPrintF`. There is no `YUtil`. The macros in `util/common.h` are the
   project's own infrastructure and have no owner: `Y_PUBLIC`, `Y_HOT` and
   `Y_UNUSED`.
@@ -348,8 +348,8 @@ CamelCase for what has storage and a prefixed ALL_CAPS for what does not:
   are used only inside `core/src`, and are public because
   `YLoggerEnableModule()` is public and takes one - a host turning on the CPU's
   logging has nothing else to pass. `YSNPrintF()` is
-  the other way round: it sits in every module's public half because `log.h`
-  needs it, and nothing outside the core calls it.
+  the other way round: it sits in every module's public half because
+  `logfmt.h` needs it, and nothing outside the core calls it.
 - `static` alone says a symbol has internal linkage, which in the bundled build
   means internal to the whole bundle rather than to its file. It is the marker
   that cannot express which of the tiers above was meant, which is why none of
@@ -1665,6 +1665,72 @@ Alongside the table, state:
   record set, and pointing the copy at the live video memory, are each caught
   there.
 
+### util — logging
+
+- **Everything the core and its hosts log is one format: logfmt**, a line of
+  space separated `key=value` pairs, written by `util/logfmt.h` and rendered
+  by the logger, so that a host only says where a line goes and never what
+  it looks like. The SDL runtime and both Pico targets print the same lines,
+  and one set of tools reads all of them.
+- **A line's first pair is its kind.** A `log` is something that happened,
+  said unprompted, and carries `level`, `module`, `tick`, `cs`, `ip` and
+  `event` ahead of its own fields:
+
+  ```
+  kind=log level=warn module=platform tick=27702858 cs=0xF000 ip=0xE0A3 event=unmapped_port_read port=0x0201
+  ```
+
+  A `reply` answers a command a host was sent - `kind=reply id=7 cmd=screen
+  status=ok` - and is never filtered, because whoever sent the command is
+  waiting for it. Severity is a property of logs only: a failed command is
+  still an answer, `status=error`, not an error the device is reporting
+  about itself.
+- **Values are typed by how they are written**: decimals, hex with a `0x`
+  prefix at a fixed width (`0x0201` for a port, `0x9A` for a byte),
+  `true`/`false`, and strings, bare when they can be and quoted otherwise. A
+  quote or backslash is escaped with a backslash, and any byte outside
+  printable ASCII as `\xNN`, so CP437 text from the guest still makes a line
+  that is printable ASCII end to end. Keys and event names are snake_case;
+  an event is a name, never a sentence.
+- **A call names an event and passes fields**: `Y_PLATFORM_WARN(
+  "unmapped_port_read", Y_LOG_HEX16("port", port))`. Each module defines its
+  four levels - `error`, `warn`, `info` and `debug` - as macros at the top of
+  its source file, and a host defines its own the same way, as the SDL
+  runtime's `APP_ERROR()` does. The event is the first variadic argument
+  rather than a parameter of its own so that an event with no fields is a
+  valid C99 macro call, and the fields are passed to `YLoggerWrite()` by
+  value through `...`, ended by `YLogEnd()`, which the macro adds.
+- **A filtered log costs only its filter.** `Y_LOG()` tests the module and the
+  level before it builds a single field, and
+  `DoesNotEvaluateTheFieldsOfASuppressedLog` keeps it that way.
+- **But a log written inline in a hot function costs that function even when
+  it never runs.** Its fields are 16-byte structs built on the stack and
+  copied into the call - with `memcpy()`, on this target - so the frame and
+  the code around it grow whether or not the branch is taken. The platform's
+  four memory and port accessors therefore call `Y_NOINLINE` helpers,
+  `YPlatformLogUnmappedPortRead()` and its siblings, which do the logging.
+  Written inline, they took `dos-boot` 0.88% slower than the format-string
+  logger before them; out of line, 0.16%, which is what is left of this
+  change. Moving `YCPUTick()`'s two logs out of line as well measured 0.06%
+  slower again, so those stay where they are. Check what a new log in an
+  `Y_HOT` function does to it before leaving it inline.
+- **The platform stamps each log with its tick and the CPU's CS:IP**, through
+  a `YLoggerSource` it sets once the CPU is up - a host does not wire either.
+  `YCPUTick()` moves IP past an instruction before running it, so a log made
+  while an instruction runs, as every port and memory log is, gives the
+  address of the instruction after it, which is also what an 8086 pushes on
+  an interrupt. Keeping the running instruction's own address would be a
+  store on every instruction, so a log that needs it, as
+  `invalid_instruction` does, passes it as a field.
+- **Module IDs 0-15 are the core's and 16-31 the hosts'**
+  (`Y_LOG_FIRST_HOST_MODULE_ID`), so a host can give its own messages a
+  module without colliding with one the core adds later.
+  `module_ids_test.cpp` holds the core to its half.
+- A line is at most `Y_LOG_MAX_LINE_LENGTH` bytes, built in the logger's own
+  buffer. A pair that does not fit is dropped whole, along with every pair
+  after it, and the line ends `truncated=true`, so a truncated line is still
+  a valid one.
+
 ### util — hot path placement
 
 - `Y_HOT` marks a function as being on the per-instruction hot path. It is
@@ -1811,6 +1877,12 @@ Alongside the table, state:
       SDL's disk audio driver, which writes raw samples to a file:
       `SDL_AUDIO_DRIVER=disk SDL_AUDIO_DISK_OUTPUT_FILE=out.raw`. SDL may upmix
       the mono stream, in which case the file is interleaved stereo.
+- **Logs go to stdout**, which Emscripten routes to the browser console, as
+  the logfmt lines described under "util — logging". Only errors are shown
+  by default; `min_level` in `main()` raises that. The runtime's own
+  messages - an image that would not open, the key trace at `debug` - are
+  module `sdl`, logged through a `YLogger` of its own that shares the
+  platform's configuration, so that it can log before the platform is up.
 
 ## pico/bench — Raspberry Pi Pico benchmark harness
 

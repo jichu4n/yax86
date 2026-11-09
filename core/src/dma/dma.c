@@ -2,8 +2,14 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define Y_DMA_LOG(level, ...) \
-  Y_LOG(dma->config.logger, &YDMALogModule, level, __VA_ARGS__)
+#define Y_DMA_ERROR(...) \
+  Y_LOG(dma->config.logger, &YDMALogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define Y_DMA_WARN(...) \
+  Y_LOG(dma->config.logger, &YDMALogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define Y_DMA_INFO(...) \
+  Y_LOG(dma->config.logger, &YDMALogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define Y_DMA_DEBUG(...) \
+  Y_LOG(dma->config.logger, &YDMALogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 Y_PUBLIC void YDMAInit(YDMAState* dma) {
   // Mask all channels by default on power-on.
@@ -119,11 +125,12 @@ Y_PUBLIC void YDMAWritePort(YDMAState* dma, uint16_t port, uint8_t value) {
         // Unmasking is the point at which a channel becomes live, so the
         // address, count and page registers are final here.
         const YDMAChannelState* channel = &dma->channels[channel_index];
-        Y_DMA_LOG(
-            Y_LOG_LEVEL_DEBUG,
-            "channel %d enabled: address %02X:%04X count %04X mode %02X",
-            channel_index, channel->page_register, channel->current_address,
-            channel->current_count, channel->mode);
+        Y_DMA_DEBUG(
+            "channel_enabled", Y_LOG_UINT("channel", channel_index),
+            Y_LOG_HEX8("page", channel->page_register),
+            Y_LOG_HEX16("address", channel->current_address),
+            Y_LOG_HEX16("count", channel->current_count),
+            Y_LOG_HEX8("mode", channel->mode));
       }
       break;
     }

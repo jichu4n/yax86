@@ -34,7 +34,7 @@ enum {
 // Log module for the PIC.
 Y_PUBLIC_HEADER const YLogModule YPICLogModule = {
     .id = Y_PIC_LOG_MODULE_ID,
-    .name = "PIC",
+    .name = "pic",
 };
 
 // ============================================================================

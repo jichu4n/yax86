@@ -27,7 +27,7 @@ enum {
 // Log module for the PIT.
 Y_PUBLIC_HEADER const YLogModule YPITLogModule = {
     .id = Y_PIT_LOG_MODULE_ID,
-    .name = "PIT",
+    .name = "pit",
 };
 
 enum {

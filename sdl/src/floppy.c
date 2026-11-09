@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+#include "app_log.h"
+
 enum {
   // Size of a 5.25" 360KB floppy image. That is the only format the FDC
   // emulates, so it is the only image size that can be mounted.
@@ -35,7 +37,7 @@ static void FloppyWriteByte(
 bool FloppyMount(YPlatformState* platform, const char* path) {
   FILE* file = fopen(path, "rb");
   if (!file) {
-    fprintf(stderr, "Could not open floppy image '%s'\n", path);
+    APP_ERROR("floppy_open_failed", Y_LOG_STRING("path", path));
     return false;
   }
   const size_t bytes_read = fread(g_floppy_image, 1, kFloppyImageSize, file);
@@ -46,11 +48,10 @@ bool FloppyMount(YPlatformState* platform, const char* path) {
   fclose(file);
 
   if (!is_expected_size) {
-    fprintf(
-        stderr,
-        "Floppy image '%s' is not a %d KB image, which is the only format "
-        "supported\n",
-        path, kFloppyImageSize / 1024);
+    // 360KB is the only format there is.
+    APP_ERROR(
+        "floppy_wrong_size", Y_LOG_STRING("path", path),
+        Y_LOG_UINT("expected_bytes", kFloppyImageSize));
     return false;
   }
 

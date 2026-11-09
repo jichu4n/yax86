@@ -2,8 +2,14 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define Y_PIC_LOG(level, ...) \
-  Y_LOG(pic->config.logger, &YPICLogModule, level, __VA_ARGS__)
+#define Y_PIC_ERROR(...) \
+  Y_LOG(pic->config.logger, &YPICLogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define Y_PIC_WARN(...) \
+  Y_LOG(pic->config.logger, &YPICLogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define Y_PIC_INFO(...) \
+  Y_LOG(pic->config.logger, &YPICLogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define Y_PIC_DEBUG(...) \
+  Y_LOG(pic->config.logger, &YPICLogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 // ============================================================================
 // Constants
@@ -114,12 +120,12 @@ Y_PUBLIC void YPICInit(YPICState* pic) {
 
 Y_PUBLIC void YPICRaiseIRQ(YPICState* pic, uint8_t irq) {
   if (irq > 7) {
-    Y_PIC_LOG(Y_LOG_LEVEL_WARN, "ignoring out of range IRQ %u", irq);
+    Y_PIC_WARN("irq_out_of_range", Y_LOG_UINT("irq", irq));
     return;
   }
-  Y_PIC_LOG(
-      Y_LOG_LEVEL_DEBUG, "IRQ %u raised, imr %02X isr %02X", irq, pic->imr,
-      pic->isr);
+  Y_PIC_DEBUG(
+      "irq_raised", Y_LOG_UINT("irq", irq), Y_LOG_HEX8("imr", pic->imr),
+      Y_LOG_HEX8("isr", pic->isr));
   pic->irr |= (1 << irq);
   YPICUpdateUnmaskedRequest(pic);
 
@@ -210,14 +216,13 @@ Y_PUBLIC void YPICWritePort(YPICState* pic, uint16_t port, uint8_t value) {
             if (value & Y_PIC_OCW2_SL) {
               // Specific EOI: clear specified ISR bit.
               uint8_t irq = value & 0x07;
-              Y_PIC_LOG(Y_LOG_LEVEL_DEBUG, "specific EOI for IRQ %u", irq);
+              Y_PIC_DEBUG("specific_eoi", Y_LOG_UINT("irq", irq));
               pic->isr &= ~(1 << irq);
             } else {
               // Non-Specific EOI: clear highest priority ISR bit.
               for (uint8_t i = 0, isr_mask = 1; i < 8; ++i, isr_mask <<= 1) {
                 if (pic->isr & isr_mask) {
-                  Y_PIC_LOG(
-                      Y_LOG_LEVEL_DEBUG, "non-specific EOI for IRQ %u", i);
+                  Y_PIC_DEBUG("non_specific_eoi", Y_LOG_UINT("irq", i));
                   pic->isr &= ~isr_mask;
                   break;
                 }

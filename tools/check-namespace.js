@@ -48,6 +48,7 @@ const OWNERS = {
   Video: {camel: ['Video'], caps: 'VIDEO'},
   // Logger is the component's word for its state and config.
   Log: {camel: ['Logger', 'Log'], caps: 'LOG'},
+  Logfmt: {camel: ['Logfmt'], caps: 'LOGFMT'},
   // C's v prefix for the va_list form of a function stays at the front.
   SNPrintF: {camel: ['SNPrintF', 'VSNPrintF'], caps: 'SNPRINTF'},
   StaticVector: {camel: ['StaticVector'], caps: 'STATIC_VECTOR'},
@@ -72,6 +73,7 @@ const MODULE_OWNERS = {
 // headers is its own owner. common.h defines only macros, which need none.
 const UTIL_OWNERS = {
   'log.h': 'Log',
+  'logfmt.h': 'Logfmt',
   'snprintf.h': 'SNPrintF',
   'static_vector.h': 'StaticVector',
 };

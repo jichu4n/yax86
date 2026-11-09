@@ -7,8 +7,14 @@
 #include "types.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define Y_CPU_LOG(level, ...) \
-  Y_LOG(cpu->config.logger, &YCPULogModule, level, __VA_ARGS__)
+#define Y_CPU_ERROR(...) \
+  Y_LOG(cpu->config.logger, &YCPULogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define Y_CPU_WARN(...) \
+  Y_LOG(cpu->config.logger, &YCPULogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define Y_CPU_INFO(...) \
+  Y_LOG(cpu->config.logger, &YCPULogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define Y_CPU_DEBUG(...) \
+  Y_LOG(cpu->config.logger, &YCPULogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 // ============================================================================
 // CPU state
@@ -23,10 +29,10 @@ Y_PUBLIC void YCPUInit(YCPUState* cpu) {
     return;
   }
   if (num_entries == 0 || (num_entries & (num_entries - 1)) != 0) {
-    Y_CPU_LOG(
-        Y_LOG_LEVEL_ERROR,
-        "decode cache of %u entries is not a power of two, running without one",
-        (unsigned)num_entries);
+    // The CPU runs without a cache.
+    Y_CPU_ERROR(
+        "decode_cache_size_not_power_of_two",
+        Y_LOG_UINT("entries", num_entries));
     // The CPU's own copy, so a rejected cache is simply not there.
     cpu->config.decode_cache = NULL;
     return;
@@ -644,10 +650,9 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
     YCPUFetchNextInstructionStatus fetch_status =
         YCPUFetchNextInstructionCached(cpu, &scratch, &entry);
     if (fetch_status != Y_CPU_FETCH_SUCCESS) {
-      Y_CPU_LOG(
-          Y_LOG_LEVEL_ERROR, "%04X:%04X failed to fetch instruction, status %d",
-          cpu->registers[Y_CPU_CS], cpu->registers[Y_CPU_IP],
-          (int)fetch_status);
+      // CS:IP, which the logger adds, is where the fetch started.
+      Y_CPU_ERROR(
+          "instruction_fetch_failed", Y_LOG_INT("status", fetch_status));
       return Y_CPU_TICK_INVALID;
     }
 
@@ -680,9 +685,12 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
           &YCPUOpcodeTable[instruction->opcode];
       if (YCPUExecuteDecodedInstruction(cpu, instruction, metadata) !=
           Y_CPU_INSTRUCTION_EXECUTED) {
-        Y_CPU_LOG(
-            Y_LOG_LEVEL_ERROR, "%04X:%04X invalid instruction, opcode %02X",
-            instruction_cs, instruction_ip, instruction->opcode);
+        // IP has already moved past the instruction, so its own address
+        // goes in as well.
+        Y_CPU_ERROR(
+            "invalid_instruction", Y_LOG_HEX8("opcode", instruction->opcode),
+            Y_LOG_HEX16("instruction_cs", instruction_cs),
+            Y_LOG_HEX16("instruction_ip", instruction_ip));
         return Y_CPU_TICK_INVALID;
       }
       // The carry is a branch not taken until 2^32 instructions have run;

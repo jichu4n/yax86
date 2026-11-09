@@ -209,9 +209,10 @@ static uint32_t __uninitialized_ram(g_overclock_marker);
 // ============================================================================
 
 static void WriteLogLine(
-    Y_UNUSED void* context, const YLogModule* module, Y_UNUSED YLogLevel level,
-    Y_UNUSED uint64_t tick, const char* message, Y_UNUSED size_t length) {
-  printf("[%s] %s\n", module->name, message);
+    Y_UNUSED void* context, Y_UNUSED YLogKind kind,
+    Y_UNUSED const YLogModule* module, Y_UNUSED YLogLevel level,
+    const char* line, Y_UNUSED size_t length) {
+  printf("%s\n", line);
 }
 
 static bool BootIsOver(void) {

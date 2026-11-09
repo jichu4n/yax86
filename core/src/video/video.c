@@ -3,8 +3,14 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define Y_VIDEO_LOG(level, ...) \
-  Y_LOG(video->config.logger, &YVideoLogModule, level, __VA_ARGS__)
+#define Y_VIDEO_ERROR(...) \
+  Y_LOG(video->config.logger, &YVideoLogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define Y_VIDEO_WARN(...) \
+  Y_LOG(video->config.logger, &YVideoLogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define Y_VIDEO_INFO(...) \
+  Y_LOG(video->config.logger, &YVideoLogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define Y_VIDEO_DEBUG(...) \
+  Y_LOG(video->config.logger, &YVideoLogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 // Power-on 6845 register values for the IBM Monochrome Display.
 Y_FILE_PRIVATE const uint8_t
@@ -126,10 +132,11 @@ Y_PUBLIC void YVideoInit(YVideoState* video) {
     if (YVideoIsTextFontDrawable(&video->config.text_font)) {
       video->has_text_font = true;
     } else {
-      Y_VIDEO_LOG(
-          Y_LOG_LEVEL_ERROR,
-          "text font of %ux%u cells cannot be drawn, using the adapter's own",
-          video->config.text_font.width, video->config.text_font.height);
+      // The adapter's own font is drawn instead.
+      Y_VIDEO_ERROR(
+          "text_font_not_drawable",
+          Y_LOG_UINT("width", video->config.text_font.width),
+          Y_LOG_UINT("height", video->config.text_font.height));
     }
   }
 
@@ -695,11 +702,12 @@ Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
   // caused it rather than let the corruption surface somewhere else.
   uint32_t declared_pixels = (uint32_t)region.width * region.height;
   if (video->num_pixels_emitted_for_region != declared_pixels) {
-    Y_VIDEO_LOG(
-        Y_LOG_LEVEL_ERROR,
-        "render region %ux%u at (%u,%u) emitted %u pixels, expected %u",
-        region.width, region.height, region.origin.x, region.origin.y,
-        video->num_pixels_emitted_for_region, declared_pixels);
+    Y_VIDEO_ERROR(
+        "render_region_pixel_count_mismatch", Y_LOG_UINT("width", region.width),
+        Y_LOG_UINT("height", region.height), Y_LOG_UINT("x", region.origin.x),
+        Y_LOG_UINT("y", region.origin.y),
+        Y_LOG_UINT("emitted", video->num_pixels_emitted_for_region),
+        Y_LOG_UINT("expected", declared_pixels));
   }
 
   if (video->config.end_render_region) {

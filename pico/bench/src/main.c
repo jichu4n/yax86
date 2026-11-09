@@ -137,9 +137,10 @@ typedef struct BenchResult {
 // Only errors are logged, and only outside a run: anything chattier would put
 // host I/O in the measured path.
 static void BenchWriteLogLine(
-    Y_UNUSED void* context, const YLogModule* module, Y_UNUSED YLogLevel level,
-    Y_UNUSED uint64_t tick, const char* message, Y_UNUSED size_t length) {
-  printf("[%s] %s\n", module->name, message);
+    Y_UNUSED void* context, Y_UNUSED YLogKind kind,
+    Y_UNUSED const YLogModule* module, Y_UNUSED YLogLevel level,
+    const char* line, Y_UNUSED size_t length) {
+  printf("%s\n", line);
 }
 
 // Serve the boot floppy straight out of flash. There is nowhere to put a

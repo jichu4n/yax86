@@ -22,7 +22,7 @@ enum {
 // Log module for the FDC.
 Y_PUBLIC_HEADER const YLogModule YFDCLogModule = {
     .id = Y_FDC_LOG_MODULE_ID,
-    .name = "FDC",
+    .name = "fdc",
 };
 
 // Floppy disk format configuration.

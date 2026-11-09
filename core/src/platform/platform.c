@@ -7,8 +7,41 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define Y_PLATFORM_LOG(level, ...) \
-  Y_LOG(&platform->logger, &YPlatformLogModule, level, __VA_ARGS__)
+#define Y_PLATFORM_ERROR(...) \
+  Y_LOG(&platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define Y_PLATFORM_WARN(...) \
+  Y_LOG(&platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define Y_PLATFORM_INFO(...) \
+  Y_LOG(&platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define Y_PLATFORM_DEBUG(...) \
+  Y_LOG(&platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
+
+// The memory and port accessors' logs, out of line. Built where they are
+// logged, a log's fields take room in the accessor around them whether or not
+// they are ever written, and the accessors are on the hot path.
+Y_FILE_PRIVATE Y_NOINLINE void YPlatformLogUnmappedMemoryRead(
+    YPlatformState* platform, uint32_t address) {
+  Y_PLATFORM_DEBUG("unmapped_memory_read", Y_LOG_HEX20("address", address));
+}
+
+Y_FILE_PRIVATE Y_NOINLINE void YPlatformLogDiscardedMemoryWrite(
+    YPlatformState* platform, uint32_t address, uint8_t value) {
+  Y_PLATFORM_DEBUG(
+      "discarded_memory_write", Y_LOG_HEX20("address", address),
+      Y_LOG_HEX8("value", value));
+}
+
+Y_FILE_PRIVATE Y_NOINLINE void YPlatformLogUnmappedPortRead(
+    YPlatformState* platform, uint16_t port) {
+  Y_PLATFORM_WARN("unmapped_port_read", Y_LOG_HEX16("port", port));
+}
+
+Y_FILE_PRIVATE Y_NOINLINE void YPlatformLogUnmappedPortWrite(
+    YPlatformState* platform, uint16_t port, uint8_t value) {
+  Y_PLATFORM_WARN(
+      "unmapped_port_write", Y_LOG_HEX16("port", port),
+      Y_LOG_HEX8("value", value));
+}
 
 // How long until the next device needs attention, in CPU cycles from now.
 Y_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
@@ -196,7 +229,7 @@ YPlatformReadMemoryByte(YPlatformState* platform, uint32_t address) {
   // Logged at debug rather than warning level: scanning unmapped memory is
   // normal on a PC/XT. GLaBIOS reads every byte of 0xF6000-0xF7FFF looking
   // for option ROMs, for instance.
-  Y_PLATFORM_LOG(Y_LOG_LEVEL_DEBUG, "read from unmapped address %05X", address);
+  YPlatformLogUnmappedMemoryRead(platform, address);
   return 0xFF;
 }
 
@@ -228,10 +261,8 @@ Y_PUBLIC Y_HOT void YPlatformWriteMemoryByte(
     }
   }
   // Either unmapped, or a read-only region such as a ROM. Both discard the
-  // write, and both are logged, as they were before there was a direct path.
-  Y_PLATFORM_LOG(
-      Y_LOG_LEVEL_DEBUG, "write of %02X to unmapped address %05X", value,
-      address);
+  // write, and both are logged.
+  YPlatformLogDiscardedMemoryWrite(platform, address, value);
 }
 
 // Register an I/O port map entry in the platform state. Returns true if the
@@ -294,7 +325,7 @@ YPlatformReadPortByte(YPlatformState* platform, uint16_t port) {
   if (!entry || !entry->read_byte) {
     // Unlike unmapped memory, an unmapped port usually means a device is
     // missing from the port map, so this stays at warning level.
-    Y_PLATFORM_LOG(Y_LOG_LEVEL_WARN, "read from unmapped port %04X", port);
+    YPlatformLogUnmappedPortRead(platform, port);
     return 0xFF;
   }
   return entry->read_byte(entry, port);
@@ -307,8 +338,7 @@ Y_PUBLIC Y_HOT void YPlatformWritePortByte(
   YPlatformPortMapEntry* entry =
       YPlatformGetPortMapEntryForPort(platform, port);
   if (!entry || !entry->write_byte) {
-    Y_PLATFORM_LOG(
-        Y_LOG_LEVEL_WARN, "write of %02X to unmapped port %04X", value, port);
+    YPlatformLogUnmappedPortWrite(platform, port, value);
     return;
   }
   entry->write_byte(entry, port, value);
@@ -885,6 +915,23 @@ Y_FILE_PRIVATE void YPlatformInitVideo(YPlatformState* platform) {
   YPlatformRegisterPortMapEntry(platform, &port_entry);
 }
 
+// What the platform's logger stamps each log with: the tick count, and where
+// the CPU is. YCPUTick() moves IP past an instruction before running it, so
+// while an instruction runs - making the port or memory access a log is
+// about - CS:IP is the instruction after it, which is also what an 8086
+// pushes when an interrupt arrives.
+Y_FILE_PRIVATE uint64_t YPlatformGetLogTick(void* context) {
+  return ((YPlatformState*)context)->ticks;
+}
+
+Y_FILE_PRIVATE bool YPlatformGetLogLocation(
+    void* context, uint16_t* cs, uint16_t* ip) {
+  const YPlatformState* platform = (const YPlatformState*)context;
+  *cs = platform->cpu.registers[Y_CPU_CS];
+  *ip = platform->cpu.registers[Y_CPU_IP];
+  return true;
+}
+
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
 //   - The physical memory size is not between 64K and 640K.
@@ -897,33 +944,36 @@ Y_PUBLIC bool YPlatformInit(YPlatformState* platform) {
           Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE ||
       platform->config.physical_memory_size >
           Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE) {
-    Y_LOG(
-        &platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_ERROR,
-        "physical_memory_size %u is not between %u and %u bytes",
-        (unsigned)platform->config.physical_memory_size,
-        (unsigned)Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE,
-        (unsigned)Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE);
+    Y_PLATFORM_ERROR(
+        "invalid_physical_memory_size",
+        Y_LOG_UINT("size", platform->config.physical_memory_size),
+        Y_LOG_UINT("min", Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE),
+        Y_LOG_UINT("max", Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE));
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
   if (platform->config.physical_memory == NULL) {
-    Y_LOG(
-        &platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_ERROR,
-        "no physical_memory buffer was provided");
+    Y_PLATFORM_ERROR("missing_physical_memory");
     return false;
   }
   // The video adapter reads and writes this directly, so an absent buffer
   // would leave the screen permanently blank with nothing to say why.
   if (platform->config.vram == NULL) {
-    Y_LOG(
-        &platform->logger, &YPlatformLogModule, Y_LOG_LEVEL_ERROR,
-        "no vram buffer was provided");
+    Y_PLATFORM_ERROR("missing_vram");
     return false;
   }
 
   YPlatformInitCPU(platform);
+  // Only once the CPU is up: a log from the config checks above would
+  // otherwise give the location of an instruction that is not running.
+  const YLoggerSource log_source = {
+      .context = platform,
+      .get_tick = YPlatformGetLogTick,
+      .get_location = YPlatformGetLogLocation,
+  };
+  YLoggerSetSource(&platform->logger, &log_source);
   YPlatformInitMemoryMap(platform);
   YPlatformInitBIOS(platform);
   YPlatformInitPIC(platform);

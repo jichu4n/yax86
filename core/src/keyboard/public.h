@@ -54,7 +54,7 @@ enum {
 // Log module for the Keyboard.
 Y_PUBLIC_HEADER const YLogModule YKeyboardLogModule = {
     .id = Y_KEYBOARD_LOG_MODULE_ID,
-    .name = "KEYBOARD",
+    .name = "keyboard",
 };
 
 struct YKeyboardState;

@@ -3,8 +3,14 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define Y_FDC_LOG(level, ...) \
-  Y_LOG(fdc->config.logger, &YFDCLogModule, level, __VA_ARGS__)
+#define Y_FDC_ERROR(...) \
+  Y_LOG(fdc->config.logger, &YFDCLogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define Y_FDC_WARN(...) \
+  Y_LOG(fdc->config.logger, &YFDCLogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define Y_FDC_INFO(...) \
+  Y_LOG(fdc->config.logger, &YFDCLogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define Y_FDC_DEBUG(...) \
+  Y_LOG(fdc->config.logger, &YFDCLogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -67,22 +73,26 @@ Y_FILE_PRIVATE inline void YFDCRaiseIRQ6(YFDCState* fdc) {
 
 // Transition into execution phase.
 Y_FILE_PRIVATE inline void YFDCStartCommandExecution(YFDCState* fdc) {
-  Y_FDC_LOG(
-      Y_LOG_LEVEL_DEBUG, "executing command %02X with %u parameter bytes",
-      fdc->current_command ? fdc->current_command->opcode : 0,
-      (unsigned)YFDCCommandBufferLength(&fdc->command_buffer) - 1);
+  Y_FDC_DEBUG(
+      "command_started",
+      Y_LOG_HEX8(
+          "command", fdc->current_command ? fdc->current_command->opcode : 0),
+      Y_LOG_UINT(
+          "parameter_bytes",
+          YFDCCommandBufferLength(&fdc->command_buffer) - 1));
   fdc->phase = Y_FDC_PHASE_EXECUTION;
   fdc->current_command_ticks = 0;
 }
 
 // Transition into result phase after command execution.
 Y_FILE_PRIVATE inline void YFDCFinishCommandExecution(YFDCState* fdc) {
-  Y_FDC_LOG(
-      Y_LOG_LEVEL_DEBUG, "command finished with %u result bytes, st0 %02X",
-      (unsigned)YFDCResultBufferLength(&fdc->result_buffer),
-      YFDCResultBufferLength(&fdc->result_buffer) > 0
-          ? *YFDCResultBufferGet(&fdc->result_buffer, 0)
-          : 0);
+  Y_FDC_DEBUG(
+      "command_finished",
+      Y_LOG_UINT("result_bytes", YFDCResultBufferLength(&fdc->result_buffer)),
+      Y_LOG_HEX8(
+          "st0", YFDCResultBufferLength(&fdc->result_buffer) > 0
+                     ? *YFDCResultBufferGet(&fdc->result_buffer, 0)
+                     : 0));
   if (YFDCResultBufferLength(&fdc->result_buffer) == 0) {
     // No result bytes to send, go back to idle phase.
     fdc->phase = Y_FDC_PHASE_IDLE;
@@ -683,7 +693,7 @@ Y_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
       fdc->current_command = YFDCFindCommandMetadata(opcode);
 
       if (!fdc->current_command) {
-        Y_FDC_LOG(Y_LOG_LEVEL_WARN, "invalid command opcode %02X", opcode);
+        Y_FDC_WARN("invalid_command", Y_LOG_HEX8("command", opcode));
         // Invalid command. Set up the result phase with an error.
         YFDCResultBufferClear(&fdc->result_buffer);
         uint8_t status = Y_FDC_ST0_INVALID_COMMAND;

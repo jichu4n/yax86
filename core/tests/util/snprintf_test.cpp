@@ -98,3 +98,13 @@ TEST(SNPrintFTest, StringPadding) {
   EXPECT_EQ(ret, 5);
   EXPECT_STREQ(buffer, "   Hi");
 }
+
+TEST(SNPrintFTest, LongLong) {
+  char buffer[100];
+  int ret = YSNPrintF(
+      buffer, sizeof(buffer), "%llu %lld %llX", 18446744073709551615ULL,
+      -9223372036854775807LL - 1, 0x0123456789ABCDEFULL);
+  EXPECT_STREQ(
+      buffer, "18446744073709551615 -9223372036854775808 123456789ABCDEF");
+  EXPECT_EQ(ret, 57);
+}

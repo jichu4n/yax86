@@ -41,6 +41,14 @@ TEST_F(LogModuleIDTest, IDsFitInModuleMask) {
   }
 }
 
+// The IDs above these are left for hosts to give modules of their own.
+TEST_F(LogModuleIDTest, IDsAreTheCores) {
+  for (const YLogModule* module : kAllModules) {
+    EXPECT_LT(module->id, Y_LOG_FIRST_HOST_MODULE_ID)
+        << "module " << module->name;
+  }
+}
+
 TEST_F(LogModuleIDTest, NamesAreNonEmpty) {
   for (const YLogModule* module : kAllModules) {
     ASSERT_NE(module->name, nullptr);

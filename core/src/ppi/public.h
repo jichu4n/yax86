@@ -68,7 +68,7 @@ enum {
 // Log module for the PPI.
 Y_PUBLIC_HEADER const YLogModule YPPILogModule = {
     .id = Y_PPI_LOG_MODULE_ID,
-    .name = "PPI",
+    .name = "ppi",
 };
 
 // I/O ports exposed by the PPI.

@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+#include "app_log.h"
+
 // The mounted image, held in memory for the lifetime of the program. A blank
 // disk is all zeroes, which is what an unpartitioned drive looks like.
 static uint8_t g_hdd_image[Y_HDC_GEOMETRY_10MB_IMAGE_SIZE];
@@ -23,7 +25,7 @@ bool HardDiskAttach(YPlatformState* platform, const char* path) {
   if (path) {
     FILE* file = fopen(path, "rb");
     if (!file) {
-      fprintf(stderr, "Could not open hard disk image '%s'\n", path);
+      APP_ERROR("hard_disk_open_failed", Y_LOG_STRING("path", path));
       return false;
     }
     const size_t bytes_read =
@@ -36,11 +38,10 @@ bool HardDiskAttach(YPlatformState* platform, const char* path) {
     fclose(file);
 
     if (!is_expected_size) {
-      fprintf(
-          stderr,
-          "Hard disk image '%s' is not a %d MB image, which is the only "
-          "geometry supported\n",
-          path, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE / (1024 * 1024));
+      // The 10MB drive is the only geometry there is.
+      APP_ERROR(
+          "hard_disk_wrong_size", Y_LOG_STRING("path", path),
+          Y_LOG_UINT("expected_bytes", Y_HDC_GEOMETRY_10MB_IMAGE_SIZE));
       return false;
     }
   }
