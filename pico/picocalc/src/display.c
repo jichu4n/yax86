@@ -33,9 +33,18 @@ enum {
   kColorYellow = 14,
   kColorWhite = 15,
 
-  // A screenshot's pixels a reply line, which with the rest of the line keeps
-  // it inside the logger's 256 bytes.
-  kScreenshotPixelsPerLine = 40,
+  // A screenshot is sent as runs of one color: the color in RGB565 and how
+  // many pixels it covers, less one, as six hex digits. A screen is a few
+  // colors in long runs - a text screen comes to about 10,000 runs for its
+  // 102,400 pixels - so this is about a seventh of the pixels in hex, and
+  // what is left of the time is reading the panel.
+  kScreenshotMaxRun = 256,
+  kScreenshotDigitsPerRun = 6,
+  // Runs a reply line, which with the rest of the line keeps it inside the
+  // logger's 256 bytes.
+  kScreenshotRunsPerLine = 26,
+  // Pixels read from the panel at a time.
+  kScreenshotReadPixels = 40,
 };
 
 // What core 0 hands core 1, one word through the inter-core FIFO each.
@@ -161,32 +170,61 @@ static void DrawStatus(void) {
   }
 }
 
+// The runs of a screenshot not yet sent, as hex.
+static char
+    g_screenshot_runs[kScreenshotRunsPerLine * kScreenshotDigitsPerRun + 1];
+static uint8_t g_screenshot_num_runs;
+
+// Send the runs gathered so far as a reply line.
+static void FlushScreenshotRuns(uint32_t id, const char* command) {
+  if (g_screenshot_num_runs == 0) {
+    return;
+  }
+  Y_LOG_REPLY(
+      &g_render_logger, id, command, Y_LOG_STRING("runs", g_screenshot_runs));
+  g_screenshot_num_runs = 0;
+}
+
+static void AddScreenshotRun(
+    uint32_t id, const char* command, uint16_t color, uint16_t length) {
+  // Room for the null snprintf() writes after the digits.
+  snprintf(
+      &g_screenshot_runs[g_screenshot_num_runs * kScreenshotDigitsPerRun],
+      kScreenshotDigitsPerRun + 1, "%04X%02X", color, (uint8_t)(length - 1));
+  if (++g_screenshot_num_runs == kScreenshotRunsPerLine) {
+    FlushScreenshotRuns(id, command);
+  }
+}
+
 // Read the whole panel back and send it to the host, as the reply to the
-// screenshot command: a line with its size, then the pixels, in RGB565 as hex,
-// a part of a row a line. Read back rather than drawn again, so that it is
-// what the panel holds, however it came to hold it.
+// screenshot command: a line with its size, then the pixels, left to right
+// and top to bottom, as runs of one color. Read back rather than drawn again,
+// so that it is what the panel holds, however it came to hold it.
 static void SendScreenshot(uint32_t id) {
   static const char kCommand[] = "screenshot";
   Y_LOG_REPLY(
       &g_render_logger, id, kCommand, Y_LOG_UINT("width", kLcdWidth),
-      Y_LOG_UINT("height", kLcdHeight), Y_LOG_STRING("format", "rgb565"));
-  uint16_t pixels[kScreenshotPixelsPerLine];
-  // Four hex digits a pixel, and room for the null snprintf() writes after
-  // the last.
-  char hex[kScreenshotPixelsPerLine * 4 + 1];
+      Y_LOG_UINT("height", kLcdHeight), Y_LOG_STRING("format", "rgb565_runs"));
+  uint16_t pixels[kScreenshotReadPixels];
+  uint16_t color = 0;
+  uint16_t length = 0;
+  g_screenshot_num_runs = 0;
   LcdBeginRead(0, 0, kLcdWidth, kLcdHeight);
-  for (uint16_t y = 0; y < kLcdHeight; ++y) {
-    for (uint16_t x = 0; x < kLcdWidth; x += kScreenshotPixelsPerLine) {
-      LcdReadPixels(pixels, kScreenshotPixelsPerLine);
-      for (uint8_t i = 0; i < kScreenshotPixelsPerLine; ++i) {
-        snprintf(&hex[i * 4], 5, "%04X", pixels[i]);
+  for (uint32_t read = 0; read < (uint32_t)kLcdWidth * kLcdHeight;
+       read += kScreenshotReadPixels) {
+    LcdReadPixels(pixels, kScreenshotReadPixels);
+    for (uint8_t i = 0; i < kScreenshotReadPixels; ++i) {
+      if (length > 0 && (pixels[i] != color || length == kScreenshotMaxRun)) {
+        AddScreenshotRun(id, kCommand, color, length);
+        length = 0;
       }
-      Y_LOG_REPLY(
-          &g_render_logger, id, kCommand, Y_LOG_UINT("row", y),
-          Y_LOG_UINT("x", x), Y_LOG_STRING("pixels", hex));
+      color = pixels[i];
+      ++length;
     }
   }
   LcdEndRead();
+  AddScreenshotRun(id, kCommand, color, length);
+  FlushScreenshotRuns(id, kCommand);
   Y_LOG_REPLY(&g_render_logger, id, kCommand, Y_LOG_STRING("status", "ok"));
 }
 
