@@ -2161,10 +2161,11 @@ SRAM, at #89:
   system clock to 250MHz, brings up the keyboard controller, and boots MS-DOS
   3.30 off an image on the SD card, or off the one in flash without it, with
   a hard disk image on the card attached as well if there is one, and with
-  the guest's text screen on the LCD and status lines below it - drawn by the second core, while the first runs
-  the machine. The machine is paced to real
-  time, keeps running once it reaches the `A>` prompt, and takes the
-  PicoCalc's keyboard as its own. DOS's date and time questions are still
+  the guest's screen on the LCD and status lines below it - drawn by the
+  second core, while the first runs the machine. The machine is paced to
+  real time, keeps running once it reaches the `A>` prompt, takes the
+  PicoCalc's keyboard as its own, and plays the PC speaker on its
+  speakers. DOS's date and time questions are still
   answered by watching the screen, the way `pico/bench` does it: there is no
   clock to set them from, and it keeps the boot the `dos-boot` workload.
 - Like `pico/bench` it is a consumer of the core, uses only the public
@@ -2592,6 +2593,31 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   lands in flash, which nothing here has confirmed. The two images are 8-byte aligned, and `.bss` is sorted by
   alignment before name, so they land ahead of guest RAM and move it.
 
+### The speaker
+
+- **The PC speaker plays on the PicoCalc's two speakers**, from
+  `src/speaker.c`. The core reports it as the frequency of the square wave
+  it should make, or 0 for silence, and one PWM slice makes exactly that:
+  GP26 and GP27 are its two channels, so the slice's period is set to the
+  tone and both duties to half, and the mainboard filters and amplifies
+  them. Nothing runs per sample or per batch - only when the tone changes.
+- The divider is the smallest that lets the 16-bit counter reach the tone,
+  for the finest period, so every tone the PIT can make is played: its
+  lowest, 18Hz, needs a divider of 212 at 250MHz. A tone above 20kHz is
+  played as silence, since nothing hears it and the amplifier need not be
+  handed it.
+- **A tone starts and stops at the batch it was set in**, not at the exact
+  emulated moment, because a batch runs faster than real time and then
+  waits. That moves each edge by up to a batch, about 10ms - inaudible in
+  a tune, but a click a few milliseconds long comes out longer or shorter
+  than it should.
+- The report's `speaker` group has the tone asked for, the tone played -
+  which is how a test checks the speaker without listening - and how many
+  times it has changed. GLaBIOS's POST beep is two changes.
+- The speaker cannot click or play the digitized sound some software makes
+  by toggling the speaker bit directly: the core reports a frequency, not
+  the speaker line - see `YPlatformConfig.set_pc_speaker_frequency`.
+
 ### Commands over USB
 
 - **A host drives the runtime with commands** on the same serial port it
@@ -2603,7 +2629,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `pacing` |
+  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `speaker`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |

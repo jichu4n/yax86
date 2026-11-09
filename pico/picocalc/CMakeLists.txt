@@ -129,6 +129,7 @@ add_executable(yax86_picocalc
     src/runtime_log.c
     src/sdcard.c
     src/southbridge.c
+    src/speaker.c
     src/text.c
     src/typing.c
     "${fatfs_dir}/ff.c"
@@ -161,6 +162,7 @@ target_link_libraries(yax86_picocalc PRIVATE
     pico_multicore
     hardware_i2c
     hardware_pio
+    hardware_pwm
     hardware_spi
     hardware_vreg
     hardware_watchdog

@@ -37,6 +37,7 @@
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
+#include "speaker.h"
 #include "typing.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
@@ -480,6 +481,11 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("stale_keys", keyboard.stale_keys),
       Y_LOG_UINT("aborts", keyboard.aborts),
       Y_LOG_UINT("timeouts", keyboard.timeouts));
+  const SpeakerStats speaker = SpeakerGetStats();
+  REPLY_GROUP(
+      command, "speaker", Y_LOG_UINT("frequency_hz", speaker.frequency_hz),
+      Y_LOG_UINT("output_hz", speaker.output_hz),
+      Y_LOG_UINT("changes", speaker.changes));
   REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
@@ -508,6 +514,11 @@ static void AnnounceToNewHost(void) {
 // The machine
 // ============================================================================
 
+static void SetPCSpeakerFrequency(
+    Y_UNUSED YPlatformState* platform, uint32_t frequency_hz) {
+  SpeakerSetFrequency(frequency_hz);
+}
+
 static bool InitMachine(void) {
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_machine_log_config;
@@ -518,6 +529,7 @@ static bool InitMachine(void) {
   config->video_text_font.glyphs = &kFont4x10[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
+  config->set_pc_speaker_frequency = SetPCSpeakerFrequency;
   if (!YPlatformInit(&g_platform)) {
     return false;
   }
@@ -935,6 +947,7 @@ int main(void) {
 
   g_status.lcd_spi_hz = DisplayStart();
   SouthbridgeInit();
+  SpeakerInit();
   g_status.southbridge_answered =
       SouthbridgeReadVersion(&g_status.southbridge_version);
   FloppyOpen();
