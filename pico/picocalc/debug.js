@@ -1,20 +1,23 @@
 #!/usr/bin/env node
 
-// Drives the PicoCalc runtime over USB serial: reads its screen, types into
-// the guest and asks for its report, through the commands in src/command.h.
+// Drives the PicoCalc runtime over USB serial: reads its screen, presses keys
+// for the guest and asks for its report, through the commands in
+// src/command.h.
 //
 //   ./debug.js screen [--attrs]
 //   ./debug.js screenshot screen.png
 //   ./debug.js type 'DIR C:\r'
 //   ./debug.js key f6 [--state press|release]
-//   ./debug.js scancode 0x52
 //   ./debug.js wait 'A>' [--timeout SECONDS]
 //   ./debug.js report
 //   ./debug.js ping
 //   ./debug.js run SCRIPT
 //
-// Text to type takes \r, \n, \t, \e, \\ and \xNN escapes, since a shell makes
-// it awkward to pass the characters themselves. A pattern to wait for is a
+// The board takes a key at a time, as the PicoCalc's keyboard sends them, so
+// text to type is sent as the keys that type it: a character's own key, with
+// Shift held around the ones that need it, as a hand would. It takes \r, \n,
+// \t, \b, \e and \\ escapes, since a shell makes it awkward to pass the
+// characters themselves. A pattern to wait for is a
 // JavaScript regular expression, matched against the screen's rows joined by
 // newlines, each row padded with spaces to the screen's width, and with ^ and
 // $ matching at the start and end of each row.
@@ -22,9 +25,13 @@
 // A script is the same commands a line each - "type DIR\r", "wait A>",
 // "sleep 1.5" - with # for a comment, run in order in one session. A wait
 // that times out stops the script and exits non-zero, which is what makes a
-// script a test. A wait matches whatever is on the screen, output from before
-// the script included, so a script clears the screen first - "type CLS\r" -
-// if what it waits for could already be there.
+// script a test.
+//
+// A wait matches whatever is on the screen, and a key is answered once it is
+// queued, not once the guest has it, so a wait straight after typing can see
+// the screen from before. Wait for something only the new input can produce:
+// after "type CLS\r", the prompt alone on a blank screen -
+// "wait ^A> *\n(?![\s\S]*\S)" - rather than any prompt.
 //
 // A screenshot is the panel read back, all 320x320 of it - the guest's screen
 // and the status lines below it, as the panel holds them - written as a PNG.
@@ -54,6 +61,21 @@ if ([...kCP437].length !== 256) {
 }
 const kCP437Characters = [...kCP437];
 
+// How long to wait before sending again a key the board had no room for.
+const kKeyRetryMs = 50;
+// The keys for the characters text can have that are not printable, and for
+// the space, which a key name cannot be.
+const kTextKeyNames = {
+  '\r': 'enter',
+  '\n': 'enter',
+  '\t': 'tab',
+  '\b': 'backspace',
+  '\x1b': 'esc',
+  ' ': 'space',
+};
+// The characters typed with Shift held, other than the capital letters.
+const kShiftedSymbols = '~!@#$%^&*()_+{}|:"<>?';
+
 // How long a command may take to be answered, and how often a wait looks at
 // the screen.
 const kReplyTimeoutMs = 5000;
@@ -64,18 +86,18 @@ const kScreenshotTimeoutMs = 30000;
 
 // Undo the escapes text to type is given with.
 function unescape(text) {
-  return text.replace(/\\(x[0-9A-Fa-f]{2}|.)/g, (match, code) => {
-    switch (code[0]) {
+  return text.replace(/\\(.)/g, (match, code) => {
+    switch (code) {
       case 'r':
         return '\r';
       case 'n':
         return '\n';
       case 't':
         return '\t';
+      case 'b':
+        return '\b';
       case 'e':
         return '\x1b';
-      case 'x':
-        return String.fromCharCode(parseInt(code.slice(1), 16));
       default:
         return code;
     }
@@ -224,14 +246,40 @@ class Board {
     return encodePNG(width, height, rgb);
   }
 
-  // Wait for the keys a type or key command queued to have been sent.
-  async drainKeys() {
+  // Press, release or tap a key by name. A key the board has no room for
+  // is refused and not queued, so it is sent again until there is room.
+  async key(name, state) {
+    const args = state === undefined ? {name} : {name, state};
     for (;;) {
-      const lines = await this.command('ping');
-      if (toNumber(lines[lines.length - 1].keys_queued) === 0) {
+      try {
+        await this.command('key', args);
         return;
+      } catch (e) {
+        if (!e.message.endsWith('queue_full')) {
+          throw e;
+        }
+        await delay(kKeyRetryMs);
       }
-      await delay(kWaitPollMs);
+    }
+  }
+
+  // Type text, as the keys that type it.
+  async type(text) {
+    for (const character of text) {
+      const name = kTextKeyNames[character] ?? character;
+      const shifted =
+        (character >= 'A' && character <= 'Z') ||
+        kShiftedSymbols.includes(character);
+      if (name === character && (character < ' ' || character > '~')) {
+        throw new Error(`cannot type ${formatValue(character)}`);
+      }
+      if (shifted) {
+        await this.key('shift', 'press');
+      }
+      await this.key(name);
+      if (shifted) {
+        await this.key('shift', 'release');
+      }
     }
   }
 
@@ -273,21 +321,10 @@ async function runStep(board, verb, argument, options) {
       return true;
     }
     case 'type':
-      await board.command('type', {text: unescape(argument)});
-      await board.drainKeys();
+      await board.type(unescape(argument));
       return true;
-    case 'key': {
-      const args = {name: rest[0]};
-      const state = rest[1] ?? options.state;
-      if (state !== undefined) {
-        args.state = state;
-      }
-      await board.command('key', args);
-      await board.drainKeys();
-      return true;
-    }
-    case 'scancode':
-      await board.command('key', {scancode: rest[0]});
+    case 'key':
+      await board.key(rest[0], rest[1] ?? options.state);
       return true;
     case 'wait': {
       const pattern = new RegExp(argument, 'm');
@@ -338,8 +375,7 @@ async function main() {
   if (positionals.length === 0) {
     console.error(
       'Usage: debug.js [--quiet] screen [--attrs] | screenshot FILE.png | ' +
-        'type TEXT | ' +
-        'key NAME [--state press|release] | scancode CODE | ' +
+        'type TEXT | key NAME [--state press|release] | ' +
         'wait PATTERN [--timeout SECONDS] | report | ping | run SCRIPT'
     );
     return 2;
