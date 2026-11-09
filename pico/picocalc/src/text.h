@@ -21,4 +21,12 @@ void TextDrawString(
     uint8_t column, uint8_t row, const char* text, uint16_t foreground,
     uint16_t background);
 
+// Draw length cells starting at a cell, each with its own colors: attrs holds
+// a CGA attribute for each, the foreground in the low nibble and the
+// background in the high, as the guest's text modes have them, and palette
+// the 16 colors they index. Clipped at the right edge of the screen.
+void TextDrawCells(
+    uint8_t column, uint8_t row, const char* chars, const uint8_t* attrs,
+    uint8_t length, const uint16_t palette[16]);
+
 #endif  // YAX86_PICOCALC_TEXT_H

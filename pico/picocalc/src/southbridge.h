@@ -39,7 +39,7 @@ typedef struct SouthbridgeKeyEvent {
 
 // How the key FIFO poll has gone, for the report.
 typedef struct SouthbridgePollStats {
-  // Reads of the FIFO that completed, and how many of them held a key.
+  // Reads that completed, the battery's included, and how many held a key.
   uint32_t reads;
   uint32_t keys;
   // Keys dropped because they were already queued when the poll started.
@@ -61,5 +61,19 @@ typedef struct SouthbridgePollStats {
 bool SouthbridgePollKey(SouthbridgeKeyEvent* event);
 
 SouthbridgePollStats SouthbridgeGetPollStats(void);
+
+// The battery, as the controller last reported it. The key FIFO poll reads it
+// every few seconds in place of the FIFO, and the controller itself only
+// measures it every 20 seconds.
+typedef struct SouthbridgeBattery {
+  // Whether there is a reading. There is none until the first read, nor
+  // while the controller reports no battery - it reports 0% then - nor from
+  // firmware that answers the register with something out of range.
+  bool known;
+  uint8_t percent;
+  bool charging;
+} SouthbridgeBattery;
+
+SouthbridgeBattery SouthbridgeGetBattery(void);
 
 #endif  // YAX86_PICOCALC_SOUTHBRIDGE_H

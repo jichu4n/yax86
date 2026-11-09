@@ -32,12 +32,14 @@
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
 #include "keymap.h"
+#include "menu.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
 #include "speaker.h"
+#include "status_bar.h"
 #include "typing.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
@@ -70,6 +72,10 @@ enum {
 
   // Enter, which answers DOS's date and time questions.
   kEnterScancode = 0x1C,
+  // The keyboard controller's codes for the Shift keys, which together open
+  // the menu.
+  kKeyLeftShift = 0xA2,
+  kKeyRightShift = 0xA3,
   // Emulated cycles between looks at the screen, 20 a second.
   kBootPollCycles = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 20,
   // How much emulated time a boot may take before it is taken to have gone
@@ -80,8 +86,19 @@ enum {
   // whichever was later, before it is blanked. A static image left showing for
   // hours can leave its mark on the panel. A key turns it on again.
   kScreenOnMs = 30 * 1000,
-  // How often the status lines are brought up to date once the boot is over.
-  kStatusUpdateMs = 1000,
+  // How often the status rows are composed again. Often enough that a drive's
+  // light comes on while it is in use; core 1 is only handed them, and draws
+  // only the rows that changed, when something has.
+  kStatusUpdateMs = 100,
+  // How long the window is that the machine's speed is judged over, for the
+  // status rows' warning that it has fallen behind real time.
+  kSlowWindowUs = 1000 * 1000,
+  // The battery level below which the status rows say it is low, and the one
+  // it has to come back above before they say so again.
+  kBatteryLowPercent = 10,
+  kBatteryRecoveredPercent = 15,
+  // How long a menu-paused loop sleeps between looks at the keyboard.
+  kPausedPollMs = 10,
   // How often the loop looks for a newly attached host once the machine has
   // stopped.
   kStoppedPollMs = 100,
@@ -100,6 +117,10 @@ enum {
   kOverclockAttemptMarker = 0x0C10C4ED,
   // How long the core voltage is given to settle before the clock is raised.
   kVoltageSettleUs = 10 * 1000,
+
+  // The BIOS's keyboard flags, in the BIOS data area: its lock and insert
+  // states.
+  kBIOSKeyboardFlagsAddress = 0x417,
 
   // The BIOS's count of timer ticks since midnight, in the BIOS data area,
   // which is the time of day DOS reports. A tick is 65,536 counts of the
@@ -189,8 +210,10 @@ static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
 // them is that much slower for.
 static uint64_t g_command_us;
-// Whether the status lines have changed since core 1 was last handed them.
-static bool g_status_changed;
+// Status rows composed that core 1 has not been handed yet, because it was
+// still drawing the last ones.
+static DisplayStatus g_status_rows;
+static bool g_status_rows_pending;
 
 // How far the machine has got in emulated time, and what pacing it against
 // real time has cost.
@@ -210,6 +233,10 @@ typedef struct RunClock {
   uint64_t waited_us;
   // Real time the machine fell behind by and did not make up.
   uint64_t dropped_us;
+  // Host time spent with the machine paused for the menu, and when the pause
+  // under way, if any, began.
+  uint64_t paused_us;
+  uint64_t pause_start_us;
 } RunClock;
 
 static RunClock g_clock;
@@ -232,7 +259,14 @@ static bool BootIsOver(void) {
 // rather than waiting for real time to catch up with it.
 static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
-static uint64_t BusyUs(void) { return ElapsedUs() - g_clock.waited_us; }
+static uint64_t PausedUs(void) {
+  return g_clock.paused_us +
+         (MenuIsOpen() ? time_us_64() - g_clock.pause_start_us : 0);
+}
+
+static uint64_t BusyUs(void) {
+  return ElapsedUs() - g_clock.waited_us - PausedUs();
+}
 
 // The time of day the guest's BIOS keeps, which is what DOS reports, in
 // milliseconds. It counts from POST, since the date and time questions are
@@ -301,16 +335,17 @@ static void FormatSpeedLine(char* buffer, size_t size) {
 // since the last time the line was drawn.
 static void FormatClockLine(char* buffer, size_t size) {
   static uint64_t window_start_us;
-  static uint64_t window_waited_us;
+  static uint64_t window_idle_us;
   const uint64_t now_us = ElapsedUs();
+  const uint64_t idle_now_us = g_clock.waited_us + PausedUs();
   const uint64_t window_us = now_us - window_start_us;
-  const uint64_t waited_us = g_clock.waited_us - window_waited_us;
+  const uint64_t waited_us = idle_now_us - window_idle_us;
   const uint32_t busy_percent =
       window_us > 0 && waited_us <= window_us
           ? (uint32_t)((window_us - waited_us) * 100 / window_us)
           : 0;
   window_start_us = now_us;
-  window_waited_us = g_clock.waited_us;
+  window_idle_us = idle_now_us;
 
   const uint64_t guest_ds = GuestClockMs() / 100;
   const uint64_t real_ds = now_us / (100 * kMicrosecondsPerMillisecond);
@@ -398,22 +433,89 @@ static void FormatDiskLine(char* buffer, size_t size) {
       (unsigned long long)(card_ms % kMillisecondsPerSecond));
 }
 
-// Hand core 1 the status lines, unless it is still drawing the last ones.
-// Returns whether it took them.
-static bool HandOverStatus(void) {
-  DisplayStatus* status = DisplayBeginStatus();
-  if (status == NULL) {
-    return false;
+// The menu's status page: what the runtime found, and what running the machine
+// has cost so far.
+static void DescribeStatus(MenuStatusLine lines[kMenuStatusLines]) {
+  static const char* const kLabels[kMenuStatusLines] = {
+      "System", "Boot", "Speed", "Clock", "Display", "Disk",
+  };
+  for (uint8_t i = 0; i < kMenuStatusLines; ++i) {
+    lines[i].label = kLabels[i];
   }
-  const size_t size = sizeof(status->values[0]);
-  FormatSystemLine(status->values[kDisplayStatusSystem], size);
-  FormatBootLine(status->values[kDisplayStatusBoot], size);
-  FormatSpeedLine(status->values[kDisplayStatusSpeed], size);
-  FormatClockLine(status->values[kDisplayStatusClock], size);
-  FormatDisplayLine(status->values[kDisplayStatusDisplay], size);
-  FormatDiskLine(status->values[kDisplayStatusDisk], size);
+  const size_t size = sizeof(lines[0].value);
+  FormatSystemLine(lines[0].value, size);
+  FormatBootLine(lines[1].value, size);
+  FormatSpeedLine(lines[2].value, size);
+  FormatClockLine(lines[3].value, size);
+  FormatDisplayLine(lines[4].value, size);
+  FormatDiskLine(lines[5].value, size);
+}
+
+// How fast the machine has run against real time over the last window, in
+// percent, if it has fallen behind and dropped time in it; 0 if it has kept
+// up.
+static uint32_t SlowPercent(void) {
+  static uint64_t window_start_us;
+  static uint64_t window_start_cycles;
+  static uint64_t window_start_dropped_us;
+  static uint32_t percent;
+  const uint64_t now_us = time_us_64();
+  if (now_us - window_start_us < kSlowWindowUs) {
+    return percent;
+  }
+  const uint64_t real_us = now_us - window_start_us;
+  const uint64_t emulated_us = (g_clock.cycles - window_start_cycles) *
+                               kMicrosecondsPerSecond /
+                               Y_PLATFORM_CPU_CYCLES_PER_SECOND;
+  const bool dropped = g_clock.dropped_us != window_start_dropped_us;
+  percent = dropped && !MenuIsOpen() && window_start_us != 0
+                ? (uint32_t)(emulated_us * 100 / real_us)
+                : 0;
+  window_start_us = now_us;
+  window_start_cycles = g_clock.cycles;
+  window_start_dropped_us = g_clock.dropped_us;
+  return percent;
+}
+
+// Say once that the battery is low, until it has charged back up.
+static void WarnOfLowBattery(SouthbridgeBattery battery) {
+  static bool warned;
+  if (!battery.known) {
+    return;
+  }
+  if (!warned && !battery.charging && battery.percent < kBatteryLowPercent) {
+    StatusBarPostMessage("Battery low");
+    warned = true;
+  } else if (battery.percent >= kBatteryRecoveredPercent) {
+    warned = false;
+  }
+}
+
+// Compose the status rows, and hand them to core 1 if they changed, or are
+// still waiting from the last time it was busy.
+static void UpdateStatusRows(void) {
+  StatusBarState state;
+  state.drive_a = FloppyGetImage();
+  state.drive_c = HardDiskGetImage();
+  state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
+  state.guest_seconds = (uint32_t)(GuestClockMs() / kMillisecondsPerSecond);
+  state.battery = SouthbridgeGetBattery();
+  state.slow_percent = SlowPercent();
+  state.hint = MenuIsOpen() ? MenuHint() : NULL;
+  WarnOfLowBattery(state.battery);
+  if (StatusBarCompose(&state, time_us_64(), &g_status_rows)) {
+    g_status_rows_pending = true;
+  }
+  if (!g_status_rows_pending) {
+    return;
+  }
+  DisplayStatus* rows = DisplayBeginStatus();
+  if (rows == NULL) {
+    return;
+  }
+  *rows = g_status_rows;
   DisplayEndStatus();
-  return true;
+  g_status_rows_pending = false;
 }
 
 // How far the boot has got, and what it took: the fields of a boot_stage
@@ -487,6 +589,9 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("output_hz", speaker.output_hz),
       Y_LOG_UINT("changes", speaker.changes));
   REPLY_GROUP(
+      command, "menu", Y_LOG_BOOL("open", MenuIsOpen()),
+      Y_LOG_STRING("page", MenuPageName()));
+  REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
           "emulated_us", g_clock.cycles * kMicrosecondsPerSecond /
@@ -495,6 +600,7 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("waited_us", g_clock.waited_us),
       Y_LOG_UINT("dropped_us", g_clock.dropped_us),
       Y_LOG_UINT("command_us", g_command_us),
+      Y_LOG_UINT("paused_us", PausedUs()),
       Y_LOG_BOOL("idle_skip", g_platform.is_dos_idle_skip_enabled));
   CommandReplyOk(command);
 }
@@ -598,7 +704,6 @@ static void SetBootStage(BootStage stage) {
   g_status.boot_elapsed_us = ElapsedUs();
   g_status.boot_busy_us = BusyUs();
   g_status.instructions = YCPUInstructionsRetired(&g_platform.cpu);
-  g_status_changed = true;
   BOOT_INFO("boot_stage", BOOT_FIELDS());
 }
 
@@ -786,8 +891,72 @@ static void RunCommand(const Command* command) {
   }
 }
 
+// ============================================================================
+// The menu
+// ============================================================================
+
+// Mark the guest's screen to be drawn in full, and offer it to core 1 now
+// rather than at the next frame, which while the machine is paused never
+// comes. Returns whether core 1 took it. If it did not, the mark stays in the
+// live state, and the next frame offered draws it all.
+static bool RedrawGuest(void) {
+  g_platform.video.dirty_state.status = Y_VIDEO_FULL_REDRAW;
+  return !YAX86_PICOCALC_DRAW_SCREEN || DisplayOfferFrame(&g_platform.video);
+}
+
+// Restart the board, which restarts the machine from power on, the way the
+// power button would - but without losing the keyboard controller's power, or
+// the guest's disks, whose sectors are already on the card.
+static void ResetMachine(void) {
+  SYSTEM_INFO("reset");
+  watchdog_reboot(0, 0, 0);
+  for (;;) {
+    tight_loop_contents();
+  }
+}
+
+// Real time goes on while the machine is paused and emulated time does not,
+// so on resuming the two are made to agree again from now, rather than the
+// machine being run flat out to catch up a pause it was meant to take.
+static void ResumeFromMenu(void) {
+  const uint64_t now_us = time_us_64();
+  g_clock.paused_us += now_us - g_clock.pause_start_us;
+  g_clock.anchor_us = now_us;
+  g_clock.anchor_cycles = g_clock.cycles;
+  RedrawGuest();
+}
+
+// A key goes to the menu, which looks for the hotkey whether it is open or
+// not, and on to the guest unless the menu has the keyboard.
+static void HandleKey(SouthbridgeKeyEvent key, bool running) {
+  const bool menu_was_open = MenuIsOpen();
+  const MenuAction action = MenuHandleKey(key);
+  if (!menu_was_open && running) {
+    TypeKey(key);
+  }
+  if (action == kMenuActionOpened) {
+    // The guest has seen both Shift keys go down, and while the menu has the
+    // keyboard it would not see them come up, so it is told now.
+    if (running) {
+      TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyLeftShift});
+      TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyRightShift});
+    }
+    g_clock.pause_start_us = time_us_64();
+    SYSTEM_INFO("menu_opened");
+  } else if (action == kMenuActionClosed) {
+    ResumeFromMenu();
+    SYSTEM_INFO("menu_closed");
+  }
+}
+
+// ============================================================================
+// The main loop
+// ============================================================================
+
 // Run the machine, paced to real time, for as long as the board has power.
-// The boot is watched on the way, and DOS's questions answered.
+// The boot is watched on the way, and DOS's questions answered. While the
+// menu is open, the machine is paused and the loop only looks after the menu,
+// the keyboard and commands.
 static void RunMachine(bool machine_ready) {
   const uint64_t max_boot_cycles =
       (uint64_t)kBootMaxEmulatedSeconds * Y_PLATFORM_CPU_CYCLES_PER_SECOND;
@@ -796,7 +965,7 @@ static void RunMachine(bool machine_ready) {
   bool running = machine_ready;
   bool screen_on = true;
   absolute_time_t blank_at = at_the_end_of_time;
-  absolute_time_t next_status_at = at_the_end_of_time;
+  absolute_time_t next_status_at = get_absolute_time();
   g_clock.last_ticks = g_platform.ticks;
   g_clock.start_us = time_us_64();
   g_clock.anchor_us = g_clock.start_us;
@@ -804,41 +973,36 @@ static void RunMachine(bool machine_ready) {
   for (;;) {
     AnnounceToNewHost();
 
-    if (running && RunBatch() == Y_PLATFORM_HUNG) {
+    if (running && !MenuIsOpen() && RunBatch() == Y_PLATFORM_HUNG) {
       // The CPU halted with nothing to wake it.
       SYSTEM_ERROR("machine_stopped");
       running = false;
     }
 
-    // Between batches, so the keyboard is never written while the machine
-    // runs. A key also keeps the screen on, and turns it back on if it was
-    // blanked: its contents are kept, and what changed meanwhile is drawn
-    // with the next frame.
     Command command;
     if (CommandPoll(&command)) {
       const uint64_t start_us = time_us_64();
       RunCommand(&command);
       g_command_us += time_us_64() - start_us;
     }
-    // A key a host typed is taken only in a batch the keyboard had none, so
-    // that the two never land in one.
+    // Between batches, so the keyboard is never written while the machine
+    // runs, and a key a host typed only in a batch the keyboard had none, so
+    // that the two never land in one. A key also keeps the screen on, and
+    // turns it back on if it was blanked: its contents are kept, and what
+    // changed meanwhile is drawn with the next frame.
     SouthbridgeKeyEvent key;
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      if (running) {
-        TypeKey(key);
-      }
+      HandleKey(key, running);
       if (!screen_on) {
         DisplayTurnOn();
         screen_on = true;
-        g_status_changed = true;
-        next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       }
       if (BootIsOver()) {
         blank_at = make_timeout_time_ms(kScreenOnMs);
       }
     }
 
-    if (screen_on && g_clock.cycles >= next_render_cycles) {
+    if (screen_on && !MenuIsOpen() && g_clock.cycles >= next_render_cycles) {
       do {
         next_render_cycles += kCyclesPerRender;
       } while (next_render_cycles <= g_clock.cycles);
@@ -847,7 +1011,7 @@ static void RunMachine(bool machine_ready) {
       }
     }
 
-    if (!BootIsOver()) {
+    if (!BootIsOver() && !MenuIsOpen()) {
       BootStage stage = g_status.boot_stage;
       if (!running || g_clock.cycles >= max_boot_cycles) {
         stage = kBootStageFailed;
@@ -867,24 +1031,25 @@ static void RunMachine(bool machine_ready) {
         // prompts too, and skipping there would move the dos-boot invariant.
         YPlatformSetDOSIdleSkip(&g_platform, true);
         blank_at = make_timeout_time_ms(kScreenOnMs);
-        next_status_at = make_timeout_time_ms(kStatusUpdateMs);
         BOOT_INFO("done");
       }
     }
 
     if (screen_on && time_reached(next_status_at)) {
-      next_status_at = delayed_by_ms(next_status_at, kStatusUpdateMs);
-      g_status_changed = true;
+      next_status_at = make_timeout_time_ms(kStatusUpdateMs);
+      UpdateStatusRows();
     }
-    if (screen_on && g_status_changed && HandOverStatus()) {
-      g_status_changed = false;
+    if (screen_on) {
+      MenuDraw(time_us_64());
     }
     if (screen_on && time_reached(blank_at)) {
       DisplayTurnOff();
       screen_on = false;
     }
 
-    if (running) {
+    if (MenuIsOpen()) {
+      sleep_ms(kPausedPollMs);
+    } else if (running) {
       PaceToRealTime();
     } else {
       sleep_ms(kStoppedPollMs);
@@ -952,7 +1117,12 @@ int main(void) {
       SouthbridgeReadVersion(&g_status.southbridge_version);
   FloppyOpen();
   HardDiskOpen();
-  HandOverStatus();
+  const MenuConfig menu_config = {
+      .describe_status = DescribeStatus,
+      .reset = ResetMachine,
+      .redraw_guest = RedrawGuest,
+  };
+  MenuInit(&menu_config);
 
   RunMachine(InitMachine());
   return 0;
