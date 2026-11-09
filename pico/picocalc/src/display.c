@@ -4,6 +4,7 @@
 
 #include "font_4x10.h"
 #include "hardware/sync.h"
+#include "hex.h"
 #include "lcd.h"
 #include "pico/multicore.h"
 #include "pico/sync.h"
@@ -31,6 +32,10 @@ enum {
   kColorLightGray = 7,
   kColorYellow = 14,
   kColorWhite = 15,
+
+  // A screenshot's pixels a reply line, which with the rest of the line keeps
+  // it inside the logger's 256 bytes.
+  kScreenshotPixelsPerLine = 40,
 };
 
 // What core 0 hands core 1, one word through the inter-core FIFO each.
@@ -39,6 +44,7 @@ typedef enum DisplayMessage {
   kDisplayMessageStatus,
   kDisplayMessageTurnOff,
   kDisplayMessageTurnOn,
+  kDisplayMessageScreenshot,
 } DisplayMessage;
 
 static const char* const kStatusLabels[kDisplayStatusLineCount] = {
@@ -57,6 +63,9 @@ static uint8_t g_frame_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static volatile bool g_frame_busy;
 static DisplayStatus g_status;
 static volatile bool g_status_busy;
+// The id of the command a screenshot answers.
+static uint32_t g_screenshot_id;
+static volatile bool g_screenshot_busy;
 
 // Shared between the cores, so only read or written under the lock.
 static critical_section_t g_stats_lock;
@@ -152,6 +161,36 @@ static void DrawStatus(void) {
   }
 }
 
+// Read the whole panel back and send it to the host, as the reply to the
+// screenshot command: a line with its size, then the pixels, in RGB565 as hex,
+// a part of a row a line. Read back rather than drawn again, so that it is
+// what the panel holds, however it came to hold it.
+static void SendScreenshot(uint32_t id) {
+  static const char kCommand[] = "screenshot";
+  Y_LOG_REPLY(
+      &g_render_logger, id, kCommand, Y_LOG_UINT("width", kLcdWidth),
+      Y_LOG_UINT("height", kLcdHeight), Y_LOG_STRING("format", "rgb565"));
+  uint16_t pixels[kScreenshotPixelsPerLine];
+  uint8_t bytes[kScreenshotPixelsPerLine * 2];
+  char hex[sizeof(bytes) * 2 + 1];
+  LcdBeginRead(0, 0, kLcdWidth, kLcdHeight);
+  for (uint16_t y = 0; y < kLcdHeight; ++y) {
+    for (uint16_t x = 0; x < kLcdWidth; x += kScreenshotPixelsPerLine) {
+      LcdReadPixels(pixels, kScreenshotPixelsPerLine);
+      for (uint8_t i = 0; i < kScreenshotPixelsPerLine; ++i) {
+        bytes[2 * i] = (uint8_t)(pixels[i] >> 8);
+        bytes[2 * i + 1] = (uint8_t)pixels[i];
+      }
+      HexFormat(bytes, sizeof(bytes), hex);
+      Y_LOG_REPLY(
+          &g_render_logger, id, kCommand, Y_LOG_UINT("row", y),
+          Y_LOG_UINT("x", x), Y_LOG_STRING("pixels", hex));
+    }
+  }
+  LcdEndRead();
+  Y_LOG_REPLY(&g_render_logger, id, kCommand, Y_LOG_STRING("status", "ok"));
+}
+
 // Mark a buffer core 0 handed over as drawn, giving it back.
 static void GiveBack(volatile bool* busy) {
   __dmb();
@@ -183,6 +222,10 @@ static void DisplayMain(void) {
         break;
       case kDisplayMessageTurnOn:
         LcdSetDisplayOn(true);
+        break;
+      case kDisplayMessageScreenshot:
+        SendScreenshot(g_screenshot_id);
+        GiveBack(&g_screenshot_busy);
         break;
     }
   }
@@ -246,6 +289,15 @@ void DisplayTurnOff(void) {
 void DisplayTurnOn(void) {
   __dmb();
   multicore_fifo_push_blocking(kDisplayMessageTurnOn);
+}
+
+bool DisplaySendScreenshot(uint32_t id) {
+  if (g_screenshot_busy) {
+    return false;
+  }
+  g_screenshot_id = id;
+  HandOver(kDisplayMessageScreenshot, &g_screenshot_busy);
+  return true;
 }
 
 DisplayStats DisplayGetStats(void) {

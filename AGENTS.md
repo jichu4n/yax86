@@ -2595,6 +2595,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | `ping` | answers, with how many typed keys are still to send |
   | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
+  | `screenshot` | the panel read back, 320x320 in RGB565, as hex a part of a row a line |
   | `type text=...` | types the text into the guest |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
   | `key scancode=0x52` | sends a PC/XT scancode straight to the guest, for a key the PicoCalc does not have |
@@ -2603,6 +2604,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   a line: a row of box drawing characters is 80 bytes outside ASCII, which
   escape to 320 characters, against the logger's 256-byte line. `debug.js`
   turns the hex back into code page 437, as Unicode.
+- **A screenshot is the panel's frame memory read back**, not the screen
+  drawn again, so it shows what the panel holds - the guest's screen and the
+  status lines, drawn right or wrong. Core 1 owns the panel, so it does the
+  read and sends the reply, and draws nothing for the two seconds it takes:
+  the frames that come due meanwhile are counted late, and what changed is
+  drawn once it is done. The read goes through the SPI block at 6MHz,
+  since the datasheet's read cycle is 150ns, with the pins handed to it from
+  PIO and back. The panel answers in the pixel format it is written in,
+  RGB565, so a pixel reads back as it was written, after a dummy byte.
+  `debug.js screenshot FILE.png` writes it as a PNG.
 - **Typed keys go through the keymap, one key event a batch**, from the queue
   in `src/typing.c`, in a batch the PicoCalc's keyboard had none. An event is
   the keyboard controller's, so the keymap turns it into scancodes as it
@@ -2617,8 +2628,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the boot 3.5ms - 5.0755 seconds of processor time against 5.0721, 0.07%.
   The time commands take is counted in the report as `command_us`, which a
   boot that took commands is that much slower for.
-- **`debug.js` is the host's side**: `screen`, `type`, `key`, `scancode`,
-  `wait`, `report` and `ping`, or `run` with a script of them, a step a line.
+- **`debug.js` is the host's side**: `screen`, `screenshot`, `type`, `key`,
+  `scancode`, `wait`, `report` and `ping`, or `run` with a script of them, a step a line.
   `wait` polls the screen until a regular expression matches it, and a
   timeout fails the script, which is what makes a script a test:
 

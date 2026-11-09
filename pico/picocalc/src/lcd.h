@@ -33,6 +33,22 @@ void LcdWritePixels(const uint16_t* pixels, uint32_t count);
 // End the write LcdBeginWrite() began.
 void LcdEndWrite(void);
 
+// Begin reading the rectangle at (x, y), width by height pixels, back from
+// the panel's frame memory: what it is showing, or would show if it were on.
+// Pixels read afterwards come left to right, top to bottom, until
+// LcdEndRead(). No other LCD call may come in between.
+//
+// A read is slow, about 2.7us a pixel, since the panel answers at no more than
+// 6.67MHz. It is for debugging, not for drawing.
+void LcdBeginRead(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+
+// Read pixels from the window LcdBeginRead() opened, in RGB565, exactly as
+// they were written.
+void LcdReadPixels(uint16_t* pixels, uint32_t count);
+
+// End the read LcdBeginRead() began.
+void LcdEndRead(void);
+
 // Turn the panel's output on or off. Off shows a blank page and puts the
 // panel to sleep, at its lowest power; what it last held is kept, so turning
 // it back on shows that again. A static image left showing for hours can

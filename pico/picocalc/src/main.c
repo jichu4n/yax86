@@ -31,6 +31,7 @@
 #include "hardware/clocks.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
+#include "hex.h"
 #include "keymap.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
@@ -663,17 +664,6 @@ enum {
   kMaxTextColumns = 80,
 };
 
-// Bytes as two hex digits each, upper case, into a buffer twice the count
-// and one more long.
-static void FormatHex(const uint8_t* bytes, uint32_t count, char* out) {
-  static const char kDigits[] = "0123456789ABCDEF";
-  for (uint32_t i = 0; i < count; ++i) {
-    *out++ = kDigits[bytes[i] >> 4];
-    *out++ = kDigits[bytes[i] & 0x0F];
-  }
-  *out = '\0';
-}
-
 // The guest's text screen: the mode, the cursor, then a line for each row of
 // the screen with its characters as hex, as the guest's code page has them,
 // and with attrs=true another with their attributes. Hex, because a row of
@@ -720,12 +710,12 @@ static void RunScreen(const Command* command) {
       attributes[column] = g_vram[(offset + 1) % vram_size];
     }
     char hex[kMaxTextColumns * 2 + 1];
-    FormatHex(characters, mode->columns, hex);
+    HexFormat(characters, mode->columns, hex);
     Y_LOG_REPLY(
         &g_runtime_logger, command->id, command->name, Y_LOG_UINT("row", row),
         Y_LOG_STRING("chars", hex));
     if (with_attributes) {
-      FormatHex(attributes, mode->columns, hex);
+      HexFormat(attributes, mode->columns, hex);
       Y_LOG_REPLY(
           &g_runtime_logger, command->id, command->name, Y_LOG_UINT("row", row),
           Y_LOG_STRING("attrs", hex));
@@ -800,6 +790,11 @@ static void RunCommand(const Command* command) {
     ReplyReport(command);
   } else if (CommandIs(command, "screen")) {
     RunScreen(command);
+  } else if (CommandIs(command, "screenshot")) {
+    // Core 1 owns the panel, so it reads it back and sends the reply.
+    if (!DisplaySendScreenshot(command->id)) {
+      CommandReplyError(command, "busy");
+    }
   } else if (CommandIs(command, "type")) {
     RunType(command);
   } else if (CommandIs(command, "key")) {
