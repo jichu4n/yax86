@@ -95,14 +95,6 @@ enum {
 
   // How long to wait between polls for the USB host to attach.
   kUSBConnectPollMs = 100,
-
-  // Fixed-point scales for the result lines, which are formatted from integers
-  // so that the firmware needs no floating point printf, and the number of
-  // fraction digits each one prints.
-  kHundredths = 100,
-  kHundredthDigits = 2,
-  kMicrosecondsPerSecond = 1000000,
-  kMicrosecondDigits = 6,
 };
 
 // The guest's conventional memory and the CGA adapter's frame buffer. Static
@@ -111,8 +103,28 @@ enum {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
-// Held for the platform's lifetime, which is why it is not a local.
-static YLoggerConfig g_logger_config;
+// What the machine logs through: errors only, since the core's warnings come
+// in numbers during a boot and writing them out would be host I/O in the
+// measured path. Held for the platform's lifetime, which is why it is not a
+// local.
+static YLoggerConfig g_machine_log_config;
+// What the harness reports through, down to info, outside the run.
+static YLoggerConfig g_bench_log_config;
+static YLogger g_bench_logger;
+
+static const YLogModule kBenchLogModule = {
+    .id = Y_LOG_FIRST_HOST_MODULE_ID,
+    .name = "bench",
+};
+
+#define BENCH_ERROR(...) \
+  Y_LOG(&g_bench_logger, &kBenchLogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define BENCH_WARN(...) \
+  Y_LOG(&g_bench_logger, &kBenchLogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define BENCH_INFO(...) \
+  Y_LOG(&g_bench_logger, &kBenchLogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define BENCH_DEBUG(...) \
+  Y_LOG(&g_bench_logger, &kBenchLogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 #ifdef YAX86_PICO_SYS_CLK_KHZ
 // Deliberately not zeroed at startup - see where it is read.
@@ -134,8 +146,6 @@ typedef struct BenchResult {
   YPlatformRunStatus status;
 } BenchResult;
 
-// Only errors are logged, and only outside a run: anything chattier would put
-// host I/O in the measured path.
 static void BenchWriteLogLine(
     Y_UNUSED void* context, Y_UNUSED YLogKind kind,
     Y_UNUSED const YLogModule* module, Y_UNUSED YLogLevel level,
@@ -171,7 +181,7 @@ static bool ResetMachine(void) {
   g_platform = kEmptyPlatform;
 
   YPlatformConfig* config = &g_platform.config;
-  config->logger_config = &g_logger_config;
+  config->logger_config = &g_machine_log_config;
   config->physical_memory_size = kGuestRAMSize;
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
@@ -346,30 +356,33 @@ static void ProfileInit(void) {
 
 // Emitted as address and count so that a host can map them to symbols with
 // nm; printing names here would mean carrying a symbol table on the board.
-static void ProfilePrint(void) {
+static Y_NOINLINE void ProfileLog(void) {
   if (g_profile_samples == 0) {
     return;
   }
-  printf("profile_samples %u\n", (unsigned)g_profile_samples);
-  printf("profile_bucket %u\n", (unsigned)(1u << kProfileSRAMBucketShift));
-  printf("profile_elsewhere %u\n", (unsigned)g_profile_elsewhere);
+  BENCH_INFO(
+      "profile", Y_LOG_UINT("samples", g_profile_samples),
+      Y_LOG_UINT("sram_bucket_bytes", 1u << kProfileSRAMBucketShift),
+      Y_LOG_UINT("flash_bucket_bytes", 1u << kProfileFlashBucketShift),
+      Y_LOG_UINT("elsewhere", g_profile_elsewhere));
   for (uint32_t i = 0; i < kProfileSRAMBuckets; ++i) {
     if (g_profile_sram[i] > 0) {
-      printf(
-          "p %08x %u\n",
-          (unsigned)(kProfileSRAMBase + (i << kProfileSRAMBucketShift)),
-          (unsigned)g_profile_sram[i]);
+      BENCH_INFO(
+          "profile_bucket",
+          Y_LOG_HEX32(
+              "address", kProfileSRAMBase + (i << kProfileSRAMBucketShift)),
+          Y_LOG_UINT("samples", g_profile_sram[i]));
     }
   }
   for (uint32_t i = 0; i < kProfileFlashBuckets; ++i) {
     if (g_profile_flash[i] > 0) {
-      printf(
-          "p %08x %u\n",
-          (unsigned)(kProfileFlashBase + (i << kProfileFlashBucketShift)),
-          (unsigned)g_profile_flash[i]);
+      BENCH_INFO(
+          "profile_bucket",
+          Y_LOG_HEX32(
+              "address", kProfileFlashBase + (i << kProfileFlashBucketShift)),
+          Y_LOG_UINT("samples", g_profile_flash[i]));
     }
   }
-  printf("profile_end\n");
 }
 #endif  // YAX86_PICO_PROFILE
 
@@ -457,45 +470,25 @@ static BenchResult RunBenchmark(void) {
 // Results
 // ============================================================================
 
-// Print a value carried as an integer scaled by a power of ten, so that no
-// floating point formatting is linked into the firmware.
-static void PrintScaled(
-    const char* label, uint64_t scaled, uint64_t scale, uint8_t digits) {
-  printf(
-      "%-13s %llu.%0*llu\n", label, (unsigned long long)(scaled / scale),
-      (int)digits, (unsigned long long)(scaled % scale));
-}
-
-// A run of zero microseconds cannot have happened, but dividing by it would
-// still be worse than reporting one.
-static uint64_t ElapsedMicroseconds(const BenchResult* r) {
-  return r->elapsed_us > 0 ? r->elapsed_us : 1;
-}
-
-static void PrintResult(const BenchResult* r) {
-  const uint64_t us = ElapsedMicroseconds(r);
-  printf("%-13s %s\n", "workload", "dos-boot");
-  PrintScaled("seconds", us, kMicrosecondsPerSecond, kMicrosecondDigits);
-  printf("%-13s %llu\n", "instructions", (unsigned long long)r->instructions);
-  printf("%-13s %llu\n", "emulated_cyc", (unsigned long long)r->cycles);
-  // Instructions per microsecond is millions of instructions per second, so
-  // MIPS needs no unit conversion - only a scale for the decimal places.
-  PrintScaled(
-      "mips", r->instructions * kHundredths / us, kHundredths,
-      kHundredthDigits);
-  // Emulated cycles per microsecond is emulated megahertz: the clock rate the
-  // guest would have had to run at for this much emulated time to have taken
-  // this much host time. Against a real 8088's 4.77.
-  PrintScaled(
-      "emulated_mhz", r->cycles * kHundredths / us, kHundredths,
-      kHundredthDigits);
+// The run's figures, as integers. Seconds, emulated MHz and MIPS are worked
+// out from them by whatever reads the line - run.js does - so that no
+// floating point formatting is linked into the firmware, and nothing is
+// truncated on the way.
+//
+// This and the other logs after the run are kept out of line, as main() would
+// otherwise take them in along with the run loop, and their fields would grow
+// the code the run loop sits in.
+static Y_NOINLINE void LogResult(const BenchResult* r) {
+  BENCH_INFO(
+      "result", Y_LOG_STRING("workload", "dos-boot"),
+      Y_LOG_BOOL("completed", r->completed),
+      Y_LOG_UINT("elapsed_us", r->elapsed_us),
+      Y_LOG_UINT("instructions", r->instructions),
+      Y_LOG_UINT("cycles", r->cycles));
   if (!r->completed) {
-    printf(
-        "warning: the DOS command prompt was never reached - the reported "
-        "rate is still valid but the run was cut short (status %d)\n",
-        (int)r->status);
+    // The rate is still valid, but the run was cut short.
+    BENCH_WARN("prompt_not_reached", Y_LOG_INT("status", r->status));
   }
-  printf("\n");
 }
 
 // ============================================================================
@@ -529,7 +522,11 @@ enum {
 // Fill the unused part of the stack with kStackPaintValue. Must be called from
 // a shallow frame - anything below the caller's frame is painted, so a deep
 // caller would leave the interesting part unmeasured.
-static void PaintStack(void) {
+//
+// Never inlined. Inlined into main(), marker lands inside main()'s frame
+// rather than below all of it, and the paint overwrites whatever main() keeps
+// below marker - a pointer read after the run, say, which then faults.
+static Y_NOINLINE void PaintStack(void) {
   // Taking the address of a local puts it in this frame, which is as good a
   // marker for where the stack currently reaches as reading SP, and is
   // ordinary C rather than inline assembly.
@@ -548,7 +545,7 @@ static void PaintStack(void) {
 // survived at all - if it did not, the stack reached the bottom of its bank
 // and the figure is a floor rather than a measurement. Interrupt frames count,
 // which is what makes this the real peak rather than the emulator's share.
-static void PrintStackUsage(void) {
+static Y_NOINLINE void LogStackUsage(void) {
   const uint32_t total =
       (uint32_t)((&__StackTop - &__StackBottom) * sizeof(uint32_t));
   const uint32_t* word = &__StackBottom;
@@ -556,26 +553,25 @@ static void PrintStackUsage(void) {
     ++word;
   }
   const uint32_t peak = (uint32_t)((&__StackTop - word) * sizeof(uint32_t));
-  printf(
-      "%-13s %u of %u bytes%s\n", "stack_peak", (unsigned)peak, (unsigned)total,
-      peak >= total ? " (OVERFLOWED - figure is a floor)" : "");
-  printf("\n");
+  // If the paint did not survive at all, the stack reached the bottom of its
+  // bank and the peak is a floor rather than a measurement.
+  BENCH_INFO(
+      "stack_peak", Y_LOG_UINT("bytes", peak), Y_LOG_UINT("total", total),
+      Y_LOG_BOOL("overflowed", peak >= total));
 }
 
 // ============================================================================
 // Startup
 // ============================================================================
 
-static void PrintHeader(void) {
-  printf("\n");
-  printf("%-13s %s\n", "emulator", "yax86");
-  printf("%-13s %s\n", "target", "rp2040");
-  printf("%-13s %s\n", "opt", YAX86_PICO_OPT);
-  printf("%-13s %u\n", "guest_ram_kb", (unsigned)YAX86_PICO_GUEST_RAM_KB);
-  printf("%-13s %u\n", "sys_clk_khz", (unsigned)(clock_get_hz(clk_sys) / 1000));
-  printf("%-13s %u\n", "profile", (unsigned)YAX86_PICO_PROFILE);
-  printf("%-13s %u\n", "state_bytes", (unsigned)sizeof(YPlatformState));
-  printf("\n");
+static Y_NOINLINE void LogHeader(void) {
+  BENCH_INFO(
+      "header", Y_LOG_STRING("emulator", "yax86"),
+      Y_LOG_STRING("target", "rp2040"), Y_LOG_STRING("opt", YAX86_PICO_OPT),
+      Y_LOG_UINT("guest_ram_kb", YAX86_PICO_GUEST_RAM_KB),
+      Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / 1000),
+      Y_LOG_BOOL("profile", YAX86_PICO_PROFILE),
+      Y_LOG_UINT("state_bytes", sizeof(YPlatformState)));
 }
 
 #ifdef YAX86_PICO_SYS_CLK_KHZ
@@ -595,12 +591,10 @@ static void PrintHeader(void) {
 static void Overclock(void) {
   if (g_overclock_marker == kOverclockAttemptMarker) {
     g_overclock_marker = 0;
-    printf("%-13s %s\n", "overclock", "skipped - last attempt hung");
+    BENCH_WARN("overclock_skipped_after_hang");
     return;
   }
-  printf(
-      "%-13s requesting %u kHz\n", "overclock",
-      (unsigned)YAX86_PICO_SYS_CLK_KHZ);
+  BENCH_INFO("overclock_requested", Y_LOG_UINT("khz", YAX86_PICO_SYS_CLK_KHZ));
   // Flushed before the clock moves, so the last thing seen is the attempt.
   sleep_ms(50);
   g_overclock_marker = kOverclockAttemptMarker;
@@ -612,7 +606,7 @@ static void Overclock(void) {
   }
   busy_wait_us(10000);
   if (!set_sys_clock_khz(YAX86_PICO_SYS_CLK_KHZ, false)) {
-    printf("%-13s %s\n", "overclock", "PLL cannot produce that clock");
+    BENCH_ERROR("overclock_pll_cannot_produce_clock");
   }
   // Survived the change. A hang under load is still possible, so the watchdog
   // stays armed until the run is over, but the marker has done its job and
@@ -630,9 +624,13 @@ int main(void) {
     sleep_ms(kUSBConnectPollMs);
   }
 
-  g_logger_config.write_line = BenchWriteLogLine;
-  g_logger_config.enabled_modules = 0xFFFFFFFF;
-  g_logger_config.min_level = Y_LOG_LEVEL_ERROR;
+  g_machine_log_config.write_line = BenchWriteLogLine;
+  g_machine_log_config.enabled_modules = 0xFFFFFFFF;
+  g_machine_log_config.min_level = Y_LOG_LEVEL_ERROR;
+  g_bench_log_config.write_line = BenchWriteLogLine;
+  g_bench_log_config.enabled_modules = 0xFFFFFFFF;
+  g_bench_log_config.min_level = Y_LOG_LEVEL_INFO;
+  YLoggerInit(&g_bench_logger, &g_bench_log_config);
 
 #if YAX86_PICO_PROFILE
   // Armed before the clock changes so that the alarm is programmed once, from
@@ -643,7 +641,7 @@ int main(void) {
   Overclock();
 #endif
 
-  PrintHeader();
+  LogHeader();
   // Painted from main's frame, before anything deep runs, so that the whole of
   // what the run uses is measured.
   PaintStack();
@@ -651,12 +649,12 @@ int main(void) {
   const BenchResult result = RunBenchmark();
 
   watchdog_disable();
-  PrintResult(&result);
+  LogResult(&result);
 #if YAX86_PICO_PROFILE
-  ProfilePrint();
+  ProfileLog();
 #endif
-  PrintStackUsage();
-  printf("done\n");
+  LogStackUsage();
+  BENCH_INFO("done");
   // Nothing left to do, and returning from main on this target resets the
   // chip, which would wipe the results off the terminal.
   for (;;) {

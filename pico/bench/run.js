@@ -6,10 +6,16 @@ const path = require('path');
 const tty = require('tty');
 const {parseArgs} = require('util');
 const {spawnSync} = require('child_process');
+const {parseLine, toNumber, formatLine} = require('./logfmt');
 
 // Flashes a benchmark image onto an attached Pico and captures what it prints.
 //
 //   ./run.js ../../build-pico/O3/yax86_pico_bench.uf2
+//
+// What the firmware prints is logfmt, a line per record - see "util —
+// logging" in AGENTS.md. Reports are shown as tables, and the bench's result
+// with the figures a PR reports worked out from it; --json prints each record
+// as a JSON object instead. --out saves the lines as they came.
 //
 // The board is rebooted into BOOTSEL with picotool rather than by hand, so a
 // run needs no button press:
@@ -32,8 +38,12 @@ const kEnumerateDelayMs = 3000;
 const kPortWaitMs = 25000;
 const kPortSettleMs = 800;
 const kPortPollMs = 200;
-// What the firmware prints when it has nothing left to say.
-const kDoneMarker = '\ndone\n';
+// The record the firmware ends with when it has nothing left to say.
+const isDone = (record) => record !== null && record.event === 'done';
+// A real 8088's clock, which "vs a real 8088" is against.
+const k8088Hz = 4.77e6;
+// The pairs every log line starts with, which a table leaves out.
+const kLogPrefixKeys = new Set(['kind', 'level', 'module', 'event', 'tick']);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -69,10 +79,54 @@ async function waitForPort(timeoutMs = kPortWaitMs) {
   return null;
 }
 
+// The figures a performance PR reports, from a bench result's integers:
+// seconds, emulated MHz, MIPS and the speed against a real 8088.
+function benchFigures(record) {
+  const us = toNumber(record.elapsed_us);
+  const cycles = toNumber(record.cycles);
+  const instructions = toNumber(record.instructions);
+  if (!(us > 0)) {
+    return [];
+  }
+  const seconds = us / 1e6;
+  return [
+    ['seconds', seconds.toFixed(6)],
+    ['emulated_mhz', (cycles / us).toFixed(3)],
+    ['mips', (instructions / us).toFixed(3)],
+    ['vs_8088', `${((100 * cycles) / k8088Hz / seconds).toFixed(1)}%`],
+  ];
+}
+
+// How a record is shown: a report or a bench header or result as a table of
+// its fields under the module's name, anything else as one line.
+function render(record) {
+  const fields = Object.entries(record).filter(
+    ([key]) => !kLogPrefixKeys.has(key)
+  );
+  const table = ['report', 'header', 'result'].includes(record.event);
+  if (!table) {
+    const head = [record.level, record.module, record.event]
+      .filter((part) => part !== undefined)
+      .join(' ');
+    const rest = fields.length > 0 ? '  ' + formatLine(Object.fromEntries(fields)) : '';
+    return `${head}${rest}\n`;
+  }
+  if (record.module === 'bench' && record.event === 'result') {
+    fields.push(...benchFigures(record));
+  }
+  const title = `[${record.module} ${record.event}]`;
+  const width = Math.max(...fields.map(([key]) => key.length));
+  return (
+    `${title}\n` +
+    fields.map(([key, value]) => `  ${key.padEnd(width)}  ${value}\n`).join('')
+  );
+}
+
 // Read from the port until the firmware says it is done, or time runs out.
-// Returns the captured text, which is echoed as it arrives so that a long run
-// can be watched.
-function capture(port, budgetMs) {
+// Returns the captured text, which is shown as it arrives so that a long run
+// can be watched: rendered, or as JSON if json is set. A line that is not
+// logfmt is shown as it is.
+function capture(port, budgetMs, json) {
   const fd = fsSync.openSync(
     port,
     fsSync.constants.O_RDWR | fsSync.constants.O_NOCTTY
@@ -90,6 +144,9 @@ function capture(port, budgetMs) {
 
   return new Promise((resolve) => {
     let out = '';
+    // The part of a line that has arrived without its end yet.
+    let pending = '';
+    let done = false;
     let timer = null;
     const finish = (timedOut) => {
       if (timer !== null) {
@@ -103,7 +160,7 @@ function capture(port, budgetMs) {
             `${out.length} bytes]\n`
         );
       }
-      resolve(out);
+      resolve({out, done});
     };
     timer = setTimeout(() => finish(true), budgetMs);
     stream.on('data', (chunk) => {
@@ -112,8 +169,22 @@ function capture(port, budgetMs) {
       // cope with.
       const text = chunk.toString('utf8').replaceAll('\r\n', '\n');
       out += text;
-      process.stdout.write(text);
-      if (out.includes(kDoneMarker)) {
+      const lines = (pending + text).split('\n');
+      pending = lines.pop();
+      for (const line of lines) {
+        const record = parseLine(line);
+        if (json) {
+          if (record !== null) {
+            process.stdout.write(JSON.stringify(record) + '\n');
+          }
+        } else {
+          process.stdout.write(record !== null ? render(record) : line + '\n');
+        }
+        if (isDone(record)) {
+          done = true;
+        }
+      }
+      if (done) {
         finish(false);
       }
     });
@@ -130,12 +201,15 @@ async function main() {
       out: {type: 'string'},
       // Capture from a board that is already running the image.
       'no-flash': {type: 'boolean', default: false},
+      // Print each record as a JSON object rather than rendering it.
+      json: {type: 'boolean', default: false},
     },
     allowPositionals: true,
   });
   if (positionals.length !== 1) {
     console.error(
-      'Usage: run.js [--timeout SECONDS] [--out FILE] [--no-flash] IMAGE.uf2'
+      'Usage: run.js [--timeout SECONDS] [--out FILE] [--no-flash] [--json] ' +
+        'IMAGE.uf2'
     );
     process.exit(2);
   }
@@ -148,11 +222,15 @@ async function main() {
   if (port === null) {
     throw new Error('no /dev/ttyACM* appeared');
   }
-  const out = await capture(port, Number(values.timeout) * 1000);
+  const {out, done} = await capture(
+    port,
+    Number(values.timeout) * 1000,
+    values.json
+  );
   if (values.out) {
     await fs.writeFile(values.out, out, 'utf8');
   }
-  return out.includes(kDoneMarker) ? 0 : 1;
+  return done ? 0 : 1;
 }
 
 if (require.main === module) {

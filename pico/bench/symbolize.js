@@ -2,6 +2,7 @@
 
 const fs = require('fs/promises');
 const {spawnSync} = require('child_process');
+const {parseLine, toNumber} = require('./logfmt');
 
 // Turns a captured profile into a list of function names.
 //
@@ -16,8 +17,6 @@ const {spawnSync} = require('child_process');
 // The tail is not reliable: a bucket lands on the function that starts before
 // it, so where several small functions share a bucket only the first is named.
 
-// A bucket line, as the firmware prints it: an address and a sample count.
-const kBucketPattern = /^p ([0-9a-f]{8}) (\d+)$/;
 // How many symbols to print. Beyond this the shares are too small to mean
 // anything, for the reason above.
 const kTopSymbols = 26;
@@ -93,12 +92,13 @@ async function symbolize(elfFilePath, captureFilePath) {
   let total = 0;
   const capture = await fs.readFile(captureFilePath, 'utf8');
   for (const line of capture.split('\n')) {
-    const match = kBucketPattern.exec(line.trim());
-    if (match === null) {
+    // A bucket's line, as the firmware logs it: an address and a count.
+    const record = parseLine(line.trim());
+    if (record === null || record.event !== 'profile_bucket') {
       continue;
     }
-    const name = symbolNameAt(symbols, parseInt(match[1], 16));
-    const count = Number(match[2]);
+    const name = symbolNameAt(symbols, toNumber(record.address));
+    const count = toNumber(record.samples);
     samplesByName.set(name, (samplesByName.get(name) ?? 0) + count);
     total += count;
   }
