@@ -31,7 +31,6 @@
 #include "hardware/clocks.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
-#include "hex.h"
 #include "keymap.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
@@ -709,13 +708,19 @@ static void RunScreen(const Command* command) {
       characters[column] = g_vram[offset];
       attributes[column] = g_vram[(offset + 1) % vram_size];
     }
+    // Two hex digits a byte, and room for the null snprintf() writes after
+    // the last pair.
     char hex[kMaxTextColumns * 2 + 1];
-    HexFormat(characters, mode->columns, hex);
+    for (uint8_t column = 0; column < mode->columns; ++column) {
+      snprintf(&hex[column * 2], 3, "%02X", characters[column]);
+    }
     Y_LOG_REPLY(
         &g_runtime_logger, command->id, command->name, Y_LOG_UINT("row", row),
         Y_LOG_STRING("chars", hex));
     if (with_attributes) {
-      HexFormat(attributes, mode->columns, hex);
+      for (uint8_t column = 0; column < mode->columns; ++column) {
+        snprintf(&hex[column * 2], 3, "%02X", attributes[column]);
+      }
       Y_LOG_REPLY(
           &g_runtime_logger, command->id, command->name, Y_LOG_UINT("row", row),
           Y_LOG_STRING("attrs", hex));
