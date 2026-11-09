@@ -724,29 +724,13 @@ static void RunScreen(const Command* command) {
   CommandReplyOk(command);
 }
 
-static void ReplyQueued(const Command* command) {
-  Y_LOG_REPLY(
-      &g_runtime_logger, command->id, command->name,
-      Y_LOG_STRING("status", "ok"), Y_LOG_UINT("keys_queued", TypingPending()));
-}
-
-// Type text into the guest, a key event a batch. The reply comes once the
-// keys are queued, not once they are typed; ping says how many are left.
-static void RunType(const Command* command) {
-  const char* text = CommandArgument(command, "text");
-  if (text == NULL) {
-    CommandReplyError(command, "missing_text");
-  } else if (!TypingQueueText(text)) {
-    CommandReplyError(command, "cannot_type");
-  } else {
-    ReplyQueued(command);
-  }
-}
-
-// Press, release or tap a key: by name, through the keymap as typed keys go,
-// or by its PC/XT scancode, straight to the guest at once, for a key the
-// PicoCalc does not have.
+// Press, release or, by default, tap a key, by name. The key goes through the
+// keymap as a key pressed on the PicoCalc does, a key event a batch, and the
+// reply comes once it is queued. A host sending keys faster than they go is
+// told the queue is full, and nothing is queued, so the key can be sent
+// again.
 static void RunKey(const Command* command) {
+  const char* name = CommandArgument(command, "name");
   const char* state = CommandArgument(command, "state");
   TypingAction action = kTypingTap;
   if (state != NULL && state[0] == 'p') {
@@ -754,38 +738,21 @@ static void RunKey(const Command* command) {
   } else if (state != NULL && state[0] == 'r') {
     action = kTypingRelease;
   }
-  const char* name = CommandArgument(command, "name");
-  const char* scancode = CommandArgument(command, "scancode");
   uint8_t code = 0;
-  uint64_t number = 0;
-  if (name != NULL) {
-    if (!TypingFindKey(name, &code)) {
-      CommandReplyError(command, "unknown_key");
-    } else if (!TypingQueueKey(code, action)) {
-      CommandReplyError(command, "queue_full");
-    } else {
-      ReplyQueued(command);
-    }
-  } else if (scancode != NULL) {
-    if (!YLogfmtParseUInt(scancode, &number) || number > 0x7F) {
-      CommandReplyError(command, "bad_scancode");
-      return;
-    }
-    if (action != kTypingRelease) {
-      YKeyboardHandleKeyPress(&g_platform.keyboard, (uint8_t)number);
-    }
-    if (action != kTypingPress) {
-      YKeyboardHandleKeyPress(&g_platform.keyboard, (uint8_t)number | 0x80);
-    }
-    CommandReplyOk(command);
+  if (name == NULL) {
+    CommandReplyError(command, "missing_name");
+  } else if (!TypingFindKey(name, &code)) {
+    CommandReplyError(command, "unknown_key");
+  } else if (!TypingQueueKey(code, action)) {
+    CommandReplyError(command, "queue_full");
   } else {
-    CommandReplyError(command, "missing_key");
+    CommandReplyOk(command);
   }
 }
 
 static void RunCommand(const Command* command) {
   if (CommandIs(command, "ping")) {
-    ReplyQueued(command);
+    CommandReplyOk(command);
   } else if (CommandIs(command, "report")) {
     ReplyReport(command);
   } else if (CommandIs(command, "screen")) {
@@ -795,8 +762,6 @@ static void RunCommand(const Command* command) {
     if (!DisplaySendScreenshot(command->id)) {
       CommandReplyError(command, "busy");
     }
-  } else if (CommandIs(command, "type")) {
-    RunType(command);
   } else if (CommandIs(command, "key")) {
     RunKey(command);
   } else {

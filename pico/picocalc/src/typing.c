@@ -1,12 +1,12 @@
 #include "typing.h"
 
 enum {
-  // Events the queue holds: a little over sixty shifted characters, each a
-  // Shift press, a press and a release, and a Shift release.
+  // Events the queue holds: 128 taps, each a press and a release. A host
+  // that sends keys faster than they go is told the queue is full, and sends
+  // the key again later.
   kTypingQueueSize = 256,
 
-  // The controller's codes for the keys this types that are not printable
-  // ASCII.
+  // The controller's codes for the named keys that are not printable ASCII.
   kCodeBackspace = 0x08,
   kCodeTab = 0x09,
   kCodeEnter = 0x0A,
@@ -33,7 +33,6 @@ enum {
 
   kFirstPrintable = 0x20,
   kLastPrintable = 0x7E,
-  kEsc = 0x1B,
 };
 
 typedef struct NamedKey {
@@ -75,10 +74,6 @@ static const NamedKey kNamedKeys[] = {
     {"space", ' '},
 };
 
-// The characters typed with Shift held, on the PicoCalc's keyboard as on a
-// PC's, other than the capital letters.
-static const char kShiftedSymbols[] = "~!@#$%^&*()_+{}|:\"<>?";
-
 static SouthbridgeKeyEvent g_queue[kTypingQueueSize];
 static uint16_t g_head;
 static uint16_t g_count;
@@ -91,73 +86,11 @@ static bool NamesEqual(const char* a, const char* b) {
   return *a == *b;
 }
 
-static bool IsShifted(char c) {
-  if (c >= 'A' && c <= 'Z') {
-    return true;
-  }
-  for (const char* symbol = kShiftedSymbols; *symbol != '\0'; ++symbol) {
-    if (*symbol == c) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// The controller's code for a character of typed text, if it has one.
-static bool CodeForCharacter(char c, uint8_t* code) {
-  if (c == '\r' || c == '\n') {
-    *code = kCodeEnter;
-  } else if (c == '\t') {
-    *code = kCodeTab;
-  } else if (c == '\b') {
-    *code = kCodeBackspace;
-  } else if (c == kEsc) {
-    *code = kCodeEsc;
-  } else if ((uint8_t)c >= kFirstPrintable && (uint8_t)c <= kLastPrintable) {
-    *code = (uint8_t)c;
-  } else {
-    return false;
-  }
-  return true;
-}
-
 static void Push(uint8_t code, SouthbridgeKeyState state) {
   const uint16_t tail = (uint16_t)((g_head + g_count) % kTypingQueueSize);
   g_queue[tail].state = state;
   g_queue[tail].key = code;
   ++g_count;
-}
-
-// How many events a key takes: a press and a release, and a Shift press and
-// release around them if it needs Shift.
-static uint16_t EventsFor(char c) { return IsShifted(c) ? 4 : 2; }
-
-bool TypingQueueText(const char* text) {
-  uint16_t needed = 0;
-  for (const char* c = text; *c != '\0'; ++c) {
-    uint8_t code = 0;
-    if (!CodeForCharacter(*c, &code)) {
-      return false;
-    }
-    needed += EventsFor(*c);
-  }
-  if (needed > kTypingQueueSize - g_count) {
-    return false;
-  }
-  for (const char* c = text; *c != '\0'; ++c) {
-    uint8_t code = 0;
-    CodeForCharacter(*c, &code);
-    const bool shifted = IsShifted(*c);
-    if (shifted) {
-      Push(kCodeLeftShift, kSouthbridgeKeyPressed);
-    }
-    Push(code, kSouthbridgeKeyPressed);
-    Push(code, kSouthbridgeKeyReleased);
-    if (shifted) {
-      Push(kCodeLeftShift, kSouthbridgeKeyReleased);
-    }
-  }
-  return true;
 }
 
 bool TypingQueueKey(uint8_t code, TypingAction action) {
@@ -199,5 +132,3 @@ bool TypingNext(SouthbridgeKeyEvent* event) {
   --g_count;
   return true;
 }
-
-uint16_t TypingPending(void) { return g_count; }
