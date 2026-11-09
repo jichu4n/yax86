@@ -3,7 +3,8 @@
 // The runtime raises the system clock, starts core 1 drawing on the LCD, brings
 // up the keyboard controller, and boots MS-DOS 3.30 off the floppy in drive A -
 // an image on the SD card, or the one built into flash without it - with the
-// guest's text screen on the LCD as it goes. The machine is
+// guest's text screen on the LCD as it goes. A hard disk image on the card is
+// attached as well, if there is one. The machine is
 // paced to real time and keeps running past the prompt, with the PicoCalc's
 // keyboard as its own. DOS's date and time questions are still answered by
 // watching the screen, the way pico/bench does it, which keeps the boot the
@@ -25,6 +26,7 @@
 #include "core/video.h"
 #include "display.h"
 #include "floppy.h"
+#include "harddisk.h"
 #include "hardware/clocks.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
@@ -338,17 +340,51 @@ static void FormatDisplayLine(char* buffer, size_t size) {
       (unsigned long)stats.frames_late);
 }
 
+// How much of a buffer of size an snprintf() that returned written filled,
+// leaving room for the terminator.
+static size_t Filled(int written, size_t size) {
+  if (written < 0) {
+    return 0;
+  }
+  return (size_t)written < size ? (size_t)written : size - 1;
+}
+
+// One drive's part of the Disk line: what it has read and written from its
+// image on the card, or what it has instead and why. Returns how much of
+// buffer it filled.
+static size_t FormatDrive(
+    char* buffer, size_t size, const char* drive, const DiskImage* image,
+    const char* instead) {
+  if (image->status != kDiskImageOpen) {
+    return Filled(
+        snprintf(
+            buffer, size, "%s %s, %s  ", drive, instead,
+            DiskImageDescribeStatus(image->status)),
+        size);
+  }
+  return Filled(
+      snprintf(
+          buffer, size, "%s %lu read, %lu written  ", drive,
+          (unsigned long)image->stats.sector_reads,
+          (unsigned long)image->stats.sector_writes),
+      size);
+}
+
 static void FormatDiskLine(char* buffer, size_t size) {
-  const FloppyStats stats = FloppyGetStats();
-  if (stats.source != kFloppySourceSDCard) {
-    snprintf(buffer, size, "A: %s", FloppyDescribeSource(stats.source));
+  const DiskImage* floppy = FloppyGetImage();
+  const DiskImage* hard_disk = HardDiskGetImage();
+  size_t length = FormatDrive(buffer, size, "A:", floppy, "built in");
+  length +=
+      FormatDrive(buffer + length, size - length, "C:", hard_disk, "none");
+  if (floppy->status != kDiskImageOpen && hard_disk->status != kDiskImageOpen) {
     return;
   }
   const uint64_t card_ms =
-      (stats.read_us + stats.write_us) / kMicrosecondsPerMillisecond;
+      (floppy->stats.read_us + floppy->stats.write_us +
+       hard_disk->stats.read_us + hard_disk->stats.write_us) /
+      kMicrosecondsPerMillisecond;
   snprintf(
-      buffer, size, "A: SD card, %lu sectors read, %lu written, %llu.%03llus",
-      (unsigned long)stats.sector_reads, (unsigned long)stats.sector_writes,
+      buffer + length, size - length, "%llu.%03llus",
       (unsigned long long)(card_ms / kMillisecondsPerSecond),
       (unsigned long long)(card_ms % kMillisecondsPerSecond));
 }
@@ -369,6 +405,19 @@ static bool HandOverStatus(void) {
   FormatDiskLine(status->values[kDisplayStatusDisk], size);
   DisplayEndStatus();
   return true;
+}
+
+// A disk image's lines of the report, each key led by a two letter prefix,
+// which the padding assumes.
+static void PrintDiskImage(const char* prefix, const DiskImage* image) {
+  const DiskImageStats* stats = &image->stats;
+  printf("%s_image       %s\n", prefix, DiskImageDescribeStatus(image->status));
+  printf("%s_fast_seek   %d\n", prefix, image->fast_seek);
+  printf("%s_reads       %lu\n", prefix, (unsigned long)stats->sector_reads);
+  printf("%s_writes      %lu\n", prefix, (unsigned long)stats->sector_writes);
+  printf("%s_errors      %lu\n", prefix, (unsigned long)stats->errors);
+  printf("%s_read_us     %llu\n", prefix, (unsigned long long)stats->read_us);
+  printf("%s_write_us    %llu\n", prefix, (unsigned long long)stats->write_us);
 }
 
 // The same facts as the status screen, as key and value lines.
@@ -407,14 +456,9 @@ static void PrintReport(void) {
   printf("%-14s %lu\n", "frames_late", (unsigned long)display.frames_late);
   printf("%-14s %llu\n", "copy_us", (unsigned long long)display.copy_us);
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
-  const FloppyStats floppy = FloppyGetStats();
-  printf("%-14s %s\n", "floppy", FloppyDescribeSource(floppy.source));
   printf("%-14s %lu\n", "sd_clock_hz", (unsigned long)SdcardGetClockHz());
-  printf("%-14s %lu\n", "fd_reads", (unsigned long)floppy.sector_reads);
-  printf("%-14s %lu\n", "fd_writes", (unsigned long)floppy.sector_writes);
-  printf("%-14s %lu\n", "fd_errors", (unsigned long)floppy.errors);
-  printf("%-14s %llu\n", "fd_read_us", (unsigned long long)floppy.read_us);
-  printf("%-14s %llu\n", "fd_write_us", (unsigned long long)floppy.write_us);
+  PrintDiskImage("fd", FloppyGetImage());
+  PrintDiskImage("hd", HardDiskGetImage());
   printf("%-14s %lu\n", "key_reads", (unsigned long)keyboard.reads);
   printf("%-14s %lu\n", "keys", (unsigned long)keyboard.keys);
   printf("%-14s %lu\n", "stale_keys", (unsigned long)keyboard.stale_keys);
@@ -464,6 +508,7 @@ static bool InitMachine(void) {
     return false;
   }
   FloppyInsert(&g_platform.fdc);
+  HardDiskAttach(&g_platform.hdc);
   return true;
 }
 
@@ -749,6 +794,7 @@ int main(void) {
   g_status.southbridge_answered =
       SouthbridgeReadVersion(&g_status.southbridge_version);
   FloppyOpen();
+  HardDiskOpen();
   HandOverStatus();
 
   RunMachine(InitMachine());
