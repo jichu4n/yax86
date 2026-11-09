@@ -279,6 +279,16 @@ round-trips through memory costs more than its instruction count suggests.**
   `YCPUFromSignedOperand()`.
 - An unreachable width arm returns `Y_CPU_UNREACHABLE_OPERAND_VALUE`,
   `0xFF` - open bus, and legal at either width where `0xFFFF` is not.
+- **Sign extension is one test, byte or not**, not a switch with a return
+  for the values outside the enum a width can hold. That return is a third
+  path, and inlined into `IMUL` and `IDIV`, GCC carries it on to their next
+  table lookup by width and warns that the index can be 2 (`-Warray-bounds`
+  on every Pico build). Taking it out also measured **0.31% faster at
+  `-O3`**, but not from sign extension, which only `SAR`, `NEG`, `IMUL` and
+  `IDIV` use: the four shrank by 216 bytes, and GCC then stopped inlining
+  `YVideoGetMode()` into `YPlatformWriteMemoryByte()`, both in SRAM, which
+  made the latter 148 bytes smaller. An inlining side effect, which a later
+  change can move again.
 - **Never initialize an operand with a designated initializer** - `YCPUOperand
   operand = {.address = {...}}`: C zeroes the unnamed members, a `memset` of
   the whole struct. Assigning fields one at a time is **3.46% at `-O3`** from
