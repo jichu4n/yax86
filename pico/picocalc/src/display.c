@@ -1,10 +1,10 @@
 #include "display.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "font_4x10.h"
 #include "hardware/sync.h"
-#include "hex.h"
 #include "lcd.h"
 #include "pico/multicore.h"
 #include "pico/sync.h"
@@ -171,17 +171,16 @@ static void SendScreenshot(uint32_t id) {
       &g_render_logger, id, kCommand, Y_LOG_UINT("width", kLcdWidth),
       Y_LOG_UINT("height", kLcdHeight), Y_LOG_STRING("format", "rgb565"));
   uint16_t pixels[kScreenshotPixelsPerLine];
-  uint8_t bytes[kScreenshotPixelsPerLine * 2];
-  char hex[sizeof(bytes) * 2 + 1];
+  // Four hex digits a pixel, and room for the null snprintf() writes after
+  // the last.
+  char hex[kScreenshotPixelsPerLine * 4 + 1];
   LcdBeginRead(0, 0, kLcdWidth, kLcdHeight);
   for (uint16_t y = 0; y < kLcdHeight; ++y) {
     for (uint16_t x = 0; x < kLcdWidth; x += kScreenshotPixelsPerLine) {
       LcdReadPixels(pixels, kScreenshotPixelsPerLine);
       for (uint8_t i = 0; i < kScreenshotPixelsPerLine; ++i) {
-        bytes[2 * i] = (uint8_t)(pixels[i] >> 8);
-        bytes[2 * i + 1] = (uint8_t)pixels[i];
+        snprintf(&hex[i * 4], 5, "%04X", pixels[i]);
       }
-      HexFormat(bytes, sizeof(bytes), hex);
       Y_LOG_REPLY(
           &g_render_logger, id, kCommand, Y_LOG_UINT("row", y),
           Y_LOG_UINT("x", x), Y_LOG_STRING("pixels", hex));
