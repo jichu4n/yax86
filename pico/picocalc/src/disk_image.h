@@ -45,6 +45,9 @@ enum {
 
 typedef struct DiskImage {
   DiskImageStatus status;
+  // Where the image is on the card, whether or not it opened. The caller's
+  // string, which must outlive the image.
+  const char* path;
   // Whether seeking looks the sector up in link_map. Without it, FatFs walks
   // the cluster chain from the start of the file to seek backwards, which an
   // image that is too fragmented for the map falls back to.

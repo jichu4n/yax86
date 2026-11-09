@@ -4,7 +4,7 @@ The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld with
 a 320x320 LCD, a keyboard, an SD card slot, speakers and a battery. It raises
 the clock to 250MHz and boots MS-DOS 3.30 from an image on the SD card, or
 from the one in flash, with a hard disk image attached if the card has one.
-The guest's screen and status lines below it are drawn by the second core
+The guest's screen and the status rows below it are drawn by the second core
 while the first runs the machine, paced to real time. It takes the
 PicoCalc's keyboard as its own and plays the PC speaker. DOS's date and time
 questions are answered by watching the screen, as `pico/bench` does - there
@@ -99,7 +99,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **The idle skip is turned on at the prompt**, not from power on, which would
   move the invariant. Without it the prompt runs at about 83% of real time;
   with it the processor is about 19% busy and emulated time tracks real time.
-- The Clock status line compares the guest's time of day (the BIOS tick count
+- The status page's Clock line compares the guest's time of day (the BIOS tick count
   at `0040:006C`) with real time since power on: about a quarter second
   behind from POST, and further only by what was dropped.
 - **The overclock is made with the watchdog armed, after USB is up**, as in
@@ -143,8 +143,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ## The guest's screen, and what drawing it costs
 
 - **Text renders 320x250 in the 4x10 font**, handed to the core through
-  `YPlatformConfig.video_text_font`, in the top 250 rows; status lines take
-  the rest. The core renders only what changed, as rectangles, and the panel
+  `YPlatformConfig.video_text_font`, in the top 250 rows; the status rows
+  take the bottom 30. The core renders only what changed, as rectangles, and the panel
   keeps its own frame memory, so each region goes straight to it:
   `begin_render_region` opens a window and `write_pixels` streams RGB565.
 - **The CGA's graphics modes render 640x200 and are drawn at 320x250**, in
@@ -265,7 +265,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Drive A is `yax86/floppy_a.img`**, 360KB on the card's FAT volume, and
   guest writes go to the card. Without one it is the read-only floppy in
-  flash, and the Disk status line says why: no card, no answer, no FAT
+  flash, and the status page's Disk line says why: no card, no answer, no FAT
   volume, no image, or the wrong size. The card is looked at once, at power
   on.
 - **The hard disk is `yax86/hdd.img`**, attached as master only if present:
@@ -328,6 +328,64 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the core reports a frequency, not the speaker line - see
   `YPlatformConfig.set_pc_speaker_frequency`.
 
+## The status rows
+
+- **Three rows of the 4x10 font at the bottom of the panel**, composed by
+  `src/status_bar.c` on core 0 and drawn by core 1, which draws only the
+  rows that changed. A line a pixel high in dark grey, two pixels above
+  them, sets them off from the guest's screen; the rows between are black.
+
+  ```
+  Inserted GAMES.IMG in drive A                                         <- messages
+  A:FLOPPY_A.IMG                  C:HDD.IMG                             <- drives
+                    CAPS NUM SCRL INS     00:44:51        ↑+↑ Menu  [████] 100%
+  ```
+
+- **Messages** are queued and shown four seconds each, without moving
+  anything on the rows below. While the menu is open the row shows its keys, and while the machine
+  is dropping time it shows `SLOW` and its speed in yellow.
+- **Drives** take a 16-column slot each, for A to D: the image's file name,
+  without its folders, in capitals, or `built-in` for the floppy in flash. A
+  drive with no image is left out. The card keeps 8.3 names, so a name fits;
+  a longer one would keep 11 characters and end in `~`. The letter is the
+  drive's light, green for 0.2 seconds after a sector is read or written.
+- **Indicators**: the guest BIOS's own lock and insert flags, at
+  `0040:0017` - a PC/XT keyboard has no lights - bright when on; the
+  guest's time of day; the menu's key; and the battery, from the keyboard
+  controller's register `0x0B`, which the key FIFO poll reads every ten
+  seconds in its place. The controller measures it every 20 seconds, and
+  answers 0% with no battery, which is shown as no battery.
+- **They are composed ten times a second**, so that a light comes on while
+  its drive is in use, and composing is skipped while nothing they show has
+  changed. Composing every time cost the boot 0.74% against master; skipping
+  it, 0.42%, within 0.06% of composing once a second.
+- The status page in the menu has the six lines of figures the panel used
+  to show at all times.
+
+## The menu
+
+- **Both Shift keys held together open it**, which nothing in DOS does and
+  typing never does, and close it again. `src/menu.c` keeps its state and
+  draws it; `main.c` carries out what its items do.
+- **The machine is paused while it is open**: no batches run and no frames
+  are drawn, and on closing, pacing starts again from the present rather
+  than running flat out to catch up. The time is `paused_us` in the report,
+  and counts as neither busy nor waited. The guest's clock stands still.
+- The guest has seen both Shift keys go down when the menu opens, and would
+  not see them come up while the menu has the keyboard, so they are released
+  to it then.
+- **It is a box drawn over the guest's screen**, white on blue in code page
+  437's double lined box, a page at a time: Resume, Status and Reset, the
+  status page, and a question before a reset. Up and Down move, Enter or
+  Space chooses, Esc or Backspace goes back. A box of a new size has the
+  guest's screen drawn in full under it first, and closing draws it in full,
+  so nothing of a box is left behind.
+- **Reset restarts the board** with `watchdog_reboot()`, which is the
+  machine from power on. What the guest wrote is already on the card.
+- **A test drives it as a hand would**, with `key shift press`, `key rshift
+  press` and their releases, and checks it with `screenshot`; the report's
+  `menu` group says whether it is open and which page shows.
+
 ## Commands over USB
 
 - **A host drives the runtime with commands on the same serial port**, a
@@ -338,7 +396,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `speaker`, `pacing` |
+  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `speaker`, `menu`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |

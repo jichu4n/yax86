@@ -49,12 +49,27 @@ enum {
 
   kRegisterVersion = 0x01,
   kRegisterKeyFIFO = 0x09,
+  // Answers the register number, then the percentage in the low seven bits,
+  // with the top bit set while charging.
+  kRegisterBattery = 0x0B,
+  kBatteryChargingBit = 0x80,
+  kBatteryPercentMask = 0x7F,
+  kBatteryMaxPercent = 100,
+  // How often the poll reads the battery in place of the key FIFO. The
+  // controller measures it every 20 seconds, so more often would find
+  // nothing new.
+  kBatteryReadIntervalUs = 10 * 1000 * 1000,
   // The bytes a register answers with.
   kRegisterAnswerBytes = 2,
 };
 
-// The key FIFO read in flight, if any.
+// The read in flight, if any, and which register it is of.
 static bool g_poll_in_flight;
+static uint8_t g_poll_register;
+// When the poll next reads the battery rather than the key FIFO: straight
+// away, the first time.
+static uint64_t g_next_battery_read_us;
+static SouthbridgeBattery g_battery;
 static uint64_t g_poll_started_us;
 // Whether a read has found the key FIFO empty yet.
 static bool g_poll_caught_up;
@@ -119,13 +134,20 @@ bool SouthbridgeReadVersion(uint8_t* version) {
   return true;
 }
 
-// Queue a whole read of the key FIFO: the register number, then a two byte
-// read, each ending in a STOP. The I2C block carries the commands out from its
-// own FIFO, so nothing waits for the bus. The controller prepares its answer
-// as the register number arrives, so the read can follow straight on.
+// Queue a whole read of the key FIFO, or every so often of the battery: the
+// register number, then a two byte read, each ending in a STOP. The I2C block
+// carries the commands out from its own FIFO, so nothing waits for the bus.
+// The controller prepares its answer as the register number arrives, so the
+// read can follow straight on.
 static void StartKeyFIFORead(void) {
   i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
-  hw->data_cmd = I2C_IC_DATA_CMD_STOP_BITS | kRegisterKeyFIFO;
+  const uint64_t now_us = time_us_64();
+  g_poll_register = kRegisterKeyFIFO;
+  if (now_us >= g_next_battery_read_us) {
+    g_poll_register = kRegisterBattery;
+    g_next_battery_read_us = now_us + kBatteryReadIntervalUs;
+  }
+  hw->data_cmd = I2C_IC_DATA_CMD_STOP_BITS | g_poll_register;
   hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS;
   hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS | I2C_IC_DATA_CMD_STOP_BITS;
   g_poll_started_us = time_us_64();
@@ -157,7 +179,12 @@ bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
     const uint8_t state = i2c_read_byte_raw(kSouthbridgeI2C);
     const uint8_t key = i2c_read_byte_raw(kSouthbridgeI2C);
     ++g_poll_stats.reads;
-    if (state == kSouthbridgeKeyIdle) {
+    if (g_poll_register == kRegisterBattery) {
+      const uint8_t percent = key & kBatteryPercentMask;
+      g_battery.known = percent > 0 && percent <= kBatteryMaxPercent;
+      g_battery.percent = percent;
+      g_battery.charging = (key & kBatteryChargingBit) != 0;
+    } else if (state == kSouthbridgeKeyIdle) {
       g_poll_caught_up = true;
     } else if (!g_poll_caught_up) {
       ++g_poll_stats.stale_keys;
@@ -182,3 +209,5 @@ bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
 }
 
 SouthbridgePollStats SouthbridgeGetPollStats(void) { return g_poll_stats; }
+
+SouthbridgeBattery SouthbridgeGetBattery(void) { return g_battery; }

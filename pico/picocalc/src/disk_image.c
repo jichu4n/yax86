@@ -77,6 +77,7 @@ static DiskImageStatus Open(DiskImage* image, const char* path, uint32_t size) {
 
 DiskImageStatus DiskImageOpen(
     DiskImage* image, const char* path, uint32_t size) {
+  image->path = path;
   image->status = Open(image, path, size);
   return image->status;
 }

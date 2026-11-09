@@ -20,18 +20,14 @@ enum {
   kGuestScreenWidth = kGuestScreenColumns * kFont4x10Width,
   kGuestScreenHeight = kGuestScreenRows * kFont4x10Height,
 
-  // The banner and status lines below it, in 4x10 character cells, which take
-  // every row the guest's screen leaves.
-  kBannerRow = kGuestScreenRows,
-  kStatusFirstRow = kBannerRow + 1,
-  kStatusLabelColumn = 1,
-  kStatusValueColumn = 10,
+  // The status rows, the panel's last three rows of 4x10 cells, and the line
+  // a pixel high that sets them off from the guest's screen, two pixels above
+  // them. The rows between are left black.
+  kStatusFirstRow = kTextRows - kDisplayStatusRows,
+  kStatusSeparatorY = kStatusFirstRow * kFont4x10Height - 2,
+  kStatusSeparatorColor = 8,
 
-  // The CGA colors the runtime's own text is drawn in.
-  kColorBlack = 0,
-  kColorLightGray = 7,
-  kColorYellow = 14,
-  kColorWhite = 15,
+  kCGAColors = 16,
 
   // How a graphics mode's 640x200 is drawn in the guest's screen's 320x250:
   // two pixels across to one, and four rows down to five.
@@ -60,13 +56,8 @@ typedef enum DisplayMessage {
   kDisplayMessageTurnOff,
   kDisplayMessageTurnOn,
   kDisplayMessageScreenshot,
+  kDisplayMessageMenu,
 } DisplayMessage;
-
-static const char* const kStatusLabels[kDisplayStatusLineCount] = {
-    [kDisplayStatusSystem] = "System",   [kDisplayStatusBoot] = "Boot",
-    [kDisplayStatusSpeed] = "Speed",     [kDisplayStatusClock] = "Clock",
-    [kDisplayStatusDisplay] = "Display", [kDisplayStatusDisk] = "Disk",
-};
 
 // What core 0 hands over. Each has a flag that only core 0 sets, once it has
 // filled the buffer in, and only core 1 clears, once it has drawn it. While it
@@ -78,6 +69,8 @@ static uint8_t g_frame_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static volatile bool g_frame_busy;
 static DisplayStatus g_status;
 static volatile bool g_status_busy;
+static DisplayMenu g_menu;
+static volatile bool g_menu_busy;
 // The id of the command a screenshot answers.
 static uint32_t g_screenshot_id;
 static volatile bool g_screenshot_busy;
@@ -98,10 +91,13 @@ static uint16_t g_graphics_row[kGuestScreenWidth];
 static uint16_t g_graphics_row_length;
 static uint16_t g_graphics_row_width;
 
-static uint16_t CGAColor(uint8_t index) {
-  const YVideoRGB rgb = YVideoDefaultConfig.cga_palette[index];
-  return LcdRGB565(rgb.r, rgb.g, rgb.b);
-}
+// The CGA's colors in the panel's RGB565, which the runtime's own text is
+// drawn in. Core 1's, filled in before it draws anything.
+static uint16_t g_palette[kCGAColors];
+// The status rows as core 1 last drew them, so that only the rows that change
+// are drawn again.
+static DisplayStatus g_drawn_status;
+static bool g_status_drawn;
 
 // ============================================================================
 // Core 1
@@ -211,31 +207,35 @@ static void DrawFrame(void) {
   critical_section_exit(&g_stats_lock);
 }
 
-// Draw one status line, padded out to the right edge so that a shorter value
-// covers a longer one.
-static void DrawStatusLine(DisplayStatusLine line, const char* value) {
-  char padded[kTextColumns - kStatusValueColumn + 1];
-  size_t length = 0;
-  while (value[length] != '\0' && length < sizeof(padded) - 1) {
-    padded[length] = value[length];
-    ++length;
+static bool TextRowsEqual(const DisplayTextRow* a, const DisplayTextRow* b) {
+  for (uint8_t i = 0; i < kTextColumns; ++i) {
+    if (a->chars[i] != b->chars[i] || a->attrs[i] != b->attrs[i]) {
+      return false;
+    }
   }
-  while (length < sizeof(padded) - 1) {
-    padded[length++] = ' ';
-  }
-  padded[length] = '\0';
-  const uint8_t row = (uint8_t)(kStatusFirstRow + line);
-  TextDrawString(
-      kStatusLabelColumn, row, kStatusLabels[line], CGAColor(kColorLightGray),
-      CGAColor(kColorBlack));
-  TextDrawString(
-      kStatusValueColumn, row, padded, CGAColor(kColorWhite),
-      CGAColor(kColorBlack));
+  return true;
 }
 
+// Draw the status rows that differ from the ones last drawn.
 static void DrawStatus(void) {
-  for (uint8_t line = 0; line < kDisplayStatusLineCount; ++line) {
-    DrawStatusLine((DisplayStatusLine)line, g_status.values[line]);
+  for (uint8_t row = 0; row < kDisplayStatusRows; ++row) {
+    const DisplayTextRow* text = &g_status.rows[row];
+    if (g_status_drawn && TextRowsEqual(text, &g_drawn_status.rows[row])) {
+      continue;
+    }
+    TextDrawCells(
+        0, (uint8_t)(kStatusFirstRow + row), text->chars, text->attrs,
+        kTextColumns, g_palette);
+    g_drawn_status.rows[row] = *text;
+  }
+  g_status_drawn = true;
+}
+
+static void DrawMenu(void) {
+  for (uint8_t row = 0; row < g_menu.rows; ++row) {
+    TextDrawCells(
+        g_menu.column, (uint8_t)(g_menu.row + row), g_menu.text[row].chars,
+        g_menu.text[row].attrs, g_menu.columns, g_palette);
   }
 }
 
@@ -304,11 +304,13 @@ static void GiveBack(volatile bool* busy) {
 }
 
 static void DisplayMain(void) {
+  for (uint8_t i = 0; i < kCGAColors; ++i) {
+    const YVideoRGB rgb = YVideoDefaultConfig.cga_palette[i];
+    g_palette[i] = LcdRGB565(rgb.r, rgb.g, rgb.b);
+  }
   const uint32_t lcd_hz = LcdInit();
-  TextDrawString(
-      kStatusLabelColumn, kBannerRow,
-      "yax86 - an IBM PC/XT emulator, on the ClockworkPi PicoCalc",
-      CGAColor(kColorYellow), CGAColor(kColorBlack));
+  LcdFillRect(
+      0, kStatusSeparatorY, kLcdWidth, 1, g_palette[kStatusSeparatorColor]);
   multicore_fifo_push_blocking(lcd_hz);
 
   for (;;) {
@@ -328,6 +330,10 @@ static void DisplayMain(void) {
         break;
       case kDisplayMessageTurnOn:
         LcdSetDisplayOn(true);
+        break;
+      case kDisplayMessageMenu:
+        DrawMenu();
+        GiveBack(&g_menu_busy);
         break;
       case kDisplayMessageScreenshot:
         SendScreenshot(g_screenshot_id);
@@ -356,15 +362,15 @@ uint32_t DisplayStart(void) {
   return multicore_fifo_pop_blocking();
 }
 
-void DisplayOfferFrame(YVideoState* video) {
+bool DisplayOfferFrame(YVideoState* video) {
   if (video->dirty_state.status == Y_VIDEO_CLEAN) {
-    return;
+    return true;
   }
   if (g_frame_busy) {
     critical_section_enter_blocking(&g_stats_lock);
     ++g_stats.frames_late;
     critical_section_exit(&g_stats_lock);
-    return;
+    return false;
   }
   const uint64_t start_us = time_us_64();
   YVideoCopyForRender(video, &g_frame, g_frame_vram);
@@ -379,6 +385,7 @@ void DisplayOfferFrame(YVideoState* video) {
   g_stats.copy_us += copy_us;
   critical_section_exit(&g_stats_lock);
   HandOver(kDisplayMessageFrame, &g_frame_busy);
+  return true;
 }
 
 DisplayStatus* DisplayBeginStatus(void) {
@@ -386,6 +393,10 @@ DisplayStatus* DisplayBeginStatus(void) {
 }
 
 void DisplayEndStatus(void) { HandOver(kDisplayMessageStatus, &g_status_busy); }
+
+DisplayMenu* DisplayBeginMenu(void) { return g_menu_busy ? NULL : &g_menu; }
+
+void DisplayEndMenu(void) { HandOver(kDisplayMessageMenu, &g_menu_busy); }
 
 void DisplayTurnOff(void) {
   __dmb();
