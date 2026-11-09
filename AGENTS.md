@@ -2592,45 +2592,52 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
   | command | does |
   | --- | --- |
-  | `ping` | answers, with how many typed keys are still to send |
+  | `ping` | answers, and nothing else |
   | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
-  | `type text=...` | types the text into the guest |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
-  | `key scancode=0x52` | sends a PC/XT scancode straight to the guest, for a key the PicoCalc does not have |
 
 - **A screen row is hex, not text.** Text escaped as logfmt would not fit on
   a line: a row of box drawing characters is 80 bytes outside ASCII, which
   escape to 320 characters, against the logger's 256-byte line. `debug.js`
   turns the hex back into code page 437, as Unicode.
-- **Typed keys go through the keymap, one key event a batch**, from the queue
-  in `src/typing.c`, in a batch the PicoCalc's keyboard had none. An event is
-  the keyboard controller's, so the keymap turns it into scancodes as it
-  does a key pressed on the device. The controller reports `A` and `!` as
-  characters and Shift as a key of its own, and the keymap sends `A` and `a`
-  as the same key, so typed text adds Shift around the characters that need
-  it - without it the guest gets lower case. The reply comes once the keys
-  are queued; `ping` says when they have all gone. A raw scancode skips the
-  queue.
+- **`key` is the only way in, and a host can do with it exactly what a hand
+  on the keyboard can.** A key is the keyboard controller's: a character
+  names the key that types it, and `shift`, `ctrl` and `alt` are keys of
+  their own, so `A` is Shift pressed around a tap of `a`, as on the device.
+  Typing text is the host's business - `debug.js` turns text into keys. There
+  is no way to send a key the PicoCalc does not have, so nothing a test does
+  is beyond what a user could do.
+- **A key goes through the keymap, one event a batch**, from the queue in
+  `src/typing.c`, in a batch the PicoCalc's keyboard had none, so the keymap
+  turns it into scancodes as it does a key pressed on the device. The reply
+  comes once the key is queued, not once the guest has it: a test waits for
+  what the key does, on the screen, rather than for the key. A key the queue
+  has no room for is refused with `queue_full` and nothing queued, and
+  `debug.js` sends it again. A host typing a key at a time does not get
+  that far: the queue held at two events still refused nothing.
 - **Commands are read once a batch, without waiting**, up to 64 bytes at a
   time, and carried out between batches. With nothing sent, the poll costs
   the boot 3.5ms - 5.0755 seconds of processor time against 5.0721, 0.07%.
   The time commands take is counted in the report as `command_us`, which a
   boot that took commands is that much slower for.
-- **`debug.js` is the host's side**: `screen`, `type`, `key`, `scancode`,
-  `wait`, `report` and `ping`, or `run` with a script of them, a step a line.
+- **`debug.js` is the host's side**: `screen`, `type`, `key`, `wait`,
+  `report` and `ping`, or `run` with a script of them, a step a line.
   `wait` polls the screen until a regular expression matches it, and a
   timeout fails the script, which is what makes a script a test:
 
   ```
   type CLS\r
-  wait ^A>
+  wait ^A> *\n(?![\s\S]*\S)
   type DIR C:\r
   wait bytes free
   ```
 
-  A wait sees the whole screen, old output included, so a script clears it
-  first. The tool opens the port once for the session.
+  A wait sees the whole screen, and can run before the guest has had the
+  keys, so it waits for something only the new input can produce. After
+  CLS that is the prompt alone on a blank screen, rather than any prompt,
+  which the screen from before could already show. The tool opens the port
+  once for the session.
 - **A command goes out with a newline before it as well as after.** The
   port opens with echo on, as any tty does, until it is made raw, so what
   the board says while it is open that way - to `serial.js` in the moment
