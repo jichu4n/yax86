@@ -331,8 +331,17 @@ async function runStep(board, verb, argument, options) {
       const seconds = Number(options.timeout ?? kDefaultWaitSeconds);
       const end = Date.now() + seconds * 1000;
       while (Date.now() < end) {
-        const {text} = await board.screen();
-        if (pattern.test(text.join('\n'))) {
+        // A graphics mode has no text to match, which is no match yet: the
+        // keys that leave it may still be on their way.
+        let text = null;
+        try {
+          ({text} = await board.screen());
+        } catch (e) {
+          if (!e.message.endsWith('not_text_mode')) {
+            throw e;
+          }
+        }
+        if (text !== null && pattern.test(text.join('\n'))) {
           return true;
         }
         await delay(kWaitPollMs);
