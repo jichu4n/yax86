@@ -3,8 +3,14 @@
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
-#define Y_HDC_LOG(level, ...) \
-  Y_LOG(hdc->config.logger, &YHDCLogModule, level, __VA_ARGS__)
+#define Y_HDC_ERROR(...) \
+  Y_LOG(hdc->config.logger, &YHDCLogModule, Y_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define Y_HDC_WARN(...) \
+  Y_LOG(hdc->config.logger, &YHDCLogModule, Y_LOG_LEVEL_WARN, __VA_ARGS__)
+#define Y_HDC_INFO(...) \
+  Y_LOG(hdc->config.logger, &YHDCLogModule, Y_LOG_LEVEL_INFO, __VA_ARGS__)
+#define Y_HDC_DEBUG(...) \
+  Y_LOG(hdc->config.logger, &YHDCLogModule, Y_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 #include <stddef.h>
 
@@ -340,10 +346,12 @@ Y_FILE_PRIVATE void YHDCHandleInitializeDeviceParameters(
   }
   drive->num_translated_heads = num_heads;
   drive->num_translated_sectors_per_track = num_sectors_per_track;
-  Y_HDC_LOG(
-      Y_LOG_LEVEL_DEBUG, "drive %u translated geometry set to %u heads, %u S/T",
-      (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, num_heads,
-      num_sectors_per_track);
+  Y_HDC_DEBUG(
+      "translated_geometry_set",
+      Y_LOG_UINT(
+          "drive", (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0),
+      Y_LOG_UINT("heads", num_heads),
+      Y_LOG_UINT("sectors_per_track", num_sectors_per_track));
   YHDCFinishCommand(hdc);
 }
 
@@ -371,12 +379,16 @@ Y_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
     return;
   }
 
-  Y_HDC_LOG(
-      Y_LOG_LEVEL_DEBUG, "drive %u command %02X, CHS %u/%u/%u, count %u",
-      (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0, opcode,
-      ((uint16_t)hdc->cylinder_high << 8) | hdc->cylinder_low,
-      hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK, hdc->sector_number,
-      hdc->sector_count);
+  Y_HDC_DEBUG(
+      "command",
+      Y_LOG_UINT(
+          "drive", (hdc->drive_head & Y_HDC_DRIVE_HEAD_DRIVE_SELECT) ? 1 : 0),
+      Y_LOG_HEX8("command", opcode),
+      Y_LOG_UINT(
+          "cylinder", ((uint16_t)hdc->cylinder_high << 8) | hdc->cylinder_low),
+      Y_LOG_UINT("head", hdc->drive_head & Y_HDC_DRIVE_HEAD_HEAD_MASK),
+      Y_LOG_UINT("sector", hdc->sector_number),
+      Y_LOG_UINT("count", hdc->sector_count));
 
   // The low nibble of recalibrate and seek is a stepping rate, so the whole
   // range is one command.
@@ -417,7 +429,7 @@ Y_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
       break;
 
     default:
-      Y_HDC_LOG(Y_LOG_LEVEL_WARN, "unsupported command %02X", opcode);
+      Y_HDC_WARN("unsupported_command", Y_LOG_HEX8("command", opcode));
       YHDCFailCommand(hdc, Y_HDC_ERROR_ABORTED);
       break;
   }
@@ -450,11 +462,11 @@ Y_FILE_PRIVATE uint8_t YHDCReadTransferByte(YHDCState* hdc) {
 // a word per low byte read rather than a byte per read of either port.
 Y_FILE_PRIVATE uint8_t YHDCReadDataRegister(YHDCState* hdc) {
   if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST)) {
-    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read with no transfer active");
+    Y_HDC_WARN("data_read_without_transfer");
     return 0;
   }
   if (hdc->transfer == Y_HDC_TRANSFER_WRITE) {
-    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register read during a write");
+    Y_HDC_WARN("data_read_during_write");
     return 0;
   }
 
@@ -501,7 +513,7 @@ Y_FILE_PRIVATE void YHDCWriteDataRegister(
     YHDCState* hdc, bool is_high_byte, uint8_t value) {
   if (!(hdc->status & Y_HDC_STATUS_DATA_REQUEST) ||
       hdc->transfer != Y_HDC_TRANSFER_WRITE) {
-    Y_HDC_LOG(Y_LOG_LEVEL_WARN, "data register written with no write active");
+    Y_HDC_WARN("data_write_without_write");
     return;
   }
 

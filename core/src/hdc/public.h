@@ -30,7 +30,7 @@ enum {
 // Log module for the HDC.
 Y_PUBLIC_HEADER const YLogModule YHDCLogModule = {
     .id = Y_HDC_LOG_MODULE_ID,
-    .name = "HDC",
+    .name = "hdc",
 };
 
 enum {

@@ -95,13 +95,13 @@ class DecodeCacheTest : public ::testing::Test {
   }
 
   static void RecordLogLine(
-      void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
-      const char* message, size_t length) {
+      void* context, YLogKind kind, const YLogModule* module, YLogLevel level,
+      const char* line, size_t length) {
+    (void)kind;
     (void)module;
     (void)level;
-    (void)tick;
     static_cast<DecodeCacheTest*>(context)->log_lines_.push_back(
-        std::string(message, length));
+        std::string(line, length));
   }
 
   static void GetInstructionFetchWindow(YCPUState* cpu, uint32_t address) {

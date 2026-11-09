@@ -99,8 +99,8 @@ inline void MockEndRenderRegion(YVideoState* video) {
 inline int mock_log_error_count;
 
 inline void MockWriteLogLine(
-    void* context, const YLogModule* module, YLogLevel level, uint64_t tick,
-    const char* message, size_t length) {
+    void* context, YLogKind kind, const YLogModule* module, YLogLevel level,
+    const char* line, size_t length) {
   if (level == Y_LOG_LEVEL_ERROR) {
     ++mock_log_error_count;
   }

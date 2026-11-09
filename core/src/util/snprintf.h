@@ -191,7 +191,9 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
         unsigned long long uval;
         if (val < 0) {
           negative = 1;
-          uval = (unsigned long long)-val;
+          // Negated as unsigned: the magnitude of the most negative value
+          // does not fit in a long long.
+          uval = 0ULL - (unsigned long long)val;
         } else {
           uval = (unsigned long long)val;
         }

@@ -6,6 +6,7 @@
 #include <emscripten.h>
 #endif
 
+#include "app_log.h"
 #include "audio.h"
 #include "core/platform.h"
 #include "core/video.h"
@@ -23,40 +24,21 @@ static bool g_running = true;
 // open and keeps rendering, but the platform is no longer ticked.
 static bool g_cpu_stopped = false;
 
-// Log module for the SDL runtime itself.
-enum {
-  kLogModuleIDApp = 16,
+const YLogModule kAppLogModule = {
+    .id = Y_LOG_FIRST_HOST_MODULE_ID,
+    .name = "sdl",
 };
-static const YLogModule kLogModuleApp = {
-    .id = kLogModuleIDApp,
-    .name = "APP",
-};
+YLogger g_app_logger;
 
 static YLoggerConfig g_logger_config;
 
-static const char* MainLogLevelName(YLogLevel level) {
-  switch (level) {
-    case Y_LOG_LEVEL_ERROR:
-      return "ERROR";
-    case Y_LOG_LEVEL_WARN:
-      return "WARN";
-    case Y_LOG_LEVEL_DEBUG:
-      return "DEBUG";
-    default:
-      return "?";
-  }
-}
-
 // Log sink. Under Emscripten, stdout is routed to the browser console.
 static void MainWriteLogLine(
-    Y_UNUSED void* context, const YLogModule* module, YLogLevel level,
-    uint64_t tick, const char* message, Y_UNUSED size_t length) {
-  printf(
-      "[%llu] %-5s %-8s %s\n", (unsigned long long)tick,
-      MainLogLevelName(level), module->name, message);
+    Y_UNUSED void* context, Y_UNUSED YLogKind kind,
+    Y_UNUSED const YLogModule* module, Y_UNUSED YLogLevel level,
+    const char* line, Y_UNUSED size_t length) {
+  printf("%s\n", line);
 }
-
-static uint64_t MainGetTick(Y_UNUSED void* context) { return g_platform.ticks; }
 
 enum {
   // Nanoseconds in a second, for turning elapsed real time into guest cycles.
@@ -175,11 +157,10 @@ void MainTick(void) {
     }
     // Anything else means the machine cannot make progress. Stop ticking it,
     // but keep rendering so the final screen stays up.
+    // Through the platform's logger, which adds where the CPU stopped.
     Y_LOG(
-        &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
-        "execution stopped at %04X:%04X with status %d",
-        g_platform.cpu.registers[Y_CPU_CS], g_platform.cpu.registers[Y_CPU_IP],
-        (int)status);
+        &g_platform.logger, &kAppLogModule, Y_LOG_LEVEL_ERROR,
+        "execution_stopped", Y_LOG_INT("status", status));
     g_cpu_stopped = true;
   }
 
@@ -193,6 +174,15 @@ void MainTick(void) {
 }
 
 int main(int argc, char* argv[]) {
+  // Logging comes first, so that anything after it can log. All modules are
+  // enabled, but only errors are shown by default - raise min_level to
+  // Y_LOG_LEVEL_WARN, Y_LOG_LEVEL_INFO or Y_LOG_LEVEL_DEBUG to see more, or
+  // narrow enabled_modules to a specific module.
+  g_logger_config.write_line = MainWriteLogLine;
+  g_logger_config.enabled_modules = 0xFFFFFFFF;
+  g_logger_config.min_level = Y_LOG_LEVEL_ERROR;
+  YLoggerInit(&g_app_logger, &g_logger_config);
+
   const char* floppy_path = kDefaultFloppyImagePath;
   // The machine has a hard disk unless asked otherwise. Under Emscripten there
   // is no command line at all, so anything gated behind a flag would be
@@ -214,7 +204,7 @@ int main(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--no-hdd") == 0) {
       attach_hard_disk = false;
     } else if (argv[i][0] == '-') {
-      fprintf(stderr, "Unknown option '%s'\n", argv[i]);
+      APP_ERROR("unknown_option", Y_LOG_STRING("option", argv[i]));
       fprintf(
           stderr,
           "Usage: %s [floppy image] [--mda|--cga] [--hdd [image]] "
@@ -230,7 +220,7 @@ int main(int argc, char* argv[]) {
   if (!DisplayInit(
           g_video_adapter_metadata->frame_buffer_width,
           g_video_adapter_metadata->frame_buffer_height)) {
-    fprintf(stderr, "Failed to init display\n");
+    APP_ERROR("display_init_failed");
     return 1;
   }
 
@@ -239,14 +229,6 @@ int main(int argc, char* argv[]) {
 
   // Initialize Memory
   memset(g_memory, 0, INTERNAL_RAM_SIZE);
-
-  // Initialize logging. All modules are enabled, but only errors are shown
-  // by default - raise min_level to Y_LOG_LEVEL_WARN or Y_LOG_LEVEL_DEBUG to
-  // see more, or narrow enabled_modules to a specific module.
-  g_logger_config.write_line = MainWriteLogLine;
-  g_logger_config.get_tick = MainGetTick;
-  g_logger_config.enabled_modules = 0xFFFFFFFF;
-  g_logger_config.min_level = Y_LOG_LEVEL_ERROR;
 
   // Initialize Platform. The caller zeroes the state and fills in its config;
   // nothing inside zeroes anything, because every module's state is a field of
@@ -266,7 +248,7 @@ int main(int argc, char* argv[]) {
   config->video_adapter = g_video_adapter;
 
   if (!YPlatformInit(&g_platform)) {
-    fprintf(stderr, "Failed to init platform\n");
+    APP_ERROR("platform_init_failed");
     AudioQuit();
     DisplayQuit();
     return 1;
@@ -277,35 +259,21 @@ int main(int argc, char* argv[]) {
   // it is a background tab's share of a laptop - so it takes the skip.
   YPlatformSetDOSIdleSkip(&g_platform, true);
 
-  Y_LOG(
-      &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
-      "yax86 started with %u KB of conventional memory",
-      config->physical_memory_size / 1024);
+  APP_DEBUG(
+      "started", Y_LOG_UINT("memory_kb", config->physical_memory_size / 1024));
 
   // Mount the boot floppy. Without one the BIOS still runs, so a failure here
   // is reported but not fatal.
   if (FloppyMount(&g_platform, floppy_path)) {
-    Y_LOG(
-        &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
-        "mounted %s in floppy drive A", floppy_path);
-  } else {
-    Y_LOG(
-        &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
-        "floppy drive A is empty - could not mount %s", floppy_path);
+    APP_DEBUG("floppy_mounted", Y_LOG_STRING("path", floppy_path));
   }
 
   if (attach_hard_disk) {
     if (HardDiskAttach(&g_platform, hard_disk_path)) {
-      Y_LOG(
-          &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_DEBUG,
-          "attached a %u MB hard disk (%s)",
-          (unsigned)(Y_HDC_GEOMETRY_10MB_IMAGE_SIZE / (1024 * 1024)),
-          hard_disk_path ? hard_disk_path : "blank");
-    } else {
-      Y_LOG(
-          &g_platform.logger, &kLogModuleApp, Y_LOG_LEVEL_ERROR,
-          "no hard disk attached - could not mount %s",
-          hard_disk_path ? hard_disk_path : "blank disk");
+      APP_DEBUG(
+          "hard_disk_attached",
+          Y_LOG_STRING("path", hard_disk_path ? hard_disk_path : ""),
+          Y_LOG_BOOL("blank", hard_disk_path == NULL));
     }
   }
 

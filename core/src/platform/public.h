@@ -19,7 +19,7 @@ enum {
 // Log module for the Platform.
 Y_PUBLIC_HEADER const YLogModule YPlatformLogModule = {
     .id = Y_PLATFORM_LOG_MODULE_ID,
-    .name = "PLATFORM",
+    .name = "platform",
 };
 
 #include "cpu.h"
@@ -292,8 +292,9 @@ typedef struct YPlatformConfig {
   // NULL, logging is disabled. The configuration is owned by the caller and
   // must outlive the platform.
   //
-  // Hosts that want tick numbers in their log output should wire get_tick to
-  // return YPlatformState.ticks.
+  // The platform stamps each log with its tick count and the CPU's CS:IP
+  // itself - see YLoggerSource - so a host only says where lines go and
+  // which of them it wants.
   YLoggerConfig* logger_config;
 
   // Physical memory size in bytes. Must be between 64K and 640K.

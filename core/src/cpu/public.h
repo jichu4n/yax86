@@ -17,7 +17,7 @@ enum {
 // Log module for the CPU.
 Y_PUBLIC_HEADER const YLogModule YCPULogModule = {
     .id = Y_CPU_LOG_MODULE_ID,
-    .name = "CPU",
+    .name = "cpu",
 };
 
 // ============================================================================

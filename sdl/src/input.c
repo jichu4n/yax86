@@ -1,7 +1,6 @@
 #include "input.h"
 
-#include <stdio.h>
-
+#include "app_log.h"
 #include "core/keyboard.h"
 
 // Mapping from SDL keycodes to PC/XT scancodes.
@@ -206,10 +205,10 @@ void InputHandleEvent(const SDL_Event* event, YPlatformState* platform) {
       if (event->type == SDL_EVENT_KEY_UP) {
         scancode |= 0x80;  // Break code
       }
-      printf(
-          "Key %s: SDL keycode=%d, scancode=0x%02X\n",
-          event->type == SDL_EVENT_KEY_DOWN ? "DOWN" : "UP", event->key.key,
-          scancode);
+      APP_DEBUG(
+          "key", Y_LOG_BOOL("down", event->type == SDL_EVENT_KEY_DOWN),
+          Y_LOG_INT("sdl_keycode", event->key.key),
+          Y_LOG_HEX8("scancode", scancode));
       YKeyboardHandleKeyPress(&platform->keyboard, scancode);
     }
   }

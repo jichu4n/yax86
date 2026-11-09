@@ -2,6 +2,7 @@
   "public": [
     "../util/common.h",
     "../util/snprintf.h",
+    "../util/logfmt.h",
     "../util/log.h",
     "public.h"
   ],

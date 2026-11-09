@@ -19,7 +19,7 @@ enum {
 // Log module for the Video.
 Y_PUBLIC_HEADER const YLogModule YVideoLogModule = {
     .id = Y_VIDEO_LOG_MODULE_ID,
-    .name = "VIDEO",
+    .name = "video",
 };
 
 // ============================================================================
