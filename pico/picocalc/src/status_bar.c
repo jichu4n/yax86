@@ -16,10 +16,10 @@ enum {
   kAttrBatteryHigh = 0x0A,
   kAttrBatteryLow = 0x0C,
 
-  // A drive's slot on its row, and the longest image name that fits in one
-  // after its letter and colon: an 8.3 name, which is all the card's file
-  // system keeps.
-  kDriveSlotColumns = 16,
+  // The drives follow each other along their row, this many columns apart,
+  // and a drive's image name is at most this long: an 8.3 name, which is all
+  // the card's file system keeps.
+  kDriveGapColumns = 2,
   kDriveNameColumns = 12,
   // How long a drive's light stays on after it was last used, so that a
   // single sector shows.
@@ -194,9 +194,9 @@ static bool DriveLit(
   return now_us < light->lit_until_us;
 }
 
-// A drive's slot: its letter, lit while in use, and its image's name, or what
-// it has instead.
-static void PutDrive(
+// A drive: its letter, lit while in use, and its image's name, or what it has
+// instead. Returns the column after it.
+static uint8_t PutDrive(
     DisplayTextRow* row, uint8_t column, char letter, const DiskImage* image,
     bool lit) {
   const bool open = image->status == kDiskImageOpen;
@@ -205,10 +205,9 @@ static void PutDrive(
   if (open) {
     char name[kDriveNameColumns + 1];
     ImageName(image->path, name);
-    Put(row, column, name, kAttrNormal);
-  } else {
-    Put(row, column, "built-in", kAttrNormal);
+    return Put(row, column, name, kAttrNormal);
   }
+  return Put(row, column, "built-in", kAttrNormal);
 }
 
 static void ComposeMessages(
@@ -228,9 +227,10 @@ static void ComposeMessages(
 
 static void ComposeDrives(
     const StatusBarState* state, bool lit_a, bool lit_c, DisplayTextRow* row) {
-  PutDrive(row, 0, 'A', state->drive_a, lit_a);
+  uint8_t column = PutDrive(row, 0, 'A', state->drive_a, lit_a);
   if (state->drive_c->status == kDiskImageOpen) {
-    PutDrive(row, 2 * kDriveSlotColumns, 'C', state->drive_c, lit_c);
+    PutDrive(
+        row, (uint8_t)(column + kDriveGapColumns), 'C', state->drive_c, lit_c);
   }
 }
 

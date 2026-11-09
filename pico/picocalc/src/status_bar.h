@@ -6,7 +6,7 @@
 //   row 31  the guest's lock flags, its time of day, the menu key, the battery
 //
 //   Inserted GAMES.IMG in drive A
-//   A:DISK01.IMG    C:HDD.IMG
+//   A:DISK01.IMG  C:HDD.IMG
 //                     CAPS NUM SCRL INS     12:34:56     ↑+↑ Menu  [■■■ ] 78%+
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H

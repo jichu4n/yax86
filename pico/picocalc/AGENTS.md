@@ -337,14 +337,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
   ```
   Inserted GAMES.IMG in drive A                                         <- messages
-  A:FLOPPY_A.IMG                  C:HDD.IMG                             <- drives
+  A:FLOPPY_A.IMG  C:HDD.IMG                                             <- drives
                     CAPS NUM SCRL INS     00:44:51        ↑+↑ Menu  [████] 100%
   ```
 
 - **Messages** are queued and shown four seconds each, without moving
   anything on the rows below. While the menu is open the row shows its keys, and while the machine
   is dropping time it shows `SLOW` and its speed in yellow.
-- **Drives** take a 16-column slot each, for A to D: the image's file name,
+- **Drives** follow each other two columns apart: the image's file name,
   without its folders, in capitals, or `built-in` for the floppy in flash. A
   drive with no image is left out. The card keeps 8.3 names, so a name fits;
   a longer one would keep 11 characters and end in `~`. The letter is the
