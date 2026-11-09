@@ -900,4 +900,21 @@ Y_PUBLIC void YVideoTick(YVideoState* video, uint32_t cycles);
 // unchanged.
 Y_PUBLIC void YVideoRender(YVideoState* video);
 
+// Hand what has changed on the screen to a copy of the video state, for a host
+// that renders somewhere the machine is not running - on another core, say -
+// and so cannot render from the live state while the machine changes it.
+//
+// Copies video into frame and the adapter's video memory into frame_vram,
+// which must hold at least the adapter's vram_size bytes, and points frame at
+// frame_vram. The record of what has changed moves with the copy: video is left
+// marked up to date, so YVideoRender(frame) draws exactly what
+// YVideoRender(video) would have, and a change made after the copy is drawn
+// from the next one rather than lost or drawn twice. frame keeps video's
+// callbacks.
+//
+// Returns false, copying nothing, when nothing has changed since the last
+// render or copy.
+Y_PUBLIC bool YVideoCopyForRender(
+    YVideoState* video, YVideoState* frame, uint8_t* frame_vram);
+
 #endif  // YAX86_VIDEO_PUBLIC_H

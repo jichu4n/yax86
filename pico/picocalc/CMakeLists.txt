@@ -97,6 +97,7 @@ add_custom_command(
 # =============================================================================
 add_executable(yax86_picocalc
     src/main.c
+    src/display.c
     src/font_4x10.c
     src/lcd.c
     src/southbridge.c
@@ -126,6 +127,7 @@ target_compile_options(yax86_picocalc PRIVATE -Wall -Wextra)
 
 target_link_libraries(yax86_picocalc PRIVATE
     pico_stdlib
+    pico_multicore
     hardware_i2c
     hardware_pio
     hardware_vreg

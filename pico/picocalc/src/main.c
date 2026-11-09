@@ -1,17 +1,19 @@
 // yax86 on the ClockworkPi PicoCalc.
 //
-// The runtime raises the system clock, brings up the LCD and the keyboard
-// controller, and boots MS-DOS 3.30 off the floppy image in flash, drawing the
-// guest's text screen on the LCD as it goes. The machine is paced to real
-// time and keeps running past the prompt. The keyboard is not read yet, so
-// DOS's date and time questions are answered by watching the screen, the way
-// pico/bench does it.
+// The runtime raises the system clock, starts core 1 drawing on the LCD, brings
+// up the keyboard controller, and boots MS-DOS 3.30 off the floppy image in
+// flash, with the guest's text screen on the LCD as it goes. The machine is
+// paced to real time and keeps running past the prompt. The keyboard is not
+// read yet, so DOS's date and time questions are answered by watching the
+// screen, the way pico/bench does it.
 //
-// The guest's screen takes the top 250 rows of the panel - 80 by 25 cells of
-// the 4x10 font - and the runtime's status lines the rest. Everything on them
-// is also reported over USB serial for pico/bench/run.js to capture. A report
-// is printed whenever a host attaches, since USB CDC drops whatever is written
-// before then.
+// Core 0, which this file runs on, runs the machine and never touches the
+// LCD: core 1 draws everything on it, from copies core 0 hands over - see
+// display.h. The guest's screen takes the top 250 rows of the panel - 80 by 25
+// cells of the 4x10 font - and the runtime's status lines the rest. Everything
+// on them is also reported over USB serial for pico/bench/run.js to capture. A
+// report is printed whenever a host attaches, since USB CDC drops whatever is
+// written before then.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -19,15 +21,13 @@
 
 #include "core/platform.h"
 #include "core/video.h"
-#include "font_4x10.h"
+#include "display.h"
 #include "hardware/clocks.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
-#include "lcd.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "southbridge.h"
-#include "text.h"
 // Generated into the build directory - see the floppy image section of
 // CMakeLists.txt.
 #include "generated/dos_floppy_data.h"
@@ -110,29 +110,7 @@ enum {
   kMicrosecondsPerSecond = 1000 * 1000,
   kMaxLagUs = kMaxLagMs * kMicrosecondsPerMillisecond,
   kHzPerKHz = 1000,
-
-  // The guest's screen: 80 by 25 cells of the 4x10 font, at the top of the
-  // panel.
-  kGuestScreenTop = 0,
-  kGuestScreenWidth = kScreenColumns * kFont4x10Width,
-  kGuestScreenHeight = kScreenRows * kFont4x10Height,
-
-  // The status lines below it, in 4x10 character cells. Row 25 is left blank
-  // to separate them from the guest's screen.
-  kBannerRow = kScreenRows + 1,
-  kStatusFirstRow = kBannerRow + 1,
-  kStatusLabelColumn = 1,
-  kStatusValueColumn = 10,
 };
-
-// The status lines, in the order they appear.
-typedef enum StatusLine {
-  kStatusLineSystem = 0,
-  kStatusLineBoot,
-  kStatusLineSpeed,
-  kStatusLineClock,
-  kStatusLineDisplay,
-} StatusLine;
 
 // What became of the request to raise the system clock.
 typedef enum OverclockResult {
@@ -183,11 +161,6 @@ typedef struct RuntimeStatus {
   // boot would have taken unpaced.
   uint64_t boot_busy_us;
   uint64_t instructions;
-  // What drawing the guest's screen has cost: renders that drew something,
-  // the pixels they drew, and the host time spent in YVideoRender().
-  uint32_t frames_drawn;
-  uint64_t pixels_drawn;
-  uint64_t render_us;
 } RuntimeStatus;
 
 static uint8_t g_guest_ram[kGuestRAMSize];
@@ -197,10 +170,8 @@ static YPlatformState g_platform;
 static YLoggerConfig g_logger_config;
 static RuntimeStatus g_status;
 static bool g_host_attached;
-// Whether the region being rendered lies on the guest's part of the panel.
-// Graphics modes render 640 pixels across, which is not drawn yet.
-static bool g_region_on_panel;
-static uint16_t g_pixel_batch[Y_VIDEO_PIXEL_BATCH_SIZE];
+// Whether the status lines have changed since core 1 was last handed them.
+static bool g_status_changed;
 
 // How far the machine has got in emulated time, and what pacing it against
 // real time has cost.
@@ -237,11 +208,6 @@ static void WriteLogLine(
     Y_UNUSED void* context, const YLogModule* module, Y_UNUSED YLogLevel level,
     Y_UNUSED uint64_t tick, const char* message, Y_UNUSED size_t length) {
   printf("[%s] %s\n", module->name, message);
-}
-
-static uint16_t CGAColor(uint8_t index) {
-  const YVideoRGB rgb = YVideoDefaultConfig.cga_palette[index];
-  return LcdRGB565(rgb.r, rgb.g, rgb.b);
 }
 
 static bool BootIsOver(void) {
@@ -343,63 +309,47 @@ static void FormatClockLine(char* buffer, size_t size) {
       (unsigned long)busy_percent);
 }
 
+static void FormatSystemLine(char* buffer, size_t size) {
+  char version[16];
+  FormatSouthbridgeVersion(version, sizeof(version));
+  snprintf(
+      buffer, size, "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %uK",
+      (unsigned long)(clock_get_hz(clk_sys) / (kHzPerKHz * kHzPerKHz)),
+      (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
+      (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
+      (unsigned)(kGuestRAMSize / 1024));
+}
+
 static void FormatDisplayLine(char* buffer, size_t size) {
   if (!YAX86_PICOCALC_DRAW_SCREEN) {
     snprintf(buffer, size, "not drawn in this build");
     return;
   }
-  const uint64_t render_ms = g_status.render_us / kMicrosecondsPerMillisecond;
-  const uint64_t busy_us = BusyUs() > 0 ? BusyUs() : 1;
+  const DisplayStats stats = DisplayGetStats();
+  const uint64_t render_ms = stats.render_us / kMicrosecondsPerMillisecond;
   snprintf(
-      buffer, size, "%lu frames, %llu.%03llus drawing, %llu%% of the work",
-      (unsigned long)g_status.frames_drawn,
+      buffer, size, "%lu frames, %llu.%03llus drawing on core 1, %lu late",
+      (unsigned long)stats.frames_drawn,
       (unsigned long long)(render_ms / kMillisecondsPerSecond),
       (unsigned long long)(render_ms % kMillisecondsPerSecond),
-      (unsigned long long)(g_status.render_us * 100 / busy_us));
+      (unsigned long)stats.frames_late);
 }
 
-// Draw one status line, padded out to the right edge so that a shorter value
-// covers a longer one.
-static void DrawStatusLine(
-    StatusLine line, const char* label, const char* value) {
-  const uint8_t row = (uint8_t)(kStatusFirstRow + line);
-  char padded[kTextColumns + 1];
-  snprintf(
-      padded, sizeof(padded), "%-*s", kTextColumns - kStatusValueColumn, value);
-  TextDrawString(kStatusLabelColumn, row, label, CGAColor(7), CGAColor(0));
-  TextDrawString(kStatusValueColumn, row, padded, CGAColor(15), CGAColor(0));
-}
-
-// Everything on the status screen that changes as the machine runs.
-static void DrawRunStatus(void) {
-  char value[kTextColumns + 1];
-  FormatBootLine(value, sizeof(value));
-  DrawStatusLine(kStatusLineBoot, "Boot", value);
-  FormatSpeedLine(value, sizeof(value));
-  DrawStatusLine(kStatusLineSpeed, "Speed", value);
-  FormatClockLine(value, sizeof(value));
-  DrawStatusLine(kStatusLineClock, "Clock", value);
-  FormatDisplayLine(value, sizeof(value));
-  DrawStatusLine(kStatusLineDisplay, "Display", value);
-}
-
-static void DrawStatusScreen(void) {
-  TextDrawString(
-      kStatusLabelColumn, kBannerRow,
-      "yax86 - an IBM PC/XT emulator, on the ClockworkPi PicoCalc",
-      CGAColor(14), CGAColor(0));
-
-  char version[16];
-  FormatSouthbridgeVersion(version, sizeof(version));
-  char value[kTextColumns + 1];
-  snprintf(
-      value, sizeof(value), "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %uK",
-      (unsigned long)(clock_get_hz(clk_sys) / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
-      (unsigned)(kGuestRAMSize / 1024));
-  DrawStatusLine(kStatusLineSystem, "System", value);
-  DrawRunStatus();
+// Hand core 1 the status lines, unless it is still drawing the last ones.
+// Returns whether it took them.
+static bool HandOverStatus(void) {
+  DisplayStatus* status = DisplayBeginStatus();
+  if (status == NULL) {
+    return false;
+  }
+  const size_t size = sizeof(status->values[0]);
+  FormatSystemLine(status->values[kDisplayStatusSystem], size);
+  FormatBootLine(status->values[kDisplayStatusBoot], size);
+  FormatSpeedLine(status->values[kDisplayStatusSpeed], size);
+  FormatClockLine(status->values[kDisplayStatusClock], size);
+  FormatDisplayLine(status->values[kDisplayStatusDisplay], size);
+  DisplayEndStatus();
+  return true;
 }
 
 // The same facts as the status screen, as key and value lines.
@@ -429,12 +379,14 @@ static void PrintReport(void) {
       "%-14s %llu\n", "boot_busy_us",
       (unsigned long long)g_status.boot_busy_us);
   printf("%-14s %lu\n", "boot_speed_pm", (unsigned long)BootSpeedPermille());
+  const DisplayStats display = DisplayGetStats();
   printf("%-14s %d\n", "draw_screen", YAX86_PICOCALC_DRAW_SCREEN);
-  printf("%-14s %lu\n", "frames_drawn", (unsigned long)g_status.frames_drawn);
+  printf("%-14s %lu\n", "frames_drawn", (unsigned long)display.frames_drawn);
   printf(
-      "%-14s %llu\n", "pixels_drawn",
-      (unsigned long long)g_status.pixels_drawn);
-  printf("%-14s %llu\n", "render_us", (unsigned long long)g_status.render_us);
+      "%-14s %llu\n", "pixels_drawn", (unsigned long long)display.pixels_drawn);
+  printf("%-14s %llu\n", "render_us", (unsigned long long)display.render_us);
+  printf("%-14s %lu\n", "frames_late", (unsigned long)display.frames_late);
+  printf("%-14s %llu\n", "copy_us", (unsigned long long)display.copy_us);
   printf("%-14s %llu\n", "real_us", (unsigned long long)ElapsedUs());
   printf(
       "%-14s %llu\n", "emulated_us",
@@ -459,54 +411,6 @@ static void ReportIfHostAttached(void) {
     }
   }
   g_host_attached = attached;
-}
-
-// ============================================================================
-// The guest's screen
-// ============================================================================
-
-// The core renders only what changed since the last render, as rectangles,
-// and the panel keeps its own frame memory, so a region goes straight to the
-// panel as a window of its own.
-static void BeginRenderRegion(
-    Y_UNUSED YVideoState* video, YVideoRegion region) {
-  g_region_on_panel = region.origin.x + region.width <= kGuestScreenWidth &&
-                      region.origin.y + region.height <= kGuestScreenHeight;
-  if (g_region_on_panel) {
-    LcdBeginWrite(
-        region.origin.x, (uint16_t)(kGuestScreenTop + region.origin.y),
-        region.width, region.height);
-  }
-}
-
-static void WriteGuestPixels(
-    Y_UNUSED YVideoState* video, Y_UNUSED YVideoPosition origin,
-    const YVideoRGB* pixels, uint8_t count) {
-  if (!g_region_on_panel) {
-    return;
-  }
-  for (uint8_t i = 0; i < count; ++i) {
-    g_pixel_batch[i] = LcdRGB565(pixels[i].r, pixels[i].g, pixels[i].b);
-  }
-  LcdWritePixels(g_pixel_batch, count);
-  g_status.pixels_drawn += count;
-}
-
-static void EndRenderRegion(Y_UNUSED YVideoState* video) {
-  if (g_region_on_panel) {
-    LcdEndWrite();
-  }
-}
-
-// Bring the panel up to date with the guest's screen, timing it.
-static void DrawGuestScreen(void) {
-  const uint64_t pixels_before = g_status.pixels_drawn;
-  const uint64_t start_us = time_us_64();
-  YVideoRender(&g_platform.video);
-  g_status.render_us += time_us_64() - start_us;
-  if (g_status.pixels_drawn != pixels_before) {
-    ++g_status.frames_drawn;
-  }
 }
 
 // ============================================================================
@@ -537,11 +441,6 @@ static bool InitMachine(void) {
   config->video_text_font.height = kFont4x10Height;
   if (!YPlatformInit(&g_platform)) {
     return false;
-  }
-  if (YAX86_PICOCALC_DRAW_SCREEN) {
-    g_platform.video.config.begin_render_region = BeginRenderRegion;
-    g_platform.video.config.write_pixels = WriteGuestPixels;
-    g_platform.video.config.end_render_region = EndRenderRegion;
   }
   g_platform.fdc.config.read_image_byte = FloppyReadByte;
   g_platform.fdc.config.write_image_byte = FloppyWriteByte;
@@ -607,7 +506,7 @@ static void SetBootStage(BootStage stage) {
   g_status.boot_elapsed_us = ElapsedUs();
   g_status.boot_busy_us = BusyUs();
   g_status.instructions = YCPUInstructionsRetired(&g_platform.cpu);
-  DrawRunStatus();
+  g_status_changed = true;
   if (g_host_attached) {
     PrintReport();
   }
@@ -689,7 +588,9 @@ static void RunMachine(bool machine_ready) {
       do {
         next_render_cycles += kCyclesPerRender;
       } while (next_render_cycles <= g_clock.cycles);
-      DrawGuestScreen();
+      if (YAX86_PICOCALC_DRAW_SCREEN) {
+        DisplayOfferFrame(&g_platform.video);
+      }
     }
 
     if (!BootIsOver()) {
@@ -703,9 +604,6 @@ static void RunMachine(bool machine_ready) {
         stage = AdvanceBoot(stage);
       }
       if (stage != g_status.boot_stage) {
-        // Drawn first, so that the screen shows what the stage was decided
-        // from and the time recorded for it includes drawing that.
-        DrawGuestScreen();
         SetBootStage(stage);
       }
       if (BootIsOver()) {
@@ -723,10 +621,13 @@ static void RunMachine(bool machine_ready) {
 
     if (screen_on && time_reached(next_status_at)) {
       next_status_at = delayed_by_ms(next_status_at, kStatusUpdateMs);
-      DrawRunStatus();
+      g_status_changed = true;
+    }
+    if (screen_on && g_status_changed && HandOverStatus()) {
+      g_status_changed = false;
     }
     if (screen_on && time_reached(blank_at)) {
-      LcdSetDisplayOn(false);
+      DisplayTurnOff();
       screen_on = false;
     }
 
@@ -783,9 +684,9 @@ int main(void) {
   stdio_init_all();
 #if YAX86_PICOCALC_SYS_CLK_KHZ
   // Before anything else is brought up, since each works out its clock
-  // divider when it is: the LCD's from the system clock, and the keyboard
-  // controller's I2C from the peripheral clock, which the overclock moves to
-  // the 48MHz USB PLL.
+  // divider when it is: the LCD's, on core 1, from the system clock, and the
+  // keyboard controller's I2C from the peripheral clock, which the overclock
+  // moves to the 48MHz USB PLL.
   g_status.overclock = Overclock();
 #endif
 
@@ -793,11 +694,11 @@ int main(void) {
   g_logger_config.enabled_modules = 0xFFFFFFFF;
   g_logger_config.min_level = Y_LOG_LEVEL_ERROR;
 
-  g_status.lcd_spi_hz = LcdInit();
+  g_status.lcd_spi_hz = DisplayStart();
   SouthbridgeInit();
   g_status.southbridge_answered =
       SouthbridgeReadVersion(&g_status.southbridge_version);
-  DrawStatusScreen();
+  HandOverStatus();
 
   RunMachine(InitMachine());
   return 0;

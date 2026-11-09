@@ -747,3 +747,24 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
   static const YVideoDirtyState kEmptyDirtyState = {0};
   video->dirty_state = kEmptyDirtyState;
 }
+
+Y_PUBLIC bool YVideoCopyForRender(
+    YVideoState* video, YVideoState* frame, uint8_t* frame_vram) {
+  if (video->dirty_state.status == Y_VIDEO_CLEAN) {
+    return false;
+  }
+  *frame = *video;
+  if (video->config.vram) {
+    const uint8_t* source = video->config.vram;
+    const uint8_t* const end =
+        source + YVideoGetAdapterMetadata(video)->vram_size;
+    uint8_t* destination = frame_vram;
+    while (source < end) {
+      *destination++ = *source++;
+    }
+    frame->config.vram = frame_vram;
+  }
+  static const YVideoDirtyState kEmptyDirtyState = {0};
+  video->dirty_state = kEmptyDirtyState;
+  return true;
+}
