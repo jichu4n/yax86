@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 
 const fs = require('fs/promises');
-const fsSync = require('fs');
-const path = require('path');
-const tty = require('tty');
 const {parseArgs} = require('util');
 const {spawnSync} = require('child_process');
 const {parseLine, toNumber, formatLine} = require('./logfmt');
+const {delay, waitForPort, openPort} = require('./serial');
 
-// Flashes a benchmark image onto an attached Pico and captures what it prints.
+// Flashes an image onto an attached Pico and captures what it prints.
 //
 //   ./run.js ../../build-pico/O3/yax86_pico_bench.uf2
 //
@@ -17,35 +15,34 @@ const {parseLine, toNumber, formatLine} = require('./logfmt');
 // with the figures a PR reports worked out from it; --json prints each record
 // as a JSON object instead. --out saves the lines as they came.
 //
+// The run is over at the line with event=done. The PicoCalc's report is the
+// answer to a command, so at that point it is asked for one, which ends the
+// capture once it is in; the bench says everything unasked, and is done.
+//
 // The board is rebooted into BOOTSEL with picotool rather than by hand, so a
 // run needs no button press:
 //
 //   picotool reboot -u -f && sleep 3 && picotool load -x <image>.uf2
-//
-// The serial port must then be opened exactly once. The firmware waits for DTR
-// before it prints anything and every open asserts it, so configuring the line
-// with a separate stty first starts the run, and the header is gone before a
-// reader attaches. That is why the line is configured through a tty.ReadStream
-// wrapped around the descriptor this already holds, rather than by shelling
-// out to something that would open the device again.
 
 // How long to give the board to re-enumerate, in milliseconds. It comes back
 // as a USB mass storage device after the reboot and as a CDC port after the
 // load, and picotool fails outright if it is asked too early.
 const kEnumerateDelayMs = 3000;
-// How long to wait for a serial port to appear, and how long to let it settle
-// once it has. Enumeration creates the node slightly before it is usable.
-const kPortWaitMs = 25000;
-const kPortSettleMs = 800;
-const kPortPollMs = 200;
-// The record the firmware ends with when it has nothing left to say.
-const isDone = (record) => record !== null && record.event === 'done';
 // A real 8088's clock, which "vs a real 8088" is against.
 const k8088Hz = 4.77e6;
-// The pairs every log line starts with, which a table leaves out.
-const kLogPrefixKeys = new Set(['kind', 'level', 'module', 'event', 'tick']);
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// The pairs a log or a reply line starts with, which a table leaves out.
+const kPrefixKeys = new Set([
+  'kind',
+  'level',
+  'module',
+  'event',
+  'tick',
+  'id',
+  'cmd',
+  'group',
+]);
+// The id run.js asks for the PicoCalc's report with.
+const kReportCommandId = '1';
 
 // Reboot the board into BOOTSEL and load an image onto it.
 async function flash(uf2FilePath) {
@@ -59,24 +56,6 @@ async function flash(uf2FilePath) {
   if (load.status !== 0) {
     throw new Error(`picotool load failed with status ${load.status}`);
   }
-}
-
-// Find the board's CDC port. Not hard-coded: the port re-enumerates after
-// every flash and after a watchdog reset, and can come back on a different
-// node than it left on.
-async function waitForPort(timeoutMs = kPortWaitMs) {
-  const end = Date.now() + timeoutMs;
-  while (Date.now() < end) {
-    const ports = (await fs.readdir('/dev'))
-      .filter((name) => name.startsWith('ttyACM'))
-      .sort();
-    if (ports.length > 0) {
-      await delay(kPortSettleMs);
-      return path.join('/dev', ports[ports.length - 1]);
-    }
-    await delay(kPortPollMs);
-  }
-  return null;
 }
 
 // The figures a performance PR reports, from a bench result's integers:
@@ -97,24 +76,32 @@ function benchFigures(record) {
   ];
 }
 
-// How a record is shown: a report or a bench header or result as a table of
-// its fields under the module's name, anything else as one line.
+// How a record is shown: a group of a report, or the bench's header or
+// result, as a table of its fields, and anything else as one line.
 function render(record) {
   const fields = Object.entries(record).filter(
-    ([key]) => !kLogPrefixKeys.has(key)
+    ([key]) => !kPrefixKeys.has(key)
   );
-  const table = ['report', 'header', 'result'].includes(record.event);
-  if (!table) {
-    const head = [record.level, record.module, record.event]
-      .filter((part) => part !== undefined)
-      .join(' ');
-    const rest = fields.length > 0 ? '  ' + formatLine(Object.fromEntries(fields)) : '';
+  let title = null;
+  if (record.kind === 'reply' && record.group !== undefined) {
+    title = `[${record.cmd} ${record.group}]`;
+  } else if (record.event === 'header' || record.event === 'result') {
+    title = `[${record.module} ${record.event}]`;
+  }
+  if (title === null) {
+    const head =
+      record.kind === 'reply'
+        ? `reply ${record.id} ${record.cmd}`
+        : [record.level, record.module, record.event]
+            .filter((part) => part !== undefined)
+            .join(' ');
+    const rest =
+      fields.length > 0 ? '  ' + formatLine(Object.fromEntries(fields)) : '';
     return `${head}${rest}\n`;
   }
   if (record.module === 'bench' && record.event === 'result') {
     fields.push(...benchFigures(record));
   }
-  const title = `[${record.module} ${record.event}]`;
   const width = Math.max(...fields.map(([key]) => key.length));
   return (
     `${title}\n` +
@@ -122,56 +109,36 @@ function render(record) {
   );
 }
 
-// Read from the port until the firmware says it is done, or time runs out.
-// Returns the captured text, which is shown as it arrives so that a long run
-// can be watched: rendered, or as JSON if json is set. A line that is not
-// logfmt is shown as it is.
+// Read from the port until the run is over, or time runs out. Returns the
+// captured lines, which are shown as they arrive so that a long run can be
+// watched: rendered, or as JSON if json is set. A line that is not logfmt is
+// shown as it is.
 function capture(port, budgetMs, json) {
-  const fd = fsSync.openSync(
-    port,
-    fsSync.constants.O_RDWR | fsSync.constants.O_NOCTTY
-  );
-  let stream;
-  try {
-    stream = new tty.ReadStream(fd);
-  } catch (e) {
-    fsSync.closeSync(fd);
-    throw e;
-  }
-  // Raw mode on this descriptor: no echo, no line discipline, and no
-  // translation in either direction. The baud rate is ignored by a CDC port.
-  stream.setRawMode(true);
-
   return new Promise((resolve) => {
-    let out = '';
-    // The part of a line that has arrived without its end yet.
-    let pending = '';
+    const lines = [];
     let done = false;
+    let finished = false;
     let timer = null;
+    let connection = null;
     const finish = (timedOut) => {
-      if (timer !== null) {
-        clearTimeout(timer);
-        timer = null;
+      if (finished) {
+        return;
       }
-      stream.destroy();
+      finished = true;
+      clearTimeout(timer);
+      connection.close();
       if (timedOut) {
         process.stdout.write(
           `\n[timed out after ${(budgetMs / 1000).toFixed(0)}s; ` +
-            `${out.length} bytes]\n`
+            `${lines.length} lines]\n`
         );
       }
-      resolve({out, done});
+      resolve({lines, done});
     };
-    timer = setTimeout(() => finish(true), budgetMs);
-    stream.on('data', (chunk) => {
-      // The SDK's stdio ends every line with CRLF, so the newlines are
-      // normalized here rather than left for every reader of the capture to
-      // cope with.
-      const text = chunk.toString('utf8').replaceAll('\r\n', '\n');
-      out += text;
-      const lines = (pending + text).split('\n');
-      pending = lines.pop();
-      for (const line of lines) {
+    connection = openPort(
+      port,
+      (line) => {
+        lines.push(line);
         const record = parseLine(line);
         if (json) {
           if (record !== null) {
@@ -180,15 +147,30 @@ function capture(port, budgetMs, json) {
         } else {
           process.stdout.write(record !== null ? render(record) : line + '\n');
         }
-        if (isDone(record)) {
-          done = true;
+        if (record === null) {
+          return;
         }
-      }
-      if (done) {
-        finish(false);
-      }
-    });
-    stream.on('error', () => finish(false));
+        if (record.event === 'done') {
+          if (record.module === 'bench') {
+            done = true;
+            finish(false);
+          } else {
+            connection
+              .write(`id=${kReportCommandId} cmd=report`)
+              .catch(() => finish(false));
+          }
+        } else if (
+          record.kind === 'reply' &&
+          record.id === kReportCommandId &&
+          record.status !== undefined
+        ) {
+          done = record.status === 'ok';
+          finish(false);
+        }
+      },
+      () => finish(false)
+    );
+    timer = setTimeout(() => finish(true), budgetMs);
   });
 }
 
@@ -222,13 +204,13 @@ async function main() {
   if (port === null) {
     throw new Error('no /dev/ttyACM* appeared');
   }
-  const {out, done} = await capture(
+  const {lines, done} = await capture(
     port,
     Number(values.timeout) * 1000,
     values.json
   );
   if (values.out) {
-    await fs.writeFile(values.out, out, 'utf8');
+    await fs.writeFile(values.out, lines.join('\n') + '\n', 'utf8');
   }
   return done ? 0 : 1;
 }

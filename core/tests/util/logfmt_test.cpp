@@ -4,6 +4,8 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 using namespace std;
 
@@ -137,4 +139,130 @@ TEST(LogfmtTest, ABufferTooSmallForTheMarkerTakesNothing) {
   Line line(4);
   YLogfmtLineAddUInt(line.line(), "a", 1);
   EXPECT_EQ(line.Finish(), "");
+}
+
+namespace {
+
+// Parse a copy of a line, returning its pairs as strings, or nothing if it is
+// not well formed.
+struct Parsed {
+  bool ok;
+  vector<pair<string, string>> pairs;
+};
+
+Parsed Parse(const string& text, uint8_t max_pairs = 8) {
+  string line = text;
+  YLogfmtPair pairs[16];
+  uint8_t num_pairs = 0;
+  Parsed parsed;
+  parsed.ok = YLogfmtParse(&line[0], pairs, max_pairs, &num_pairs);
+  for (uint8_t i = 0; i < num_pairs; ++i) {
+    parsed.pairs.emplace_back(pairs[i].key, pairs[i].value);
+  }
+  return parsed;
+}
+
+using Pairs = vector<pair<string, string>>;
+
+}  // namespace
+
+TEST(LogfmtParseTest, BarePairs) {
+  const Parsed parsed = Parse("id=7 cmd=screen attrs=true");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(
+      parsed.pairs,
+      (Pairs{{"id", "7"}, {"cmd", "screen"}, {"attrs", "true"}}));
+}
+
+TEST(LogfmtParseTest, ExtraSpacesAreIgnored) {
+  const Parsed parsed = Parse("  id=7   cmd=ping  ");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(parsed.pairs, (Pairs{{"id", "7"}, {"cmd", "ping"}}));
+}
+
+TEST(LogfmtParseTest, AnEmptyLineHasNoPairs) {
+  EXPECT_TRUE(Parse("").ok);
+  EXPECT_TRUE(Parse("").pairs.empty());
+  EXPECT_TRUE(Parse("   ").ok);
+}
+
+TEST(LogfmtParseTest, QuotedValuesAreUnescaped) {
+  const Parsed parsed =
+      Parse("text=\"DIR C:\\x0D\" q=\"say \\\"hi\\\"\" b=\"a\\\\b\" e=\"\"");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(
+      parsed.pairs, (Pairs{
+                        {"text", "DIR C:\r"},
+                        {"q", "say \"hi\""},
+                        {"b", "a\\b"},
+                        {"e", ""},
+                    }));
+}
+
+TEST(LogfmtParseTest, AnEmptyBareValue) {
+  const Parsed parsed = Parse("a= b=1");
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(parsed.pairs, (Pairs{{"a", ""}, {"b", "1"}}));
+}
+
+TEST(LogfmtParseTest, MalformedLines) {
+  // Not a pair.
+  EXPECT_FALSE(Parse("screen").ok);
+  EXPECT_FALSE(Parse("id=7 screen").ok);
+  // An empty key.
+  EXPECT_FALSE(Parse("=7").ok);
+  // A quote left open, and one followed by more than a space.
+  EXPECT_FALSE(Parse("text=\"open").ok);
+  EXPECT_FALSE(Parse("text=\"a\"b").ok);
+  // Escapes the writer does not write, and a short hex escape.
+  EXPECT_FALSE(Parse("text=\"\\n\"").ok);
+  EXPECT_FALSE(Parse("text=\"\\x4\"").ok);
+  EXPECT_FALSE(Parse("text=\"\\xG0\"").ok);
+}
+
+TEST(LogfmtParseTest, TooManyPairs) {
+  EXPECT_TRUE(Parse("a=1 b=2", 2).ok);
+  EXPECT_FALSE(Parse("a=1 b=2 c=3", 2).ok);
+}
+
+TEST(LogfmtParseTest, ReadsWhatTheWriterWrites) {
+  const string text = "A>\"x\" \\ \xC9\xCD\r\t=";
+  Line line;
+  YLogfmtLineAddString(line.line(), "text", text.c_str());
+  YLogfmtLineAddHex(line.line(), "port", 0x201, 4);
+  const Parsed parsed = Parse(line.Finish());
+  EXPECT_TRUE(parsed.ok);
+  EXPECT_EQ(parsed.pairs, (Pairs{{"text", text}, {"port", "0x0201"}}));
+}
+
+TEST(LogfmtParseTest, Find) {
+  string line = "id=7 cmd=key name=f6";
+  YLogfmtPair pairs[4];
+  uint8_t num_pairs = 0;
+  ASSERT_TRUE(YLogfmtParse(&line[0], pairs, 4, &num_pairs));
+  EXPECT_STREQ(YLogfmtFind(pairs, num_pairs, "name"), "f6");
+  EXPECT_STREQ(YLogfmtFind(pairs, num_pairs, "id"), "7");
+  EXPECT_EQ(YLogfmtFind(pairs, num_pairs, "nam"), nullptr);
+  EXPECT_EQ(YLogfmtFind(pairs, num_pairs, "names"), nullptr);
+}
+
+TEST(LogfmtParseTest, Numbers) {
+  uint64_t number = 0;
+  EXPECT_TRUE(YLogfmtParseUInt("0", &number));
+  EXPECT_EQ(number, 0u);
+  EXPECT_TRUE(YLogfmtParseUInt("4294967296", &number));
+  EXPECT_EQ(number, 4294967296u);
+  EXPECT_TRUE(YLogfmtParseUInt("18446744073709551615", &number));
+  EXPECT_EQ(number, UINT64_MAX);
+  EXPECT_TRUE(YLogfmtParseUInt("0x0201", &number));
+  EXPECT_EQ(number, 0x201u);
+  EXPECT_TRUE(YLogfmtParseUInt("0xffffFFFFffffFFFF", &number));
+  EXPECT_EQ(number, UINT64_MAX);
+
+  EXPECT_FALSE(YLogfmtParseUInt("", &number));
+  EXPECT_FALSE(YLogfmtParseUInt("0x", &number));
+  EXPECT_FALSE(YLogfmtParseUInt("12a", &number));
+  EXPECT_FALSE(YLogfmtParseUInt("-1", &number));
+  EXPECT_FALSE(YLogfmtParseUInt("18446744073709551616", &number));
+  EXPECT_FALSE(YLogfmtParseUInt("0x10000000000000000", &number));
 }
