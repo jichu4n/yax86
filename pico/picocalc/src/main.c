@@ -3,9 +3,10 @@
 // The runtime raises the system clock, starts core 1 drawing on the LCD, brings
 // up the keyboard controller, and boots MS-DOS 3.30 off the floppy image in
 // flash, with the guest's text screen on the LCD as it goes. The machine is
-// paced to real time and keeps running past the prompt. The keyboard is not
-// read yet, so DOS's date and time questions are answered by watching the
-// screen, the way pico/bench does it.
+// paced to real time and keeps running past the prompt, with the PicoCalc's
+// keyboard as its own. DOS's date and time questions are still answered by
+// watching the screen, the way pico/bench does it, which keeps the boot the
+// dos-boot workload.
 //
 // Core 0, which this file runs on, runs the machine and never touches the
 // LCD: core 1 draws everything on it, from copies core 0 hands over - see
@@ -25,6 +26,7 @@
 #include "hardware/clocks.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
+#include "keymap.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "southbridge.h"
@@ -68,10 +70,10 @@ enum {
   // wrong. Reaching the prompt takes under six emulated seconds.
   kBootMaxEmulatedSeconds = 30,
 
-  // How long the screen stays on once the boot is over, before it is blanked.
-  // Nothing the guest does changes it after the boot but the cursor, and a
-  // static image left showing for hours can leave its mark on the panel.
-  kScreenOnAfterBootMs = 30 * 1000,
+  // How long the screen stays on after the boot is over or a key is pressed,
+  // whichever was later, before it is blanked. A static image left showing for
+  // hours can leave its mark on the panel. A key turns it on again.
+  kScreenOnMs = 30 * 1000,
   // How often the status lines are brought up to date once the boot is over.
   kStatusUpdateMs = 1000,
   // How often the loop looks for a newly attached host once the machine has
@@ -313,10 +315,11 @@ static void FormatSystemLine(char* buffer, size_t size) {
   char version[16];
   FormatSouthbridgeVersion(version, sizeof(version));
   snprintf(
-      buffer, size, "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %uK",
+      buffer, size, "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %lu keys, %uK",
       (unsigned long)(clock_get_hz(clk_sys) / (kHzPerKHz * kHzPerKHz)),
       (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
       (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
+      (unsigned long)SouthbridgeGetPollStats().keys,
       (unsigned)(kGuestRAMSize / 1024));
 }
 
@@ -387,6 +390,12 @@ static void PrintReport(void) {
   printf("%-14s %llu\n", "render_us", (unsigned long long)display.render_us);
   printf("%-14s %lu\n", "frames_late", (unsigned long)display.frames_late);
   printf("%-14s %llu\n", "copy_us", (unsigned long long)display.copy_us);
+  const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
+  printf("%-14s %lu\n", "key_reads", (unsigned long)keyboard.reads);
+  printf("%-14s %lu\n", "keys", (unsigned long)keyboard.keys);
+  printf("%-14s %lu\n", "stale_keys", (unsigned long)keyboard.stale_keys);
+  printf("%-14s %lu\n", "key_aborts", (unsigned long)keyboard.aborts);
+  printf("%-14s %lu\n", "key_timeouts", (unsigned long)keyboard.timeouts);
   printf("%-14s %llu\n", "real_us", (unsigned long long)ElapsedUs());
   printf(
       "%-14s %llu\n", "emulated_us",
@@ -473,7 +482,9 @@ static bool ScreenContains(const char* needle) {
 }
 
 // Answer whichever question DOS is asking, and return the stage the boot has
-// reached. Stands in for the keyboard until the runtime reads one.
+// reached. The machine has no clock to set the date and time from, and
+// answering for the user keeps the boot the dos-boot workload, which is what
+// the speed figures measure.
 static BootStage AdvanceBoot(BootStage stage) {
   switch (stage) {
     case kBootStagePowerOn:
@@ -561,6 +572,15 @@ static void PaceToRealTime(void) {
   }
 }
 
+// Pass a key on to the guest, as the scancodes a PC/XT keyboard would send.
+static void TypeKey(SouthbridgeKeyEvent event) {
+  uint8_t scancodes[kKeymapMaxScancodes];
+  const uint8_t count = KeymapTranslate(event, scancodes);
+  for (uint8_t i = 0; i < count; ++i) {
+    YKeyboardHandleKeyPress(&g_platform.keyboard, scancodes[i]);
+  }
+}
+
 // Run the machine, paced to real time, for as long as the board has power.
 // The boot is watched on the way, and DOS's questions answered.
 static void RunMachine(bool machine_ready) {
@@ -582,6 +602,26 @@ static void RunMachine(bool machine_ready) {
     if (running && RunBatch() == Y_PLATFORM_HUNG) {
       printf("machine stopped: the CPU halted with nothing to wake it\n");
       running = false;
+    }
+
+    // Between batches, so the keyboard is never written while the machine
+    // runs. A key also keeps the screen on, and turns it back on if it was
+    // blanked: its contents are kept, and what changed meanwhile is drawn
+    // with the next frame.
+    SouthbridgeKeyEvent key;
+    if (SouthbridgePollKey(&key)) {
+      if (running) {
+        TypeKey(key);
+      }
+      if (!screen_on) {
+        DisplayTurnOn();
+        screen_on = true;
+        g_status_changed = true;
+        next_status_at = make_timeout_time_ms(kStatusUpdateMs);
+      }
+      if (BootIsOver()) {
+        blank_at = make_timeout_time_ms(kScreenOnMs);
+      }
     }
 
     if (screen_on && g_clock.cycles >= next_render_cycles) {
@@ -612,7 +652,7 @@ static void RunMachine(bool machine_ready) {
         // of emulation. Not before now: DOS idles at the date and time
         // prompts too, and skipping there would move the dos-boot invariant.
         YPlatformSetDOSIdleSkip(&g_platform, true);
-        blank_at = make_timeout_time_ms(kScreenOnAfterBootMs);
+        blank_at = make_timeout_time_ms(kScreenOnMs);
         next_status_at = make_timeout_time_ms(kStatusUpdateMs);
         // So that a host that watched the boot gets the final report too.
         g_host_attached = false;

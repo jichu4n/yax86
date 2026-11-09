@@ -18,16 +18,20 @@ enum {
   kSouthbridgePinSCL = 7,
   kSouthbridgeAddress = 0x1F,
 
-  // ClockworkPi's samples run the bus at 10kHz. Whether it takes more is a
-  // question for when the keyboard is read on every frame.
-  kSouthbridgeI2CHz = 10 * 1000,
+  // ClockworkPi's samples run the bus at 10kHz. The controller answers every
+  // read at 10, 100 and 400kHz alike, and the key FIFO is read once a batch
+  // whatever the rate, so this is standard mode: well within both parts, and
+  // a tenth of the time on the bus that 10kHz takes.
+  kSouthbridgeI2CHz = 100 * 1000,
 
   // How long a transfer may take before the controller is taken to be absent.
-  // A two byte read at 10kHz is about 3ms, so this is generous.
+  // A two byte read at 100kHz is about 0.3ms, so this is generous.
   kSouthbridgeTimeoutUs = 50 * 1000,
   // ClockworkPi's samples wait this long between writing a register number and
-  // reading its value. The controller's main loop runs every 10ms, and the
-  // answer is prepared when the register number arrives.
+  // reading its value. The controller prepares its answer as the register
+  // number arrives, and the key FIFO poll below reads straight on without
+  // ever finding it unready, so this is caution kept for the one read made at
+  // startup.
   kSouthbridgeReplyDelayMs = 16,
 
   // How long to keep asking a controller that does not acknowledge. From v1.6
@@ -37,8 +41,23 @@ enum {
   kSouthbridgeAnswerWindowMs = 3000,
   kSouthbridgeRetryMs = 250,
 
+  // How long a read of the key FIFO may take before the bus is taken to be
+  // stuck and the I2C block is reset. A read is about 50 bit times, 0.5ms at
+  // 100kHz.
+  kSouthbridgePollTimeoutUs = 50 * 1000,
+
   kRegisterVersion = 0x01,
+  kRegisterKeyFIFO = 0x09,
+  // The bytes a register answers with.
+  kRegisterAnswerBytes = 2,
 };
+
+// The key FIFO read in flight, if any.
+static bool g_poll_in_flight;
+static uint64_t g_poll_started_us;
+// Whether a read has found the key FIFO empty yet.
+static bool g_poll_caught_up;
+static SouthbridgePollStats g_poll_stats;
 
 void SouthbridgeInit(void) {
   i2c_init(kSouthbridgeI2C, kSouthbridgeI2CHz);
@@ -46,6 +65,16 @@ void SouthbridgeInit(void) {
   gpio_set_function(kSouthbridgePinSCL, GPIO_FUNC_I2C);
   gpio_pull_up(kSouthbridgePinSDA);
   gpio_pull_up(kSouthbridgePinSCL);
+}
+
+// The I2C block's target address can only be changed while it is disabled,
+// which the SDK's own transfers do every time. The poll below sets it once
+// and leaves the block running.
+static void SetTargetAddress(void) {
+  i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
+  hw->enable = 0;
+  hw->tar = kSouthbridgeAddress;
+  hw->enable = 1;
 }
 
 // Read a register's two byte answer.
@@ -88,3 +117,67 @@ bool SouthbridgeReadVersion(uint8_t* version) {
   *version = answer[1];
   return true;
 }
+
+// Queue a whole read of the key FIFO: the register number, then a two byte
+// read, each ending in a STOP. The I2C block carries the commands out from its
+// own FIFO, so nothing waits for the bus. The controller prepares its answer
+// as the register number arrives, so the read can follow straight on.
+static void StartKeyFIFORead(void) {
+  i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
+  hw->data_cmd = I2C_IC_DATA_CMD_STOP_BITS | kRegisterKeyFIFO;
+  hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS;
+  hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS | I2C_IC_DATA_CMD_STOP_BITS;
+  g_poll_started_us = time_us_64();
+  g_poll_in_flight = true;
+}
+
+static void DrainReceiveFIFO(void) {
+  while (i2c_get_read_available(kSouthbridgeI2C) > 0) {
+    i2c_read_byte_raw(kSouthbridgeI2C);
+  }
+}
+
+bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
+  i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
+  if (!g_poll_in_flight) {
+    SetTargetAddress();
+    StartKeyFIFORead();
+    return false;
+  }
+
+  bool has_key = false;
+  if (hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS) {
+    // The block has flushed what was left of the read and sent a STOP.
+    // Reading the register clears the abort.
+    (void)hw->clr_tx_abrt;
+    DrainReceiveFIFO();
+    ++g_poll_stats.aborts;
+  } else if (i2c_get_read_available(kSouthbridgeI2C) >= kRegisterAnswerBytes) {
+    const uint8_t state = i2c_read_byte_raw(kSouthbridgeI2C);
+    const uint8_t key = i2c_read_byte_raw(kSouthbridgeI2C);
+    ++g_poll_stats.reads;
+    if (state == kSouthbridgeKeyIdle) {
+      g_poll_caught_up = true;
+    } else if (!g_poll_caught_up) {
+      ++g_poll_stats.stale_keys;
+    } else if (state <= kSouthbridgeKeyReleased) {
+      event->state = (SouthbridgeKeyState)state;
+      event->key = key;
+      ++g_poll_stats.keys;
+      has_key = true;
+    }
+  } else if (time_us_64() - g_poll_started_us > kSouthbridgePollTimeoutUs) {
+    // Start again from a freshly reset block, which drops whatever it was
+    // stuck on.
+    i2c_deinit(kSouthbridgeI2C);
+    SouthbridgeInit();
+    SetTargetAddress();
+    ++g_poll_stats.timeouts;
+  } else {
+    return false;
+  }
+  StartKeyFIFORead();
+  return has_key;
+}
+
+SouthbridgePollStats SouthbridgeGetPollStats(void) { return g_poll_stats; }

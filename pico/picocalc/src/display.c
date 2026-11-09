@@ -37,6 +37,7 @@ typedef enum DisplayMessage {
   kDisplayMessageFrame = 1,
   kDisplayMessageStatus,
   kDisplayMessageTurnOff,
+  kDisplayMessageTurnOn,
 } DisplayMessage;
 
 static const char* const kStatusLabels[kDisplayStatusLineCount] = {
@@ -179,6 +180,9 @@ static void DisplayMain(void) {
       case kDisplayMessageTurnOff:
         LcdSetDisplayOn(false);
         break;
+      case kDisplayMessageTurnOn:
+        LcdSetDisplayOn(true);
+        break;
     }
   }
 }
@@ -233,6 +237,11 @@ void DisplayEndStatus(void) { HandOver(kDisplayMessageStatus, &g_status_busy); }
 void DisplayTurnOff(void) {
   __dmb();
   multicore_fifo_push_blocking(kDisplayMessageTurnOff);
+}
+
+void DisplayTurnOn(void) {
+  __dmb();
+  multicore_fifo_push_blocking(kDisplayMessageTurnOn);
 }
 
 DisplayStats DisplayGetStats(void) {

@@ -99,6 +99,7 @@ add_executable(yax86_picocalc
     src/main.c
     src/display.c
     src/font_4x10.c
+    src/keymap.c
     src/lcd.c
     src/southbridge.c
     src/text.c

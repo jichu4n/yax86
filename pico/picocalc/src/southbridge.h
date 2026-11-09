@@ -19,4 +19,47 @@ void SouthbridgeInit(void);
 // v1.6. Returns false if the controller did not answer at all.
 bool SouthbridgeReadVersion(uint8_t* version);
 
+// What became of a key, as the controller's key FIFO reports it.
+typedef enum SouthbridgeKeyState {
+  // The FIFO was empty.
+  kSouthbridgeKeyIdle = 0,
+  kSouthbridgeKeyPressed,
+  // Reported every 100ms once a key has been held for 300ms, except for the
+  // keys whose repeat the controller reports as presses instead.
+  kSouthbridgeKeyHeld,
+  kSouthbridgeKeyReleased,
+} SouthbridgeKeyState;
+
+// One entry of the key FIFO: a key, in ClockworkPi's key codes - ASCII, with
+// the keys ASCII has no code for above 0x80 - and what became of it.
+typedef struct SouthbridgeKeyEvent {
+  SouthbridgeKeyState state;
+  uint8_t key;
+} SouthbridgeKeyEvent;
+
+// How the key FIFO poll has gone, for the report.
+typedef struct SouthbridgePollStats {
+  // Reads of the FIFO that completed, and how many of them held a key.
+  uint32_t reads;
+  uint32_t keys;
+  // Keys dropped because they were already queued when the poll started.
+  uint32_t stale_keys;
+  // Reads the controller did not acknowledge, and reads that never completed.
+  uint32_t aborts;
+  uint32_t timeouts;
+} SouthbridgePollStats;
+
+// Move the key FIFO poll on, without ever waiting for the bus. Each call
+// collects the read started by the call before it, if it has completed, and
+// starts the next, so call it often - once a batch. Returns true, with the
+// key in event, if the read it collected held one.
+//
+// The controller keeps running while the RP2040 restarts, and queues keys
+// whether or not anything reads them, so its FIFO can be full of keys pressed
+// long before this firmware started. Those are dropped: every key up to the
+// first read that finds the FIFO empty.
+bool SouthbridgePollKey(SouthbridgeKeyEvent* event);
+
+SouthbridgePollStats SouthbridgeGetPollStats(void);
+
 #endif  // YAX86_PICOCALC_SOUTHBRIDGE_H
