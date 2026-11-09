@@ -2048,6 +2048,7 @@ SRAM, at #89:
   with a 320x320 LCD, a keyboard, an SD card slot and a battery. It raises the
   system clock to 250MHz, brings up the keyboard controller, and boots MS-DOS
   3.30 off an image on the SD card, or off the one in flash without it, with
+  a hard disk image on the card attached as well if there is one, and with
   the guest's text screen on the LCD and status lines below it - drawn by the second core, while the first runs
   the machine. The machine is paced to real
   time, keeps running once it reaches the `A>` prompt, and takes the
@@ -2117,7 +2118,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   moves it too, which is the guest being typed at rather than anything
   broken - and the reason the keys the controller queued before the firmware
   started are dropped. So does booting off a floppy on the card that is not
-  the one in `resources` byte for byte - see the SD card section.
+  the one in `resources` byte for byte, or with a hard disk image on the
+  card - see the SD card section.
 
 ### Running in real time
 
@@ -2390,14 +2392,21 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   backlights and the battery, and never reports them, and Shift with Left
   or Right reports nothing at all.
 
-### The SD card and drive A
+### The SD card, drive A and the hard disk
 
 - **Drive A is `yax86/floppy_a.img` on the card**, a 360KB image on its FAT
   volume, and what the guest writes to it is written to the card. Without
   one, it is the floppy built into flash, which takes no writes, and the
   Disk status line says why: no card, a card that did not answer, no FAT
-  volume, no image, or an image that is not 360KB. The card is looked at
+  volume, no image, or an image of the wrong size. The card is looked at
   once, at power on.
+- **The hard disk is `yax86/hdd.img`**, attached as the hard disk
+  controller's master drive only when the card has one. It is the core's
+  10MB drive, 306 cylinders of 4 heads and 17 sectors, and the image has to
+  be exactly that, 10,653,696 bytes. A blank one is zeros -
+  `dd if=/dev/zero of=hdd.img bs=512 count=20808` - which the guest
+  partitions with FDISK and formats with `FORMAT C: /S`, both on the boot
+  floppy. Nothing on the device creates one.
 - `src/sdcard.c` drives the card in its SPI mode on SPI0, from the SD
   Association's simplified physical layer specification: 400kHz to bring it
   up, then 24MHz. The SPI block runs from the 48MHz peripheral clock - see
@@ -2412,27 +2421,44 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   by a hash anyone can check against the download, and leaves the source
   tree holding only our own code. To move to a new release, replace the zip
   and its hash, and carry our settings over to the new `ffconf.h`.
-- **`src/ffconf.h` is the release's, with three settings changed**: code page
-  437, `FF_FS_TINY`, and `FF_FS_NORTC`. Long names and exFAT are off. The
+- **`src/ffconf.h` is the release's, with four settings changed**: code page
+  437, `FF_FS_TINY`, `FF_FS_NORTC` and `FF_USE_FASTSEEK`. Long names and exFAT are off. The
   build copies it over the stock one, since `ff.h` includes it from its own
   directory before any include path, and does so with `configure_file()`, so
   that a change to it reconfigures the build.
 - FatFs is the one thing in the image that calls `memcpy()` and `memset()`
   itself; the runtime's own code calls neither.
-- **The floppy controller moves a byte at a time, and `src/floppy.c` keeps one
-  sector of the image in memory**, so each sector the guest reads or writes
+- **Both controllers move a byte at a time, and `src/disk_image.c` keeps one
+  sector of each image in memory**, so each sector the guest reads or writes
   costs one card access. A sector the guest writes goes to the card as soon
   as its last byte is in, so nothing it wrote waits in memory to be lost when
-  the power goes.
+  the power goes. `src/floppy.c` and `src/harddisk.c` each hold an image and
+  hand it to their controller.
+- **Each image keeps a map of where its clusters are on the card**, FatFs's
+  fast seek. Without one, a seek backwards walks the file's cluster chain
+  from its start, and a hard disk seeks backwards all the time. The map has
+  room for an image in 31 pieces, and a file copied onto a card is usually
+  in one; a more fragmented image goes without, and the report says so as
+  `fd_fast_seek` and `hd_fast_seek`.
 - **The card costs 1.5% of `dos-boot`**: 4.8896 seconds of processor time
   against 4.8171 off the floppy in flash, two runs each with a spread under
   0.01%. DOS reads 214 sectors on the way to `A>`, which take 75ms - about
   0.35ms a sector, for which the machine waits.
 - **The invariant holds only off an image identical to the one in
-  `resources`.** A copy of `DISK01.IMG` boots in the same 2,328,128
-  instructions. The same image with one file added to its root directory
-  took 2,328,239, so an image the guest has written to is not one to measure
-  with.
+  `resources`, and with no hard disk.** A copy of `DISK01.IMG` boots in the
+  same 2,328,128 instructions. The same image with one file added to its root
+  directory took 2,328,239, so an image the guest has written to is not one
+  to measure with. A hard disk changes the boot more: the drive's BIOS finds
+  it during POST and DOS reads its partition table, so a blank drive took
+  2,398,153 and a formatted one 2,415,480.
+- **Code added here can cost the boot without running.** The hard disk took
+  the boot from 4.8899 to 4.9317 seconds with no image on the card, 0.85%,
+  with the same instructions and no new work on the way: the floppy's reads
+  got faster with fast seek. Master with a 1,696 byte array added ahead of
+  guest RAM, which moves it to where the branch has it, took 4.9052, so a
+  third of that is guest RAM moving. The rest is most likely where code
+  lands in flash, which nothing here has confirmed. The two images are 8-byte aligned, and `.bss` is sorted by
+  alignment before name, so they land ahead of guest RAM and move it.
 
 ### The 4x10 font
 
