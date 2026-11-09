@@ -93,16 +93,40 @@ add_custom_command(
 )
 
 # =============================================================================
+# FatFs
+# =============================================================================
+# ChaN's release, as downloaded from elm-chan.org, unpacked into the build
+# directory. ff.h includes ffconf.h from its own directory before any include
+# path, so ours is copied over the stock one; configure_file() also reruns the
+# configure when ours changes.
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+include(FetchContent)
+FetchContent_Declare(
+    fatfs
+    URL "${YAX86_ROOT}/resources/FatFs/ff16.zip"
+    URL_HASH SHA256=99f7dc1f7e095356e4a9e3dbe29959090d8b948afe2bbc5441e52fdf4b85449e
+)
+FetchContent_MakeAvailable(fatfs)
+set(fatfs_dir "${fatfs_SOURCE_DIR}/source")
+configure_file(src/ffconf.h "${fatfs_dir}/ffconf.h" COPYONLY)
+
+# =============================================================================
 # Firmware
 # =============================================================================
 add_executable(yax86_picocalc
     src/main.c
+    src/diskio.c
     src/display.c
+    src/floppy.c
     src/font_4x10.c
     src/keymap.c
     src/lcd.c
+    src/sdcard.c
     src/southbridge.c
     src/text.c
+    "${fatfs_dir}/ff.c"
     "${floppy_data_prefix}.c"
     "${YAX86_ROOT}/core/yax86_core.c"
 )
@@ -110,6 +134,7 @@ add_executable(yax86_picocalc
 target_include_directories(yax86_picocalc PRIVATE
     "${YAX86_ROOT}"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${fatfs_dir}"
     # Where the generated boot floppy header lands.
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
@@ -131,6 +156,7 @@ target_link_libraries(yax86_picocalc PRIVATE
     pico_multicore
     hardware_i2c
     hardware_pio
+    hardware_spi
     hardware_vreg
     hardware_watchdog
 )

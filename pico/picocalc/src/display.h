@@ -24,6 +24,7 @@ typedef enum DisplayStatusLine {
   kDisplayStatusSpeed,
   kDisplayStatusClock,
   kDisplayStatusDisplay,
+  kDisplayStatusDisk,
   kDisplayStatusLineCount,
 } DisplayStatusLine;
 

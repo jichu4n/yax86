@@ -18,9 +18,9 @@ enum {
   kGuestScreenWidth = kGuestScreenColumns * kFont4x10Width,
   kGuestScreenHeight = kGuestScreenRows * kFont4x10Height,
 
-  // The banner and status lines below it, in 4x10 character cells. The row
-  // after the guest's screen is left blank to separate them from it.
-  kBannerRow = kGuestScreenRows + 1,
+  // The banner and status lines below it, in 4x10 character cells, which take
+  // every row the guest's screen leaves.
+  kBannerRow = kGuestScreenRows,
   kStatusFirstRow = kBannerRow + 1,
   kStatusLabelColumn = 1,
   kStatusValueColumn = 10,
@@ -43,7 +43,7 @@ typedef enum DisplayMessage {
 static const char* const kStatusLabels[kDisplayStatusLineCount] = {
     [kDisplayStatusSystem] = "System",   [kDisplayStatusBoot] = "Boot",
     [kDisplayStatusSpeed] = "Speed",     [kDisplayStatusClock] = "Clock",
-    [kDisplayStatusDisplay] = "Display",
+    [kDisplayStatusDisplay] = "Display", [kDisplayStatusDisk] = "Disk",
 };
 
 // What core 0 hands over. Each has a flag that only core 0 sets, once it has
