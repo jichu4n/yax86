@@ -10,8 +10,8 @@ const {delay, waitForPort, openPort} = require('./serial');
 //
 //   ./run.js ../../build-pico/O3/yax86_pico_bench.uf2
 //
-// What the firmware prints is logfmt, a line per record - see "util —
-// logging" in AGENTS.md. Reports are shown as tables, and the bench's result
+// What the firmware prints is logfmt, a line per record - see "util -
+// logging" in core/AGENTS.md. Reports are shown as tables, and the bench's result
 // with the figures a PR reports worked out from it; --json prints each record
 // as a JSON object instead. --out saves the lines as they came.
 //

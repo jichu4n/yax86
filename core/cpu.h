@@ -3071,7 +3071,8 @@ Y_MODULE_PRIVATE Y_ALWAYS_INLINE YCPUOperandValue YCPUReadOperandValue(
   // and is worse still - YCPUGetRegisterOrMemoryOperandAddress() writes this
   // field for every operand, and a write to a bitfield is a read-modify-write.
   // Widening YCPUOpcodeMetadata.width to a byte would likewise put the width
-  // switches in this same position; see AGENTS.md before doing either.
+  // switches in this same position; see core/src/cpu/AGENTS.md before doing
+  // either.
   const YCPUWidth width = ctx->metadata->width;
   if (address->type == Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER) {
     return YCPUReadRegisterOperandValue(ctx->cpu, address, width);

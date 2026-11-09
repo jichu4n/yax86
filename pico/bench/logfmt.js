@@ -1,5 +1,5 @@
 // logfmt lines, as the core's logger writes them - see core/src/util/logfmt.h
-// and "util — logging" in AGENTS.md: space separated key=value pairs, with a
+// and "util - logging" in core/AGENTS.md: space separated key=value pairs, with a
 // value quoted when it has to be, and \", \\ and \xNN escapes inside quotes.
 
 // Parse a line into its pairs, in order, as an object of strings. Returns null
