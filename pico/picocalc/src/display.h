@@ -2,10 +2,10 @@
 // below it - drawn by core 1, which owns the LCD and does nothing else.
 //
 // Core 0 runs the machine and never touches the LCD. It hands core 1 what to
-// draw: a copy of the guest's screen once a frame, the status line values, and
-// the request to turn the panel off. Each is handed over only while core 1 is
-// not using the last one, so the two cores never share anything either of them
-// is changing.
+// draw: a copy of the guest's screen once a frame, the status line values,
+// and the requests to turn the panel off and on. Each is handed over only
+// while core 1 is not using the last one, so the two cores never share
+// anything either of them is changing.
 //
 // Every function here is called from core 0.
 #ifndef YAX86_PICOCALC_DISPLAY_H
@@ -59,9 +59,12 @@ void DisplayOfferFrame(YVideoState* video);
 DisplayStatus* DisplayBeginStatus(void);
 void DisplayEndStatus(void);
 
-// Turn the panel off, after whatever core 1 has already been handed. Nothing
-// is drawn after this.
+// Turn the panel off, after whatever core 1 has already been handed, and on
+// again. The panel keeps what it showed while it is off, so only what changed
+// meanwhile needs drawing once it is back on. Turning it on takes core 1
+// 120ms, which core 0 does not wait for.
 void DisplayTurnOff(void);
+void DisplayTurnOn(void);
 
 DisplayStats DisplayGetStats(void);
 

@@ -2050,9 +2050,10 @@ SRAM, at #89:
   3.30 off the floppy image in flash, with the guest's text screen on the LCD
   and status lines below it - drawn by the second core, while the first runs
   the machine. The machine is paced to real
-  time and keeps running once it reaches the `A>` prompt. The keyboard is not
-  read yet, so DOS's date and time questions are answered by watching the
-  screen, the way `pico/bench` does it.
+  time, keeps running once it reaches the `A>` prompt, and takes the
+  PicoCalc's keyboard as its own. DOS's date and time questions are still
+  answered by watching the screen, the way `pico/bench` does it: there is no
+  clock to set them from, and it keeps the boot the `dos-boot` workload.
 - Like `pico/bench` it is a consumer of the core, uses only the public
   interface, and is not built in CI.
 
@@ -2106,13 +2107,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The boot reaches `A>` having retired **2,328,128 instructions**, the same
   count `pico/bench` reports for `dos-boot`. That is what says this runtime and
   the benchmark run the same machine, so a figure measured on one stands for
-  the other. At 250MHz it takes 4.73 seconds of processor time without
-  drawing the guest's screen and 4.80 with it - 123% and 121% of a real
+  the other. At 250MHz it takes 4.72 seconds of processor time without
+  drawing the guest's screen and 4.82 with it - 123% and 121% of a real
   PC/XT. At the stock 125MHz, 9.44 seconds with drawing, which is 61.5%.
   Processor time rather than how long it took, because the boot is paced -
   see below.
 - If the count moves while the bench's does not, the runtime has stopped
-  running the machine the benchmark measures.
+  running the machine the benchmark measures. A key pressed during the boot
+  moves it too, which is the guest being typed at rather than anything
+  broken - and the reason the keys the controller queued before the firmware
+  started are dropped.
 
 ### Running in real time
 
@@ -2272,20 +2276,53 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   keeps running meanwhile, and the frames that come due are drawn together in
   the next. Putting the drawing code in SRAM, so that core 1 shares less of
   the XIP cache with core 0, has not been tried.
-- **The screen is blanked 30 seconds after the boot**, with the panel's
-  display off and sleep in commands - `LcdSetDisplayOn(false)`, which core 1
-  carries out after whatever it was handed before. Nothing but
-  the cursor changes on it after the boot, and a static image left showing
-  for hours can leave its mark on the panel. The guest's screen is not
-  rendered while it is blank. The backlight is the controller's, and its
+- **The screen is blanked 30 seconds after the boot or the last key**,
+  whichever was later, with the panel's display off and sleep in commands -
+  `LcdSetDisplayOn(false)`, which core 1 carries out after whatever it was
+  handed before. A static image left showing for hours can leave its mark on
+  the panel. The guest's screen is not rendered while it is blank, so what
+  changes meanwhile stays recorded in the live video state. A key turns the
+  panel back on: the panel keeps its frame memory through sleep, so the next
+  frame need only draw what changed, and the key goes on to the guest as
+  well. The backlight is the controller's, and its
   firmware will not dim the LCD's below 16 of 255, so blanking is the panel's
   job rather than the backlight's.
 
 ### The keyboard controller
 
-- It answers a register at a time: write the register number, wait, then read
-  two bytes. ClockworkPi's samples wait 16ms and run the bus at 10kHz, and so
-  does this for now.
+- It answers a register at a time: write the register number, then read two
+  bytes. ClockworkPi's samples wait 16ms between the two. That is not
+  needed: the controller prepares its answer as the register number arrives,
+  and answered every read straight on. The one read made at startup, of the
+  version, still waits.
+- **The bus runs at 10kHz**, as in ClockworkPi's samples and its PicoMite
+  build, whose headers say the keyboard's should be 10kHz without saying
+  why, though some of its other builds run it at 400kHz. The controller answered
+  every read at 10, 100 and 400kHz alike, about 6,000 reads a minute at each
+  without an error. A faster bus would only shorten each read, and a read at
+  10kHz, about 5ms, finishes well within the batch that collects it, so
+  nothing here gains from one.
+- **The key FIFO is read without waiting, once a batch, on core 0.**
+  `SouthbridgePollKey()` queues a whole read - the register number, then a
+  two byte read, each ending in a STOP - in the I2C block's own FIFO, and the
+  next call collects the answer and queues the next. The block carries the
+  bus out by itself, so core 0 spends about 3.5us a batch on it: 2.1ms over
+  `dos-boot`. A read the controller does not acknowledge aborts and is
+  counted; one that never completes resets the block after 50ms.
+- One read a batch is about a hundred a second, a key event each. A key
+  pressed and released is two events, a modifier held repeats ten times a
+  second, and the controller's FIFO holds 31, so typing never comes near it.
+- **The controller queues keys whether or not anything reads them, and keeps
+  running while the RP2040 restarts**, so its FIFO can be full of keys
+  pressed long before the firmware started. The first boot with the poll
+  took 31, the FIFO's size, as typing and moved the `dos-boot` invariant.
+  Everything up to the first read that finds the FIFO empty is dropped.
+- **The poll's real cost to `dos-boot` is where it puts the code.** The boot
+  took 0.42% longer than on master - 4.8174 seconds against 4.7971 - and a
+  build whose poll returns at once, with everything still linked, took
+  4.8153. So 18ms of the 20ms is layout, which is the same effect as the
+  drawing section describes.
+
 - **Write a register number before every read.** Firmware older than April
   2025 (ClockworkPi commit `f58e85e`) freezes SCL if a read arrives with no
   register number before it, which is exactly what a bus scan does.
@@ -2302,8 +2339,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   not reproduce it. The cause is not known, and that unit's firmware is older
   than v1.6, which is the release that added an I2C restart after 2.5 quiet
   seconds "indicating a possible I2C malfunction". The boot-time read retries
-  for three seconds, which spans one such restart on v1.6 and later; reading
-  the keyboard continuously will need more than that.
+  for three seconds, which spans one such restart on v1.6 and later. The key
+  FIFO poll needs nothing extra: a read that is not acknowledged is counted
+  and the next batch tries again, for as long as it takes.
 - **Flashing the controller** is ClockworkPi's procedure, in the PicoCalc
   repository's wiki: set DIP switch 1 on the back of the mainboard, power on,
   and `stm32flash` its serial bootloader through the USB-C port, which is a
@@ -2317,6 +2355,39 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   cables and the batteries were removed and put back. A long press is the
   wrong way to try in any case: the firmware shuts the device down on a long
   press, and has since at least v1.4.
+
+### The keyboard
+
+- The controller reports characters, not keys: ASCII, with the keys ASCII
+  has no code for above 0x80, and each reported as pressed, held or
+  released. `src/keymap.c` turns each into the PC/XT's set 1 scancodes.
+- **Shifted characters arrive already shifted**, as `!` rather than Shift
+  and 1. The controller reports Shift, Ctrl and Alt as keys of their own as
+  well, so a character is sent as the key that types it on a PC, both cases
+  of a letter and both characters on a key alike, and the modifiers as they
+  come. The guest sees Shift held and the 1 key, and makes the `!` itself.
+- **The keys a PC has and the PicoCalc does not arrive as shifted forms of
+  other keys**: F6 to F10 on F1 to F5, Home on Tab, End on Delete, Page Up
+  and Down on the Up and Down arrows, Insert on Enter, and Break on Esc. Alt
+  and I is Insert as well. On a PC/XT those are keypad keys or keys of their
+  own, and Shift held would change them - Shift and Page Up on the keypad is
+  a 9. So each is sent as a whole press and release, with whichever of
+  Shift and Alt the guest was told are held let go around it, and its
+  release sends nothing. Ctrl is left alone, so Ctrl, Shift and Esc is
+  Ctrl-Break.
+- A key held down repeats as a run of make codes, as a PC/XT keyboard's
+  does. The controller starts repeating after 300ms, ten times a second.
+- **Releases do not always match their presses**, because the controller
+  works out the character again when a key is let go, with the modifiers
+  held at that moment: Shift let go before the 1 releases a `1`, not a `!`.
+  Both are the same PC key, so the release is right. For the shifted forms
+  it is not, which is the other reason their releases send nothing. What is
+  left is an arrow pressed, Shift pressed, and the arrow let go, which
+  reports Page Up released: the arrow's make code is never followed by its
+  break. A PC/XT BIOS takes no notice of a keypad key's release.
+- The controller keeps Alt with comma, full stop, space and B for the
+  backlights and the battery, and never reports them, and Shift with Left
+  or Right reports nothing at all.
 
 ### The 4x10 font
 
