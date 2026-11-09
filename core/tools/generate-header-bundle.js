@@ -3,7 +3,52 @@
 const fs = require('fs/promises');
 const path = require('path');
 
+// Generates a module's header bundle, core/<module>.h, from the files its
+// core/src/<module>/bundle.json names:
+//
+//   requires  other bundles this one includes rather than copies, such as
+//             "util", which every module needs and which would otherwise be
+//             copied into every module's bundle and again into yax86_core.h
+//   public    files that make up the module's interface
+//   private   files compiled only where YAX86_IMPLEMENTATION is defined
+//
+// A required bundle is included ahead of this one's extern "C" block, inside
+// an #ifndef on its include guard, so that in yax86_core.h, where it comes
+// first, the include is skipped without the file being opened.
+
 const IMPLEMENTATION_MACRO = 'YAX86_IMPLEMENTATION';
+
+function bundleIncludeGuard(moduleName) {
+  return `YAX86_${moduleName.toUpperCase()}_BUNDLE_H`;
+}
+
+function requiredBundleIncludes(requires) {
+  return requires
+    .map((moduleName) => {
+      const includeGuard = bundleIncludeGuard(moduleName);
+      return [
+        `#ifndef ${includeGuard}`,
+        `#include "${moduleName}.h"`,
+        `#endif  // ${includeGuard}`,
+        '',
+      ].join('\n');
+    })
+    .join('\n');
+}
+
+// A file named twice would be copied into the bundle twice. Its include guard
+// makes the second copy compile to nothing, so it is only ever dead weight.
+function checkNoFileNamedTwice(moduleName, fileNames) {
+  const seen = new Set();
+  for (const fileName of fileNames) {
+    if (seen.has(fileName)) {
+      throw new Error(
+        `${moduleName}/bundle.json names ${fileName} more than once`
+      );
+    }
+    seen.add(fileName);
+  }
+}
 
 function wrapFileContent({relFilePath, fileContent}) {
   return [
@@ -43,12 +88,14 @@ async function readAndWrapFileContent({fileNames, rootDirPath, moduleDir}) {
 async function generateHeaderBundle({
   moduleName,
   outputFilePath,
+  requires = [],
   public,
   private,
   rootDirPath,
   moduleDir,
 }) {
-  const includeGuard = `YAX86_${moduleName.toUpperCase()}_BUNDLE_H`;
+  checkNoFileNamedTwice(moduleName, [...public, ...private]);
+  const includeGuard = bundleIncludeGuard(moduleName);
   const publicContent = await readAndWrapFileContent({
     fileNames: public,
     rootDirPath,
@@ -67,6 +114,7 @@ async function generateHeaderBundle({
     `#ifndef ${includeGuard}`,
     `#define ${includeGuard}`,
     '',
+    requiredBundleIncludes(requires),
     '#ifdef __cplusplus',
     'extern "C" {',
     '#endif  // __cplusplus',

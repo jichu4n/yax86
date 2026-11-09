@@ -32,11 +32,18 @@ visibility, and how performance work is measured - are in the root
   in `core`** - `core/src/cpu` becomes `core/cpu.h` - and all of them into
   `core/yax86_core.h`, which `libyax86_core.a` is built from. A module's
   external interface is its `public.h`.
+- **The util headers are a bundle of their own, `core/util.h`**, which every
+  module's bundle includes rather than copies: `"requires": ["util"]` in its
+  `bundle.json` puts a guarded `#include "util.h"` ahead of the module's
+  `extern "C"` block. `util.h` comes first in `yax86_core.h`, so each util
+  file is there once, and the later includes are skipped without the file
+  being opened. Copied into every bundle instead, the util headers were
+  25,364 of the bundles' 63,532 lines, and a change to `util/log.h` repeated
+  twenty-two times. The bundler refuses a `bundle.json` that names a file
+  twice.
 - **The bundles and generated ROM arrays are committed, and `.gitattributes`
-  marks them generated**, so GitHub collapses them. Each bundle carries its
-  own copy of the util headers it uses and `yax86_core.h` all of them again,
-  so a change to `util/log.h` repeats twenty times there. Review the sources
-  under `core/src`.
+  marks them generated**, so GitHub collapses them. Review the sources under
+  `core/src`.
 - `platform` is the motherboard: it connects the modules and owns the memory
   and port maps.
 - **ROMs are compiled in**, since targets like the Pico have no file system.
@@ -279,11 +286,10 @@ visibility, and how performance work is measured - are in the root
   silently undone by the next regeneration, at the cost of the whole 1.59x.
   If the count drops, the bundler is wrong:
   ```sh
-  grep -c Y_HOT core/yax86_core.h    # 170
+  grep -c Y_HOT core/yax86_core.h    # 93
   ```
   That is 86 marks plus the seven lines of the macro block in
-  `util/common.h`, once for each of the twelve times a `bundle.json` names
-  it.
+  `util/common.h`.
 - **`Y_ALWAYS_INLINE` exists for a small helper with one hot caller**, which
   every level inlines until a second caller appears and `-Os` and `-O2` emit
   it out of line for both - 3.6% at `-O2`. `Y_HOT` on the helper recovers

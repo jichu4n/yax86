@@ -18,6 +18,10 @@ function(generate_header_bundle module)
     set(ALL_HEADER_BUNDLES ${ALL_HEADER_BUNDLES} PARENT_SCOPE)
 endfunction()
 
+# The util headers every module uses, in a bundle of their own that each
+# module's bundle includes. First, so that it comes first in yax86_core.h,
+# where it is then the only copy.
+generate_header_bundle("util")
 generate_header_bundle("bios")
 generate_header_bundle("cpu")
 generate_header_bundle("dma")
