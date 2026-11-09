@@ -1733,6 +1733,12 @@ Alongside the table, state:
   (`Y_LOG_FIRST_HOST_MODULE_ID`), so a host can give its own messages a
   module without colliding with one the core adds later.
   `module_ids_test.cpp` holds the core to its half.
+- **Lines are read back by `YLogfmtParse()`**, which splits one into pairs in
+  place, undoing the escapes, with `YLogfmtFind()` to look a key up and
+  `YLogfmtParseUInt()` to read a number the way the writer writes one. It
+  is what a host reads commands with: the same format runs both ways, and a
+  command is `id=7 cmd=screen`. It refuses any escape the writer does not
+  write, and a token that is not a pair.
 - A line is at most `Y_LOG_MAX_LINE_LENGTH` bytes, built in the logger's own
   buffer. A pair that does not fit is dropped whole, along with every pair
   after it, and the line ends `truncated=true`, so a truncated line is still
@@ -1959,8 +1965,11 @@ report, the bench's header and its result as a table, with seconds, emulated
 MHz, MIPS and "vs a real 8088" worked out from the result's integers, and
 any other line on one line of its own. `--out` saves the lines as they came,
 and `--json` prints each one as a JSON object instead, for a script. The
-run is over at the line with `event=done`. To pull figures out of a
-capture, match the pair: `grep -o 'elapsed_us=[0-9]*' capture.txt`.
+run is over at the line with `event=done` - for the PicoCalc, once it has
+answered the `report` command `run.js` sends it then. To pull figures out of
+a capture, match the pair: `grep -o 'elapsed_us=[0-9]*' capture.txt`.
+`serial.js` opens the port and `logfmt.js` reads and writes the lines, for
+`run.js` and for the PicoCalc's `debug.js`.
 
 `YAX86_CORE_ROOT` names the checkout whose `core` is compiled in, which is how
 a branch and its baseline are measured against one harness:
@@ -2184,14 +2193,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ./pico/bench/run.js build-pico/picocalc/yax86_picocalc.uf2
 ```
 
-- Everything the status screen shows is also sent over USB serial as logfmt -
-  see "util — logging" - as a report each time a host attaches: an `info`
-  line with `event=report` for each of the runtime's modules, `system`,
-  `boot`, `display`, `disk` (one for each drive), `keyboard` and `pacing`.
-  USB CDC drops what is written before a host attaches, so nothing is written
-  until one is. Each stage of the boot is a `boot_stage` line, and once it
-  is over the report is sent again, then `event=done`. That is what `run.js`
-  waits for, so it flashes and reads this image as it does the bench.
+- What the runtime says goes out over USB serial as logfmt - see "util —
+  logging". Each stage of the boot is a `boot_stage` line, and once it is
+  over, `event=done`, which is said again to a host that attaches later. USB
+  CDC drops what is written before a host attaches, so nothing is written
+  until one is. Everything the status screen shows is the answer to the
+  `report` command - see "Commands over USB" below - which `run.js` sends at
+  `done`, so it flashes and reads this image as it does the bench.
 - `src/runtime_log.c` holds the loggers. The machine's configuration is at
   `error`, like the bench's and for the same reason, and the runtime's own
   modules log at `info` through a logger of their own. The copy of the
@@ -2573,6 +2581,60 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   third of that is guest RAM moving. The rest is most likely where code
   lands in flash, which nothing here has confirmed. The two images are 8-byte aligned, and `.bss` is sorted by
   alignment before name, so they land ahead of guest RAM and move it.
+
+### Commands over USB
+
+- **A host drives the runtime with commands** on the same serial port it
+  reads from, a logfmt line each - `id=7 cmd=screen` - each answered by
+  `kind=reply` lines with its id, the last of which has `status=ok` or
+  `status=error` and an `error`. `src/command.c` reads them and `main.c`
+  carries them out:
+
+  | command | does |
+  | --- | --- |
+  | `ping` | answers, with how many typed keys are still to send |
+  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `pacing` |
+  | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
+  | `type text=...` | types the text into the guest |
+  | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
+  | `key scancode=0x52` | sends a PC/XT scancode straight to the guest, for a key the PicoCalc does not have |
+
+- **A screen row is hex, not text.** Text escaped as logfmt would not fit on
+  a line: a row of box drawing characters is 80 bytes outside ASCII, which
+  escape to 320 characters, against the logger's 256-byte line. `debug.js`
+  turns the hex back into code page 437, as Unicode.
+- **Typed keys go through the keymap, one key event a batch**, from the queue
+  in `src/typing.c`, in a batch the PicoCalc's keyboard had none. An event is
+  the keyboard controller's, so the keymap turns it into scancodes as it
+  does a key pressed on the device. The controller reports `A` and `!` as
+  characters and Shift as a key of its own, and the keymap sends `A` and `a`
+  as the same key, so typed text adds Shift around the characters that need
+  it - without it the guest gets lower case. The reply comes once the keys
+  are queued; `ping` says when they have all gone. A raw scancode skips the
+  queue.
+- **Commands are read once a batch, without waiting**, up to 64 bytes at a
+  time, and carried out between batches. With nothing sent, the poll costs
+  the boot 3.5ms - 5.0755 seconds of processor time against 5.0721, 0.07%.
+  The time commands take is counted in the report as `command_us`, which a
+  boot that took commands is that much slower for.
+- **`debug.js` is the host's side**: `screen`, `type`, `key`, `scancode`,
+  `wait`, `report` and `ping`, or `run` with a script of them, a step a line.
+  `wait` polls the screen until a regular expression matches it, and a
+  timeout fails the script, which is what makes a script a test:
+
+  ```
+  type CLS\r
+  wait ^A>
+  type DIR C:\r
+  wait bytes free
+  ```
+
+  A wait sees the whole screen, old output included, so a script clears it
+  first. The tool opens the port once for the session, and pings until it
+  is answered before anything else: a command sent in the moment after the
+  port opens is sometimes lost - two runs in five, sending a command at
+  once - and losing a ping costs nothing where resending a `type` could type
+  it twice. Why the first bytes go missing is not known.
 
 ### The 4x10 font
 

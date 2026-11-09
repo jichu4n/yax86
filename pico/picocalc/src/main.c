@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "command.h"
 #include "core/platform.h"
 #include "core/video.h"
 #include "display.h"
@@ -36,6 +37,7 @@
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
+#include "typing.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
 // identical but for that, which is what measures what drawing costs.
@@ -183,6 +185,9 @@ static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
 static RuntimeStatus g_status;
 static bool g_host_attached;
+// Host time spent carrying out commands a host sent, which a boot that took
+// them is that much slower for.
+static uint64_t g_command_us;
 // Whether the status lines have changed since core 1 was last handed them.
 static bool g_status_changed;
 
@@ -410,11 +415,31 @@ static bool HandOverStatus(void) {
   return true;
 }
 
-// A drive's line of the report.
-static void LogDiskImage(const char* drive, const DiskImage* image) {
+// How far the boot has got, and what it took: the fields of a boot_stage
+// log, and of the boot's group of a report.
+#define BOOT_FIELDS()                                                   \
+  Y_LOG_STRING("stage", kBootStageEvents[g_status.boot_stage]),         \
+      Y_LOG_UINT("instructions", g_status.instructions),                \
+      Y_LOG_UINT("cycles", g_status.boot_cycles),                       \
+      Y_LOG_UINT(                                                       \
+          "emulated_us", g_status.boot_cycles* kMicrosecondsPerSecond / \
+                             Y_PLATFORM_CPU_CYCLES_PER_SECOND),         \
+      Y_LOG_UINT("real_us", g_status.boot_elapsed_us),                  \
+      Y_LOG_UINT("busy_us", g_status.boot_busy_us),                     \
+      Y_LOG_UINT("speed_pm", BootSpeedPermille())
+
+// A line of a reply to a report command: one group of its facts.
+#define REPLY_GROUP(command, group, ...)                 \
+  Y_LOG_REPLY(                                           \
+      &g_runtime_logger, (command)->id, (command)->name, \
+      Y_LOG_STRING("group", (group)), __VA_ARGS__)
+
+// A drive's group of a report.
+static void ReplyDiskImage(
+    const Command* command, const char* group, const DiskImage* image) {
   const DiskImageStats* stats = &image->stats;
-  DISK_INFO(
-      "report", Y_LOG_STRING("drive", drive),
+  REPLY_GROUP(
+      command, group,
       Y_LOG_STRING("image", DiskImageDescribeStatus(image->status)),
       Y_LOG_BOOL("fast_seek", image->fast_seek),
       Y_LOG_UINT("reads", stats->sector_reads),
@@ -424,73 +449,57 @@ static void LogDiskImage(const char* drive, const DiskImage* image) {
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// How far the boot has got, and what it took, as a boot_stage log when the
-// boot moves on, and as the boot's line of the report.
-static void LogBoot(const char* event) {
-  BOOT_INFO(
-      event, Y_LOG_STRING("stage", kBootStageEvents[g_status.boot_stage]),
-      Y_LOG_UINT("instructions", g_status.instructions),
-      Y_LOG_UINT("cycles", g_status.boot_cycles),
-      Y_LOG_UINT(
-          "emulated_us", g_status.boot_cycles * kMicrosecondsPerSecond /
-                             Y_PLATFORM_CPU_CYCLES_PER_SECOND),
-      Y_LOG_UINT("real_us", g_status.boot_elapsed_us),
-      Y_LOG_UINT("busy_us", g_status.boot_busy_us),
-      Y_LOG_UINT("speed_pm", BootSpeedPermille()));
-}
-
-// The same facts as the status screen, as a line for each part of the
-// runtime.
-static void LogReport(void) {
+// The same facts as the status screen, as a group for each part of the
+// runtime, in answer to a report command.
+static void ReplyReport(const Command* command) {
   char version[16];
   FormatSouthbridgeVersion(version, sizeof(version));
-  SYSTEM_INFO(
-      "report", Y_LOG_STRING("runtime", "yax86 picocalc"),
+  REPLY_GROUP(
+      command, "system", Y_LOG_STRING("runtime", "yax86 picocalc"),
       Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / kHzPerKHz),
       Y_LOG_STRING("overclock", kOverclockNames[g_status.overclock]),
       Y_LOG_UINT("lcd_spi_hz", g_status.lcd_spi_hz),
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
       Y_LOG_STRING("keyboard_fw", version),
       Y_LOG_UINT("guest_ram_kb", kGuestRAMSize / 1024));
-  LogBoot("report");
+  REPLY_GROUP(command, "boot", BOOT_FIELDS());
   const DisplayStats display = DisplayGetStats();
-  DISPLAY_INFO(
-      "report", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
+  REPLY_GROUP(
+      command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
       Y_LOG_UINT("pixels_drawn", display.pixels_drawn),
       Y_LOG_UINT("render_us", display.render_us),
       Y_LOG_UINT("frames_late", display.frames_late),
       Y_LOG_UINT("copy_us", display.copy_us));
-  LogDiskImage("a", FloppyGetImage());
-  LogDiskImage("c", HardDiskGetImage());
+  ReplyDiskImage(command, "drive_a", FloppyGetImage());
+  ReplyDiskImage(command, "drive_c", HardDiskGetImage());
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
-  KEYBOARD_INFO(
-      "report", Y_LOG_UINT("reads", keyboard.reads),
+  REPLY_GROUP(
+      command, "keyboard", Y_LOG_UINT("reads", keyboard.reads),
       Y_LOG_UINT("keys", keyboard.keys),
       Y_LOG_UINT("stale_keys", keyboard.stale_keys),
       Y_LOG_UINT("aborts", keyboard.aborts),
       Y_LOG_UINT("timeouts", keyboard.timeouts));
-  PACING_INFO(
-      "report", Y_LOG_UINT("real_us", ElapsedUs()),
+  REPLY_GROUP(
+      command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
           "emulated_us", g_clock.cycles * kMicrosecondsPerSecond /
                              Y_PLATFORM_CPU_CYCLES_PER_SECOND),
       Y_LOG_UINT("guest_clock_ms", GuestClockMs()),
       Y_LOG_UINT("waited_us", g_clock.waited_us),
       Y_LOG_UINT("dropped_us", g_clock.dropped_us),
+      Y_LOG_UINT("command_us", g_command_us),
       Y_LOG_BOOL("idle_skip", g_platform.is_dos_idle_skip_enabled));
+  CommandReplyOk(command);
 }
 
-// Send a report if a host has attached since the last look, then the done
-// line run.js waits for if the boot is over. Cheap enough to call every
-// batch: it reads a flag the USB stack keeps.
-static void ReportIfHostAttached(void) {
+// Say the boot is over to a host that has attached since the last look, if
+// it is: one that attached after the boot would otherwise not know. Cheap
+// enough to call every batch: it reads a flag the USB stack keeps.
+static void AnnounceToNewHost(void) {
   const bool attached = stdio_usb_connected();
-  if (attached && !g_host_attached) {
-    LogReport();
-    if (BootIsOver()) {
-      BOOT_INFO("done");
-    }
+  if (attached && !g_host_attached && BootIsOver()) {
+    BOOT_INFO("done");
   }
   g_host_attached = attached;
 }
@@ -578,7 +587,7 @@ static void SetBootStage(BootStage stage) {
   g_status.boot_busy_us = BusyUs();
   g_status.instructions = YCPUInstructionsRetired(&g_platform.cpu);
   g_status_changed = true;
-  LogBoot("boot_stage");
+  BOOT_INFO("boot_stage", BOOT_FIELDS());
 }
 
 // Run a batch of emulated cycles, and return how the machine stands after it.
@@ -639,6 +648,167 @@ static void TypeKey(SouthbridgeKeyEvent event) {
   }
 }
 
+// ============================================================================
+// Commands
+// ============================================================================
+
+enum {
+  // CRT controller registers 12 to 15: where the screen starts in video
+  // memory, and where the cursor is, each in character cells.
+  kCRTCStartAddressHigh = 12,
+  kCRTCStartAddressLow = 13,
+  kCRTCCursorHigh = 14,
+  kCRTCCursorLow = 15,
+  kBytesPerTextCell = 2,
+  kMaxTextColumns = 80,
+};
+
+// Bytes as two hex digits each, upper case, into a buffer twice the count
+// and one more long.
+static void FormatHex(const uint8_t* bytes, uint32_t count, char* out) {
+  static const char kDigits[] = "0123456789ABCDEF";
+  for (uint32_t i = 0; i < count; ++i) {
+    *out++ = kDigits[bytes[i] >> 4];
+    *out++ = kDigits[bytes[i] & 0x0F];
+  }
+  *out = '\0';
+}
+
+// The guest's text screen: the mode, the cursor, then a line for each row of
+// the screen with its characters as hex, as the guest's code page has them,
+// and with attrs=true another with their attributes. Hex, because a row of
+// box drawing characters escaped as text would not fit on a line.
+static void RunScreen(const Command* command) {
+  const YVideoState* video = &g_platform.video;
+  const YVideoModeMetadata* mode = YVideoGetModeMetadata(video);
+  if (mode->type != Y_VIDEO_MODE_TEXT || mode->columns > kMaxTextColumns) {
+    CommandReplyError(command, "not_text_mode");
+    return;
+  }
+  const char* attrs = CommandArgument(command, "attrs");
+  const bool with_attributes = attrs != NULL && attrs[0] == 't';
+  const uint8_t* registers = video->registers;
+  const uint32_t start = ((uint32_t)registers[kCRTCStartAddressHigh] << 8) |
+                         registers[kCRTCStartAddressLow];
+  const uint32_t cursor =
+      ((uint32_t)registers[kCRTCCursorHigh] << 8) | registers[kCRTCCursorLow];
+  const uint32_t cells = (uint32_t)mode->columns * mode->rows;
+  const uint32_t vram_size = YVideoGetAdapterMetadata(video)->vram_size;
+  // Where the cursor is on the screen, if it is on it at all.
+  const uint32_t cursor_cell = cursor - start;
+  if (cursor >= start && cursor_cell < cells) {
+    Y_LOG_REPLY(
+        &g_runtime_logger, command->id, command->name,
+        Y_LOG_HEX8("mode", mode->mode), Y_LOG_UINT("columns", mode->columns),
+        Y_LOG_UINT("rows", mode->rows),
+        Y_LOG_UINT("cursor_row", cursor_cell / mode->columns),
+        Y_LOG_UINT("cursor_column", cursor_cell % mode->columns));
+  } else {
+    Y_LOG_REPLY(
+        &g_runtime_logger, command->id, command->name,
+        Y_LOG_HEX8("mode", mode->mode), Y_LOG_UINT("columns", mode->columns),
+        Y_LOG_UINT("rows", mode->rows));
+  }
+  for (uint8_t row = 0; row < mode->rows; ++row) {
+    uint8_t characters[kMaxTextColumns];
+    uint8_t attributes[kMaxTextColumns];
+    for (uint8_t column = 0; column < mode->columns; ++column) {
+      // The screen can start anywhere, and wraps at the end of video memory.
+      const uint32_t cell = start + (uint32_t)row * mode->columns + column;
+      const uint32_t offset = (cell * kBytesPerTextCell) % vram_size;
+      characters[column] = g_vram[offset];
+      attributes[column] = g_vram[(offset + 1) % vram_size];
+    }
+    char hex[kMaxTextColumns * 2 + 1];
+    FormatHex(characters, mode->columns, hex);
+    Y_LOG_REPLY(
+        &g_runtime_logger, command->id, command->name, Y_LOG_UINT("row", row),
+        Y_LOG_STRING("chars", hex));
+    if (with_attributes) {
+      FormatHex(attributes, mode->columns, hex);
+      Y_LOG_REPLY(
+          &g_runtime_logger, command->id, command->name, Y_LOG_UINT("row", row),
+          Y_LOG_STRING("attrs", hex));
+    }
+  }
+  CommandReplyOk(command);
+}
+
+static void ReplyQueued(const Command* command) {
+  Y_LOG_REPLY(
+      &g_runtime_logger, command->id, command->name,
+      Y_LOG_STRING("status", "ok"), Y_LOG_UINT("keys_queued", TypingPending()));
+}
+
+// Type text into the guest, a key event a batch. The reply comes once the
+// keys are queued, not once they are typed; ping says how many are left.
+static void RunType(const Command* command) {
+  const char* text = CommandArgument(command, "text");
+  if (text == NULL) {
+    CommandReplyError(command, "missing_text");
+  } else if (!TypingQueueText(text)) {
+    CommandReplyError(command, "cannot_type");
+  } else {
+    ReplyQueued(command);
+  }
+}
+
+// Press, release or tap a key: by name, through the keymap as typed keys go,
+// or by its PC/XT scancode, straight to the guest at once, for a key the
+// PicoCalc does not have.
+static void RunKey(const Command* command) {
+  const char* state = CommandArgument(command, "state");
+  TypingAction action = kTypingTap;
+  if (state != NULL && state[0] == 'p') {
+    action = kTypingPress;
+  } else if (state != NULL && state[0] == 'r') {
+    action = kTypingRelease;
+  }
+  const char* name = CommandArgument(command, "name");
+  const char* scancode = CommandArgument(command, "scancode");
+  uint8_t code = 0;
+  uint64_t number = 0;
+  if (name != NULL) {
+    if (!TypingFindKey(name, &code)) {
+      CommandReplyError(command, "unknown_key");
+    } else if (!TypingQueueKey(code, action)) {
+      CommandReplyError(command, "queue_full");
+    } else {
+      ReplyQueued(command);
+    }
+  } else if (scancode != NULL) {
+    if (!YLogfmtParseUInt(scancode, &number) || number > 0x7F) {
+      CommandReplyError(command, "bad_scancode");
+      return;
+    }
+    if (action != kTypingRelease) {
+      YKeyboardHandleKeyPress(&g_platform.keyboard, (uint8_t)number);
+    }
+    if (action != kTypingPress) {
+      YKeyboardHandleKeyPress(&g_platform.keyboard, (uint8_t)number | 0x80);
+    }
+    CommandReplyOk(command);
+  } else {
+    CommandReplyError(command, "missing_key");
+  }
+}
+
+static void RunCommand(const Command* command) {
+  if (CommandIs(command, "ping")) {
+    ReplyQueued(command);
+  } else if (CommandIs(command, "report")) {
+    ReplyReport(command);
+  } else if (CommandIs(command, "screen")) {
+    RunScreen(command);
+  } else if (CommandIs(command, "type")) {
+    RunType(command);
+  } else if (CommandIs(command, "key")) {
+    RunKey(command);
+  } else {
+    CommandReplyError(command, "unknown_command");
+  }
+}
+
 // Run the machine, paced to real time, for as long as the board has power.
 // The boot is watched on the way, and DOS's questions answered.
 static void RunMachine(bool machine_ready) {
@@ -655,7 +825,7 @@ static void RunMachine(bool machine_ready) {
   g_clock.anchor_us = g_clock.start_us;
 
   for (;;) {
-    ReportIfHostAttached();
+    AnnounceToNewHost();
 
     if (running && RunBatch() == Y_PLATFORM_HUNG) {
       // The CPU halted with nothing to wake it.
@@ -667,8 +837,16 @@ static void RunMachine(bool machine_ready) {
     // runs. A key also keeps the screen on, and turns it back on if it was
     // blanked: its contents are kept, and what changed meanwhile is drawn
     // with the next frame.
+    Command command;
+    if (CommandPoll(&command)) {
+      const uint64_t start_us = time_us_64();
+      RunCommand(&command);
+      g_command_us += time_us_64() - start_us;
+    }
+    // A key a host typed is taken only in a batch the keyboard had none, so
+    // that the two never land in one.
     SouthbridgeKeyEvent key;
-    if (SouthbridgePollKey(&key)) {
+    if (SouthbridgePollKey(&key) || TypingNext(&key)) {
       if (running) {
         TypeKey(key);
       }
@@ -713,8 +891,7 @@ static void RunMachine(bool machine_ready) {
         YPlatformSetDOSIdleSkip(&g_platform, true);
         blank_at = make_timeout_time_ms(kScreenOnMs);
         next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-        // So that a host that watched the boot gets the final report too.
-        g_host_attached = false;
+        BOOT_INFO("done");
       }
     }
 
