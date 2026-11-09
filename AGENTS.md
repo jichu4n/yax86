@@ -440,9 +440,10 @@ on hardware with the `dos-boot` workload:
 | this   | **4.814238** | **5.754** | **0.484** | **120.6%** | **+3.35%** | 82,435 |
 ```
 
-The derived columns are computed from the seconds rather than read off the
-harness, which truncates MHz and MIPS to two decimals when it prints them. For
-`C` emulated cycles and `I` retired instructions over `t` seconds:
+The harness reports the run as integers - `elapsed_us`, `cycles` and
+`instructions` - and `run.js` works the derived columns out from them, so
+nothing is truncated on the way. For `C` emulated cycles and `I` retired
+instructions over `t` seconds:
 
 - emulated MHz = `C / t / 1e6`
 - MIPS = `I / t / 1e6`
@@ -1953,6 +1954,14 @@ captures what it prints. It exits non-zero if the run did not finish;
 ./pico/bench/run.js build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
 ```
 
+What the firmware prints is logfmt - see "util — logging". `run.js` shows a
+report, the bench's header and its result as a table, with seconds, emulated
+MHz, MIPS and "vs a real 8088" worked out from the result's integers, and
+any other line on one line of its own. `--out` saves the lines as they came,
+and `--json` prints each one as a JSON object instead, for a script. The
+run is over at the line with `event=done`. To pull figures out of a
+capture, match the pair: `grep -o 'elapsed_us=[0-9]*' capture.txt`.
+
 `YAX86_CORE_ROOT` names the checkout whose `core` is compiled in, which is how
 a branch and its baseline are measured against one harness:
 
@@ -2058,11 +2067,27 @@ SRAM, at #89:
   — the same trap as leaving a browser console open in front of the WASM build
   — so the UART is switched off entirely and results accumulate in RAM until
   the run has finished.
-- Everything printed is derived from integers, so no floating point formatting
-  is linked in. Emulated cycles per microsecond is emulated megahertz and
-  retired instructions per microsecond is MIPS, so neither needs a unit
-  conversion. Both are truncated to two decimals, which is why a PR computes
-  them from the seconds instead.
+- Everything printed is an integer, so no floating point formatting is linked
+  in. Emulated cycles per microsecond is emulated megahertz and retired
+  instructions per microsecond is MIPS, which is how `run.js` works them out.
+- **The harness logs through the core's logger**, in a module of its own,
+  `bench`, at `info`. The machine has a configuration of its own at `error`:
+  the core's warnings - a read from an unmapped port, for one - come in
+  numbers during a boot, and writing them out would be host I/O in the
+  measured path.
+- **The harness's code sits ahead of the core's in flash**, so code added to
+  the harness moves every core function that runs from flash, and with it
+  which of them the XIP cache keeps. Moving logs into the harness pushed the
+  core's flash code 4,464 bytes along and took `dos-boot` 0.26% longer, with
+  the core and its SRAM placement identical. That is what building a
+  baseline with the same harness, through `YAX86_CORE_ROOT`, is for; across a
+  harness change, rebuild the baseline rather than compare with an earlier
+  figure.
+- **`PaintStack()` is never inlined.** It paints everything below its own
+  frame, so inlined into `main()` it paints part of `main()`'s frame too, and
+  a value `main()` kept there before the run reads back as `0x5A5A5A5A`
+  after it. The board faults, with the watchdog already disarmed, and has to
+  be unplugged to recover.
 - The one perturbation that cannot be removed is USB servicing, which the SDK
   drives from a timer interrupt. It costs the same in every build, so it does
   not affect any comparison this harness exists to make.
@@ -2159,10 +2184,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ./pico/bench/run.js build-pico/picocalc/yax86_picocalc.uf2
 ```
 
-- Everything the status screen shows is also sent over USB serial, as a report
-  each time a host attaches - USB CDC drops what is written before then - and
-  `done` once the boot is over. That is the shape `run.js` captures, so it
-  flashes and reads this image unchanged.
+- Everything the status screen shows is also sent over USB serial as logfmt -
+  see "util — logging" - as a report each time a host attaches: an `info`
+  line with `event=report` for each of the runtime's modules, `system`,
+  `boot`, `display`, `disk` (one for each drive), `keyboard` and `pacing`.
+  USB CDC drops what is written before a host attaches, so nothing is written
+  until one is. Each stage of the boot is a `boot_stage` line, and once it
+  is over the report is sent again, then `event=done`. That is what `run.js`
+  waits for, so it flashes and reads this image as it does the bench.
+- `src/runtime_log.c` holds the loggers. The machine's configuration is at
+  `error`, like the bench's and for the same reason, and the runtime's own
+  modules log at `info` through a logger of their own. The copy of the
+  guest's screen core 1 renders logs through a third: a logger builds each
+  line in a buffer of its own, so the two cores cannot share one. The SDK's
+  stdio takes a lock around each write, so their lines come out whole.
 - **Flashing an image directly replaces ClockworkPi's factory firmware.** That
   is a boot loader at offset 0, which offers an SD card menu or else starts the
   default app; PicoMite as the default app at 200KB; and PicoMite's own storage
@@ -2219,7 +2254,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Speed is measured as processor time, not as how long the boot took.**
   Paced, the boot takes as long as on a real PC/XT however fast the emulator
   is, so the runtime records the time it spent running the machine - elapsed
-  less waited - as `boot_busy_us`. That is what an unpaced boot takes, to
+  less waited - as `busy_us` in the boot's line of the report and in each
+  `boot_stage` line. That is what an unpaced boot takes, to
   within 0.1%: a build with the pacing taken out measured 5.0105 and 5.0107
   seconds, against 5.0147 to 5.0149 paced.
 - **Faster on average is not faster throughout.** At 250MHz the boot drops
@@ -2516,8 +2552,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   fast seek. Without one, a seek backwards walks the file's cluster chain
   from its start, and a hard disk seeks backwards all the time. The map has
   room for an image in 31 pieces, and a file copied onto a card is usually
-  in one; a more fragmented image goes without, and the report says so as
-  `fd_fast_seek` and `hd_fast_seek`.
+  in one; a more fragmented image goes without, and the drive's line of the
+  report says so as `fast_seek`.
 - **The card costs 1.5% of `dos-boot`**: 4.8896 seconds of processor time
   against 4.8171 off the floppy in flash, two runs each with a spread under
   0.01%. DOS reads 214 sectors on the way to `A>`, which take 75ms - about

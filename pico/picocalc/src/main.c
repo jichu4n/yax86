@@ -33,6 +33,7 @@
 #include "keymap.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
 
@@ -124,11 +125,12 @@ typedef enum OverclockResult {
   kOverclockSkippedAfterHang,
 } OverclockResult;
 
+// What came of the overclock, as the report gives it.
 static const char* const kOverclockNames[] = {
-    [kOverclockNotRequested] = "not requested",
+    [kOverclockNotRequested] = "not_requested",
     [kOverclockApplied] = "applied",
-    [kOverclockPLLCannot] = "PLL cannot produce that clock",
-    [kOverclockSkippedAfterHang] = "skipped - the last attempt hung",
+    [kOverclockPLLCannot] = "pll_cannot_produce_clock",
+    [kOverclockSkippedAfterHang] = "skipped_after_hang",
 };
 
 // How far the boot has got. DOS asks for the date and then the time before it
@@ -147,6 +149,15 @@ static const char* const kBootStageNames[] = {
     [kBootStageAnsweringTime] = "answered the time prompt",
     [kBootStagePrompt] = "reached the A> prompt",
     [kBootStageFailed] = "did not reach the prompt",
+};
+
+// The same, as a log gives them.
+static const char* const kBootStageEvents[] = {
+    [kBootStagePowerOn] = "power_on",
+    [kBootStageAnsweringDate] = "date_prompt",
+    [kBootStageAnsweringTime] = "time_prompt",
+    [kBootStagePrompt] = "prompt",
+    [kBootStageFailed] = "failed",
 };
 
 // What the runtime found and how far it has got, for the LCD and for the
@@ -170,8 +181,6 @@ typedef struct RuntimeStatus {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
-// Held for the platform's lifetime, which is why it is not a local.
-static YLoggerConfig g_logger_config;
 static RuntimeStatus g_status;
 static bool g_host_attached;
 // Whether the status lines have changed since core 1 was last handed them.
@@ -207,13 +216,6 @@ static uint32_t __uninitialized_ram(g_overclock_marker);
 // ============================================================================
 // Reporting
 // ============================================================================
-
-static void WriteLogLine(
-    Y_UNUSED void* context, Y_UNUSED YLogKind kind,
-    Y_UNUSED const YLogModule* module, Y_UNUSED YLogLevel level,
-    const char* line, Y_UNUSED size_t length) {
-  printf("%s\n", line);
-}
 
 static bool BootIsOver(void) {
   return g_status.boot_stage == kBootStagePrompt ||
@@ -408,84 +410,86 @@ static bool HandOverStatus(void) {
   return true;
 }
 
-// A disk image's lines of the report, each key led by a two letter prefix,
-// which the padding assumes.
-static void PrintDiskImage(const char* prefix, const DiskImage* image) {
+// A drive's line of the report.
+static void LogDiskImage(const char* drive, const DiskImage* image) {
   const DiskImageStats* stats = &image->stats;
-  printf("%s_image       %s\n", prefix, DiskImageDescribeStatus(image->status));
-  printf("%s_fast_seek   %d\n", prefix, image->fast_seek);
-  printf("%s_reads       %lu\n", prefix, (unsigned long)stats->sector_reads);
-  printf("%s_writes      %lu\n", prefix, (unsigned long)stats->sector_writes);
-  printf("%s_errors      %lu\n", prefix, (unsigned long)stats->errors);
-  printf("%s_read_us     %llu\n", prefix, (unsigned long long)stats->read_us);
-  printf("%s_write_us    %llu\n", prefix, (unsigned long long)stats->write_us);
+  DISK_INFO(
+      "report", Y_LOG_STRING("drive", drive),
+      Y_LOG_STRING("image", DiskImageDescribeStatus(image->status)),
+      Y_LOG_BOOL("fast_seek", image->fast_seek),
+      Y_LOG_UINT("reads", stats->sector_reads),
+      Y_LOG_UINT("writes", stats->sector_writes),
+      Y_LOG_UINT("errors", stats->errors),
+      Y_LOG_UINT("read_us", stats->read_us),
+      Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// The same facts as the status screen, as key and value lines.
-static void PrintReport(void) {
-  char boot[kTextColumns + 1];
-  FormatBootLine(boot, sizeof(boot));
-  printf("\n");
-  printf("%-14s %s\n", "runtime", "yax86 picocalc");
-  printf(
-      "%-14s %u\n", "sys_clk_khz",
-      (unsigned)(clock_get_hz(clk_sys) / kHzPerKHz));
-  printf("%-14s %s\n", "overclock", kOverclockNames[g_status.overclock]);
-  printf("%-14s %u\n", "lcd_spi_hz", (unsigned)g_status.lcd_spi_hz);
+// How far the boot has got, and what it took, as a boot_stage log when the
+// boot moves on, and as the boot's line of the report.
+static void LogBoot(const char* event) {
+  BOOT_INFO(
+      event, Y_LOG_STRING("stage", kBootStageEvents[g_status.boot_stage]),
+      Y_LOG_UINT("instructions", g_status.instructions),
+      Y_LOG_UINT("cycles", g_status.boot_cycles),
+      Y_LOG_UINT(
+          "emulated_us", g_status.boot_cycles * kMicrosecondsPerSecond /
+                             Y_PLATFORM_CPU_CYCLES_PER_SECOND),
+      Y_LOG_UINT("real_us", g_status.boot_elapsed_us),
+      Y_LOG_UINT("busy_us", g_status.boot_busy_us),
+      Y_LOG_UINT("speed_pm", BootSpeedPermille()));
+}
+
+// The same facts as the status screen, as a line for each part of the
+// runtime.
+static void LogReport(void) {
   char version[16];
   FormatSouthbridgeVersion(version, sizeof(version));
-  printf("%-14s %s\n", "keyboard_fw", version);
-  printf("%-14s %u\n", "guest_ram_kb", (unsigned)(kGuestRAMSize / 1024));
-  printf("%-14s %s\n", "boot", boot);
-  printf(
-      "%-14s %llu\n", "instructions",
-      (unsigned long long)g_status.instructions);
-  printf(
-      "%-14s %llu\n", "boot_cycles", (unsigned long long)g_status.boot_cycles);
-  printf(
-      "%-14s %llu\n", "boot_us", (unsigned long long)g_status.boot_elapsed_us);
-  printf(
-      "%-14s %llu\n", "boot_busy_us",
-      (unsigned long long)g_status.boot_busy_us);
-  printf("%-14s %lu\n", "boot_speed_pm", (unsigned long)BootSpeedPermille());
+  SYSTEM_INFO(
+      "report", Y_LOG_STRING("runtime", "yax86 picocalc"),
+      Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / kHzPerKHz),
+      Y_LOG_STRING("overclock", kOverclockNames[g_status.overclock]),
+      Y_LOG_UINT("lcd_spi_hz", g_status.lcd_spi_hz),
+      Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
+      Y_LOG_STRING("keyboard_fw", version),
+      Y_LOG_UINT("guest_ram_kb", kGuestRAMSize / 1024));
+  LogBoot("report");
   const DisplayStats display = DisplayGetStats();
-  printf("%-14s %d\n", "draw_screen", YAX86_PICOCALC_DRAW_SCREEN);
-  printf("%-14s %lu\n", "frames_drawn", (unsigned long)display.frames_drawn);
-  printf(
-      "%-14s %llu\n", "pixels_drawn", (unsigned long long)display.pixels_drawn);
-  printf("%-14s %llu\n", "render_us", (unsigned long long)display.render_us);
-  printf("%-14s %lu\n", "frames_late", (unsigned long)display.frames_late);
-  printf("%-14s %llu\n", "copy_us", (unsigned long long)display.copy_us);
+  DISPLAY_INFO(
+      "report", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
+      Y_LOG_UINT("frames_drawn", display.frames_drawn),
+      Y_LOG_UINT("pixels_drawn", display.pixels_drawn),
+      Y_LOG_UINT("render_us", display.render_us),
+      Y_LOG_UINT("frames_late", display.frames_late),
+      Y_LOG_UINT("copy_us", display.copy_us));
+  LogDiskImage("a", FloppyGetImage());
+  LogDiskImage("c", HardDiskGetImage());
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
-  printf("%-14s %lu\n", "sd_clock_hz", (unsigned long)SdcardGetClockHz());
-  PrintDiskImage("fd", FloppyGetImage());
-  PrintDiskImage("hd", HardDiskGetImage());
-  printf("%-14s %lu\n", "key_reads", (unsigned long)keyboard.reads);
-  printf("%-14s %lu\n", "keys", (unsigned long)keyboard.keys);
-  printf("%-14s %lu\n", "stale_keys", (unsigned long)keyboard.stale_keys);
-  printf("%-14s %lu\n", "key_aborts", (unsigned long)keyboard.aborts);
-  printf("%-14s %lu\n", "key_timeouts", (unsigned long)keyboard.timeouts);
-  printf("%-14s %llu\n", "real_us", (unsigned long long)ElapsedUs());
-  printf(
-      "%-14s %llu\n", "emulated_us",
-      (unsigned long long)(g_clock.cycles * kMicrosecondsPerSecond /
-                           Y_PLATFORM_CPU_CYCLES_PER_SECOND));
-  printf("%-14s %llu\n", "guest_clock_ms", (unsigned long long)GuestClockMs());
-  printf("%-14s %llu\n", "waited_us", (unsigned long long)g_clock.waited_us);
-  printf("%-14s %llu\n", "dropped_us", (unsigned long long)g_clock.dropped_us);
-  printf("%-14s %d\n", "idle_skip", (int)g_platform.is_dos_idle_skip_enabled);
-  printf("\n");
+  KEYBOARD_INFO(
+      "report", Y_LOG_UINT("reads", keyboard.reads),
+      Y_LOG_UINT("keys", keyboard.keys),
+      Y_LOG_UINT("stale_keys", keyboard.stale_keys),
+      Y_LOG_UINT("aborts", keyboard.aborts),
+      Y_LOG_UINT("timeouts", keyboard.timeouts));
+  PACING_INFO(
+      "report", Y_LOG_UINT("real_us", ElapsedUs()),
+      Y_LOG_UINT(
+          "emulated_us", g_clock.cycles * kMicrosecondsPerSecond /
+                             Y_PLATFORM_CPU_CYCLES_PER_SECOND),
+      Y_LOG_UINT("guest_clock_ms", GuestClockMs()),
+      Y_LOG_UINT("waited_us", g_clock.waited_us),
+      Y_LOG_UINT("dropped_us", g_clock.dropped_us),
+      Y_LOG_BOOL("idle_skip", g_platform.is_dos_idle_skip_enabled));
 }
 
-// Send a report if a host has attached since the last look, ending with the
-// marker run.js waits for once the boot is over. Cheap enough to call every
+// Send a report if a host has attached since the last look, then the done
+// line run.js waits for if the boot is over. Cheap enough to call every
 // batch: it reads a flag the USB stack keeps.
 static void ReportIfHostAttached(void) {
   const bool attached = stdio_usb_connected();
   if (attached && !g_host_attached) {
-    PrintReport();
+    LogReport();
     if (BootIsOver()) {
-      printf("done\n");
+      BOOT_INFO("done");
     }
   }
   g_host_attached = attached;
@@ -497,7 +501,7 @@ static void ReportIfHostAttached(void) {
 
 static bool InitMachine(void) {
   YPlatformConfig* config = &g_platform.config;
-  config->logger_config = &g_logger_config;
+  config->logger_config = &g_machine_log_config;
   config->physical_memory_size = kGuestRAMSize;
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
@@ -574,9 +578,7 @@ static void SetBootStage(BootStage stage) {
   g_status.boot_busy_us = BusyUs();
   g_status.instructions = YCPUInstructionsRetired(&g_platform.cpu);
   g_status_changed = true;
-  if (g_host_attached) {
-    PrintReport();
-  }
+  LogBoot("boot_stage");
 }
 
 // Run a batch of emulated cycles, and return how the machine stands after it.
@@ -656,7 +658,8 @@ static void RunMachine(bool machine_ready) {
     ReportIfHostAttached();
 
     if (running && RunBatch() == Y_PLATFORM_HUNG) {
-      printf("machine stopped: the CPU halted with nothing to wake it\n");
+      // The CPU halted with nothing to wake it.
+      SYSTEM_ERROR("machine_stopped");
       running = false;
     }
 
@@ -786,9 +789,7 @@ int main(void) {
   g_status.overclock = Overclock();
 #endif
 
-  g_logger_config.write_line = WriteLogLine;
-  g_logger_config.enabled_modules = 0xFFFFFFFF;
-  g_logger_config.min_level = Y_LOG_LEVEL_ERROR;
+  RuntimeLogInit();
 
   g_status.lcd_spi_hz = DisplayStart();
   SouthbridgeInit();

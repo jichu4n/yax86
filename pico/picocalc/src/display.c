@@ -8,6 +8,7 @@
 #include "pico/multicore.h"
 #include "pico/sync.h"
 #include "pico/time.h"
+#include "runtime_log.h"
 
 enum {
   // The guest's screen: 80 by 25 cells of the 4x10 font, at the top of the
@@ -218,6 +219,9 @@ void DisplayOfferFrame(YVideoState* video) {
   }
   const uint64_t start_us = time_us_64();
   YVideoCopyForRender(video, &g_frame, g_frame_vram);
+  // The copy is rendered on core 1, so what it logs goes through core 1's own
+  // logger rather than the machine's, which core 0 is using.
+  g_frame.config.logger = &g_render_logger;
   g_frame.config.begin_render_region = BeginRenderRegion;
   g_frame.config.write_pixels = WriteGuestPixels;
   g_frame.config.end_render_region = EndRenderRegion;
