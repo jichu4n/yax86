@@ -534,9 +534,9 @@ Alongside the table, state:
 - **The bundles and the generated ROM arrays are committed, and
   `.gitattributes` marks them generated**, so GitHub collapses them in a pull
   request's diff. Each module's bundle carries its own copy of the util
-  headers it uses, and `yax86_core.h` carries all ten, so a change to
-  `util/log.h` shows up eleven times over in the bundles. Review the sources
-  under `core/src`.
+  headers it uses, and `yax86_core.h` carries every module's copy again, so
+  a change to `util/log.h` is repeated twenty times in the bundles. Review
+  the sources under `core/src`.
 - `platform` is the virtual motherboard: it connects the modules together and
   owns the memory and port maps.
 - ROMs live alongside the module that maps them and are compiled into the
