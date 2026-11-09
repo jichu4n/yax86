@@ -33,6 +33,12 @@ enum {
   kColorYellow = 14,
   kColorWhite = 15,
 
+  // How a graphics mode's 640x200 is drawn in the guest's screen's 320x250:
+  // two pixels across to one, and four rows down to five.
+  kGraphicsColumnsPerPixel = 2,
+  kGraphicsRowsIn = 4,
+  kGraphicsRowsOut = 5,
+
   // A screenshot is sent as runs of one color: the color in RGB565 and how
   // many pixels it covers, less one, as six hex digits. A screen is a few
   // colors in long runs - a text screen comes to about 10,000 runs for its
@@ -80,10 +86,17 @@ static volatile bool g_screenshot_busy;
 static critical_section_t g_stats_lock;
 static DisplayStats g_stats;
 
-// Core 1's own, while it draws a frame.
+// Core 1's own, while it draws a frame: whether the region being drawn is on
+// the panel, and whether it is in a graphics mode.
 static bool g_region_on_panel;
+static bool g_region_graphics;
 static uint16_t g_pixel_batch[Y_VIDEO_PIXEL_BATCH_SIZE];
 static uint64_t g_frame_pixels;
+// A graphics mode's row, scaled to the panel, as it is put together, and how
+// wide it is.
+static uint16_t g_graphics_row[kGuestScreenWidth];
+static uint16_t g_graphics_row_length;
+static uint16_t g_graphics_row_width;
 
 static uint16_t CGAColor(uint8_t index) {
   const YVideoRGB rgb = YVideoDefaultConfig.cga_palette[index];
@@ -94,25 +107,81 @@ static uint16_t CGAColor(uint8_t index) {
 // Core 1
 // ============================================================================
 
+// The first panel row of a graphics mode's row y. A graphics mode renders
+// 640x200 - the CGA's 320x200 modes with each pixel doubled - and is drawn at
+// half its width and five fourths of its height, which fills the 320x250 the
+// guest's text takes. Every fourth row is drawn twice. That comes close to
+// the shape a PC/XT's monitor gives the picture: 4:3 is 1.33 times as wide
+// as it is high, and 320x250 is 1.28.
+static uint16_t GraphicsPanelRow(uint16_t y) {
+  return (uint16_t)(y * kGraphicsRowsOut / kGraphicsRowsIn);
+}
+
 // The core renders only what changed since the last render, as rectangles,
 // and the panel keeps its own frame memory, so a region goes straight to the
 // panel as a window of its own.
-static void BeginRenderRegion(
-    Y_UNUSED YVideoState* video, YVideoRegion region) {
-  g_region_on_panel = region.origin.x + region.width <= kGuestScreenWidth &&
-                      region.origin.y + region.height <= kGuestScreenHeight;
+static void BeginRenderRegion(YVideoState* video, YVideoRegion region) {
+  g_region_graphics =
+      YVideoGetModeMetadata(video)->type == Y_VIDEO_MODE_GRAPHICS;
+  uint16_t x = region.origin.x;
+  uint16_t y = region.origin.y;
+  uint16_t width = region.width;
+  uint16_t height = region.height;
+  if (g_region_graphics) {
+    x /= kGraphicsColumnsPerPixel;
+    width /= kGraphicsColumnsPerPixel;
+    y = GraphicsPanelRow(region.origin.y);
+    height = (uint16_t)(GraphicsPanelRow(region.origin.y + region.height) - y);
+    g_graphics_row_length = 0;
+    g_graphics_row_width = width;
+  }
+  g_region_on_panel =
+      x + width <= kGuestScreenWidth && y + height <= kGuestScreenHeight;
   if (g_region_on_panel) {
-    LcdBeginWrite(
-        region.origin.x, (uint16_t)(kGuestScreenTop + region.origin.y),
-        region.width, region.height);
+    LcdBeginWrite(x, (uint16_t)(kGuestScreenTop + y), width, height);
   }
 }
 
-// Graphics modes render 640 pixels across, which is not drawn yet.
+// Two neighboring pixels of a graphics mode as one on the panel. In the
+// 320x200 modes they are always the same pixel, doubled. In 640x200 they can
+// differ, and the panel shows the color between them, so that a line one
+// pixel wide is still there, at half its brightness.
+static uint16_t GraphicsBlend(YVideoRGB left, YVideoRGB right) {
+  return LcdRGB565(
+      (uint8_t)((left.r + right.r) / 2), (uint8_t)((left.g + right.g) / 2),
+      (uint8_t)((left.b + right.b) / 2));
+}
+
+// A graphics mode's pixels are put together a row at a time, since a row
+// that is drawn twice has to be sent twice. A region is a whole number of
+// the core's dirty columns across, 8 pixels each in a graphics mode, so a
+// batch is always an even number of pixels and a pair never spans two.
+static void WriteGraphicsPixels(
+    YVideoPosition origin, const YVideoRGB* pixels, uint8_t count) {
+  for (uint8_t i = 0; i + 1 < count; i += kGraphicsColumnsPerPixel) {
+    g_graphics_row[g_graphics_row_length++] =
+        GraphicsBlend(pixels[i], pixels[i + 1]);
+  }
+  if (g_graphics_row_length < g_graphics_row_width) {
+    return;
+  }
+  const uint16_t copies =
+      (uint16_t)(GraphicsPanelRow(origin.y + 1) - GraphicsPanelRow(origin.y));
+  for (uint16_t i = 0; i < copies; ++i) {
+    LcdWritePixels(g_graphics_row, g_graphics_row_width);
+  }
+  g_frame_pixels += (uint64_t)g_graphics_row_width * copies;
+  g_graphics_row_length = 0;
+}
+
 static void WriteGuestPixels(
-    Y_UNUSED YVideoState* video, Y_UNUSED YVideoPosition origin,
-    const YVideoRGB* pixels, uint8_t count) {
+    Y_UNUSED YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
+    uint8_t count) {
   if (!g_region_on_panel) {
+    return;
+  }
+  if (g_region_graphics) {
+    WriteGraphicsPixels(origin, pixels, count);
     return;
   }
   for (uint8_t i = 0; i < count; ++i) {

@@ -2353,7 +2353,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - The core renders only what changed, as rectangles, and the panel keeps its
   own frame memory, so each region goes straight to the panel as a window of
   its own: `begin_render_region` opens it and `write_pixels` streams RGB565
-  into it. Graphics modes render 640 pixels across and are not drawn yet.
+  into it.
+- **The CGA's graphics modes render 640x200, and are drawn at 320x250**, in
+  the same area as text: two pixels across to one, and four rows down to
+  five, every fourth row drawn twice. That fills the area and comes close to
+  the shape a PC/XT's 4:3 monitor gives the picture - 320x250 is 1.28 times
+  as wide as it is high, where 4:3 is 1.33. The 320x200 modes double every
+  pixel, so halving loses nothing. In 640x200 a pair can differ, and is
+  drawn as the color between the two, so that a line a pixel wide is still
+  there at half its brightness. A row is put together in a buffer before it
+  goes to the panel, since a row drawn twice is sent twice; text goes
+  straight through as it did.
 - **Core 1 draws everything on the LCD, and core 0 never touches it** -
   `src/display.c`. Core 0 runs the machine and hands core 1 what to draw: a
   copy of the guest's screen from `YVideoCopyForRender()`, the status line
