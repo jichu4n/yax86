@@ -2,19 +2,16 @@
 
 #include <stdio.h>
 
+#include "config_file.h"
 #include "core/platform.h"
 #include "disk_image.h"
 #include "ff.h"
-
-enum {
-  // The most pairs a line may have.
-  kMaxPairs = 8,
-};
 
 static const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
 static const char kSettingsFolder[] = "yax86";
 static const char kSettingsPath[] = "yax86/yax86.cfg";
+static const char kBootDefaultKey[] = "boot_default";
 
 static const char* const kDriveKeys[kVMDrives] = {
     [kVMDriveA] = "drive_a",
@@ -197,110 +194,6 @@ bool VMConfigResolvePath(
   return true;
 }
 
-// What a file's pairs are handed to, one at a time. Returns false, with the
-// problem described, at one that is not understood.
-typedef bool (*TakePair)(
-    const char* key, const char* value, void* context,
-    char problem[kVMProblemLength + 1]);
-
-typedef enum ReadResult {
-  kReadOk = 0,
-  kReadMissing,
-  kReadProblem,
-} ReadResult;
-
-static void Describe(char problem[kVMProblemLength + 1], const char* text) {
-  snprintf(problem, kVMProblemLength + 1, "%s", text);
-}
-
-// Take in one line's pairs, a # line being a comment.
-static bool ReadLine(
-    char* line, uint16_t line_number, TakePair take, void* context,
-    char problem[kVMProblemLength + 1]) {
-  if (line[0] == '#') {
-    return true;
-  }
-  YLogfmtPair pairs[kMaxPairs];
-  uint8_t num_pairs = 0;
-  if (!YLogfmtParse(line, pairs, kMaxPairs, &num_pairs)) {
-    snprintf(
-        problem, kVMProblemLength + 1, "line %u is not key=value pairs",
-        line_number);
-    return false;
-  }
-  for (uint8_t i = 0; i < num_pairs; ++i) {
-    char what[kVMProblemLength + 1];
-    if (!take(pairs[i].key, pairs[i].value, context, what)) {
-      // "line 65535: " leaves room for 48 characters of what.
-      snprintf(
-          problem, kVMProblemLength + 1, "line %u: %.48s", line_number, what);
-      return false;
-    }
-  }
-  return true;
-}
-
-// Read a configuration file at path, handing each pair to take.
-static ReadResult ReadFile(
-    const char* path, TakePair take, void* context,
-    char problem[kVMProblemLength + 1]) {
-  // Read whole, so that lines can be cut up in place; static, as it is more
-  // than a core's stack should hold.
-  static char text[kVMConfigMaxBytes + 1];
-  problem[0] = '\0';
-  if (DiskImageMountCard() != kDiskImageOpen) {
-    Describe(problem, "no SD card to read");
-    return kReadMissing;
-  }
-  FIL file;
-  const FRESULT opened = f_open(&file, path, FA_READ);
-  if (opened == FR_NO_FILE || opened == FR_NO_PATH) {
-    Describe(problem, "no such file");
-    return kReadMissing;
-  }
-  if (opened != FR_OK) {
-    Describe(problem, "could not open the file");
-    return kReadProblem;
-  }
-  UINT read = 0;
-  const FRESULT result = f_read(&file, text, kVMConfigMaxBytes, &read);
-  const bool whole = f_eof(&file);
-  f_close(&file);
-  if (result != FR_OK) {
-    Describe(problem, "could not read the file");
-    return kReadProblem;
-  }
-  if (!whole) {
-    snprintf(
-        problem, kVMProblemLength + 1, "longer than %u bytes",
-        (unsigned)kVMConfigMaxBytes);
-    return kReadProblem;
-  }
-  text[read] = '\0';
-  char* line = text;
-  uint16_t line_number = 1;
-  while (*line != '\0') {
-    char* end = line;
-    while (*end != '\0' && *end != '\n') {
-      ++end;
-    }
-    const bool last = *end == '\0';
-    *end = '\0';
-    if (end > line && end[-1] == '\r') {
-      end[-1] = '\0';
-    }
-    if (!ReadLine(line, line_number, take, context, problem)) {
-      return kReadProblem;
-    }
-    if (last) {
-      break;
-    }
-    line = end + 1;
-    ++line_number;
-  }
-  return kReadOk;
-}
-
 // A VM's file being read, and the folder its paths are relative to.
 typedef struct VMReading {
   VMConfig* config;
@@ -340,20 +233,21 @@ bool VMConfigRead(
   }
   VMReading reading = {.config = config};
   FileListFolderOf(path, reading.folder);
-  return ReadFile(path, TakeVMPair, &reading, problem) == kReadOk;
+  return ConfigFileRead(path, TakeVMPair, &reading, problem) == kConfigFileOk;
 }
 
 static bool TakeSettingsPair(
     const char* key, const char* value, void* context,
     char problem[kVMProblemLength + 1]) {
   VMSettings* settings = context;
-  if (SameText(key, "boot_default")) {
+  if (SameText(key, kBootDefaultKey)) {
     if (value[0] == '\0') {
       settings->boot_default[0] = '\0';
     } else if (!VMConfigResolvePath(
                    kSettingsFolder, value, settings->boot_default)) {
       settings->boot_default[0] = '\0';
-      Describe(problem, "boot_default is not a path here");
+      snprintf(
+          problem, kVMProblemLength + 1, "boot_default is not a path here");
       return false;
     }
     return true;
@@ -376,12 +270,12 @@ static bool TakeSettingsPair(
 bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]) {
   settings->boot_default[0] = '\0';
   settings->boot_delay = kVMDefaultBootDelay;
-  const ReadResult result =
-      ReadFile(kSettingsPath, TakeSettingsPair, settings, problem);
-  if (result == kReadMissing) {
+  const ConfigFileResult result =
+      ConfigFileRead(kSettingsPath, TakeSettingsPair, settings, problem);
+  if (result == kConfigFileMissing) {
     problem[0] = '\0';
   }
-  if (result == kReadProblem) {
+  if (result == kConfigFileProblem) {
     return false;
   }
   FILINFO info;
@@ -395,4 +289,104 @@ bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]) {
     return false;
   }
   return true;
+}
+
+static char Lower(char c) {
+  return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+}
+
+static bool PutChar(char out[kFileListMaxPath + 2], uint16_t* length, char c) {
+  if (*length == kFileListMaxPath + 1) {
+    return false;
+  }
+  out[(*length)++] = c;
+  return true;
+}
+
+bool VMConfigRelativePath(
+    const char* folder, const char* path, char out[kFileListMaxPath + 2]) {
+  // The folders the two have in common, from the root: path's last segment
+  // is its file, never one of them.
+  const char* f = folder;
+  const char* p = path;
+  uint8_t common = 0;
+  while (*f != '\0') {
+    uint16_t folder_length = 0;
+    while (f[folder_length] != '\0' && f[folder_length] != '/') {
+      ++folder_length;
+    }
+    uint16_t path_length = 0;
+    while (p[path_length] != '\0' && p[path_length] != '/') {
+      ++path_length;
+    }
+    if (p[path_length] != '/' || folder_length != path_length) {
+      break;
+    }
+    uint16_t i = 0;
+    while (i < folder_length && Upper(f[i]) == Upper(p[i])) {
+      ++i;
+    }
+    if (i < folder_length) {
+      break;
+    }
+    ++common;
+    f += folder_length;
+    if (*f == '/') {
+      ++f;
+    }
+    p += path_length + 1;
+  }
+  uint16_t length = 0;
+  if (common == 0) {
+    // Nothing in common: from the root.
+    p = path;
+    PutChar(out, &length, '/');
+  } else if (*f != '\0') {
+    // Up out of each of folder's segments left.
+    for (const char* c = f;; ++c) {
+      if (*c == '/' || *c == '\0') {
+        if (!PutChar(out, &length, '.') || !PutChar(out, &length, '.') ||
+            !PutChar(out, &length, '/')) {
+          return false;
+        }
+      }
+      if (*c == '\0') {
+        break;
+      }
+    }
+  }
+  for (; *p != '\0'; ++p) {
+    if (!PutChar(out, &length, Lower(*p))) {
+      return false;
+    }
+  }
+  out[length] = '\0';
+  return true;
+}
+
+bool VMConfigSaveDrive(
+    const VMConfig* config, uint8_t drive, const char* path,
+    char problem[kVMProblemLength + 1]) {
+  char value[kFileListMaxPath + 2] = "";
+  if (path != NULL && path[0] != '\0') {
+    char folder[kFileListMaxPath + 1];
+    FileListFolderOf(config->entry.path, folder);
+    if (!VMConfigRelativePath(folder, path, value)) {
+      snprintf(problem, kVMProblemLength + 1, "path too long");
+      return false;
+    }
+  }
+  const ConfigFileSetting setting = {.key = kDriveKeys[drive], .value = value};
+  return ConfigFileUpdate(config->entry.path, &setting, 1, problem);
+}
+
+bool VMSettingsSaveBootDefault(
+    const char* path, char problem[kVMProblemLength + 1]) {
+  char value[kFileListMaxPath + 2];
+  if (!VMConfigRelativePath(kSettingsFolder, path, value)) {
+    snprintf(problem, kVMProblemLength + 1, "path too long");
+    return false;
+  }
+  const ConfigFileSetting setting = {.key = kBootDefaultKey, .value = value};
+  return ConfigFileUpdate(kSettingsPath, &setting, 1, problem);
 }

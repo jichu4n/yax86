@@ -23,13 +23,15 @@
 // VM the list highlights, and starts by itself after boot_delay seconds
 // with no key pressed; 0 starts it at once. Without settings, or with a
 // boot_default that is not there, the first VM listed is the default,
-// after 5 seconds.
+// after 5 seconds. Whichever VM starts becomes boot_default for the next
+// power on.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "config_file.h"
 #include "file_list.h"
 
 enum {
@@ -45,9 +47,8 @@ enum {
   kVMListMax = 16,
   // A VM's name: its folder's, an 8.3 name.
   kVMNameLength = 12,
-  // The longest configuration file read, and the longest problem described.
-  kVMConfigMaxBytes = 2048,
-  kVMProblemLength = 60,
+  // The longest problem described.
+  kVMProblemLength = kConfigFileProblemLength,
   // How long the list at power on waits for a key, in seconds, without
   // settings, and at most.
   kVMDefaultBootDelay = 5,
@@ -100,6 +101,31 @@ bool VMConfigRead(
 // that is not understood, settings then holding what was understood before
 // it; or if boot_default names no file, which is then left empty.
 bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]);
+
+// Make the VM whose file is at path, from the card's root, the settings'
+// boot_default, through ConfigFileUpdate(), written as VMConfigRelativePath()
+// makes it from `yax86`. Returns false, with the problem described, if the
+// settings could not be read, would be too long, or could not be written.
+bool VMSettingsSaveBootDefault(
+    const char* path, char problem[kVMProblemLength + 1]);
+
+// Save the image in a VM's drive, a path from the card's root or NULL or
+// empty for none, to its `vm.cfg`, through ConfigFileUpdate(), written as
+// VMConfigRelativePath() makes it from the file's folder. Returns false, with
+// the problem described, if the file could not be read, would be too long, or
+// could not be written.
+bool VMConfigSaveDrive(
+    const VMConfig* config, uint8_t drive, const char* path,
+    char problem[kVMProblemLength + 1]);
+
+// Write path, from the card's root, as a configuration file in folder names
+// it: relative to folder, climbing out with "..", when the two share a folder
+// from the root, and from the root with a leading / when they share none - a
+// path under `yax86` stays relative when the file moves within it. In lower
+// case, FAT names being the same in either. Returns false if it would not
+// fit.
+bool VMConfigRelativePath(
+    const char* folder, const char* path, char out[kFileListMaxPath + 2]);
 
 // Resolve path against folder, both without a leading slash, into resolved:
 // a path with a leading / starts at the card's root instead, and "." and
