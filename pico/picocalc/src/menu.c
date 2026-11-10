@@ -5,6 +5,7 @@
 
 #include "display.h"
 #include "file_list.h"
+#include "usb_disk.h"
 
 enum {
   // The controller's codes for the keys the menu listens to.
@@ -65,14 +66,24 @@ typedef enum MenuPage {
   // The page of the drive in g_drive.
   kMenuPageDrive,
   kMenuPageBrowse,
-  // The VMs to start, at power on.
+  // The VMs to start, at power on, and from there what can go on USB, the
+  // card while it is there, and the question before taking it back.
   kMenuPageVMs,
+  kMenuPageUSB,
+  kMenuPageSharing,
+  kMenuPageStopSharing,
 } MenuPage;
 
 static const char* const kPageNames[] = {
-    [kMenuPageMain] = "main",     [kMenuPageStatus] = "status",
-    [kMenuPageReset] = "reset",   [kMenuPageDrive] = "drive",
-    [kMenuPageBrowse] = "browse", [kMenuPageVMs] = "vms",
+    [kMenuPageMain] = "main",
+    [kMenuPageStatus] = "status",
+    [kMenuPageReset] = "reset",
+    [kMenuPageDrive] = "drive",
+    [kMenuPageBrowse] = "browse",
+    [kMenuPageVMs] = "vms",
+    [kMenuPageUSB] = "usb",
+    [kMenuPageSharing] = "usb_sharing",
+    [kMenuPageStopSharing] = "usb_stop",
 };
 
 // An item of a page, and whether choosing it opens another menu, which a
@@ -116,6 +127,30 @@ static const MenuItem kResetItems[kResetItemCount] = {
     [kResetConfirm] = {"Reset", false},
 };
 
+typedef enum USBItem {
+  kUSBCard = 0,
+  kUSBItemCount,
+} USBItem;
+
+static const MenuItem kUSBItems[kUSBItemCount] = {
+    [kUSBCard] = {"Whole SD card", false},
+};
+
+static const MenuItem kSharingItems[] = {{"Disconnect", false}};
+
+typedef enum StopSharingItem {
+  kStopSharingCancel = 0,
+  kStopSharingConfirm,
+  kStopSharingItemCount,
+} StopSharingItem;
+
+static const MenuItem kStopSharingItems[kStopSharingItemCount] = {
+    [kStopSharingCancel] = {"Cancel", false},
+    [kStopSharingConfirm] = {"Disconnect anyway", false},
+};
+
+static const MenuItem kUSBRow = {"USB disk mode", true};
+
 static MenuConfig g_config;
 static bool g_open;
 static MenuPage g_page;
@@ -138,6 +173,9 @@ static uint8_t g_list_top;
 // highlighted one starts by itself, and why the last chosen did not.
 static const VMList* g_vms;
 static uint8_t g_countdown;
+// Whether the menu is the list at power on, or a page reached from it, which
+// only starting something closes.
+static bool g_choosing;
 //
 // The problem is kept in two buffers, used in turn, so that a new one is a
 // new pointer: the status rows tell a change of hint by its pointer.
@@ -166,6 +204,7 @@ static void ScrollToChosen(void);
 void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
   g_vms = list;
   g_open = true;
+  g_choosing = true;
   g_box_drawn = false;
   g_list_top = 0;
   ShowPage(kMenuPageVMs, highlighted);
@@ -174,7 +213,12 @@ void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
 
 uint8_t MenuChosenVM(void) { return g_chosen; }
 
-void MenuClose(void) { g_open = false; }
+void MenuClose(void) {
+  g_open = false;
+  g_choosing = false;
+}
+
+void MenuShowSharing(void) { ShowPage(kMenuPageSharing, 0); }
 
 void MenuSetCountdown(uint8_t seconds) {
   if (seconds != g_countdown) {
@@ -197,7 +241,10 @@ void MenuSetProblem(const char* problem) {
 
 const char* MenuHint(void) {
   if (g_page == kMenuPageVMs) {
-    return "\x18\x19=Move  Enter=Start";
+    return "\x18\x19=Move  Enter=Select";
+  }
+  if (g_page == kMenuPageSharing) {
+    return "Enter=Disconnect";
   }
   if (g_page == kMenuPageStatus) {
     return "Esc=Back";
@@ -205,7 +252,7 @@ const char* MenuHint(void) {
   if (g_page == kMenuPageBrowse) {
     return "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back";
   }
-  return "\x18\x19=Move  Enter=Choose  Esc=Back";
+  return "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
 const char* MenuProblem(void) {
@@ -303,6 +350,17 @@ static uint8_t DriveItemCount(void) {
   return DriveEmpty() ? kDriveEject : kDriveItemCount;
 }
 
+// The list at power on's rows: a VM each, then USB disk mode.
+static uint8_t VMRowCount(void) { return (uint8_t)(g_vms->count + 1); }
+
+static uint8_t USBRowIndex(void) { return (uint8_t)(VMRowCount() - 1); }
+
+// Whether disconnecting would take the card from a computer still using it.
+static bool ComputerHasCard(void) {
+  const UsbDiskStats stats = UsbDiskGetStats();
+  return stats.connected && stats.seen && !stats.ejected;
+}
+
 static uint8_t PageItemCount(void) {
   switch (g_page) {
     case kMenuPageMain:
@@ -314,11 +372,27 @@ static uint8_t PageItemCount(void) {
     case kMenuPageBrowse:
       return g_list.count;
     case kMenuPageVMs:
-      return g_vms->count;
+      return VMRowCount();
+    case kMenuPageUSB:
+      return kUSBItemCount;
+    case kMenuPageSharing:
+      return 1;
+    case kMenuPageStopSharing:
+      return kStopSharingItemCount;
     case kMenuPageStatus:
       return 0;
   }
   return 0;
+}
+
+// Disconnect the card: at once if no computer is using it, and after asking if
+// one is.
+static MenuAction Disconnect(void) {
+  if (ComputerHasCard()) {
+    ShowPage(kMenuPageStopSharing, kStopSharingCancel);
+    return kMenuActionNone;
+  }
+  return kMenuActionStopSharing;
 }
 
 // Go back a page, or close the menu from the main one.
@@ -343,6 +417,15 @@ static MenuAction Back(void) {
       break;
     case kMenuPageVMs:
       // There is no VM to go back to yet.
+      break;
+    case kMenuPageUSB:
+      ShowPage(kMenuPageVMs, USBRowIndex());
+      ScrollToChosen();
+      break;
+    case kMenuPageSharing:
+      return Disconnect();
+    case kMenuPageStopSharing:
+      ShowPage(kMenuPageSharing, 0);
       break;
   }
   return kMenuActionNone;
@@ -408,7 +491,20 @@ static MenuAction Choose(void) {
     case kMenuPageBrowse:
       return OpenEntry();
     case kMenuPageVMs:
-      return g_chosen < g_vms->count ? kMenuActionVMChosen : kMenuActionNone;
+      if (g_chosen == USBRowIndex()) {
+        ShowPage(kMenuPageUSB, kUSBCard);
+        return kMenuActionNone;
+      }
+      return kMenuActionVMChosen;
+    case kMenuPageUSB:
+      return kMenuActionShareCard;
+    case kMenuPageSharing:
+      return Disconnect();
+    case kMenuPageStopSharing:
+      if (g_chosen == kStopSharingConfirm) {
+        return kMenuActionStopSharing;
+      }
+      return Back();
     case kMenuPageStatus:
       return Back();
   }
@@ -433,9 +529,11 @@ static bool TrackHotkey(SouthbridgeKeyEvent event) {
 
 MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   const bool hotkey = TrackHotkey(event);
-  if (g_open && g_page == kMenuPageVMs) {
-    // Nothing closes the list but choosing.
-    if (hotkey || event.key == kKeyEsc || event.key == kKeyBackspace) {
+  if (g_open && g_choosing) {
+    // Nothing closes the list but starting something, and Esc goes back no
+    // further than it.
+    if (hotkey || (g_page == kMenuPageVMs &&
+                   (event.key == kKeyEsc || event.key == kKeyBackspace))) {
       return kMenuActionNone;
     }
     if (event.state != kSouthbridgeKeyReleased && g_problem[0] != '\0') {
@@ -598,8 +696,13 @@ static void DrawItems(
     uint8_t line_count, const MenuItem* items, uint8_t count) {
   const uint8_t text_rows = line_count > 0 ? (uint8_t)(line_count + 1) : 0;
   // The edges, a blank row either side of the items, and the lines with a
-  // blank row under them.
-  PlaceBox(menu, kNarrowColumns, (uint8_t)(count + 4 + text_rows));
+  // blank row under them - or at power on, the list's size, as there is no
+  // guest's screen to draw under a smaller box to hide the list's.
+  uint8_t rows = (uint8_t)(count + 4 + text_rows);
+  if (g_choosing && rows < kBrowseRows + 2) {
+    rows = kBrowseRows + 2;
+  }
+  PlaceBox(menu, kNarrowColumns, rows);
   uint8_t row = 0;
   EdgeRow(&menu->text[row++], menu->columns, true, title);
   BlankRow(&menu->text[row++], menu->columns);
@@ -613,7 +716,9 @@ static void DrawItems(
   for (uint8_t i = 0; i < count; ++i) {
     MenuItemRow(&menu->text[row++], menu->columns, &items[i], i == g_chosen);
   }
-  BlankRow(&menu->text[row++], menu->columns);
+  while (row + 1 < rows) {
+    BlankRow(&menu->text[row++], menu->columns);
+  }
   EdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
@@ -741,15 +846,17 @@ static void DrawBrowsePage(DisplayMenu* menu) {
 // are more above or below, and the countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
   PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
-  EdgeRow(&menu->text[0], menu->columns, true, "Start a VM");
+  EdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
-    if (index >= g_vms->count) {
+    if (index >= VMRowCount()) {
       BlankRow(row, menu->columns);
-      continue;
+    } else if (index == USBRowIndex()) {
+      MenuItemRow(row, menu->columns, &kUSBRow, index == g_chosen);
+    } else {
+      ItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
     }
-    ItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
   }
   char countdown[kNarrowColumns];
   if (g_countdown > 0) {
@@ -763,16 +870,44 @@ static void DrawVMsPage(DisplayMenu* menu) {
   if (g_list_top > 0) {
     menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
   }
-  if (g_list_top + kBrowseRows < g_vms->count) {
+  if (g_list_top + kBrowseRows < VMRowCount()) {
     menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
   }
+}
+
+// The card while it is on USB: who has it, and how much has moved.
+static void DrawSharingPage(DisplayMenu* menu) {
+  const UsbDiskStats stats = UsbDiskGetStats();
+  const char* state = "Waiting for the computer...";
+  if (!stats.connected) {
+    state = "Connect a computer by USB.";
+  } else if (stats.ejected) {
+    state = "Ejected by the computer.";
+  } else if (stats.seen) {
+    state = "In use by the computer.";
+  }
+  // Room for two of the largest counts, which a box cuts to its width.
+  char moved[64];
+  snprintf(
+      moved, sizeof(moved), "Read %lu KB, written %lu KB",
+      (unsigned long)(stats.blocks_read / 2),
+      (unsigned long)(stats.blocks_written / 2));
+  const char* const lines[] = {
+      "Sharing the SD card over USB.",
+      state,
+      moved,
+      ComputerHasCard() ? "Eject it on the computer first." : "",
+  };
+  DrawItems(
+      menu, "USB disk mode", lines, sizeof(lines) / sizeof(lines[0]),
+      kSharingItems, 1);
 }
 
 void MenuDraw(uint64_t now_us) {
   if (!g_open) {
     return;
   }
-  if (g_page == kMenuPageStatus &&
+  if ((g_page == kMenuPageStatus || g_page == kMenuPageSharing) &&
       now_us - g_status_drawn_us >= kStatusRefreshUs) {
     g_dirty = true;
   }
@@ -800,6 +935,23 @@ void MenuDraw(uint64_t now_us) {
       break;
     case kMenuPageVMs:
       DrawVMsPage(menu);
+      break;
+    case kMenuPageUSB:
+      DrawItems(menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount);
+      break;
+    case kMenuPageSharing:
+      DrawSharingPage(menu);
+      g_status_drawn_us = now_us;
+      break;
+    case kMenuPageStopSharing:
+      DrawItems(
+          menu, "USB disk mode",
+          (const char* const[]){
+              "The computer has not ejected the",
+              "card, and may not have finished",
+              "writing to it.",
+          },
+          3, kStopSharingItems, kStopSharingItemCount);
       break;
     case kMenuPageStatus:
       DrawStatusPage(menu);

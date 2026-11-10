@@ -14,10 +14,10 @@
 #define CFG_TUD_CDC_TX_BUFSIZE (64)
 #define CFG_TUD_CDC_EP_BUFSIZE (64)
 
-// The card reader - see usb_disk.c. A read or write is handed over a block at
-// a time.
+// The card reader - see usb_disk.c. A read or write is handed over 4KB - eight
+// blocks, one call to the card - at a time.
 #define CFG_TUD_MSC (1)
-#define CFG_TUD_MSC_EP_BUFSIZE (512)
+#define CFG_TUD_MSC_EP_BUFSIZE (4096)
 
 // picotool's reset interface is vendor specific, with pico_usb_reset's own
 // driver rather than TinyUSB's.

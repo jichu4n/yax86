@@ -87,6 +87,11 @@ void DiskImageClose(DiskImage* image);
 // whether it is mounted: kDiskImageOpen if it is, and why not if it is not.
 DiskImageStatus DiskImageMountCard(void);
 
+// Unmount the card's volume, so that something else can have the card - a
+// computer over USB - and the next DiskImageMountCard() mounts it afresh,
+// reading what that something changed. No file may be open.
+void DiskImageUnmountCard(void);
+
 // An image's file name, without its folders, in capitals, as DOS shows a
 // name. A name too long for kDiskImageNameLength keeps its first characters
 // and ends in ~, as DOS shortens a long name.
