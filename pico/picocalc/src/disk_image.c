@@ -24,6 +24,13 @@ static FATFS g_volume;
 static bool g_mount_tried;
 static DiskImageStatus g_mount_status;
 
+void DiskImageUnmountCard(void) {
+  if (g_mount_tried && g_mount_status == kDiskImageOpen) {
+    f_mount(NULL, "", 0);
+  }
+  g_mount_tried = false;
+}
+
 DiskImageStatus DiskImageMountCard(void) {
   if (g_mount_tried) {
     return g_mount_status;

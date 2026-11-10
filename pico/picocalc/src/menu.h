@@ -59,6 +59,10 @@ typedef enum MenuAction {
   kMenuActionClosed,
   // A VM was chosen from the list: see MenuChosenVM().
   kMenuActionVMChosen,
+  // From the list's USB disk page: put the SD card on USB, then show it with
+  // MenuShowSharing(); and take it back, then show the list again.
+  kMenuActionShareCard,
+  kMenuActionStopSharing,
 } MenuAction;
 
 void MenuInit(const MenuConfig* config);
@@ -69,12 +73,21 @@ bool MenuIsOpen(void);
 // one at index highlighted. Neither the hotkey nor Esc closes it: the caller
 // does, with MenuClose(), once a VM chosen has started. list must
 // outlive the choosing.
+//
+// Under the VMs are two more rows: the built-in floppy, only when there are no
+// VMs, whose index is then 0, past the list's end; and USB disk, a page from
+// which the SD card goes on USB.
 void MenuChooseVMs(const VMList* list, uint8_t highlighted);
 
 void MenuClose(void);
 
-// The index in the list of the VM chosen, or highlighted.
+// The index in the list of the VM chosen, or highlighted; one past the list's
+// end is the built-in floppy.
 uint8_t MenuChosenVM(void);
+
+// Show the SD card's page, once the caller has put it on USB: who has it,
+// and Leave, which asks first if a computer is still using it.
+void MenuShowSharing(void);
 
 // Show the seconds left before the highlighted VM starts by itself, or
 // stop showing them with 0.

@@ -42,6 +42,7 @@
 #include "speaker.h"
 #include "status_bar.h"
 #include "typing.h"
+#include "usb_disk.h"
 #include "vm_config.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
@@ -616,6 +617,14 @@ static void ReplyReport(const Command* command) {
   REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
       Y_LOG_UINT("vms", g_vms.count));
+  const UsbDiskStats usb = UsbDiskGetStats();
+  REPLY_GROUP(
+      command, "usb", Y_LOG_BOOL("sharing", usb.sharing),
+      Y_LOG_BOOL("connected", usb.connected), Y_LOG_BOOL("seen", usb.seen),
+      Y_LOG_BOOL("ejected", usb.ejected),
+      Y_LOG_UINT("blocks_read", usb.blocks_read),
+      Y_LOG_UINT("blocks_written", usb.blocks_written),
+      Y_LOG_UINT("errors", usb.errors));
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
   REPLY_GROUP(
       command, "keyboard", Y_LOG_UINT("reads", keyboard.reads),
@@ -1271,14 +1280,42 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
 // running until a key is pressed. Settings that ask for no wait start the
 // default at once, without the list, unless there is a problem to show.
 // Without any VMs, the built-in floppy boots in drive A.
+// Put the SD card on USB, for a computer: the card is unmounted first, as
+// nothing here may touch it while the computer has it.
+static void ShareCard(void) {
+  DiskImageUnmountCard();
+  UsbDiskShareCard();
+  MenuShowSharing();
+  SYSTEM_INFO("usb_card_shared");
+}
+
+// Take the card back from USB and read it afresh - the computer may have
+// added VMs, removed them, or changed the settings - showing the list again
+// without counting down.
+static void StopSharingCard(void) {
+  const UsbDiskStats stats = UsbDiskGetStats();
+  UsbDiskStopSharing();
+  SYSTEM_INFO(
+      "usb_card_returned", Y_LOG_BOOL("ejected", stats.ejected),
+      Y_LOG_UINT("blocks_read", stats.blocks_read),
+      Y_LOG_UINT("blocks_written", stats.blocks_written),
+      Y_LOG_UINT("errors", stats.errors));
+  VMListRead(&g_vms);
+  uint8_t highlighted = 0;
+  ReadSettings(&g_settings, &highlighted);
+  MenuChooseVMs(&g_vms, highlighted);
+}
+
 static void ChooseVM(void) {
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   const bool settings_read = ReadSettings(&g_settings, &highlighted);
-  if (g_vms.count == 0) {
+  // Without a card there is nothing to choose, or to put on USB.
+  if (DiskImageMountCard() != kDiskImageOpen) {
     return;
   }
-  if (settings_read && g_settings.boot_delay == 0 && TakeVM(highlighted)) {
+  if (settings_read && g_settings.boot_delay == 0 &&
+      (g_vms.count == 0 || TakeVM(highlighted))) {
     return;
   }
   MenuChooseVMs(&g_vms, highlighted);
@@ -1296,7 +1333,19 @@ static void ChooseVM(void) {
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
       counting = false;
       MenuSetCountdown(0);
-      chosen = MenuHandleKey(key) == kMenuActionVMChosen;
+      switch (MenuHandleKey(key)) {
+        case kMenuActionVMChosen:
+          chosen = true;
+          break;
+        case kMenuActionShareCard:
+          ShareCard();
+          break;
+        case kMenuActionStopSharing:
+          StopSharingCard();
+          break;
+        default:
+          break;
+      }
     }
     if (counting) {
       const int64_t left_us =
@@ -1310,7 +1359,9 @@ static void ChooseVM(void) {
                                    kMicrosecondsPerSecond));
       }
     }
-    if (chosen && TakeVM(MenuChosenVM())) {
+    // Past the list's end is the built-in floppy, offered when there are no
+    // VMs.
+    if (chosen && (MenuChosenVM() >= g_vms.count || TakeVM(MenuChosenVM()))) {
       MenuClose();
       return;
     }

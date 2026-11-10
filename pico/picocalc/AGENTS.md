@@ -291,9 +291,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   root, and listed even when it is outside `yax86/vm`; and
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
   start the default without showing the list.
-- **At power on, with VMs on the card, the menu lists them**, before
-  the VM exists: the countdown runs on the list's bottom edge until a
-  key is pressed, then the default starts. A file that does not read keeps
+- **At power on, with a card, the menu lists its VMs**, before the VM
+  exists, then Built-in floppy if there are none, and USB disk - see "The
+  USB device". The countdown runs on the list's bottom edge until a key is
+  pressed, then the default starts - the first VM, or with none, the
+  built-in floppy. Every page reached from the list is drawn the list's
+  size, as there is no guest's screen yet to draw under a smaller box. A file that does not read keeps
   the list up with its problem on the keys row - `BROKEN: line 2: no
   setting drive_e` - as do bad settings, which start the countdown anyway
   with what was read. A `boot_default` naming no file is one, and the
@@ -306,7 +309,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   once a VM names its drives.
 - **Without VMs - no card, or none in `yax86/vm` - drive A holds the
   read-only floppy in flash** and no other drive has a disk, so a PicoCalc
-  with no card still boots. No image on the card is looked for by name:
+  with no card still boots; without a card, at once, with no list. No image on the card is looked for by name:
   every image a VM uses is one its `vm.cfg` names.
 - **`src/config_file.c` reads and updates every configuration file**:
   `ConfigFileRead()` hands each pair to the caller, and
@@ -393,7 +396,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the boot 0.85% slower with no image on the card, though the floppy's reads
   got faster. A third of it is guest RAM moving - the images are 8-byte
   aligned, and `.bss` sorts by alignment before name, so they land ahead of
-  it - and the rest most likely flash layout.
+  it - and the rest most likely flash layout. USB disk mode did it again:
+  0.69% slower, 5.1043 seconds against 5.0691, with guest RAM where it was
+  and none of its code running in the boot, while everything linked after
+  `main.c` and `menu.c` moved 3.5KB along in flash.
 
 ## The speaker
 
@@ -513,11 +519,36 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - `src/tusb_config.h` configures TinyUSB, and is found ahead of the one
   `pico_stdio_usb` carries, which configures nothing for an application
   that links TinyUSB.
-- **The card reader is always there, and for now always empty**: TEST UNIT
-  READY answers NOT READY, MEDIUM NOT PRESENT, so a host sees a removable
-  disk with no media - `sdX` on Linux, 0B. Being there from power on is what
-  lets it take a card later without the device going away, which would take
-  the serial port and the reset interface with it.
+- **The card reader is always there, and empty until the list at power on
+  shares the card**: TEST UNIT READY answers NOT READY, MEDIUM NOT PRESENT,
+  so a host sees a removable disk with no media - `sdX` on Linux, 0B. Being
+  there from power on is what lets it take a card later without the device
+  going away, which would take the serial port and the reset interface with
+  it. Linux asks every two seconds, and sees a card shared within that.
+- **USB disk mode is reached only from the list at power on**, never while a
+  VM runs: nothing has the card open there, and no guest holds a copy of a
+  disk's FAT that a computer could change under it. Its row, USB disk, opens
+  a page with Whole SD card, which unmounts the card's volume -
+  `DiskImageUnmountCard()` - and shares it. The card's page shows whether a
+  computer has it and what has moved; Leave asks first if the computer has
+  the card and has not ejected it, then mounts the card again and reads the
+  VMs and settings afresh, showing the list without counting down. The
+  report's `usb` group has the same.
+- **The computer reads and writes the card's own blocks**, its partition
+  table and FAT volume, in the USB callbacks, which pico_stdio_usb's task runs
+  from a low priority interrupt. They cannot leave the card to the main loop:
+  TinyUSB's task drains its queue before it returns, and a callback that
+  answers "not yet" is queued again at once, so the interrupt would spin and
+  the main loop never run. Nothing else touches the card while it is shared,
+  and the main loop only flips whether it is, which the interrupt, preempting
+  it, always sees whole.
+- **A transfer is 4KB, eight blocks, a callback** (`CFG_TUD_MSC_EP_BUFSIZE`).
+  Through a computer's file system, writing 1MB took 4.3 seconds, about
+  240KB/s, and reading 10MB 17.6 seconds, about 600KB/s - the card moves a
+  block a command, and a write waits for each block to be programmed. Reading
+  and writing several blocks a command, CMD18 and CMD25, is what would be
+  next. Each write has reached the card before its callback returns, so
+  SYNCHRONIZE CACHE has nothing to do.
 - **The card's size** is read from its CSD register (CMD9) when it is
   brought up - `SdcardGetBlockCount()`, `sd_blocks` in the report - as the
   reader has to say how many blocks it holds. FatFs never needed it.
@@ -532,7 +563,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a` to `drive_d`, `vm`, `keyboard`, `speaker`, `menu`, `pacing` |
+  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a` to `drive_d`, `vm`, `usb`, `keyboard`, `speaker`, `menu`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
