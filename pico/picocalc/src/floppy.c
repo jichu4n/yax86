@@ -1,5 +1,6 @@
 #include "floppy.h"
 
+#include "file_list.h"
 // Generated into the build directory - see the floppy image section of
 // CMakeLists.txt.
 #include "generated/dos_floppy_data.h"
@@ -14,65 +15,78 @@ enum {
 
 static const char kImagePath[] = "yax86/floppy_a.img";
 
-static DiskImage g_image;
-// The path of an image inserted from the menu, which the image points to.
-static char g_inserted_path[kFloppyMaxPath + 1];
+static DiskImage g_images[kFloppyDrives];
+// The paths of images inserted from the menu, which the images point to.
+static char g_inserted_paths[kFloppyDrives][kFileListMaxPath + 1];
+// Whether drive A holds the floppy built into flash.
+static bool g_built_in;
 
-void FloppyOpen(void) { DiskImageOpen(&g_image, kImagePath, kImageSize); }
-
-const DiskImage* FloppyGetImage(void) { return &g_image; }
-
-static uint8_t BuiltInReadByte(
-    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset) {
-  return offset < kDOSFloppyDataSize ? kDOSFloppyData[offset] : kOpenBusByte;
+void FloppyOpen(void) {
+  g_built_in =
+      DiskImageOpen(&g_images[kFloppyDriveA], kImagePath, kImageSize) !=
+      kDiskImageOpen;
+  g_images[kFloppyDriveB].status = kDiskImageEjected;
 }
 
-static void BuiltInWriteByte(
-    Y_UNUSED void* context, Y_UNUSED uint8_t drive, Y_UNUSED uint32_t offset,
-    Y_UNUSED uint8_t value) {}
+const DiskImage* FloppyGetImage(FloppyDrive drive) { return &g_images[drive]; }
 
-static uint8_t CardReadByte(
-    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset) {
-  return DiskImageReadByte(&g_image, offset);
-}
-
-static void CardWriteByte(
-    Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset,
-    uint8_t value) {
-  DiskImageWriteByte(&g_image, offset, value);
-}
-
-void FloppyInsert(YFDCState* fdc) {
-  if (g_image.status == kDiskImageOpen) {
-    fdc->config.read_image_byte = CardReadByte;
-    fdc->config.write_image_byte = CardWriteByte;
-  } else {
-    fdc->config.read_image_byte = BuiltInReadByte;
-    fdc->config.write_image_byte = BuiltInWriteByte;
+FloppyDrive FloppyDriveHolding(const char* path) {
+  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+    const DiskImage* image = &g_images[drive];
+    if (image->status == kDiskImageOpen &&
+        FileListSamePath(image->path, path)) {
+      return (FloppyDrive)drive;
+    }
   }
-  YFDCInsertDisk(fdc, 0, &YFDCFormat360KB);
+  return kFloppyDrives;
 }
 
-void FloppyEject(YFDCState* fdc) {
-  DiskImageClose(&g_image);
-  YFDCEjectDisk(fdc, 0);
-}
-
-DiskImageStatus FloppyInsertImage(YFDCState* fdc, const char* path) {
-  FloppyEject(fdc);
-  uint16_t length = 0;
-  while (path[length] != '\0' && length < kFloppyMaxPath) {
-    g_inserted_path[length] = path[length];
-    ++length;
+static uint8_t ReadByte(
+    Y_UNUSED void* context, uint8_t drive, uint32_t offset) {
+  if (drive == kFloppyDriveA && g_built_in) {
+    return offset < kDOSFloppyDataSize ? kDOSFloppyData[offset] : kOpenBusByte;
   }
-  g_inserted_path[length] = '\0';
+  if (drive >= kFloppyDrives) {
+    return kOpenBusByte;
+  }
+  return DiskImageReadByte(&g_images[drive], offset);
+}
+
+static void WriteByte(
+    Y_UNUSED void* context, uint8_t drive, uint32_t offset, uint8_t value) {
+  if ((drive == kFloppyDriveA && g_built_in) || drive >= kFloppyDrives) {
+    return;
+  }
+  DiskImageWriteByte(&g_images[drive], offset, value);
+}
+
+void FloppyAttach(YFDCState* fdc) {
+  fdc->config.read_image_byte = ReadByte;
+  fdc->config.write_image_byte = WriteByte;
+  YFDCInsertDisk(fdc, kFloppyDriveA, &YFDCFormat360KB);
+}
+
+void FloppyEject(YFDCState* fdc, FloppyDrive drive) {
+  DiskImageClose(&g_images[drive]);
+  if (drive == kFloppyDriveA) {
+    g_built_in = false;
+  }
+  YFDCEjectDisk(fdc, drive);
+}
+
+DiskImageStatus FloppyInsertImage(
+    YFDCState* fdc, FloppyDrive drive, const char* path) {
+  FloppyEject(fdc, drive);
+  char* inserted_path = g_inserted_paths[drive];
+  FileListCopyPath(path, inserted_path);
+  DiskImage* image = &g_images[drive];
   const DiskImageStatus status =
-      DiskImageOpen(&g_image, g_inserted_path, kImageSize);
+      DiskImageOpen(image, inserted_path, kImageSize);
   if (status != kDiskImageOpen) {
     // Nothing to fall back to: the drive stays empty.
-    g_image.status = kDiskImageEjected;
+    image->status = kDiskImageEjected;
     return status;
   }
-  FloppyInsert(fdc);
+  YFDCInsertDisk(fdc, drive, &YFDCFormat360KB);
   return status;
 }

@@ -92,6 +92,18 @@ void FileListRead(FileList* list, const char* path, uint32_t image_size) {
   f_closedir(&folder);
 }
 
+static char Upper(char c) {
+  return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+}
+
+bool FileListSamePath(const char* a, const char* b) {
+  while (*a != '\0' && Upper(*a) == Upper(*b)) {
+    ++a;
+    ++b;
+  }
+  return *a == '\0' && *b == '\0';
+}
+
 void FileListFolderOf(const char* path, char folder[kFileListMaxPath + 1]) {
   FileListCopyPath(path, folder);
   uint16_t last_slash = 0;

@@ -15206,6 +15206,10 @@ typedef struct YPlatformConfig {
   // branches on when it programs the adapter.
   YVideoAdapter video_adapter;
 
+  // The number of floppy drives, 1 to 4, which the PPI's DIP switches report
+  // to the BIOS. 0, the default, is taken as 1.
+  uint8_t floppy_drives;
+
   // The machine's conventional memory, physical_memory_size bytes of it.
   // Required - YPlatformInit() fails without it.
   //
@@ -16238,7 +16242,8 @@ Y_FILE_PRIVATE void YPlatformInitPIT(YPlatformState* platform) {
 Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
-  platform->ppi.config.num_floppy_drives = 1;
+  platform->ppi.config.num_floppy_drives =
+      platform->config.floppy_drives > 0 ? platform->config.floppy_drives : 1;
   platform->ppi.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.

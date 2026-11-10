@@ -415,18 +415,29 @@ static size_t FormatDrive(
 }
 
 static void FormatDiskLine(char* buffer, size_t size) {
-  const DiskImage* floppy = FloppyGetImage();
+  const DiskImage* floppy_a = FloppyGetImage(kFloppyDriveA);
+  const DiskImage* floppy_b = FloppyGetImage(kFloppyDriveB);
   const DiskImage* hard_disk = HardDiskGetImage();
-  size_t length = FormatDrive(buffer, size, "A:", floppy, "built in");
+  size_t length = FormatDrive(buffer, size, "A:", floppy_a, "built in");
+  // Drive B has only ever had an image or nothing, so it is left out empty.
+  if (floppy_b->status == kDiskImageOpen) {
+    length += FormatDrive(buffer + length, size - length, "B:", floppy_b, "");
+  }
   length +=
       FormatDrive(buffer + length, size - length, "C:", hard_disk, "none");
-  if (floppy->status != kDiskImageOpen && hard_disk->status != kDiskImageOpen) {
+  const DiskImage* const images[] = {floppy_a, floppy_b, hard_disk};
+  uint64_t card_us = 0;
+  bool any_open = false;
+  for (size_t i = 0; i < sizeof(images) / sizeof(images[0]); ++i) {
+    if (images[i]->status == kDiskImageOpen) {
+      any_open = true;
+    }
+    card_us += images[i]->stats.read_us + images[i]->stats.write_us;
+  }
+  if (!any_open) {
     return;
   }
-  const uint64_t card_ms =
-      (floppy->stats.read_us + floppy->stats.write_us +
-       hard_disk->stats.read_us + hard_disk->stats.write_us) /
-      kMicrosecondsPerMillisecond;
+  const uint64_t card_ms = card_us / kMicrosecondsPerMillisecond;
   snprintf(
       buffer + length, size - length, "%llu.%03llus",
       (unsigned long long)(card_ms / kMillisecondsPerSecond),
@@ -495,8 +506,9 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
 // still waiting from the last time it was busy.
 static void UpdateStatusRows(void) {
   StatusBarState state;
-  state.drive_a = FloppyGetImage();
-  state.drive_c = HardDiskGetImage();
+  state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
+  state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
+  state.drives[kStatusBarDriveC] = HardDiskGetImage();
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
   state.guest_seconds = (uint32_t)(GuestClockMs() / kMillisecondsPerSecond);
   state.battery = SouthbridgeGetBattery();
@@ -575,7 +587,8 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("render_us", display.render_us),
       Y_LOG_UINT("frames_late", display.frames_late),
       Y_LOG_UINT("copy_us", display.copy_us));
-  ReplyDiskImage(command, "drive_a", FloppyGetImage());
+  ReplyDiskImage(command, "drive_a", FloppyGetImage(kFloppyDriveA));
+  ReplyDiskImage(command, "drive_b", FloppyGetImage(kFloppyDriveB));
   ReplyDiskImage(command, "drive_c", HardDiskGetImage());
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
   REPLY_GROUP(
@@ -633,6 +646,7 @@ static bool InitMachine(void) {
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
+  config->floppy_drives = kFloppyDrives;
   config->video_text_font.glyphs = &kFont4x10[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -640,7 +654,7 @@ static bool InitMachine(void) {
   if (!YPlatformInit(&g_platform)) {
     return false;
   }
-  FloppyInsert(&g_platform.fdc);
+  FloppyAttach(&g_platform.fdc);
   HardDiskAttach(&g_platform.hdc);
   return true;
 }
@@ -916,29 +930,58 @@ static void ResetMachine(void) {
   }
 }
 
-// Take the disk out of drive A, and say so.
-static void EjectDriveA(void) {
-  FloppyEject(&g_platform.fdc);
-  StatusBarPostMessage("Ejected the disk from drive A");
-  DISK_INFO("ejected", Y_LOG_STRING("drive", "a"));
+static const char* const kDriveNames[kFloppyDrives] = {
+    [kFloppyDriveA] = "a",
+    [kFloppyDriveB] = "b",
+};
+
+static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
+
+// Take the disk out of a floppy drive, and say so.
+static void EjectDrive(FloppyDrive drive) {
+  FloppyEject(&g_platform.fdc, drive);
+  char message[kTextColumns + 1];
+  snprintf(
+      message, sizeof(message), "Ejected the disk from drive %c",
+      DriveLetter(drive));
+  StatusBarPostMessage(message);
+  DISK_INFO("ejected", Y_LOG_STRING("drive", kDriveNames[drive]));
 }
 
-// Put an image in drive A, and say whether it went in.
-static void InsertDriveA(const char* path) {
-  const DiskImageStatus status = FloppyInsertImage(&g_platform.fdc, path);
+// Put an image in a floppy drive, and say whether it went in. An image
+// already in the other drive stays there: two drives writing one image would
+// each overwrite the other's sectors.
+static void InsertDrive(FloppyDrive drive, const char* path) {
   char name[kDiskImageNameLength + 1];
   DiskImageName(path, name);
   char message[kTextColumns + 1];
+  const FloppyDrive holding = FloppyDriveHolding(path);
+  if (holding != kFloppyDrives) {
+    snprintf(
+        message, sizeof(message), "%s is already in drive %c", name,
+        DriveLetter(holding));
+    StatusBarPostMessage(message);
+    DISK_WARN(
+        "insert_failed", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("path", path), Y_LOG_STRING("error", "in_other_drive"));
+    return;
+  }
+  const DiskImageStatus status =
+      FloppyInsertImage(&g_platform.fdc, drive, path);
   if (status == kDiskImageOpen) {
-    snprintf(message, sizeof(message), "Inserted %s in drive A", name);
+    snprintf(
+        message, sizeof(message), "Inserted %s in drive %c", name,
+        DriveLetter(drive));
     DISK_INFO(
-        "inserted", Y_LOG_STRING("drive", "a"), Y_LOG_STRING("path", path));
+        "inserted", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("path", path));
   } else {
     snprintf(
         message, sizeof(message), "Could not insert %s: %s", name,
         DiskImageDescribeStatus(status));
     DISK_WARN(
-        "insert_failed", Y_LOG_STRING("drive", "a"), Y_LOG_STRING("path", path),
+        "insert_failed", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("path", path),
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
   }
   StatusBarPostMessage(message);
@@ -1150,9 +1193,9 @@ int main(void) {
       .describe_status = DescribeStatus,
       .reset = ResetMachine,
       .redraw_guest = RedrawGuest,
-      .drive_a = FloppyGetImage,
-      .eject_drive_a = EjectDriveA,
-      .insert_drive_a = InsertDriveA,
+      .drive = FloppyGetImage,
+      .eject_drive = EjectDrive,
+      .insert_drive = InsertDrive,
   };
   MenuInit(&menu_config);
 
