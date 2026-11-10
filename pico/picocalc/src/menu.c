@@ -197,15 +197,19 @@ void MenuSetProblem(const char* problem) {
 
 const char* MenuHint(void) {
   if (g_page == kMenuPageMachines) {
-    return g_problem[0] != '\0' ? g_problem : "\x18\x19 move   Enter start";
+    return "\x18\x19=Move  Enter=Start";
   }
   if (g_page == kMenuPageStatus) {
-    return "Esc back";
+    return "Esc=Back";
   }
   if (g_page == kMenuPageBrowse) {
-    return "\x18\x19 move   Enter open   Backspace up a folder   Esc back";
+    return "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back";
   }
-  return "\x18\x19 move   Enter choose   Esc back";
+  return "\x18\x19=Move  Enter=Choose  Esc=Back";
+}
+
+const char* MenuProblem(void) {
+  return g_problem[0] != '\0' ? g_problem : NULL;
 }
 
 static char Upper(char c) {

@@ -77,11 +77,13 @@ typedef struct ComposedFrom {
   bool lit[kStatusBarDrives];
   DiskImageStatus status[kStatusBarDrives];
   const char* machine;
+  bool running;
   uint8_t keyboard_flags;
   uint32_t guest_seconds;
   SouthbridgeBattery battery;
   uint32_t slow_percent;
   const char* hint;
+  const char* problem;
   const char* message;
 } ComposedFrom;
 
@@ -139,6 +141,26 @@ static uint8_t Put(
   return column;
 }
 
+// Put Key=Action pairs, two spaces apart, on a row from column: each key and
+// its = in key_attr, each action in action_attr. Returns the column after.
+static uint8_t PutKeys(
+    DisplayTextRow* row, uint8_t column, const char* text, uint8_t key_attr,
+    uint8_t action_attr) {
+  uint8_t attr = key_attr;
+  for (const char* c = text; *c != '\0' && column < kTextColumns; ++c) {
+    if (c[0] == ' ' && c[1] == ' ') {
+      attr = key_attr;
+    }
+    row->chars[column] = *c;
+    row->attrs[column] = attr;
+    ++column;
+    if (*c == '=') {
+      attr = action_attr;
+    }
+  }
+  return column;
+}
+
 static uint8_t PutChar(
     DisplayTextRow* row, uint8_t column, char c, uint8_t attr) {
   const char text[] = {c, '\0'};
@@ -181,8 +203,10 @@ static uint8_t PutDrive(
 
 static void ComposeMessages(
     const StatusBarState* state, const char* message, DisplayTextRow* row) {
-  if (state->hint != NULL) {
-    Put(row, 0, state->hint, kAttrNormal);
+  if (state->problem != NULL) {
+    Put(row, 0, state->problem, kAttrBright);
+  } else if (state->hint != NULL) {
+    PutKeys(row, 0, state->hint, kAttrNormal, kAttrBright);
   } else if (message != NULL) {
     Put(row, 0, message, kAttrBright);
   } else if (state->slow_percent > 0) {
@@ -251,25 +275,28 @@ static void ComposeIndicators(
   if (state->machine != NULL) {
     Put(row, 0, state->machine, kAttrBright);
   }
-  uint8_t column = kLocksColumn;
-  for (uint8_t i = 0; i < sizeof(kLocks) / sizeof(kLocks[0]); ++i) {
-    const bool on = (state->keyboard_flags & kLocks[i].flag) != 0;
-    column = Put(row, column, kLocks[i].name, on ? kAttrBright : kAttrDim);
-    ++column;
+  if (state->running) {
+    uint8_t column = kLocksColumn;
+    for (uint8_t i = 0; i < sizeof(kLocks) / sizeof(kLocks[0]); ++i) {
+      const bool on = (state->keyboard_flags & kLocks[i].flag) != 0;
+      column = Put(row, column, kLocks[i].name, on ? kAttrBright : kAttrDim);
+      ++column;
+    }
+
+    const uint32_t seconds = state->guest_seconds % kSecondsPerDay;
+    char clock[9];
+    snprintf(
+        clock, sizeof(clock), "%02lu:%02lu:%02lu",
+        (unsigned long)(seconds / kSecondsPerHour),
+        (unsigned long)(seconds / kSecondsPerMinute % kSecondsPerMinute),
+        (unsigned long)(seconds % kSecondsPerMinute));
+    Put(row, kClockColumn, clock, kAttrNormal);
+
+    const char menu_key[] = {
+        (char)kCharShift, '+', (char)kCharShift, '=', 'M', 'e', 'n', 'u', '\0'};
+    // Dimmer than the menu's own keys, being always there.
+    PutKeys(row, kMenuKeyColumn, menu_key, kAttrDim, kAttrNormal);
   }
-
-  const uint32_t seconds = state->guest_seconds % kSecondsPerDay;
-  char clock[9];
-  snprintf(
-      clock, sizeof(clock), "%02lu:%02lu:%02lu",
-      (unsigned long)(seconds / kSecondsPerHour),
-      (unsigned long)(seconds / kSecondsPerMinute % kSecondsPerMinute),
-      (unsigned long)(seconds % kSecondsPerMinute));
-  Put(row, kClockColumn, clock, kAttrNormal);
-
-  const char menu_key[] = {
-      (char)kCharShift, '+', (char)kCharShift, ' ', 'M', 'e', 'n', 'u', '\0'};
-  Put(row, kMenuKeyColumn, menu_key, kAttrDim);
 
   ComposeBattery(&state->battery, row);
 }
@@ -281,13 +308,14 @@ static bool ComposedFromEqual(const ComposedFrom* a, const ComposedFrom* b) {
       return false;
     }
   }
-  return a->machine == b->machine && a->keyboard_flags == b->keyboard_flags &&
+  return a->machine == b->machine && a->running == b->running &&
+         a->keyboard_flags == b->keyboard_flags &&
          a->guest_seconds == b->guest_seconds &&
          a->battery.known == b->battery.known &&
          a->battery.percent == b->battery.percent &&
          a->battery.charging == b->battery.charging &&
          a->slow_percent == b->slow_percent && a->hint == b->hint &&
-         a->message == b->message;
+         a->problem == b->problem && a->message == b->message;
 }
 
 bool StatusBarCompose(
@@ -300,11 +328,13 @@ bool StatusBarCompose(
     from.status[drive] = image != NULL ? image->status : kDiskImageEjected;
   }
   from.machine = state->machine;
+  from.running = state->running;
   from.keyboard_flags = state->keyboard_flags;
   from.guest_seconds = state->guest_seconds;
   from.battery = state->battery;
   from.slow_percent = state->slow_percent;
   from.hint = state->hint;
+  from.problem = state->problem;
   from.message = CurrentMessage(now_us);
   if (g_composed && ComposedFromEqual(&from, &g_composed_from)) {
     return false;

@@ -398,13 +398,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   ```
   Inserted GAMES.IMG in drive B                                         <- messages
   A:DISK01.IMG  B:GAMES.IMG  C:DOS33.IMG                                <- drives
-  DOS33             CAPS NUM SCRL INS     00:44:51        ↑+↑ Menu  [████] 100%
+  DOS33             CAPS NUM SCRL INS     00:44:51        ↑+↑=Menu  [████] 100%
   ```
 
 - **Messages** are queued and shown four seconds each, without moving
   anything on the rows below. While the menu is open the row shows its
   keys, and while the machine is dropping time it shows `SLOW` and its
   speed in yellow.
+- **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
+  pairs two spaces apart - `↑↓=Move  Enter=Choose  Esc=Back` - the action
+  brighter than the key, so the two read apart in the 4x10 font. The menu
+  key on the bottom row, `↑+↑=Menu`, is the same a step dimmer.
 - **Drives** follow each other two columns apart: the image's file name,
   without its folders, in capitals, `built-in` for the floppy in flash, or
   `empty` for a floppy drive without a disk. A hard disk with no image is
@@ -417,7 +421,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   guest's time of day; the menu's key; and the battery, from the keyboard
   controller's register `0x0B`, which the key FIFO poll reads every ten
   seconds in its place. The controller measures it every 20 seconds, and
-  answers 0% with no battery, which is shown as no battery.
+  answers 0% with no battery, which is shown as no battery. While the list
+  of machines shows at power on there is no guest and the menu key does
+  nothing, so the row has only the battery.
 - **They are composed ten times a second**, so that a light comes on while
   its drive is in use, and composing is skipped while nothing they show has
   changed. Composing every time cost the boot 0.74% against master; skipping

@@ -80,7 +80,7 @@ uint8_t MenuChosenMachine(void);
 // stop showing them with 0.
 void MenuSetCountdown(uint8_t seconds);
 
-// Show why the machine chosen could not start, in place of the keys, until
+// Set why the machine chosen could not start, for MenuProblem(), until
 // another key is pressed; NULL for nothing. The text is copied.
 void MenuSetProblem(const char* problem);
 
@@ -94,8 +94,13 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event);
 // passed. Call every pass of the main loop while the menu is open.
 void MenuDraw(uint64_t now_us);
 
-// The keys to show on the status bar's message row while the menu is open.
+// The keys to show on the status bar's message row while the menu is open,
+// as Key=Action pairs.
 const char* MenuHint(void);
+
+// Why the machine chosen could not start, to show in place of the keys, or
+// NULL.
+const char* MenuProblem(void);
 
 // The page showing, as the report gives it.
 const char* MenuPageName(void);

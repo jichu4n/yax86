@@ -518,12 +518,13 @@ static void OfferStatusRows(const StatusBarState* state);
 
 // Compose the status rows from the machine's state.
 static void UpdateStatusRows(void) {
-  StatusBarState state;
+  StatusBarState state = {0};
   state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
   state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
   state.drives[kStatusBarDriveC] = HardDiskGetImage(kHardDiskC);
   state.drives[kStatusBarDriveD] = HardDiskGetImage(kHardDiskD);
   state.machine = g_has_machine ? g_machine.machine.name : NULL;
+  state.running = true;
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
   state.guest_seconds = (uint32_t)(GuestClockMs() / kMillisecondsPerSecond);
   state.battery = SouthbridgeGetBattery();
@@ -1165,6 +1166,7 @@ static void UpdateChoosingRows(void) {
   StatusBarState state = {0};
   state.battery = SouthbridgeGetBattery();
   state.hint = MenuHint();
+  state.problem = MenuProblem();
   OfferStatusRows(&state);
 }
 

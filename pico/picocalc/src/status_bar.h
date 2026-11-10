@@ -8,7 +8,7 @@
 //
 //   Inserted GAMES.IMG in drive A
 //   A:DISK01.IMG  B:empty  C:HDD.IMG
-//   DOS33             CAPS NUM SCRL INS     12:34:56     ↑+↑ Menu  [■■■ ] 78%+
+//   DOS33             CAPS NUM SCRL INS     12:34:56     ↑+↑=Menu  [■■■ ] 78%+
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H
 
@@ -35,6 +35,10 @@ typedef struct StatusBarState {
   const DiskImage* drives[kStatusBarDrives];
   // The machine's name, or NULL without a machine.
   const char* machine;
+  // Whether a machine is running. Its lock flags, time of day and the menu
+  // key show only while one is: the list at power on has no guest, and the
+  // menu key does nothing there.
+  bool running;
   // The guest BIOS's keyboard flags, at 0040:0017, which hold its lock and
   // insert states.
   uint8_t keyboard_flags;
@@ -45,8 +49,11 @@ typedef struct StatusBarState {
   // percent, while it has been falling behind; 0 otherwise.
   uint32_t slow_percent;
   // Keys to show on the message row in place of messages, such as the menu's
-  // while it is open, or NULL.
+  // while it is open, or NULL: Key=Action pairs two spaces apart, the way
+  // MS-DOS's own programs label theirs - "\x18\x19=Move  Enter=Choose".
   const char* hint;
+  // A problem to show in place of the keys, or NULL.
+  const char* problem;
 } StatusBarState;
 
 // Queue a message for the message row, shown for a few seconds after the
