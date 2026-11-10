@@ -479,10 +479,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   not see them come up while the menu has the keyboard, so they are released
   to it then.
 - **It is a box drawn over the guest's screen**, white on blue in code page
-  437's double lined box, a page at a time: Drive A, Drive B, Status and
-  Reset - Esc resumes; a drive's page, with what is in it, Swap disk image
-  and Eject, or Choose disk image alone while it is empty; the browser; the
-  status page; and a question before a reset. An item that opens another
+  437's double lined box, a page at a time: Drive A, Drive B, Status, Reset
+  and Power off - Esc resumes; a drive's page, with what is in it, Swap disk
+  image and Eject, or Choose disk image alone while it is empty; the
+  browser; the status page; and a question before a reset or a power off.
+  An item that opens another
   menu ends in a `>`. Up and Down move, Enter or Space chooses, Esc or
   Backspace goes back.
 - **The browser starts in the folder of the image in the drive**, with it
@@ -493,8 +494,18 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   root back to the drive's page; Page Up and Down move a page.
 - **A box of a new size has the guest's screen drawn in full under it
   first**, and closing draws it in full, so nothing of a box is left behind.
-- **Reset restarts the board** with `watchdog_reboot()`, which is the
-  VM from power on. What the guest wrote is already on the card.
+- **Reset and Power off restart the board** with `watchdog_reboot()`, so
+  every start begins from the same state, and leave a note for the start
+  after it: Reset starts the same VM again at once, without the list, and
+  Power off shows the list with that VM highlighted and no countdown,
+  whatever `boot_delay` says. A VM that no longer reads leaves the list
+  waiting with its problem. What the guest wrote is already on the card.
+- **The note is in RAM startup does not clear**, as the overclock's marker
+  is, so it survives the reboot but not a power cycle. The start after clears
+  it before acting on it, so a later reboot - picotool's, or
+  the power button's - starts as from power on. Power off is offered only
+  with a VM, since without a card there is no list: Reset then reboots to
+  the built-in floppy with no note.
 - **A test drives it as a hand would**, with `key shift press`, `key rshift
   press` and their releases, and checks it with `screenshot`; the report's
   `menu` group says whether it is open and which page shows.

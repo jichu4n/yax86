@@ -64,6 +64,7 @@ typedef enum MenuPage {
   kMenuPageMain = 0,
   kMenuPageStatus,
   kMenuPageReset,
+  kMenuPagePowerOff,
   // The page of the drive in g_drive.
   kMenuPageDrive,
   kMenuPageBrowse,
@@ -79,6 +80,7 @@ static const char* const kPageNames[] = {
     [kMenuPageMain] = "main",
     [kMenuPageStatus] = "status",
     [kMenuPageReset] = "reset",
+    [kMenuPagePowerOff] = "power_off",
     [kMenuPageDrive] = "drive",
     [kMenuPageBrowse] = "browse",
     [kMenuPageVMs] = "vms",
@@ -100,14 +102,15 @@ typedef enum MainItem {
   kMainDriveB,
   kMainStatus,
   kMainReset,
+  // Shown only while there is a list of VMs to go back to.
+  kMainPowerOff,
   kMainItemCount,
 } MainItem;
 
 static const MenuItem kMainItems[kMainItemCount] = {
-    [kMainDriveA] = {"Drive A", true},
-    [kMainDriveB] = {"Drive B", true},
-    [kMainStatus] = {"Status", true},
-    [kMainReset] = {"Reset", false},
+    [kMainDriveA] = {"Drive A", true},      [kMainDriveB] = {"Drive B", true},
+    [kMainStatus] = {"Status", true},       [kMainReset] = {"Reset", false},
+    [kMainPowerOff] = {"Power off", false},
 };
 
 typedef enum DriveItem {
@@ -126,6 +129,17 @@ typedef enum ResetItem {
 static const MenuItem kResetItems[kResetItemCount] = {
     [kResetCancel] = {"Cancel", false},
     [kResetConfirm] = {"Reset", false},
+};
+
+typedef enum PowerOffItem {
+  kPowerOffCancel = 0,
+  kPowerOffConfirm,
+  kPowerOffItemCount,
+} PowerOffItem;
+
+static const MenuItem kPowerOffItems[kPowerOffItemCount] = {
+    [kPowerOffCancel] = {"Cancel", false},
+    [kPowerOffConfirm] = {"Power off", false},
 };
 
 typedef enum USBItem {
@@ -362,6 +376,10 @@ static bool DriveEmpty(void) {
   return g_config.drive(g_drive)->status == kDiskImageEjected;
 }
 
+static uint8_t MainItemCount(void) {
+  return g_config.can_power_off() ? kMainItemCount : kMainPowerOff;
+}
+
 static uint8_t DriveItemCount(void) {
   return DriveEmpty() ? kDriveEject : kDriveItemCount;
 }
@@ -380,9 +398,11 @@ static bool ComputerHasCard(void) {
 static uint8_t PageItemCount(void) {
   switch (g_page) {
     case kMenuPageMain:
-      return kMainItemCount;
+      return MainItemCount();
     case kMenuPageReset:
       return kResetItemCount;
+    case kMenuPagePowerOff:
+      return kPowerOffItemCount;
     case kMenuPageDrive:
       return DriveItemCount();
     case kMenuPageBrowse:
@@ -427,6 +447,9 @@ static MenuAction Back(void) {
       break;
     case kMenuPageReset:
       ShowPage(kMenuPageMain, kMainReset);
+      break;
+    case kMenuPagePowerOff:
+      ShowPage(kMenuPageMain, kMainPowerOff);
       break;
     case kMenuPageDrive:
       ShowPage(kMenuPageMain, (uint8_t)(kMainDriveA + g_drive));
@@ -500,6 +523,9 @@ static MenuAction Choose(void) {
         case kMainReset:
           ShowPage(kMenuPageReset, kResetCancel);
           return kMenuActionNone;
+        case kMainPowerOff:
+          ShowPage(kMenuPagePowerOff, kPowerOffCancel);
+          return kMenuActionNone;
         case kMainItemCount:
           break;
       }
@@ -507,6 +533,11 @@ static MenuAction Choose(void) {
     case kMenuPageReset:
       if (g_chosen == kResetConfirm) {
         g_config.reset();
+      }
+      return Back();
+    case kMenuPagePowerOff:
+      if (g_chosen == kPowerOffConfirm) {
+        g_config.power_off();
       }
       return Back();
     case kMenuPageDrive:
@@ -972,12 +1003,17 @@ void MenuDraw(uint64_t now_us) {
   }
   switch (g_page) {
     case kMenuPageMain:
-      DrawItems(menu, "yax86", NULL, 0, kMainItems, kMainItemCount);
+      DrawItems(menu, "yax86", NULL, 0, kMainItems, MainItemCount());
       break;
     case kMenuPageReset:
       DrawItems(
-          menu, "Reset", (const char* const[]){"Restart the VM from power on?"},
-          1, kResetItems, kResetItemCount);
+          menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
+          kResetItemCount);
+      break;
+    case kMenuPagePowerOff:
+      DrawItems(
+          menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
+          kPowerOffItems, kPowerOffItemCount);
       break;
     case kMenuPageDrive:
       DrawDrivePage(menu);

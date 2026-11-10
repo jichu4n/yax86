@@ -3,8 +3,8 @@
 //
 // It is a box drawn over the guest's screen, with a page at a time: the main
 // page's items, a page for each floppy drive and the browser that finds it an
-// image, the status page, and a question before a reset. At power on, before
-// the VM starts, it is the list of VMs to start. Up and Down
+// image, the status page, and a question before a reset or a power off. At
+// power on, before the VM starts, it is the list of VMs to start. Up and Down
 // move, Enter or Space chooses, and Esc or Backspace goes back a page, or
 // closes the menu from the main one. Both Shift keys again close it too.
 //
@@ -36,8 +36,13 @@ typedef struct MenuStatusLine {
 typedef struct MenuConfig {
   // Fill in the status page's lines.
   void (*describe_status)(MenuStatusLine lines[kMenuStatusLines]);
-  // Reset the VM. Does not return.
+  // Restart the VM from power on, with the same disks. Does not return.
   void (*reset)(void);
+  // Turn the VM off and go back to the list of VMs, which waits for a key.
+  // Does not return. Offered only while can_power_off() says there is a list
+  // to go back to.
+  void (*power_off)(void);
+  bool (*can_power_off)(void);
   // Draw the guest's screen in full, under the menu, and return whether core
   // 1 took it; false means try again later. The menu calls it when its box
   // changes size, before drawing the new one, so that nothing of the old one
