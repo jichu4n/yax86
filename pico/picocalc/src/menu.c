@@ -1007,17 +1007,13 @@ void MenuDraw(uint64_t now_us) {
       break;
     case kMenuPageReset:
       DrawItems(
-          menu, "Reset", (const char* const[]){"Restart the VM from power on?"},
-          1, kResetItems, kResetItemCount);
+          menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
+          kResetItemCount);
       break;
     case kMenuPagePowerOff:
       DrawItems(
-          menu, "Power off",
-          (const char* const[]){
-              "Turn off the VM and go back to the",
-              "list of VMs?",
-          },
-          2, kPowerOffItems, kPowerOffItemCount);
+          menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
+          kPowerOffItems, kPowerOffItemCount);
       break;
     case kMenuPageDrive:
       DrawDrivePage(menu);
