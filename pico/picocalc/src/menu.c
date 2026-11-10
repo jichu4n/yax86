@@ -138,6 +138,10 @@ static uint8_t g_list_top;
 // highlighted one starts by itself, and why the last chosen did not.
 static const MachineList* g_machines;
 static uint8_t g_countdown;
+// The countdown as the keys row shows it, in two buffers used in turn, as
+// the problem is.
+static char g_countdown_hints[2][kTextColumns + 1];
+static char* g_countdown_hint = g_countdown_hints[0];
 //
 // The problem is kept in two buffers, used in turn, so that a new one is a
 // new pointer: the status rows tell a change of hint by its pointer.
@@ -177,9 +181,20 @@ uint8_t MenuChosenMachine(void) { return g_chosen; }
 void MenuClose(void) { g_open = false; }
 
 void MenuSetCountdown(uint8_t seconds) {
-  if (seconds != g_countdown) {
-    g_countdown = seconds;
-    g_dirty = true;
+  if (seconds == g_countdown) {
+    return;
+  }
+  g_countdown = seconds;
+  g_dirty = true;
+  if (seconds > 0) {
+    // A buffer in turn, so that the status rows see a new hint.
+    g_countdown_hint = g_countdown_hint == g_countdown_hints[0]
+                           ? g_countdown_hints[1]
+                           : g_countdown_hints[0];
+    snprintf(
+        g_countdown_hint, kTextColumns + 1,
+        "Starting %s in %u s - press a key to wait",
+        g_machines->machines[g_chosen].name, (unsigned)seconds);
   }
 }
 
@@ -197,7 +212,10 @@ void MenuSetProblem(const char* problem) {
 
 const char* MenuHint(void) {
   if (g_page == kMenuPageMachines) {
-    return g_problem[0] != '\0' ? g_problem : "\x18\x19 move   Enter start";
+    if (g_problem[0] != '\0') {
+      return g_problem;
+    }
+    return g_countdown > 0 ? g_countdown_hint : "\x18\x19 move   Enter start";
   }
   if (g_page == kMenuPageStatus) {
     return "Esc back";

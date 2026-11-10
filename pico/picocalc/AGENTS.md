@@ -290,8 +290,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
   start the default without showing the list.
 - **At power on, with machines on the card, the menu lists them**, before
-  the machine exists: the countdown runs on the list's bottom edge until a
-  key is pressed, then the default starts. A file that does not read keeps
+  the machine exists: the countdown runs on the list's bottom edge and the
+  keys row - `Starting DOS33 in 4 s - press a key to wait` - until a key is
+  pressed, then the default starts. A file that does not read keeps
   the list up with its problem on the keys row - `BROKEN.CFG: line 2: no
   setting drive_e` - as do bad settings, which start the countdown anyway
   with what was read. The countdown is what lets a board left alone, or a
@@ -398,7 +399,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   ```
   Inserted GAMES.IMG in drive B                                         <- messages
   A:DISK01.IMG  B:GAMES.IMG  C:DOS33.IMG                                <- drives
-                    CAPS NUM SCRL INS     00:44:51        ↑+↑ Menu  [████] 100%
+  DOS33             CAPS NUM SCRL INS     00:44:51        ↑+↑ Menu  [████] 100%
   ```
 
 - **Messages** are queued and shown four seconds each, without moving
@@ -411,7 +412,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   left out. The card keeps 8.3 names, so a name fits; a longer one would
   keep 11 characters and end in `~`. The letter is the drive's light, green
   for 0.2 seconds after a sector is read or written.
-- **Indicators**: the guest BIOS's own lock and insert flags, at
+- **Indicators**: the machine's name, if one was started; the guest BIOS's
+  own lock and insert flags, at
   `0040:0017` - a PC/XT keyboard has no lights - bright when on; the
   guest's time of day; the menu's key; and the battery, from the keyboard
   controller's register `0x0B`, which the key FIFO poll reads every ten

@@ -3,11 +3,12 @@
 //
 //   row 29  messages, a few seconds each, and the menu's keys while it is open
 //   row 30  the drives: each one's letter, lit while it is in use, and image
-//   row 31  the guest's lock flags, its time of day, the menu key, the battery
+//   row 31  the machine's name, the guest's lock flags, its time of day, the
+//           menu key, the battery
 //
 //   Inserted GAMES.IMG in drive A
 //   A:DISK01.IMG  B:empty  C:HDD.IMG
-//                     CAPS NUM SCRL INS     12:34:56     ↑+↑ Menu  [■■■ ] 78%+
+//   DOS33             CAPS NUM SCRL INS     12:34:56     ↑+↑ Menu  [■■■ ] 78%+
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H
 
@@ -32,6 +33,8 @@ typedef struct StatusBarState {
   // empty, and drives C and D are not shown. NULL, before the machine has
   // drives, shows nothing.
   const DiskImage* drives[kStatusBarDrives];
+  // The machine's name, or NULL without a machine.
+  const char* machine;
   // The guest BIOS's keyboard flags, at 0040:0017, which hold its lock and
   // insert states.
   uint8_t keyboard_flags;

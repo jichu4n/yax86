@@ -523,6 +523,7 @@ static void UpdateStatusRows(void) {
   state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
   state.drives[kStatusBarDriveC] = HardDiskGetImage(kHardDiskC);
   state.drives[kStatusBarDriveD] = HardDiskGetImage(kHardDiskD);
+  state.machine = g_has_machine ? g_machine.machine.name : NULL;
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
   state.guest_seconds = (uint32_t)(GuestClockMs() / kMillisecondsPerSecond);
   state.battery = SouthbridgeGetBattery();
