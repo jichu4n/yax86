@@ -625,6 +625,7 @@ static void ReplyReport(const Command* command) {
       Y_LOG_BOOL("ejected", usb.ejected),
       Y_LOG_UINT("blocks_read", usb.blocks_read),
       Y_LOG_UINT("blocks_written", usb.blocks_written),
+      Y_LOG_UINT("read_us", usb.read_us), Y_LOG_UINT("write_us", usb.write_us),
       Y_LOG_UINT("errors", usb.errors));
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
   REPLY_GROUP(

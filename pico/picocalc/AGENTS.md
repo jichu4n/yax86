@@ -365,8 +365,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - `src/sdcard.c` runs the card in SPI mode on SPI0, from the SD simplified
   physical layer spec: 400kHz to bring it up, then 24MHz - the 48MHz
   peripheral clock divided evenly, under the 25MHz default speed limit. Each
-  command starts from a fresh select that waits for ready; blocks move one
-  at a time, CMD17 and CMD24.
+  command starts from a fresh select that waits for ready. A block alone is
+  CMD17 or CMD24, and a run of them one CMD18 or CMD25, ended by CMD12 or the
+  stop token. The drives only ever move a block alone, so the boot's card
+  accesses are the same either way; FatFs and USB disk mode move runs.
 - **The filesystem is FatFs R0.16.** `resources/FatFs/ff16.zip` is the
   release exactly as elm-chan.org serves it, unpacked by `FetchContent` and
   checked against its SHA-256, which says it is unchanged and keeps the tree
@@ -535,9 +537,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **An image on USB is its own disk**: a floppy is a FAT12 volume with no
   partition table, which a computer mounts whole, and a hard disk has its
   table, with the partition at sector 17. The card stays mounted, and the
-  image is read and written through `DiskImage` a byte at a time, as the
-  drives do - the sector it holds makes that a card access a block, with its
-  fast seek - and closed on disconnecting, which writes the held sector back.
+  image is read and written through `DiskImage` a run of sectors at a time,
+  `DiskImageReadSectors()` and `DiskImageWriteSectors()`, which FatFs hands
+  to the card whole as far as a cluster goes, found through the fast seek's
+  map - and closed on disconnecting. Through the drives' byte at a time
+  instead, each sector written was read first, and writing ran at 137KB/s.
   The browser shows no "in drive A": at power on the drives have no images.
   The card's page shows whether a computer has it and what has moved;
   Disconnect asks first if the computer has the card and has not ejected it,
@@ -551,12 +555,27 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the main loop never run. Nothing else touches the card while it is shared,
   and the main loop only flips whether it is, which the interrupt, preempting
   it, always sees whole.
-- **A transfer is 4KB, eight blocks, a callback** (`CFG_TUD_MSC_EP_BUFSIZE`).
-  Through a computer's file system, writing 1MB took 4.3 seconds, about
-  240KB/s, and reading 10MB 17.6 seconds, about 600KB/s - the card moves a
-  block a command, and a write waits for each block to be programmed. Reading
-  and writing several blocks a command, CMD18 and CMD25, is what would be
-  next. Each write has reached the card before its callback returns, so
+- **A transfer is 8KB, sixteen blocks, a callback**
+  (`CFG_TUD_MSC_EP_BUFSIZE`), each one CMD18 or CMD25. Writing 8MB to a file
+  on the card ran at 609KB/s and reading it 720KB/s; to an image, 614KB/s
+  and 688KB/s. A block a command, it was 246 and 605KB/s, and an image 137
+  and 492KB/s.
+
+  | buffer | card read | card write | image read | image write |
+  | --- | --- | --- | --- | --- |
+  | 4KB | 711 | 568 | 682 | 572 |
+  | 8KB | 720 | 609 | 688 | 614 |
+  | 16KB | 721 | 636 | 691 | 644 |
+
+  16KB gains writes 4.5% more for another 8KB of RAM.
+- **USB is what is left**: `read_us` and `write_us` in the report are the
+  time on the card, against the computer's whole transfer. Reading 48MB the
+  card took 19.7 of 58 seconds, about 2.4MB/s against 24MHz's 3MB/s, and
+  USB, at full speed, the rest, about 1.05MB/s. The two take turns - TinyUSB
+  asks for the next transfer only once the last is sent, and 0.18 has no
+  asynchronous MSC calls - so overlapping them, worth up to about 1MB/s
+  each way, would mean running TinyUSB's task some other way.
+- Each write has reached the card before its callback returns, so
   SYNCHRONIZE CACHE has nothing to do.
 - **The card's size** is read from its CSD register (CMD9) when it is
   brought up - `SdcardGetBlockCount()`, `sd_blocks` in the report - as the
