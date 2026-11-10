@@ -15,6 +15,9 @@ static const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
 static const char kSettingsFolder[] = "yax86";
 static const char kSettingsPath[] = "yax86/yax86.cfg";
+// Where new settings are written before they take the old ones' place.
+static const char kSettingsNewPath[] = "yax86/yax86.new";
+static const char kBootDefaultKey[] = "boot_default";
 
 static const char* const kDriveKeys[kVMDrives] = {
     [kVMDriveA] = "drive_a",
@@ -240,13 +243,14 @@ static bool ReadLine(
   return true;
 }
 
-// Read a configuration file at path, handing each pair to take.
-static ReadResult ReadFile(
-    const char* path, TakePair take, void* context,
-    char problem[kVMProblemLength + 1]) {
-  // Read whole, so that lines can be cut up in place; static, as it is more
-  // than a core's stack should hold.
-  static char text[kVMConfigMaxBytes + 1];
+// A configuration file's text, read whole so that lines can be cut up in
+// place; static, as it is more than a core's stack should hold.
+static char g_text[kVMConfigMaxBytes + 1];
+
+// Read the file at path whole into g_text, ended with a NUL.
+static ReadResult LoadFile(
+    const char* path, char problem[kVMProblemLength + 1]) {
+  char* const text = g_text;
   problem[0] = '\0';
   if (DiskImageMountCard() != kDiskImageOpen) {
     Describe(problem, "no SD card to read");
@@ -277,7 +281,18 @@ static ReadResult ReadFile(
     return kReadProblem;
   }
   text[read] = '\0';
-  char* line = text;
+  return kReadOk;
+}
+
+// Read a configuration file at path, handing each pair to take.
+static ReadResult ReadFile(
+    const char* path, TakePair take, void* context,
+    char problem[kVMProblemLength + 1]) {
+  const ReadResult loaded = LoadFile(path, problem);
+  if (loaded != kReadOk) {
+    return loaded;
+  }
+  char* line = g_text;
   uint16_t line_number = 1;
   while (*line != '\0') {
     char* end = line;
@@ -347,7 +362,7 @@ static bool TakeSettingsPair(
     const char* key, const char* value, void* context,
     char problem[kVMProblemLength + 1]) {
   VMSettings* settings = context;
-  if (SameText(key, "boot_default")) {
+  if (SameText(key, kBootDefaultKey)) {
     if (value[0] == '\0') {
       settings->boot_default[0] = '\0';
     } else if (!VMConfigResolvePath(
@@ -392,6 +407,222 @@ bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]) {
         problem, kVMProblemLength + 1, "no boot_default %.44s",
         settings->boot_default);
     settings->boot_default[0] = '\0';
+    return false;
+  }
+  return true;
+}
+
+// Settings being written: the text so far, and whether it still fits.
+typedef struct SettingsWriter {
+  char text[kVMConfigMaxBytes + 1];
+  uint16_t length;
+  bool fits;
+} SettingsWriter;
+
+static void Write(SettingsWriter* writer, const char* from, const char* end) {
+  for (const char* c = from; c < end; ++c) {
+    if (writer->length == kVMConfigMaxBytes) {
+      writer->fits = false;
+      return;
+    }
+    writer->text[writer->length++] = *c;
+  }
+}
+
+static void WriteText(SettingsWriter* writer, const char* text) {
+  const char* end = text;
+  while (*end != '\0') {
+    ++end;
+  }
+  Write(writer, text, end);
+}
+
+static bool IsSpace(char c) { return c == ' ' || c == '\t'; }
+
+// The next key=value pair for key in a line, from c up to end: where it
+// starts and ends. A quoted value runs to its closing quote.
+static bool FindPair(
+    const char* c, const char* end, const char* key, const char** pair_start,
+    const char** pair_end) {
+  while (c < end) {
+    while (c < end && IsSpace(*c)) {
+      ++c;
+    }
+    if (c == end) {
+      break;
+    }
+    const char* start = c;
+    while (c < end && *c != '=' && !IsSpace(*c)) {
+      ++c;
+    }
+    const char* key_end = c;
+    if (c < end && *c == '=') {
+      ++c;
+      if (c < end && *c == '"') {
+        ++c;
+        while (c < end && *c != '"') {
+          if (*c == '\\' && c + 1 < end) {
+            ++c;
+          }
+          ++c;
+        }
+        if (c < end) {
+          ++c;
+        }
+      } else {
+        while (c < end && !IsSpace(*c)) {
+          ++c;
+        }
+      }
+    }
+    const char* k = key;
+    const char* t = start;
+    while (*k != '\0' && t < key_end && *k == *t) {
+      ++k;
+      ++t;
+    }
+    if (*k == '\0' && t == key_end) {
+      *pair_start = start;
+      *pair_end = c;
+      return true;
+    }
+  }
+  return false;
+}
+
+// The pair boot_default=path, path written from the settings' folder in
+// lower case - FAT names are the same in either - or from the root with a
+// leading / when it is elsewhere, and quoted if it has a space or quote.
+static void WriteBootDefault(SettingsWriter* writer, const char* path) {
+  WriteText(writer, kBootDefaultKey);
+  WriteText(writer, "=");
+  const char* rest = path;
+  const char* folder = kSettingsFolder;
+  while (*folder != '\0' && Upper(*rest) == Upper(*folder)) {
+    ++folder;
+    ++rest;
+  }
+  if (*folder == '\0' && *rest == '/') {
+    ++rest;
+  } else {
+    rest = path;
+    WriteText(writer, "/");
+  }
+  bool quote = false;
+  for (const char* c = rest; *c != '\0'; ++c) {
+    quote = quote || IsSpace(*c) || *c == '"' || *c == '\\';
+  }
+  if (quote) {
+    WriteText(writer, "\"");
+  }
+  for (const char* c = rest; *c != '\0'; ++c) {
+    char lower = (*c >= 'A' && *c <= 'Z') ? (char)(*c - 'A' + 'a') : *c;
+    if (quote && (lower == '"' || lower == '\\')) {
+      WriteText(writer, "\\");
+    }
+    Write(writer, &lower, &lower + 1);
+  }
+  if (quote) {
+    WriteText(writer, "\"");
+  }
+}
+
+bool VMSettingsSaveBootDefault(
+    const char* path, char problem[kVMProblemLength + 1]) {
+  static SettingsWriter writer;
+  writer.length = 0;
+  writer.fits = true;
+  if (DiskImageMountCard() != kDiskImageOpen) {
+    Describe(problem, "no SD card to write");
+    return false;
+  }
+  const ReadResult loaded = LoadFile(kSettingsPath, problem);
+  if (loaded == kReadProblem) {
+    return false;
+  }
+  if (loaded == kReadMissing) {
+    g_text[0] = '\0';
+  }
+  problem[0] = '\0';
+
+  // Each boot_default pair takes the new path, and everything else stays as
+  // it was, comments, other settings and line ends included.
+  bool replaced = false;
+  bool crlf = false;
+  const char* line = g_text;
+  while (*line != '\0') {
+    const char* end = line;
+    while (*end != '\0' && *end != '\n') {
+      ++end;
+    }
+    const char* content_end = end;
+    if (content_end > line && content_end[-1] == '\r') {
+      --content_end;
+      crlf = true;
+    }
+    const char* c = line;
+    while (c < content_end && IsSpace(*c)) {
+      ++c;
+    }
+    if (c < content_end && *c != '#') {
+      const char* pair_start;
+      const char* pair_end;
+      c = line;
+      while (
+          FindPair(c, content_end, kBootDefaultKey, &pair_start, &pair_end)) {
+        Write(&writer, c, pair_start);
+        WriteBootDefault(&writer, path);
+        replaced = true;
+        c = pair_end;
+      }
+      Write(&writer, c, end);
+    } else {
+      Write(&writer, line, end);
+    }
+    if (*end == '\0') {
+      line = end;
+    } else {
+      Write(&writer, end, end + 1);
+      line = end + 1;
+    }
+  }
+  if (!replaced) {
+    if (writer.length > 0 && writer.text[writer.length - 1] != '\n') {
+      WriteText(&writer, crlf ? "\r\n" : "\n");
+    }
+    WriteBootDefault(&writer, path);
+    WriteText(&writer, crlf ? "\r\n" : "\n");
+  }
+  if (!writer.fits) {
+    snprintf(
+        problem, kVMProblemLength + 1, "would be longer than %u bytes",
+        (unsigned)kVMConfigMaxBytes);
+    return false;
+  }
+
+  // Written in full beside the old settings before taking their place, so
+  // that a write cut short leaves the old ones.
+  FIL file;
+  if (f_open(&file, kSettingsNewPath, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) {
+    Describe(problem, "could not create yax86.new");
+    return false;
+  }
+  UINT written = 0;
+  const FRESULT wrote = f_write(&file, writer.text, writer.length, &written);
+  const FRESULT closed = f_close(&file);
+  if (wrote != FR_OK || closed != FR_OK || written != writer.length) {
+    f_unlink(kSettingsNewPath);
+    Describe(problem, "could not write yax86.new");
+    return false;
+  }
+  const FRESULT removed = f_unlink(kSettingsPath);
+  if (removed != FR_OK && removed != FR_NO_FILE) {
+    f_unlink(kSettingsNewPath);
+    Describe(problem, "could not replace yax86.cfg");
+    return false;
+  }
+  if (f_rename(kSettingsNewPath, kSettingsPath) != FR_OK) {
+    Describe(problem, "could not rename yax86.new to yax86.cfg");
     return false;
   }
   return true;

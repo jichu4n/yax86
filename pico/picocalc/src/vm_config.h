@@ -23,7 +23,8 @@
 // VM the list highlights, and starts by itself after boot_delay seconds
 // with no key pressed; 0 starts it at once. Without settings, or with a
 // boot_default that is not there, the first VM listed is the default,
-// after 5 seconds.
+// after 5 seconds. Whichever VM starts becomes boot_default for the next
+// power on.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -100,6 +101,15 @@ bool VMConfigRead(
 // that is not understood, settings then holding what was understood before
 // it; or if boot_default names no file, which is then left empty.
 bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]);
+
+// Make the VM whose file is at path, from the card's root, the settings'
+// boot_default, changing only that in `yax86/yax86.cfg` - or creating it, with
+// only that, if there is none. The new settings are written in full to
+// `yax86/yax86.new` before taking the old ones' place, so a write cut short
+// leaves the old ones. Returns false, with the problem described, if they
+// could not be read, would be too long, or could not be written.
+bool VMSettingsSaveBootDefault(
+    const char* path, char problem[kVMProblemLength + 1]);
 
 // Resolve path against folder, both without a leading slash, into resolved:
 // a path with a leading / starts at the card's root instead, and "." and

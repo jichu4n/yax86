@@ -1170,12 +1170,36 @@ static void UpdateChoosingRows(void) {
 
 // Read the configuration of the VM at index in the list, to start it.
 // Returns false if it could not be read, with why shown on the list.
+// The card's settings, as read at power on.
+static VMSettings g_settings;
+
+// Make the VM at path the one to start at the next power on, if it is not
+// already. Writing the card only when it changes keeps a board that starts
+// its default every time from writing at all.
+static void SaveBootDefault(const char* path) {
+  if (FileListSamePath(g_settings.boot_default, path)) {
+    return;
+  }
+  char problem[kVMProblemLength + 1];
+  if (VMSettingsSaveBootDefault(path, problem)) {
+    FileListCopyPath(path, g_settings.boot_default);
+    SYSTEM_INFO("boot_default_saved", Y_LOG_STRING("path", path));
+    return;
+  }
+  char message[kTextColumns + 1];
+  snprintf(
+      message, sizeof(message), "Could not save boot_default: %.50s", problem);
+  StatusBarPostMessage(message);
+  SYSTEM_WARN("boot_default_not_saved", Y_LOG_STRING("problem", problem));
+}
+
 static bool TakeVM(uint8_t index) {
   const VMEntry* vm = &g_vms.vms[index];
   char problem[kVMProblemLength + 1];
   if (VMConfigRead(vm->path, &g_vm, problem)) {
     g_has_vm = true;
     SYSTEM_INFO("vm_chosen", Y_LOG_STRING("path", vm->path));
+    SaveBootDefault(vm->path);
     return true;
   }
   char message[kTextColumns + 1];
@@ -1219,19 +1243,18 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
 // Without any VMs, the built-in floppy boots in drive A.
 static void ChooseVM(void) {
   VMListRead(&g_vms);
-  VMSettings settings;
   uint8_t highlighted = 0;
-  const bool settings_read = ReadSettings(&settings, &highlighted);
+  const bool settings_read = ReadSettings(&g_settings, &highlighted);
   if (g_vms.count == 0) {
     return;
   }
-  if (settings_read && settings.boot_delay == 0 && TakeVM(highlighted)) {
+  if (settings_read && g_settings.boot_delay == 0 && TakeVM(highlighted)) {
     return;
   }
   MenuChooseVMs(&g_vms, highlighted);
   const absolute_time_t start_at =
-      make_timeout_time_ms(settings.boot_delay * kMillisecondsPerSecond);
-  bool counting = settings.boot_delay > 0;
+      make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
+  bool counting = g_settings.boot_delay > 0;
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
