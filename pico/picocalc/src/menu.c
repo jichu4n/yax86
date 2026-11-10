@@ -94,7 +94,7 @@ typedef enum DriveItem {
 } DriveItem;
 
 static const char* const kDriveItems[kDriveItemCount] = {
-    [kDriveInsert] = "Insert a disk...",
+    [kDriveInsert] = "Choose disk image...",
     [kDriveEject] = "Eject",
 };
 

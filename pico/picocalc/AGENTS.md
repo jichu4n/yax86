@@ -388,8 +388,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   to it then.
 - **It is a box drawn over the guest's screen**, white on blue in code page
   437's double lined box, a page at a time: Resume, Drive A, Status and
-  Reset; drive A's page, with what is in it, Insert and Eject; the browser;
-  the status page; and a question before a reset.
+  Reset; drive A's page, with what is in it, Choose disk image and Eject;
+  the browser; the status page; and a question before a reset.
 - **The browser starts in the folder of the image in drive A**, with it
   chosen, or in `yax86`. Enter opens a folder or inserts an image and
   closes the menu; Backspace goes up a folder, with the one left chosen,
