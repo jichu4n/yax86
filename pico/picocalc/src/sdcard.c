@@ -42,6 +42,7 @@ enum {
   // next command is one.
   kCommandGoIdle = 0,
   kCommandSendIfCond = 8,
+  kCommandSendCSD = 9,
   kCommandSetBlockLength = 16,
   kCommandReadBlock = 17,
   kCommandWriteBlock = 24,
@@ -75,6 +76,16 @@ enum {
   // addressed by block rather than by byte.
   kOCRHighCapacityByte0 = 0x40,
 
+  // The card specific data register, which CMD9 reads as a 16-byte block. Its
+  // first two bits say which layout the rest has.
+  kCSDBytes = 16,
+  kCSDVersionShift = 6,
+  kCSDVersion1 = 0,
+  kCSDVersion2 = 1,
+  // A version 2.0 card's capacity is C_SIZE + 1 times 512KB, a thousand and
+  // twenty-four blocks.
+  kCSD2BlocksPerUnit = 1024,
+
   // The tokens around a block.
   kTokenStartBlock = 0xFE,
   kDataResponseMask = 0x1F,
@@ -83,6 +94,7 @@ enum {
 };
 
 static bool g_byte_addressed;
+static uint32_t g_block_count;
 static uint32_t g_clock_hz;
 
 static uint8_t Transfer(uint8_t out) {
@@ -175,6 +187,38 @@ static bool WaitForOpCond(uint32_t argument) {
 }
 
 // The sequence in section 7.2.1 of the specification, less MMC.
+static bool ReadData(uint8_t* data, uint32_t length);
+
+// The card's size in blocks, from its card specific data, or 0 if it could not
+// be read or has a layout this does not know.
+static uint32_t ReadBlockCount(void) {
+  uint8_t csd[kCSDBytes];
+  if (SendCommand(kCommandSendCSD, 0) != kR1Ready ||
+      !ReadData(csd, sizeof(csd))) {
+    return 0;
+  }
+  const uint8_t version = csd[0] >> kCSDVersionShift;
+  if (version == kCSDVersion2) {
+    // C_SIZE is bits 69 to 48.
+    const uint32_t c_size =
+        ((uint32_t)(csd[7] & 0x3F) << 16) | ((uint32_t)csd[8] << 8) | csd[9];
+    return (c_size + 1) * kCSD2BlocksPerUnit;
+  }
+  if (version == kCSDVersion1) {
+    // (C_SIZE + 1) << (C_SIZE_MULT + 2) blocks of 2^READ_BL_LEN bytes:
+    // READ_BL_LEN is bits 83 to 80, C_SIZE 73 to 62, C_SIZE_MULT 49 to 47.
+    const uint8_t read_bl_len = csd[5] & 0x0F;
+    const uint32_t c_size = ((uint32_t)(csd[6] & 0x03) << 10) |
+                            ((uint32_t)csd[7] << 2) | (csd[8] >> 6);
+    const uint8_t c_size_mult =
+        (uint8_t)(((csd[9] & 0x03) << 1) | (csd[10] >> 7));
+    const uint8_t shift = (uint8_t)(c_size_mult + 2 + read_bl_len);
+    // In 512-byte blocks: at least 2^9 bytes each.
+    return shift >= 9 ? (c_size + 1) << (shift - 9) : 0;
+  }
+  return 0;
+}
+
 static bool BringUp(void) {
   // At least 74 clocks with CS high, for the card to finish powering up.
   gpio_put(kSdcardPinCS, 1);
@@ -230,6 +274,7 @@ static bool BringUp(void) {
       SendCommand(kCommandSetBlockLength, kSdcardBlockSize) != kR1Ready) {
     return false;
   }
+  g_block_count = ReadBlockCount();
   return true;
 }
 
@@ -243,6 +288,7 @@ bool SdcardIsInserted(void) {
 }
 
 bool SdcardInit(void) {
+  g_block_count = 0;
   spi_init(kSdcardSPI, kSdcardInitHz);
   gpio_set_function(kSdcardPinMISO, GPIO_FUNC_SPI);
   gpio_set_function(kSdcardPinSCK, GPIO_FUNC_SPI);
@@ -263,14 +309,15 @@ bool SdcardInit(void) {
 
 uint32_t SdcardGetClockHz(void) { return g_clock_hz; }
 
+uint32_t SdcardGetBlockCount(void) { return g_block_count; }
+
 static uint32_t Address(uint32_t block) {
   return g_byte_addressed ? block * kSdcardBlockSize : block;
 }
 
-static bool ReadBlock(uint32_t block, uint8_t* data) {
-  if (SendCommand(kCommandReadBlock, Address(block)) != kR1Ready) {
-    return false;
-  }
+// Read the data block a command's R1 is followed by: its start token, length
+// bytes, and the CRC, which is not checked.
+static bool ReadData(uint8_t* data, uint32_t length) {
   const uint64_t deadline = time_us_64() + kSdcardReadTimeoutUs;
   uint8_t token;
   while ((token = Transfer(kSdcardIdleByte)) == kSdcardIdleByte) {
@@ -281,11 +328,18 @@ static bool ReadBlock(uint32_t block, uint8_t* data) {
   if (token != kTokenStartBlock) {
     return false;
   }
-  spi_read_blocking(kSdcardSPI, kSdcardIdleByte, data, kSdcardBlockSize);
+  spi_read_blocking(kSdcardSPI, kSdcardIdleByte, data, length);
   for (uint8_t i = 0; i < kBlockCRCBytes; ++i) {
     Transfer(kSdcardIdleByte);
   }
   return true;
+}
+
+static bool ReadBlock(uint32_t block, uint8_t* data) {
+  if (SendCommand(kCommandReadBlock, Address(block)) != kR1Ready) {
+    return false;
+  }
+  return ReadData(data, kSdcardBlockSize);
 }
 
 static bool WriteBlock(uint32_t block, const uint8_t* data) {

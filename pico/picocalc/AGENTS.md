@@ -491,6 +491,37 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   press` and their releases, and checks it with `screenshot`; the report's
   `menu` group says whether it is open and which page shows.
 
+## The USB device
+
+- **The PicoCalc is one USB device with three functions**, described in
+  `src/usb_descriptors.c`: the serial port (CDC, interfaces 0 and 1), which
+  `pico_stdio_usb` drives; picotool's reset interface (2), from
+  `pico_usb_reset`; and a card reader (3), mass storage, in
+  `src/usb_disk.c`. The serial port and the reset interface are described
+  as `pico_stdio_usb` describes them, with the SDK's vendor and product
+  IDs, so a host finds `/dev/ttyACM*` and `picotool reboot -f` works as
+  before.
+- **A third function means describing the device here**, which
+  `pico_stdio_usb` allows only once the application links `tinyusb_device`
+  itself - and then it turns off three things it otherwise does: starting
+  TinyUSB, running `tud_task()` from a low priority interrupt, and the reset
+  interface. `CMakeLists.txt` turns each back on. **Without the first two
+  the board never appears on USB**, so neither picotool nor the 1200 baud
+  reset can reach it, and only BOOTSEL - the Pico's button held while the
+  cable goes in - brings it back. Before flashing a change to any of this,
+  check the image still calls `tusb_rhport_init` from `stdio_usb_init`.
+- `src/tusb_config.h` configures TinyUSB, and is found ahead of the one
+  `pico_stdio_usb` carries, which configures nothing for an application
+  that links TinyUSB.
+- **The card reader is always there, and for now always empty**: TEST UNIT
+  READY answers NOT READY, MEDIUM NOT PRESENT, so a host sees a removable
+  disk with no media - `sdX` on Linux, 0B. Being there from power on is what
+  lets it take a card later without the device going away, which would take
+  the serial port and the reset interface with it.
+- **The card's size** is read from its CSD register (CMD9) when it is
+  brought up - `SdcardGetBlockCount()`, `sd_blocks` in the report - as the
+  reader has to say how many blocks it holds. FatFs never needed it.
+
 ## Commands over USB
 
 - **A host drives the runtime with commands on the same serial port**, a
