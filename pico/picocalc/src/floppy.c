@@ -13,19 +13,38 @@ enum {
   kOpenBusByte = 0xFF,
 };
 
-static const char kImagePath[] = "yax86/floppy_a.img";
-
 static DiskImage g_images[kFloppyDrives];
-// The paths of images inserted from the menu, which the images point to.
+// The paths of the images, which the images point to.
 static char g_inserted_paths[kFloppyDrives][kFileListMaxPath + 1];
 // Whether drive A holds the floppy built into flash.
 static bool g_built_in;
 
-void FloppyOpen(void) {
-  g_built_in =
-      DiskImageOpen(&g_images[kFloppyDriveA], kImagePath, kImageSize) !=
-      kDiskImageOpen;
-  g_images[kFloppyDriveB].status = kDiskImageEjected;
+void FloppyOpen(
+    const char* const paths[kFloppyDrives], bool built_in,
+    DiskImageStatus opened[kFloppyDrives]) {
+  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+    DiskImage* image = &g_images[drive];
+    if (paths[drive] == NULL || paths[drive][0] == '\0') {
+      image->status = kDiskImageEjected;
+    } else {
+      FileListCopyPath(paths[drive], g_inserted_paths[drive]);
+      DiskImageOpen(image, g_inserted_paths[drive], kImageSize);
+    }
+    opened[drive] = image->status;
+  }
+  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+    if (g_images[drive].status != kDiskImageOpen) {
+      g_images[drive].status = kDiskImageEjected;
+    }
+  }
+  g_built_in = built_in;
+  if (built_in) {
+    // Why drive A has no image on the card, for the status page.
+    const DiskImageStatus card = DiskImageMountCard();
+    DiskImage* image = &g_images[kFloppyDriveA];
+    image->status = card != kDiskImageOpen ? card : kDiskImageNotFound;
+    opened[kFloppyDriveA] = image->status;
+  }
 }
 
 const DiskImage* FloppyGetImage(FloppyDrive drive) { return &g_images[drive]; }
@@ -63,7 +82,12 @@ static void WriteByte(
 void FloppyAttach(YFDCState* fdc) {
   fdc->config.read_image_byte = ReadByte;
   fdc->config.write_image_byte = WriteByte;
-  YFDCInsertDisk(fdc, kFloppyDriveA, &YFDCFormat360KB);
+  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+    if (g_images[drive].status == kDiskImageOpen ||
+        (drive == kFloppyDriveA && g_built_in)) {
+      YFDCInsertDisk(fdc, drive, &YFDCFormat360KB);
+    }
+  }
 }
 
 void FloppyEject(YFDCState* fdc, FloppyDrive drive) {

@@ -1,7 +1,7 @@
 // Everything on the LCD - the guest's screen, the menu over it and the status
 // rows below it - drawn by core 1, which owns the LCD and does nothing else.
 //
-// Core 0 runs the machine and never touches the LCD. It hands core 1 what to
+// Core 0 runs the VM and never touches the LCD. It hands core 1 what to
 // draw: a copy of the guest's screen once a frame, the status rows and the
 // menu as text, and the requests to turn the panel off and on, and to read
 // it back. Each is

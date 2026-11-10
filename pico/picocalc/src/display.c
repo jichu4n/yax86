@@ -375,7 +375,7 @@ bool DisplayOfferFrame(YVideoState* video) {
   const uint64_t start_us = time_us_64();
   YVideoCopyForRender(video, &g_frame, g_frame_vram);
   // The copy is rendered on core 1, so what it logs goes through core 1's own
-  // logger rather than the machine's, which core 0 is using.
+  // logger rather than the VM's, which core 0 is using.
   g_frame.config.logger = &g_render_logger;
   g_frame.config.begin_render_region = BeginRenderRegion;
   g_frame.config.write_pixels = WriteGuestPixels;

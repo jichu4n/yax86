@@ -3,11 +3,12 @@
 //
 //   row 29  messages, a few seconds each, and the menu's keys while it is open
 //   row 30  the drives: each one's letter, lit while it is in use, and image
-//   row 31  the guest's lock flags, its time of day, the menu key, the battery
+//   row 31  the VM's name, the guest's lock flags, its time of day, the
+//           menu key, the battery
 //
 //   Inserted GAMES.IMG in drive A
 //   A:DISK01.IMG  B:empty  C:HDD.IMG
-//                     CAPS NUM SCRL INS     12:34:56     ↑+↑ Menu  [■■■ ] 78%+
+//   DOS33             CAPS NUM SCRL INS     12:34:56     ↑+↑=Menu  [■■■ ] 78%+
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H
 
@@ -19,29 +20,40 @@
 #include "southbridge.h"
 
 enum {
-  // Drives A, B and C.
-  kStatusBarDrives = 3,
+  // Drives A, B, C and D.
+  kStatusBarDrives = 4,
   kStatusBarDriveC = 2,
+  kStatusBarDriveD = 3,
 };
 
 // What the status rows show, gathered by the caller.
 typedef struct StatusBarState {
-  // The drives' images, A, B and C, which are shown when they are open.
-  // Without one, drive A has the floppy built into flash, or is empty once
-  // ejected, drive B is empty, and drive C is not shown.
+  // The drives' images, A to D, which are shown when they are open. Without
+  // one, drive A has the floppy built into flash or is empty, drive B is
+  // empty, and drives C and D are not shown. NULL, before the VM has
+  // drives, shows nothing.
   const DiskImage* drives[kStatusBarDrives];
+  // The VM's name, or NULL without a VM.
+  const char* vm;
+  // Whether a VM is running. Its lock flags, time of day and the menu
+  // key show only while one is: the list at power on has no guest, and the
+  // menu key does nothing there.
+  bool running;
   // The guest BIOS's keyboard flags, at 0040:0017, which hold its lock and
   // insert states.
   uint8_t keyboard_flags;
   // The guest's time of day, in seconds since midnight.
   uint32_t guest_seconds;
   SouthbridgeBattery battery;
-  // How fast the machine has run against real time over the last second, in
+  // How fast the VM has run against real time over the last second, in
   // percent, while it has been falling behind; 0 otherwise.
   uint32_t slow_percent;
   // Keys to show on the message row in place of messages, such as the menu's
-  // while it is open, or NULL.
+  // while it is open, or NULL: Key=Action pairs two spaces apart, the way
+  // MS-DOS's own programs label theirs - "\x18\x19=Move  Enter=Choose".
   const char* hint;
+  // A problem to show in place of the keys, or NULL.
+  const char* problem;
 } StatusBarState;
 
 // Queue a message for the message row, shown for a few seconds after the
