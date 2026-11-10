@@ -3,8 +3,8 @@
 //   id=7 cmd=screen
 //
 // answered by reply lines carrying the same id - see "util - logging" in
-// core/AGENTS.md. Bytes are read without waiting, a few at a time, so that
-// polling costs a batch next to nothing when a host has sent nothing.
+// core/AGENTS.md. Bytes are read without waiting, a few at a time, so that polling
+// costs a batch next to nothing when a host has sent nothing.
 #ifndef YAX86_PICOCALC_COMMAND_H
 #define YAX86_PICOCALC_COMMAND_H
 
