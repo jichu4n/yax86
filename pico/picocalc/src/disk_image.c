@@ -17,15 +17,14 @@ static const char* const kStatusDescriptions[] = {
     [kDiskImageNoFilesystem] = "no FAT volume",
     [kDiskImageNotFound] = "no image",
     [kDiskImageWrongSize] = "image is the wrong size",
+    [kDiskImageEjected] = "ejected",
 };
 
 static FATFS g_volume;
 static bool g_mount_tried;
 static DiskImageStatus g_mount_status;
 
-// Mount the card's volume, the first time this is called, and return whether
-// it is mounted.
-static DiskImageStatus Mount(void) {
+DiskImageStatus DiskImageMountCard(void) {
   if (g_mount_tried) {
     return g_mount_status;
   }
@@ -58,7 +57,7 @@ static bool MapClusters(DiskImage* image) {
 }
 
 static DiskImageStatus Open(DiskImage* image, const char* path, uint32_t size) {
-  const DiskImageStatus mounted = Mount();
+  const DiskImageStatus mounted = DiskImageMountCard();
   if (mounted != kDiskImageOpen) {
     return mounted;
   }
@@ -84,6 +83,31 @@ DiskImageStatus DiskImageOpen(
 
 const char* DiskImageDescribeStatus(DiskImageStatus status) {
   return kStatusDescriptions[status];
+}
+
+void DiskImageName(const char* path, char name[kDiskImageNameLength + 1]) {
+  const char* start = path;
+  for (const char* c = path; *c != '\0'; ++c) {
+    if (*c == '/') {
+      start = c + 1;
+    }
+  }
+  uint8_t length = 0;
+  while (start[length] != '\0') {
+    ++length;
+  }
+  const uint8_t kept =
+      length > kDiskImageNameLength ? kDiskImageNameLength - 1 : length;
+  for (uint8_t i = 0; i < kept; ++i) {
+    const char c = start[i];
+    name[i] = (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+  }
+  if (length > kDiskImageNameLength) {
+    name[kept] = '~';
+    name[kept + 1] = '\0';
+  } else {
+    name[kept] = '\0';
+  }
 }
 
 // Move the card's file position to a sector of the image.
@@ -147,4 +171,13 @@ void DiskImageWriteByte(DiskImage* image, uint32_t offset, uint8_t value) {
   if (offset % kSectorSize == kSectorSize - 1) {
     WriteBackSector(image);
   }
+}
+
+void DiskImageClose(DiskImage* image) {
+  if (image->status == kDiskImageOpen) {
+    WriteBackSector(image);
+    f_close(&image->file);
+  }
+  image->status = kDiskImageEjected;
+  image->sector_dirty = false;
 }
