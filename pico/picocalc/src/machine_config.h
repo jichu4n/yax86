@@ -1,10 +1,11 @@
-// Machines: a configuration file each, naming the images in the machine's
-// drives. The list at power on is every `.CFG` file in `yax86/machines` on
-// the SD card, and the default machine if it is elsewhere. A machine is
-// named for its file: `DOS33.CFG` is the machine DOS33.
+// Machines: a folder each in `yax86/vm`, holding a configuration file,
+// `vm.cfg`, that names the images in the machine's drives, and whichever of
+// those images are its own. The list at power on is every folder in
+// `yax86/vm` with a `vm.cfg`, and the default machine if it is elsewhere. A
+// machine is named for its folder: `yax86/vm/dos330` is the machine DOS330.
 //
-//   drive_a=../MSDOS330/DISK01.IMG
-//   drive_c=DOS33.IMG
+//   drive_a=../../images/msdos330/disk01.img
+//   drive_c=hdd.img
 //   drive_d=/shared/tools.img
 //
 // Each line is logfmt - any number of key=value pairs - and a line starting
@@ -14,14 +15,15 @@
 //
 // The card's own settings are `yax86/yax86.cfg`, in the same form:
 //
-//   boot_default=machines/DOS33.CFG
+//   boot_default=vm/dos330/vm.cfg
 //   boot_delay=5
 //
 // boot_default is the path of a machine's file, relative to the folder
 // the settings are in or, with a leading /, to the card's root. It is the
 // machine the list highlights, and starts by itself after boot_delay seconds
-// with no key pressed; 0 starts it at once. Without settings, the first
-// machine listed is the default, after 5 seconds.
+// with no key pressed; 0 starts it at once. Without settings, or with a
+// boot_default that is not there, the first machine listed is the default,
+// after 5 seconds.
 #ifndef YAX86_PICOCALC_MACHINE_CONFIG_H
 #define YAX86_PICOCALC_MACHINE_CONFIG_H
 
@@ -41,8 +43,8 @@ enum {
 
   // The most machines listed: the first found past this are left out.
   kMachineListMax = 16,
-  // A machine's name: the file's, without its .CFG.
-  kMachineNameLength = 8,
+  // A machine's name: its folder's, an 8.3 name.
+  kMachineNameLength = 12,
   // The longest configuration file read, and the longest problem described.
   kMachineConfigMaxBytes = 2048,
   kMachineProblemLength = 60,
@@ -78,7 +80,7 @@ typedef struct MachineConfig {
   char drives[kMachineDrives][kFileListMaxPath + 1];
 } MachineConfig;
 
-// List the machines in `yax86/machines`, sorted by name. An empty list, with
+// List the machines in `yax86/vm`, sorted by name. An empty list, with
 // no card or no such folder, means there are none to choose from.
 void MachineListRead(MachineList* list);
 
@@ -96,7 +98,8 @@ bool MachineConfigRead(
 
 // Read the card's settings, which without `yax86/yax86.cfg` are the
 // defaults. Returns false, with the problem described, if the file has a line
-// that is not understood; settings then holds what was understood before it.
+// that is not understood, settings then holding what was understood before
+// it; or if boot_default names no file, which is then left empty.
 bool MachineSettingsRead(
     MachineSettings* settings, char problem[kMachineProblemLength + 1]);
 

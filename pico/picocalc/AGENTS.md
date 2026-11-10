@@ -268,33 +268,36 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## Machines
 
-- **A machine is a configuration file naming its drives' images**,
-  `src/machine_config.c`. Every `.CFG` in `yax86/machines` is one, named
-  for the file. Each line is logfmt, `#` starts a comment, and a path is
+- **A machine is a folder in `yax86/vm`**, `src/machine_config.c`,
+  holding `vm.cfg`, which names its drives' images, and the images that
+  are its own. Every folder there with a `vm.cfg` is one, named for the
+  folder. Each line is logfmt, `#` starts a comment, and a path is
   relative to the file's folder - `..` followed - or to the card's root
   with a leading `/`, so machines can share images and keep their own:
 
   ```
-  # yax86/machines/DOS33.CFG
-  drive_a=../MSDOS330/DISK01.IMG
-  drive_b=../MSDOS330/DISK02.IMG
-  drive_c=DOS33.IMG
+  # yax86/vm/dos330/vm.cfg
+  drive_a=../../images/msdos330/disk01.img
+  drive_b=../../images/msdos330/disk02.img
+  drive_c=hdd.img
   ```
 
   `drive_a` and `drive_b` are 360KB floppies, `drive_c` and `drive_d` the
   hard disk controller's master and slave, each the core's 10MB drive. A
   drive not named is empty.
 - **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the path
-  of the machine to highlight and start, relative to its own folder or the
-  root, and listed even when it is outside `yax86/machines`; and
+  of the `vm.cfg` to highlight and start, relative to its own folder or the
+  root, and listed even when it is outside `yax86/vm`; and
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
   start the default without showing the list.
 - **At power on, with machines on the card, the menu lists them**, before
   the machine exists: the countdown runs on the list's bottom edge until a
   key is pressed, then the default starts. A file that does not read keeps
-  the list up with its problem on the keys row - `BROKEN.CFG: line 2: no
+  the list up with its problem on the keys row - `BROKEN: line 2: no
   setting drive_e` - as do bad settings, which start the countdown anyway
-  with what was read. The countdown is what lets a board left alone, or a
+  with what was read. A `boot_default` naming no file is one, and the
+  first machine listed is the default instead, so a mistyped path still
+  boots. The countdown is what lets a board left alone, or a
   host measuring the boot, still boot.
 - **A machine's image that does not open leaves its drive empty**, and the
   message row says why after the start; so does one named for two drives,

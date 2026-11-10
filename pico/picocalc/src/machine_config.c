@@ -11,8 +11,8 @@ enum {
   kMaxPairs = 8,
 };
 
-static const char kMachinesFolder[] = "yax86/machines";
-static const char kExtension[] = ".CFG";
+static const char kMachinesFolder[] = "yax86/vm";
+static const char kConfigFile[] = "vm.cfg";
 static const char kSettingsFolder[] = "yax86";
 static const char kSettingsPath[] = "yax86/yax86.cfg";
 
@@ -35,46 +35,38 @@ static bool SameText(const char* a, const char* b) {
   return *a == *b;
 }
 
-// A machine's name, from its file's: the name without its folders or
-// extension, in capitals, cut to kMachineNameLength.
-static void NameOf(const char* path, char name[kMachineNameLength + 1]) {
-  const char* start = path;
-  for (const char* c = path; *c != '\0'; ++c) {
-    if (*c == '/') {
-      start = c + 1;
-    }
+// Copy a name in capitals, cut to kMachineNameLength.
+static void CopyName(
+    const char* from, uint16_t length, char name[kMachineNameLength + 1]) {
+  if (length > kMachineNameLength) {
+    length = kMachineNameLength;
   }
-  uint8_t length = 0;
-  while (start[length] != '\0' && start[length] != '.' &&
-         length < kMachineNameLength) {
-    name[length] = Upper(start[length]);
-    ++length;
+  for (uint16_t i = 0; i < length; ++i) {
+    name[i] = Upper(from[i]);
   }
   name[length] = '\0';
 }
 
-// The machine a file in the machines folder is, if it is one: its name
-// without the extension, from an 8.3 name ending in .CFG.
-static bool MachineName(const char* file, char name[kMachineNameLength + 1]) {
-  uint8_t length = 0;
-  while (file[length] != '\0' && file[length] != '.') {
-    if (length == kMachineNameLength) {
-      return false;
-    }
-    name[length] = Upper(file[length]);
-    ++length;
-  }
-  name[length] = '\0';
-  if (length == 0) {
-    return false;
-  }
-  const char* extension = &file[length];
-  for (uint8_t i = 0; i < sizeof(kExtension); ++i) {
-    if (Upper(extension[i]) != kExtension[i]) {
-      return false;
+// A machine's name, from its file's path: the name of the folder the file is
+// in, or the file's own without a folder.
+static void NameOf(const char* path, char name[kMachineNameLength + 1]) {
+  const char* folder = path;
+  const char* file = path;
+  for (const char* c = path; *c != '\0'; ++c) {
+    if (*c == '/') {
+      folder = file;
+      file = c + 1;
     }
   }
-  return true;
+  if (file == path) {
+    const char* end = file;
+    while (*end != '\0' && *end != '.') {
+      ++end;
+    }
+    CopyName(file, (uint16_t)(end - file), name);
+    return;
+  }
+  CopyName(folder, (uint16_t)(file - 1 - folder), name);
 }
 
 static bool NamesInOrder(const char* a, const char* b) {
@@ -127,13 +119,23 @@ void MachineListRead(MachineList* list) {
   }
   FILINFO info;
   while (f_readdir(&folder, &info) == FR_OK && info.fname[0] != '\0') {
-    MachineEntry entry;
-    if ((info.fattrib & (AM_DIR | AM_HID | AM_SYS)) ||
-        !MachineName(info.fname, entry.name)) {
+    if (!(info.fattrib & AM_DIR) || (info.fattrib & (AM_HID | AM_SYS)) ||
+        info.fname[0] == '.') {
       continue;
     }
+    MachineEntry entry;
     snprintf(
-        entry.path, sizeof(entry.path), "%s/%s", kMachinesFolder, info.fname);
+        entry.path, sizeof(entry.path), "%s/%s/%s", kMachinesFolder, info.fname,
+        kConfigFile);
+    FILINFO config;
+    if (f_stat(entry.path, &config) != FR_OK || (config.fattrib & AM_DIR)) {
+      continue;
+    }
+    uint16_t length = 0;
+    while (info.fname[length] != '\0') {
+      ++length;
+    }
+    CopyName(info.fname, length, entry.name);
     Insert(list, &entry);
   }
   f_closedir(&folder);
@@ -383,5 +385,18 @@ bool MachineSettingsRead(
   if (result == kReadMissing) {
     problem[0] = '\0';
   }
-  return result != kReadProblem;
+  if (result == kReadProblem) {
+    return false;
+  }
+  FILINFO info;
+  if (settings->boot_default[0] != '\0' &&
+      (f_stat(settings->boot_default, &info) != FR_OK ||
+       (info.fattrib & AM_DIR))) {
+    snprintf(
+        problem, kMachineProblemLength + 1, "no boot_default %.44s",
+        settings->boot_default);
+    settings->boot_default[0] = '\0';
+    return false;
+  }
+  return true;
 }

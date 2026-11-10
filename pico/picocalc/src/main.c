@@ -1180,10 +1180,8 @@ static bool TakeMachine(uint8_t index) {
     SYSTEM_INFO("machine_chosen", Y_LOG_STRING("path", machine->path));
     return true;
   }
-  char file[kDiskImageNameLength + 1];
-  DiskImageName(machine->path, file);
   char message[kTextColumns + 1];
-  snprintf(message, sizeof(message), "%s: %s", file, problem);
+  snprintf(message, sizeof(message), "%s: %s", machine->name, problem);
   MenuSetProblem(message);
   SYSTEM_WARN(
       "machine_config_problem", Y_LOG_STRING("path", machine->path),
