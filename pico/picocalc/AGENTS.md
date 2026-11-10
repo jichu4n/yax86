@@ -266,8 +266,19 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Drive A is `yax86/floppy_a.img`**, 360KB on the card's FAT volume, and
   guest writes go to the card. Without one it is the read-only floppy in
   flash, and the status page's Disk line says why: no card, no answer, no FAT
-  volume, no image, or the wrong size. The card is looked at once, at power
+  volume, no image, or the wrong size. The card is mounted once, at power
   on.
+- **The menu changes the disk in drive A** for any 360KB image on the card,
+  or ejects it. `DiskImageClose()` writes back the sector held and closes
+  the file; the FDC then reports the drive not ready, which DOS shows as
+  "General Failure ... Abort, Retry, Fail?". The built-in floppy is not
+  offered again once ejected - a reset brings it back. Nothing remembers the
+  image inserted: the next power on starts from `yax86/floppy_a.img` again.
+- `src/file_list.c` lists a folder for the menu's browser: `..`, folders,
+  then files exactly the image size, each by name, with hidden and system
+  entries left out. It holds 64, and says when a folder had more. Names are
+  8.3, as FatFs is built without long names, and paths are FatFs's, with no
+  leading slash.
 - **The hard disk is `yax86/hdd.img`**, attached as master only if present:
   the core's 10MB drive, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hdd.img bs=512
@@ -345,8 +356,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   anything on the rows below. While the menu is open the row shows its keys, and while the machine
   is dropping time it shows `SLOW` and its speed in yellow.
 - **Drives** follow each other two columns apart: the image's file name,
-  without its folders, in capitals, or `built-in` for the floppy in flash. A
-  drive with no image is left out. The card keeps 8.3 names, so a name fits;
+  without its folders, in capitals, `built-in` for the floppy in flash, or
+  `empty` for drive A once ejected. Drive C with no image is left out. The card keeps 8.3 names, so a name fits;
   a longer one would keep 11 characters and end in `~`. The letter is the
   drive's light, green for 0.2 seconds after a sector is read or written.
 - **Indicators**: the guest BIOS's own lock and insert flags, at
@@ -366,7 +377,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Both Shift keys held together open it**, which nothing in DOS does and
   typing never does, and close it again. `src/menu.c` keeps its state and
-  draws it; `main.c` carries out what its items do.
+  draws it; `main.c` carries out what its items do, through the callbacks
+  in `MenuConfig`.
 - **The machine is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,
@@ -375,8 +387,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   not see them come up while the menu has the keyboard, so they are released
   to it then.
 - **It is a box drawn over the guest's screen**, white on blue in code page
-  437's double lined box, a page at a time: Resume, Status and Reset, the
-  status page, and a question before a reset. Up and Down move, Enter or
+  437's double lined box, a page at a time: Resume, Drive A, Status and
+  Reset; drive A's page, with what is in it, Insert and Eject; the browser;
+  the status page; and a question before a reset.
+- **The browser starts in the folder of the image in drive A**, with it
+  chosen, or in `yax86`. Enter opens a folder or inserts an image and
+  closes the menu; Backspace goes up a folder, with the one left chosen,
+  and from the root back to drive A's page; Page Up and Down move a page. Up and Down move, Enter or
   Space chooses, Esc or Backspace goes back. A box of a new size has the
   guest's screen drawn in full under it first, and closing draws it in full,
   so nothing of a box is left behind.

@@ -15,6 +15,8 @@ enum {
 static const char kImagePath[] = "yax86/floppy_a.img";
 
 static DiskImage g_image;
+// The path of an image inserted from the menu, which the image points to.
+static char g_inserted_path[kFloppyMaxPath + 1];
 
 void FloppyOpen(void) { DiskImageOpen(&g_image, kImagePath, kImageSize); }
 
@@ -49,4 +51,28 @@ void FloppyInsert(YFDCState* fdc) {
     fdc->config.write_image_byte = BuiltInWriteByte;
   }
   YFDCInsertDisk(fdc, 0, &YFDCFormat360KB);
+}
+
+void FloppyEject(YFDCState* fdc) {
+  DiskImageClose(&g_image);
+  YFDCEjectDisk(fdc, 0);
+}
+
+DiskImageStatus FloppyInsertImage(YFDCState* fdc, const char* path) {
+  FloppyEject(fdc);
+  uint16_t length = 0;
+  while (path[length] != '\0' && length < kFloppyMaxPath) {
+    g_inserted_path[length] = path[length];
+    ++length;
+  }
+  g_inserted_path[length] = '\0';
+  const DiskImageStatus status =
+      DiskImageOpen(&g_image, g_inserted_path, kImageSize);
+  if (status != kDiskImageOpen) {
+    // Nothing to fall back to: the drive stays empty.
+    g_image.status = kDiskImageEjected;
+    return status;
+  }
+  FloppyInsert(fdc);
+  return status;
 }

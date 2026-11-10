@@ -22,6 +22,8 @@ typedef enum DiskImageStatus {
   kDiskImageNoFilesystem,
   kDiskImageNotFound,
   kDiskImageWrongSize,
+  // Closed with DiskImageClose(): a drive with no disk in it.
+  kDiskImageEjected,
 } DiskImageStatus;
 
 // What reading and writing an image has cost, for the report.
@@ -41,6 +43,9 @@ enum {
   // 64 covers an image in up to 31 pieces, and a file copied onto a card is
   // usually in one.
   kDiskImageLinkMapEntries = 64,
+  // The longest name DiskImageName() gives: an 8.3 name, which is all the
+  // card's file system keeps.
+  kDiskImageNameLength = 12,
 };
 
 typedef struct DiskImage {
@@ -71,8 +76,21 @@ typedef struct DiskImage {
 DiskImageStatus DiskImageOpen(
     DiskImage* image, const char* path, uint32_t size);
 
-// A few words on why an image did not open, for the status line.
+// A few words on why an image did not open, for the status page.
 const char* DiskImageDescribeStatus(DiskImageStatus status);
+
+// Close an image, writing back the sector the guest was part way through
+// writing, if any, and leave it ejected.
+void DiskImageClose(DiskImage* image);
+
+// Mount the card's volume, the first time an image or this asks, and return
+// whether it is mounted: kDiskImageOpen if it is, and why not if it is not.
+DiskImageStatus DiskImageMountCard(void);
+
+// An image's file name, without its folders, in capitals, as DOS shows a
+// name. A name too long for kDiskImageNameLength keeps its first characters
+// and ends in ~, as DOS shortens a long name.
+void DiskImageName(const char* path, char name[kDiskImageNameLength + 1]);
 
 // Read or write a byte of an open image. A read from beyond the image, or
 // from a sector that could not be read, returns 0xFF; a write beyond it is

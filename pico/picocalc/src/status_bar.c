@@ -16,11 +16,8 @@ enum {
   kAttrBatteryHigh = 0x0A,
   kAttrBatteryLow = 0x0C,
 
-  // The drives follow each other along their row, this many columns apart,
-  // and a drive's image name is at most this long: an 8.3 name, which is all
-  // the card's file system keeps.
+  // The drives follow each other along their row, this many columns apart.
   kDriveGapColumns = 2,
-  kDriveNameColumns = 12,
   // How long a drive's light stays on after it was last used, so that a
   // single sector shows.
   kDriveLightUs = 200 * 1000,
@@ -150,34 +147,6 @@ static uint8_t PutChar(
   return Put(row, column, text, attr);
 }
 
-// An image's file name, without its folders, in capitals, as DOS shows a
-// name. A name too long for a drive's slot keeps its first characters and
-// ends in ~, as DOS shortens a long name.
-static void ImageName(const char* path, char name[kDriveNameColumns + 1]) {
-  const char* start = path;
-  for (const char* c = path; *c != '\0'; ++c) {
-    if (*c == '/') {
-      start = c + 1;
-    }
-  }
-  uint8_t length = 0;
-  while (start[length] != '\0') {
-    ++length;
-  }
-  const uint8_t kept =
-      length > kDriveNameColumns ? kDriveNameColumns - 1 : length;
-  for (uint8_t i = 0; i < kept; ++i) {
-    const char c = start[i];
-    name[i] = (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
-  }
-  if (length > kDriveNameColumns) {
-    name[kept] = '~';
-    name[kept + 1] = '\0';
-  } else {
-    name[kept] = '\0';
-  }
-}
-
 // Whether a drive's light is on at now_us, which it is for a while after the
 // image last read or wrote a sector.
 static bool DriveLit(
@@ -203,11 +172,13 @@ static uint8_t PutDrive(
   column = PutChar(row, column, letter, lit ? kAttrLit : kAttrNormal);
   column = PutChar(row, column, ':', kAttrNormal);
   if (open) {
-    char name[kDriveNameColumns + 1];
-    ImageName(image->path, name);
+    char name[kDiskImageNameLength + 1];
+    DiskImageName(image->path, name);
     return Put(row, column, name, kAttrNormal);
   }
-  return Put(row, column, "built-in", kAttrNormal);
+  return Put(
+      row, column, image->status == kDiskImageEjected ? "empty" : "built-in",
+      kAttrNormal);
 }
 
 static void ComposeMessages(

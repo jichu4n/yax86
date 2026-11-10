@@ -2,7 +2,8 @@
 // does and typing never does. The machine is paused while it is open.
 //
 // It is a box drawn over the guest's screen, with a page at a time: the main
-// page's items, the status page, and a question before a reset. Up and Down
+// page's items, drive A's page and the browser that finds it an image, the
+// status page, and a question before a reset. Up and Down
 // move, Enter or Space chooses, and Esc or Backspace goes back a page, or
 // closes the menu from the main one. Both Shift keys again close it too.
 //
@@ -14,6 +15,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "disk_image.h"
 #include "southbridge.h"
 
 enum {
@@ -38,6 +40,11 @@ typedef struct MenuConfig {
   // changes size, before drawing the new one, so that nothing of the old one
   // is left showing.
   bool (*redraw_guest)(void);
+  // Drive A's image, to show what is in the drive and where the browser
+  // starts; take the disk out; and put the image at a path in, in its place.
+  const DiskImage* (*drive_a)(void);
+  void (*eject_drive_a)(void);
+  void (*insert_drive_a)(const char* path);
 } MenuConfig;
 
 // What a key did to the menu.

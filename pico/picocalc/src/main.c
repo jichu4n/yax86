@@ -544,6 +544,7 @@ static void ReplyDiskImage(
   REPLY_GROUP(
       command, group,
       Y_LOG_STRING("image", DiskImageDescribeStatus(image->status)),
+      Y_LOG_STRING("path", image->path != NULL ? image->path : ""),
       Y_LOG_BOOL("fast_seek", image->fast_seek),
       Y_LOG_UINT("reads", stats->sector_reads),
       Y_LOG_UINT("writes", stats->sector_writes),
@@ -915,6 +916,34 @@ static void ResetMachine(void) {
   }
 }
 
+// Take the disk out of drive A, and say so.
+static void EjectDriveA(void) {
+  FloppyEject(&g_platform.fdc);
+  StatusBarPostMessage("Ejected the disk from drive A");
+  DISK_INFO("ejected", Y_LOG_STRING("drive", "a"));
+}
+
+// Put an image in drive A, and say whether it went in.
+static void InsertDriveA(const char* path) {
+  const DiskImageStatus status = FloppyInsertImage(&g_platform.fdc, path);
+  char name[kDiskImageNameLength + 1];
+  DiskImageName(path, name);
+  char message[kTextColumns + 1];
+  if (status == kDiskImageOpen) {
+    snprintf(message, sizeof(message), "Inserted %s in drive A", name);
+    DISK_INFO(
+        "inserted", Y_LOG_STRING("drive", "a"), Y_LOG_STRING("path", path));
+  } else {
+    snprintf(
+        message, sizeof(message), "Could not insert %s: %s", name,
+        DiskImageDescribeStatus(status));
+    DISK_WARN(
+        "insert_failed", Y_LOG_STRING("drive", "a"), Y_LOG_STRING("path", path),
+        Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
+  }
+  StatusBarPostMessage(message);
+}
+
 // Real time goes on while the machine is paused and emulated time does not,
 // so on resuming the two are made to agree again from now, rather than the
 // machine being run flat out to catch up a pause it was meant to take.
@@ -1121,6 +1150,9 @@ int main(void) {
       .describe_status = DescribeStatus,
       .reset = ResetMachine,
       .redraw_guest = RedrawGuest,
+      .drive_a = FloppyGetImage,
+      .eject_drive_a = EjectDriveA,
+      .insert_drive_a = InsertDriveA,
   };
   MenuInit(&menu_config);
 
