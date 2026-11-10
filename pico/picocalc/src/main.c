@@ -597,6 +597,7 @@ static void ReplyReport(const Command* command) {
       Y_LOG_STRING("overclock", kOverclockNames[g_status.overclock]),
       Y_LOG_UINT("lcd_spi_hz", g_status.lcd_spi_hz),
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
+      Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
       Y_LOG_STRING("keyboard_fw", version),
       Y_LOG_UINT("guest_ram_kb", kGuestRAMSize / 1024));
   REPLY_GROUP(command, "boot", BOOT_FIELDS());

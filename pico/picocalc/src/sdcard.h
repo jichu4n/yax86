@@ -29,4 +29,8 @@ bool SdcardSync(void);
 // The serial clock the card runs at once it is up, in Hz.
 uint32_t SdcardGetClockHz(void);
 
+// The card's size in 512-byte blocks, read from its card specific data
+// register when it was brought up, or 0 if that could not be read.
+uint32_t SdcardGetBlockCount(void);
+
 #endif  // YAX86_PICOCALC_SDCARD_H

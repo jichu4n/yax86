@@ -137,6 +137,8 @@ add_executable(yax86_picocalc
     src/status_bar.c
     src/text.c
     src/typing.c
+    src/usb_descriptors.c
+    src/usb_disk.c
     "${fatfs_dir}/ff.c"
     "${floppy_data_prefix}.c"
     "${YAX86_ROOT}/core/yax86_core.c"
@@ -153,6 +155,19 @@ target_include_directories(yax86_picocalc PRIVATE
 target_compile_definitions(yax86_picocalc PRIVATE
     YAX86_PICOCALC_DRAW_SCREEN=${YAX86_PICOCALC_DRAW_SCREEN}
     YAX86_PICOCALC_SYS_CLK_KHZ=${sys_clk_khz}
+    # What pico_usb_reset gives a device it describes itself, and turns off for
+    # one described by the application: picotool's reset interface, with the
+    # Microsoft OS 2.0 descriptor Windows needs to use it without a driver, and
+    # a reset into BOOTSEL when the serial port is opened at 1200 baud.
+    PICO_ENABLE_USB_RESET_VIA_VENDOR_INTERFACE=1
+    PICO_USB_RESET_SUPPORT_MS_OS_20_DESCRIPTOR=1
+    PICO_USB_RESET_MS_OS_20_DESCRIPTOR_ITF=2
+    PICO_ENABLE_USB_RESET_VIA_BAUD_RATE=1
+    # And what pico_stdio_usb does for a device it describes, and leaves to the
+    # application otherwise: starting TinyUSB, and running its task from a low
+    # priority interrupt. Without them the board never appears on USB at all.
+    PICO_STDIO_USB_ENABLE_TINYUSB_INIT=1
+    PICO_STDIO_USB_ENABLE_IRQ_BACKGROUND_TASK=1
 )
 
 # Place the emulator's hot path in SRAM, with the same header pico/bench
@@ -171,6 +186,10 @@ target_link_libraries(yax86_picocalc PRIVATE
     hardware_spi
     hardware_vreg
     hardware_watchdog
+    pico_unique_id
+    # Linked directly, rather than only through pico_stdio_usb, so that the
+    # USB device is ours to describe - see src/usb_descriptors.c.
+    tinyusb_device
 )
 
 target_link_options(yax86_picocalc PRIVATE -Wl,--print-memory-usage)
