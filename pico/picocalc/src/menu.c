@@ -24,8 +24,8 @@ enum {
   // The browser's rows of entries, which with its edges fill the most rows a
   // box can have.
   kBrowseRows = kDisplayMenuMaxRows - 2,
-  // Where an entry's note starts on its row: a folder's <DIR>, and the image
-  // in the drive's mark.
+  // Where an entry's note starts on its row: a folder's <DIR>, and which
+  // drive an image is in.
   kBrowseNoteColumn = 18,
 
   // A page's box: the main page and the question are narrow, centered on the
@@ -62,13 +62,14 @@ typedef enum MenuPage {
   kMenuPageMain = 0,
   kMenuPageStatus,
   kMenuPageReset,
-  kMenuPageDriveA,
+  // The page of the drive in g_drive.
+  kMenuPageDrive,
   kMenuPageBrowse,
 } MenuPage;
 
 static const char* const kPageNames[] = {
     [kMenuPageMain] = "main",     [kMenuPageStatus] = "status",
-    [kMenuPageReset] = "reset",   [kMenuPageDriveA] = "drive_a",
+    [kMenuPageReset] = "reset",   [kMenuPageDrive] = "drive",
     [kMenuPageBrowse] = "browse",
 };
 
@@ -80,7 +81,9 @@ typedef struct MenuItem {
 } MenuItem;
 
 typedef enum MainItem {
+  // The drives' items, in the order of FloppyDrive.
   kMainDriveA = 0,
+  kMainDriveB,
   kMainStatus,
   kMainReset,
   kMainItemCount,
@@ -88,6 +91,7 @@ typedef enum MainItem {
 
 static const MenuItem kMainItems[kMainItemCount] = {
     [kMainDriveA] = {"Drive A", true},
+    [kMainDriveB] = {"Drive B", true},
     [kMainStatus] = {"Status", true},
     [kMainReset] = {"Reset", false},
 };
@@ -113,6 +117,8 @@ static const MenuItem kResetItems[kResetItemCount] = {
 static MenuConfig g_config;
 static bool g_open;
 static MenuPage g_page;
+// The drive whose page or browser shows.
+static FloppyDrive g_drive;
 static uint8_t g_chosen;
 // Whether what is on the panel is out of date, and when the status page was
 // last drawn.
@@ -134,7 +140,14 @@ void MenuInit(const MenuConfig* config) { g_config = *config; }
 
 bool MenuIsOpen(void) { return g_open; }
 
-const char* MenuPageName(void) { return kPageNames[g_page]; }
+const char* MenuPageName(void) {
+  if (g_page == kMenuPageDrive) {
+    return g_drive == kFloppyDriveA ? "drive_a" : "drive_b";
+  }
+  return kPageNames[g_page];
+}
+
+static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
 
 const char* MenuHint(void) {
   if (g_page == kMenuPageStatus) {
@@ -152,16 +165,7 @@ static char Upper(char c) {
   return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
 }
 
-// Whether two paths name the same file. The card's file system ignores case.
-static bool SamePath(const char* a, const char* b) {
-  while (*a != '\0' && Upper(*a) == Upper(*b)) {
-    ++a;
-    ++b;
-  }
-  return *a == '\0' && *b == '\0';
-}
-
-// Show the browser on a folder, with the image in drive A chosen if it is
+// Show the browser on a folder, with the image in the drive chosen if it is
 // there.
 static void Browse(const char* path) {
   FileListRead(&g_list, path, kFloppyImageSize);
@@ -169,7 +173,7 @@ static void Browse(const char* path) {
   g_chosen = 0;
   g_list_top = 0;
   g_dirty = true;
-  const DiskImage* image = g_config.drive_a();
+  const DiskImage* image = g_config.drive(g_drive);
   if (image->status != kDiskImageOpen) {
     return;
   }
@@ -177,16 +181,22 @@ static void Browse(const char* path) {
   for (uint8_t i = 0; i < g_list.count; ++i) {
     if (g_list.entries[i].kind == kFileListImage &&
         FileListEntryPath(&g_list, &g_list.entries[i], path_of_entry) &&
-        SamePath(path_of_entry, image->path)) {
+        FileListSamePath(path_of_entry, image->path)) {
       g_chosen = i;
       ScrollToChosen();
     }
   }
 }
 
-// The folder the browser starts in: drive A's image's, or yax86.
+// The folder the browser starts in: that of the image in the drive, or else
+// of the one in the other drive - the next disk of a set is likely beside
+// it - or else yax86.
 static void StartBrowsing(void) {
-  const DiskImage* image = g_config.drive_a();
+  const DiskImage* image = g_config.drive(g_drive);
+  if (image->status != kDiskImageOpen) {
+    image = g_config.drive(
+        g_drive == kFloppyDriveA ? kFloppyDriveB : kFloppyDriveA);
+  }
   char folder[kFileListMaxPath + 1];
   if (image->status == kDiskImageOpen) {
     FileListFolderOf(image->path, folder);
@@ -221,7 +231,7 @@ static void BrowseUp(void) {
   for (uint8_t i = 0; i < g_list.count; ++i) {
     if (g_list.entries[i].kind == kFileListFolder &&
         FileListEntryPath(&g_list, &g_list.entries[i], path_of_entry) &&
-        SamePath(path_of_entry, left)) {
+        FileListSamePath(path_of_entry, left)) {
       g_chosen = i;
       ScrollToChosen();
     }
@@ -234,12 +244,12 @@ static void ShowPage(MenuPage page, uint8_t chosen) {
   g_dirty = true;
 }
 
-static bool DriveAEmpty(void) {
-  return g_config.drive_a()->status == kDiskImageEjected;
+static bool DriveEmpty(void) {
+  return g_config.drive(g_drive)->status == kDiskImageEjected;
 }
 
 static uint8_t DriveItemCount(void) {
-  return DriveAEmpty() ? kDriveEject : kDriveItemCount;
+  return DriveEmpty() ? kDriveEject : kDriveItemCount;
 }
 
 static uint8_t PageItemCount(void) {
@@ -248,7 +258,7 @@ static uint8_t PageItemCount(void) {
       return kMainItemCount;
     case kMenuPageReset:
       return kResetItemCount;
-    case kMenuPageDriveA:
+    case kMenuPageDrive:
       return DriveItemCount();
     case kMenuPageBrowse:
       return g_list.count;
@@ -266,13 +276,13 @@ static MenuAction Back(void) {
   }
   switch (g_page) {
     case kMenuPageBrowse:
-      ShowPage(kMenuPageDriveA, kDriveInsert);
+      ShowPage(kMenuPageDrive, kDriveInsert);
       break;
     case kMenuPageReset:
       ShowPage(kMenuPageMain, kMainReset);
       break;
-    case kMenuPageDriveA:
-      ShowPage(kMenuPageMain, kMainDriveA);
+    case kMenuPageDrive:
+      ShowPage(kMenuPageMain, (uint8_t)(kMainDriveA + g_drive));
       break;
     case kMenuPageStatus:
     case kMenuPageMain:
@@ -283,7 +293,7 @@ static MenuAction Back(void) {
 }
 
 // Open the chosen entry of the browser: a folder to look in, or an image to
-// put in drive A, which closes the menu.
+// put in the drive, which closes the menu.
 static MenuAction OpenEntry(void) {
   if (g_chosen >= g_list.count) {
     return kMenuActionNone;
@@ -301,7 +311,7 @@ static MenuAction OpenEntry(void) {
     Browse(path);
     return kMenuActionNone;
   }
-  g_config.insert_drive_a(path);
+  g_config.insert_drive(g_drive, path);
   g_open = false;
   return kMenuActionClosed;
 }
@@ -311,7 +321,9 @@ static MenuAction Choose(void) {
     case kMenuPageMain:
       switch ((MainItem)g_chosen) {
         case kMainDriveA:
-          ShowPage(kMenuPageDriveA, kDriveInsert);
+        case kMainDriveB:
+          g_drive = (FloppyDrive)(g_chosen - kMainDriveA);
+          ShowPage(kMenuPageDrive, kDriveInsert);
           return kMenuActionNone;
         case kMainStatus:
           ShowPage(kMenuPageStatus, 0);
@@ -328,13 +340,13 @@ static MenuAction Choose(void) {
         g_config.reset();
       }
       return Back();
-    case kMenuPageDriveA:
+    case kMenuPageDrive:
       if (g_chosen == kDriveInsert) {
         StartBrowsing();
       } else {
-        g_config.eject_drive_a();
+        g_config.eject_drive(g_drive);
         // Eject goes with the disk.
-        ShowPage(kMenuPageDriveA, kDriveInsert);
+        ShowPage(kMenuPageDrive, kDriveInsert);
       }
       return kMenuActionNone;
     case kMenuPageBrowse:
@@ -557,11 +569,11 @@ static void DrawStatusPage(DisplayMenu* menu) {
 }
 
 static void DrawDrivePage(DisplayMenu* menu) {
-  const DiskImage* image = g_config.drive_a();
+  const DiskImage* image = g_config.drive(g_drive);
   char line[kNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
-  const bool empty = DriveAEmpty();
+  const bool empty = DriveEmpty();
   if (image->status == kDiskImageOpen) {
     DiskImageName(image->path, name);
     in_drive = name;
@@ -578,8 +590,10 @@ static void DrawDrivePage(DisplayMenu* menu) {
       "Change disks only while DOS is",
       "not using the drive.",
   };
+  const char title[] = {'D', 'r', 'i', 'v', 'e', ' ', DriveLetter(g_drive),
+                        '\0'};
   DrawItems(
-      menu, "Drive A", lines, sizeof(lines) / sizeof(lines[0]), items,
+      menu, title, lines, sizeof(lines) / sizeof(lines[0]), items,
       DriveItemCount());
 }
 
@@ -609,7 +623,6 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     }
   }
   EdgeRow(&menu->text[0], menu->columns, true, title);
-  const DiskImage* image = g_config.drive_a();
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
@@ -629,11 +642,19 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     char path[kFileListMaxPath + 1];
     if (entry->kind != kFileListImage) {
       PutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
-    } else if (
-        image->status == kDiskImageOpen &&
-        FileListEntryPath(&g_list, entry, path) &&
-        SamePath(path, image->path)) {
-      PutText(row, menu->columns, kBrowseNoteColumn, "in the drive", attr);
+      continue;
+    }
+    if (!FileListEntryPath(&g_list, entry, path)) {
+      continue;
+    }
+    for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+      const DiskImage* image = g_config.drive((FloppyDrive)drive);
+      if (image->status == kDiskImageOpen &&
+          FileListSamePath(path, image->path)) {
+        char note[] = "in drive A";
+        note[sizeof(note) - 2] = DriveLetter((FloppyDrive)drive);
+        PutText(row, menu->columns, kBrowseNoteColumn, note, attr);
+      }
     }
   }
   // A folder with more entries than a list holds says so on the bottom edge.
@@ -673,7 +694,7 @@ void MenuDraw(uint64_t now_us) {
           (const char* const[]){"Restart the machine from power on?"}, 1,
           kResetItems, kResetItemCount);
       break;
-    case kMenuPageDriveA:
+    case kMenuPageDrive:
       DrawDrivePage(menu);
       break;
     case kMenuPageBrowse:

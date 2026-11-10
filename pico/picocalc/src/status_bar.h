@@ -6,7 +6,7 @@
 //   row 31  the guest's lock flags, its time of day, the menu key, the battery
 //
 //   Inserted GAMES.IMG in drive A
-//   A:DISK01.IMG  C:HDD.IMG
+//   A:DISK01.IMG  B:empty  C:HDD.IMG
 //                     CAPS NUM SCRL INS     12:34:56     ↑+↑ Menu  [■■■ ] 78%+
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H
@@ -18,12 +18,18 @@
 #include "display.h"
 #include "southbridge.h"
 
+enum {
+  // Drives A, B and C.
+  kStatusBarDrives = 3,
+  kStatusBarDriveC = 2,
+};
+
 // What the status rows show, gathered by the caller.
 typedef struct StatusBarState {
-  // The drives' images, which are shown when they are open. Without one,
-  // drive A has the floppy built into flash, and drive C is not shown.
-  const DiskImage* drive_a;
-  const DiskImage* drive_c;
+  // The drives' images, A, B and C, which are shown when they are open.
+  // Without one, drive A has the floppy built into flash, or is empty once
+  // ejected, drive B is empty, and drive C is not shown.
+  const DiskImage* drives[kStatusBarDrives];
   // The guest BIOS's keyboard flags, at 0040:0017, which hold its lock and
   // insert states.
   uint8_t keyboard_flags;

@@ -64,7 +64,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## The dos-boot invariant
 
-- **The boot reaches `A>` in 2,328,128 instructions**, as `pico/bench`
+- **The machine is the bench's with a second floppy drive**, and the drive
+  is what the boot's count differs by: the BIOS and DOS look at drive B,
+  757 instructions with the hard disk attached. One drive, the bench's
+  machine, reaches `A>` in 2,328,128 instructions, as `pico/bench`
   reports, which is what says the two run the same machine. At 250MHz, off
   the floppy in flash, it takes 4.72 seconds of processor time without
   drawing and 4.82 with it - 123% and 121% of a real PC/XT - and 4.89 off the
@@ -73,7 +76,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   running the measured machine. A key pressed during the boot moves it, which
   is why keys queued before the firmware started are dropped. So does a
   floppy that is not `resources`' byte for byte, or a hard disk image - see
-  the SD card section.
+  the SD card section. Compare against a baseline with the same drives.
 
 ## Running in real time
 
@@ -261,19 +264,27 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - Alt with comma, full stop, space and B belong to the controller (backlights,
   battery) and are never reported; Shift with Left or Right reports nothing.
 
-## The SD card, drive A and the hard disk
+## The SD card, the floppy drives and the hard disk
 
 - **Drive A is `yax86/floppy_a.img`**, 360KB on the card's FAT volume, and
   guest writes go to the card. Without one it is the read-only floppy in
   flash, and the status page's Disk line says why: no card, no answer, no FAT
   volume, no image, or the wrong size. The card is mounted once, at power
   on.
-- **The menu changes the disk in drive A** for any 360KB image on the card,
-  or ejects it. `DiskImageClose()` writes back the sector held and closes
-  the file; the FDC then reports the drive not ready, which DOS shows as
-  "General Failure ... Abort, Retry, Fail?". The built-in floppy is not
-  offered again once ejected - a reset brings it back. Nothing remembers the
-  image inserted: the next power on starts from `yax86/floppy_a.img` again.
+- **Drive B starts empty.** With two drives DOS has a B: of its own
+  rather than one it shares with A, prompting for a disk swap.
+  `YPlatformConfig.floppy_drives` sets what the BIOS's DIP switches report.
+- **The menu changes the disk in either drive** for any 360KB image on the
+  card, or ejects it. `DiskImageClose()` writes back the sector held and
+  closes the file; the FDC then reports the drive not ready, which DOS
+  shows as "General Failure ... Abort, Retry, Fail?". The built-in floppy is
+  not offered again once ejected - a reset brings it back. Nothing remembers
+  the images inserted: the next power on starts from `yax86/floppy_a.img`,
+  with B empty.
+- **An image goes in one drive at a time.** Each drive keeps its own copy of
+  a sector, so two drives writing one file would each overwrite the other's
+  changes; inserting an image the other drive holds is refused with a
+  message.
 - `src/file_list.c` lists a folder for the menu's browser: `..`, folders,
   then files exactly the image size, each by name, with hidden and system
   entries left out. It holds 64, and says when a folder had more. Names are
@@ -313,7 +324,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **The invariant holds only off an image identical to `resources`', with no
   hard disk**: a copy of `DISK01.IMG` boots in 2,328,128, but with a file
   added 2,328,239. The hard disk's BIOS and DOS's partition read change the
-  boot more: 2,398,153 instructions with a blank drive, 2,415,480 formatted.
+  boot more: 2,398,153 instructions with a blank drive, 2,415,480 formatted
+  with one floppy drive; the second floppy drive adds 757.
 - **Code added here can cost the boot without running**: the hard disk made
   the boot 0.85% slower with no image on the card, though the floppy's reads
   got faster. A third of it is guest RAM moving - the images are 8-byte
@@ -347,18 +359,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   them, sets them off from the guest's screen; the rows between are black.
 
   ```
-  Inserted GAMES.IMG in drive A                                         <- messages
-  A:FLOPPY_A.IMG  C:HDD.IMG                                             <- drives
+  Inserted GAMES.IMG in drive B                                         <- messages
+  A:FLOPPY_A.IMG  B:GAMES.IMG  C:HDD.IMG                                <- drives
                     CAPS NUM SCRL INS     00:44:51        ↑+↑ Menu  [████] 100%
   ```
 
 - **Messages** are queued and shown four seconds each, without moving
-  anything on the rows below. While the menu is open the row shows its keys, and while the machine
-  is dropping time it shows `SLOW` and its speed in yellow.
+  anything on the rows below. While the menu is open the row shows its
+  keys, and while the machine is dropping time it shows `SLOW` and its
+  speed in yellow.
 - **Drives** follow each other two columns apart: the image's file name,
   without its folders, in capitals, `built-in` for the floppy in flash, or
-  `empty` for drive A once ejected. Drive C with no image is left out. The card keeps 8.3 names, so a name fits;
-  a longer one would keep 11 characters and end in `~`. The letter is the
+  `empty` for a floppy drive without a disk. Drive C with no image is left
+  out. The card keeps 8.3 names, so a name fits; a longer one would keep 11
+  characters and end in `~`. The letter is the
   drive's light, green for 0.2 seconds after a sector is read or written.
 - **Indicators**: the guest BIOS's own lock and insert flags, at
   `0040:0017` - a PC/XT keyboard has no lights - bright when on; the
@@ -387,18 +401,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   not see them come up while the menu has the keyboard, so they are released
   to it then.
 - **It is a box drawn over the guest's screen**, white on blue in code page
-  437's double lined box, a page at a time: Drive A, Status and Reset -
-  Esc resumes; drive A's page, with what is in it, Swap disk image and
-  Eject, or Choose disk image alone while it is empty; the browser; the
-  status page; and a question before a reset. An item that opens another menu ends in a
-  `>`.
-- **The browser starts in the folder of the image in drive A**, with it
-  chosen, or in `yax86`. Enter opens a folder or inserts an image and
-  closes the menu; Backspace goes up a folder, with the one left chosen,
-  and from the root back to drive A's page; Page Up and Down move a page. Up and Down move, Enter or
-  Space chooses, Esc or Backspace goes back. A box of a new size has the
-  guest's screen drawn in full under it first, and closing draws it in full,
-  so nothing of a box is left behind.
+  437's double lined box, a page at a time: Drive A, Drive B, Status and
+  Reset - Esc resumes; a drive's page, with what is in it, Swap disk image
+  and Eject, or Choose disk image alone while it is empty; the browser; the
+  status page; and a question before a reset. An item that opens another
+  menu ends in a `>`. Up and Down move, Enter or Space chooses, Esc or
+  Backspace goes back.
+- **The browser starts in the folder of the image in the drive**, with it
+  chosen, or else of the image in the other drive - the next disk of a set
+  is likely beside it - or else in `yax86`. Each image in a drive is marked
+  with its drive. Enter opens a folder or inserts an image and closes the
+  menu; Backspace goes up a folder, with the one left chosen, and from the
+  root back to the drive's page; Page Up and Down move a page.
+- **A box of a new size has the guest's screen drawn in full under it
+  first**, and closing draws it in full, so nothing of a box is left behind.
 - **Reset restarts the board** with `watchdog_reboot()`, which is the
   machine from power on. What the guest wrote is already on the card.
 - **A test drives it as a hand would**, with `key shift press`, `key rshift
@@ -415,7 +431,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_c`, `keyboard`, `speaker`, `menu`, `pacing` |
+  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_b`, `drive_c`, `keyboard`, `speaker`, `menu`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |

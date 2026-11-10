@@ -67,18 +67,15 @@ static uint8_t g_message_count;
 // not been yet.
 static uint64_t g_message_shown_us;
 
-static DriveLight g_light_a;
-static DriveLight g_light_c;
+static DriveLight g_lights[kStatusBarDrives];
 
 // What the rows were last composed from. Composing takes a few snprintf()
 // calls and three rows' worth of writes, which ten times a second cost a boot
 // about 0.4%, so it is skipped while none of this changes - which between a
 // disk's bursts of reads is everything but the clock.
 typedef struct ComposedFrom {
-  bool lit_a;
-  bool lit_c;
-  DiskImageStatus status_a;
-  DiskImageStatus status_c;
+  bool lit[kStatusBarDrives];
+  DiskImageStatus status[kStatusBarDrives];
   uint8_t keyboard_flags;
   uint32_t guest_seconds;
   SouthbridgeBattery battery;
@@ -197,11 +194,18 @@ static void ComposeMessages(
 }
 
 static void ComposeDrives(
-    const StatusBarState* state, bool lit_a, bool lit_c, DisplayTextRow* row) {
-  uint8_t column = PutDrive(row, 0, 'A', state->drive_a, lit_a);
-  if (state->drive_c->status == kDiskImageOpen) {
-    PutDrive(
-        row, (uint8_t)(column + kDriveGapColumns), 'C', state->drive_c, lit_c);
+    const StatusBarState* state, const bool lit[kStatusBarDrives],
+    DisplayTextRow* row) {
+  uint8_t column = 0;
+  for (uint8_t drive = 0; drive < kStatusBarDrives; ++drive) {
+    const DiskImage* image = state->drives[drive];
+    if (drive == kStatusBarDriveC && image->status != kDiskImageOpen) {
+      continue;
+    }
+    if (column > 0) {
+      column = (uint8_t)(column + kDriveGapColumns);
+    }
+    column = PutDrive(row, column, (char)('A' + drive), image, lit[drive]);
   }
 }
 
@@ -266,9 +270,13 @@ static void ComposeIndicators(
 }
 
 static bool ComposedFromEqual(const ComposedFrom* a, const ComposedFrom* b) {
-  return a->lit_a == b->lit_a && a->lit_c == b->lit_c &&
-         a->status_a == b->status_a && a->status_c == b->status_c &&
-         a->keyboard_flags == b->keyboard_flags &&
+  for (uint8_t drive = 0; drive < kStatusBarDrives; ++drive) {
+    if (a->lit[drive] != b->lit[drive] ||
+        a->status[drive] != b->status[drive]) {
+      return false;
+    }
+  }
+  return a->keyboard_flags == b->keyboard_flags &&
          a->guest_seconds == b->guest_seconds &&
          a->battery.known == b->battery.known &&
          a->battery.percent == b->battery.percent &&
@@ -280,10 +288,10 @@ static bool ComposedFromEqual(const ComposedFrom* a, const ComposedFrom* b) {
 bool StatusBarCompose(
     const StatusBarState* state, uint64_t now_us, DisplayStatus* rows) {
   ComposedFrom from;
-  from.lit_a = DriveLit(&g_light_a, state->drive_a, now_us);
-  from.lit_c = DriveLit(&g_light_c, state->drive_c, now_us);
-  from.status_a = state->drive_a->status;
-  from.status_c = state->drive_c->status;
+  for (uint8_t drive = 0; drive < kStatusBarDrives; ++drive) {
+    from.lit[drive] = DriveLit(&g_lights[drive], state->drives[drive], now_us);
+    from.status[drive] = state->drives[drive]->status;
+  }
   from.keyboard_flags = state->keyboard_flags;
   from.guest_seconds = state->guest_seconds;
   from.battery = state->battery;
@@ -299,7 +307,7 @@ bool StatusBarCompose(
     ClearRow(&rows->rows[row]);
   }
   ComposeMessages(state, from.message, &rows->rows[kRowMessages]);
-  ComposeDrives(state, from.lit_a, from.lit_c, &rows->rows[kRowDrives]);
+  ComposeDrives(state, from.lit, &rows->rows[kRowDrives]);
   ComposeIndicators(state, &rows->rows[kRowIndicators]);
   return true;
 }

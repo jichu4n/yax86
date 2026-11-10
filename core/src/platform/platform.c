@@ -768,7 +768,8 @@ Y_FILE_PRIVATE void YPlatformInitPIT(YPlatformState* platform) {
 Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
-  platform->ppi.config.num_floppy_drives = 1;
+  platform->ppi.config.num_floppy_drives =
+      platform->config.floppy_drives > 0 ? platform->config.floppy_drives : 1;
   platform->ppi.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
