@@ -65,12 +65,14 @@ typedef enum MenuPage {
   // The page of the drive in g_drive.
   kMenuPageDrive,
   kMenuPageBrowse,
+  // The machines to start, at power on.
+  kMenuPageMachines,
 } MenuPage;
 
 static const char* const kPageNames[] = {
     [kMenuPageMain] = "main",     [kMenuPageStatus] = "status",
     [kMenuPageReset] = "reset",   [kMenuPageDrive] = "drive",
-    [kMenuPageBrowse] = "browse",
+    [kMenuPageBrowse] = "browse", [kMenuPageMachines] = "machines",
 };
 
 // An item of a page, and whether choosing it opens another menu, which a
@@ -132,6 +134,15 @@ static bool g_box_drawn;
 // The folder the browser shows, and the entry at the top of its rows.
 static FileList g_list;
 static uint8_t g_list_top;
+// The machines to choose from at power on, the seconds before the
+// highlighted one starts by itself, and why the last chosen did not.
+static const MachineList* g_machines;
+static uint8_t g_countdown;
+//
+// The problem is kept in two buffers, used in turn, so that a new one is a
+// new pointer: the status rows tell a change of hint by its pointer.
+static char g_problems[2][kTextColumns + 1];
+static char* g_problem = g_problems[0];
 // Which Shift keys are held, from the controller's events.
 static bool g_left_shift_held;
 static bool g_right_shift_held;
@@ -149,7 +160,45 @@ const char* MenuPageName(void) {
 
 static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
 
+static void ShowPage(MenuPage page, uint8_t chosen);
+static void ScrollToChosen(void);
+
+void MenuChooseMachines(const MachineList* list, uint8_t highlighted) {
+  g_machines = list;
+  g_open = true;
+  g_box_drawn = false;
+  g_list_top = 0;
+  ShowPage(kMenuPageMachines, highlighted);
+  ScrollToChosen();
+}
+
+uint8_t MenuChosenMachine(void) { return g_chosen; }
+
+void MenuClose(void) { g_open = false; }
+
+void MenuSetCountdown(uint8_t seconds) {
+  if (seconds != g_countdown) {
+    g_countdown = seconds;
+    g_dirty = true;
+  }
+}
+
+void MenuSetProblem(const char* problem) {
+  g_problem = g_problem == g_problems[0] ? g_problems[1] : g_problems[0];
+  uint8_t i = 0;
+  if (problem != NULL) {
+    while (problem[i] != '\0' && i < kTextColumns) {
+      g_problem[i] = problem[i];
+      ++i;
+    }
+  }
+  g_problem[i] = '\0';
+}
+
 const char* MenuHint(void) {
+  if (g_page == kMenuPageMachines) {
+    return g_problem[0] != '\0' ? g_problem : "\x18\x19 move   Enter start";
+  }
   if (g_page == kMenuPageStatus) {
     return "Esc back";
   }
@@ -158,8 +207,6 @@ const char* MenuHint(void) {
   }
   return "\x18\x19 move   Enter choose   Esc back";
 }
-
-static void ScrollToChosen(void);
 
 static char Upper(char c) {
   return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
@@ -262,6 +309,8 @@ static uint8_t PageItemCount(void) {
       return DriveItemCount();
     case kMenuPageBrowse:
       return g_list.count;
+    case kMenuPageMachines:
+      return g_machines->count;
     case kMenuPageStatus:
       return 0;
   }
@@ -287,6 +336,9 @@ static MenuAction Back(void) {
     case kMenuPageStatus:
     case kMenuPageMain:
       ShowPage(kMenuPageMain, kMainStatus);
+      break;
+    case kMenuPageMachines:
+      // There is no machine to go back to yet.
       break;
   }
   return kMenuActionNone;
@@ -351,6 +403,9 @@ static MenuAction Choose(void) {
       return kMenuActionNone;
     case kMenuPageBrowse:
       return OpenEntry();
+    case kMenuPageMachines:
+      return g_chosen < g_machines->count ? kMenuActionMachineChosen
+                                          : kMenuActionNone;
     case kMenuPageStatus:
       return Back();
   }
@@ -374,7 +429,17 @@ static bool TrackHotkey(SouthbridgeKeyEvent event) {
 }
 
 MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
-  if (TrackHotkey(event)) {
+  const bool hotkey = TrackHotkey(event);
+  if (g_open && g_page == kMenuPageMachines) {
+    // Nothing closes the list but choosing.
+    if (hotkey || event.key == kKeyEsc || event.key == kKeyBackspace) {
+      return kMenuActionNone;
+    }
+    if (event.state != kSouthbridgeKeyReleased && g_problem[0] != '\0') {
+      g_problem[0] = '\0';
+      g_dirty = true;
+    }
+  } else if (hotkey) {
     g_open = !g_open;
     if (g_open) {
       g_box_drawn = false;
@@ -669,6 +734,39 @@ static void DrawBrowsePage(DisplayMenu* menu) {
   }
 }
 
+// The machines to start: a row each, with arrows on the border where there
+// are more above or below, and the countdown on the bottom edge.
+static void DrawMachinesPage(DisplayMenu* menu) {
+  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
+  EdgeRow(&menu->text[0], menu->columns, true, "Start a machine");
+  for (uint8_t i = 0; i < kBrowseRows; ++i) {
+    DisplayTextRow* row = &menu->text[1 + i];
+    const uint8_t index = (uint8_t)(g_list_top + i);
+    if (index >= g_machines->count) {
+      BlankRow(row, menu->columns);
+      continue;
+    }
+    ItemRow(
+        row, menu->columns, g_machines->machines[index].name,
+        index == g_chosen);
+  }
+  char countdown[kNarrowColumns];
+  if (g_countdown > 0) {
+    snprintf(
+        countdown, sizeof(countdown), "starting in %u s",
+        (unsigned)g_countdown);
+  }
+  EdgeRow(
+      &menu->text[kBrowseRows + 1], menu->columns, false,
+      g_countdown > 0 ? countdown : NULL);
+  if (g_list_top > 0) {
+    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
+  }
+  if (g_list_top + kBrowseRows < g_machines->count) {
+    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
+  }
+}
+
 void MenuDraw(uint64_t now_us) {
   if (!g_open) {
     return;
@@ -699,6 +797,9 @@ void MenuDraw(uint64_t now_us) {
       break;
     case kMenuPageBrowse:
       DrawBrowsePage(menu);
+      break;
+    case kMenuPageMachines:
+      DrawMachinesPage(menu);
       break;
     case kMenuPageStatus:
       DrawStatusPage(menu);

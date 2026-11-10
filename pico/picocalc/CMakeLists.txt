@@ -123,6 +123,7 @@ add_executable(yax86_picocalc
     src/diskio.c
     src/display.c
     src/file_list.c
+    src/machine_config.c
     src/floppy.c
     src/harddisk.c
     src/font_4x10.c

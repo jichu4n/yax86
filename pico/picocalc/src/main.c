@@ -26,12 +26,14 @@
 #include "core/platform.h"
 #include "core/video.h"
 #include "display.h"
+#include "file_list.h"
 #include "floppy.h"
 #include "harddisk.h"
 #include "hardware/clocks.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
 #include "keymap.h"
+#include "machine_config.h"
 #include "menu.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
@@ -205,6 +207,12 @@ typedef struct RuntimeStatus {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
+// The machines on the card, and the one started, if one was: without one the
+// drives are as they were before machines, drive A `yax86/floppy_a.img` or
+// the built-in floppy, and drive C `yax86/hdd.img`.
+static MachineList g_machines;
+static MachineConfig g_machine;
+static bool g_has_machine;
 static RuntimeStatus g_status;
 static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
@@ -415,24 +423,28 @@ static size_t FormatDrive(
 }
 
 static void FormatDiskLine(char* buffer, size_t size) {
-  const DiskImage* floppy_a = FloppyGetImage(kFloppyDriveA);
-  const DiskImage* floppy_b = FloppyGetImage(kFloppyDriveB);
-  const DiskImage* hard_disk = HardDiskGetImage();
-  size_t length = FormatDrive(buffer, size, "A:", floppy_a, "built in");
-  // Drive B has only ever had an image or nothing, so it is left out empty.
-  if (floppy_b->status == kDiskImageOpen) {
-    length += FormatDrive(buffer + length, size - length, "B:", floppy_b, "");
-  }
-  length +=
-      FormatDrive(buffer + length, size - length, "C:", hard_disk, "none");
-  const DiskImage* const images[] = {floppy_a, floppy_b, hard_disk};
+  const DiskImage* const images[kMachineDrives] = {
+      [kMachineDriveA] = FloppyGetImage(kFloppyDriveA),
+      [kMachineDriveB] = FloppyGetImage(kFloppyDriveB),
+      [kMachineDriveC] = HardDiskGetImage(kHardDiskC),
+      [kMachineDriveD] = HardDiskGetImage(kHardDiskD),
+  };
+  size_t length = 0;
   uint64_t card_us = 0;
   bool any_open = false;
-  for (size_t i = 0; i < sizeof(images) / sizeof(images[0]); ++i) {
-    if (images[i]->status == kDiskImageOpen) {
+  for (uint8_t drive = 0; drive < kMachineDrives; ++drive) {
+    const DiskImage* image = images[drive];
+    const char label[] = {(char)('A' + drive), ':', '\0'};
+    if (image->status == kDiskImageOpen) {
       any_open = true;
+      length += FormatDrive(buffer + length, size - length, label, image, "");
+    } else if (image->status != kDiskImageEjected) {
+      // What drive A has instead, or why a configured image did not open.
+      length += FormatDrive(
+          buffer + length, size - length, label, image,
+          drive == kMachineDriveA && !g_has_machine ? "built in" : "none");
     }
-    card_us += images[i]->stats.read_us + images[i]->stats.write_us;
+    card_us += image->stats.read_us + image->stats.write_us;
   }
   if (!any_open) {
     return;
@@ -502,20 +514,28 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
   }
 }
 
-// Compose the status rows, and hand them to core 1 if they changed, or are
-// still waiting from the last time it was busy.
+static void OfferStatusRows(const StatusBarState* state);
+
+// Compose the status rows from the machine's state.
 static void UpdateStatusRows(void) {
   StatusBarState state;
   state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
   state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
-  state.drives[kStatusBarDriveC] = HardDiskGetImage();
+  state.drives[kStatusBarDriveC] = HardDiskGetImage(kHardDiskC);
+  state.drives[kStatusBarDriveD] = HardDiskGetImage(kHardDiskD);
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
   state.guest_seconds = (uint32_t)(GuestClockMs() / kMillisecondsPerSecond);
   state.battery = SouthbridgeGetBattery();
   state.slow_percent = SlowPercent();
   state.hint = MenuIsOpen() ? MenuHint() : NULL;
   WarnOfLowBattery(state.battery);
-  if (StatusBarCompose(&state, time_us_64(), &g_status_rows)) {
+  OfferStatusRows(&state);
+}
+
+// Compose the status rows from state, and hand them to core 1 if they
+// changed, or are still waiting from the last time it was busy.
+static void OfferStatusRows(const StatusBarState* state) {
+  if (StatusBarCompose(state, time_us_64(), &g_status_rows)) {
     g_status_rows_pending = true;
   }
   if (!g_status_rows_pending) {
@@ -589,7 +609,12 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("copy_us", display.copy_us));
   ReplyDiskImage(command, "drive_a", FloppyGetImage(kFloppyDriveA));
   ReplyDiskImage(command, "drive_b", FloppyGetImage(kFloppyDriveB));
-  ReplyDiskImage(command, "drive_c", HardDiskGetImage());
+  ReplyDiskImage(command, "drive_c", HardDiskGetImage(kHardDiskC));
+  ReplyDiskImage(command, "drive_d", HardDiskGetImage(kHardDiskD));
+  REPLY_GROUP(
+      command, "machine",
+      Y_LOG_STRING("name", g_has_machine ? g_machine.machine.name : ""),
+      Y_LOG_UINT("machines", g_machines.count));
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
   REPLY_GROUP(
       command, "keyboard", Y_LOG_UINT("reads", keyboard.reads),
@@ -1130,6 +1155,180 @@ static void RunMachine(bool machine_ready) {
 }
 
 // ============================================================================
+// Choosing a machine
+// ============================================================================
+
+// The status rows while the list of machines shows: the list's keys, or why
+// a machine did not start, and the battery. There are no drives yet.
+static void UpdateChoosingRows(void) {
+  StatusBarState state = {0};
+  state.battery = SouthbridgeGetBattery();
+  state.hint = MenuHint();
+  OfferStatusRows(&state);
+}
+
+// Read the configuration of the machine at index in the list, to start it.
+// Returns false if it could not be read, with why shown on the list.
+static bool TakeMachine(uint8_t index) {
+  const MachineEntry* machine = &g_machines.machines[index];
+  char problem[kMachineProblemLength + 1];
+  if (MachineConfigRead(machine->path, &g_machine, problem)) {
+    g_has_machine = true;
+    SYSTEM_INFO("machine_chosen", Y_LOG_STRING("path", machine->path));
+    return true;
+  }
+  char file[kDiskImageNameLength + 1];
+  DiskImageName(machine->path, file);
+  char message[kTextColumns + 1];
+  snprintf(message, sizeof(message), "%s: %s", file, problem);
+  MenuSetProblem(message);
+  SYSTEM_WARN(
+      "machine_config_problem", Y_LOG_STRING("path", machine->path),
+      Y_LOG_STRING("problem", problem));
+  return false;
+}
+
+// The card's settings, and the index of the default machine in the list.
+// Returns false, with the problem shown on the list, if the settings had one.
+static bool ReadSettings(MachineSettings* settings, uint8_t* highlighted) {
+  char problem[kMachineProblemLength + 1];
+  bool read = MachineSettingsRead(settings, problem);
+  *highlighted = 0;
+  if (read && settings->boot_default[0] != '\0') {
+    // A default outside the machines folder is listed too.
+    const uint8_t index = MachineListFind(&g_machines, settings->boot_default);
+    if (index < kMachineListMax) {
+      *highlighted = index;
+    } else {
+      snprintf(
+          problem, sizeof(problem), "too many machines to add boot_default");
+      read = false;
+    }
+  }
+  if (!read) {
+    char message[kTextColumns + 1];
+    snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
+    MenuSetProblem(message);
+    SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
+  }
+  return read;
+}
+
+// With machines on the card, show the list of them until one is chosen whose
+// configuration reads, or until the default starts by itself, the countdown
+// running until a key is pressed. Settings that ask for no wait start the
+// default at once, without the list, unless there is a problem to show.
+// Without any machines, the machine starts with the drives it had before
+// machines.
+static void ChooseMachine(void) {
+  MachineListRead(&g_machines);
+  MachineSettings settings;
+  uint8_t highlighted = 0;
+  const bool settings_read = ReadSettings(&settings, &highlighted);
+  if (g_machines.count == 0) {
+    return;
+  }
+  if (settings_read && settings.boot_delay == 0 && TakeMachine(highlighted)) {
+    return;
+  }
+  MenuChooseMachines(&g_machines, highlighted);
+  const absolute_time_t start_at =
+      make_timeout_time_ms(settings.boot_delay * kMillisecondsPerSecond);
+  bool counting = settings.boot_delay > 0;
+  absolute_time_t next_status_at = get_absolute_time();
+  for (;;) {
+    Command command;
+    if (CommandPoll(&command)) {
+      RunCommand(&command);
+    }
+    bool chosen = false;
+    SouthbridgeKeyEvent key;
+    if (SouthbridgePollKey(&key) || TypingNext(&key)) {
+      counting = false;
+      MenuSetCountdown(0);
+      chosen = MenuHandleKey(key) == kMenuActionMachineChosen;
+    }
+    if (counting) {
+      const int64_t left_us =
+          absolute_time_diff_us(get_absolute_time(), start_at);
+      if (left_us <= 0) {
+        counting = false;
+        MenuSetCountdown(0);
+        chosen = true;
+      } else {
+        MenuSetCountdown((uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
+                                   kMicrosecondsPerSecond));
+      }
+    }
+    if (chosen && TakeMachine(MenuChosenMachine())) {
+      MenuClose();
+      return;
+    }
+    if (time_reached(next_status_at)) {
+      next_status_at = make_timeout_time_ms(kStatusUpdateMs);
+      UpdateChoosingRows();
+    }
+    MenuDraw(time_us_64());
+    sleep_ms(kPausedPollMs);
+  }
+}
+
+// Open the drives' images: the machine's, or without one, the ones before
+// machines. An image a machine names that does not open leaves its drive
+// empty, which a message says - as does one named for two drives, which goes
+// in the first: two drives writing one image would each overwrite the
+// other's sectors.
+static void OpenDrives(void) {
+  const char* paths[kMachineDrives] = {
+      [kMachineDriveA] = kFloppyDefaultPath,
+      [kMachineDriveC] = kHardDiskDefaultPath,
+  };
+  char message[kTextColumns + 1];
+  if (g_has_machine) {
+    snprintf(message, sizeof(message), "Started %s", g_machine.machine.name);
+    StatusBarPostMessage(message);
+    for (uint8_t drive = 0; drive < kMachineDrives; ++drive) {
+      paths[drive] = g_machine.drives[drive];
+      for (uint8_t earlier = 0; earlier < drive; ++earlier) {
+        if (paths[drive][0] != '\0' &&
+            FileListSamePath(paths[drive], paths[earlier])) {
+          char name[kDiskImageNameLength + 1];
+          DiskImageName(paths[drive], name);
+          snprintf(
+              message, sizeof(message), "Drive %c: %s is already in drive %c",
+              (char)('A' + drive), name, (char)('A' + earlier));
+          StatusBarPostMessage(message);
+          paths[drive] = "";
+        }
+      }
+    }
+  }
+  DiskImageStatus opened[kMachineDrives];
+  FloppyOpen(&paths[kMachineDriveA], !g_has_machine, &opened[kMachineDriveA]);
+  HardDiskOpen(&paths[kMachineDriveC]);
+  opened[kMachineDriveC] = HardDiskGetImage(kHardDiskC)->status;
+  opened[kMachineDriveD] = HardDiskGetImage(kHardDiskD)->status;
+  if (!g_has_machine) {
+    return;
+  }
+  for (uint8_t drive = 0; drive < kMachineDrives; ++drive) {
+    if (paths[drive][0] == '\0' || opened[drive] == kDiskImageOpen) {
+      continue;
+    }
+    char name[kDiskImageNameLength + 1];
+    DiskImageName(paths[drive], name);
+    snprintf(
+        message, sizeof(message), "Drive %c: could not open %s: %s",
+        (char)('A' + drive), name, DiskImageDescribeStatus(opened[drive]));
+    StatusBarPostMessage(message);
+    DISK_WARN(
+        "open_failed", Y_LOG_UINT("drive", drive),
+        Y_LOG_STRING("path", paths[drive]),
+        Y_LOG_STRING("error", DiskImageDescribeStatus(opened[drive])));
+  }
+}
+
+// ============================================================================
 // Startup
 // ============================================================================
 
@@ -1187,8 +1386,6 @@ int main(void) {
   SpeakerInit();
   g_status.southbridge_answered =
       SouthbridgeReadVersion(&g_status.southbridge_version);
-  FloppyOpen();
-  HardDiskOpen();
   const MenuConfig menu_config = {
       .describe_status = DescribeStatus,
       .reset = ResetMachine,
@@ -1199,6 +1396,8 @@ int main(void) {
   };
   MenuInit(&menu_config);
 
+  ChooseMachine();
+  OpenDrives();
   RunMachine(InitMachine());
   return 0;
 }

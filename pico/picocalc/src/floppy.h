@@ -1,7 +1,9 @@
 // The floppies in drives A and B.
 //
-// At power on drive A holds `yax86/floppy_a.img` from the SD card, a 360KB
-// floppy, or else the boot floppy built into flash; drive B is empty. What
+// At power on each drive holds the image its machine's configuration names,
+// a 360KB floppy on the SD card, or nothing. Without a configuration drive A
+// holds `yax86/floppy_a.img`, or else the boot floppy built into flash, and
+// drive B is empty. What
 // the guest writes to an image on the card is written to the card. The
 // built-in floppy cannot be written, and what the guest writes to it is
 // dropped. The menu can eject either drive's disk, and insert any 360KB image
@@ -18,10 +20,19 @@ typedef enum FloppyDrive {
   kFloppyDrives,
 } FloppyDrive;
 
-// Look for drive A's image on the SD card. Call once, before FloppyAttach().
-void FloppyOpen(void);
+// The image drive A looks for without a machine configuration.
+extern const char kFloppyDefaultPath[];
 
-// Hand the drives to the floppy controller, with drive A's disk in.
+// Open each drive's image on the SD card: a path from the card's root, or
+// NULL or empty for none. A drive whose image does not open is left empty,
+// but if built_in_fallback, drive A holds the built-in floppy instead, its
+// image's status saying why. Fills opened with how each drive's open went.
+// Call once, before FloppyAttach().
+void FloppyOpen(
+    const char* const paths[kFloppyDrives], bool built_in_fallback,
+    DiskImageStatus opened[kFloppyDrives]);
+
+// Hand the drives to the floppy controller, with their disks in.
 void FloppyAttach(YFDCState* fdc);
 
 // A drive's image on the card: whether it is open, and what it has cost.

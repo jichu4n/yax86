@@ -1,22 +1,35 @@
-// The hard disk: `yax86/hdd.img` on the SD card, as the hard disk
-// controller's master drive, if the card has one.
+// The hard disks: images on the SD card as the hard disk controller's master,
+// drive C, and slave, drive D.
 //
-// The image is the core's 10MB drive, 306 cylinders of 4 heads and 17
-// sectors, and what the guest writes to it is written to the card. Without
-// one there is no hard disk, and the machine is the one `dos-boot` measures.
+// An image is the core's 10MB drive, 306 cylinders of 4 heads and 17
+// sectors, and what the guest writes to it is written to the card. A drive
+// with no image is not attached. Without a machine configuration, drive C is
+// `yax86/hdd.img` if the card has one, and drive D is not attached; with no
+// hard disk, the machine is the one `dos-boot` measures, but for its drives.
 #ifndef YAX86_PICOCALC_HARDDISK_H
 #define YAX86_PICOCALC_HARDDISK_H
 
 #include "core/hdc.h"
 #include "disk_image.h"
 
-// Look for the image on the SD card. Call once, before HardDiskAttach().
-void HardDiskOpen(void);
+typedef enum HardDiskDrive {
+  kHardDiskC = 0,
+  kHardDiskD,
+  kHardDisks,
+} HardDiskDrive;
 
-// Attach the image to the hard disk controller, if it opened.
+// The image looked for without a machine configuration, as drive C.
+extern const char kHardDiskDefaultPath[];
+
+// Open each drive's image on the SD card: a path from the card's root, or
+// NULL or empty for none, which leaves the drive kDiskImageEjected. Call
+// once, before HardDiskAttach(). The paths are copied.
+void HardDiskOpen(const char* const paths[kHardDisks]);
+
+// Attach the drives whose images opened to the hard disk controller.
 void HardDiskAttach(YHDCState* hdc);
 
-// The image on the card: whether it opened, and what it has cost.
-const DiskImage* HardDiskGetImage(void);
+// A drive's image on the card: whether it opened, and what it has cost.
+const DiskImage* HardDiskGetImage(HardDiskDrive drive);
 
 #endif  // YAX86_PICOCALC_HARDDISK_H

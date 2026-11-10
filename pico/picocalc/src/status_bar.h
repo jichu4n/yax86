@@ -19,16 +19,18 @@
 #include "southbridge.h"
 
 enum {
-  // Drives A, B and C.
-  kStatusBarDrives = 3,
+  // Drives A, B, C and D.
+  kStatusBarDrives = 4,
   kStatusBarDriveC = 2,
+  kStatusBarDriveD = 3,
 };
 
 // What the status rows show, gathered by the caller.
 typedef struct StatusBarState {
-  // The drives' images, A, B and C, which are shown when they are open.
-  // Without one, drive A has the floppy built into flash, or is empty once
-  // ejected, drive B is empty, and drive C is not shown.
+  // The drives' images, A to D, which are shown when they are open. Without
+  // one, drive A has the floppy built into flash or is empty, drive B is
+  // empty, and drives C and D are not shown. NULL, before the machine has
+  // drives, shows nothing.
   const DiskImage* drives[kStatusBarDrives];
   // The guest BIOS's keyboard flags, at 0040:0017, which hold its lock and
   // insert states.

@@ -2,8 +2,9 @@
 
 The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld with
 a 320x320 LCD, a keyboard, an SD card slot, speakers and a battery. It raises
-the clock to 250MHz and boots MS-DOS 3.30 from an image on the SD card, or
-from the one in flash, with a hard disk image attached if the card has one.
+the clock to 250MHz and starts a machine whose configuration is on the SD
+card, chosen at power on, or without one boots MS-DOS 3.30 from an image on
+the card or the one in flash, with a hard disk image if the card has one.
 The guest's screen and the status rows below it are drawn by the second core
 while the first runs the machine, paced to real time. It takes the
 PicoCalc's keyboard as its own and plays the PC speaker. DOS's date and time
@@ -66,9 +67,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **The machine is the bench's with a second floppy drive**, and the drive
   is what the boot's count differs by: the BIOS and DOS look at drive B,
-  757 instructions with the hard disk attached. One drive, the bench's
-  machine, reaches `A>` in 2,328,128 instructions, as `pico/bench`
-  reports, which is what says the two run the same machine. At 250MHz, off
+  772 instructions off the floppy alone (2,328,900) and 757 with the hard
+  disk. One drive, the bench's machine, reaches `A>` in 2,328,128
+  instructions, as `pico/bench` reports, which is what says the two run the
+  same machine. At 250MHz, off
   the floppy in flash, it takes 4.72 seconds of processor time without
   drawing and 4.82 with it - 123% and 121% of a real PC/XT - and 4.89 off the
   card; at 125MHz, 9.44 with drawing, 61.5%.
@@ -264,13 +266,51 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - Alt with comma, full stop, space and B belong to the controller (backlights,
   battery) and are never reported; Shift with Left or Right reports nothing.
 
+## Machines
+
+- **A machine is a configuration file naming its drives' images**,
+  `src/machine_config.c`. Every `.CFG` in `yax86/machines` is one, named
+  for the file. Each line is logfmt, `#` starts a comment, and a path is
+  relative to the file's folder - `..` followed - or to the card's root
+  with a leading `/`, so machines can share images and keep their own:
+
+  ```
+  # yax86/machines/DOS33.CFG
+  drive_a=../MSDOS330/DISK01.IMG
+  drive_b=../MSDOS330/DISK02.IMG
+  drive_c=DOS33.IMG
+  ```
+
+  `drive_a` and `drive_b` are 360KB floppies, `drive_c` and `drive_d` the
+  hard disk controller's master and slave, each the core's 10MB drive. A
+  drive not named is empty.
+- **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the path
+  of the machine to highlight and start, relative to its own folder or the
+  root, and listed even when it is outside `yax86/machines`; and
+  `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
+  start the default without showing the list.
+- **At power on, with machines on the card, the menu lists them**, before
+  the machine exists: the countdown runs on the list's bottom edge until a
+  key is pressed, then the default starts. A file that does not read keeps
+  the list up with its problem on the keys row - `BROKEN.CFG: line 2: no
+  setting drive_e` - as do bad settings, which start the countdown anyway
+  with what was read. The countdown is what lets a board left alone, or a
+  host measuring the boot, still boot.
+- **A machine's image that does not open leaves its drive empty**, and the
+  message row says why after the start; so does one named for two drives,
+  which goes in the first. There is no falling back to the built-in floppy
+  once a machine names its drives.
+- **Without machines, the drives are as before them**: drive A is
+  `yax86/floppy_a.img`, or the read-only floppy in flash, with the status
+  page's Disk line saying why - no card, no answer, no FAT volume, no image,
+  or the wrong size - and drive C is `yax86/hdd.img` if present.
+- Nothing yet writes a configuration: a disk changed in the menu is
+  forgotten at the next power on.
+
 ## The SD card, the floppy drives and the hard disk
 
-- **Drive A is `yax86/floppy_a.img`**, 360KB on the card's FAT volume, and
-  guest writes go to the card. Without one it is the read-only floppy in
-  flash, and the status page's Disk line says why: no card, no answer, no FAT
-  volume, no image, or the wrong size. The card is mounted once, at power
-  on.
+- **Images are on the card's FAT volume**, and guest writes go to the card.
+  The card is mounted once, at power on.
 - **Drive B starts empty.** With two drives DOS has a B: of its own
   rather than one it shares with A, prompting for a disk swap.
   `YPlatformConfig.floppy_drives` sets what the BIOS's DIP switches report.
@@ -278,9 +318,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   card, or ejects it. `DiskImageClose()` writes back the sector held and
   closes the file; the FDC then reports the drive not ready, which DOS
   shows as "General Failure ... Abort, Retry, Fail?". The built-in floppy is
-  not offered again once ejected - a reset brings it back. Nothing remembers
-  the images inserted: the next power on starts from `yax86/floppy_a.img`,
-  with B empty.
+  not offered again once ejected - a reset brings it back.
 - **An image goes in one drive at a time.** Each drive keeps its own copy of
   a sector, so two drives writing one file would each overwrite the other's
   changes; inserting an image the other drive holds is refused with a
@@ -290,8 +328,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   entries left out. It holds 64, and says when a folder had more. Names are
   8.3, as FatFs is built without long names, and paths are FatFs's, with no
   leading slash.
-- **The hard disk is `yax86/hdd.img`**, attached as master only if present:
-  the core's 10MB drive, 306 cylinders, 4 heads, 17 sectors, exactly
+- **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hdd.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
   the boot floppy. Nothing on the device creates one. Its partition starts
@@ -360,7 +397,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
   ```
   Inserted GAMES.IMG in drive B                                         <- messages
-  A:FLOPPY_A.IMG  B:GAMES.IMG  C:HDD.IMG                                <- drives
+  A:DISK01.IMG  B:GAMES.IMG  C:DOS33.IMG                                <- drives
                     CAPS NUM SCRL INS     00:44:51        ↑+↑ Menu  [████] 100%
   ```
 
@@ -370,10 +407,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   speed in yellow.
 - **Drives** follow each other two columns apart: the image's file name,
   without its folders, in capitals, `built-in` for the floppy in flash, or
-  `empty` for a floppy drive without a disk. Drive C with no image is left
-  out. The card keeps 8.3 names, so a name fits; a longer one would keep 11
-  characters and end in `~`. The letter is the
-  drive's light, green for 0.2 seconds after a sector is read or written.
+  `empty` for a floppy drive without a disk. A hard disk with no image is
+  left out. The card keeps 8.3 names, so a name fits; a longer one would
+  keep 11 characters and end in `~`. The letter is the drive's light, green
+  for 0.2 seconds after a sector is read or written.
 - **Indicators**: the guest BIOS's own lock and insert flags, at
   `0040:0017` - a PC/XT keyboard has no lights - bright when on; the
   guest's time of day; the menu's key; and the battery, from the keyboard
@@ -431,7 +468,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a`, `drive_b`, `drive_c`, `keyboard`, `speaker`, `menu`, `pacing` |
+  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a` to `drive_d`, `machine`, `keyboard`, `speaker`, `menu`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |

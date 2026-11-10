@@ -3,7 +3,8 @@
 //
 // It is a box drawn over the guest's screen, with a page at a time: the main
 // page's items, a page for each floppy drive and the browser that finds it an
-// image, the status page, and a question before a reset. Up and Down
+// image, the status page, and a question before a reset. At power on, before
+// the machine starts, it is the list of machines to start. Up and Down
 // move, Enter or Space chooses, and Esc or Backspace goes back a page, or
 // closes the menu from the main one. Both Shift keys again close it too.
 //
@@ -17,6 +18,7 @@
 
 #include "disk_image.h"
 #include "floppy.h"
+#include "machine_config.h"
 #include "southbridge.h"
 
 enum {
@@ -55,11 +57,32 @@ typedef enum MenuAction {
   kMenuActionNone = 0,
   kMenuActionOpened,
   kMenuActionClosed,
+  // A machine was chosen from the list: see MenuChosenMachine().
+  kMenuActionMachineChosen,
 } MenuAction;
 
 void MenuInit(const MenuConfig* config);
 
 bool MenuIsOpen(void);
+
+// Open the menu on the list of machines, to choose one to start, with the
+// one at index highlighted. Neither the hotkey nor Esc closes it: the caller
+// does, with MenuClose(), once a machine chosen has started. list must
+// outlive the choosing.
+void MenuChooseMachines(const MachineList* list, uint8_t highlighted);
+
+void MenuClose(void);
+
+// The index in the list of the machine chosen, or highlighted.
+uint8_t MenuChosenMachine(void);
+
+// Show the seconds left before the highlighted machine starts by itself, or
+// stop showing them with 0.
+void MenuSetCountdown(uint8_t seconds);
+
+// Show why the machine chosen could not start, in place of the keys, until
+// another key is pressed; NULL for nothing. The text is copied.
+void MenuSetProblem(const char* problem);
 
 // Hand the menu a key event - every one, whether the menu is open or not,
 // since the hotkey is two keys held together. While the menu is closed, only

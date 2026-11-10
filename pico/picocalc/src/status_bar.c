@@ -199,7 +199,8 @@ static void ComposeDrives(
   uint8_t column = 0;
   for (uint8_t drive = 0; drive < kStatusBarDrives; ++drive) {
     const DiskImage* image = state->drives[drive];
-    if (drive == kStatusBarDriveC && image->status != kDiskImageOpen) {
+    if (image == NULL ||
+        (drive >= kStatusBarDriveC && image->status != kDiskImageOpen)) {
       continue;
     }
     if (column > 0) {
@@ -289,8 +290,10 @@ bool StatusBarCompose(
     const StatusBarState* state, uint64_t now_us, DisplayStatus* rows) {
   ComposedFrom from;
   for (uint8_t drive = 0; drive < kStatusBarDrives; ++drive) {
-    from.lit[drive] = DriveLit(&g_lights[drive], state->drives[drive], now_us);
-    from.status[drive] = state->drives[drive]->status;
+    const DiskImage* image = state->drives[drive];
+    from.lit[drive] =
+        image != NULL && DriveLit(&g_lights[drive], image, now_us);
+    from.status[drive] = image != NULL ? image->status : kDiskImageEjected;
   }
   from.keyboard_flags = state->keyboard_flags;
   from.guest_seconds = state->guest_seconds;
