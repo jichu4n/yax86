@@ -1,5 +1,6 @@
 #include "usb_disk.h"
 
+#include "pico/time.h"
 #include "sdcard.h"
 #include "tusb.h"
 
@@ -47,6 +48,8 @@ static void Share(DiskImage* image) {
   g_stats.ejected = false;
   g_stats.blocks_read = 0;
   g_stats.blocks_written = 0;
+  g_stats.read_us = 0;
+  g_stats.write_us = 0;
   g_stats.errors = 0;
   g_changed = true;
   g_sharing = true;
@@ -67,6 +70,8 @@ UsbDiskStats UsbDiskGetStats(void) {
       .ejected = g_stats.ejected,
       .blocks_read = g_stats.blocks_read,
       .blocks_written = g_stats.blocks_written,
+      .read_us = g_stats.read_us,
+      .write_us = g_stats.write_us,
       .errors = g_stats.errors,
   };
   return stats;
@@ -82,31 +87,20 @@ static uint32_t BlockCount(void) {
                          : SdcardGetBlockCount();
 }
 
-// Move count blocks from lba between what is shared and data. An image is
-// read and written a byte at a time, as the drives do, through the sector it
-// holds - a block at a time from the card, as the bytes go in order.
+// Move count blocks from lba between what is shared and data: the card's
+// own, or an image's sectors, which are its blocks.
 static bool ReadBlocks(uint32_t lba, uint8_t* data, uint32_t count) {
   if (g_image == NULL) {
     return SdcardReadBlocks(lba, data, count);
   }
-  const uint32_t errors = g_image->stats.errors;
-  const uint32_t start = lba * kSdcardBlockSize;
-  for (uint32_t i = 0; i < count * kSdcardBlockSize; ++i) {
-    data[i] = DiskImageReadByte(g_image, start + i);
-  }
-  return g_image->stats.errors == errors;
+  return DiskImageReadSectors(g_image, lba, data, count);
 }
 
 static bool WriteBlocks(uint32_t lba, const uint8_t* data, uint32_t count) {
   if (g_image == NULL) {
     return SdcardWriteBlocks(lba, data, count);
   }
-  const uint32_t errors = g_image->stats.errors;
-  const uint32_t start = lba * kSdcardBlockSize;
-  for (uint32_t i = 0; i < count * kSdcardBlockSize; ++i) {
-    DiskImageWriteByte(g_image, start + i, data[i]);
-  }
-  return g_image->stats.errors == errors;
+  return DiskImageWriteSectors(g_image, lba, data, count);
 }
 
 static void CopyPadded(uint8_t* to, const char* from, uint8_t length) {
@@ -180,7 +174,10 @@ int32_t tud_msc_read10_cb(
     return -1;
   }
   const uint32_t count = bufsize / kSdcardBlockSize;
-  if (!ReadBlocks(lba, buffer, count)) {
+  const uint64_t start_us = time_us_64();
+  const bool read = ReadBlocks(lba, buffer, count);
+  g_stats.read_us += time_us_64() - start_us;
+  if (!read) {
     tud_msc_set_sense(lun, kSenseMediumError, kSenseReadError, 0);
     ++g_stats.errors;
     return -1;
@@ -196,7 +193,10 @@ int32_t tud_msc_write10_cb(
     return -1;
   }
   const uint32_t count = bufsize / kSdcardBlockSize;
-  if (!WriteBlocks(lba, buffer, count)) {
+  const uint64_t start_us = time_us_64();
+  const bool written = WriteBlocks(lba, buffer, count);
+  g_stats.write_us += time_us_64() - start_us;
+  if (!written) {
     tud_msc_set_sense(lun, kSenseMediumError, kSenseWriteError, 0);
     ++g_stats.errors;
     return -1;

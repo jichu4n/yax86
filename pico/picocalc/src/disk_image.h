@@ -103,4 +103,14 @@ void DiskImageName(const char* path, char name[kDiskImageNameLength + 1]);
 uint8_t DiskImageReadByte(DiskImage* image, uint32_t offset);
 void DiskImageWriteByte(DiskImage* image, uint32_t offset, uint8_t value);
 
+// Read or write count whole sectors of an open image from the one at index,
+// all of which must be in it, and return whether the card took them. A run
+// goes to the card in as few accesses as its clusters allow - for a computer
+// over USB, rather than a drive's byte at a time. The sector held for the
+// bytes is written back first, and is read again after a write.
+bool DiskImageReadSectors(
+    DiskImage* image, uint32_t index, uint8_t* data, uint32_t count);
+bool DiskImageWriteSectors(
+    DiskImage* image, uint32_t index, const uint8_t* data, uint32_t count);
+
 #endif  // YAX86_PICOCALC_DISK_IMAGE_H

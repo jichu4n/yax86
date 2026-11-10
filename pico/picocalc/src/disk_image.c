@@ -180,6 +180,49 @@ void DiskImageWriteByte(DiskImage* image, uint32_t offset, uint8_t value) {
   }
 }
 
+bool DiskImageReadSectors(
+    DiskImage* image, uint32_t index, uint8_t* data, uint32_t count) {
+  if (image->status != kDiskImageOpen) {
+    return false;
+  }
+  // The held sector may have bytes the card does not.
+  WriteBackSector(image);
+  const uint64_t start_us = time_us_64();
+  const UINT length = count * kSectorSize;
+  UINT read = 0;
+  const bool ok = SeekSector(image, (int32_t)index) &&
+                  f_read(&image->file, data, length, &read) == FR_OK &&
+                  read == length;
+  if (!ok) {
+    ++image->stats.errors;
+  }
+  image->stats.sector_reads += count;
+  image->stats.read_us += time_us_64() - start_us;
+  return ok;
+}
+
+bool DiskImageWriteSectors(
+    DiskImage* image, uint32_t index, const uint8_t* data, uint32_t count) {
+  if (image->status != kDiskImageOpen) {
+    return false;
+  }
+  WriteBackSector(image);
+  // The held sector may be one of these, which would leave it stale.
+  image->sector_index = kNoSector;
+  const uint64_t start_us = time_us_64();
+  const UINT length = count * kSectorSize;
+  UINT written = 0;
+  const bool ok = SeekSector(image, (int32_t)index) &&
+                  f_write(&image->file, data, length, &written) == FR_OK &&
+                  written == length;
+  if (!ok) {
+    ++image->stats.errors;
+  }
+  image->stats.sector_writes += count;
+  image->stats.write_us += time_us_64() - start_us;
+  return ok;
+}
+
 void DiskImageClose(DiskImage* image) {
   if (image->status == kDiskImageOpen) {
     WriteBackSector(image);

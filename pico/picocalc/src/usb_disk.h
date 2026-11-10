@@ -44,6 +44,10 @@ typedef struct UsbDiskStats {
   bool ejected;
   uint32_t blocks_read;
   uint32_t blocks_written;
+  // The time the reads and writes took on the card, of all the time the
+  // computer took to move them: the rest is USB's.
+  uint64_t read_us;
+  uint64_t write_us;
   // Reads and writes the card failed, or that were past its end.
   uint32_t errors;
 } UsbDiskStats;
