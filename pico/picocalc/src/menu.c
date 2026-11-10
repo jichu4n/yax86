@@ -80,22 +80,21 @@ typedef struct MenuItem {
 } MenuItem;
 
 typedef enum MainItem {
-  kMainResume = 0,
-  kMainDriveA,
+  kMainDriveA = 0,
   kMainStatus,
   kMainReset,
   kMainItemCount,
 } MainItem;
 
 static const MenuItem kMainItems[kMainItemCount] = {
-    [kMainResume] = {"Resume", false},
     [kMainDriveA] = {"Drive A", true},
-    [kMainStatus] = {"Status", false},
-    [kMainReset] = {"Reset the machine", false},
+    [kMainStatus] = {"Status", true},
+    [kMainReset] = {"Reset", false},
 };
 
 typedef enum DriveItem {
   kDriveInsert = 0,
+  // Shown only while there is something to eject.
   kDriveEject,
   kDriveItemCount,
 } DriveItem;
@@ -235,6 +234,14 @@ static void ShowPage(MenuPage page, uint8_t chosen) {
   g_dirty = true;
 }
 
+static bool DriveAEmpty(void) {
+  return g_config.drive_a()->status == kDiskImageEjected;
+}
+
+static uint8_t DriveItemCount(void) {
+  return DriveAEmpty() ? kDriveEject : kDriveItemCount;
+}
+
 static uint8_t PageItemCount(void) {
   switch (g_page) {
     case kMenuPageMain:
@@ -242,7 +249,7 @@ static uint8_t PageItemCount(void) {
     case kMenuPageReset:
       return kResetItemCount;
     case kMenuPageDriveA:
-      return kDriveItemCount;
+      return DriveItemCount();
     case kMenuPageBrowse:
       return g_list.count;
     case kMenuPageStatus:
@@ -303,9 +310,6 @@ static MenuAction Choose(void) {
   switch (g_page) {
     case kMenuPageMain:
       switch ((MainItem)g_chosen) {
-        case kMainResume:
-          g_open = false;
-          return kMenuActionClosed;
         case kMainDriveA:
           ShowPage(kMenuPageDriveA, kDriveInsert);
           return kMenuActionNone;
@@ -329,7 +333,8 @@ static MenuAction Choose(void) {
         StartBrowsing();
       } else {
         g_config.eject_drive_a();
-        g_dirty = true;
+        // Eject goes with the disk.
+        ShowPage(kMenuPageDriveA, kDriveInsert);
       }
       return kMenuActionNone;
     case kMenuPageBrowse:
@@ -361,7 +366,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     g_open = !g_open;
     if (g_open) {
       g_box_drawn = false;
-      ShowPage(kMenuPageMain, kMainResume);
+      ShowPage(kMenuPageMain, kMainDriveA);
       return kMenuActionOpened;
     }
     return kMenuActionClosed;
@@ -556,7 +561,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
   char line[kNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
-  const bool empty = image->status == kDiskImageEjected;
+  const bool empty = DriveAEmpty();
   if (image->status == kDiskImageOpen) {
     DiskImageName(image->path, name);
     in_drive = name;
@@ -575,7 +580,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
   };
   DrawItems(
       menu, "Drive A", lines, sizeof(lines) / sizeof(lines[0]), items,
-      kDriveItemCount);
+      DriveItemCount());
 }
 
 // The browser: the folder as the title, and a row for each entry that
