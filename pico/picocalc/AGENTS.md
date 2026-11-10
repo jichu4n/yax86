@@ -290,9 +290,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
   start the default without showing the list.
 - **At power on, with machines on the card, the menu lists them**, before
-  the machine exists: the countdown runs on the list's bottom edge and the
-  keys row - `Starting DOS33 in 4 s - press a key to wait` - until a key is
-  pressed, then the default starts. A file that does not read keeps
+  the machine exists: the countdown runs on the list's bottom edge until a
+  key is pressed, then the default starts. A file that does not read keeps
   the list up with its problem on the keys row - `BROKEN.CFG: line 2: no
   setting drive_e` - as do bad settings, which start the countdown anyway
   with what was read. The countdown is what lets a board left alone, or a
