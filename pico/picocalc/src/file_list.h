@@ -28,6 +28,8 @@ typedef enum FileListKind {
 typedef struct FileListEntry {
   FileListKind kind;
   char name[kFileListMaxName + 1];
+  // An image's size in bytes, one of the sizes listed.
+  uint32_t size;
 } FileListEntry;
 
 typedef struct FileList {
@@ -41,9 +43,11 @@ typedef struct FileList {
   bool readable;
 } FileList;
 
-// Read the folder at path, listing the files exactly image_size bytes long as
-// images, and every folder that is not hidden or a system folder.
-void FileListRead(FileList* list, const char* path, uint32_t image_size);
+// Read the folder at path, listing the files exactly one of image_sizes long
+// as images, and every folder that is not hidden or a system folder.
+void FileListRead(
+    FileList* list, const char* path, const uint32_t* image_sizes,
+    uint8_t num_sizes);
 
 // The path of an entry of the list: the folder above for kFileListParent.
 // Returns false if it would not fit in kFileListMaxPath.

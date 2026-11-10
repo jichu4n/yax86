@@ -63,6 +63,9 @@ typedef enum MenuAction {
   // MenuShowSharing(); and take it back, then show the list again.
   kMenuActionShareCard,
   kMenuActionStopSharing,
+  // From the same page, through the browser: put a disk image on USB - see
+  // MenuChosenImage() - then show it with MenuShowSharing().
+  kMenuActionShareImage,
 } MenuAction;
 
 void MenuInit(const MenuConfig* config);
@@ -88,6 +91,10 @@ uint8_t MenuChosenVM(void);
 // Show the SD card's page, once the caller has put it on USB: who has it,
 // and Leave, which asks first if a computer is still using it.
 void MenuShowSharing(void);
+
+// The disk image chosen to put on USB, a path from the card's root, and its
+// size, which is a floppy's or the hard disk's.
+const char* MenuChosenImage(uint32_t* size);
 
 // Show the seconds left before the highlighted VM starts by itself, or
 // stop showing them with 0.

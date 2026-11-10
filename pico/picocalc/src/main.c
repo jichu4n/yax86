@@ -620,6 +620,7 @@ static void ReplyReport(const Command* command) {
   const UsbDiskStats usb = UsbDiskGetStats();
   REPLY_GROUP(
       command, "usb", Y_LOG_BOOL("sharing", usb.sharing),
+      Y_LOG_STRING("image", usb.image_path != NULL ? usb.image_path : ""),
       Y_LOG_BOOL("connected", usb.connected), Y_LOG_BOOL("seen", usb.seen),
       Y_LOG_BOOL("ejected", usb.ejected),
       Y_LOG_UINT("blocks_read", usb.blocks_read),
@@ -1284,14 +1285,49 @@ static void ShareCard(void) {
   SYSTEM_INFO("usb_card_shared");
 }
 
-// Take the card back from USB and read it afresh - the computer may have
-// added VMs, removed them, or changed the settings - showing the list again
-// without counting down.
-static void StopSharingCard(void) {
+// The disk image on USB, while one is, and its path.
+static DiskImage g_usb_image;
+static char g_usb_image_path[kFileListMaxPath + 1];
+
+// Put the disk image chosen in the browser on USB, the card staying mounted
+// to read it through; or say why it could not be, staying in the browser.
+static void ShareImage(void) {
+  uint32_t size = 0;
+  FileListCopyPath(MenuChosenImage(&size), g_usb_image_path);
+  const DiskImageStatus status =
+      DiskImageOpen(&g_usb_image, g_usb_image_path, size);
+  if (status != kDiskImageOpen) {
+    char name[kDiskImageNameLength + 1];
+    DiskImageName(g_usb_image_path, name);
+    char message[kTextColumns + 1];
+    snprintf(
+        message, sizeof(message), "Could not open %s: %s", name,
+        DiskImageDescribeStatus(status));
+    MenuSetProblem(message);
+    SYSTEM_WARN(
+        "usb_image_not_shared", Y_LOG_STRING("path", g_usb_image_path),
+        Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
+    return;
+  }
+  UsbDiskShareImage(&g_usb_image);
+  MenuShowSharing();
+  SYSTEM_INFO("usb_image_shared", Y_LOG_STRING("path", g_usb_image_path));
+}
+
+// Take the card or image back from USB and read the card afresh - the
+// computer may have added VMs, removed them, or changed the settings -
+// showing the list again without counting down. An image is closed, writing
+// back the sector it holds.
+static void StopSharing(void) {
   const UsbDiskStats stats = UsbDiskGetStats();
   UsbDiskStopSharing();
+  if (stats.image_path != NULL) {
+    DiskImageClose(&g_usb_image);
+  }
   SYSTEM_INFO(
-      "usb_card_returned", Y_LOG_BOOL("ejected", stats.ejected),
+      "usb_returned",
+      Y_LOG_STRING("image", stats.image_path != NULL ? stats.image_path : ""),
+      Y_LOG_BOOL("ejected", stats.ejected),
       Y_LOG_UINT("blocks_read", stats.blocks_read),
       Y_LOG_UINT("blocks_written", stats.blocks_written),
       Y_LOG_UINT("errors", stats.errors));
@@ -1340,8 +1376,11 @@ static void ChooseVM(void) {
         case kMenuActionShareCard:
           ShareCard();
           break;
+        case kMenuActionShareImage:
+          ShareImage();
+          break;
         case kMenuActionStopSharing:
-          StopSharingCard();
+          StopSharing();
           break;
         default:
           break;

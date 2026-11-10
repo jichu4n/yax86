@@ -35,11 +35,14 @@ static const char kRevision[] = "1.0 ";
 // but not the other way around - so a change the main loop makes is whole by
 // the time a callback sees it.
 static volatile bool g_sharing;
+// The image shared, or NULL for the whole card.
+static DiskImage* volatile g_image;
 // Whether the host is yet to be told the medium changed.
 static volatile bool g_changed;
 static volatile UsbDiskStats g_stats;
 
-void UsbDiskShareCard(void) {
+static void Share(DiskImage* image) {
+  g_image = image;
   g_stats.seen = false;
   g_stats.ejected = false;
   g_stats.blocks_read = 0;
@@ -49,11 +52,16 @@ void UsbDiskShareCard(void) {
   g_sharing = true;
 }
 
+void UsbDiskShareCard(void) { Share(NULL); }
+
+void UsbDiskShareImage(DiskImage* image) { Share(image); }
+
 void UsbDiskStopSharing(void) { g_sharing = false; }
 
 UsbDiskStats UsbDiskGetStats(void) {
   UsbDiskStats stats = {
       .sharing = g_sharing,
+      .image_path = g_sharing && g_image != NULL ? g_image->path : NULL,
       .connected = tud_mounted(),
       .seen = g_stats.seen,
       .ejected = g_stats.ejected,
@@ -67,6 +75,39 @@ UsbDiskStats UsbDiskGetStats(void) {
 // Whether the card is in the reader as the host sees it: shared, and not
 // ejected by it.
 static bool Present(void) { return g_sharing && !g_stats.ejected; }
+
+// The blocks of what is shared.
+static uint32_t BlockCount(void) {
+  return g_image != NULL ? g_image->size / kSdcardBlockSize
+                         : SdcardGetBlockCount();
+}
+
+// Move count blocks from lba between what is shared and data. An image is
+// read and written a byte at a time, as the drives do, through the sector it
+// holds - a block at a time from the card, as the bytes go in order.
+static bool ReadBlocks(uint32_t lba, uint8_t* data, uint32_t count) {
+  if (g_image == NULL) {
+    return SdcardReadBlocks(lba, data, count);
+  }
+  const uint32_t errors = g_image->stats.errors;
+  const uint32_t start = lba * kSdcardBlockSize;
+  for (uint32_t i = 0; i < count * kSdcardBlockSize; ++i) {
+    data[i] = DiskImageReadByte(g_image, start + i);
+  }
+  return g_image->stats.errors == errors;
+}
+
+static bool WriteBlocks(uint32_t lba, const uint8_t* data, uint32_t count) {
+  if (g_image == NULL) {
+    return SdcardWriteBlocks(lba, data, count);
+  }
+  const uint32_t errors = g_image->stats.errors;
+  const uint32_t start = lba * kSdcardBlockSize;
+  for (uint32_t i = 0; i < count * kSdcardBlockSize; ++i) {
+    DiskImageWriteByte(g_image, start + i, data[i]);
+  }
+  return g_image->stats.errors == errors;
+}
 
 static void CopyPadded(uint8_t* to, const char* from, uint8_t length) {
   for (uint8_t i = 0; i < length; ++i) {
@@ -100,7 +141,7 @@ bool tud_msc_test_unit_ready_cb(uint8_t lun) {
 void tud_msc_capacity_cb(
     uint8_t lun, uint32_t* block_count, uint16_t* block_size) {
   (void)lun;
-  *block_count = Present() ? SdcardGetBlockCount() : 0;
+  *block_count = Present() ? BlockCount() : 0;
   *block_size = kSdcardBlockSize;
 }
 
@@ -123,8 +164,8 @@ static bool CheckTransfer(
     return false;
   }
   const uint32_t count = bufsize / kSdcardBlockSize;
-  if (offset != 0 || bufsize % kSdcardBlockSize != 0 ||
-      lba >= SdcardGetBlockCount() || count > SdcardGetBlockCount() - lba) {
+  if (offset != 0 || bufsize % kSdcardBlockSize != 0 || lba >= BlockCount() ||
+      count > BlockCount() - lba) {
     tud_msc_set_sense(lun, kSenseIllegalRequest, kSenseOutOfRange, 0);
     ++g_stats.errors;
     return false;
@@ -139,7 +180,7 @@ int32_t tud_msc_read10_cb(
     return -1;
   }
   const uint32_t count = bufsize / kSdcardBlockSize;
-  if (!SdcardReadBlocks(lba, buffer, count)) {
+  if (!ReadBlocks(lba, buffer, count)) {
     tud_msc_set_sense(lun, kSenseMediumError, kSenseReadError, 0);
     ++g_stats.errors;
     return -1;
@@ -155,7 +196,7 @@ int32_t tud_msc_write10_cb(
     return -1;
   }
   const uint32_t count = bufsize / kSdcardBlockSize;
-  if (!SdcardWriteBlocks(lba, buffer, count)) {
+  if (!WriteBlocks(lba, buffer, count)) {
     tud_msc_set_sense(lun, kSenseMediumError, kSenseWriteError, 0);
     ++g_stats.errors;
     return -1;
