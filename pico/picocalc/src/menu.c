@@ -249,7 +249,7 @@ void MenuSetProblem(const char* problem) {
 
 const char* MenuHint(void) {
   if (g_page == kMenuPageVMs) {
-    return "\x18\x19=Move  Enter=Start";
+    return "\x18\x19=Move  Enter=Select";
   }
   if (g_page == kMenuPageSharing) {
     return "Enter=Disconnect";
@@ -260,7 +260,7 @@ const char* MenuHint(void) {
   if (g_page == kMenuPageBrowse) {
     return "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back";
   }
-  return "\x18\x19=Move  Enter=Choose  Esc=Back";
+  return "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
 const char* MenuProblem(void) {
@@ -890,7 +890,7 @@ static void DrawBrowsePage(DisplayMenu* menu) {
 // are more above or below, and the countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
   PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
-  EdgeRow(&menu->text[0], menu->columns, true, NULL);
+  EdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);

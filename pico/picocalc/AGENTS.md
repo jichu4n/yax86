@@ -438,7 +438,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   keys, and while the VM is dropping time it shows `SLOW` and its
   speed in yellow.
 - **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
-  pairs two spaces apart - `↑↓=Move  Enter=Choose  Esc=Back` - the action
+  pairs two spaces apart - `↑↓=Move  Enter=Select  Esc=Back` - the action
   brighter than the key, so the two read apart in the 4x10 font. The menu
   key on the bottom row, `↑+↑=Menu`, is the same a step dimmer.
 - **Drives** follow each other two columns apart: the image's file name,

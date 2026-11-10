@@ -50,7 +50,7 @@ typedef struct StatusBarState {
   uint32_t slow_percent;
   // Keys to show on the message row in place of messages, such as the menu's
   // while it is open, or NULL: Key=Action pairs two spaces apart, the way
-  // MS-DOS's own programs label theirs - "\x18\x19=Move  Enter=Choose".
+  // MS-DOS's own programs label theirs - "\x18\x19=Move  Enter=Select".
   const char* hint;
   // A problem to show in place of the keys, or NULL.
   const char* problem;
