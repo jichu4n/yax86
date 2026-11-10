@@ -118,6 +118,9 @@ enum {
   // is survived. Any value does, as long as uninitialized RAM is unlikely to
   // hold it.
   kOverclockAttemptMarker = 0x0C10C4ED,
+  // Written to g_start_note's marker by a reset or a power off, for the
+  // start after the reboot - see LeaveStartNote().
+  kStartNoteMarker = 0x5747A27E,
   // How long the core voltage is given to settle before the clock is raised.
   kVoltageSettleUs = 10 * 1000,
 
@@ -253,6 +256,27 @@ static RunClock g_clock;
 // Deliberately not zeroed at startup - see Overclock().
 static uint32_t __uninitialized_ram(g_overclock_marker);
 #endif
+
+// What the start after a reboot is to do, left by the menu's Reset and Power
+// off.
+typedef enum StartIntent {
+  // Start the VM again at once, without the list.
+  kStartIntentRestart = 0,
+  // Show the list, with the VM highlighted, and wait for a key.
+  kStartIntentList,
+} StartIntent;
+
+typedef struct StartNote {
+  // kStartNoteMarker while the note is to be acted on.
+  uint32_t marker;
+  StartIntent intent;
+  // The VM's vm.cfg.
+  char path[kFileListMaxPath + 1];
+} StartNote;
+
+// Deliberately not zeroed at startup, so that it survives the reboot - see
+// LeaveStartNote().
+static StartNote __uninitialized_ram(g_start_note);
 
 // ============================================================================
 // Reporting
@@ -956,16 +980,64 @@ static bool RedrawGuest(void) {
   return !YAX86_PICOCALC_DRAW_SCREEN || DisplayOfferFrame(&g_platform.video);
 }
 
-// Restart the board, which restarts the VM from power on, the way the
-// power button would - but without losing the keyboard controller's power, or
-// the guest's disks, whose sectors are already on the card.
-static void ResetVM(void) {
-  SYSTEM_INFO("reset");
+// Restart the board, leaving a note for the start after it, which takes it
+// - see TakeStartNote(). Every start, whether from power on, a reset or a power
+// off, begins from the same state. Nothing is lost: the keyboard controller
+// keeps its power, and the guest's disks have every sector it wrote on the
+// card.
+//
+// The note is in RAM that startup does not clear, as g_overclock_marker is: it
+// survives the reboot but not a power cycle. It is only ever set across the
+// reboot, and the start after takes it whatever it does next, so a later
+// reboot - picotool's, or the power button's - never finds one left from
+// before.
+static void LeaveStartNote(StartIntent intent) {
+  g_start_note.intent = intent;
+  FileListCopyPath(g_vm.entry.path, g_start_note.path);
+  g_start_note.marker = kStartNoteMarker;
   watchdog_reboot(0, 0, 0);
   for (;;) {
     tight_loop_contents();
   }
 }
+
+// Take the note a reset or power off left, if one did: returns whether there
+// was one.
+static bool TakeStartNote(StartNote* note) {
+  if (g_start_note.marker != kStartNoteMarker) {
+    return false;
+  }
+  g_start_note.marker = 0;
+  note->intent = g_start_note.intent;
+  // The path may have been left unterminated by RAM it never wrote.
+  g_start_note.path[kFileListMaxPath] = '\0';
+  FileListCopyPath(g_start_note.path, note->path);
+  return true;
+}
+
+// The VM again from power on, with the disks it has now, without the list.
+// Without a VM there is no card, and a plain reboot boots the built-in floppy
+// again.
+static void ResetVM(void) {
+  SYSTEM_INFO("reset", Y_LOG_STRING("path", g_vm.entry.path));
+  if (!g_has_vm) {
+    watchdog_reboot(0, 0, 0);
+    for (;;) {
+      tight_loop_contents();
+    }
+  }
+  LeaveStartNote(kStartIntentRestart);
+}
+
+// Back to the list, which waits for a key with the VM left highlighted.
+static void PowerOffVM(void) {
+  SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm.entry.path));
+  LeaveStartNote(kStartIntentList);
+}
+
+// Whether there is a list to power off to: there is one only with a card, and
+// a VM is started only from it.
+static bool CanPowerOff(void) { return g_has_vm; }
 
 static const char* const kDriveNames[kFloppyDrives] = {
     [kFloppyDriveA] = "a",
@@ -1344,7 +1416,13 @@ static void StopSharing(void) {
 // default at once, without the list, unless there is a problem to show. With
 // no VMs the list offers only USB disk mode, and nothing starts by itself.
 // Without a card, the built-in floppy boots in drive A.
+//
+// After a reset the VM reset starts again at once; after a power off the list
+// waits for a key, with the VM turned off highlighted. Either way, a VM that
+// no longer reads leaves the list waiting with its problem.
 static void ChooseVM(void) {
+  StartNote note = {0};
+  const bool noted = TakeStartNote(&note);
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   const bool settings_read = ReadSettings(&g_settings, &highlighted);
@@ -1352,14 +1430,26 @@ static void ChooseVM(void) {
   if (DiskImageMountCard() != kDiskImageOpen) {
     return;
   }
-  if (settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
+  if (noted) {
+    SYSTEM_INFO(
+        note.intent == kStartIntentRestart ? "restarting" : "powered_off",
+        Y_LOG_STRING("path", note.path));
+    const uint8_t index = VMListFind(&g_vms, note.path);
+    if (index < kVMListMax) {
+      highlighted = index;
+      if (note.intent == kStartIntentRestart && TakeVM(index)) {
+        return;
+      }
+    }
+  } else if (
+      settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
       TakeVM(highlighted)) {
     return;
   }
   MenuChooseVMs(&g_vms, highlighted);
   const absolute_time_t start_at =
       make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
-  bool counting = g_settings.boot_delay > 0 && g_vms.count > 0;
+  bool counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
@@ -1526,6 +1616,8 @@ int main(void) {
   const MenuConfig menu_config = {
       .describe_status = DescribeStatus,
       .reset = ResetVM,
+      .power_off = PowerOffVM,
+      .can_power_off = CanPowerOff,
       .redraw_guest = RedrawGuest,
       .drive = FloppyGetImage,
       .eject_drive = EjectDrive,
