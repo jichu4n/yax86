@@ -308,16 +308,22 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   read-only floppy in flash** and no other drive has a disk, so a PicoCalc
   with no card still boots. No image on the card is looked for by name:
   every image a VM uses is one its `vm.cfg` names.
+- **`src/config_file.c` reads and updates every configuration file**:
+  `ConfigFileRead()` hands each pair to the caller, and
+  `ConfigFileUpdate()` sets keys to new values. An update changes only
+  those pairs, where they stand: comments, other pairs and line ends stay,
+  a key with no pair gains a line at the end, and a missing file is
+  created. Values are written with the core's `YLogfmtLine`, so they are
+  quoted exactly as `YLogfmtParse()` reads them back. The new file is
+  written in full beside the old with the extension `.new` -
+  `yax86/yax86.new` - before the old one is removed and it is renamed, so
+  a write cut short leaves the old file.
 - **The VM started becomes `boot_default`**, so the next power on
   highlights it and starts it after the countdown. `yax86.cfg` is written
   only when the default changes - a board that starts its default every
-  time never writes - and only the `boot_default` pair changes: comments,
-  other settings and line ends stay, and a file without one gains a line,
-  or is created with only that. The path is written from `yax86` in lower
-  case, FAT names being the same in either. The new file is written in
-  full as `yax86/yax86.new` before the old one is removed and it is
-  renamed, so a write cut short leaves the old settings; a failure says
-  why on the message row and the VM starts anyway.
+  time never writes. The path is written from `yax86` in lower case, FAT
+  names being the same in either. A failure says why on the message row
+  and the VM starts anyway.
 - A disk changed in the menu is not written back: it is forgotten at the
   next power on.
 

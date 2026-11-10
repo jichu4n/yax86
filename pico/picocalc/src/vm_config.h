@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "config_file.h"
 #include "file_list.h"
 
 enum {
@@ -46,9 +47,8 @@ enum {
   kVMListMax = 16,
   // A VM's name: its folder's, an 8.3 name.
   kVMNameLength = 12,
-  // The longest configuration file read, and the longest problem described.
-  kVMConfigMaxBytes = 2048,
-  kVMProblemLength = 60,
+  // The longest problem described.
+  kVMProblemLength = kConfigFileProblemLength,
   // How long the list at power on waits for a key, in seconds, without
   // settings, and at most.
   kVMDefaultBootDelay = 5,
