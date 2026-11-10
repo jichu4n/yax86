@@ -57,8 +57,8 @@ void FileListCopyPath(const char* from, char to[kFileListMaxPath + 1]);
 // Whether two paths name the same file. The card's file system ignores case.
 bool FileListSamePath(const char* a, const char* b);
 
-// The folder a path is in: "yax86" for "yax86/floppy_a.img", "" for a file at
-// the root.
+// The folder a path is in: "yax86/vm/dos330" for "yax86/vm/dos330/hdd.img", ""
+// for a file at the root.
 void FileListFolderOf(const char* path, char folder[kFileListMaxPath + 1]);
 
 #endif  // YAX86_PICOCALC_FILE_LIST_H

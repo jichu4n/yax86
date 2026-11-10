@@ -21,7 +21,7 @@ const YLogModule kDiskLogModule = {kDiskLogModuleID, "disk"};
 const YLogModule kKeyboardLogModule = {kKeyboardLogModuleID, "keyboard"};
 const YLogModule kPacingLogModule = {kPacingLogModuleID, "pacing"};
 
-YLoggerConfig g_machine_log_config;
+YLoggerConfig g_vm_log_config;
 static YLoggerConfig g_runtime_log_config;
 YLogger g_runtime_logger;
 YLogger g_render_logger;
@@ -38,12 +38,12 @@ static void WriteLine(
 }
 
 void RuntimeLogInit(void) {
-  g_machine_log_config.write_line = WriteLine;
-  g_machine_log_config.enabled_modules = 0xFFFFFFFF;
-  g_machine_log_config.min_level = Y_LOG_LEVEL_ERROR;
+  g_vm_log_config.write_line = WriteLine;
+  g_vm_log_config.enabled_modules = 0xFFFFFFFF;
+  g_vm_log_config.min_level = Y_LOG_LEVEL_ERROR;
   g_runtime_log_config.write_line = WriteLine;
   g_runtime_log_config.enabled_modules = 0xFFFFFFFF;
   g_runtime_log_config.min_level = Y_LOG_LEVEL_INFO;
   YLoggerInit(&g_runtime_logger, &g_runtime_log_config);
-  YLoggerInit(&g_render_logger, &g_machine_log_config);
+  YLoggerInit(&g_render_logger, &g_vm_log_config);
 }

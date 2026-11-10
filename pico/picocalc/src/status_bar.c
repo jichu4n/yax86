@@ -76,7 +76,7 @@ static DriveLight g_lights[kStatusBarDrives];
 typedef struct ComposedFrom {
   bool lit[kStatusBarDrives];
   DiskImageStatus status[kStatusBarDrives];
-  const char* machine;
+  const char* vm;
   bool running;
   uint8_t keyboard_flags;
   uint32_t guest_seconds;
@@ -272,8 +272,8 @@ static void ComposeIndicators(
       {"SCRL", kFlagScrollLock},
       {"INS", kFlagInsert},
   };
-  if (state->machine != NULL) {
-    Put(row, 0, state->machine, kAttrBright);
+  if (state->vm != NULL) {
+    Put(row, 0, state->vm, kAttrBright);
   }
   if (state->running) {
     uint8_t column = kLocksColumn;
@@ -308,7 +308,7 @@ static bool ComposedFromEqual(const ComposedFrom* a, const ComposedFrom* b) {
       return false;
     }
   }
-  return a->machine == b->machine && a->running == b->running &&
+  return a->vm == b->vm && a->running == b->running &&
          a->keyboard_flags == b->keyboard_flags &&
          a->guest_seconds == b->guest_seconds &&
          a->battery.known == b->battery.known &&
@@ -327,7 +327,7 @@ bool StatusBarCompose(
         image != NULL && DriveLit(&g_lights[drive], image, now_us);
     from.status[drive] = image != NULL ? image->status : kDiskImageEjected;
   }
-  from.machine = state->machine;
+  from.vm = state->vm;
   from.running = state->running;
   from.keyboard_flags = state->keyboard_flags;
   from.guest_seconds = state->guest_seconds;

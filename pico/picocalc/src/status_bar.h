@@ -3,7 +3,7 @@
 //
 //   row 29  messages, a few seconds each, and the menu's keys while it is open
 //   row 30  the drives: each one's letter, lit while it is in use, and image
-//   row 31  the machine's name, the guest's lock flags, its time of day, the
+//   row 31  the VM's name, the guest's lock flags, its time of day, the
 //           menu key, the battery
 //
 //   Inserted GAMES.IMG in drive A
@@ -30,12 +30,12 @@ enum {
 typedef struct StatusBarState {
   // The drives' images, A to D, which are shown when they are open. Without
   // one, drive A has the floppy built into flash or is empty, drive B is
-  // empty, and drives C and D are not shown. NULL, before the machine has
+  // empty, and drives C and D are not shown. NULL, before the VM has
   // drives, shows nothing.
   const DiskImage* drives[kStatusBarDrives];
-  // The machine's name, or NULL without a machine.
-  const char* machine;
-  // Whether a machine is running. Its lock flags, time of day and the menu
+  // The VM's name, or NULL without a VM.
+  const char* vm;
+  // Whether a VM is running. Its lock flags, time of day and the menu
   // key show only while one is: the list at power on has no guest, and the
   // menu key does nothing there.
   bool running;
@@ -45,7 +45,7 @@ typedef struct StatusBarState {
   // The guest's time of day, in seconds since midnight.
   uint32_t guest_seconds;
   SouthbridgeBattery battery;
-  // How fast the machine has run against real time over the last second, in
+  // How fast the VM has run against real time over the last second, in
   // percent, while it has been falling behind; 0 otherwise.
   uint32_t slow_percent;
   // Keys to show on the message row in place of messages, such as the menu's

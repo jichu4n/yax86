@@ -29,7 +29,7 @@ typedef enum DiskImageStatus {
 // What reading and writing an image has cost, for the report.
 typedef struct DiskImageStats {
   // Sectors read from and written to the card, reads and writes that failed,
-  // and the time they took, which the machine waits for.
+  // and the time they took, which the VM waits for.
   uint32_t sector_reads;
   uint32_t sector_writes;
   uint32_t errors;

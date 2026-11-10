@@ -2,8 +2,6 @@
 
 #include "file_list.h"
 
-const char kHardDiskDefaultPath[] = "yax86/hdd.img";
-
 static DiskImage g_images[kHardDisks];
 static char g_paths[kHardDisks][kFileListMaxPath + 1];
 

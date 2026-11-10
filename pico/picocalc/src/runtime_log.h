@@ -1,19 +1,19 @@
-// The runtime's logging: the configuration it shares with the machine, a
+// The runtime's logging: the configuration it shares with the VM, a
 // logger for each core, the runtime's own log modules, and a macro for each
 // module and level.
 //
-// Everything the runtime and the machine say goes out over USB serial as one
-// logfmt line each - see "util - logging" in core/AGENTS.md. A line written while
-// no host is attached is dropped, as USB CDC would drop it anyway.
+// Everything the runtime and the VM say goes out over USB serial as one
+// logfmt line each - see "util - logging" in core/AGENTS.md. A line written
+// while no host is attached is dropped, as USB CDC would drop it anyway.
 #ifndef YAX86_PICOCALC_RUNTIME_LOG_H
 #define YAX86_PICOCALC_RUNTIME_LOG_H
 
 #include "core/platform.h"
 
-// What the machine logs through, on both cores: errors only. The core's
+// What the VM logs through, on both cores: errors only. The core's
 // warnings - a read from an unmapped port, for one - come in numbers during a
 // boot, and writing them out would put serial I/O in the time being measured.
-extern YLoggerConfig g_machine_log_config;
+extern YLoggerConfig g_vm_log_config;
 
 // What the runtime logs through on core 0, down to info, which is where its
 // reports and the boot's progress are. It has no source, so its lines carry
@@ -21,7 +21,7 @@ extern YLoggerConfig g_machine_log_config;
 // instruction the guest was running.
 extern YLogger g_runtime_logger;
 
-// What core 1 logs through, with the machine's configuration: the copy of the
+// What core 1 logs through, with the VM's configuration: the copy of the
 // guest's screen it renders, and the screenshot it sends, whose replies are
 // never filtered. A logger builds each line in a buffer of its own, so the
 // two cores cannot share one.

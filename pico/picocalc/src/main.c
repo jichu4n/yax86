@@ -1,16 +1,16 @@
 // yax86 on the ClockworkPi PicoCalc.
 //
 // The runtime raises the system clock, starts core 1 drawing on the LCD, brings
-// up the keyboard controller, and boots MS-DOS 3.30 off the floppy in drive A -
-// an image on the SD card, or the one built into flash without it - with the
-// guest's text screen on the LCD as it goes. A hard disk image on the card is
-// attached as well, if there is one. The machine is
+// up the keyboard controller, and starts a VM chosen from those on the SD
+// card, with its drives' images - or with none on the card, boots MS-DOS 3.30
+// off the floppy built into flash - with the guest's text screen on the LCD
+// as it goes. The VM is
 // paced to real time and keeps running past the prompt, with the PicoCalc's
 // keyboard as its own. DOS's date and time questions are still answered by
 // watching the screen, the way pico/bench does it, which keeps the boot the
 // dos-boot workload.
 //
-// Core 0, which this file runs on, runs the machine and never touches the
+// Core 0, which this file runs on, runs the VM and never touches the
 // LCD: core 1 draws everything on it, from copies core 0 hands over - see
 // display.h. The guest's screen takes the top 250 rows of the panel - 80 by 25
 // cells of the 4x10 font - and the runtime's status lines the rest. Everything
@@ -33,7 +33,6 @@
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
 #include "keymap.h"
-#include "machine_config.h"
 #include "menu.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
@@ -43,6 +42,7 @@
 #include "speaker.h"
 #include "status_bar.h"
 #include "typing.h"
+#include "vm_config.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
 // identical but for that, which is what measures what drawing costs.
@@ -92,7 +92,7 @@ enum {
   // light comes on while it is in use; core 1 is only handed them, and draws
   // only the rows that changed, when something has.
   kStatusUpdateMs = 100,
-  // How long the window is that the machine's speed is judged over, for the
+  // How long the window is that the VM's speed is judged over, for the
   // status rows' warning that it has fallen behind real time.
   kSlowWindowUs = 1000 * 1000,
   // The battery level below which the status rows say it is low, and the one
@@ -101,11 +101,11 @@ enum {
   kBatteryRecoveredPercent = 15,
   // How long a menu-paused loop sleeps between looks at the keyboard.
   kPausedPollMs = 10,
-  // How often the loop looks for a newly attached host once the machine has
+  // How often the loop looks for a newly attached host once the VM has
   // stopped.
   kStoppedPollMs = 100,
 
-  // How far behind real time the machine may fall and still make it up by
+  // How far behind real time the VM may fall and still make it up by
   // running flat out. Past this the lag is dropped instead, so that a long
   // stall is not followed by a burst of emulation at full speed.
   kMaxLagMs = 100,
@@ -197,7 +197,7 @@ typedef struct RuntimeStatus {
   // Emulated and host time at the point boot_stage was last changed.
   uint64_t boot_cycles;
   uint64_t boot_elapsed_us;
-  // Host time spent running the machine up to then, which is the elapsed time
+  // Host time spent running the VM up to then, which is the elapsed time
   // less the time spent waiting for real time to catch up. It is what the
   // boot would have taken unpaced.
   uint64_t boot_busy_us;
@@ -207,12 +207,11 @@ typedef struct RuntimeStatus {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
-// The machines on the card, and the one started, if one was: without one the
-// drives are as they were before machines, drive A `yax86/floppy_a.img` or
-// the built-in floppy, and drive C `yax86/hdd.img`.
-static MachineList g_machines;
-static MachineConfig g_machine;
-static bool g_has_machine;
+// The VMs on the card, and the one started, if one was: without one
+// drive A holds the built-in floppy and no other drive has a disk.
+static VMList g_vms;
+static VMConfig g_vm;
+static bool g_has_vm;
 static RuntimeStatus g_status;
 static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
@@ -223,7 +222,7 @@ static uint64_t g_command_us;
 static DisplayStatus g_status_rows;
 static bool g_status_rows_pending;
 
-// How far the machine has got in emulated time, and what pacing it against
+// How far the VM has got in emulated time, and what pacing it against
 // real time has cost.
 typedef struct RunClock {
   // Emulated cycles since power on. The platform's own counter is 32 bits, so
@@ -237,11 +236,11 @@ typedef struct RunClock {
   // on is due to take as long in real time.
   uint64_t anchor_us;
   uint64_t anchor_cycles;
-  // Host time spent waiting for real time to catch up with the machine.
+  // Host time spent waiting for real time to catch up with the VM.
   uint64_t waited_us;
-  // Real time the machine fell behind by and did not make up.
+  // Real time the VM fell behind by and did not make up.
   uint64_t dropped_us;
-  // Host time spent with the machine paused for the menu, and when the pause
+  // Host time spent with the VM paused for the menu, and when the pause
   // under way, if any, began.
   uint64_t paused_us;
   uint64_t pause_start_us;
@@ -263,7 +262,7 @@ static bool BootIsOver(void) {
          g_status.boot_stage == kBootStageFailed;
 }
 
-// Host time since power on, and how much of it went to running the machine
+// Host time since power on, and how much of it went to running the VM
 // rather than waiting for real time to catch up with it.
 static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
@@ -423,16 +422,16 @@ static size_t FormatDrive(
 }
 
 static void FormatDiskLine(char* buffer, size_t size) {
-  const DiskImage* const images[kMachineDrives] = {
-      [kMachineDriveA] = FloppyGetImage(kFloppyDriveA),
-      [kMachineDriveB] = FloppyGetImage(kFloppyDriveB),
-      [kMachineDriveC] = HardDiskGetImage(kHardDiskC),
-      [kMachineDriveD] = HardDiskGetImage(kHardDiskD),
+  const DiskImage* const images[kVMDrives] = {
+      [kVMDriveA] = FloppyGetImage(kFloppyDriveA),
+      [kVMDriveB] = FloppyGetImage(kFloppyDriveB),
+      [kVMDriveC] = HardDiskGetImage(kHardDiskC),
+      [kVMDriveD] = HardDiskGetImage(kHardDiskD),
   };
   size_t length = 0;
   uint64_t card_us = 0;
   bool any_open = false;
-  for (uint8_t drive = 0; drive < kMachineDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const DiskImage* image = images[drive];
     const char label[] = {(char)('A' + drive), ':', '\0'};
     if (image->status == kDiskImageOpen) {
@@ -442,7 +441,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
       // What drive A has instead, or why a configured image did not open.
       length += FormatDrive(
           buffer + length, size - length, label, image,
-          drive == kMachineDriveA && !g_has_machine ? "built in" : "none");
+          drive == kVMDriveA && !g_has_vm ? "built in" : "none");
     }
     card_us += image->stats.read_us + image->stats.write_us;
   }
@@ -456,7 +455,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
       (unsigned long long)(card_ms % kMillisecondsPerSecond));
 }
 
-// The menu's status page: what the runtime found, and what running the machine
+// The menu's status page: what the runtime found, and what running the VM
 // has cost so far.
 static void DescribeStatus(MenuStatusLine lines[kMenuStatusLines]) {
   static const char* const kLabels[kMenuStatusLines] = {
@@ -474,7 +473,7 @@ static void DescribeStatus(MenuStatusLine lines[kMenuStatusLines]) {
   FormatDiskLine(lines[5].value, size);
 }
 
-// How fast the machine has run against real time over the last window, in
+// How fast the VM has run against real time over the last window, in
 // percent, if it has fallen behind and dropped time in it; 0 if it has kept
 // up.
 static uint32_t SlowPercent(void) {
@@ -516,14 +515,14 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
 
 static void OfferStatusRows(const StatusBarState* state);
 
-// Compose the status rows from the machine's state.
+// Compose the status rows from the VM's state.
 static void UpdateStatusRows(void) {
   StatusBarState state = {0};
   state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
   state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
   state.drives[kStatusBarDriveC] = HardDiskGetImage(kHardDiskC);
   state.drives[kStatusBarDriveD] = HardDiskGetImage(kHardDiskD);
-  state.machine = g_has_machine ? g_machine.machine.name : NULL;
+  state.vm = g_has_vm ? g_vm.entry.name : NULL;
   state.running = true;
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
   state.guest_seconds = (uint32_t)(GuestClockMs() / kMillisecondsPerSecond);
@@ -614,9 +613,8 @@ static void ReplyReport(const Command* command) {
   ReplyDiskImage(command, "drive_c", HardDiskGetImage(kHardDiskC));
   ReplyDiskImage(command, "drive_d", HardDiskGetImage(kHardDiskD));
   REPLY_GROUP(
-      command, "machine",
-      Y_LOG_STRING("name", g_has_machine ? g_machine.machine.name : ""),
-      Y_LOG_UINT("machines", g_machines.count));
+      command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
+      Y_LOG_UINT("vms", g_vms.count));
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
   REPLY_GROUP(
       command, "keyboard", Y_LOG_UINT("reads", keyboard.reads),
@@ -658,7 +656,7 @@ static void AnnounceToNewHost(void) {
 }
 
 // ============================================================================
-// The machine
+// The VM
 // ============================================================================
 
 static void SetPCSpeakerFrequency(
@@ -666,9 +664,9 @@ static void SetPCSpeakerFrequency(
   SpeakerSetFrequency(frequency_hz);
 }
 
-static bool InitMachine(void) {
+static bool InitVM(void) {
   YPlatformConfig* config = &g_platform.config;
-  config->logger_config = &g_machine_log_config;
+  config->logger_config = &g_vm_log_config;
   config->physical_memory_size = kGuestRAMSize;
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
@@ -711,7 +709,7 @@ static bool ScreenContains(const char* needle) {
 }
 
 // Answer whichever question DOS is asking, and return the stage the boot has
-// reached. The machine has no clock to set the date and time from, and
+// reached. The VM has no clock to set the date and time from, and
 // answering for the user keeps the boot the dos-boot workload, which is what
 // the speed figures measure.
 static BootStage AdvanceBoot(BootStage stage) {
@@ -749,10 +747,10 @@ static void SetBootStage(BootStage stage) {
   BOOT_INFO("boot_stage", BOOT_FIELDS());
 }
 
-// Run a batch of emulated cycles, and return how the machine stands after it.
+// Run a batch of emulated cycles, and return how the VM stands after it.
 static YPlatformRunStatus RunBatch(void) {
   // An invalid opcode is not a stop: the 8088 has no invalid opcode
-  // exception, so a real machine would carry on.
+  // exception, so a real one would carry on.
   YPlatformRunStatus status = Y_PLATFORM_RUNNING;
   for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
     const uint32_t batch_start = g_platform.ticks;
@@ -768,7 +766,7 @@ static YPlatformRunStatus RunBatch(void) {
   return status;
 }
 
-// Wait until real time has caught up with the emulated time the machine has
+// Wait until real time has caught up with the emulated time the VM has
 // reached, which is what keeps it from running faster than a real PC/XT.
 //
 // Only ever waits between batches, never changes them, so pacing cannot move
@@ -776,7 +774,7 @@ static YPlatformRunStatus RunBatch(void) {
 // to spare.
 static void PaceToRealTime(void) {
   // The anchor moves a whole emulated second at a time, which keeps the
-  // product below from overflowing however long the machine runs, and loses
+  // product below from overflowing however long the VM runs, and loses
   // nothing to rounding.
   while (g_clock.cycles - g_clock.anchor_cycles >=
          Y_PLATFORM_CPU_CYCLES_PER_SECOND) {
@@ -938,7 +936,7 @@ static void RunCommand(const Command* command) {
 // ============================================================================
 
 // Mark the guest's screen to be drawn in full, and offer it to core 1 now
-// rather than at the next frame, which while the machine is paused never
+// rather than at the next frame, which while the VM is paused never
 // comes. Returns whether core 1 took it. If it did not, the mark stays in the
 // live state, and the next frame offered draws it all.
 static bool RedrawGuest(void) {
@@ -946,10 +944,10 @@ static bool RedrawGuest(void) {
   return !YAX86_PICOCALC_DRAW_SCREEN || DisplayOfferFrame(&g_platform.video);
 }
 
-// Restart the board, which restarts the machine from power on, the way the
+// Restart the board, which restarts the VM from power on, the way the
 // power button would - but without losing the keyboard controller's power, or
 // the guest's disks, whose sectors are already on the card.
-static void ResetMachine(void) {
+static void ResetVM(void) {
   SYSTEM_INFO("reset");
   watchdog_reboot(0, 0, 0);
   for (;;) {
@@ -1014,9 +1012,9 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
   StatusBarPostMessage(message);
 }
 
-// Real time goes on while the machine is paused and emulated time does not,
+// Real time goes on while the VM is paused and emulated time does not,
 // so on resuming the two are made to agree again from now, rather than the
-// machine being run flat out to catch up a pause it was meant to take.
+// VM being run flat out to catch up a pause it was meant to take.
 static void ResumeFromMenu(void) {
   const uint64_t now_us = time_us_64();
   g_clock.paused_us += now_us - g_clock.pause_start_us;
@@ -1052,16 +1050,16 @@ static void HandleKey(SouthbridgeKeyEvent key, bool running) {
 // The main loop
 // ============================================================================
 
-// Run the machine, paced to real time, for as long as the board has power.
+// Run the VM, paced to real time, for as long as the board has power.
 // The boot is watched on the way, and DOS's questions answered. While the
-// menu is open, the machine is paused and the loop only looks after the menu,
+// menu is open, the VM is paused and the loop only looks after the menu,
 // the keyboard and commands.
-static void RunMachine(bool machine_ready) {
+static void RunVM(bool vm_ready) {
   const uint64_t max_boot_cycles =
       (uint64_t)kBootMaxEmulatedSeconds * Y_PLATFORM_CPU_CYCLES_PER_SECOND;
   uint64_t next_poll_cycles = kBootPollCycles;
   uint64_t next_render_cycles = kCyclesPerRender;
-  bool running = machine_ready;
+  bool running = vm_ready;
   bool screen_on = true;
   absolute_time_t blank_at = at_the_end_of_time;
   absolute_time_t next_status_at = get_absolute_time();
@@ -1074,7 +1072,7 @@ static void RunMachine(bool machine_ready) {
 
     if (running && !MenuIsOpen() && RunBatch() == Y_PLATFORM_HUNG) {
       // The CPU halted with nothing to wake it.
-      SYSTEM_ERROR("machine_stopped");
+      SYSTEM_ERROR("vm_stopped");
       running = false;
     }
 
@@ -1084,7 +1082,7 @@ static void RunMachine(bool machine_ready) {
       RunCommand(&command);
       g_command_us += time_us_64() - start_us;
     }
-    // Between batches, so the keyboard is never written while the machine
+    // Between batches, so the keyboard is never written while the VM
     // runs, and a key a host typed only in a batch the keyboard had none, so
     // that the two never land in one. A key also keeps the screen on, and
     // turns it back on if it was blanked: its contents are kept, and what
@@ -1157,11 +1155,11 @@ static void RunMachine(bool machine_ready) {
 }
 
 // ============================================================================
-// Choosing a machine
+// Choosing a VM
 // ============================================================================
 
-// The status rows while the list of machines shows: the list's keys, or why
-// a machine did not start, and the battery. There are no drives yet.
+// The status rows while the list of VMs shows: the list's keys, or why
+// a VM did not start, and the battery. There are no drives yet.
 static void UpdateChoosingRows(void) {
   StatusBarState state = {0};
   state.battery = SouthbridgeGetBattery();
@@ -1170,39 +1168,38 @@ static void UpdateChoosingRows(void) {
   OfferStatusRows(&state);
 }
 
-// Read the configuration of the machine at index in the list, to start it.
+// Read the configuration of the VM at index in the list, to start it.
 // Returns false if it could not be read, with why shown on the list.
-static bool TakeMachine(uint8_t index) {
-  const MachineEntry* machine = &g_machines.machines[index];
-  char problem[kMachineProblemLength + 1];
-  if (MachineConfigRead(machine->path, &g_machine, problem)) {
-    g_has_machine = true;
-    SYSTEM_INFO("machine_chosen", Y_LOG_STRING("path", machine->path));
+static bool TakeVM(uint8_t index) {
+  const VMEntry* vm = &g_vms.vms[index];
+  char problem[kVMProblemLength + 1];
+  if (VMConfigRead(vm->path, &g_vm, problem)) {
+    g_has_vm = true;
+    SYSTEM_INFO("vm_chosen", Y_LOG_STRING("path", vm->path));
     return true;
   }
   char message[kTextColumns + 1];
-  snprintf(message, sizeof(message), "%s: %s", machine->name, problem);
+  snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
   MenuSetProblem(message);
   SYSTEM_WARN(
-      "machine_config_problem", Y_LOG_STRING("path", machine->path),
+      "vm_config_problem", Y_LOG_STRING("path", vm->path),
       Y_LOG_STRING("problem", problem));
   return false;
 }
 
-// The card's settings, and the index of the default machine in the list.
+// The card's settings, and the index of the default VM in the list.
 // Returns false, with the problem shown on the list, if the settings had one.
-static bool ReadSettings(MachineSettings* settings, uint8_t* highlighted) {
-  char problem[kMachineProblemLength + 1];
-  bool read = MachineSettingsRead(settings, problem);
+static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
+  char problem[kVMProblemLength + 1];
+  bool read = VMSettingsRead(settings, problem);
   *highlighted = 0;
   if (read && settings->boot_default[0] != '\0') {
-    // A default outside the machines folder is listed too.
-    const uint8_t index = MachineListFind(&g_machines, settings->boot_default);
-    if (index < kMachineListMax) {
+    // A default outside the VMs folder is listed too.
+    const uint8_t index = VMListFind(&g_vms, settings->boot_default);
+    if (index < kVMListMax) {
       *highlighted = index;
     } else {
-      snprintf(
-          problem, sizeof(problem), "too many machines to add boot_default");
+      snprintf(problem, sizeof(problem), "too many VMs to add boot_default");
       read = false;
     }
   }
@@ -1215,24 +1212,23 @@ static bool ReadSettings(MachineSettings* settings, uint8_t* highlighted) {
   return read;
 }
 
-// With machines on the card, show the list of them until one is chosen whose
+// With VMs on the card, show the list of them until one is chosen whose
 // configuration reads, or until the default starts by itself, the countdown
 // running until a key is pressed. Settings that ask for no wait start the
 // default at once, without the list, unless there is a problem to show.
-// Without any machines, the machine starts with the drives it had before
-// machines.
-static void ChooseMachine(void) {
-  MachineListRead(&g_machines);
-  MachineSettings settings;
+// Without any VMs, the built-in floppy boots in drive A.
+static void ChooseVM(void) {
+  VMListRead(&g_vms);
+  VMSettings settings;
   uint8_t highlighted = 0;
   const bool settings_read = ReadSettings(&settings, &highlighted);
-  if (g_machines.count == 0) {
+  if (g_vms.count == 0) {
     return;
   }
-  if (settings_read && settings.boot_delay == 0 && TakeMachine(highlighted)) {
+  if (settings_read && settings.boot_delay == 0 && TakeVM(highlighted)) {
     return;
   }
-  MenuChooseMachines(&g_machines, highlighted);
+  MenuChooseVMs(&g_vms, highlighted);
   const absolute_time_t start_at =
       make_timeout_time_ms(settings.boot_delay * kMillisecondsPerSecond);
   bool counting = settings.boot_delay > 0;
@@ -1247,7 +1243,7 @@ static void ChooseMachine(void) {
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
       counting = false;
       MenuSetCountdown(0);
-      chosen = MenuHandleKey(key) == kMenuActionMachineChosen;
+      chosen = MenuHandleKey(key) == kMenuActionVMChosen;
     }
     if (counting) {
       const int64_t left_us =
@@ -1261,7 +1257,7 @@ static void ChooseMachine(void) {
                                    kMicrosecondsPerSecond));
       }
     }
-    if (chosen && TakeMachine(MenuChosenMachine())) {
+    if (chosen && TakeVM(MenuChosenVM())) {
       MenuClose();
       return;
     }
@@ -1274,22 +1270,19 @@ static void ChooseMachine(void) {
   }
 }
 
-// Open the drives' images: the machine's, or without one, the ones before
-// machines. An image a machine names that does not open leaves its drive
-// empty, which a message says - as does one named for two drives, which goes
-// in the first: two drives writing one image would each overwrite the
+// Open the drives' images: the VM's, or without one, none - drive A then
+// has the built-in floppy. An image a VM names that does not open leaves its
+// drive empty, which a message says - as does one named for two drives, which
+// goes in the first: two drives writing one image would each overwrite the
 // other's sectors.
 static void OpenDrives(void) {
-  const char* paths[kMachineDrives] = {
-      [kMachineDriveA] = kFloppyDefaultPath,
-      [kMachineDriveC] = kHardDiskDefaultPath,
-  };
+  const char* paths[kVMDrives] = {"", "", "", ""};
   char message[kTextColumns + 1];
-  if (g_has_machine) {
-    snprintf(message, sizeof(message), "Started %s", g_machine.machine.name);
+  if (g_has_vm) {
+    snprintf(message, sizeof(message), "Started %s", g_vm.entry.name);
     StatusBarPostMessage(message);
-    for (uint8_t drive = 0; drive < kMachineDrives; ++drive) {
-      paths[drive] = g_machine.drives[drive];
+    for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+      paths[drive] = g_vm.drives[drive];
       for (uint8_t earlier = 0; earlier < drive; ++earlier) {
         if (paths[drive][0] != '\0' &&
             FileListSamePath(paths[drive], paths[earlier])) {
@@ -1304,15 +1297,15 @@ static void OpenDrives(void) {
       }
     }
   }
-  DiskImageStatus opened[kMachineDrives];
-  FloppyOpen(&paths[kMachineDriveA], !g_has_machine, &opened[kMachineDriveA]);
-  HardDiskOpen(&paths[kMachineDriveC]);
-  opened[kMachineDriveC] = HardDiskGetImage(kHardDiskC)->status;
-  opened[kMachineDriveD] = HardDiskGetImage(kHardDiskD)->status;
-  if (!g_has_machine) {
+  DiskImageStatus opened[kVMDrives];
+  FloppyOpen(&paths[kVMDriveA], !g_has_vm, &opened[kVMDriveA]);
+  HardDiskOpen(&paths[kVMDriveC]);
+  opened[kVMDriveC] = HardDiskGetImage(kHardDiskC)->status;
+  opened[kVMDriveD] = HardDiskGetImage(kHardDiskD)->status;
+  if (!g_has_vm) {
     return;
   }
-  for (uint8_t drive = 0; drive < kMachineDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     if (paths[drive][0] == '\0' || opened[drive] == kDiskImageOpen) {
       continue;
     }
@@ -1389,7 +1382,7 @@ int main(void) {
       SouthbridgeReadVersion(&g_status.southbridge_version);
   const MenuConfig menu_config = {
       .describe_status = DescribeStatus,
-      .reset = ResetMachine,
+      .reset = ResetVM,
       .redraw_guest = RedrawGuest,
       .drive = FloppyGetImage,
       .eject_drive = EjectDrive,
@@ -1397,8 +1390,8 @@ int main(void) {
   };
   MenuInit(&menu_config);
 
-  ChooseMachine();
+  ChooseVM();
   OpenDrives();
-  RunMachine(InitMachine());
+  RunVM(InitVM());
   return 0;
 }

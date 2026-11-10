@@ -13,8 +13,6 @@ enum {
   kOpenBusByte = 0xFF,
 };
 
-const char kFloppyDefaultPath[] = "yax86/floppy_a.img";
-
 static DiskImage g_images[kFloppyDrives];
 // The paths of the images, which the images point to.
 static char g_inserted_paths[kFloppyDrives][kFileListMaxPath + 1];
@@ -22,7 +20,7 @@ static char g_inserted_paths[kFloppyDrives][kFileListMaxPath + 1];
 static bool g_built_in;
 
 void FloppyOpen(
-    const char* const paths[kFloppyDrives], bool built_in_fallback,
+    const char* const paths[kFloppyDrives], bool built_in,
     DiskImageStatus opened[kFloppyDrives]) {
   for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
     DiskImage* image = &g_images[drive];
@@ -34,13 +32,18 @@ void FloppyOpen(
     }
     opened[drive] = image->status;
   }
-  g_built_in =
-      built_in_fallback && g_images[kFloppyDriveA].status != kDiskImageOpen;
   for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
-    if (g_images[drive].status != kDiskImageOpen &&
-        !(drive == kFloppyDriveA && g_built_in)) {
+    if (g_images[drive].status != kDiskImageOpen) {
       g_images[drive].status = kDiskImageEjected;
     }
+  }
+  g_built_in = built_in;
+  if (built_in) {
+    // Why drive A has no image on the card, for the status page.
+    const DiskImageStatus card = DiskImageMountCard();
+    DiskImage* image = &g_images[kFloppyDriveA];
+    image->status = card != kDiskImageOpen ? card : kDiskImageNotFound;
+    opened[kFloppyDriveA] = image->status;
   }
 }
 

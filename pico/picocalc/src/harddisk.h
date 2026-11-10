@@ -3,9 +3,7 @@
 //
 // An image is the core's 10MB drive, 306 cylinders of 4 heads and 17
 // sectors, and what the guest writes to it is written to the card. A drive
-// with no image is not attached. Without a machine configuration, drive C is
-// `yax86/hdd.img` if the card has one, and drive D is not attached; with no
-// hard disk, the machine is the one `dos-boot` measures, but for its drives.
+// with no image is not attached, and with no VM to start neither is.
 #ifndef YAX86_PICOCALC_HARDDISK_H
 #define YAX86_PICOCALC_HARDDISK_H
 
@@ -17,9 +15,6 @@ typedef enum HardDiskDrive {
   kHardDiskD,
   kHardDisks,
 } HardDiskDrive;
-
-// The image looked for without a machine configuration, as drive C.
-extern const char kHardDiskDefaultPath[];
 
 // Open each drive's image on the SD card: a path from the card's root, or
 // NULL or empty for none, which leaves the drive kDiskImageEjected. Call
