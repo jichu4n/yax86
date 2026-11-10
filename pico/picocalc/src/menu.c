@@ -72,6 +72,13 @@ static const char* const kPageNames[] = {
     [kMenuPageBrowse] = "browse",
 };
 
+// An item of a page, and whether choosing it opens another menu, which a
+// chevron at its end says.
+typedef struct MenuItem {
+  const char* text;
+  bool opens_menu;
+} MenuItem;
+
 typedef enum MainItem {
   kMainResume = 0,
   kMainDriveA,
@@ -80,11 +87,11 @@ typedef enum MainItem {
   kMainItemCount,
 } MainItem;
 
-static const char* const kMainItems[kMainItemCount] = {
-    [kMainResume] = "Resume",
-    [kMainDriveA] = "Drive A",
-    [kMainStatus] = "Status",
-    [kMainReset] = "Reset the machine",
+static const MenuItem kMainItems[kMainItemCount] = {
+    [kMainResume] = {"Resume", false},
+    [kMainDriveA] = {"Drive A", true},
+    [kMainStatus] = {"Status", false},
+    [kMainReset] = {"Reset the machine", false},
 };
 
 typedef enum DriveItem {
@@ -93,20 +100,15 @@ typedef enum DriveItem {
   kDriveItemCount,
 } DriveItem;
 
-static const char* const kDriveItems[kDriveItemCount] = {
-    [kDriveInsert] = "Choose disk image...",
-    [kDriveEject] = "Eject",
-};
-
 typedef enum ResetItem {
   kResetCancel = 0,
   kResetConfirm,
   kResetItemCount,
 } ResetItem;
 
-static const char* const kResetItems[kResetItemCount] = {
-    [kResetCancel] = "Cancel",
-    [kResetConfirm] = "Reset",
+static const MenuItem kResetItems[kResetItemCount] = {
+    [kResetCancel] = {"Cancel", false},
+    [kResetConfirm] = {"Reset", false},
 };
 
 static MenuConfig g_config;
@@ -487,6 +489,16 @@ static void ItemRow(
   PutText(row, columns, 3, text, chosen ? kAttrChosen : kAttrText);
 }
 
+// A menu item's row, with a chevron near the right border if it opens
+// another menu.
+static void MenuItemRow(
+    DisplayTextRow* row, uint8_t columns, const MenuItem* item, bool chosen) {
+  ItemRow(row, columns, item->text, chosen);
+  if (item->opens_menu) {
+    row->chars[columns - 3] = '>';
+  }
+}
+
 // Lay out a box of rows, centered on the guest's screen.
 static void PlaceBox(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
   menu->columns = columns;
@@ -498,7 +510,7 @@ static void PlaceBox(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
 // A page of items, under lines of text, if any.
 static void DrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const char* const* items, uint8_t count) {
+    uint8_t line_count, const MenuItem* items, uint8_t count) {
   const uint8_t text_rows = line_count > 0 ? (uint8_t)(line_count + 1) : 0;
   // The edges, a blank row either side of the items, and the lines with a
   // blank row under them.
@@ -514,7 +526,7 @@ static void DrawItems(
     BlankRow(&menu->text[row++], menu->columns);
   }
   for (uint8_t i = 0; i < count; ++i) {
-    ItemRow(&menu->text[row++], menu->columns, items[i], i == g_chosen);
+    MenuItemRow(&menu->text[row++], menu->columns, &items[i], i == g_chosen);
   }
   BlankRow(&menu->text[row++], menu->columns);
   EdgeRow(&menu->text[row], menu->columns, false, NULL);
@@ -544,12 +556,17 @@ static void DrawDrivePage(DisplayMenu* menu) {
   char line[kNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
+  const bool empty = image->status == kDiskImageEjected;
   if (image->status == kDiskImageOpen) {
     DiskImageName(image->path, name);
     in_drive = name;
-  } else if (image->status == kDiskImageEjected) {
+  } else if (empty) {
     in_drive = "nothing";
   }
+  const MenuItem items[kDriveItemCount] = {
+      [kDriveInsert] = {empty ? "Choose disk image" : "Swap disk image", true},
+      [kDriveEject] = {"Eject", false},
+  };
   snprintf(line, sizeof(line), "In the drive: %s", in_drive);
   const char* const lines[] = {
       line,
@@ -557,7 +574,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
       "not using the drive.",
   };
   DrawItems(
-      menu, "Drive A", lines, sizeof(lines) / sizeof(lines[0]), kDriveItems,
+      menu, "Drive A", lines, sizeof(lines) / sizeof(lines[0]), items,
       kDriveItemCount);
 }
 
