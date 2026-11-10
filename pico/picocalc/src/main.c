@@ -963,6 +963,32 @@ static const char* const kDriveNames[kFloppyDrives] = {
 static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
 
 // Take the disk out of a floppy drive, and say so.
+// Save what a floppy drive now holds to the VM's `vm.cfg`, so the next start
+// has it. Without a VM - the built-in floppy - there is nothing to save to.
+static void SaveDrive(FloppyDrive drive) {
+  if (!g_has_vm) {
+    return;
+  }
+  const DiskImage* image = FloppyGetImage(drive);
+  const char* path = image->status == kDiskImageOpen ? image->path : "";
+  char problem[kVMProblemLength + 1];
+  if (!VMConfigSaveDrive(&g_vm, kVMDriveA + drive, path, problem)) {
+    char message[kTextColumns + 1];
+    snprintf(
+        message, sizeof(message), "Could not save drive %c: %.50s",
+        DriveLetter(drive), problem);
+    StatusBarPostMessage(message);
+    SYSTEM_WARN(
+        "drive_not_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("problem", problem));
+    return;
+  }
+  FileListCopyPath(path, g_vm.drives[kVMDriveA + drive]);
+  SYSTEM_INFO(
+      "drive_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
+      Y_LOG_STRING("path", path));
+}
+
 static void EjectDrive(FloppyDrive drive) {
   FloppyEject(&g_platform.fdc, drive);
   char message[kTextColumns + 1];
@@ -971,6 +997,7 @@ static void EjectDrive(FloppyDrive drive) {
       DriveLetter(drive));
   StatusBarPostMessage(message);
   DISK_INFO("ejected", Y_LOG_STRING("drive", kDriveNames[drive]));
+  SaveDrive(drive);
 }
 
 // Put an image in a floppy drive, and say whether it went in. An image
@@ -1010,6 +1037,8 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
   }
   StatusBarPostMessage(message);
+  // The drive is empty after an insert that failed.
+  SaveDrive(drive);
 }
 
 // Real time goes on while the VM is paused and emulated time does not,

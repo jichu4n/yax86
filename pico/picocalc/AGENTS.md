@@ -321,11 +321,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **The VM started becomes `boot_default`**, so the next power on
   highlights it and starts it after the countdown. `yax86.cfg` is written
   only when the default changes - a board that starts its default every
-  time never writes. The path is written from `yax86` in lower case, FAT
-  names being the same in either. A failure says why on the message row
-  and the VM starts anyway.
-- A disk changed in the menu is not written back: it is forgotten at the
-  next power on.
+  time never writes. A failure says why on the message row and the VM
+  starts anyway.
+- **A floppy swapped or ejected in the menu is saved to the VM's
+  `vm.cfg`**, so the next start has the same disks: `drive_b=""` once
+  ejected, and an insert that fails leaves the drive empty and saves it
+  so. Without a VM there is no file, and nothing is saved.
+- **Paths are written as a person would**, by `VMConfigRelativePath()`:
+  relative to the file's folder, climbing out with `..`, when the two
+  share a folder from the root - `../../images/msdos330/disk02.img` from
+  a VM in `yax86/vm` - and from the root with a leading `/` when they
+  share none. In lower case, FAT names being the same in either.
 
 ## The SD card, the floppy drives and the hard disk
 

@@ -103,13 +103,29 @@ bool VMConfigRead(
 bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]);
 
 // Make the VM whose file is at path, from the card's root, the settings'
-// boot_default, changing only that in `yax86/yax86.cfg` - or creating it, with
-// only that, if there is none. The new settings are written in full to
-// `yax86/yax86.new` before taking the old ones' place, so a write cut short
-// leaves the old ones. Returns false, with the problem described, if they
-// could not be read, would be too long, or could not be written.
+// boot_default, through ConfigFileUpdate(), written as VMConfigRelativePath()
+// makes it from `yax86`. Returns false, with the problem described, if the
+// settings could not be read, would be too long, or could not be written.
 bool VMSettingsSaveBootDefault(
     const char* path, char problem[kVMProblemLength + 1]);
+
+// Save the image in a VM's drive, a path from the card's root or NULL or
+// empty for none, to its `vm.cfg`, through ConfigFileUpdate(), written as
+// VMConfigRelativePath() makes it from the file's folder. Returns false, with
+// the problem described, if the file could not be read, would be too long, or
+// could not be written.
+bool VMConfigSaveDrive(
+    const VMConfig* config, uint8_t drive, const char* path,
+    char problem[kVMProblemLength + 1]);
+
+// Write path, from the card's root, as a configuration file in folder names
+// it: relative to folder, climbing out with "..", when the two share a folder
+// from the root, and from the root with a leading / when they share none - a
+// path under `yax86` stays relative when the file moves within it. In lower
+// case, FAT names being the same in either. Returns false if it would not
+// fit.
+bool VMConfigRelativePath(
+    const char* folder, const char* path, char out[kFileListMaxPath + 2]);
 
 // Resolve path against folder, both without a leading slash, into resolved:
 // a path with a leading / starts at the card's root instead, and "." and

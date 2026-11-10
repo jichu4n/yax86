@@ -291,29 +291,102 @@ bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]) {
   return true;
 }
 
-bool VMSettingsSaveBootDefault(
-    const char* path, char problem[kVMProblemLength + 1]) {
-  // The path from the settings' folder in lower case - FAT names are the same
-  // in either - or from the root with a leading / when it is elsewhere.
-  char value[kFileListMaxPath + 2];
-  const char* rest = path;
-  const char* folder = kSettingsFolder;
-  while (*folder != '\0' && Upper(*rest) == Upper(*folder)) {
-    ++folder;
-    ++rest;
+static char Lower(char c) {
+  return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+}
+
+static bool PutChar(char out[kFileListMaxPath + 2], uint16_t* length, char c) {
+  if (*length == kFileListMaxPath + 1) {
+    return false;
+  }
+  out[(*length)++] = c;
+  return true;
+}
+
+bool VMConfigRelativePath(
+    const char* folder, const char* path, char out[kFileListMaxPath + 2]) {
+  // The folders the two have in common, from the root: path's last segment
+  // is its file, never one of them.
+  const char* f = folder;
+  const char* p = path;
+  uint8_t common = 0;
+  while (*f != '\0') {
+    uint16_t folder_length = 0;
+    while (f[folder_length] != '\0' && f[folder_length] != '/') {
+      ++folder_length;
+    }
+    uint16_t path_length = 0;
+    while (p[path_length] != '\0' && p[path_length] != '/') {
+      ++path_length;
+    }
+    if (p[path_length] != '/' || folder_length != path_length) {
+      break;
+    }
+    uint16_t i = 0;
+    while (i < folder_length && Upper(f[i]) == Upper(p[i])) {
+      ++i;
+    }
+    if (i < folder_length) {
+      break;
+    }
+    ++common;
+    f += folder_length;
+    if (*f == '/') {
+      ++f;
+    }
+    p += path_length + 1;
   }
   uint16_t length = 0;
-  if (*folder == '\0' && *rest == '/') {
-    ++rest;
-  } else {
-    rest = path;
-    value[length++] = '/';
+  if (common == 0) {
+    // Nothing in common: from the root.
+    p = path;
+    PutChar(out, &length, '/');
+  } else if (*f != '\0') {
+    // Up out of each of folder's segments left.
+    for (const char* c = f;; ++c) {
+      if (*c == '/' || *c == '\0') {
+        if (!PutChar(out, &length, '.') || !PutChar(out, &length, '.') ||
+            !PutChar(out, &length, '/')) {
+          return false;
+        }
+      }
+      if (*c == '\0') {
+        break;
+      }
+    }
   }
-  for (; *rest != '\0'; ++rest) {
-    value[length++] =
-        (*rest >= 'A' && *rest <= 'Z') ? (char)(*rest - 'A' + 'a') : *rest;
+  for (; *p != '\0'; ++p) {
+    if (!PutChar(out, &length, Lower(*p))) {
+      return false;
+    }
   }
-  value[length] = '\0';
+  out[length] = '\0';
+  return true;
+}
+
+bool VMConfigSaveDrive(
+    const VMConfig* config, uint8_t drive, const char* path,
+    char problem[kVMProblemLength + 1]) {
+  char value[kFileListMaxPath + 2] = "";
+  if (path != NULL && path[0] != '\0') {
+    char folder[kFileListMaxPath + 1];
+    FileListFolderOf(config->entry.path, folder);
+    if (!VMConfigRelativePath(folder, path, value)) {
+      snprintf(problem, kVMProblemLength + 1, "path too long");
+      return false;
+    }
+  }
+  const ConfigFileSetting setting = {.key = kDriveKeys[drive], .value = value};
+  return ConfigFileUpdate(config->entry.path, &setting, 1, problem);
+}
+
+bool VMSettingsSaveBootDefault(
+    const char* path, char problem[kVMProblemLength + 1]) {
+  char value[kFileListMaxPath + 2];
+  if (!VMConfigRelativePath(kSettingsFolder, path, value)) {
+    snprintf(problem, kVMProblemLength + 1, "path too long");
+    return false;
+  }
   const ConfigFileSetting setting = {.key = kBootDefaultKey, .value = value};
   return ConfigFileUpdate(kSettingsPath, &setting, 1, problem);
 }
