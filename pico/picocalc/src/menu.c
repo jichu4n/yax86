@@ -5,6 +5,7 @@
 
 #include "display.h"
 #include "file_list.h"
+#include "harddisk.h"
 #include "usb_disk.h"
 
 enum {
@@ -129,11 +130,13 @@ static const MenuItem kResetItems[kResetItemCount] = {
 
 typedef enum USBItem {
   kUSBCard = 0,
+  kUSBImage,
   kUSBItemCount,
 } USBItem;
 
 static const MenuItem kUSBItems[kUSBItemCount] = {
     [kUSBCard] = {"Whole SD card", false},
+    [kUSBImage] = {"Disk image", true},
 };
 
 static const MenuItem kSharingItems[] = {{"Disconnect", false}};
@@ -176,6 +179,11 @@ static uint8_t g_countdown;
 // Whether the menu is the list at power on, or a page reached from it, which
 // only starting something closes.
 static bool g_choosing;
+// Whether the browser is finding a disk image to put on USB, from the list,
+// rather than a floppy for a drive; and the image found.
+static bool g_browsing_for_usb;
+static char g_usb_image_path[kFileListMaxPath + 1];
+static uint32_t g_usb_image_size;
 //
 // The problem is kept in two buffers, used in turn, so that a new one is a
 // new pointer: the status rows tell a change of hint by its pointer.
@@ -266,11 +274,18 @@ static char Upper(char c) {
 // Show the browser on a folder, with the image in the drive chosen if it is
 // there.
 static void Browse(const char* path) {
-  FileListRead(&g_list, path, kFloppyImageSize);
+  // A drive takes a floppy; USB takes either kind of image.
+  static const uint32_t kImageSizes[] = {
+      kFloppyImageSize, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE};
+  FileListRead(&g_list, path, kImageSizes, g_browsing_for_usb ? 2 : 1);
   g_page = kMenuPageBrowse;
   g_chosen = 0;
   g_list_top = 0;
   g_dirty = true;
+  // The drives have no images yet at power on.
+  if (g_browsing_for_usb) {
+    return;
+  }
   const DiskImage* image = g_config.drive(g_drive);
   if (image->status != kDiskImageOpen) {
     return;
@@ -290,6 +305,7 @@ static void Browse(const char* path) {
 // of the one in the other drive - the next disk of a set is likely beside
 // it - or else yax86.
 static void StartBrowsing(void) {
+  g_browsing_for_usb = false;
   const DiskImage* image = g_config.drive(g_drive);
   if (image->status != kDiskImageOpen) {
     image = g_config.drive(
@@ -403,7 +419,11 @@ static MenuAction Back(void) {
   }
   switch (g_page) {
     case kMenuPageBrowse:
-      ShowPage(kMenuPageDrive, kDriveInsert);
+      if (g_browsing_for_usb) {
+        ShowPage(kMenuPageUSB, kUSBImage);
+      } else {
+        ShowPage(kMenuPageDrive, kDriveInsert);
+      }
       break;
     case kMenuPageReset:
       ShowPage(kMenuPageMain, kMainReset);
@@ -450,9 +470,19 @@ static MenuAction OpenEntry(void) {
     Browse(path);
     return kMenuActionNone;
   }
+  if (g_browsing_for_usb) {
+    FileListCopyPath(path, g_usb_image_path);
+    g_usb_image_size = entry->size;
+    return kMenuActionShareImage;
+  }
   g_config.insert_drive(g_drive, path);
   g_open = false;
   return kMenuActionClosed;
+}
+
+const char* MenuChosenImage(uint32_t* size) {
+  *size = g_usb_image_size;
+  return g_usb_image_path;
 }
 
 static MenuAction Choose(void) {
@@ -497,6 +527,11 @@ static MenuAction Choose(void) {
       }
       return kMenuActionVMChosen;
     case kMenuPageUSB:
+      if (g_chosen == kUSBImage) {
+        g_browsing_for_usb = true;
+        Browse("yax86");
+        return kMenuActionNone;
+      }
       return kMenuActionShareCard;
     case kMenuPageSharing:
       return Disconnect();
@@ -805,7 +840,10 @@ static void DrawBrowsePage(DisplayMenu* menu) {
         PutText(row, menu->columns, 3, "The card cannot be read", kAttrText);
       } else if (i == 1 && g_list.count <= 1) {
         PutText(
-            row, menu->columns, 3, "No folders or floppy images", kAttrText);
+            row, menu->columns, 3,
+            g_browsing_for_usb ? "No folders or disk images"
+                               : "No folders or floppy images",
+            kAttrText);
       }
       continue;
     }
@@ -815,6 +853,12 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     char path[kFileListMaxPath + 1];
     if (entry->kind != kFileListImage) {
       PutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
+      continue;
+    }
+    if (g_browsing_for_usb) {
+      PutText(
+          row, menu->columns, kBrowseNoteColumn,
+          entry->size == kFloppyImageSize ? "floppy" : "hard disk", attr);
       continue;
     }
     if (!FileListEntryPath(&g_list, entry, path)) {
@@ -892,8 +936,16 @@ static void DrawSharingPage(DisplayMenu* menu) {
       moved, sizeof(moved), "Read %lu KB, written %lu KB",
       (unsigned long)(stats.blocks_read / 2),
       (unsigned long)(stats.blocks_written / 2));
+  char what[kNarrowColumns];
+  if (stats.image_path != NULL) {
+    char name[kDiskImageNameLength + 1];
+    DiskImageName(stats.image_path, name);
+    snprintf(what, sizeof(what), "Sharing %s over USB.", name);
+  } else {
+    snprintf(what, sizeof(what), "Sharing the SD card over USB.");
+  }
   const char* const lines[] = {
-      "Sharing the SD card over USB.",
+      what,
       state,
       moved,
       ComputerHasCard() ? "Eject it on the computer first." : "",
@@ -948,7 +1000,7 @@ void MenuDraw(uint64_t now_us) {
           menu, "USB disk mode",
           (const char* const[]){
               "The computer has not ejected the",
-              "card, and may not have finished",
+              "disk, and may not have finished",
               "writing to it.",
           },
           3, kStopSharingItems, kStopSharingItemCount);

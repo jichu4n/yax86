@@ -529,11 +529,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   VM runs: nothing has the card open there, and no guest holds a copy of a
   disk's FAT that a computer could change under it. Its row, USB disk mode,
   opens a page with Whole SD card, which unmounts the card's volume -
-  `DiskImageUnmountCard()` - and shares it. The card's page shows whether a
-  computer has it and what has moved; Disconnect asks first if the computer has
-  the card and has not ejected it, then mounts the card again and reads the
-  VMs and settings afresh, showing the list without counting down. The
-  report's `usb` group has the same.
+  `DiskImageUnmountCard()` - and shares it, and Disk image, which opens the
+  browser on `yax86` listing floppy and hard disk images alike, each marked
+  which, and shares the one chosen.
+- **An image on USB is its own disk**: a floppy is a FAT12 volume with no
+  partition table, which a computer mounts whole, and a hard disk has its
+  table, with the partition at sector 17. The card stays mounted, and the
+  image is read and written through `DiskImage` a byte at a time, as the
+  drives do - the sector it holds makes that a card access a block, with its
+  fast seek - and closed on disconnecting, which writes the held sector back.
+  The browser shows no "in drive A": at power on the drives have no images.
+  The card's page shows whether a computer has it and what has moved;
+  Disconnect asks first if the computer has the card and has not ejected it,
+  then mounts the card again and reads the VMs and settings afresh, showing
+  the list without counting down. The report's `usb` group has the same.
 - **The computer reads and writes the card's own blocks**, its partition
   table and FAT volume, in the USB callbacks, which pico_stdio_usb's task runs
   from a low priority interrupt. They cannot leave the card to the main loop:

@@ -54,13 +54,16 @@ void FileListCopyPath(const char* from, char to[kFileListMaxPath + 1]) {
   to[i] = '\0';
 }
 
-void FileListRead(FileList* list, const char* path, uint32_t image_size) {
+void FileListRead(
+    FileList* list, const char* path, const uint32_t* image_sizes,
+    uint8_t num_sizes) {
   FileListCopyPath(path, list->path);
   list->count = 0;
   list->truncated = false;
   list->readable = false;
   if (list->path[0] != '\0') {
-    const FileListEntry parent = {.kind = kFileListParent, .name = ".."};
+    const FileListEntry parent = {
+        .kind = kFileListParent, .name = "..", .size = 0};
     Insert(list, &parent);
   }
   if (DiskImageMountCard() != kDiskImageOpen) {
@@ -78,13 +81,17 @@ void FileListRead(FileList* list, const char* path, uint32_t image_size) {
     if ((info.fattrib & (AM_HID | AM_SYS)) || info.fname[0] == '.') {
       continue;
     }
-    FileListEntry entry;
-    if (info.fattrib & AM_DIR) {
-      entry.kind = kFileListFolder;
-    } else if (info.fsize == image_size) {
+    FileListEntry entry = {.kind = kFileListFolder, .size = 0};
+    if (!(info.fattrib & AM_DIR)) {
+      uint8_t i = 0;
+      while (i < num_sizes && info.fsize != image_sizes[i]) {
+        ++i;
+      }
+      if (i == num_sizes) {
+        continue;
+      }
       entry.kind = kFileListImage;
-    } else {
-      continue;
+      entry.size = image_sizes[i];
     }
     CopyName(info.fname, entry.name);
     Insert(list, &entry);
