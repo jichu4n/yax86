@@ -1275,11 +1275,6 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   return read;
 }
 
-// With VMs on the card, show the list of them until one is chosen whose
-// configuration reads, or until the default starts by itself, the countdown
-// running until a key is pressed. Settings that ask for no wait start the
-// default at once, without the list, unless there is a problem to show.
-// Without any VMs, the built-in floppy boots in drive A.
 // Put the SD card on USB, for a computer: the card is unmounted first, as
 // nothing here may touch it while the computer has it.
 static void ShareCard(void) {
@@ -1306,6 +1301,11 @@ static void StopSharingCard(void) {
   MenuChooseVMs(&g_vms, highlighted);
 }
 
+// With VMs on the card, show the list of them until one is chosen whose
+// configuration reads, or until the default starts by itself, the countdown
+// running until a key is pressed. Settings that ask for no wait start the
+// default at once, without the list, unless there is a problem to show.
+// Without any VMs, the built-in floppy boots in drive A.
 static void ChooseVM(void) {
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
