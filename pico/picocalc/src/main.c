@@ -1275,7 +1275,7 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   return read;
 }
 
-// Put the SD card on USB, for a computer: the card is unmounted first, as
+// Share the SD card over USB: the card is unmounted first, as
 // nothing here may touch it while the computer has it.
 static void ShareCard(void) {
   DiskImageUnmountCard();
@@ -1301,11 +1301,12 @@ static void StopSharingCard(void) {
   MenuChooseVMs(&g_vms, highlighted);
 }
 
-// With VMs on the card, show the list of them until one is chosen whose
+// With a card, show the list of its VMs until one is chosen whose
 // configuration reads, or until the default starts by itself, the countdown
 // running until a key is pressed. Settings that ask for no wait start the
-// default at once, without the list, unless there is a problem to show.
-// Without any VMs, the built-in floppy boots in drive A.
+// default at once, without the list, unless there is a problem to show. With
+// no VMs the list offers only USB disk mode, and nothing starts by itself.
+// Without a card, the built-in floppy boots in drive A.
 static void ChooseVM(void) {
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
@@ -1314,14 +1315,14 @@ static void ChooseVM(void) {
   if (DiskImageMountCard() != kDiskImageOpen) {
     return;
   }
-  if (settings_read && g_settings.boot_delay == 0 &&
-      (g_vms.count == 0 || TakeVM(highlighted))) {
+  if (settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
+      TakeVM(highlighted)) {
     return;
   }
   MenuChooseVMs(&g_vms, highlighted);
   const absolute_time_t start_at =
       make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
-  bool counting = g_settings.boot_delay > 0;
+  bool counting = g_settings.boot_delay > 0 && g_vms.count > 0;
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
@@ -1359,9 +1360,7 @@ static void ChooseVM(void) {
                                    kMicrosecondsPerSecond));
       }
     }
-    // Past the list's end is the built-in floppy, offered when there are no
-    // VMs.
-    if (chosen && (MenuChosenVM() >= g_vms.count || TakeVM(MenuChosenVM()))) {
+    if (chosen && TakeVM(MenuChosenVM())) {
       MenuClose();
       return;
     }

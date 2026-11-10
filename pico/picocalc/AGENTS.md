@@ -292,10 +292,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
   start the default without showing the list.
 - **At power on, with a card, the menu lists its VMs**, before the VM
-  exists, then Built-in floppy if there are none, and USB disk - see "The
-  USB device". The countdown runs on the list's bottom edge until a key is
-  pressed, then the default starts - the first VM, or with none, the
-  built-in floppy. Every page reached from the list is drawn the list's
+  exists, then USB disk mode - see "The USB device". The countdown runs on
+  the list's bottom edge until a key is pressed, then the default starts.
+  With no VMs the list has only USB disk mode, and nothing counts down or
+  starts by itself; the built-in floppy boots only without a card. Every page reached from the list is drawn the list's
   size, as there is no guest's screen yet to draw under a smaller box. A file that does not read keeps
   the list up with its problem on the keys row - `BROKEN: line 2: no
   setting drive_e` - as do bad settings, which start the countdown anyway
@@ -527,10 +527,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   it. Linux asks every two seconds, and sees a card shared within that.
 - **USB disk mode is reached only from the list at power on**, never while a
   VM runs: nothing has the card open there, and no guest holds a copy of a
-  disk's FAT that a computer could change under it. Its row, USB disk, opens
-  a page with Whole SD card, which unmounts the card's volume -
+  disk's FAT that a computer could change under it. Its row, USB disk mode,
+  opens a page with Whole SD card, which unmounts the card's volume -
   `DiskImageUnmountCard()` - and shares it. The card's page shows whether a
-  computer has it and what has moved; Leave asks first if the computer has
+  computer has it and what has moved; Disconnect asks first if the computer has
   the card and has not ejected it, then mounts the card again and reads the
   VMs and settings afresh, showing the list without counting down. The
   report's `usb` group has the same.

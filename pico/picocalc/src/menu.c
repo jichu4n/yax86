@@ -136,7 +136,7 @@ static const MenuItem kUSBItems[kUSBItemCount] = {
     [kUSBCard] = {"Whole SD card", false},
 };
 
-static const MenuItem kSharingItems[] = {{"Leave", false}};
+static const MenuItem kSharingItems[] = {{"Disconnect", false}};
 
 typedef enum StopSharingItem {
   kStopSharingCancel = 0,
@@ -146,11 +146,10 @@ typedef enum StopSharingItem {
 
 static const MenuItem kStopSharingItems[kStopSharingItemCount] = {
     [kStopSharingCancel] = {"Cancel", false},
-    [kStopSharingConfirm] = {"Leave anyway", false},
+    [kStopSharingConfirm] = {"Disconnect anyway", false},
 };
 
-static const MenuItem kUSBRow = {"USB disk", true};
-static const MenuItem kBuiltInRow = {"Built-in floppy", false};
+static const MenuItem kUSBRow = {"USB disk mode", true};
 
 static MenuConfig g_config;
 static bool g_open;
@@ -245,7 +244,7 @@ const char* MenuHint(void) {
     return "\x18\x19=Move  Enter=Start";
   }
   if (g_page == kMenuPageSharing) {
-    return "Enter=Leave";
+    return "Enter=Disconnect";
   }
   if (g_page == kMenuPageStatus) {
     return "Esc=Back";
@@ -351,15 +350,12 @@ static uint8_t DriveItemCount(void) {
   return DriveEmpty() ? kDriveEject : kDriveItemCount;
 }
 
-// The list at power on's rows: a VM each, the built-in floppy when there are
-// none, and USB disk.
-static uint8_t VMRowCount(void) {
-  return (uint8_t)(g_vms->count + (g_vms->count == 0 ? 1 : 0) + 1);
-}
+// The list at power on's rows: a VM each, then USB disk mode.
+static uint8_t VMRowCount(void) { return (uint8_t)(g_vms->count + 1); }
 
 static uint8_t USBRowIndex(void) { return (uint8_t)(VMRowCount() - 1); }
 
-// Whether leaving would take the card from a computer still using it.
+// Whether disconnecting would take the card from a computer still using it.
 static bool ComputerHasCard(void) {
   const UsbDiskStats stats = UsbDiskGetStats();
   return stats.connected && stats.seen && !stats.ejected;
@@ -389,9 +385,9 @@ static uint8_t PageItemCount(void) {
   return 0;
 }
 
-// Leave the card's page: at once if no computer is using the card, and after
-// asking if one is.
-static MenuAction LeaveSharing(void) {
+// Disconnect the card: at once if no computer is using it, and after asking if
+// one is.
+static MenuAction Disconnect(void) {
   if (ComputerHasCard()) {
     ShowPage(kMenuPageStopSharing, kStopSharingCancel);
     return kMenuActionNone;
@@ -427,7 +423,7 @@ static MenuAction Back(void) {
       ScrollToChosen();
       break;
     case kMenuPageSharing:
-      return LeaveSharing();
+      return Disconnect();
     case kMenuPageStopSharing:
       ShowPage(kMenuPageSharing, 0);
       break;
@@ -503,7 +499,7 @@ static MenuAction Choose(void) {
     case kMenuPageUSB:
       return kMenuActionShareCard;
     case kMenuPageSharing:
-      return LeaveSharing();
+      return Disconnect();
     case kMenuPageStopSharing:
       if (g_chosen == kStopSharingConfirm) {
         return kMenuActionStopSharing;
@@ -850,7 +846,7 @@ static void DrawBrowsePage(DisplayMenu* menu) {
 // are more above or below, and the countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
   PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
-  EdgeRow(&menu->text[0], menu->columns, true, "Start a VM");
+  EdgeRow(&menu->text[0], menu->columns, true, NULL);
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
@@ -858,8 +854,6 @@ static void DrawVMsPage(DisplayMenu* menu) {
       BlankRow(row, menu->columns);
     } else if (index == USBRowIndex()) {
       MenuItemRow(row, menu->columns, &kUSBRow, index == g_chosen);
-    } else if (index >= g_vms->count) {
-      MenuItemRow(row, menu->columns, &kBuiltInRow, index == g_chosen);
     } else {
       ItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
     }
@@ -886,11 +880,11 @@ static void DrawSharingPage(DisplayMenu* menu) {
   const UsbDiskStats stats = UsbDiskGetStats();
   const char* state = "Waiting for the computer...";
   if (!stats.connected) {
-    state = "No computer is connected.";
+    state = "Connect a computer by USB.";
   } else if (stats.ejected) {
-    state = "The computer has ejected it.";
+    state = "Ejected by the computer.";
   } else if (stats.seen) {
-    state = "The computer has it.";
+    state = "In use by the computer.";
   }
   // Room for two of the largest counts, which a box cuts to its width.
   char moved[64];
@@ -899,14 +893,14 @@ static void DrawSharingPage(DisplayMenu* menu) {
       (unsigned long)(stats.blocks_read / 2),
       (unsigned long)(stats.blocks_written / 2));
   const char* const lines[] = {
-      "The SD card is on USB.",
+      "Sharing the SD card over USB.",
       state,
       moved,
-      ComputerHasCard() ? "Eject it there before leaving." : "",
+      ComputerHasCard() ? "Eject it on the computer first." : "",
   };
   DrawItems(
-      menu, "USB disk", lines, sizeof(lines) / sizeof(lines[0]), kSharingItems,
-      1);
+      menu, "USB disk mode", lines, sizeof(lines) / sizeof(lines[0]),
+      kSharingItems, 1);
 }
 
 void MenuDraw(uint64_t now_us) {
@@ -943,10 +937,7 @@ void MenuDraw(uint64_t now_us) {
       DrawVMsPage(menu);
       break;
     case kMenuPageUSB:
-      DrawItems(
-          menu, "USB disk",
-          (const char* const[]){"Put on USB, for a computer:"}, 1, kUSBItems,
-          kUSBItemCount);
+      DrawItems(menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount);
       break;
     case kMenuPageSharing:
       DrawSharingPage(menu);
@@ -954,7 +945,7 @@ void MenuDraw(uint64_t now_us) {
       break;
     case kMenuPageStopSharing:
       DrawItems(
-          menu, "USB disk",
+          menu, "USB disk mode",
           (const char* const[]){
               "The computer has not ejected the",
               "card, and may not have finished",
