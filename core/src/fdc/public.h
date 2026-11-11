@@ -275,8 +275,9 @@ typedef struct YFDCState {
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.
-    uint16_t
-        sector_byte_index;  // Current byte index within the current sector.
+    // Current byte index within the current sector; for Format Track, the
+    // ID bytes taken so far.
+    uint16_t sector_byte_index;
     uint8_t data_register;  // Buffer for the byte currently being transferred.
     bool dma_request_active;  // DREQ is asserted, waiting for DMA access.
     bool tc_received;         // TC (Terminal Count) signal received from DMA.

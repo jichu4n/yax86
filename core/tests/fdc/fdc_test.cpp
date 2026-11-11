@@ -1,5 +1,7 @@
 #include "fdc.h"
 
+#include <map>
+
 #include "gtest/gtest.h"
 
 namespace {
@@ -26,6 +28,7 @@ class FDCTest : public ::testing::Test {
       FDCTest* test = static_cast<FDCTest*>(context);
       test->last_written_byte_ = value;
       test->last_written_offset_ = offset;
+      test->written_[offset] = value;
     };
     fdc_.config.request_dma = [](void* context) {
       FDCTest* test = static_cast<FDCTest*>(context);
@@ -72,6 +75,48 @@ class FDCTest : public ::testing::Test {
   uint8_t last_dma_byte_ = 0;
   uint8_t last_written_byte_ = 0;
   uint32_t last_written_offset_ = 0;
+  // Every byte written to the image, by offset.
+  std::map<uint32_t, uint8_t> written_;
+
+  // Seek drive 0 to a cylinder, and take the seek's interrupt.
+  void SeekDrive0(uint8_t cylinder) {
+    SendCommand(0x0F);
+    SendParameter(0x00);
+    SendParameter(cylinder);
+    YFDCTick(&fdc_);
+    YFDCTick(&fdc_);
+    SendCommand(0x08);
+    YFDCTick(&fdc_);
+    ReadResult();
+    ReadResult();
+    irq6_raised_ = false;
+  }
+
+  // Issue Format Track for drive 0: MFM, 512-byte sectors, a gap length of
+  // 0x50 and the fill byte given.
+  void StartFormat(uint8_t head, uint8_t sectors, uint8_t fill) {
+    SendCommand(0x4D);
+    SendParameter((uint8_t)(head << 2));
+    SendParameter(0x02);
+    SendParameter(sectors);
+    SendParameter(0x50);
+    SendParameter(fill);
+  }
+
+  // Hand over a sector's ID by DMA, a byte a tick, as the BIOS's DMA
+  // channel would, with the terminal count on the last byte if tc.
+  void SendSectorID(
+      uint8_t cylinder, uint8_t head, uint8_t sector, bool tc = false) {
+    const uint8_t id[] = {cylinder, head, sector, 0x02};
+    for (int i = 0; i < 4; ++i) {
+      ASSERT_TRUE(fdc_.transfer.dma_request_active);
+      WriteDmaByte(id[i]);
+      if (tc && i == 3) {
+        YFDCHandleTC(&fdc_);
+      }
+      YFDCTick(&fdc_);
+    }
+  }
 };
 
 TEST_F(FDCTest, ReadData) {
@@ -203,6 +248,118 @@ TEST_F(FDCTest, WriteData) {
   YFDCTick(&fdc_);
   EXPECT_TRUE(irq6_raised_);
   EXPECT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+}
+
+TEST_F(FDCTest, WriteDataWritesTheByteThatComesWithTerminalCount) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
+  dma_mode_ = kDmaModeWrite;
+
+  SendCommand(0x45);    // Write Data, MFM
+  SendParameter(0x00);  // Drive 0, head 0
+  SendParameter(0x00);  // C
+  SendParameter(0x00);  // H
+  SendParameter(0x01);  // R
+  SendParameter(0x02);  // N: 512 bytes
+  SendParameter(0x09);  // EOT
+  SendParameter(0x2A);  // GPL
+  SendParameter(0xFF);  // DTL
+  YFDCTick(&fdc_);
+
+  // A two-byte transfer: the BIOS's DMA count ends on the second byte, and
+  // the terminal count comes with it.
+  WriteDmaByte(0xAA);
+  YFDCTick(&fdc_);
+  WriteDmaByte(0xBB);
+  YFDCHandleTC(&fdc_);
+  YFDCTick(&fdc_);
+
+  ASSERT_EQ(written_.size(), 2u);
+  EXPECT_EQ(written_[0], 0xAA);
+  EXPECT_EQ(written_[1], 0xBB);
+  EXPECT_TRUE(irq6_raised_);
+  EXPECT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+}
+
+TEST_F(FDCTest, FormatTrackFillsEachSectorOfTheTrack) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
+  SeekDrive0(2);
+  dma_mode_ = kDmaModeWrite;
+
+  StartFormat(/*head=*/1, /*sectors=*/9, /*fill=*/0xF6);
+  YFDCTick(&fdc_);
+  EXPECT_TRUE(dma_requested_);
+  EXPECT_FALSE(irq6_raised_);
+  // The BIOS's DMA count ends with the last sector's ID, so the terminal
+  // count comes with its last byte, which must still format the sector.
+  for (uint8_t sector = 1; sector <= 9; ++sector) {
+    SendSectorID(2, 1, sector, /*tc=*/sector == 9);
+  }
+
+  // Cylinder 2, head 1: past two cylinders of two heads of nine sectors, and
+  // head 0's nine of cylinder 2.
+  const uint32_t track_start = (2 * 2 * 9 + 9) * 512;
+  ASSERT_EQ(written_.size(), 9u * 512);
+  EXPECT_EQ(written_.begin()->first, track_start);
+  EXPECT_EQ(written_.rbegin()->first, track_start + 9 * 512 - 1);
+  for (const auto& [offset, value] : written_) {
+    EXPECT_EQ(value, 0xF6) << "at offset " << offset;
+  }
+
+  EXPECT_TRUE(irq6_raised_);
+  EXPECT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult(), 0x04);  // ST0: normal, head 1, drive 0
+  EXPECT_EQ(ReadResult(), 0x00);  // ST1
+  EXPECT_EQ(ReadResult(), 0x00);  // ST2
+  EXPECT_EQ(ReadResult(), 2);     // C, from the last ID
+  EXPECT_EQ(ReadResult(), 1);     // H
+  EXPECT_EQ(ReadResult(), 9);     // R
+  EXPECT_EQ(ReadResult(), 2);     // N
+  EXPECT_EQ(fdc_.phase, Y_FDC_PHASE_IDLE);
+}
+
+TEST_F(FDCTest, FormatTrackEndsAfterItsSectorsWithoutTerminalCount) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
+  dma_mode_ = kDmaModeWrite;
+
+  StartFormat(/*head=*/0, /*sectors=*/2, /*fill=*/0xE5);
+  YFDCTick(&fdc_);
+  SendSectorID(0, 0, 1);
+  EXPECT_FALSE(irq6_raised_);
+  SendSectorID(0, 0, 2);
+
+  EXPECT_EQ(written_.size(), 2u * 512);
+  EXPECT_EQ(written_.begin()->first, 0u);
+  EXPECT_TRUE(irq6_raised_);
+  EXPECT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_FALSE(fdc_.transfer.dma_request_active);
+}
+
+TEST_F(FDCTest, FormatTrackLeavesASectorTheImageHasNoPlaceFor) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
+  dma_mode_ = kDmaModeWrite;
+
+  StartFormat(/*head=*/0, /*sectors=*/2, /*fill=*/0xF6);
+  YFDCTick(&fdc_);
+  // Sector 10 is past a 360KB track's nine.
+  SendSectorID(0, 0, 10);
+  SendSectorID(0, 0, 1);
+
+  EXPECT_EQ(written_.size(), 512u);
+  EXPECT_EQ(written_.begin()->first, 0u);
+  EXPECT_TRUE(irq6_raised_);
+}
+
+TEST_F(FDCTest, FormatTrackWithNoDiskIsNotReady) {
+  dma_mode_ = kDmaModeWrite;
+
+  StartFormat(/*head=*/0, /*sectors=*/9, /*fill=*/0xF6);
+  YFDCTick(&fdc_);
+
+  EXPECT_FALSE(dma_requested_);
+  EXPECT_TRUE(written_.empty());
+  EXPECT_TRUE(irq6_raised_);
+  EXPECT_EQ(
+      ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY);
 }
 
 TEST_F(FDCTest, ReadTrackEnd) {

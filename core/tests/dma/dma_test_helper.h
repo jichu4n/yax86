@@ -13,6 +13,7 @@ static uint8_t g_mock_memory[128 * 1024];
 // Storage for mock device interactions.
 static uint8_t g_data_from_device;
 static uint8_t g_data_to_device;
+static int g_device_reads;
 
 // Mock callback implementations
 static uint8_t MockReadMemory(void* context, uint32_t address) {
@@ -29,6 +30,7 @@ static void MockWriteMemory(void* context, uint32_t address, uint8_t value) {
 }
 
 static uint8_t MockReadDevice(void* context, uint8_t channel) {
+  ++g_device_reads;
   return g_data_from_device;
 }
 
@@ -44,6 +46,7 @@ class DMATest : public ::testing::Test {
     memset(g_mock_memory, 0, sizeof(g_mock_memory));
     g_data_from_device = 0;
     g_data_to_device = 0;
+    g_device_reads = 0;
 
     // Set up the DMA config with our mock callbacks.
     dma_.config.context = this;
