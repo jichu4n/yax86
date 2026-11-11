@@ -1667,7 +1667,7 @@ static void DrawNewPage(DisplayMenu* menu) {
   const char* cursor =
       FormItem() == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
   snprintf(
-      rows[kNewName], sizeof(rows[kNewName]), "%-13s %s%s", "Name", g_name,
+      rows[kNewName], sizeof(rows[kNewName]), "%-15s %s%s", "Name", g_name,
       cursor);
   items[kNewName] = (MenuItem){rows[kNewName], false};
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
@@ -1683,7 +1683,7 @@ static void DrawNewPage(DisplayMenu* menu) {
       what = name;
     }
     snprintf(
-        rows[item], sizeof(rows[item]), "%-13s %s", kVMDriveNames[drive], what);
+        rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (MenuItem){rows[item], true};
   }
   items[kNewCreate] = (MenuItem){g_editing ? "Save" : "Create", false};
