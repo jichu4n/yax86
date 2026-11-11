@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <strings.h>
 
 #include "command.h"
 #include "core/platform.h"
@@ -146,6 +148,7 @@ enum {
   kCyclesPerRender = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 60,
 
   kMicrosecondsPerMillisecond = 1000,
+  kBytesPerKB = 1024,
   kMillisecondsPerSecond = 1000,
   kMicrosecondsPerSecond = 1000 * 1000,
   kMaxLagUs = kMaxLagMs * kMicrosecondsPerMillisecond,
@@ -275,8 +278,8 @@ typedef struct StartNote {
   // kStartNoteMarker while the note is to be acted on.
   uint32_t marker;
   StartIntent intent;
-  // The VM's vm.cfg.
-  char path[kFileListMaxPath + 1];
+  // The VM's name.
+  char name[kVMNameLength + 1];
 } StartNote;
 
 // Deliberately not zeroed at startup, so that it survives the reboot - see
@@ -1064,7 +1067,7 @@ static bool RedrawGuest(void) {
 // before.
 static void LeaveStartNote(StartIntent intent) {
   g_start_note.intent = intent;
-  FileListCopyPath(g_vm.entry.path, g_start_note.path);
+  memcpy(g_start_note.name, g_vm.entry.name, sizeof(g_start_note.name));
   g_start_note.marker = kStartNoteMarker;
   watchdog_reboot(0, 0, 0);
   for (;;) {
@@ -1080,9 +1083,9 @@ static bool TakeStartNote(StartNote* note) {
   }
   g_start_note.marker = 0;
   note->intent = g_start_note.intent;
-  // The path may have been left unterminated by RAM it never wrote.
-  g_start_note.path[kFileListMaxPath] = '\0';
-  FileListCopyPath(g_start_note.path, note->path);
+  // The name may have been left unterminated by RAM it never wrote.
+  g_start_note.name[kVMNameLength] = '\0';
+  memcpy(note->name, g_start_note.name, sizeof(note->name));
   return true;
 }
 
@@ -1138,7 +1141,7 @@ static void SaveDrive(FloppyDrive drive) {
         Y_LOG_STRING("problem", problem));
     return;
   }
-  FileListCopyPath(path, g_vm.drives[kVMDriveA + drive]);
+  FSCopyPath(path, g_vm.drives[kVMDriveA + drive]);
   SYSTEM_INFO(
       "drive_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
       Y_LOG_STRING("path", path));
@@ -1357,17 +1360,18 @@ static void UpdateChoosingRows(void) {
 // The card's settings, as read at power on.
 static VMSettings g_settings;
 
-// Make the VM at path the one to start at the next power on, if it is not
+// Make the VM named name the one to start at the next power on, if it is not
 // already. Writing the card only when it changes keeps a board that starts
 // its default every time from writing at all.
-static void SaveBootDefault(const char* path) {
-  if (FileListSamePath(g_settings.boot_default, path)) {
+static void SaveBootDefault(const char* name) {
+  if (strcasecmp(g_settings.boot_default, name) == 0) {
     return;
   }
   char problem[kVMProblemLength + 1];
-  if (VMSettingsSaveBootDefault(path, problem)) {
-    FileListCopyPath(path, g_settings.boot_default);
-    SYSTEM_INFO("boot_default_saved", Y_LOG_STRING("path", path));
+  if (VMSettingsSaveBootDefault(name, problem)) {
+    snprintf(
+        g_settings.boot_default, sizeof(g_settings.boot_default), "%s", name);
+    SYSTEM_INFO("boot_default_saved", Y_LOG_STRING("name", name));
     return;
   }
   char message[kTextColumns + 1];
@@ -1380,10 +1384,10 @@ static void SaveBootDefault(const char* path) {
 static __noinline bool TakeVM(uint8_t index) {
   const VMEntry* vm = &g_vms.vms[index];
   char problem[kVMProblemLength + 1];
-  if (VMConfigRead(vm->path, &g_vm, problem)) {
+  if (VMConfigRead(vm, &g_vm, problem)) {
     g_has_vm = true;
     SYSTEM_INFO("vm_chosen", Y_LOG_STRING("path", vm->path));
-    SaveBootDefault(vm->path);
+    SaveBootDefault(vm->name);
     return true;
   }
   char message[kTextColumns + 1];
@@ -1402,13 +1406,10 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   bool read = VMSettingsRead(settings, problem);
   *highlighted = 0;
   if (read && settings->boot_default[0] != '\0') {
-    // A default outside the VMs folder is listed too.
+    // Past the list's end, the first is highlighted instead.
     const uint8_t index = VMListFind(&g_vms, settings->boot_default);
     if (index < kVMListMax) {
       *highlighted = index;
-    } else {
-      snprintf(problem, sizeof(problem), "too many VMs to add boot_default");
-      read = false;
     }
   }
   if (!read) {
@@ -1431,13 +1432,13 @@ static void ShareCard(void) {
 
 // The disk image on USB, while one is, and its path.
 static DiskImage g_usb_image;
-static char g_usb_image_path[kFileListMaxPath + 1];
+static char g_usb_image_path[kFSMaxPath + 1];
 
 // Put the disk image chosen in the browser on USB, the card staying mounted
 // to read it through; or say why it could not be, staying in the browser.
 static __noinline void ShareImage(void) {
   uint32_t size = 0;
-  FileListCopyPath(MenuChosenImage(&size), g_usb_image_path);
+  FSCopyPath(MenuChosenImage(&size), g_usb_image_path);
   const DiskImageStatus status =
       DiskImageOpen(&g_usb_image, g_usb_image_path, size);
   if (status != kDiskImageOpen) {
@@ -1481,13 +1482,12 @@ static __noinline void StopSharing(void) {
   MenuChooseVMs(&g_vms, highlighted);
 }
 
-// After Manage VMs has changed the card, read its VMs afresh - and the
-// settings, which may name one elsewhere - and show Manage VMs again with
-// the VM at path chosen.
-static __noinline void ShowManagedVMs(const char* path) {
-  // path may be in the list read over.
-  char chosen[kFileListMaxPath + 1];
-  FileListCopyPath(path, chosen);
+// After Manage VMs has changed the card, read its VMs afresh, and the
+// settings, and show Manage VMs again with the VM named name chosen.
+static __noinline void ShowManagedVMs(const char* name) {
+  // name may be in the list read over.
+  char chosen[kVMNameLength + 1];
+  snprintf(chosen, sizeof(chosen), "%s", name);
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   ReadSettings(&g_settings, &highlighted);
@@ -1504,18 +1504,19 @@ static void ShowManageProblem(
 
 static __noinline void RenameVM(void) {
   const VMEntry vm = g_vms.vms[MenuManagedVM()];
-  char path[kFileListMaxPath + 1];
+  VMEntry renamed;
   char problem[kVMProblemLength + 1];
   const VMFolderResult result =
-      VMFolderRename(&g_vms, &vm, MenuTypedName(), path, problem);
+      VMFolderRename(&g_vms, &vm, MenuTypedName(), &renamed, problem);
   if (result == kVMFolderBadName) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? path : vm.path);
+  ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
-        "vm_renamed", Y_LOG_STRING("from", vm.path), Y_LOG_STRING("to", path));
+        "vm_renamed", Y_LOG_STRING("from", vm.name),
+        Y_LOG_STRING("to", renamed.name));
   } else {
     ShowManageProblem("vm_not_renamed", &vm, problem);
   }
@@ -1523,32 +1524,36 @@ static __noinline void RenameVM(void) {
 
 // Show how far a clone has come, at once: the main loop, which would draw it,
 // is waiting for the clone.
-static void ShowCopyProgress(uint32_t copied_kb, uint32_t total_kb) {
-  MenuSetCopyProgress(copied_kb, total_kb);
+static void ShowCopyProgress(uint64_t done, uint64_t total) {
+  MenuSetCopyProgress(
+      (uint32_t)(done / kBytesPerKB), (uint32_t)(total / kBytesPerKB));
   UpdateChoosingRows();
   MenuDraw(time_us_64());
 }
 
 static __noinline void CloneVM(void) {
   const VMEntry vm = g_vms.vms[MenuManagedVM()];
-  char path[kFileListMaxPath + 1];
+  VMEntry copy;
   char problem[kVMProblemLength + 1];
   const uint64_t start_us = time_us_64();
-  const VMFolderResult result = VMFolderClone(
-      &vm, MenuTypedName(), g_guest_ram, kCopyBufferSize, ShowCopyProgress,
-      path, problem);
+  FSTransfer transfer = {
+      .buffer = g_guest_ram,
+      .buffer_size = kCopyBufferSize,
+      .progress = ShowCopyProgress,
+  };
+  const VMFolderResult result =
+      VMFolderClone(&vm, MenuTypedName(), &transfer, &copy, problem);
   // Left as the guest would find RAM at power on, whatever it held.
-  for (uint32_t i = 0; i < kCopyBufferSize; ++i) {
-    g_guest_ram[i] = 0;
-  }
+  memset(g_guest_ram, 0, kCopyBufferSize);
   if (result == kVMFolderBadName) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? path : vm.path);
+  ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
-        "vm_cloned", Y_LOG_STRING("from", vm.path), Y_LOG_STRING("to", path),
+        "vm_cloned", Y_LOG_STRING("from", vm.name),
+        Y_LOG_STRING("to", copy.name),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
@@ -1561,9 +1566,9 @@ static __noinline void DeleteVM(void) {
   char problem[kVMProblemLength + 1];
   const bool deleted = VMFolderDelete(&vm, problem);
   // Gone from the list, it leaves the first VM chosen.
-  ShowManagedVMs(vm.path);
+  ShowManagedVMs(vm.name);
   if (deleted) {
-    SYSTEM_INFO("vm_deleted", Y_LOG_STRING("path", vm.path));
+    SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
   } else {
     ShowManageProblem("vm_not_deleted", &vm, problem);
   }
@@ -1596,8 +1601,8 @@ static __noinline void ChooseVM(void) {
   if (noted) {
     SYSTEM_INFO(
         note.intent == kStartIntentRestart ? "restarting" : "powered_off",
-        Y_LOG_STRING("path", note.path));
-    const uint8_t index = VMListFind(&g_vms, note.path);
+        Y_LOG_STRING("name", note.name));
+    const uint8_t index = VMListFind(&g_vms, note.name);
     if (index < kVMListMax) {
       highlighted = index;
       if (note.intent == kStartIntentRestart && TakeVM(index)) {
@@ -1693,7 +1698,7 @@ static __noinline void OpenDrives(void) {
       paths[drive] = g_vm.drives[drive];
       for (uint8_t earlier = 0; earlier < drive; ++earlier) {
         if (paths[drive][0] != '\0' &&
-            FileListSamePath(paths[drive], paths[earlier])) {
+            FSSamePath(paths[drive], paths[earlier])) {
           char name[kDiskImageNameLength + 1];
           DiskImageName(paths[drive], name);
           snprintf(

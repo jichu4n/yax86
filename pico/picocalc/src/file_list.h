@@ -1,21 +1,18 @@
 // A folder on the SD card, read for the menu's browser: the way up, the
-// folders in it, and the disk images in it, each sorted by name.
-//
-// Paths are FatFs's, without a leading slash: "" is the card's root, and
-// "yax86/MSDOS330" a folder two down. The card keeps 8.3 names, so a name is
-// at most 12 characters.
+// folders in it, and the disk images in it, each sorted by name. Paths are
+// as fs.h has them.
 #ifndef YAX86_PICOCALC_FILE_LIST_H
 #define YAX86_PICOCALC_FILE_LIST_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "fs.h"
+
 enum {
   // The most entries a list holds. A folder with more lists the first ones
   // found and says it was cut short.
   kFileListMaxEntries = 64,
-  kFileListMaxName = 12,
-  kFileListMaxPath = 127,
 };
 
 typedef enum FileListKind {
@@ -27,14 +24,14 @@ typedef enum FileListKind {
 
 typedef struct FileListEntry {
   FileListKind kind;
-  char name[kFileListMaxName + 1];
+  char name[kFSMaxName + 1];
   // An image's size in bytes, one of the sizes listed.
   uint32_t size;
 } FileListEntry;
 
 typedef struct FileList {
   // The folder listed.
-  char path[kFileListMaxPath + 1];
+  char path[kFSMaxPath + 1];
   FileListEntry entries[kFileListMaxEntries];
   uint8_t count;
   // Whether the folder had more than kFileListMaxEntries.
@@ -50,19 +47,9 @@ void FileListRead(
     uint8_t num_sizes);
 
 // The path of an entry of the list: the folder above for kFileListParent.
-// Returns false if it would not fit in kFileListMaxPath.
+// Returns false if it would not fit in kFSMaxPath.
 bool FileListEntryPath(
     const FileList* list, const FileListEntry* entry,
-    char path[kFileListMaxPath + 1]);
-
-// Copy a path, cut to kFileListMaxPath.
-void FileListCopyPath(const char* from, char to[kFileListMaxPath + 1]);
-
-// Whether two paths name the same file. The card's file system ignores case.
-bool FileListSamePath(const char* a, const char* b);
-
-// The folder a path is in: "yax86/vm/dos330" for "yax86/vm/dos330/hdd.img", ""
-// for a file at the root.
-void FileListFolderOf(const char* path, char folder[kFileListMaxPath + 1]);
+    char path[kFSMaxPath + 1]);
 
 #endif  // YAX86_PICOCALC_FILE_LIST_H

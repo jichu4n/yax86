@@ -1,9 +1,9 @@
 #include "harddisk.h"
 
-#include "file_list.h"
+#include "fs.h"
 
 static DiskImage g_images[kHardDisks];
-static char g_paths[kHardDisks][kFileListMaxPath + 1];
+static char g_paths[kHardDisks][kFSMaxPath + 1];
 
 void HardDiskOpen(const char* const paths[kHardDisks]) {
   for (uint8_t drive = 0; drive < kHardDisks; ++drive) {
@@ -12,7 +12,7 @@ void HardDiskOpen(const char* const paths[kHardDisks]) {
       image->status = kDiskImageEjected;
       continue;
     }
-    FileListCopyPath(paths[drive], g_paths[drive]);
+    FSCopyPath(paths[drive], g_paths[drive]);
     DiskImageOpen(image, g_paths[drive], Y_HDC_GEOMETRY_10MB_IMAGE_SIZE);
   }
 }

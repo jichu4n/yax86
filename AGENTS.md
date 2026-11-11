@@ -134,10 +134,14 @@ headless Chrome when done; that Chrome is heavy even idle.
 - Core code is portable C99; tests are C++14 with Google Test. Everything
   follows the Google C++ style guide, formatted with `clang-format`, except
   for the core's file-scope names - see "Naming".
-- No libc functions like `printf` or `memset`. Headers for types, constants
-  and macros (`uint8_t`, `NULL`) are fine.
-- No dynamic allocation - static storage and the stack only. Zero data with
-  static zero-initialization, `static MyStruct data = {0};`, not `memset`.
+- **The core calls no libc functions**, like `printf` or `memset`, so it
+  stays standalone. Headers for types, constants and macros (`uint8_t`,
+  `NULL`) are fine.
+- **The hosts use the C library** - `strlen()`, `strcasecmp()`,
+  `toupper()`, `memcpy()`, `snprintf()` - rather than writing their own.
+- No dynamic allocation, core or host - static storage and the stack only.
+  In the core, zero data with static zero-initialization, `static MyStruct
+  data = {0};`, not `memset`.
 
 ### Declarations
 

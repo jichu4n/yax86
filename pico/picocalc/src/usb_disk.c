@@ -1,5 +1,7 @@
 #include "usb_disk.h"
 
+#include <string.h>
+
 #include "pico/time.h"
 #include "sdcard.h"
 #include "tusb.h"
@@ -103,19 +105,13 @@ static bool WriteBlocks(uint32_t lba, const uint8_t* data, uint32_t count) {
   return DiskImageWriteSectors(g_image, lba, data, count);
 }
 
-static void CopyPadded(uint8_t* to, const char* from, uint8_t length) {
-  for (uint8_t i = 0; i < length; ++i) {
-    to[i] = (uint8_t)from[i];
-  }
-}
-
 void tud_msc_inquiry_cb(
     uint8_t lun, uint8_t vendor_id[8], uint8_t product_id[16],
     uint8_t product_rev[4]) {
   (void)lun;
-  CopyPadded(vendor_id, kVendor, sizeof(kVendor) - 1);
-  CopyPadded(product_id, kProduct, sizeof(kProduct) - 1);
-  CopyPadded(product_rev, kRevision, sizeof(kRevision) - 1);
+  memcpy(vendor_id, kVendor, sizeof(kVendor) - 1);
+  memcpy(product_id, kProduct, sizeof(kProduct) - 1);
+  memcpy(product_rev, kRevision, sizeof(kRevision) - 1);
 }
 
 bool tud_msc_test_unit_ready_cb(uint8_t lun) {

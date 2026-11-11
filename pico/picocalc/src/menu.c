@@ -1,7 +1,9 @@
 #include "menu.h"
 
+#include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "display.h"
 #include "file_list.h"
@@ -235,19 +237,16 @@ static bool g_choosing;
 // Whether the browser is finding a disk image to put on USB, from the list,
 // rather than a floppy for a drive; and the image found.
 static bool g_browsing_for_usb;
-static char g_usb_image_path[kFileListMaxPath + 1];
+static char g_usb_image_path[kFSMaxPath + 1];
 static uint32_t g_usb_image_size;
 //
-// The VMs Manage VMs lists, as indexes in g_vms: those in yax86/vm.
-static uint8_t g_managed[kVMListMax];
-static uint8_t g_managed_count;
 // The VM whose page shows, an index in g_vms; the names of the images in its
 // drives, empty for none; and whether its vm.cfg read.
 static uint8_t g_vm;
 static char g_vm_drives[kVMDrives][kDiskImageNameLength + 1];
 static bool g_vm_readable;
 // The name being typed, and whether it is for a clone rather than a rename.
-static char g_name[kVMFolderMaxName + 1];
+static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
 static bool g_cloning;
 // What deleting the VM would take.
@@ -310,14 +309,7 @@ void MenuSetCountdown(uint8_t seconds) {
 
 void MenuSetProblem(const char* problem) {
   g_problem = g_problem == g_problems[0] ? g_problems[1] : g_problems[0];
-  uint8_t i = 0;
-  if (problem != NULL) {
-    while (problem[i] != '\0' && i < kTextColumns) {
-      g_problem[i] = problem[i];
-      ++i;
-    }
-  }
-  g_problem[i] = '\0';
+  snprintf(g_problem, kTextColumns + 1, "%s", problem != NULL ? problem : "");
 }
 
 const char* MenuHint(void) {
@@ -347,10 +339,6 @@ const char* MenuProblem(void) {
   return g_problem[0] != '\0' ? g_problem : NULL;
 }
 
-static char Upper(char c) {
-  return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
-}
-
 // Show the browser on a folder, with the image in the drive chosen if it is
 // there.
 static void Browse(const char* path) {
@@ -370,11 +358,11 @@ static void Browse(const char* path) {
   if (image->status != kDiskImageOpen) {
     return;
   }
-  char path_of_entry[kFileListMaxPath + 1];
+  char path_of_entry[kFSMaxPath + 1];
   for (uint8_t i = 0; i < g_list.count; ++i) {
     if (g_list.entries[i].kind == kFileListImage &&
         FileListEntryPath(&g_list, &g_list.entries[i], path_of_entry) &&
-        FileListSamePath(path_of_entry, image->path)) {
+        FSSamePath(path_of_entry, image->path)) {
       g_chosen = i;
       ScrollToChosen();
     }
@@ -391,16 +379,11 @@ static void StartBrowsing(void) {
     image = g_config.drive(
         g_drive == kFloppyDriveA ? kFloppyDriveB : kFloppyDriveA);
   }
-  char folder[kFileListMaxPath + 1];
+  char folder[kFSMaxPath + 1];
   if (image->status == kDiskImageOpen) {
-    FileListFolderOf(image->path, folder);
+    FSFolderOf(image->path, folder);
   } else {
-    folder[0] = 'y';
-    folder[1] = 'a';
-    folder[2] = 'x';
-    folder[3] = '8';
-    folder[4] = '6';
-    folder[5] = '\0';
+    FSCopyPath("yax86", folder);
   }
   Browse(folder);
 }
@@ -416,16 +399,16 @@ static void ScrollToChosen(void) {
 
 // Show the browser on the folder above, with the folder just left chosen.
 static void BrowseUp(void) {
-  char left[kFileListMaxPath + 1];
-  char parent[kFileListMaxPath + 1];
-  FileListCopyPath(g_list.path, left);
-  FileListFolderOf(left, parent);
+  char left[kFSMaxPath + 1];
+  char parent[kFSMaxPath + 1];
+  FSCopyPath(g_list.path, left);
+  FSFolderOf(left, parent);
   Browse(parent);
-  char path_of_entry[kFileListMaxPath + 1];
+  char path_of_entry[kFSMaxPath + 1];
   for (uint8_t i = 0; i < g_list.count; ++i) {
     if (g_list.entries[i].kind == kFileListFolder &&
         FileListEntryPath(&g_list, &g_list.entries[i], path_of_entry) &&
-        FileListSamePath(path_of_entry, left)) {
+        FSSamePath(path_of_entry, left)) {
       g_chosen = i;
       ScrollToChosen();
     }
@@ -484,7 +467,7 @@ static uint8_t PageItemCount(void) {
     case kMenuPageStopSharing:
       return kStopSharingItemCount;
     case kMenuPageManage:
-      return g_managed_count;
+      return g_vms->count;
     case kMenuPageVM:
       return kVMItemCount;
     case kMenuPageDelete:
@@ -497,32 +480,16 @@ static uint8_t PageItemCount(void) {
   return 0;
 }
 
-// Show Manage VMs, with the VM at index in g_vms chosen, or the first if it
-// is not listed there.
+// Show Manage VMs, with the VM at index in the list chosen, or the first if
+// there is none there.
 static void ShowManaged(uint8_t index) {
-  g_managed_count = 0;
-  uint8_t chosen = 0;
-  for (uint8_t i = 0; i < g_vms->count; ++i) {
-    if (VMFolderIsManaged(&g_vms->vms[i])) {
-      if (i == index) {
-        chosen = g_managed_count;
-      }
-      g_managed[g_managed_count++] = i;
-    }
-  }
   g_list_top = 0;
-  ShowPage(kMenuPageManage, chosen);
+  ShowPage(kMenuPageManage, index < g_vms->count ? index : 0);
   ScrollToChosen();
 }
 
-void MenuShowManagedVMs(const char* path) {
-  uint8_t index = kVMListMax;
-  for (uint8_t i = 0; i < g_vms->count; ++i) {
-    if (FileListSamePath(g_vms->vms[i].path, path)) {
-      index = i;
-    }
-  }
-  ShowManaged(index);
+void MenuShowManagedVMs(const char* name) {
+  ShowManaged(VMListFind(g_vms, name));
 }
 
 // Show a VM's page, with the images in its drives.
@@ -530,7 +497,7 @@ static void ShowVM(uint8_t index) {
   g_vm = index;
   VMConfig config;
   char problem[kVMProblemLength + 1];
-  g_vm_readable = VMConfigRead(g_vms->vms[index].path, &config, problem);
+  g_vm_readable = VMConfigRead(&g_vms->vms[index], &config, problem);
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     g_vm_drives[drive][0] = '\0';
     if (config.drives[drive][0] != '\0') {
@@ -546,13 +513,13 @@ static void StartNaming(bool cloning) {
   g_cloning = cloning;
   const char* name = g_vms->vms[g_vm].name;
   g_name_length = 0;
-  while (name[g_name_length] != '\0' && g_name_length < kVMFolderMaxName) {
+  while (name[g_name_length] != '\0' && g_name_length < kFSMaxFolderName) {
     g_name[g_name_length] = name[g_name_length];
     ++g_name_length;
   }
   if (cloning) {
-    if (g_name_length > kVMFolderMaxName - 2) {
-      g_name_length = kVMFolderMaxName - 2;
+    if (g_name_length > kFSMaxFolderName - 2) {
+      g_name_length = kFSMaxFolderName - 2;
     }
     g_name[g_name_length++] = '_';
     g_name[g_name_length++] = '2';
@@ -578,9 +545,9 @@ static MenuAction TypeName(uint8_t key) {
     default:
       break;
   }
-  if (key < 0x80 && VMFolderNameCharacter((char)key) &&
-      g_name_length < kVMFolderMaxName) {
-    g_name[g_name_length++] = Upper((char)key);
+  if (key < 0x80 && FSIsFolderNameCharacter((char)key) &&
+      g_name_length < kFSMaxFolderName) {
+    g_name[g_name_length++] = (char)toupper(key);
     g_name[g_name_length] = '\0';
     g_dirty = true;
   }
@@ -676,7 +643,7 @@ static MenuAction OpenEntry(void) {
     return kMenuActionNone;
   }
   const FileListEntry* entry = &g_list.entries[g_chosen];
-  char path[kFileListMaxPath + 1];
+  char path[kFSMaxPath + 1];
   if (!FileListEntryPath(&g_list, entry, path)) {
     return kMenuActionNone;
   }
@@ -689,7 +656,7 @@ static MenuAction OpenEntry(void) {
     return kMenuActionNone;
   }
   if (g_browsing_for_usb) {
-    FileListCopyPath(path, g_usb_image_path);
+    FSCopyPath(path, g_usb_image_path);
     g_usb_image_size = entry->size;
     return kMenuActionShareImage;
   }
@@ -757,8 +724,8 @@ static MenuAction Choose(void) {
       }
       return kMenuActionVMChosen;
     case kMenuPageManage:
-      if (g_managed_count > 0) {
-        ShowVM(g_managed[g_chosen]);
+      if (g_vms->count > 0) {
+        ShowVM(g_chosen);
       }
       return kMenuActionNone;
     case kMenuPageVM:
@@ -926,10 +893,7 @@ static void EdgeRow(
   if (title == NULL) {
     return;
   }
-  uint8_t length = 0;
-  while (title[length] != '\0') {
-    ++length;
-  }
+  const uint8_t length = (uint8_t)strlen(title);
   // The title, with a space either side, over the middle of the edge.
   uint8_t column = (uint8_t)((columns - length - 2) / 2);
   row->chars[column] = ' ';
@@ -1070,23 +1034,16 @@ static void DrawBrowsePage(DisplayMenu* menu) {
   // The folder, from the card's root, keeping its end if it is too long.
   char title[kNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
-  char full[kFileListMaxPath + 2];
-  full[0] = '/';
-  uint16_t length = 1;
-  for (const char* c = g_list.path; *c != '\0'; ++c) {
-    full[length++] = Upper(*c);
+  char full[kFSMaxPath + 2];
+  snprintf(full, sizeof(full), "/%s", g_list.path);
+  for (char* c = full; *c != '\0'; ++c) {
+    *c = (char)toupper((unsigned char)*c);
   }
-  full[length] = '\0';
+  const size_t length = strlen(full);
   if (length > room) {
-    title[0] = '.';
-    title[1] = '.';
-    for (uint8_t i = 2; i <= room; ++i) {
-      title[i] = full[length - room + i];
-    }
+    snprintf(title, sizeof(title), "..%s", &full[length - room + 2]);
   } else {
-    for (uint16_t i = 0; i <= length; ++i) {
-      title[i] = full[i];
-    }
+    snprintf(title, sizeof(title), "%s", full);
   }
   EdgeRow(&menu->text[0], menu->columns, true, title);
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
@@ -1108,7 +1065,7 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     const FileListEntry* entry = &g_list.entries[index];
     ItemRow(row, menu->columns, entry->name, index == g_chosen);
     const uint8_t attr = index == g_chosen ? kAttrChosen : kAttrText;
-    char path[kFileListMaxPath + 1];
+    char path[kFSMaxPath + 1];
     if (entry->kind != kFileListImage) {
       PutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
       continue;
@@ -1124,8 +1081,7 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     }
     for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
       const DiskImage* image = g_config.drive((FloppyDrive)drive);
-      if (image->status == kDiskImageOpen &&
-          FileListSamePath(path, image->path)) {
+      if (image->status == kDiskImageOpen && FSSamePath(path, image->path)) {
         char note[] = "in drive A";
         note[sizeof(note) - 2] = DriveLetter((FloppyDrive)drive);
         PutText(row, menu->columns, kBrowseNoteColumn, note, attr);
@@ -1187,13 +1143,13 @@ static void DrawManagePage(DisplayMenu* menu) {
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
-    if (index < g_managed_count) {
-      const MenuItem item = {g_vms->vms[g_managed[index]].name, true};
+    if (index < g_vms->count) {
+      const MenuItem item = {g_vms->vms[index].name, true};
       MenuItemRow(row, menu->columns, &item, index == g_chosen);
       continue;
     }
     BlankRow(row, menu->columns);
-    if (i == 0 && g_managed_count == 0) {
+    if (i == 0 && g_vms->count == 0) {
       PutText(row, menu->columns, 3, "No VMs in /YAX86/VM", kAttrText);
     }
   }
@@ -1201,7 +1157,7 @@ static void DrawManagePage(DisplayMenu* menu) {
   if (g_list_top > 0) {
     menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
   }
-  if (g_list_top + kBrowseRows < g_managed_count) {
+  if (g_list_top + kBrowseRows < g_vms->count) {
     menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
   }
 }
@@ -1250,22 +1206,22 @@ static void DrawNamePage(DisplayMenu* menu) {
   // The field, on the blank line: the box's edge, a blank row, then the
   // first line.
   DisplayTextRow* row = &menu->text[3];
-  char field[kVMFolderMaxName + 1];
-  for (uint8_t i = 0; i < kVMFolderMaxName; ++i) {
+  char field[kFSMaxFolderName + 1];
+  for (uint8_t i = 0; i < kFSMaxFolderName; ++i) {
     field[i] = i < g_name_length ? g_name[i] : ' ';
   }
-  if (g_name_length < kVMFolderMaxName) {
+  if (g_name_length < kFSMaxFolderName) {
     field[g_name_length] = '_';
   }
-  field[kVMFolderMaxName] = '\0';
+  field[kFSMaxFolderName] = '\0';
   PutText(row, menu->columns, 3, field, kAttrChosen);
 }
 
 // Join names into text as "A, B and C", for as many as fit, then "and N
 // more" for the rest.
 static void JoinNames(
-    char* text, uint8_t size, char (*names)[kFileListMaxName + 1],
-    uint8_t named, uint8_t count) {
+    char* text, uint8_t size, char (*names)[kFSMaxName + 1], uint8_t named,
+    uint8_t count) {
   uint8_t length = 0;
   text[0] = '\0';
   for (uint8_t i = 0; i < named; ++i) {

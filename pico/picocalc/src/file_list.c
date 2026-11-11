@@ -1,15 +1,9 @@
 #include "file_list.h"
 
-#include "disk_image.h"
-#include "ff.h"
+#include <stdio.h>
+#include <string.h>
 
-static bool NamesInOrder(const char* a, const char* b) {
-  while (*a != '\0' && *a == *b) {
-    ++a;
-    ++b;
-  }
-  return (unsigned char)*a <= (unsigned char)*b;
-}
+#include "disk_image.h"
 
 // Whether a belongs before b: the way up first, then folders, then images,
 // each by name.
@@ -17,16 +11,7 @@ static bool EntriesInOrder(const FileListEntry* a, const FileListEntry* b) {
   if (a->kind != b->kind) {
     return a->kind < b->kind;
   }
-  return NamesInOrder(a->name, b->name);
-}
-
-static void CopyName(const char* from, char to[kFileListMaxName + 1]) {
-  uint8_t i = 0;
-  while (from[i] != '\0' && i < kFileListMaxName) {
-    to[i] = from[i];
-    ++i;
-  }
-  to[i] = '\0';
+  return strcmp(a->name, b->name) <= 0;
 }
 
 // Add an entry where it belongs, keeping the list sorted. An insertion sort:
@@ -45,19 +30,39 @@ static void Insert(FileList* list, const FileListEntry* entry) {
   ++list->count;
 }
 
-void FileListCopyPath(const char* from, char to[kFileListMaxPath + 1]) {
-  uint16_t i = 0;
-  while (from[i] != '\0' && i < kFileListMaxPath) {
-    to[i] = from[i];
-    ++i;
+// A listing under way: the list, and the sizes an image may have.
+typedef struct Reading {
+  FileList* list;
+  const uint32_t* image_sizes;
+  uint8_t num_sizes;
+} Reading;
+
+static bool TakeEntry(const FILINFO* info, void* context) {
+  Reading* reading = context;
+  if (info->fattrib & (AM_HID | AM_SYS)) {
+    return true;
   }
-  to[i] = '\0';
+  FileListEntry entry = {.kind = kFileListFolder, .size = 0};
+  if (!(info->fattrib & AM_DIR)) {
+    uint8_t i = 0;
+    while (i < reading->num_sizes && info->fsize != reading->image_sizes[i]) {
+      ++i;
+    }
+    if (i == reading->num_sizes) {
+      return true;
+    }
+    entry.kind = kFileListImage;
+    entry.size = reading->image_sizes[i];
+  }
+  snprintf(entry.name, sizeof(entry.name), "%s", info->fname);
+  Insert(reading->list, &entry);
+  return true;
 }
 
 void FileListRead(
     FileList* list, const char* path, const uint32_t* image_sizes,
     uint8_t num_sizes) {
-  FileListCopyPath(path, list->path);
+  FSCopyPath(path, list->path);
   list->count = 0;
   list->truncated = false;
   list->readable = false;
@@ -69,84 +74,17 @@ void FileListRead(
   if (DiskImageMountCard() != kDiskImageOpen) {
     return;
   }
-  DIR folder;
-  if (f_opendir(&folder, list->path) != FR_OK) {
-    return;
-  }
-  list->readable = true;
-  FILINFO info;
-  while (f_readdir(&folder, &info) == FR_OK && info.fname[0] != '\0') {
-    // The dot entries too, should FatFs ever hand them over: the list has
-    // its own way up.
-    if ((info.fattrib & (AM_HID | AM_SYS)) || info.fname[0] == '.') {
-      continue;
-    }
-    FileListEntry entry = {.kind = kFileListFolder, .size = 0};
-    if (!(info.fattrib & AM_DIR)) {
-      uint8_t i = 0;
-      while (i < num_sizes && info.fsize != image_sizes[i]) {
-        ++i;
-      }
-      if (i == num_sizes) {
-        continue;
-      }
-      entry.kind = kFileListImage;
-      entry.size = image_sizes[i];
-    }
-    CopyName(info.fname, entry.name);
-    Insert(list, &entry);
-  }
-  f_closedir(&folder);
-}
-
-static char Upper(char c) {
-  return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
-}
-
-bool FileListSamePath(const char* a, const char* b) {
-  while (*a != '\0' && Upper(*a) == Upper(*b)) {
-    ++a;
-    ++b;
-  }
-  return *a == '\0' && *b == '\0';
-}
-
-void FileListFolderOf(const char* path, char folder[kFileListMaxPath + 1]) {
-  FileListCopyPath(path, folder);
-  uint16_t last_slash = 0;
-  bool has_slash = false;
-  for (uint16_t i = 0; folder[i] != '\0'; ++i) {
-    if (folder[i] == '/') {
-      last_slash = i;
-      has_slash = true;
-    }
-  }
-  folder[has_slash ? last_slash : 0] = '\0';
+  Reading reading = {
+      .list = list, .image_sizes = image_sizes, .num_sizes = num_sizes};
+  list->readable = FSListFolder(list->path, TakeEntry, &reading) == FR_OK;
 }
 
 bool FileListEntryPath(
     const FileList* list, const FileListEntry* entry,
-    char path[kFileListMaxPath + 1]) {
+    char path[kFSMaxPath + 1]) {
   if (entry->kind == kFileListParent) {
-    FileListFolderOf(list->path, path);
+    FSFolderOf(list->path, path);
     return true;
   }
-  uint16_t length = 0;
-  for (const char* c = list->path; *c != '\0'; ++c) {
-    path[length++] = *c;
-  }
-  if (length > 0) {
-    if (length == kFileListMaxPath) {
-      return false;
-    }
-    path[length++] = '/';
-  }
-  for (const char* c = entry->name; *c != '\0'; ++c) {
-    if (length == kFileListMaxPath) {
-      return false;
-    }
-    path[length++] = *c;
-  }
-  path[length] = '\0';
-  return true;
+  return FSJoin(list->path, entry->name, path);
 }
