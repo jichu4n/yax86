@@ -180,12 +180,14 @@ Y_FILE_PRIVATE Y_HOT Y_NOINLINE bool YCPUOpenPagedFetchWindow(
   if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
     return false;
   }
+  // The window is the whole frame, covering its page's guest addresses: from
+  // the page's first address, the offset rounded down to a page boundary, for
+  // one page.
   const uint32_t page_size = (uint32_t)1 << paged->page_shift;
+  const uint32_t page_offset = offset & ~(page_size - 1);
   YCPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
-  window->data =
-      paged->frames +
-      ((uint32_t)(entry & Y_CPU_PAGED_DATA_FRAME_MASK) << paged->page_shift);
-  window->start = paged->start + (offset & ~(page_size - 1));
+  window->data = YCPUGetPagedFrame(paged, entry);
+  window->start = paged->start + page_offset;
   window->end = window->start + page_size;
   return true;
 }

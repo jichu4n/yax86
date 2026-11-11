@@ -105,20 +105,12 @@ Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
     return NULL;
   }
 
-  // Where the page's frame starts in frames: frames are a page long and laid
-  // out back to back, so frame n starts n pages in. The frame number is the
-  // entry with RESIDENT and DIRTY masked off, widened before the shift so the
-  // arithmetic is unsigned.
-  const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
-  const uint32_t frame_start = frame << window->page_shift;
-
   // How far into its page the address is: the offset's low page_shift bits.
   const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
   const uint32_t offset_in_page = offset & page_mask;
 
-  // frame_start's low page_shift bits are all 0 and offset_in_page fits in
-  // them, so OR-ing them is the same as adding them.
-  return window->frames + (frame_start | offset_in_page);
+  // The byte is that far into the page's frame.
+  return YCPUGetPagedFrame(window, entry) + offset_in_page;
 }
 
 // Read a byte at an address the direct data window does not cover: from its

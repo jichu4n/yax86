@@ -3148,6 +3148,23 @@ Y_MODULE_PRIVATE uint32_t YCPUFromOperand(const YCPUOperand* operand);
 Y_MODULE_PRIVATE int32_t
 YCPUFromSignedOperand(YCPUWidth width, const YCPUOperand* operand);
 
+// Where the frame a page table entry names starts in the paged data window's
+// frames. Frames are a page long and laid out back to back, so frame n starts
+// n pages in. The frame number is the entry with RESIDENT and DIRTY masked
+// off, widened before the shift so the arithmetic is unsigned. With 256-byte
+// pages, entry 0x4005 names frame 5, which starts at frames + 0x500.
+//
+// Only the entry's frame number is read: the caller checks the flags first.
+// YCPUGetPagedDataByte() and YCPUOpenPagedFetchWindow() share this, each
+// keeping its own checks inline: moving those here as well changed which way
+// the compiler laid out the branches, making a page in its frame the taken
+// branch, a cycle slower on a Cortex-M0+.
+Y_MODULE_PRIVATE_HEADER inline uint8_t* YCPUGetPagedFrame(
+    const YCPUPagedDataWindow* window, uint16_t entry) {
+  const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
+  return window->frames + (frame << window->page_shift);
+}
+
 // Computes the raw address a segment register and an offset address.
 Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
     const YCPUState* cpu, uint8_t segment_register_index, uint16_t offset);
@@ -3512,20 +3529,12 @@ Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
     return NULL;
   }
 
-  // Where the page's frame starts in frames: frames are a page long and laid
-  // out back to back, so frame n starts n pages in. The frame number is the
-  // entry with RESIDENT and DIRTY masked off, widened before the shift so the
-  // arithmetic is unsigned.
-  const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
-  const uint32_t frame_start = frame << window->page_shift;
-
   // How far into its page the address is: the offset's low page_shift bits.
   const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
   const uint32_t offset_in_page = offset & page_mask;
 
-  // frame_start's low page_shift bits are all 0 and offset_in_page fits in
-  // them, so OR-ing them is the same as adding them.
-  return window->frames + (frame_start | offset_in_page);
+  // The byte is that far into the page's frame.
+  return YCPUGetPagedFrame(window, entry) + offset_in_page;
 }
 
 // Read a byte at an address the direct data window does not cover: from its
@@ -9413,12 +9422,14 @@ Y_FILE_PRIVATE Y_HOT Y_NOINLINE bool YCPUOpenPagedFetchWindow(
   if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
     return false;
   }
+  // The window is the whole frame, covering its page's guest addresses: from
+  // the page's first address, the offset rounded down to a page boundary, for
+  // one page.
   const uint32_t page_size = (uint32_t)1 << paged->page_shift;
+  const uint32_t page_offset = offset & ~(page_size - 1);
   YCPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
-  window->data =
-      paged->frames +
-      ((uint32_t)(entry & Y_CPU_PAGED_DATA_FRAME_MASK) << paged->page_shift);
-  window->start = paged->start + (offset & ~(page_size - 1));
+  window->data = YCPUGetPagedFrame(paged, entry);
+  window->start = paged->start + page_offset;
   window->end = window->start + page_size;
   return true;
 }
