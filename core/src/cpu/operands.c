@@ -77,22 +77,57 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
 // The byte in its frame that a guest address in the paged range refers to, or
 // NULL if the address is outside the range or its page's entry lacks any of
 // flags. A read passes Y_CPU_PAGED_DATA_RESIDENT, and a write that and
-// Y_CPU_PAGED_DATA_DIRTY.
+// Y_CPU_PAGED_DATA_DIRTY. NULL sends the access to the host's callback.
+//
+// This is the translation described at YCPUPagedDataWindow. With 256-byte
+// pages starting at 0x10000, guest address 0x11234 whose page's entry is
+// 0x4005 is byte 0x34 of page 0x12, held in frame 5: frames + 0x534.
 Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
     const YCPUState* cpu, uint32_t raw_address, uint16_t flags) {
   const YCPUPagedDataWindow* window = &cpu->paged_data_window;
+
+  // How far into the paged range the address is. An address below start
+  // wraps to a huge value, so this one unsigned compare rejects addresses on
+  // both sides of the range, and every address when size is 0.
   const uint32_t offset = raw_address - window->start;
   if (offset >= window->size) {
     return NULL;
   }
-  const uint16_t entry = window->pages[offset >> window->page_shift];
+
+  // The page the address is in, and the page's entry in the page table.
+  const uint32_t page = offset >> window->page_shift;
+  const uint16_t entry = window->pages[page];
+
+  // The access needs every bit in flags. Testing that any one is set would let
+  // a write through to a dirty page whose RESIDENT the host cleared to sample
+  // use, and the host would never hear of it.
   if ((entry & flags) != flags) {
     return NULL;
   }
+
+  // Where the page's frame starts in frames: frames are a page long and laid
+  // out back to back, so frame n starts n pages in. The frame number is the
+  // entry with RESIDENT and DIRTY masked off, widened before the shift so the
+  // arithmetic is unsigned.
+  const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
+  const uint32_t frame_start = frame << window->page_shift;
+
+  // How far into its page the address is: the offset's low page_shift bits.
   const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
-  return window->frames + (((uint32_t)(entry & Y_CPU_PAGED_DATA_FRAME_MASK)
-                            << window->page_shift) |
-                           (offset & page_mask));
+  const uint32_t offset_in_page = offset & page_mask;
+
+  // frame_start's low page_shift bits are all 0 and offset_in_page fits in
+  // them, so OR-ing them is the same as adding them.
+  return window->frames + (frame_start | offset_in_page);
+}
+const uint16_t entry = window->pages[offset >> window->page_shift];
+if ((entry & flags) != flags) {
+  return NULL;
+}
+const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
+return window->frames + (((uint32_t)(entry & Y_CPU_PAGED_DATA_FRAME_MASK)
+                          << window->page_shift) |
+                         (offset & page_mask));
 }
 
 // Read a byte at an address the direct data window does not cover: from its
