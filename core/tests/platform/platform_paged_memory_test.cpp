@@ -18,15 +18,17 @@ enum : uint8_t {
   kOpMovMoffsAl = 0xA2,
 };
 
-constexpr uint32_t kPhysicalSize = 64 * 1024;
+constexpr uint32_t kDirectSize = 64 * 1024;
 constexpr uint32_t kPagedSize = 64 * 1024;
 constexpr uint8_t kPageShift = 9;
 constexpr uint32_t kPageSize = 1 << kPageShift;
 constexpr uint32_t kNumPages = kPagedSize >> kPageShift;
 constexpr uint32_t kMaxFrames = 4;
 // The paged region starts here, at segment 0x1000.
-constexpr uint32_t kPagedStart = kPhysicalSize;
+constexpr uint32_t kPagedStart = kDirectSize;
 constexpr uint16_t kPagedSegment = kPagedStart >> 4;
+// A frame holding no page.
+constexpr uint32_t kNoPage = 0xFFFFFFFF;
 
 // A host as the PicoCalc's is: a few frames, the pages in a backing store of
 // their own, a frame given to the page longest in one when none is free, and a
@@ -48,8 +50,8 @@ class PlatformPagedMemoryTest : public ::testing::Test {
     paged_.pages = pages_;
     paged_.frames = frames_;
     paged_.page_fault = PageFault;
-    platform_.config.physical_memory_size = kPhysicalSize;
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory_size = kDirectSize;
+    platform_.config.direct_memory = ram_;
     platform_.config.paged_memory = &paged_;
     platform_.config.vram = vram_;
     if (!YPlatformInit(&platform_)) {
@@ -68,7 +70,13 @@ class PlatformPagedMemoryTest : public ::testing::Test {
       return;
     }
     uint16_t& entry = self->pages_[page];
-    if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
+    const uint32_t old_frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
+    if (!(entry & Y_CPU_PAGED_DATA_RESIDENT) &&
+        old_frame < self->frames_used_ &&
+        self->frame_page_[old_frame] == page) {
+      // Still in its frame, RESIDENT cleared to sample use: DIRTY stands.
+      entry |= Y_CPU_PAGED_DATA_RESIDENT;
+    } else if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
       uint32_t frame;
       if (self->frames_used_ < self->num_frames_) {
         frame = self->frames_used_++;
@@ -84,19 +92,20 @@ class PlatformPagedMemoryTest : public ::testing::Test {
       entry = static_cast<uint16_t>(frame | Y_CPU_PAGED_DATA_RESIDENT);
     }
     if (write) {
-      entry |= Y_CPU_PAGED_DATA_WRITABLE;
+      entry |= Y_CPU_PAGED_DATA_DIRTY;
     }
   }
 
   void Evict(uint32_t page) {
     const uint16_t entry = pages_[page];
     const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
-    if (entry & Y_CPU_PAGED_DATA_WRITABLE) {
+    if (entry & Y_CPU_PAGED_DATA_DIRTY) {
       std::memcpy(
           &backing_[page * kPageSize], &frames_[frame * kPageSize], kPageSize);
     }
     // Scribbled over, so that a read of the frame for this page gets it wrong.
     std::memset(&frames_[frame * kPageSize], 0xCC, kPageSize);
+    frame_page_[frame] = kNoPage;
     pages_[page] = 0;
   }
 
@@ -125,7 +134,7 @@ class PlatformPagedMemoryTest : public ::testing::Test {
 
   YPlatformState platform_ = {};
   YPlatformPagedMemory paged_ = {};
-  uint8_t ram_[kPhysicalSize] = {0};
+  uint8_t ram_[kDirectSize] = {0};
   uint8_t vram_[Y_VIDEO_CGA_VRAM_SIZE] = {0};
   uint16_t pages_[kNumPages] = {0};
   uint8_t frames_[kMaxFrames * kPageSize] = {0};
@@ -154,11 +163,11 @@ TEST_F(PlatformPagedMemoryTest, EveryByteReadsBackThroughFarFewerFrames) {
 
 TEST_F(PlatformPagedMemoryTest, PhysicalMemoryIsNotPaged) {
   ASSERT_TRUE(Init());
-  YPlatformWriteMemoryByte(&platform_, kPhysicalSize - 1, 0x5A);
-  EXPECT_EQ(ram_[kPhysicalSize - 1], 0x5A);
+  YPlatformWriteMemoryByte(&platform_, kDirectSize - 1, 0x5A);
+  EXPECT_EQ(ram_[kDirectSize - 1], 0x5A);
   EXPECT_TRUE(faults_.empty());
   // The CPU still indexes it directly.
-  EXPECT_EQ(platform_.cpu.direct_data_window.end, kPhysicalSize);
+  EXPECT_EQ(platform_.cpu.direct_data_window.end, kDirectSize);
 }
 
 TEST_F(PlatformPagedMemoryTest, AReadHandsThePageOutReadOnly) {
@@ -250,11 +259,11 @@ TEST_F(PlatformPagedMemoryTest, AWriteSurvivesItsPageLeavingItsFrame) {
 
 // The CPU indexes a page its entry allows without asking, and asks about one
 // it does not: a read of a page with RESIDENT cleared, and a write to one
-// without WRITABLE.
+// without DIRTY.
 TEST_F(PlatformPagedMemoryTest, TheCPUAsksOnlyWhatTheEntryDoesNotAllow) {
   ASSERT_TRUE(Init());
   // MOV AL, [0x0400]; MOV AL, [0x0401]; MOV [0x0402], AL; MOV [0x0403], AL;
-  // HLT, in physical memory, on page 2 of paged memory.
+  // HLT, in direct memory, on page 2 of paged memory.
   Load(
       0x100, {kOpMovAlMoffs, 0x00, 0x04, kOpMovAlMoffs, 0x01, 0x04,
               kOpMovMoffsAl, 0x02, 0x04, kOpMovMoffsAl, 0x03, 0x04, kOpHlt});
@@ -271,16 +280,40 @@ TEST_F(PlatformPagedMemoryTest, TheCPUAsksOnlyWhatTheEntryDoesNotAllow) {
       YPlatformReadMemoryByte(&platform_, kPagedStart + 0x403),
       backing_[0x401]);
 
-  pages_[2] &= static_cast<uint16_t>(
-      ~(Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_WRITABLE));
+  // With RESIDENT cleared on the dirty page, the CPU asks about the first
+  // read, and the host setting RESIDENT again is all the writes need.
+  pages_[2] &= static_cast<uint16_t>(~Y_CPU_PAGED_DATA_RESIDENT);
   platform_.cpu.registers[Y_CPU_IP] = 0x100;
   platform_.cpu.is_halted = false;
   RunUntilHalt();
-  EXPECT_EQ(faults_.size(), 4u);
+  ASSERT_EQ(faults_.size(), 3u);
+  EXPECT_FALSE(faults_[2].write);
+
+  // A write to a dirty page with RESIDENT cleared is asked about too: the CPU
+  // writes in the frame only with both bits.
+  pages_[2] &= static_cast<uint16_t>(~Y_CPU_PAGED_DATA_RESIDENT);
+  platform_.cpu.registers[Y_CPU_IP] = 0x100 + 6;
+  platform_.cpu.is_halted = false;
+  RunUntilHalt();
+  ASSERT_EQ(faults_.size(), 4u);
+  EXPECT_TRUE(faults_[3].write);
+}
+
+TEST_F(PlatformPagedMemoryTest, ClearingResidentLeavesDirtyAndTheData) {
+  ASSERT_TRUE(Init());
+  YPlatformWriteMemoryByte(&platform_, kPagedStart, 0x11);
+  ASSERT_EQ(faults_.size(), 1u);
+  pages_[0] &= static_cast<uint16_t>(~Y_CPU_PAGED_DATA_RESIDENT);
+  YPlatformWriteMemoryByte(&platform_, kPagedStart + 1, 0x22);
+  ASSERT_EQ(faults_.size(), 2u);
+  EXPECT_TRUE(faults_[1].write);
+  EXPECT_TRUE(pages_[0] & Y_CPU_PAGED_DATA_DIRTY);
+  EXPECT_EQ(YPlatformReadMemoryByte(&platform_, kPagedStart), 0x11);
+  EXPECT_EQ(YPlatformReadMemoryByte(&platform_, kPagedStart + 1), 0x22);
 }
 
 TEST_F(PlatformPagedMemoryTest, AllOfConventionalMemoryMayBePaged) {
-  platform_.config.physical_memory_size = 0;
+  platform_.config.direct_memory_size = 0;
   paged_.context = this;
   paged_.size = kPagedSize;
   paged_.page_shift = kPageShift;
@@ -307,8 +340,8 @@ TEST_F(PlatformPagedMemoryTest, InitRefusesPagesLargerThanTheMemoryMaps) {
   paged_.pages = pages_;
   paged_.frames = frames_;
   paged_.page_fault = PageFault;
-  platform_.config.physical_memory_size = kPhysicalSize;
-  platform_.config.physical_memory = ram_;
+  platform_.config.direct_memory_size = kDirectSize;
+  platform_.config.direct_memory = ram_;
   platform_.config.paged_memory = &paged_;
   platform_.config.vram = vram_;
   EXPECT_FALSE(YPlatformInit(&platform_));
@@ -321,8 +354,8 @@ TEST_F(PlatformPagedMemoryTest, InitRefusesPhysicalMemoryEndingMidPage) {
   paged_.pages = pages_;
   paged_.frames = frames_;
   paged_.page_fault = PageFault;
-  platform_.config.physical_memory_size = kPhysicalSize - kPageSize;
-  platform_.config.physical_memory = ram_;
+  platform_.config.direct_memory_size = kDirectSize - kPageSize;
+  platform_.config.direct_memory = ram_;
   platform_.config.paged_memory = &paged_;
   platform_.config.vram = vram_;
   EXPECT_FALSE(YPlatformInit(&platform_));
@@ -330,13 +363,13 @@ TEST_F(PlatformPagedMemoryTest, InitRefusesPhysicalMemoryEndingMidPage) {
 
 TEST_F(PlatformPagedMemoryTest, InitRefusesMoreThan640KB) {
   paged_.context = this;
-  paged_.size = Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE;
+  paged_.size = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE;
   paged_.page_shift = kPageShift;
   paged_.pages = pages_;
   paged_.frames = frames_;
   paged_.page_fault = PageFault;
-  platform_.config.physical_memory_size = kPhysicalSize;
-  platform_.config.physical_memory = ram_;
+  platform_.config.direct_memory_size = kDirectSize;
+  platform_.config.direct_memory = ram_;
   platform_.config.paged_memory = &paged_;
   platform_.config.vram = vram_;
   EXPECT_FALSE(YPlatformInit(&platform_));

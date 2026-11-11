@@ -42,15 +42,15 @@ struct YPlatformState;
 typedef uint8_t YPlatformMemoryMapEntryType;
 
 enum {
-  // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
-  // 0x9FFFF (640KB).
+  // Conventional memory held in YPlatformConfig.direct_memory, from 0x00000 up
+  // to direct_memory_size - at most 640KB, to 0x9FFFF.
   Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL = 0,
   // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
   Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
   Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
   // Paged conventional memory - the part of conventional memory above
-  // physical_memory_size, when YPlatformConfig.paged_memory is set.
+  // direct_memory_size, when YPlatformConfig.paged_memory is set.
   Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY = 0x02,
   // Video RAM - mapped to 0xB0000 (MDA) or 0xB8000 (CGA).
   Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM = 0x10,
@@ -85,10 +85,10 @@ enum {
   // address space: no entry may reach one, so it is unmapped instead.
   Y_PLATFORM_MEMORY_PAGE_STRADDLED = 0xFE,
 
-  // Maximum size of physical memory in bytes.
-  Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE = 640 * 1024,
-  // Minimum size of physical memory in bytes.
-  Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE = 64 * 1024,
+  // Maximum size of conventional memory in bytes, direct and paged together.
+  Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE = 640 * 1024,
+  // Minimum size of conventional memory in bytes, direct and paged together.
+  Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE = 64 * 1024,
 };
 
 enum {
@@ -130,7 +130,7 @@ typedef struct YPlatformPagedMemory {
   uint8_t* frames;
   // Called when an access needs a page its entry does not allow: page is the
   // page's number counted from the start of the region, and write is true for
-  // a write. Must leave pages[page] with RESIDENT set, and WRITABLE as well if
+  // a write. Must leave pages[page] with RESIDENT set, and DIRTY as well if
   // write is true.
   void (*page_fault)(
       struct YPlatformPagedMemory* memory, uint32_t page, bool write);
@@ -349,11 +349,10 @@ typedef struct YPlatformConfig {
   // which of them it wants.
   YLoggerConfig* logger_config;
 
-  // The size in bytes of conventional memory held in physical_memory. With
-  // paged_memory, conventional memory is this and paged_memory's size
-  // together, and this may be 0; either way, the whole must be between 64K and
-  // 640K.
-  uint32_t physical_memory_size;
+  // The size in bytes of direct_memory. Conventional memory is this plus
+  // paged_memory's size, and must come to between 64K and 640K; with
+  // paged_memory this may be 0.
+  uint32_t direct_memory_size;
 
   // The video adapter installed in the machine. This also determines the
   // display type reported by the PPI's DIP switches, which is what the BIOS
@@ -364,27 +363,27 @@ typedef struct YPlatformConfig {
   // to the BIOS. 0, the default, is taken as 1.
   uint8_t floppy_drives;
 
-  // The machine's conventional memory, physical_memory_size bytes of it.
-  // Required unless physical_memory_size is 0 - YPlatformInit() fails without
-  // it.
+  // Conventional memory the CPU reads and writes directly - its direct data
+  // window - from address 0, direct_memory_size bytes of it. Required unless
+  // direct_memory_size is 0 - YPlatformInit() fails without it.
   //
   // The caller owns the buffer and it must outlive the platform. Conventional
   // memory is plain storage, so the platform reads and writes it directly
   // rather than through a callback; regions that need a callback register one
   // themselves via YPlatformMemoryMapEntry.
   //
-  // Addresses above physical_memory_size are not backed by this buffer and are
-  // not an error: on the 8086 an access outside installed memory yields
-  // garbage rather than faulting, and unmapped reads here return 0xFF.
-  uint8_t* physical_memory;
+  // Addresses above conventional memory are not an error: on the 8086 an
+  // access outside installed memory yields garbage rather than faulting, and
+  // unmapped reads here return 0xFF.
+  uint8_t* direct_memory;
 
   // Paged conventional memory - see YPlatformPagedMemory - or NULL for none.
-  // It starts where physical_memory ends, at physical_memory_size, which must
+  // It starts where direct_memory ends, at direct_memory_size, which must
   // then be a multiple of 4KB.
   //
-  // An access to it costs more than one to physical_memory even when its page
+  // An access to it costs more than one to direct_memory even when its page
   // is in a frame - a call and two more loads, against a compare and a load -
-  // but physical_memory takes host memory that could have been frames. Where
+  // but direct_memory takes host memory that could have been frames. Where
   // to split the two is the host's to measure.
   //
   // The caller owns it and it must outlive the platform.
@@ -393,7 +392,7 @@ typedef struct YPlatformConfig {
   // The video adapter's memory, at least vram_size bytes for the adapter named
   // by video_adapter. Required - YPlatformInit() fails without it.
   //
-  // Separate from physical_memory because video memory sits above conventional
+  // Separate from direct_memory because video memory sits above conventional
   // memory in the address space, at 0xB0000 or 0xB8000. A host whose memory
   // buffer spans the whole megabyte can point this into it.
   //
@@ -540,8 +539,9 @@ typedef struct YPlatformState {
 
 // Initialize the platform state. Returns true if the platform state was
 // successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
-//   - No physical memory buffer was provided.
+//   - Conventional memory, direct and paged, is not between 64K and 640K.
+//   - direct_memory_size is not 0 but no direct_memory buffer was provided.
+//   - paged_memory is set but invalid, or does not start on a 4KB boundary.
 //   - No video memory buffer was provided.
 // The caller zero-initializes the YPlatformState and fills in the fields of its
 // config first. Nothing here zeroes anything: every module's state is a field

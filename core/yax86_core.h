@@ -2319,9 +2319,9 @@ typedef struct YCPUInstructionFetchWindow {
 //
 // A host may set either window, both or neither, and the two must not
 // overlap. The platform uses both when paged memory is configured: the direct
-// window is physical_memory, [0, physical_memory_size), and the paged window
+// window is direct_memory, [0, direct_memory_size), and the paged window
 // starts right where it ends, so together they cover conventional memory. With
-// physical_memory_size 0 the direct window is empty and all of it is paged.
+// direct_memory_size 0 the direct window is empty and all of it is paged.
 //
 // Instruction fetch does not go through either data window. It keeps its own
 // YCPUInstructionFetchWindow, which opens on a page in its frame by itself
@@ -2351,9 +2351,7 @@ typedef struct YCPUDirectDataWindow {
 // Paged memory: guest memory that the host keeps in pages, only some of them
 // in fast memory at a time, bringing the rest in on demand - for a host with
 // less fast memory than the guest has RAM, such as a microcontroller holding
-// the pages in slower external memory. This is the description of paging for
-// the whole core; the platform's YPlatformPagedMemory adds only how the host
-// is asked for a page.
+// the pages in slower external memory.
 //
 // Terms:
 //   - A page is a fixed-size block of the paged range's guest addresses: page
@@ -2361,24 +2359,23 @@ typedef struct YCPUDirectDataWindow {
 //   - A frame is a page-sized block of the host's fast memory, holding one
 //     page's bytes while that page is in use.
 //   - The page table has one uint16_t entry per page, saying whether the page
-//     is in a frame, which one, and what the CPU may do there:
+//     is in a frame, which one, and whether it has been written there:
 //
 //     bit   15         14         13 ........................ 0
 //         +----------+----------+-------------------------------+
-//         | WRITABLE | RESIDENT |         frame number          |
+//         |  DIRTY   | RESIDENT |         frame number          |
 //         +----------+----------+-------------------------------+
 //
-// An entry is in one of three states:
-//   - RESIDENT clear: the page is not in a frame, or the host wants to hear of
-//     the next access to it. Every read and write of the page goes to the
-//     host. The frame number is ignored, so the host may leave a stale one.
-//   - RESIDENT set, WRITABLE clear: the page is in the frame numbered by bits
-//     0-13. The CPU reads it there, and a write goes to the host.
-//   - RESIDENT and WRITABLE set: the CPU reads and writes the page in its
-//     frame.
-// WRITABLE is never set without RESIDENT. So 0x0000 is "not in a frame",
-// 0x4005 is "in frame 5, read-only", and 0xC005 is "in frame 5, readable and
-// writable".
+// What the CPU does with an entry:
+//   - RESIDENT clear: every read and write of the page goes to the host. The
+//     page is not in a frame, or the host wants to hear of the next access to
+//     it. The frame number is not read.
+//   - RESIDENT set, DIRTY clear: the CPU reads the page in the frame numbered
+//     by bits 0-13, and a write goes to the host, which sets DIRTY.
+//   - RESIDENT and DIRTY set: the CPU reads and writes the page in its frame.
+// Every page is writable: DIRTY clear only means a write goes through the host
+// first. So 0x0000 is "not in a frame", 0x4005 "in frame 5, not written
+// since it came in", and 0xC005 "in frame 5, written".
 //
 // How an access goes: one the entry allows goes straight to the frame, with
 // no call - see YCPUPagedDataWindow for the arithmetic. Any other goes to the
@@ -2386,27 +2383,19 @@ typedef struct YCPUDirectDataWindow {
 // platform calls YPlatformPagedMemory.page_fault - and the host sets the entry
 // so that it allows the access.
 //
-// Why WRITABLE exists - telling clean pages from dirty ones: a page that has
-// not been written since it came into its frame still matches its copy in
-// backing memory, so evicting it costs nothing, while a written ("dirty") one
-// has to be written back first. WRITABLE says whether the host already knows a
-// page is dirty:
-//   - Leave it clear on a page brought in for a read. The page's first write
-//     then goes to the host once, which records the page as dirty and sets
-//     WRITABLE, and later writes go straight to the frame. A page that is
-//     never written - most code - is evicted without a write-back.
-//   - Set it when the page is already known dirty - brought in by a write, or
-//     written since - since its writes have nothing more to tell; or on every
-//     page, if the host does not track dirty pages at all, for example because
-//     its frames are the memory itself and nothing is ever written back.
-// A host that clears WRITABLE for another reason - such as sampling use,
-// below - should keep its own dirty flag and restore WRITABLE from it when the
-// page next comes back, or a dirty page reports its first write twice.
+// Why DIRTY exists: a page not written since it came into its frame still
+// matches its copy in backing memory, so evicting it costs nothing, while a
+// written ("dirty") one has to be written back first. Bringing a page in with
+// DIRTY clear sends its first write to the host, once, which sets DIRTY; at
+// eviction DIRTY says whether to write the page back. A page that is never
+// written - most code - is evicted without a write-back. A host that writes
+// every page back, or whose frames are the memory itself, sets DIRTY on every
+// page and never sees a write.
 //
 // Using RESIDENT to sample use: clearing RESIDENT on a page that stays in its
 // frame sends the next access to the host, which sets it again; that is how a
-// clock or LRU pager learns which pages were used recently. WRITABLE has to be
-// cleared with it, since the CPU writes to the frame on WRITABLE alone.
+// clock or LRU pager learns which pages were used recently. DIRTY is left as
+// it is, so it stays the record of whether the page needs writing back.
 //
 // Rules for the host:
 //   - The page table and frames are the host's. It may change entries at any
@@ -2418,10 +2407,10 @@ typedef struct YCPUDirectDataWindow {
 enum {
   // The page is in the frame the entry names, and may be read there.
   Y_CPU_PAGED_DATA_RESIDENT = 0x4000,
-  // The page may also be written in its frame. A host leaves this clear to be
-  // told of a page's first write, so that it knows which pages need writing
-  // back.
-  Y_CPU_PAGED_DATA_WRITABLE = 0x8000,
+  // The page has been written since it came into its frame. With RESIDENT,
+  // the CPU writes it in the frame; without, a write goes to the host, which
+  // is how a host learns which pages need writing back.
+  Y_CPU_PAGED_DATA_DIRTY = 0x8000,
   // Bits 0-13: the frame's number, so up to 16,384 frames.
   Y_CPU_PAGED_DATA_FRAME_MASK = 0x3FFF,
 };
@@ -2435,8 +2424,8 @@ enum {
 //     frame  = entry & Y_CPU_PAGED_DATA_FRAME_MASK
 //     byte   = frames[(frame << page_shift) | (offset & (page size - 1))]
 //
-// and goes to the host instead if the entry lacks the bit the access needs -
-// RESIDENT to read, WRITABLE to write.
+// and goes to the host instead if the entry lacks the bits the access needs -
+// RESIDENT to read, RESIDENT and DIRTY to write.
 typedef struct YCPUPagedDataWindow {
   // The page table: entry i covers the guest addresses from
   // start + (i << page_shift) up to the next page.
@@ -3492,17 +3481,18 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
 }
 
 // The byte in its frame that a guest address in the paged range refers to, or
-// NULL if the address is outside the range or its page's entry lacks flag -
-// Y_CPU_PAGED_DATA_RESIDENT for a read, Y_CPU_PAGED_DATA_WRITABLE for a write.
+// NULL if the address is outside the range or its page's entry lacks any of
+// flags - Y_CPU_PAGED_DATA_RESIDENT for a read, and that and
+// Y_CPU_PAGED_DATA_DIRTY for a write.
 Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
-    const YCPUState* cpu, uint32_t raw_address, uint16_t flag) {
+    const YCPUState* cpu, uint32_t raw_address, uint16_t flags) {
   const YCPUPagedDataWindow* window = &cpu->paged_data_window;
   const uint32_t offset = raw_address - window->start;
   if (offset >= window->size) {
     return NULL;
   }
   const uint16_t entry = window->pages[offset >> window->page_shift];
-  if (!(entry & flag)) {
+  if ((entry & flags) != flags) {
     return NULL;
   }
   const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
@@ -3615,12 +3605,12 @@ Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
 }
 
 // Write a byte the direct data window does not cover: into its frame if the
-// address is paged and its page is in one and writable, and otherwise through
-// the host, which brings the page in or marks it writable.
+// address is paged and its page is in one and dirty, and otherwise through the
+// host, which brings the page in and marks it dirty.
 Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteBeyondWindow(
     YCPUState* cpu, uint32_t address, uint8_t value) {
-  uint8_t* paged =
-      YCPUGetPagedDataByte(cpu, address, Y_CPU_PAGED_DATA_WRITABLE);
+  uint8_t* paged = YCPUGetPagedDataByte(
+      cpu, address, Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY);
   if (paged) {
     *paged = value;
     return;
@@ -15278,15 +15268,15 @@ struct YPlatformState;
 typedef uint8_t YPlatformMemoryMapEntryType;
 
 enum {
-  // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
-  // 0x9FFFF (640KB).
+  // Conventional memory held in YPlatformConfig.direct_memory, from 0x00000 up
+  // to direct_memory_size - at most 640KB, to 0x9FFFF.
   Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL = 0,
   // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
   Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
   Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
   // Paged conventional memory - the part of conventional memory above
-  // physical_memory_size, when YPlatformConfig.paged_memory is set.
+  // direct_memory_size, when YPlatformConfig.paged_memory is set.
   Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY = 0x02,
   // Video RAM - mapped to 0xB0000 (MDA) or 0xB8000 (CGA).
   Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM = 0x10,
@@ -15321,10 +15311,10 @@ enum {
   // address space: no entry may reach one, so it is unmapped instead.
   Y_PLATFORM_MEMORY_PAGE_STRADDLED = 0xFE,
 
-  // Maximum size of physical memory in bytes.
-  Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE = 640 * 1024,
-  // Minimum size of physical memory in bytes.
-  Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE = 64 * 1024,
+  // Maximum size of conventional memory in bytes, direct and paged together.
+  Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE = 640 * 1024,
+  // Minimum size of conventional memory in bytes, direct and paged together.
+  Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE = 64 * 1024,
 };
 
 enum {
@@ -15366,7 +15356,7 @@ typedef struct YPlatformPagedMemory {
   uint8_t* frames;
   // Called when an access needs a page its entry does not allow: page is the
   // page's number counted from the start of the region, and write is true for
-  // a write. Must leave pages[page] with RESIDENT set, and WRITABLE as well if
+  // a write. Must leave pages[page] with RESIDENT set, and DIRTY as well if
   // write is true.
   void (*page_fault)(
       struct YPlatformPagedMemory* memory, uint32_t page, bool write);
@@ -15585,11 +15575,10 @@ typedef struct YPlatformConfig {
   // which of them it wants.
   YLoggerConfig* logger_config;
 
-  // The size in bytes of conventional memory held in physical_memory. With
-  // paged_memory, conventional memory is this and paged_memory's size
-  // together, and this may be 0; either way, the whole must be between 64K and
-  // 640K.
-  uint32_t physical_memory_size;
+  // The size in bytes of direct_memory. Conventional memory is this plus
+  // paged_memory's size, and must come to between 64K and 640K; with
+  // paged_memory this may be 0.
+  uint32_t direct_memory_size;
 
   // The video adapter installed in the machine. This also determines the
   // display type reported by the PPI's DIP switches, which is what the BIOS
@@ -15600,27 +15589,27 @@ typedef struct YPlatformConfig {
   // to the BIOS. 0, the default, is taken as 1.
   uint8_t floppy_drives;
 
-  // The machine's conventional memory, physical_memory_size bytes of it.
-  // Required unless physical_memory_size is 0 - YPlatformInit() fails without
-  // it.
+  // Conventional memory the CPU reads and writes directly - its direct data
+  // window - from address 0, direct_memory_size bytes of it. Required unless
+  // direct_memory_size is 0 - YPlatformInit() fails without it.
   //
   // The caller owns the buffer and it must outlive the platform. Conventional
   // memory is plain storage, so the platform reads and writes it directly
   // rather than through a callback; regions that need a callback register one
   // themselves via YPlatformMemoryMapEntry.
   //
-  // Addresses above physical_memory_size are not backed by this buffer and are
-  // not an error: on the 8086 an access outside installed memory yields
-  // garbage rather than faulting, and unmapped reads here return 0xFF.
-  uint8_t* physical_memory;
+  // Addresses above conventional memory are not an error: on the 8086 an
+  // access outside installed memory yields garbage rather than faulting, and
+  // unmapped reads here return 0xFF.
+  uint8_t* direct_memory;
 
   // Paged conventional memory - see YPlatformPagedMemory - or NULL for none.
-  // It starts where physical_memory ends, at physical_memory_size, which must
+  // It starts where direct_memory ends, at direct_memory_size, which must
   // then be a multiple of 4KB.
   //
-  // An access to it costs more than one to physical_memory even when its page
+  // An access to it costs more than one to direct_memory even when its page
   // is in a frame - a call and two more loads, against a compare and a load -
-  // but physical_memory takes host memory that could have been frames. Where
+  // but direct_memory takes host memory that could have been frames. Where
   // to split the two is the host's to measure.
   //
   // The caller owns it and it must outlive the platform.
@@ -15629,7 +15618,7 @@ typedef struct YPlatformConfig {
   // The video adapter's memory, at least vram_size bytes for the adapter named
   // by video_adapter. Required - YPlatformInit() fails without it.
   //
-  // Separate from physical_memory because video memory sits above conventional
+  // Separate from direct_memory because video memory sits above conventional
   // memory in the address space, at 0xB0000 or 0xB8000. A host whose memory
   // buffer spans the whole megabyte can point this into it.
   //
@@ -15776,8 +15765,9 @@ typedef struct YPlatformState {
 
 // Initialize the platform state. Returns true if the platform state was
 // successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
-//   - No physical memory buffer was provided.
+//   - Conventional memory, direct and paged, is not between 64K and 640K.
+//   - direct_memory_size is not 0 but no direct_memory buffer was provided.
+//   - paged_memory is set but invalid, or does not start on a 4KB boundary.
 //   - No video memory buffer was provided.
 // The caller zero-initializes the YPlatformState and fills in the fields of its
 // config first. Nothing here zeroes anything: every module's state is a field
@@ -16153,10 +16143,13 @@ Y_FILE_PRIVATE Y_HOT void YPlatformWritePagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset,
     uint8_t value) {
   const uint32_t page = offset >> memory->page_shift;
+  // A write needs the page in its frame and already dirty; otherwise the host
+  // is told, so that it can mark the page dirty.
+  const uint16_t writable = Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
+  if ((page_entry & writable) != writable) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, true);
-    if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
+    if ((page_entry & writable) != writable) {
       return;
     }
   }
@@ -16733,24 +16726,24 @@ Y_FILE_PRIVATE void YPlatformInitMemoryMap(YPlatformState* platform) {
   for (uint32_t page = 0; page < Y_PLATFORM_NUM_MEMORY_PAGES; ++page) {
     platform->memory_page_map[page] = Y_PLATFORM_MEMORY_PAGE_UNMAPPED;
   }
-  const uint32_t physical_memory_size = platform->config.physical_memory_size;
-  if (physical_memory_size > 0) {
+  const uint32_t direct_memory_size = platform->config.direct_memory_size;
+  if (direct_memory_size > 0) {
     YPlatformMemoryMapEntry conventional_memory = {
         .context = platform,
         .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL,
         .start = 0x0000,
-        .end = physical_memory_size - 1,
+        .end = direct_memory_size - 1,
         // Conventional memory is the caller's buffer, accessed directly.
-        .read_data = platform->config.physical_memory,
-        .write_data = platform->config.physical_memory};
+        .read_data = platform->config.direct_memory,
+        .write_data = platform->config.direct_memory};
     YPlatformRegisterMemoryMapEntry(platform, &conventional_memory);
   }
   if (platform->config.paged_memory) {
     YPlatformMemoryMapEntry paged_memory = {
         .context = platform,
         .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY,
-        .start = physical_memory_size,
-        .end = physical_memory_size + platform->config.paged_memory->size - 1,
+        .start = direct_memory_size,
+        .end = direct_memory_size + platform->config.paged_memory->size - 1,
         .paged_memory = platform->config.paged_memory};
     YPlatformRegisterMemoryMapEntry(platform, &paged_memory);
   }
@@ -16959,46 +16952,45 @@ Y_FILE_PRIVATE bool YPlatformGetLogLocation(
 
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
+//   - Conventional memory, direct and paged, is not between 64K and 640K.
 Y_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
   YLoggerInit(&platform->logger, platform->config.logger_config);
 
   const YPlatformPagedMemory* paged_memory = platform->config.paged_memory;
-  const uint32_t memory_size = platform->config.physical_memory_size +
+  const uint32_t memory_size = platform->config.direct_memory_size +
                                (paged_memory ? paged_memory->size : 0);
-  if (memory_size < Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE ||
-      memory_size > Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE) {
+  if (memory_size < Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE ||
+      memory_size > Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE) {
     Y_PLATFORM_ERROR(
-        "invalid_physical_memory_size", Y_LOG_UINT("size", memory_size),
-        Y_LOG_UINT("min", Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE),
-        Y_LOG_UINT("max", Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE));
+        "invalid_conventional_memory_size", Y_LOG_UINT("size", memory_size),
+        Y_LOG_UINT("min", Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE),
+        Y_LOG_UINT("max", Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE));
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
-  if (platform->config.physical_memory_size > 0 &&
-      platform->config.physical_memory == NULL) {
-    Y_PLATFORM_ERROR("missing_physical_memory");
+  if (platform->config.direct_memory_size > 0 &&
+      platform->config.direct_memory == NULL) {
+    Y_PLATFORM_ERROR("missing_direct_memory");
     return false;
   }
-  // Paged memory starts where physical memory ends. That has to be on a 4KB
+  // Paged memory starts where direct memory ends. That has to be on a 4KB
   // boundary, the granularity the memory map indexes regions at, and the
   // region has to be a usable size for its pages.
   if (paged_memory) {
     const YPlatformMemoryMapEntry entry = {
-        .start = platform->config.physical_memory_size,
+        .start = platform->config.direct_memory_size,
         .end = memory_size - 1,
         .paged_memory = platform->config.paged_memory};
-    if ((platform->config.physical_memory_size &
+    if ((platform->config.direct_memory_size &
          (Y_PLATFORM_MEMORY_PAGE_SIZE - 1)) != 0 ||
         !YPlatformIsPagedMemoryValid(&entry)) {
       Y_PLATFORM_ERROR(
           "invalid_paged_memory",
-          Y_LOG_UINT(
-              "physical_memory_size", platform->config.physical_memory_size),
+          Y_LOG_UINT("direct_memory_size", platform->config.direct_memory_size),
           Y_LOG_UINT("size", paged_memory->size),
           Y_LOG_UINT("page_shift", paged_memory->page_shift));
       return false;

@@ -182,8 +182,8 @@ static bool ResetMachine(void) {
 
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_machine_log_config;
-  config->physical_memory_size = kGuestRAMSize;
-  config->physical_memory = g_guest_ram;
+  config->direct_memory_size = kGuestRAMSize;
+  config->direct_memory = g_guest_ram;
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   // The DOS idle skip is left off. The run stops at the command prompt,

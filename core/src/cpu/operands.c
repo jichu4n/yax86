@@ -75,17 +75,18 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
 }
 
 // The byte in its frame that a guest address in the paged range refers to, or
-// NULL if the address is outside the range or its page's entry lacks flag -
-// Y_CPU_PAGED_DATA_RESIDENT for a read, Y_CPU_PAGED_DATA_WRITABLE for a write.
+// NULL if the address is outside the range or its page's entry lacks any of
+// flags - Y_CPU_PAGED_DATA_RESIDENT for a read, and that and
+// Y_CPU_PAGED_DATA_DIRTY for a write.
 Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
-    const YCPUState* cpu, uint32_t raw_address, uint16_t flag) {
+    const YCPUState* cpu, uint32_t raw_address, uint16_t flags) {
   const YCPUPagedDataWindow* window = &cpu->paged_data_window;
   const uint32_t offset = raw_address - window->start;
   if (offset >= window->size) {
     return NULL;
   }
   const uint16_t entry = window->pages[offset >> window->page_shift];
-  if (!(entry & flag)) {
+  if ((entry & flags) != flags) {
     return NULL;
   }
   const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
@@ -198,12 +199,12 @@ Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
 }
 
 // Write a byte the direct data window does not cover: into its frame if the
-// address is paged and its page is in one and writable, and otherwise through
-// the host, which brings the page in or marks it writable.
+// address is paged and its page is in one and dirty, and otherwise through the
+// host, which brings the page in and marks it dirty.
 Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteBeyondWindow(
     YCPUState* cpu, uint32_t address, uint8_t value) {
-  uint8_t* paged =
-      YCPUGetPagedDataByte(cpu, address, Y_CPU_PAGED_DATA_WRITABLE);
+  uint8_t* paged = YCPUGetPagedDataByte(
+      cpu, address, Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY);
   if (paged) {
     *paged = value;
     return;

@@ -101,25 +101,31 @@ visibility, and how performance work is measured - are in the root
 
 - **What it is for**: a host with less fast memory than the guest has RAM sets
   `YPlatformConfig.paged_memory`, and conventional memory above
-  `physical_memory_size` is then held in pages, only some of them in fast
+  `direct_memory_size` is then held in pages, only some of them in fast
   memory ("frames") at a time - a microcontroller, say, holding the pages in
-  slower external memory. `physical_memory_size` may be 0. The PicoCalc port
+  slower external memory. `direct_memory_size` may be 0. The PicoCalc port
   is the user today; its `AGENTS.md` has how it pages and what it measured.
 - **The host owns the page table and the frames**: one `uint16_t` per page,
-  bit 15 `WRITABLE`, bit 14 `RESIDENT`, bits 0-13 the frame number - laid out
+  bit 15 `DIRTY`, bit 14 `RESIDENT`, bits 0-13 the frame number - laid out
   at `Y_CPU_PAGED_DATA_RESIDENT`. An access the entry allows goes to the
   frame; anything else calls the host's `page_fault`, which must set the
   entry so that it allows it.
 - **Two bits so that the host learns what it needs and pays nothing per
-  access**: bringing a page in without `WRITABLE` makes its first write fault,
+  access**: bringing a page in without `DIRTY` makes its first write fault,
   which is how the host knows which pages to write back - a page never written
   is evicted for free. On the PicoCalc that is most code: seven DOS commands
   brought in 4,971 pages and wrote back 3,394, a Word session 17,502 and
-  7,633. A host that does not track dirty pages sets `WRITABLE` with
-  `RESIDENT` on every page and never takes a write fault. Clearing `RESIDENT`
-  on a page it keeps in its frame makes the next access fault, which is how
-  it samples which pages are in use. The frame number is read only with
-  `RESIDENT` set, so a host may leave it in an entry it has cleared.
+  7,633. A host that does not track dirty pages sets `DIRTY` with `RESIDENT`
+  on every page and never takes a write fault. Clearing `RESIDENT` on a page
+  it keeps in its frame makes the next access fault, which is how it samples
+  which pages are in use. The frame number is read only with `RESIDENT` set.
+- **The bit is `DIRTY`, not `WRITABLE`, and a write needs both bits.** Every
+  page is writable - a write with `DIRTY` clear goes through the host - so
+  `WRITABLE` read as "read-only" when clear. With the CPU writing on
+  `RESIDENT` and `DIRTY` together, clearing `RESIDENT` to sample use leaves
+  `DIRTY` alone, and the entry is the one record of whether a page needs
+  writing back; when the CPU wrote on the one bit, sampling had to clear both
+  and a host had to keep its own dirty flag.
 - **The CPU reads the page table itself**: `YCPUPagedDataWindow`, which
   `YPlatformUpdateAfterMemoryMapChange()` assigns from the paged entry, so an
   access to a page in its frame is a subtract, a compare and two loads, and
@@ -150,7 +156,7 @@ visibility, and how performance work is measured - are in the root
   frames as with 4, and with 256 as with 2.
 - **Both data windows stay, and a host may set either, both or neither.**
   The direct window could be modelled as a paged one - frames over
-  `physical_memory`, entry *i* `RESIDENT | WRITABLE | i` - but every host that
+  `direct_memory`, entry *i* `RESIDENT | DIRTY | i` - but every host that
   does not page would pay for it: `dos-boot` with all of 128KB paged and every
   page in its frame is 15% slower than direct. Nor is there a switch between
   them: an empty window already is one (`end` 0, `size` 0), the CPU's code is

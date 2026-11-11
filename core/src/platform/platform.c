@@ -276,10 +276,13 @@ Y_FILE_PRIVATE Y_HOT void YPlatformWritePagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset,
     uint8_t value) {
   const uint32_t page = offset >> memory->page_shift;
+  // A write needs the page in its frame and already dirty; otherwise the host
+  // is told, so that it can mark the page dirty.
+  const uint16_t writable = Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
+  if ((page_entry & writable) != writable) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, true);
-    if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
+    if ((page_entry & writable) != writable) {
       return;
     }
   }
@@ -856,24 +859,24 @@ Y_FILE_PRIVATE void YPlatformInitMemoryMap(YPlatformState* platform) {
   for (uint32_t page = 0; page < Y_PLATFORM_NUM_MEMORY_PAGES; ++page) {
     platform->memory_page_map[page] = Y_PLATFORM_MEMORY_PAGE_UNMAPPED;
   }
-  const uint32_t physical_memory_size = platform->config.physical_memory_size;
-  if (physical_memory_size > 0) {
+  const uint32_t direct_memory_size = platform->config.direct_memory_size;
+  if (direct_memory_size > 0) {
     YPlatformMemoryMapEntry conventional_memory = {
         .context = platform,
         .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL,
         .start = 0x0000,
-        .end = physical_memory_size - 1,
+        .end = direct_memory_size - 1,
         // Conventional memory is the caller's buffer, accessed directly.
-        .read_data = platform->config.physical_memory,
-        .write_data = platform->config.physical_memory};
+        .read_data = platform->config.direct_memory,
+        .write_data = platform->config.direct_memory};
     YPlatformRegisterMemoryMapEntry(platform, &conventional_memory);
   }
   if (platform->config.paged_memory) {
     YPlatformMemoryMapEntry paged_memory = {
         .context = platform,
         .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY,
-        .start = physical_memory_size,
-        .end = physical_memory_size + platform->config.paged_memory->size - 1,
+        .start = direct_memory_size,
+        .end = direct_memory_size + platform->config.paged_memory->size - 1,
         .paged_memory = platform->config.paged_memory};
     YPlatformRegisterMemoryMapEntry(platform, &paged_memory);
   }
@@ -1082,46 +1085,45 @@ Y_FILE_PRIVATE bool YPlatformGetLogLocation(
 
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
+//   - Conventional memory, direct and paged, is not between 64K and 640K.
 Y_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
   YLoggerInit(&platform->logger, platform->config.logger_config);
 
   const YPlatformPagedMemory* paged_memory = platform->config.paged_memory;
-  const uint32_t memory_size = platform->config.physical_memory_size +
+  const uint32_t memory_size = platform->config.direct_memory_size +
                                (paged_memory ? paged_memory->size : 0);
-  if (memory_size < Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE ||
-      memory_size > Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE) {
+  if (memory_size < Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE ||
+      memory_size > Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE) {
     Y_PLATFORM_ERROR(
-        "invalid_physical_memory_size", Y_LOG_UINT("size", memory_size),
-        Y_LOG_UINT("min", Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE),
-        Y_LOG_UINT("max", Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE));
+        "invalid_conventional_memory_size", Y_LOG_UINT("size", memory_size),
+        Y_LOG_UINT("min", Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE),
+        Y_LOG_UINT("max", Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE));
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
-  if (platform->config.physical_memory_size > 0 &&
-      platform->config.physical_memory == NULL) {
-    Y_PLATFORM_ERROR("missing_physical_memory");
+  if (platform->config.direct_memory_size > 0 &&
+      platform->config.direct_memory == NULL) {
+    Y_PLATFORM_ERROR("missing_direct_memory");
     return false;
   }
-  // Paged memory starts where physical memory ends. That has to be on a 4KB
+  // Paged memory starts where direct memory ends. That has to be on a 4KB
   // boundary, the granularity the memory map indexes regions at, and the
   // region has to be a usable size for its pages.
   if (paged_memory) {
     const YPlatformMemoryMapEntry entry = {
-        .start = platform->config.physical_memory_size,
+        .start = platform->config.direct_memory_size,
         .end = memory_size - 1,
         .paged_memory = platform->config.paged_memory};
-    if ((platform->config.physical_memory_size &
+    if ((platform->config.direct_memory_size &
          (Y_PLATFORM_MEMORY_PAGE_SIZE - 1)) != 0 ||
         !YPlatformIsPagedMemoryValid(&entry)) {
       Y_PLATFORM_ERROR(
           "invalid_paged_memory",
-          Y_LOG_UINT(
-              "physical_memory_size", platform->config.physical_memory_size),
+          Y_LOG_UINT("direct_memory_size", platform->config.direct_memory_size),
           Y_LOG_UINT("size", paged_memory->size),
           Y_LOG_UINT("page_shift", paged_memory->page_shift));
       return false;
