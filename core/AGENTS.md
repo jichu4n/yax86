@@ -97,6 +97,42 @@ visibility, and how performance work is measured - are in the root
   unmapped directly. Guest addresses never reach it - `YCPUToRawAddress()`
   masks them to 20 bits - so this bounds what a host may register.
 
+## platform - paged memory
+
+- **`YPlatformConfig.paged_memory` holds conventional memory above
+  `physical_memory_size` in pages**, for a host with less fast memory than
+  the machine has RAM: the PicoCalc keeps its frames in SRAM and the rest of
+  640KB in PSRAM. The host owns a page table of `uint16_t` entries - a frame
+  number and two flags - and the frames; an access the entry allows goes to
+  the frame, anything else calls `page_fault`, which must make the entry
+  allow it. `physical_memory_size` may be 0, all of conventional memory paged.
+- **Two flags, so that the host learns what it needs and nothing per
+  access**: `RESIDENT` allows reads and `WRITABLE` writes as well. Handing a
+  page out without `WRITABLE` says which pages to write back; clearing
+  `RESIDENT` on a page it holds, which costs the next access a call, is how a
+  host samples which pages are used. The platform reads only the flags and,
+  with `RESIDENT`, the frame, so a host keeps the frame in an entry it has
+  cleared.
+- **Nothing derived from guest memory is dropped when a page leaves its
+  frame**, because what the page holds is unchanged - the decode cache keeps
+  its decodes. The one thing that is not a page's content is instruction
+  fetch's window, a pointer into a frame, so `YPlatformFaultPagedMemory()`
+  drops it after every fault: a frame may have gone to another page. The
+  one-frame tests in `platform_paged_memory_test.cpp`, code and data taking
+  the frame from each other, fail without it.
+- **The fetch window is a page**, ending at every page boundary, where the
+  next instruction asks again.
+- **The paged paths come after every other kind of region** in
+  `YPlatformReadMemoryByte()` and `YPlatformWriteMemoryByte()`, so a machine
+  without paged memory pays nothing on the way to them.
+- **Paged memory is reached through the memory map, not the direct data
+  window**, so an access to a page in a frame still costs the callback and
+  lookup; and REP string runs, which plan over the window, go element by
+  element there. So with all of memory paged a boot retires a few hundred
+  instructions fewer, the difference the bulk runs' decode cache reporting
+  makes (see `src/cpu/AGENTS.md`); with physical memory under the window,
+  paged runs retire exactly the instructions unpaged ones do.
+
 ## platform - idle skipping
 
 - MS-DOS waits for a key by polling, never halting: at the 3.30 prompt the

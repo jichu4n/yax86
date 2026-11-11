@@ -49,6 +49,9 @@ enum {
   Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
   Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
+  // Paged conventional memory - the part of conventional memory above
+  // physical_memory_size, when YPlatformConfig.paged_memory supplies it.
+  Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY = 0x02,
   // Video RAM - mapped to 0xB0000 (MDA) or 0xB8000 (CGA).
   Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM = 0x10,
 
@@ -87,6 +90,63 @@ enum {
   // Minimum size of physical memory in bytes.
   Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE = 64 * 1024,
 };
+
+enum {
+  // A paged memory page table entry: the page is in a frame, which is the
+  // entry's low bits, and may be read there.
+  Y_PLATFORM_PAGED_MEMORY_RESIDENT = 0x4000,
+  // The page may also be written in its frame. Set only with RESIDENT.
+  Y_PLATFORM_PAGED_MEMORY_WRITABLE = 0x8000,
+  // The frame number in a page table entry.
+  Y_PLATFORM_PAGED_MEMORY_FRAME_MASK = 0x3FFF,
+  // The largest page: the memory map's own, so that a page never spans two
+  // of the map's.
+  Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT = Y_PLATFORM_MEMORY_PAGE_SHIFT,
+};
+
+// Memory held in pages the host keeps in frames of its own and brings in on
+// demand, for a host with less fast memory than the machine has RAM - the
+// PicoCalc keeps 128KB of frames for 640KB of RAM, the rest in PSRAM.
+//
+// The host owns everything here. Each page of the region has an entry in
+// pages: 0 while the page is in no frame, or its frame number with
+// Y_PLATFORM_PAGED_MEMORY_RESIDENT, and Y_PLATFORM_PAGED_MEMORY_WRITABLE as
+// well once it may be written. An access the entry allows goes straight to the
+// frame. Any other calls page_fault, which must leave the page's entry
+// allowing it - bringing the page into a frame, and taking another page out of
+// one if it has to - before it returns. Leaving the entry as it was is taken as
+// a failure: the read gives 0xFF and the write is discarded, as for unmapped
+// memory.
+//
+// So a host learns of the first write to a page by handing it out without
+// WRITABLE, which is how it knows which pages to write back; and of a read of
+// a page by clearing RESIDENT on a page it holds, which costs the next access a
+// call that only sets it again.
+//
+// What a page holds must never change except by the guest: the CPU keeps
+// decoded instructions across a page leaving its frame and coming back. And a
+// frame must not be given to another page except in page_fault, which the
+// platform follows by dropping its pointer into the frame instruction fetch
+// was reading from - or followed by YPlatformUpdateAfterMemoryMapChange().
+// Clearing entries' bits outside page_fault needs nothing: the instruction
+// fetch's pointer is still into the right page, and an access the entry
+// refuses comes back through page_fault.
+typedef struct YPlatformPagedMemory {
+  // Custom data for page_fault.
+  void* context;
+  // The region's size in bytes, a whole number of pages.
+  uint32_t size;
+  // A page is 1 << page_shift bytes, and so is a frame.
+  uint8_t page_shift;
+  // An entry per page, size >> page_shift of them.
+  uint16_t* pages;
+  // The frames, frame n starting n << page_shift bytes in.
+  uint8_t* frames;
+  // Make the page allow a read, or a read and a write if write is true. page
+  // is the page's number from the start of the region.
+  void (*page_fault)(
+      struct YPlatformPagedMemory* memory, uint32_t page, bool write);
+} YPlatformPagedMemory;
 
 // A memory map entry for a region in logical address space. Memory regions
 // should not overlap.
@@ -139,6 +199,10 @@ typedef struct YPlatformMemoryMapEntry {
   void (*write_byte_fn)(
       struct YPlatformMemoryMapEntry* entry, uint32_t relative_address,
       uint8_t value);
+
+  // Memory held in pages - see YPlatformPagedMemory - for a region with no
+  // direct pointers or callbacks. Covers [start, end], which must be its size.
+  YPlatformPagedMemory* paged_memory;
 } YPlatformMemoryMapEntry;
 
 // Register a memory map entry in the platform state. Returns true if the entry
@@ -297,7 +361,10 @@ typedef struct YPlatformConfig {
   // which of them it wants.
   YLoggerConfig* logger_config;
 
-  // Physical memory size in bytes. Must be between 64K and 640K.
+  // The size in bytes of conventional memory held in physical_memory. With
+  // paged_memory, conventional memory is this and paged_memory's size
+  // together, and this may be 0; either way, the whole must be between 64K and
+  // 640K.
   uint32_t physical_memory_size;
 
   // The video adapter installed in the machine. This also determines the
@@ -310,7 +377,8 @@ typedef struct YPlatformConfig {
   uint8_t floppy_drives;
 
   // The machine's conventional memory, physical_memory_size bytes of it.
-  // Required - YPlatformInit() fails without it.
+  // Required unless physical_memory_size is 0 - YPlatformInit() fails without
+  // it.
   //
   // The caller owns the buffer and it must outlive the platform. Conventional
   // memory is plain storage, so the platform reads and writes it directly
@@ -321,6 +389,15 @@ typedef struct YPlatformConfig {
   // not an error: on the 8086 an access outside installed memory yields
   // garbage rather than faulting, and unmapped reads here return 0xFF.
   uint8_t* physical_memory;
+
+  // Conventional memory above physical_memory_size held in pages - see
+  // YPlatformPagedMemory - or NULL for none. Reached through the memory map
+  // rather than the CPU's direct data window, so an access is slower than to
+  // physical_memory even while its page is in a frame; but memory held in
+  // physical_memory is not a frame, so where to split the two is the host's
+  // to measure. physical_memory_size must be a whole number of 4KB pages with
+  // it. The caller owns it and it must outlive the platform.
+  YPlatformPagedMemory* paged_memory;
 
   // The video adapter's memory, at least vram_size bytes for the adapter named
   // by video_adapter. Required - YPlatformInit() fails without it.

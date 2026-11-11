@@ -483,6 +483,14 @@ Y_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
   cpu->direct_data_window.end = 0;
 }
 
+// Discards the instruction fetch window, so that the next fetch asks
+// YCPUConfig.get_instruction_fetch_window for one again. A host calls this when
+// the storage the window points into stops holding the addresses it covers.
+Y_PUBLIC_HEADER inline void YCPUInvalidateInstructionFetchWindow(
+    YCPUState* cpu) {
+  cpu->instruction_fetch_window.data = NULL;
+}
+
 // Discards every cached decode.
 //
 // A host calls this when it changes what an address means rather than what is
