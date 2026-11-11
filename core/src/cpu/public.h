@@ -279,9 +279,9 @@ typedef struct YCPUInstructionFetchWindow {
 //      [start, start + size), held in pages the host keeps in frames. Tried
 //      only for an address the direct window does not cover; an access to a
 //      page in its frame is a call and a few loads.
-//   3. YCPUConfig.read_memory_byte and write_memory_byte: everything else -
-//      ROM, video memory, devices - and any paged access whose page's entry
-//      does not allow it.
+//   3. YCPUConfig.read_memory_byte and write_memory_byte: everything else,
+//      such as ROM, video memory and devices, and any paged access whose
+//      page's entry does not allow it.
 //
 // A host may set either window, both or neither, and the two must not
 // overlap. The platform uses both when paged memory is configured: the direct
@@ -315,9 +315,9 @@ typedef struct YCPUDirectDataWindow {
 } YCPUDirectDataWindow;
 
 // Paged memory: guest memory that the host keeps in pages, only some of them
-// in fast memory at a time, bringing the rest in on demand - for a host with
-// less fast memory than the guest has RAM, such as a microcontroller holding
-// the pages in slower external memory.
+// in fast memory at a time, bringing the rest in on demand. It is for a host
+// with less fast memory than the guest has RAM, such as a microcontroller
+// holding the pages in slower external memory.
 //
 // Terms:
 //   - A page is a fixed-size block of the paged range's guest addresses: page
@@ -344,17 +344,18 @@ typedef struct YCPUDirectDataWindow {
 // since it came in", and 0xC005 "in frame 5, written".
 //
 // How an access goes: one the entry allows goes straight to the frame, with
-// no call - see YCPUPagedDataWindow for the arithmetic. Any other goes to the
-// host - YCPUConfig.read_memory_byte or write_memory_byte, which in the
-// platform calls YPlatformPagedMemory.page_fault - and the host sets the entry
-// so that it allows the access.
+// no call; YCPUPagedDataWindow shows the arithmetic. Any other goes to the
+// host through YCPUConfig.read_memory_byte or write_memory_byte, and the host
+// sets the entry so that it allows the access. In the platform, those
+// callbacks call YPlatformPagedMemory.page_fault_fn.
 //
 // Why DIRTY exists: a page not written since it came into its frame still
 // matches its copy in backing memory, so evicting it costs nothing, while a
 // written ("dirty") one has to be written back first. Bringing a page in with
 // DIRTY clear sends its first write to the host, once, which sets DIRTY; at
 // eviction DIRTY says whether to write the page back. A page that is never
-// written - most code - is evicted without a write-back. A host that writes
+// written, as most code is not, is evicted without a write-back. A host that
+// writes
 // every page back, or whose frames are the memory itself, sets DIRTY on every
 // page and never sees a write.
 //
@@ -381,8 +382,8 @@ enum {
   Y_CPU_PAGED_DATA_FRAME_MASK = 0x3FFF,
 };
 
-// Where the paged range is and how to find a page in its frame - see above
-// Y_CPU_PAGED_DATA_RESIDENT for paging itself. The platform fills this in
+// Where the paged range is and how to find a page in its frame. Paging itself
+// is described above Y_CPU_PAGED_DATA_RESIDENT. The platform fills this in
 // from YPlatformPagedMemory. The CPU translates an address like this:
 //
 //     offset = address - start                (outside if offset >= size)
@@ -402,9 +403,9 @@ typedef struct YCPUPagedDataWindow {
   // The first guest linear address of the paged range.
   uint32_t start;
   // The paged range's size in bytes, a whole number of pages; 0 when there is
-  // no paged memory. With 0 every address falls outside the range, so the
-  // bounds test - one subtract and one unsigned compare - is all the CPU
-  // checks, never pages against NULL.
+  // no paged memory. With 0 every address falls outside the range, so the CPU
+  // needs only the bounds test, one subtract and one unsigned compare, and
+  // never checks pages against NULL.
   uint32_t size;
   // log2 of the page size: a page, and a frame, is 1 << page_shift bytes.
   uint8_t page_shift;
@@ -518,9 +519,9 @@ typedef struct YCPUState {
   // object the caller had to keep alive for as long as the CPU.
   YCPUConfig config;
 
-  // Paged guest memory, assigned whole by whoever sets it up - the platform,
-  // from YPlatformConfig.paged_memory. Zero for none. Changing page table
-  // entries needs no update here: the CPU reads them on every access.
+  // Paged guest memory. The platform assigns it whole from
+  // YPlatformConfig.paged_memory, and leaves it zero for none. Changing page
+  // table entries needs no update here: the CPU reads them on every access.
   // Read only where the direct data window does not reach, so it is last,
   // where it moves no hotter field's offset.
   YCPUPagedDataWindow paged_data_window;

@@ -108,7 +108,7 @@ visibility, and how performance work is measured - are in the root
 - **The host owns the page table and the frames**: one `uint16_t` per page,
   bit 15 `DIRTY`, bit 14 `RESIDENT`, bits 0-13 the frame number - laid out
   at `Y_CPU_PAGED_DATA_RESIDENT`. An access the entry allows goes to the
-  frame; anything else calls the host's `page_fault`, which must set the
+  frame; anything else calls the host's `page_fault_fn`, which must set the
   entry so that it allows it.
 - **Two bits so that the host learns what it needs and pays nothing per
   access**: bringing a page in without `DIRTY` makes its first write fault,

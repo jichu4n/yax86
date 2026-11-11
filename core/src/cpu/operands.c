@@ -76,8 +76,8 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
 
 // The byte in its frame that a guest address in the paged range refers to, or
 // NULL if the address is outside the range or its page's entry lacks any of
-// flags - Y_CPU_PAGED_DATA_RESIDENT for a read, and that and
-// Y_CPU_PAGED_DATA_DIRTY for a write.
+// flags. A read passes Y_CPU_PAGED_DATA_RESIDENT, and a write that and
+// Y_CPU_PAGED_DATA_DIRTY.
 Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
     const YCPUState* cpu, uint32_t raw_address, uint16_t flags) {
   const YCPUPagedDataWindow* window = &cpu->paged_data_window;

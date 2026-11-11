@@ -49,7 +49,7 @@ class PlatformPagedMemoryTest : public ::testing::Test {
     paged_.page_shift = kPageShift;
     paged_.pages = pages_;
     paged_.frames = frames_;
-    paged_.page_fault = PageFault;
+    paged_.page_fault_fn = PageFault;
     platform_.config.direct_memory_size = kDirectSize;
     platform_.config.direct_memory = ram_;
     platform_.config.paged_memory = &paged_;
@@ -242,7 +242,7 @@ TEST_F(PlatformPagedMemoryTest, AFrameTakenFromCodeIsNotFetchedFrom) {
 // and the write is there when it comes back.
 TEST_F(PlatformPagedMemoryTest, AWriteSurvivesItsPageLeavingItsFrame) {
   ASSERT_TRUE(Init(1));
-  // MOV AL, 0x77; MOV [0x0400], AL; MOV AL, [0x0001]; HLT - the last reads
+  // MOV AL, 0x77; MOV [0x0400], AL; MOV AL, [0x0001]; HLT. The third reads
   // back page 0's second byte, the 0x77 the first instruction was assembled
   // with.
   Load(
@@ -319,7 +319,7 @@ TEST_F(PlatformPagedMemoryTest, AllOfConventionalMemoryMayBePaged) {
   paged_.page_shift = kPageShift;
   paged_.pages = pages_;
   paged_.frames = frames_;
-  paged_.page_fault = PageFault;
+  paged_.page_fault_fn = PageFault;
   platform_.config.paged_memory = &paged_;
   platform_.config.vram = vram_;
   ASSERT_TRUE(YPlatformInit(&platform_));
@@ -339,7 +339,7 @@ TEST_F(PlatformPagedMemoryTest, InitRefusesPagesLargerThanTheMemoryMaps) {
   paged_.size = kPagedSize;
   paged_.pages = pages_;
   paged_.frames = frames_;
-  paged_.page_fault = PageFault;
+  paged_.page_fault_fn = PageFault;
   platform_.config.direct_memory_size = kDirectSize;
   platform_.config.direct_memory = ram_;
   platform_.config.paged_memory = &paged_;
@@ -353,7 +353,7 @@ TEST_F(PlatformPagedMemoryTest, InitRefusesPhysicalMemoryEndingMidPage) {
   paged_.page_shift = kPageShift;
   paged_.pages = pages_;
   paged_.frames = frames_;
-  paged_.page_fault = PageFault;
+  paged_.page_fault_fn = PageFault;
   platform_.config.direct_memory_size = kDirectSize - kPageSize;
   platform_.config.direct_memory = ram_;
   platform_.config.paged_memory = &paged_;
@@ -367,7 +367,7 @@ TEST_F(PlatformPagedMemoryTest, InitRefusesMoreThan640KB) {
   paged_.page_shift = kPageShift;
   paged_.pages = pages_;
   paged_.frames = frames_;
-  paged_.page_fault = PageFault;
+  paged_.page_fault_fn = PageFault;
   platform_.config.direct_memory_size = kDirectSize;
   platform_.config.direct_memory = ram_;
   platform_.config.paged_memory = &paged_;

@@ -104,15 +104,15 @@ Y_FILE_PRIVATE void YPlatformUpdateMemoryPageMapForEntry(
 }
 
 // Whether a paged region is usable: a supported page size, a page table,
-// frames and a page_fault, and a size that is exactly the region's and a whole
-// number of pages.
+// frames and a page_fault_fn, and a size that is exactly the region's and a
+// whole number of pages.
 Y_FILE_PRIVATE bool YPlatformIsPagedMemoryValid(
     const YPlatformMemoryMapEntry* entry) {
   const YPlatformPagedMemory* memory = entry->paged_memory;
   if (memory->page_shift == 0 ||
       memory->page_shift > Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT ||
       memory->pages == NULL || memory->frames == NULL ||
-      memory->page_fault == NULL) {
+      memory->page_fault_fn == NULL) {
     return false;
   }
   const uint32_t page_mask = ((uint32_t)1 << memory->page_shift) - 1;
@@ -233,14 +233,14 @@ Y_PUBLIC Y_HOT YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryByType(
   return NULL;
 }
 
-// Calls the host's page_fault for a page and returns the page's entry
+// Calls the host's page_fault_fn for a page and returns the page's entry
 // afterwards. To make room the host may have moved another page out of the
 // frame instruction fetch is reading from, so the fetch window is dropped and
 // the next fetch opens a fresh one.
 Y_FILE_PRIVATE Y_NOINLINE uint16_t YPlatformFaultPagedMemory(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t page,
     bool write) {
-  memory->page_fault(memory, page, write);
+  memory->page_fault_fn(memory, page, write);
   YCPUInvalidateInstructionFetchWindow(&platform->cpu);
   return memory->pages[page];
 }
@@ -255,7 +255,7 @@ Y_FILE_PRIVATE inline uint8_t* YPlatformGetPagedMemoryByte(
                            (offset & page_mask));
 }
 
-// Read the byte at offset into a paged region, calling page_fault first if
+// Read the byte at offset into a paged region, calling page_fault_fn first if
 // its page is not in a frame.
 Y_FILE_PRIVATE Y_HOT uint8_t YPlatformReadPagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset) {
@@ -270,7 +270,7 @@ Y_FILE_PRIVATE Y_HOT uint8_t YPlatformReadPagedMemoryByte(
   return *YPlatformGetPagedMemoryByte(memory, page_entry, offset);
 }
 
-// Write the byte at offset into a paged region, calling page_fault first if
+// Write the byte at offset into a paged region, calling page_fault_fn first if
 // its page is not in a frame or not writable.
 Y_FILE_PRIVATE Y_HOT void YPlatformWritePagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset,
@@ -449,8 +449,8 @@ YPlatformCPUCallbackReadMemoryByte(YCPUState* cpu, uint32_t address) {
 // its decode cache about the write, and YPlatformWriteMemoryByte() would tell
 // it again. Counting a write twice changes when the cache discards decodes,
 // which changes where runs of instructions end and so when the guest takes
-// its timer interrupts - so the number of frames, which decides which writes
-// fault, would change what the guest does. Writes to every other region are
+// its timer interrupts. The number of frames decides which writes fault, so
+// it would change what the guest does. Writes to every other region are
 // still counted twice; the dos-boot invariant depends on that.
 Y_FILE_PRIVATE Y_NOINLINE void YPlatformCPUWritePagedMemoryByte(
     YPlatformState* platform, uint32_t address, uint8_t value) {
@@ -770,7 +770,7 @@ YPlatformCPUCallbackHandleInterrupt(YCPUState* cpu, uint8_t interrupt_number) {
 }
 
 // Points instruction fetch at the frame holding the page an address is in,
-// calling page_fault first if the page is not in a frame.
+// calling page_fault_fn first if the page is not in a frame.
 //
 // The window covers that one page, since the next page's frame can be
 // anywhere; fetching past its end comes back here.

@@ -43,14 +43,14 @@ typedef uint8_t YPlatformMemoryMapEntryType;
 
 enum {
   // Conventional memory held in YPlatformConfig.direct_memory, from 0x00000 up
-  // to direct_memory_size - at most 640KB, to 0x9FFFF.
+  // to direct_memory_size. At most 640KB, so it ends by 0x9FFFF.
   Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL = 0,
   // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
   Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
   Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
-  // Paged conventional memory - the part of conventional memory above
-  // direct_memory_size, when YPlatformConfig.paged_memory is set.
+  // Paged conventional memory: the part above direct_memory_size, when
+  // YPlatformConfig.paged_memory is set.
   Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY = 0x02,
   // Video RAM - mapped to 0xB0000 (MDA) or 0xB8000 (CGA).
   Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM = 0x10,
@@ -99,24 +99,18 @@ enum {
 
 // Paged memory as a host gives it to the platform. Pages, frames, the page
 // table and its bits (Y_CPU_PAGED_DATA_*) are described above
-// Y_CPU_PAGED_DATA_RESIDENT; the platform hands pages, frames and page_shift
-// to the CPU, and this adds page_fault, which is where every access the CPU
-// cannot make in a frame ends up.
+// Y_CPU_PAGED_DATA_RESIDENT. The platform hands pages, frames and page_shift
+// to the CPU. What this adds is page_fault_fn, the host's handler for every
+// access the CPU cannot make in a frame.
 //
-// page_fault(memory, page, write) must set the page's entry so that it allows
-// the access before returning - typically by choosing a frame, writing back
-// the page in it if that one is dirty, loading this page and setting its entry
-// - and the access then proceeds in the frame. If the entry still refuses, the
-// read gives 0xFF and the write is dropped, as for unmapped memory.
-//
-// A frame may be handed to another page only inside page_fault. Instruction
-// fetch holds a pointer into one frame, and the platform drops it whenever
-// page_fault returns; reassigning a frame anywhere else needs
-// YPlatformUpdateAfterMemoryMapChange() afterwards. Clearing bits outside
-// page_fault needs nothing: the next access the entry refuses comes to
-// page_fault.
+// A frame may be handed to another page only inside page_fault_fn.
+// Instruction fetch holds a pointer into one frame, and the platform drops it
+// whenever page_fault_fn returns. Reassigning a frame anywhere else needs a
+// call to YPlatformUpdateAfterMemoryMapChange() afterwards. Clearing bits
+// outside page_fault_fn needs nothing, because the next access the entry
+// refuses comes to page_fault_fn.
 typedef struct YPlatformPagedMemory {
-  // The host's own data, for page_fault to use.
+  // The host's own data, for page_fault_fn to use.
   void* context;
   // The region's size in bytes, a whole number of pages.
   uint32_t size;
@@ -128,11 +122,30 @@ typedef struct YPlatformPagedMemory {
   // The frames: frame n is the 1 << page_shift bytes starting
   // n << page_shift bytes in.
   uint8_t* frames;
-  // Called when an access needs a page its entry does not allow: page is the
-  // page's number counted from the start of the region, and write is true for
-  // a write. Must leave pages[page] with RESIDENT set, and DIRTY as well if
-  // write is true.
-  void (*page_fault)(
+  // The host's page fault handler. Required.
+  //
+  // When it is called: on a read of a byte in a page whose entry lacks
+  // RESIDENT, or a write to a byte in a page whose entry lacks RESIDENT or
+  // DIRTY. The access can be the CPU's data access or instruction fetch, a DMA
+  // transfer, or a host call to YPlatformReadMemoryByte() or
+  // YPlatformWriteMemoryByte(). It is called once per such access, before the
+  // access is made, and emulation waits for it to return.
+  //
+  // Parameters:
+  //   - memory: this YPlatformPagedMemory, for context.
+  //   - page: the page's index in pages, counted from the start of the
+  //     region, not a guest address. Its first byte is at guest address
+  //     direct_memory_size + (page << page_shift).
+  //   - write: true for a write, false for a read or an instruction fetch.
+  //
+  // What it must do: set pages[page] so that it allows the access, that is
+  // RESIDENT, plus DIRTY if write is true. Typically that means choosing a
+  // frame, writing back the page already in it if that one is DIRTY, loading
+  // this page into it and setting this page's entry. A page that is still in
+  // its frame, with RESIDENT cleared to sample use, needs only RESIDENT set
+  // again. The access then proceeds in the frame. If the entry still refuses
+  // it, the read gives 0xFF and the write is dropped, as for unmapped memory.
+  void (*page_fault_fn)(
       struct YPlatformPagedMemory* memory, uint32_t page, bool write);
 } YPlatformPagedMemory;
 
@@ -188,8 +201,8 @@ typedef struct YPlatformMemoryMapEntry {
       struct YPlatformMemoryMapEntry* entry, uint32_t relative_address,
       uint8_t value);
 
-  // Paged memory - see YPlatformPagedMemory - for a region with no direct
-  // pointers or callbacks. Its size must be exactly end - start + 1.
+  // Paged memory, as described at YPlatformPagedMemory, for a region with no
+  // direct pointers or callbacks. Its size must be exactly end - start + 1.
   YPlatformPagedMemory* paged_memory;
 } YPlatformMemoryMapEntry;
 
@@ -363,9 +376,9 @@ typedef struct YPlatformConfig {
   // to the BIOS. 0, the default, is taken as 1.
   uint8_t floppy_drives;
 
-  // Conventional memory the CPU reads and writes directly - its direct data
-  // window - from address 0, direct_memory_size bytes of it. Required unless
-  // direct_memory_size is 0 - YPlatformInit() fails without it.
+  // Conventional memory that the CPU reads and writes directly, through its
+  // direct data window: direct_memory_size bytes from address 0. Required
+  // unless direct_memory_size is 0, and YPlatformInit() fails without it.
   //
   // The caller owns the buffer and it must outlive the platform. Conventional
   // memory is plain storage, so the platform reads and writes it directly
@@ -377,13 +390,13 @@ typedef struct YPlatformConfig {
   // unmapped reads here return 0xFF.
   uint8_t* direct_memory;
 
-  // Paged conventional memory - see YPlatformPagedMemory - or NULL for none.
-  // It starts where direct_memory ends, at direct_memory_size, which must
-  // then be a multiple of 4KB.
+  // Paged conventional memory, as described at YPlatformPagedMemory, or NULL
+  // for none. It starts where direct_memory ends, at direct_memory_size, which
+  // must then be a multiple of 4KB.
   //
   // An access to it costs more than one to direct_memory even when its page
-  // is in a frame - a call and two more loads, against a compare and a load -
-  // but direct_memory takes host memory that could have been frames. Where
+  // is in a frame: a call and two more loads, against a compare and a load.
+  // But direct_memory takes host memory that could have been frames, so where
   // to split the two is the host's to measure.
   //
   // The caller owns it and it must outlive the platform.
