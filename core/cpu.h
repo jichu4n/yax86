@@ -7400,20 +7400,35 @@ Y_FILE_PRIVATE inline Y_HOT uint8_t YCPUFetchNextInstructionByte(
 Y_FILE_PRIVATE Y_HOT Y_NOINLINE bool YCPUOpenPagedFetchWindow(
     YCPUState* cpu, uint32_t raw_address) {
   const YCPUPagedDataWindow* paged = &cpu->paged_data_window;
+
+  // How far into the paged range the address is. An address below start
+  // wraps to a huge value, so this one unsigned compare rejects addresses on
+  // both sides of the range, and every address when size is 0.
   const uint32_t offset = raw_address - paged->start;
   if (offset >= paged->size) {
     return false;
   }
-  const uint16_t entry = paged->pages[offset >> paged->page_shift];
+
+  // The page the address is in, and the page's entry in the page table.
+  const uint32_t page = offset >> paged->page_shift;
+  const uint16_t entry = paged->pages[page];
+
+  // Fetching only reads, so RESIDENT is all it needs. Without it the host is
+  // asked instead, through the caller's get_instruction_fetch_window.
   if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
     return false;
   }
-  // The window is the whole frame, covering its page's guest addresses: from
-  // the page's first address, the offset rounded down to a page boundary, for
-  // one page.
+
+  // The window covers one page: its guest addresses start at the offset
+  // rounded down to a page boundary, and run for one page.
   const uint32_t page_size = (uint32_t)1 << paged->page_shift;
   const uint32_t page_offset = offset & ~(page_size - 1);
   YCPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+
+  // Its bytes are the page's frame, and its guest addresses those of the page.
+  // With 256-byte pages starting at 0x10000, a fetch from 0x11234 in a page
+  // held in frame 5 opens frames + 0x500 as guest addresses 0x11200 to
+  // 0x112FF.
   window->data = YCPUGetPagedFrame(paged, entry);
   window->start = paged->start + page_offset;
   window->end = window->start + page_size;
