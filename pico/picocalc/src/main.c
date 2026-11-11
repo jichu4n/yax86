@@ -828,13 +828,13 @@ static void ConfigureGuestRAM(YPlatformConfig* config) {
              PsramGetStats().state == kPsramOk && !g_after_fault;
   if (!g_paging) {
     g_guest_ram_size = kGuestRAMSize;
-    config->physical_memory_size = kGuestRAMSize;
-    config->physical_memory = g_guest_ram;
+    config->direct_memory_size = kGuestRAMSize;
+    config->direct_memory = g_guest_ram;
     return;
   }
   g_guest_ram_size = kPagedGuestRAMSize;
-  config->physical_memory_size = kPinnedGuestRAMSize;
-  config->physical_memory = g_guest_ram;
+  config->direct_memory_size = kPinnedGuestRAMSize;
+  config->direct_memory = g_guest_ram;
   config->paged_memory = PagerInit(
       g_guest_ram + kPinnedGuestRAMSize, kGuestRAMSize - kPinnedGuestRAMSize,
       kPagedGuestRAMSize - kPinnedGuestRAMSize);

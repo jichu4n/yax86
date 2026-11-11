@@ -7,7 +7,7 @@
 
 enum {
   // The most guest RAM there can be to page, and so the largest page table.
-  kPagerMaxPages = Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE >> kPagerPageShift,
+  kPagerMaxPages = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE >> kPagerPageShift,
   // The most frames: all 128KB of the SRAM guest RAM has.
   kPagerMaxFrames = 128 * 1024 / kPagerPageSize,
   // A frame holding no page.
@@ -51,7 +51,7 @@ YPlatformPagedMemory* PagerInit(
   g_memory.page_shift = kPagerPageShift;
   g_memory.pages = g_pages;
   g_memory.frames = frames;
-  g_memory.page_fault = PagerPageFault;
+  g_memory.page_fault_fn = PagerPageFault;
   return &g_memory;
 }
 
