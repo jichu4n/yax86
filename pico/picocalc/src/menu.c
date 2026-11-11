@@ -234,7 +234,7 @@ typedef enum NewDriveItem {
 static const MenuItem kNewFloppyItems[kNewDriveItemCount] = {
     [kNewDriveNone] = {"Empty", false},
     [kNewDriveBlank] = {"New floppy image (360KB)", false},
-    [kNewDriveImage] = {"Existing disk image", true},
+    [kNewDriveImage] = {"Existing floppy image", true},
 };
 
 static const MenuItem kNewHardDiskItems[kNewDriveItemCount] = {

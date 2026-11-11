@@ -378,8 +378,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
   drives A, B and C, and Create. A floppy drive is Empty, New floppy image
-  (360KB), or Existing disk image, a 360KB image from the browser; drive C
-  is Empty, New disk image (10MB), or Existing disk image, a 10MB one. An
+  (360KB), or Existing floppy image, a 360KB image from the browser; drive
+  C is Empty, New disk image (10MB), or Existing disk image, a 10MB one. An
   existing image is shared, like any image outside the VM's folder. An
   empty drive is "empty" wherever the menu says what a drive holds, as the
   status rows have it. Drive D
