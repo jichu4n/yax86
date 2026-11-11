@@ -94,11 +94,11 @@ enum {
 enum {
   // A paged memory page table entry: the page is in a frame, which is the
   // entry's low bits, and may be read there.
-  Y_PLATFORM_PAGED_MEMORY_RESIDENT = 0x4000,
+  Y_PLATFORM_PAGED_MEMORY_RESIDENT = Y_CPU_PAGED_DATA_RESIDENT,
   // The page may also be written in its frame. Set only with RESIDENT.
-  Y_PLATFORM_PAGED_MEMORY_WRITABLE = 0x8000,
+  Y_PLATFORM_PAGED_MEMORY_WRITABLE = Y_CPU_PAGED_DATA_WRITABLE,
   // The frame number in a page table entry.
-  Y_PLATFORM_PAGED_MEMORY_FRAME_MASK = 0x3FFF,
+  Y_PLATFORM_PAGED_MEMORY_FRAME_MASK = Y_CPU_PAGED_DATA_FRAME_MASK,
   // The largest page: the memory map's own, so that a page never spans two
   // of the map's.
   Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT = Y_PLATFORM_MEMORY_PAGE_SHIFT,

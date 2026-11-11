@@ -120,18 +120,34 @@ visibility, and how performance work is measured - are in the root
   drops it after every fault: a frame may have gone to another page. The
   one-frame tests in `platform_paged_memory_test.cpp`, code and data taking
   the frame from each other, fail without it.
-- **The fetch window is a page**, ending at every page boundary, where the
-  next instruction asks again.
-- **The paged paths come after every other kind of region** in
-  `YPlatformReadMemoryByte()` and `YPlatformWriteMemoryByte()`, so a machine
-  without paged memory pays nothing on the way to them.
-- **Paged memory is reached through the memory map, not the direct data
-  window**, so an access to a page in a frame still costs the callback and
-  lookup; and REP string runs, which plan over the window, go element by
-  element there. So with all of memory paged a boot retires a few hundred
-  instructions fewer, the difference the bulk runs' decode cache reporting
-  makes (see `src/cpu/AGENTS.md`); with physical memory under the window,
-  paged runs retire exactly the instructions unpaged ones do.
+- **The CPU indexes the page table itself** - `YCPUPagedDataWindow`, set
+  from the paged entry by `YPlatformUpdateAfterMemoryMapChange()` - so a page
+  in its frame costs a subtract, a compare and two loads, and only a refusal
+  reaches the platform. Through the platform's memory map, as at first, the
+  DOS330 boot at 640KB took 7.00 seconds on the PicoCalc with nothing pinned;
+  indexed, 6.32.
+- **Instruction fetch opens a page in its frame the same way**, without the
+  host, in `YCPUOpenPagedFetchWindow()`: the window is a page, and a jump to
+  another page reopens it.
+- **A write that faults is reported to the decode cache once.** The CPU
+  reports every write it makes, and `YPlatformWriteMemoryByte()` reports the
+  writes it is handed, so a callback write is counted twice - which moves
+  when the cache flushes, so where runs of instructions end, so when the
+  guest takes its timer interrupts. For paged memory that would make the
+  number of frames change what the guest does; `YPlatformCPUCallbackWriteMemoryByte()`
+  sends the CPU's paged writes past the second report. Every other region
+  keeps it, which the `dos-boot` invariant counts. With it, MS-DOS 3.30
+  running five programs at 640KB retires the same instructions with 128
+  frames as with 4, and with 256 as with 2.
+- **REP string runs plan over the direct data window only**, so they go
+  element by element in paged memory, and a boot with more of memory paged
+  retires a few hundred instructions fewer - the difference the bulk runs'
+  decode cache reporting makes (see `src/cpu/AGENTS.md`).
+- **What paging costs where nothing faults**, `dos-boot` at 128KB on the
+  bench with every page in a frame: 2% with the first 64KB direct and the
+  rest paged, 15% with all of it paged - the direct window is a compare and a
+  load, a paged access a call and two more loads. The PicoCalc builds both;
+  see its `AGENTS.md`.
 
 ## platform - idle skipping
 

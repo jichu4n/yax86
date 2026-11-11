@@ -248,6 +248,37 @@ TEST_F(PlatformPagedMemoryTest, AWriteSurvivesItsPageLeavingItsFrame) {
   EXPECT_TRUE(platform_.cpu.is_halted);
 }
 
+// The CPU indexes a page its entry allows without asking, and asks about one
+// it does not: a read of a page with RESIDENT cleared, and a write to one
+// without WRITABLE.
+TEST_F(PlatformPagedMemoryTest, TheCPUAsksOnlyWhatTheEntryDoesNotAllow) {
+  ASSERT_TRUE(Init());
+  // MOV AL, [0x0400]; MOV AL, [0x0401]; MOV [0x0402], AL; MOV [0x0403], AL;
+  // HLT, in physical memory, on page 2 of paged memory.
+  Load(
+      0x100, {kOpMovAlMoffs, 0x00, 0x04, kOpMovAlMoffs, 0x01, 0x04,
+              kOpMovMoffsAl, 0x02, 0x04, kOpMovMoffsAl, 0x03, 0x04, kOpHlt});
+  platform_.cpu.registers[Y_CPU_CS] = 0;
+  platform_.cpu.registers[Y_CPU_DS] = kPagedSegment;
+  platform_.cpu.registers[Y_CPU_IP] = 0x100;
+  RunUntilHalt();
+  ASSERT_EQ(faults_.size(), 2u);
+  EXPECT_EQ(faults_[0].page, 2u);
+  EXPECT_FALSE(faults_[0].write);
+  EXPECT_EQ(faults_[1].page, 2u);
+  EXPECT_TRUE(faults_[1].write);
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(&platform_, kPagedStart + 0x403),
+      backing_[0x401]);
+
+  pages_[2] &= static_cast<uint16_t>(
+      ~(Y_PLATFORM_PAGED_MEMORY_RESIDENT | Y_PLATFORM_PAGED_MEMORY_WRITABLE));
+  platform_.cpu.registers[Y_CPU_IP] = 0x100;
+  platform_.cpu.is_halted = false;
+  RunUntilHalt();
+  EXPECT_EQ(faults_.size(), 4u);
+}
+
 TEST_F(PlatformPagedMemoryTest, AllOfConventionalMemoryMayBePaged) {
   platform_.config.physical_memory_size = 0;
   paged_.context = this;

@@ -114,11 +114,11 @@ enum {
 enum {
   // A paged memory page table entry: the page is in a frame, which is the
   // entry's low bits, and may be read there.
-  Y_PLATFORM_PAGED_MEMORY_RESIDENT = 0x4000,
+  Y_PLATFORM_PAGED_MEMORY_RESIDENT = Y_CPU_PAGED_DATA_RESIDENT,
   // The page may also be written in its frame. Set only with RESIDENT.
-  Y_PLATFORM_PAGED_MEMORY_WRITABLE = 0x8000,
+  Y_PLATFORM_PAGED_MEMORY_WRITABLE = Y_CPU_PAGED_DATA_WRITABLE,
   // The frame number in a page table entry.
-  Y_PLATFORM_PAGED_MEMORY_FRAME_MASK = 0x3FFF,
+  Y_PLATFORM_PAGED_MEMORY_FRAME_MASK = Y_CPU_PAGED_DATA_FRAME_MASK,
   // The largest page: the memory map's own, so that a page never spans two
   // of the map's.
   Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT = Y_PLATFORM_MEMORY_PAGE_SHIFT,
@@ -719,6 +719,8 @@ Y_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
 
 // Hand the CPU conventional memory to index directly, or take it away again.
 Y_FILE_PRIVATE void YPlatformUpdateDirectDataWindow(YPlatformState* platform);
+// The same for paged memory.
+Y_FILE_PRIVATE void YPlatformUpdatePagedDataWindow(YPlatformState* platform);
 
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
@@ -837,6 +839,7 @@ Y_PUBLIC void YPlatformUpdateAfterMemoryMapChange(YPlatformState* platform) {
   // The data window is whichever entry covers address 0, which a registration
   // may have just become.
   YPlatformUpdateDirectDataWindow(platform);
+  YPlatformUpdatePagedDataWindow(platform);
   // A decode taken before a region was mapped came from open bus. No page
   // generation moved, because nothing was written - what the bytes at those
   // addresses mean has changed.
@@ -1101,10 +1104,29 @@ YPlatformCPUCallbackReadMemoryByte(YCPUState* cpu, uint32_t address) {
   return YPlatformReadMemoryByte((YPlatformState*)cpu->config.context, address);
 }
 
+// A write the CPU makes to paged memory whose page has to be asked for.
+//
+// The CPU has reported the write to its decode cache already, and
+// YPlatformWriteMemoryByte() would report it again - so a fault would move
+// when the cache flushes, and with it where runs of instructions end, and the
+// number of frames would change what the guest does. Every other region keeps
+// the second report, which the dos-boot invariant counts.
+Y_FILE_PRIVATE Y_NOINLINE void YPlatformCPUWritePagedMemoryByte(
+    YPlatformState* platform, uint32_t address, uint8_t value) {
+  YPlatformMemoryMapEntry* entry =
+      YPlatformGetMemoryMapEntryForAddress(platform, address);
+  YPlatformWritePagedMemoryByte(
+      platform, entry->paged_memory, address - entry->start, value);
+}
+
 Y_FILE_PRIVATE void YPlatformCPUCallbackWriteMemoryByte(
     YCPUState* cpu, uint32_t address, uint8_t value) {
-  YPlatformWriteMemoryByte(
-      (YPlatformState*)cpu->config.context, address, value);
+  YPlatformState* platform = (YPlatformState*)cpu->config.context;
+  if (address - cpu->paged_data_window.start < cpu->paged_data_window.size) {
+    YPlatformCPUWritePagedMemoryByte(platform, address, value);
+    return;
+  }
+  YPlatformWriteMemoryByte(platform, address, value);
 }
 
 Y_FILE_PRIVATE uint8_t
@@ -2063,6 +2085,21 @@ Y_FILE_PRIVATE void YPlatformUpdateDirectDataWindow(YPlatformState* platform) {
   // A map entry's end is the last address in the region; a window's is one
   // past it.
   YCPUSetDirectDataWindow(&platform->cpu, entry->write_data, entry->end + 1);
+}
+
+// Hand the CPU paged memory to index directly where its pages allow, or take
+// it away again.
+Y_FILE_PRIVATE void YPlatformUpdatePagedDataWindow(YPlatformState* platform) {
+  const YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
+      platform, Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY);
+  if (entry == NULL) {
+    YCPUSetPagedDataWindow(&platform->cpu, NULL, NULL, 0, 0, 0);
+    return;
+  }
+  const YPlatformPagedMemory* memory = entry->paged_memory;
+  YCPUSetPagedDataWindow(
+      &platform->cpu, memory->pages, memory->frames, entry->start, memory->size,
+      memory->page_shift);
 }
 
 
