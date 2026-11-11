@@ -111,84 +111,30 @@ enum {
   Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE = 64 * 1024,
 };
 
-// The bits of a YPlatformPagedMemory page table entry. They are the CPU's,
-// which reads the same entries - see Y_CPU_PAGED_DATA_RESIDENT for the layout:
-// bit 15 WRITABLE, bit 14 RESIDENT, bits 0-13 the frame number.
 enum {
-  // The page is in the frame the entry names, and may be read there.
-  Y_PLATFORM_PAGED_MEMORY_RESIDENT = Y_CPU_PAGED_DATA_RESIDENT,
-  // The page may also be written in its frame. Never set without RESIDENT.
-  // Left clear, the next write faults - how a host learns a page has become
-  // dirty and must be written back; see YPlatformPagedMemory.
-  Y_PLATFORM_PAGED_MEMORY_WRITABLE = Y_CPU_PAGED_DATA_WRITABLE,
-  // Bits 0-13: the frame's number.
-  Y_PLATFORM_PAGED_MEMORY_FRAME_MASK = Y_CPU_PAGED_DATA_FRAME_MASK,
   // The largest page_shift, 4KB pages: the memory map indexes regions in 4KB
   // pages, and a larger paged page would span two of them.
   Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT = Y_PLATFORM_MEMORY_PAGE_SHIFT,
 };
 
-// Guest memory that the host keeps in pages, only some of them in fast memory
-// at a time - for a host with less fast memory than the machine has RAM, such
-// as a microcontroller holding the pages in slower external memory.
+// Paged memory as a host gives it to the platform. Pages, frames, the page
+// table and its bits (Y_CPU_PAGED_DATA_*) are described above
+// Y_CPU_PAGED_DATA_RESIDENT; the platform hands pages, frames and page_shift
+// to the CPU, and this adds page_fault, which is where every access the CPU
+// cannot make in a frame ends up.
 //
-// Terms:
-//   - A page is a fixed-size block of the region's guest addresses: page 0 is
-//     its first 1 << page_shift bytes, page 1 the next, and so on.
-//   - A frame is a page-sized block of host memory in frames that holds one
-//     page's bytes while that page is in fast memory.
-//   - The page table, pages, has one uint16_t entry per page saying whether it
-//     is in a frame, which one, and whether it may be written there. The bit
-//     layout is described at Y_CPU_PAGED_DATA_RESIDENT.
+// page_fault(memory, page, write) must set the page's entry so that it allows
+// the access before returning - typically by choosing a frame, writing back
+// the page in it if that one is dirty, loading this page and setting its entry
+// - and the access then proceeds in the frame. If the entry still refuses, the
+// read gives 0xFF and the write is dropped, as for unmapped memory.
 //
-// How an access goes:
-//   - A read of a page whose entry has RESIDENT, or a write to one with
-//     WRITABLE, goes straight to the frame. The CPU does this itself without
-//     calling anything.
-//   - Any other access calls page_fault(memory, page, write). Before it
-//     returns, the host must set the page's entry so that it allows the
-//     access - typically by choosing a frame, writing back and evicting the
-//     page that was in it, loading this page into it, and setting this page's
-//     entry - and then the access proceeds in the frame. If page_fault leaves
-//     the entry still refusing, the read gives 0xFF and the write is dropped,
-//     as for unmapped memory.
-//
-// Why WRITABLE exists - telling clean pages from dirty ones: a page that has
-// not been written since it came into its frame still matches its copy in
-// backing memory, so evicting it costs nothing, while a written ("dirty") one
-// has to be written back first. WRITABLE says whether the host already knows a
-// page is dirty:
-//   - Leave it clear on a page brought in for a read. The page's first write
-//     then faults once, page_fault records the page as dirty and sets
-//     WRITABLE, and later writes go straight to the frame. A page that is
-//     never written never faults on a write, and is evicted without a
-//     write-back - for code, which is rarely written, that is most pages.
-//   - Set it when the page is already known dirty - brought in by a write, or
-//     written since - since its writes have nothing more to tell; or on every
-//     page, if the host does not track dirty pages at all, for example because
-//     its frames are the memory itself and nothing is ever written back.
-// A host that clears WRITABLE for another reason - such as sampling use,
-// below - should keep its own dirty flag and restore WRITABLE from it on the
-// next fault, or a dirty page takes a needless second write fault.
-//
-// Using RESIDENT to sample use: clearing RESIDENT on a page that stays in its
-// frame makes the next access fault, and the host sets it again; that is how a
-// clock or LRU pager learns which pages were used recently. WRITABLE has to be
-// cleared with it, since the CPU writes to the frame on WRITABLE alone. The
-// platform and CPU read the frame number only when RESIDENT is set.
-//
-// Rules for the host:
-//   - The page table and frames belong to the host, which may change entries
-//     at any time between accesses.
-//   - A page's bytes must not change except through the guest's own writes,
-//     since the CPU keeps instructions it has decoded from a page while the
-//     page is out of its frame.
-//   - A frame may be handed to another page only inside page_fault. Instruction
-//     fetch holds a pointer into one frame, and the platform drops that
-//     pointer when page_fault returns. Reassigning a frame anywhere else needs
-//     YPlatformUpdateAfterMemoryMapChange() afterwards.
-//   - Clearing bits outside page_fault is fine: the next access the entry
-//     refuses comes to page_fault.
+// A frame may be handed to another page only inside page_fault. Instruction
+// fetch holds a pointer into one frame, and the platform drops it whenever
+// page_fault returns; reassigning a frame anywhere else needs
+// YPlatformUpdateAfterMemoryMapChange() afterwards. Clearing bits outside
+// page_fault needs nothing: the next access the entry refuses comes to
+// page_fault.
 typedef struct YPlatformPagedMemory {
   // The host's own data, for page_fault to use.
   void* context;
@@ -965,10 +911,9 @@ Y_FILE_PRIVATE Y_NOINLINE uint16_t YPlatformFaultPagedMemory(
 Y_FILE_PRIVATE inline uint8_t* YPlatformGetPagedMemoryByte(
     const YPlatformPagedMemory* memory, uint16_t page_entry, uint32_t offset) {
   const uint32_t page_mask = ((uint32_t)1 << memory->page_shift) - 1;
-  return memory->frames +
-         (((uint32_t)(page_entry & Y_PLATFORM_PAGED_MEMORY_FRAME_MASK)
-           << memory->page_shift) |
-          (offset & page_mask));
+  return memory->frames + (((uint32_t)(page_entry & Y_CPU_PAGED_DATA_FRAME_MASK)
+                            << memory->page_shift) |
+                           (offset & page_mask));
 }
 
 // Read the byte at offset into a paged region, calling page_fault first if
@@ -977,9 +922,9 @@ Y_FILE_PRIVATE Y_HOT uint8_t YPlatformReadPagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset) {
   const uint32_t page = offset >> memory->page_shift;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+  if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, false);
-    if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+    if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
       return 0xFF;
     }
   }
@@ -993,9 +938,9 @@ Y_FILE_PRIVATE Y_HOT void YPlatformWritePagedMemoryByte(
     uint8_t value) {
   const uint32_t page = offset >> memory->page_shift;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_WRITABLE)) {
+  if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, true);
-    if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_WRITABLE)) {
+    if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
       return;
     }
   }
@@ -1494,9 +1439,9 @@ Y_FILE_PRIVATE void YPlatformGetPagedMemoryFetchWindow(
   const uint32_t offset = address - entry->start;
   const uint32_t page = offset >> memory->page_shift;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+  if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, false);
-    if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+    if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
       return;
     }
   }

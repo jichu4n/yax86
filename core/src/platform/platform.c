@@ -250,10 +250,9 @@ Y_FILE_PRIVATE Y_NOINLINE uint16_t YPlatformFaultPagedMemory(
 Y_FILE_PRIVATE inline uint8_t* YPlatformGetPagedMemoryByte(
     const YPlatformPagedMemory* memory, uint16_t page_entry, uint32_t offset) {
   const uint32_t page_mask = ((uint32_t)1 << memory->page_shift) - 1;
-  return memory->frames +
-         (((uint32_t)(page_entry & Y_PLATFORM_PAGED_MEMORY_FRAME_MASK)
-           << memory->page_shift) |
-          (offset & page_mask));
+  return memory->frames + (((uint32_t)(page_entry & Y_CPU_PAGED_DATA_FRAME_MASK)
+                            << memory->page_shift) |
+                           (offset & page_mask));
 }
 
 // Read the byte at offset into a paged region, calling page_fault first if
@@ -262,9 +261,9 @@ Y_FILE_PRIVATE Y_HOT uint8_t YPlatformReadPagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset) {
   const uint32_t page = offset >> memory->page_shift;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+  if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, false);
-    if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+    if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
       return 0xFF;
     }
   }
@@ -278,9 +277,9 @@ Y_FILE_PRIVATE Y_HOT void YPlatformWritePagedMemoryByte(
     uint8_t value) {
   const uint32_t page = offset >> memory->page_shift;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_WRITABLE)) {
+  if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, true);
-    if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_WRITABLE)) {
+    if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
       return;
     }
   }
@@ -779,9 +778,9 @@ Y_FILE_PRIVATE void YPlatformGetPagedMemoryFetchWindow(
   const uint32_t offset = address - entry->start;
   const uint32_t page = offset >> memory->page_shift;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+  if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, false);
-    if (!(page_entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+    if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
       return;
     }
   }
