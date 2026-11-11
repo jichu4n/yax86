@@ -515,7 +515,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
       // What drive A has instead, or why a configured image did not open.
       length += FormatDrive(
           buffer + length, size - length, label, image,
-          drive == kVMDriveA && !g_has_vm ? "built in" : "none");
+          drive == kVMDriveA && !g_has_vm ? "built in" : "empty");
     }
     card_us += image->stats.read_us + image->stats.write_us;
   }

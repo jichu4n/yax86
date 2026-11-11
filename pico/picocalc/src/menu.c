@@ -232,15 +232,15 @@ typedef enum NewDriveItem {
 } NewDriveItem;
 
 static const MenuItem kNewFloppyItems[kNewDriveItemCount] = {
-    [kNewDriveNone] = {"None", false},
-    [kNewDriveBlank] = {"New blank floppy", false},
-    [kNewDriveImage] = {"Disk image", true},
+    [kNewDriveNone] = {"Empty", false},
+    [kNewDriveBlank] = {"New floppy image (360KB)", false},
+    [kNewDriveImage] = {"Existing disk image", true},
 };
 
 static const MenuItem kNewHardDiskItems[kNewDriveItemCount] = {
-    [kNewDriveNone] = {"None", false},
-    [kNewDriveBlank] = {"New blank 10MB disk", false},
-    [kNewDriveImage] = {"Disk image", true},
+    [kNewDriveNone] = {"Empty", false},
+    [kNewDriveBlank] = {"New disk image (10MB)", false},
+    [kNewDriveImage] = {"Existing disk image", true},
 };
 
 static const MenuItem kNewVMRow = {"New VM", true};
@@ -1195,7 +1195,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
     DiskImageName(image->path, name);
     in_drive = name;
   } else if (empty) {
-    in_drive = "nothing";
+    in_drive = "empty";
   }
   const MenuItem items[kDriveItemCount] = {
       [kDriveInsert] = {empty ? "Choose disk image" : "Swap disk image", true},
@@ -1500,10 +1500,10 @@ static void DrawNewPage(DisplayMenu* menu) {
   items[kNewName] = (MenuItem){rows[kNewName], false};
   for (uint8_t drive = 0; drive <= kVMDriveC; ++drive) {
     const uint8_t item = (uint8_t)(kNewDriveA + drive);
-    const char* what = "none";
+    const char* what = "empty";
     char name[kDiskImageNameLength + 1];
     if (g_new_blank[drive]) {
-      what = drive == kVMDriveC ? "new blank disk" : "new blank floppy";
+      what = drive == kVMDriveC ? "new disk image" : "new floppy image";
     } else if (g_new_drives[drive][0] != '\0') {
       DiskImageName(g_new_drives[drive], name);
       what = name;

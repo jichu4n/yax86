@@ -58,7 +58,8 @@ static bool Taken(const VMEntry* vm, char problem[kVMProblemLength + 1]) {
   if (!FSExists(folder)) {
     return false;
   }
-  snprintf(problem, kVMProblemLength + 1, "%s is already taken", vm->name);
+  snprintf(
+      problem, kVMProblemLength + 1, "A VM named %s already exists", vm->name);
   return true;
 }
 

@@ -377,10 +377,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
-  drives A, B and C, and Create. A floppy drive is None, a new blank
-  floppy, or a 360KB image from the browser; drive C is None, a new blank
-  10MB disk, or a 10MB image from the browser. An image from the browser is
-  shared, like any image outside the VM's folder. Drive D
+  drives A, B and C, and Create. A floppy drive is Empty, New floppy image
+  (360KB), or Existing disk image, a 360KB image from the browser; drive C
+  is Empty, New disk image (10MB), or Existing disk image, a 10MB one. An
+  existing image is shared, like any image outside the VM's folder. An
+  empty drive is "empty" wherever the menu says what a drive holds, as the
+  status rows have it. Drive D
   is left empty, for `vm.cfg` to name. Backspace on the form only ever
   erases the name - Esc leaves it - so that a press meant for the name does
   not throw the form away. Create writes `vm.cfg` with all four drives, as
