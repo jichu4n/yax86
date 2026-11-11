@@ -91,6 +91,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   floppy that is not `resources`' byte for byte, or a hard disk image - see
   the SD card section. Compare against a baseline with the same VM, or
   none.
+- **These counts are the 128KB machine's**, built with
+  `YAX86_PICOCALC_GUEST_RAM_KB=128`, which pages nothing. The default build
+  pages 640KB - see "Paging guest RAM" - and boots DOS330 in 2,443,404
+  instructions and 29,160,390 cycles, the BIOS testing and DOS sizing more
+  RAM. Measure a change to the runtime against the 128KB build, as pico/bench
+  measures.
 
 ## Running in real time
 
@@ -518,8 +524,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **8MB, an ESP-PSRAM64H on one-bit SPI, driven by PIO** - `src/psram.c`,
   `src/psram.pio`, on pio1, the LCD having pio0. Reads are Fast Read
   (`0x0B`), writes `0x02`; its ID's second byte, known good die, reads
-  `0x5D`. Nothing uses it yet beyond the self-test at startup; the report's
-  `psram` group has its state, the self-test's times and what has moved.
+  `0x5D`. It holds the guest RAM SRAM does not - see "Paging guest RAM".
+  The report's `psram` group has its state, the self-test's times and what
+  has moved.
 - **The serial clock is 62.5MHz**, from 250MHz or 125MHz divided evenly; any
   other system clock leaves it off as `unsupported_clock`. 83MHz and 125MHz
   read back wrong.
@@ -552,6 +559,65 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   without it, as `skipped_after_hang`.
 - **It costs the boot nothing it runs**: 5.0459 seconds against 5.0644 on
   master, the DOS330 VM, three runs each - flash layout.
+
+## Paging guest RAM
+
+- **The guest has 640KB: 128KB of SRAM frames, and PSRAM behind them**,
+  through the core's `YPlatformConfig.paged_memory` (`core/AGENTS.md`).
+  `src/pager.c` holds the page table and brings a page into a frame when the
+  guest first touches it - from PSRAM, or as zeros if it has never been
+  written back, as SRAM guest RAM starts - and takes frames back by the clock
+  algorithm, writing a page back only if it was written. The report's
+  `paging` group has the counts and `fault_us`, the time in the fault
+  handler.
+- **Pages are 512 bytes.** Against traces of MS-DOS 3.30 running Turbo C++,
+  Turbo Pascal, QuickBASIC, QBasic and Word 5.5, 4KB pages thrash 128KB of
+  frames - a 128KB pool stalled 50% to 260% of run time - and 512 bytes
+  stalls least short of 256 bytes' larger page table.
+- **Nothing is pinned by default**: `YAX86_PICOCALC_PINNED_KB` holds that much
+  of guest RAM from address 0 in SRAM instead, under the CPU's direct data
+  window, with the rest of the 128KB as frames. Pinning makes an access
+  cheaper and leaves fewer frames, and on the device the two came out even:
+  seven DOS commands - see below - took 179.7 seconds of processor time with
+  nothing pinned and 179.0 with 64KB, faults 0.7% and 1.1% of it. Where
+  nothing faults, `dos-boot` on the bench with all of 128KB paged is 15%
+  slower than direct, and with 64KB pinned 2%; the DOS330 boot at 640KB takes
+  6.32 seconds pinning nothing and 5.65 pinning 64KB.
+- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM as
+  before.** A hard fault on either core reboots the board through
+  `isr_hardfault()`, which replaces the SDK's breakpoint, and leaves a marker
+  in RAM startup does not clear; the start after it pages nothing, says so
+  on the message row, and reports `off_after_fault`. Paging is the newest
+  code a fault could come from, and a board that halts on one needs its
+  cable replugged.
+- **The runtime reads the BIOS data area through the memory map**,
+  `GuestRAMByte()`: with nothing pinned it is paged.
+- **The workloads** are `workloads/bench.txt` and `workloads/word.txt`, run
+  with `debug.js` from the VMs `BENCH` and `WORD`: a 10MB hard disk each,
+  made with mtools as in "The SD card", holding Turbo C++ 1.01, Turbo Pascal
+  7.01, QuickBASIC 4.5 and QBasic, and Word 5.5's Setup files - commercial
+  software, so not in the repository. Each command runs from `CLS`, between
+  `report`s:
+
+  | command | processor time | faults |
+  | --- | --- | --- |
+  | `TCC` compiling and linking a 40-line program | 18.9s | 2.6% |
+  | running it | 7.0s | 0.1% |
+  | `TPC /B BREAKOUT`, six units | 11.3s | 0.6% |
+  | `TPC QSORT` | 2.2s | 3.0% |
+  | `BC QCARDS.BAS` | 32.1s | 0.3% |
+  | `LINK QCARDS` | 26.7s | 0.8% |
+  | `QBASIC /RUN`, arrays and strings | 81.5s | 0.5% |
+  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 563.2s | 0.2% |
+  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 84.3s | 2.8% |
+
+  Word is what pages most - 21,424 pages in from PSRAM in 84 seconds - and
+  where pinning loses: with 64KB pinned its faults were 6.0% of 85.2
+  seconds. The other commands came out even.
+- **A run's disk changes the next run**: the compilers leave their output,
+  and Word's Setup records the name typed on its own files and skips asking
+  next time. `workloads/word.txt` deletes `C:\WORD` after, and a second run of Setup
+  has one screen fewer.
 
 ## The speaker
 

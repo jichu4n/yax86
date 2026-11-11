@@ -32,6 +32,36 @@ else()
         "'${YAX86_PICOCALC_SYS_CLK_KHZ}'")
 endif()
 
+# Guest RAM with the PSRAM, in KB: conventional memory from 128 to 640, paged
+# through SRAM above the pinned part - see src/pager.h. Without the PSRAM the
+# guest has the 128KB of SRAM alone, which is also what 128 with nothing
+# pinned measures against.
+set(YAX86_PICOCALC_GUEST_RAM_KB "640" CACHE STRING
+    "Guest RAM in KB with the PSRAM, 128 to 640")
+# How much of guest RAM, from address 0, is held in SRAM rather than paged, in
+# KB: a multiple of 4 under 128, the rest of the 128KB of SRAM being frames.
+set(YAX86_PICOCALC_PINNED_KB "0" CACHE STRING
+    "Guest RAM held in SRAM rather than paged, in KB")
+if(NOT YAX86_PICOCALC_GUEST_RAM_KB MATCHES "^[0-9]+$"
+   OR YAX86_PICOCALC_GUEST_RAM_KB LESS 128
+   OR YAX86_PICOCALC_GUEST_RAM_KB GREATER 640)
+    message(FATAL_ERROR
+        "YAX86_PICOCALC_GUEST_RAM_KB must be 128 to 640, not "
+        "'${YAX86_PICOCALC_GUEST_RAM_KB}'")
+endif()
+if(NOT YAX86_PICOCALC_PINNED_KB MATCHES "^[0-9]+$"
+   OR NOT YAX86_PICOCALC_PINNED_KB LESS 128)
+    message(FATAL_ERROR
+        "YAX86_PICOCALC_PINNED_KB must be under 128, not "
+        "'${YAX86_PICOCALC_PINNED_KB}'")
+endif()
+math(EXPR pinned_kb_remainder "${YAX86_PICOCALC_PINNED_KB} % 4")
+if(NOT pinned_kb_remainder EQUAL 0)
+    message(FATAL_ERROR
+        "YAX86_PICOCALC_PINNED_KB must be a multiple of 4, not "
+        "'${YAX86_PICOCALC_PINNED_KB}'")
+endif()
+
 # =============================================================================
 # Pico SDK
 # =============================================================================
@@ -132,6 +162,7 @@ add_executable(yax86_picocalc
     src/font_4x10.c
     src/keymap.c
     src/lcd.c
+    src/pager.c
     src/psram.c
     src/runtime_log.c
     src/sdcard.c
@@ -158,6 +189,8 @@ target_include_directories(yax86_picocalc PRIVATE
 target_compile_definitions(yax86_picocalc PRIVATE
     YAX86_PICOCALC_DRAW_SCREEN=${YAX86_PICOCALC_DRAW_SCREEN}
     YAX86_PICOCALC_SYS_CLK_KHZ=${sys_clk_khz}
+    YAX86_PICOCALC_GUEST_RAM_KB=${YAX86_PICOCALC_GUEST_RAM_KB}
+    YAX86_PICOCALC_PINNED_KB=${YAX86_PICOCALC_PINNED_KB}
     # What pico_usb_reset gives a device it describes itself, and turns off for
     # one described by the application: picotool's reset interface, with the
     # Microsoft OS 2.0 descriptor Windows needs to use it without a driver, and
