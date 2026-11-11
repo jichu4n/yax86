@@ -49,20 +49,12 @@
 #include "usb_disk.h"
 #include "vm_config.h"
 #include "vm_folder.h"
+#include "yax86_pico.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
 // identical but for that, which is what measures what drawing costs.
 #ifndef YAX86_PICOCALC_DRAW_SCREEN
 #define YAX86_PICOCALC_DRAW_SCREEN 1
-#endif
-
-// Guest RAM with the PSRAM, and how much of it from address 0 is held in SRAM
-// rather than paged, in KB. Set by CMakeLists.txt.
-#ifndef YAX86_PICOCALC_GUEST_RAM_KB
-#define YAX86_PICOCALC_GUEST_RAM_KB 640
-#endif
-#ifndef YAX86_PICOCALC_PINNED_KB
-#define YAX86_PICOCALC_PINNED_KB 0
 #endif
 
 // The system clock in kHz, or 0 for the stock 125MHz. Set by CMakeLists.txt.
@@ -71,13 +63,9 @@
 #endif
 
 enum {
-  // The SRAM guest RAM has: all of it without the PSRAM - the same 128K
-  // pico/bench measures with - and with it, the pinned part and the frames
-  // the rest is paged through.
-  kGuestRAMSize = 128 * 1024,
-  // Guest RAM with the PSRAM, and the part of it held in SRAM.
-  kPagedGuestRAMSize = YAX86_PICOCALC_GUEST_RAM_KB * 1024,
-  kPinnedGuestRAMSize = YAX86_PICOCALC_PINNED_KB * 1024,
+  // The SRAM guest memory has: conventional memory itself without the
+  // PSRAM, and the frames it is paged through with it - see yax86_pico.h.
+  kGuestRAMSize = kPicoGuestSRAMSize,
   // The part of the guest's RAM a clone's files are copied through, before a
   // VM starts and the RAM is the guest's: 64 of the card's blocks, which go to
   // and from it a run at a time.
@@ -291,9 +279,8 @@ static uint32_t __uninitialized_ram(g_fault_marker);
 // Whether the last start ended in a hard fault, which leaves paging off for
 // this one.
 static bool g_after_fault;
-// How much guest RAM the VM has, and whether it is paged; and whether the VM
-// is up, before which there is no guest RAM to read.
-static uint32_t g_guest_ram_size = kGuestRAMSize;
+// Whether guest RAM is paged, and whether the VM is up, before which there is
+// no guest RAM to read.
 static bool g_paging;
 static bool g_vm_up;
 
@@ -377,8 +364,13 @@ static uint64_t PausedUs(void) {
          (MenuIsOpen() ? time_us_64() - g_clock.pause_start_us : 0);
 }
 
-// A byte of guest RAM, through the memory map, since it may be paged - or 0
-// before the VM is up, as SRAM guest RAM starts.
+// How much guest RAM the VM has.
+static uint32_t GuestRAMSize(void) {
+  return g_paging ? kPicoPagedGuestRAMSize : kGuestRAMSize;
+}
+
+// A byte of guest RAM, read through the memory map since it may be paged. 0
+// before the VM is up, which is what guest RAM starts as.
 static uint8_t GuestRAMByte(uint32_t address) {
   return g_vm_up ? YPlatformReadMemoryByte(&g_platform, address) : 0;
 }
@@ -486,7 +478,7 @@ static void FormatSystemLine(char* buffer, size_t size) {
       (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
       (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
       (unsigned long)SouthbridgeGetPollStats().keys,
-      (unsigned)((g_paging ? kPagedGuestRAMSize : kGuestRAMSize) / 1024));
+      (unsigned)(GuestRAMSize() / 1024));
 }
 
 static void FormatDisplayLine(char* buffer, size_t size) {
@@ -694,7 +686,7 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
       Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
       Y_LOG_STRING("keyboard_fw", version),
-      Y_LOG_UINT("guest_ram_kb", g_guest_ram_size / 1024));
+      Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024));
   const PsramStats psram = PsramGetStats();
   REPLY_GROUP(
       command, "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
@@ -708,9 +700,8 @@ static __noinline void ReplyReportBoard(const Command* command) {
   REPLY_GROUP(
       command, "paging", Y_LOG_BOOL("on", g_paging),
       Y_LOG_BOOL("off_after_fault", g_after_fault),
-      Y_LOG_UINT("pinned_kb", g_paging ? kPinnedGuestRAMSize / 1024 : 0),
       Y_LOG_UINT("frames", pager.frames),
-      Y_LOG_UINT("page_bytes", kPagerPageSize),
+      Y_LOG_UINT("page_bytes", 1u << kPicoPageShift),
       Y_LOG_UINT("page_ins", pager.page_ins),
       Y_LOG_UINT("zero_fills", pager.zero_fills),
       Y_LOG_UINT("write_backs", pager.write_backs),
@@ -820,24 +811,21 @@ static uint8_t FloppyDrives(void) {
   return g_has_vm && !g_vm.present[kVMDriveFD2] ? 1 : kFloppyDrives;
 }
 
-// Page guest RAM through the PSRAM if it came up, and the last start did not
-// end in a hard fault: paging is the newest thing a fault could come from, and
-// without it the VM has the 128KB of SRAM as before.
+// Page all of guest RAM through the PSRAM if it came up, and the last start
+// did not end in a hard fault: paging is the newest thing a fault could come
+// from, and without it the VM has the SRAM alone - see yax86_pico.h.
 static void ConfigureGuestRAM(YPlatformConfig* config) {
-  g_paging = kPagedGuestRAMSize > kGuestRAMSize &&
-             PsramGetStats().state == kPsramOk && !g_after_fault;
+  g_paging = PsramGetStats().state == kPsramOk && !g_after_fault;
   if (!g_paging) {
-    g_guest_ram_size = kGuestRAMSize;
     config->direct_memory_size = kGuestRAMSize;
     config->direct_memory = g_guest_ram;
+    config->paged_memory = NULL;
     return;
   }
-  g_guest_ram_size = kPagedGuestRAMSize;
-  config->direct_memory_size = kPinnedGuestRAMSize;
-  config->direct_memory = g_guest_ram;
-  config->paged_memory = PagerInit(
-      g_guest_ram + kPinnedGuestRAMSize, kGuestRAMSize - kPinnedGuestRAMSize,
-      kPagedGuestRAMSize - kPinnedGuestRAMSize);
+  config->direct_memory_size = 0;
+  config->direct_memory = NULL;
+  config->paged_memory =
+      PagerInit(g_guest_ram, kGuestRAMSize, kPicoPagedGuestRAMSize);
 }
 
 static bool InitVM(void) {

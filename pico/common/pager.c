@@ -7,9 +7,10 @@
 
 enum {
   // The most guest RAM there can be to page, and so the largest page table.
-  kPagerMaxPages = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE >> kPagerPageShift,
-  // The most frames: all 128KB of the SRAM guest RAM has.
-  kPagerMaxFrames = 128 * 1024 / kPagerPageSize,
+  kPagerMaxPages = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE >> kPicoPageShift,
+  // The most frames: all of the SRAM guest memory has.
+  kPagerMaxFrames = kPicoGuestSRAMSize >> kPicoPageShift,
+  kPagerPageSize = 1 << kPicoPageShift,
   // A frame holding no page.
   kPagerNoPage = 0xFFFF,
 };
@@ -31,7 +32,7 @@ static void PagerPageFault(
 
 YPlatformPagedMemory* PagerInit(
     uint8_t* frames, uint32_t frames_size, uint32_t size) {
-  g_num_frames = frames_size >> kPagerPageShift;
+  g_num_frames = frames_size >> kPicoPageShift;
   if (g_num_frames > kPagerMaxFrames) {
     g_num_frames = kPagerMaxFrames;
   }
@@ -45,7 +46,7 @@ YPlatformPagedMemory* PagerInit(
   g_stats.frames = g_num_frames;
   g_memory.context = NULL;
   g_memory.size = size;
-  g_memory.page_shift = kPagerPageShift;
+  g_memory.page_shift = kPicoPageShift;
   g_memory.pages = g_pages;
   g_memory.frames = frames;
   g_memory.page_fault_fn = PagerPageFault;
@@ -53,7 +54,7 @@ YPlatformPagedMemory* PagerInit(
 }
 
 static inline uint8_t* PagerFrame(uint32_t frame) {
-  return g_memory.frames + (frame << kPagerPageShift);
+  return g_memory.frames + (frame << kPicoPageShift);
 }
 
 // A frame for a page in none: a free one, or the first the hand comes to
@@ -75,7 +76,7 @@ static uint32_t __not_in_flash_func(PagerTakeFrame)(void) {
     }
     if (*entry & Y_CPU_PAGED_DATA_DIRTY) {
       if (!PsramWrite(
-              page << kPagerPageShift, PagerFrame(frame), kPagerPageSize)) {
+              page << kPicoPageShift, PagerFrame(frame), kPagerPageSize)) {
         ++g_stats.errors;
       }
       g_backed[page / 8] |= (uint8_t)(1u << (page % 8));
@@ -105,7 +106,7 @@ static void __not_in_flash_func(PagerPageFault)(
     }
     if (g_backed[page / 8] & (1u << (page % 8))) {
       if (!PsramRead(
-              page << kPagerPageShift, PagerFrame(frame), kPagerPageSize)) {
+              page << kPicoPageShift, PagerFrame(frame), kPagerPageSize)) {
         ++g_stats.errors;
       }
       ++g_stats.page_ins;

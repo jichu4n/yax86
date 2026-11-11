@@ -1,9 +1,11 @@
-// The PicoCalc's 8MB of PSRAM, an ESP-PSRAM64H on one-bit SPI through PIO.
+// The PicoCalc's 8MB of PSRAM, an ESP-PSRAM64H on one-bit SPI through PIO,
+// on the mainboard the Pico plugs into. On a bare Pico its pins are not
+// connected, and PsramInit() fails.
 //
 // Every wait is bounded, so a chip that stops answering costs a timeout and
 // an error, never a hang. Called from core 0 only.
-#ifndef YAX86_PICOCALC_PSRAM_H
-#define YAX86_PICOCALC_PSRAM_H
+#ifndef YAX86_PICO_PSRAM_H
+#define YAX86_PICO_PSRAM_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -58,4 +60,4 @@ bool PsramWrite(uint32_t address, const void* data, uint32_t size);
 PsramStats PsramGetStats(void);
 const char* PsramStateName(PsramState state);
 
-#endif  // YAX86_PICOCALC_PSRAM_H
+#endif  // YAX86_PICO_PSRAM_H

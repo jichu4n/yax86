@@ -132,7 +132,7 @@ visibility, and how performance work is measured - are in the root
   access to a page in its frame is a subtract, a compare and two loads, and
   only a fault reaches the platform. Going through the platform's memory map
   for every access instead, the DOS330 boot at 640KB took 7.00 seconds with
-  `pico/picocalc` on the PicoCalc's RP2040 at 250MHz, nothing pinned; with
+  `pico/picocalc` on the PicoCalc's RP2040 at 250MHz, all of it paged; with
   the CPU indexing, 6.32.
 - **Instruction fetch opens a page's frame the same way**, without asking the
   host, in `YCPUOpenPagedFetchWindow()`. The fetch window is one page, since
@@ -164,10 +164,11 @@ visibility, and how performance work is measured - are in the root
   `-O3`) with all of 128KB paged and every page in its frame is 15% slower
   than direct. Nor is there a switch between them: an empty window already is
   one (`end` 0, `size` 0), the CPU's code is the same whichever are set, and a
-  flag would cost the same test. Each combination has a user: direct only for
-  `pico/bench`, SDL and `pico/picocalc` without PSRAM; paged only for
-  `pico/picocalc`'s default; both for its `YAX86_PICOCALC_PINNED_KB`; neither
-  for the CPU tests' helper and mocks.
+  flag would cost the same test. The combinations in use are direct only, for
+  SDL and the Pico hosts without PSRAM; paged only, for the Pico hosts with
+  it; and neither, for the CPU tests' helper and mocks. Both is for a host
+  that holds part of memory directly and pages the rest, which the PicoCalc
+  measured and dropped (`pico/picocalc/AGENTS.md`).
 - **A paged-only build pays for the direct window it does not have**, by
   reading of the disassembly, not yet measured. Every inlined data access
   first loads `direct_data_window.end`, compares and falls through, about 4

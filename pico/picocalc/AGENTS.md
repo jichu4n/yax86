@@ -91,12 +91,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   floppy that is not `resources`' byte for byte, or a hard disk image - see
   the SD card section. Compare against a baseline with the same VM, or
   none.
-- **These counts are the 128KB machine's**, built with
-  `YAX86_PICOCALC_GUEST_RAM_KB=128`, which pages nothing. The default build
-  pages 640KB - see "Paging guest RAM" - and boots DOS330 in 2,443,404
-  instructions and 29,160,390 cycles, the BIOS testing and DOS sizing more
-  RAM. Measure a change to the runtime against the 128KB build, as pico/bench
-  measures.
+- **These counts are the 128KB machine's**, which the runtime runs without
+  the PSRAM or after a crash. With the PSRAM it pages 640KB (see "Paging
+  guest RAM"), and DOS330 boots in 2,443,404 instructions and 29,160,390
+  cycles, the BIOS testing and DOS sizing more memory; the bench's 640KB
+  `dos-boot` takes 2,356,813 and 27,964,698. The runtime with no VMs has not
+  been counted at 640KB.
 
 ## Running in real time
 
@@ -521,8 +521,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## The PSRAM
 
-- **8MB, an ESP-PSRAM64H on one-bit SPI, driven by PIO** - `src/psram.c`,
-  `src/psram.pio`, on pio1, the LCD having pio0. Reads are Fast Read
+- **8MB, an ESP-PSRAM64H on one-bit SPI, driven by PIO**:
+  `pico/common/psram.c` and `psram.pio`, shared with `pico/bench`, on pio1,
+  the LCD having pio0. Reads are Fast Read
   (`0x0B`), writes `0x02`; its ID's second byte, known good die, reads
   `0x5D`. It holds the guest RAM SRAM does not - see "Paging guest RAM".
   The report's `psram` group has its state, the self-test's times and what
@@ -562,16 +563,18 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## Paging guest RAM
 
-- **The guest has 640KB: 128KB of SRAM frames, and PSRAM behind them**,
-  through the core's `YPlatformConfig.paged_memory` (`core/AGENTS.md`).
-  `src/pager.c` holds the page table and brings a page into a frame when the
-  guest first touches it - from PSRAM, or as zeros if it has never been
-  written back, as SRAM guest RAM starts - and takes frames back by the clock
-  algorithm, writing a page back only if it was written. The report's
-  `paging` group has the counts and `fault_us`, the time in the fault
-  handler.
-- **Pages are 256 bytes**, measured on the device with the workloads below,
-  nothing pinned - the share of processor time in faults:
+- **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames,
+  and PSRAM behind them**, through the core's `YPlatformConfig.paged_memory`
+  (`core/AGENTS.md`). The sizes are in `pico/common/yax86_pico.h`, a header
+  per board so that a Pico 2 can have its own, and `pico/common/pager.c`
+  does the paging, both shared with `pico/bench` so that it measures what
+  runs here. The pager brings a page into a frame when the guest first
+  touches it, from PSRAM, or as zeros if it has never been written back, and
+  takes frames back by the clock algorithm, writing a page back only if it
+  was written. The report's `paging` group has the counts and `fault_us`,
+  the time in the fault handler.
+- **Pages are 256 bytes**, measured on the device with `pico/bench`'s
+  PicoCalc workloads, the share of processor time in faults:
 
   | page | seven commands | Word session | Word's pages in |
   | --- | --- | --- | --- |
@@ -581,58 +584,26 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
   A fault moves a whole page through the PSRAM at about 0.18us a byte, and
   more of a large page is never used, so fewer bytes moved beats fewer
-  faults. Smaller pages cost nothing measurable where
-  nothing faults: the DOS330 boot took 6.305, 6.320 and 6.346 seconds. The
-  page table is 2 bytes a page, 5KB at 256 bytes; 128 bytes' 10KB is more
-  than the SRAM has spare. Traces on a desktop had already ruled out 4KB,
-  which thrashes 128KB of frames.
-- **Nothing is pinned by default**: `YAX86_PICOCALC_PINNED_KB` holds that much
-  of guest RAM from address 0 in SRAM instead, under the CPU's direct data
-  window, with the rest of the 128KB as frames. Pinning makes an access
-  cheaper and leaves fewer frames, and on the device, with 512-byte pages,
-  the two came out even: seven DOS commands - see below - took 179.7 seconds
-  of processor time with nothing pinned and 179.0 with 64KB, faults 0.7% and
-  1.1% of it; but the Word session's faults went from 2.8% to 6.0%. The
-  programs' code and data are above 64KB, so pinning speeds up little of
-  what they do. Where
-  nothing faults, `dos-boot` on the bench with all of 128KB paged is 15%
-  slower than direct, and with 64KB pinned 2%; the DOS330 boot at 640KB takes
-  6.32 seconds pinning nothing and 5.65 pinning 64KB.
-- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM as
-  before.** A hard fault on either core reboots the board through
+  faults. Smaller pages cost nothing measurable where nothing faults: the
+  DOS330 boot took 6.305, 6.320 and 6.346 seconds. The page table is 2 bytes
+  a page, 5KB at 256 bytes; 128 bytes' 10KB is more than the SRAM has spare.
+  Traces on a desktop had already ruled out 4KB, which thrashes 128KB of
+  frames.
+- **No guest RAM is held directly in SRAM.** Holding the first 64KB there,
+  under the CPU's direct data window, with the other 64KB as frames, came
+  out even on the seven commands with 512-byte pages, 179.0 seconds of
+  processor time against 179.7, and more than doubled the Word session's
+  share in faults, 2.8% to 6.0%. The programs' code and data are above
+  64KB, so it sped up little of what they do, and it left half the frames.
+- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM** held
+  directly. A hard fault on either core reboots the board through
   `isr_hardfault()`, which replaces the SDK's breakpoint, and leaves a marker
   in RAM startup does not clear; the start after it pages nothing, says so
   on the message row, and reports `off_after_fault`. Paging is the newest
   code a fault could come from, and a board that halts on one needs its
   cable replugged.
 - **The runtime reads the BIOS data area through the memory map**,
-  `GuestRAMByte()`: with nothing pinned it is paged.
-- **The workloads** are `workloads/bench.txt` and `workloads/word.txt`, run
-  with `debug.js` from the VMs `BENCH` and `WORD`: a 10MB hard disk each,
-  made with mtools as in "The SD card", holding Turbo C++ 1.01, Turbo Pascal
-  7.01, QuickBASIC 4.5 and QBasic, and Word 5.5's Setup files - commercial
-  software, so not in the repository. Each command runs from `CLS`, between
-  `report`s:
-
-  | command | processor time | faults |
-  | --- | --- | --- |
-  | `TCC` compiling and linking a 40-line program | 18.8s | 1.9% |
-  | running it | 7.0s | 0.1% |
-  | `TPC /B BREAKOUT`, six units | 11.3s | 0.5% |
-  | `TPC QSORT` | 2.2s | 2.5% |
-  | `BC QCARDS.BAS` | 32.1s | 0.3% |
-  | `LINK QCARDS` | 26.7s | 0.5% |
-  | `QBASIC /RUN`, arrays and strings | 81.7s | 0.4% |
-  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 561.4s | 0.1% |
-  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 83.5s | 1.3% |
-
-  These run at 67% to 121% of a real PC/XT, 78% for the seven commands
-  together, against 120% for the 128KB machine's boot: faults are not what
-  holds them back.
-- **A run's disk changes the next run**: the compilers leave their output,
-  and Word's Setup records the name typed on its own files and skips asking
-  next time. `workloads/word.txt` deletes `C:\WORD` after; a second run of
-  Setup needs its two name screens' steps taken out.
+  `GuestRAMByte()`, since with the PSRAM it is paged.
 
 ## The speaker
 
