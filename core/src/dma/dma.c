@@ -207,18 +207,19 @@ Y_PUBLIC Y_HOT void YDMATransferByte(YDMAState* dma, uint8_t channel_index) {
   const uint8_t transfer_type = channel->mode & (0x03 << 2);
   switch (transfer_type) {
     case Y_DMA_MODE_TRANSFER_TYPE_VERIFY:
-    case Y_DMA_MODE_TRANSFER_TYPE_WRITE:
-      // Device -> memory. A verify cycle acknowledges the device just the
-      // same, so the device hands its byte over and moves on, but nothing is
-      // written: the BIOS verifies sectors this way, and a floppy controller
-      // left waiting for its byte to be taken never finishes the read.
+      // A verify cycle acknowledges the device as a write to memory would, so
+      // the device hands its byte over and moves on, but nothing is written:
+      // the BIOS verifies sectors this way, and a floppy controller left
+      // waiting for its byte to be taken never finishes the read.
       if (dma->config.read_device_byte) {
+        dma->config.read_device_byte(dma->config.context, channel_index);
+      }
+      break;
+    case Y_DMA_MODE_TRANSFER_TYPE_WRITE:  // Write to memory (device -> memory)
+      if (dma->config.read_device_byte && dma->config.write_memory_byte) {
         const uint8_t data =
             dma->config.read_device_byte(dma->config.context, channel_index);
-        if (transfer_type == Y_DMA_MODE_TRANSFER_TYPE_WRITE &&
-            dma->config.write_memory_byte) {
-          dma->config.write_memory_byte(dma->config.context, address, data);
-        }
+        dma->config.write_memory_byte(dma->config.context, address, data);
       }
       break;
     case Y_DMA_MODE_TRANSFER_TYPE_READ:  // Read from memory (memory -> device)

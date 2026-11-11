@@ -179,12 +179,14 @@ visibility, and how performance work is measured - are in the root
   acknowledges the device as for a transfer to memory, and leaves out only
   the memory write. The BIOS verifies sectors so, as DOS's FORMAT does each
   track, and a controller whose byte is never taken never finishes the read.
-  Verify shares the write's device read in `YDMATransferByte()`: a case of
-  its own grew the function by 108 bytes and cost `dos-boot` 0.11%.
-- **The code costs `dos-boot` 0.43% without running**: none of it runs in
+  Verify's case of its own grows `YDMATransferByte()` by 108 bytes and
+  moves an inlining decision into `YPlatformWriteMemoryByte()`: alone, 0.11%
+  of `dos-boot`; beside the FDC's code below, within 0.01% of sharing the
+  write's device read, which grows neither.
+- **The code costs `dos-boot` 0.44% without running**: none of it runs in
   the boot, and the invariant holds, but the FDC is bundled ahead of most
-  modules and 490 bytes more of it moves them along in flash - 4.7457
-  seconds against 4.7253 at 250MHz, `-O3`.
+  modules and 490 bytes more of it moves them along in flash - 4.7460
+  seconds against 4.7251 at 250MHz, `-O3`.
 
 ## video - host text fonts
 
