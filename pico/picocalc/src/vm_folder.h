@@ -1,5 +1,5 @@
-// A VM's folder on the card, as a whole: renaming it, copying it as a new VM,
-// and deleting it, for the menu's Manage VMs.
+// A VM's folder on the card, as a whole: making a new one, renaming it,
+// copying it as a new VM, and deleting it, for the menu's Manage VMs.
 //
 // Everything in a VM's folder is its own, and goes with it: renamed, copied
 // or deleted. An image a VM names outside its folder is shared, and stays
@@ -32,7 +32,15 @@ typedef struct VMFolderContents {
   char users[kVMFolderNamed][kVMNameLength + 1];
 } VMFolderContents;
 
-// How a rename or a clone went.
+// A new VM: its name, and the images in its drives, paths from the card's
+// root or empty for none - or for drives A to C, a blank disk of its own.
+typedef struct VMFolderNew {
+  const char* name;
+  const char* drives[kVMDrives];
+  bool blank[kVMDriveC + 1];
+} VMFolderNew;
+
+// How making, renaming or cloning a VM went.
 typedef enum VMFolderResult {
   kVMFolderDone = 0,
   // The name will not do, and nothing was changed.
@@ -54,6 +62,18 @@ void VMFolderDescribe(
 // written again after.
 VMFolderResult VMFolderRename(
     const VMList* list, const VMEntry* vm, const char* name, VMEntry* renamed,
+    char problem[kVMProblemLength + 1]);
+
+// Make a new VM, vm->name: its folder, with a vm.cfg naming its drives, and
+// its blank disks, written through transfer's buffer, calling its progress as
+// it goes. A blank disk is zeros, unformatted as a new disk was, for DOS's
+// FORMAT - and for a hard disk, FDISK first: a 360KB floppy, `floppy_a.img`
+// or `floppy_b.img`, or the core's 10MB hard disk, `hdd.img`. created is the
+// new VM. Anything but kVMFolderDone comes with the problem described, as for
+// VMFolderRename(); a VM that could not be made has what was made of it
+// deleted.
+VMFolderResult VMFolderCreate(
+    const VMFolderNew* vm, FSTransfer* transfer, VMEntry* created,
     char problem[kVMProblemLength + 1]);
 
 // Copy vm's folder as a new VM, name, moving the files through transfer's

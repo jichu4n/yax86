@@ -101,6 +101,10 @@ uint64_t FSFolderSize(const char* path);
 // depth. On a failure what was made of to is deleted.
 FRESULT FSCopyFolder(const char* from, const char* to, FSTransfer* transfer);
 
+// Write a new file at path of size zeros, through transfer's buffer, which it
+// zeroes first, calling its progress as it goes.
+FRESULT FSWriteZeros(const char* path, uint32_t size, FSTransfer* transfer);
+
 // Delete the folder at path and everything in it, at any depth. last, if not
 // NULL, is a file directly in it deleted after everything else, so that a
 // delete cut short still leaves it.

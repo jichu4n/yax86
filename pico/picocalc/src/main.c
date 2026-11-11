@@ -515,7 +515,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
       // What drive A has instead, or why a configured image did not open.
       length += FormatDrive(
           buffer + length, size - length, label, image,
-          drive == kVMDriveA && !g_has_vm ? "built in" : "none");
+          drive == kVMDriveA && !g_has_vm ? "built in" : "empty");
     }
     card_us += image->stats.read_us + image->stats.write_us;
   }
@@ -1561,6 +1561,42 @@ static __noinline void CloneVM(void) {
   }
 }
 
+static __noinline void CreateVM(void) {
+  VMFolderNew vm;
+  MenuNewVM(&vm);
+  VMEntry created;
+  char problem[kVMProblemLength + 1];
+  const uint64_t start_us = time_us_64();
+  // Blank disks are written through the guest's RAM, which is zeroed after.
+  FSTransfer transfer = {
+      .buffer = g_guest_ram,
+      .buffer_size = kCopyBufferSize,
+      .progress = ShowCopyProgress,
+  };
+  const VMFolderResult result =
+      VMFolderCreate(&vm, &transfer, &created, problem);
+  memset(g_guest_ram, 0, kCopyBufferSize);
+  if (result == kVMFolderBadName) {
+    MenuSetProblem(problem);
+    return;
+  }
+  ShowManagedVMs(created.name);
+  if (result == kVMFolderDone) {
+    SYSTEM_INFO(
+        "vm_created", Y_LOG_STRING("name", created.name),
+        Y_LOG_BOOL("blank_a", vm.blank[kVMDriveA]),
+        Y_LOG_BOOL("blank_b", vm.blank[kVMDriveB]),
+        Y_LOG_BOOL("blank_c", vm.blank[kVMDriveC]),
+        Y_LOG_UINT(
+            "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
+  } else {
+    MenuSetProblem(problem);
+    SYSTEM_WARN(
+        "vm_not_created", Y_LOG_STRING("name", created.name),
+        Y_LOG_STRING("problem", problem));
+  }
+}
+
 static __noinline void DeleteVM(void) {
   const VMEntry vm = g_vms.vms[MenuManagedVM()];
   char problem[kVMProblemLength + 1];
@@ -1650,6 +1686,9 @@ static __noinline void ChooseVM(void) {
           break;
         case kMenuActionDeleteVM:
           DeleteVM();
+          break;
+        case kMenuActionCreateVM:
+          CreateVM();
           break;
         default:
           break;

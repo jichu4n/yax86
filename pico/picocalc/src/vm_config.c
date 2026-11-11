@@ -196,6 +196,28 @@ bool VMConfigSaveDrive(
   return ConfigFileUpdate(config->entry.path, &setting, 1, problem);
 }
 
+bool VMConfigCreate(
+    const VMEntry* vm, const char* const drives[kVMDrives],
+    char problem[kVMProblemLength + 1]) {
+  // Kept off the stack, with ConfigFileUpdate() under them.
+  static char values[kVMDrives][kFSMaxPath + 2];
+  char folder[kFSMaxPath + 1];
+  FSFolderOf(vm->path, folder);
+  ConfigFileSetting settings[kVMDrives];
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    values[drive][0] = '\0';
+    if (drives[drive][0] != '\0' &&
+        !FSRelativePath(folder, drives[drive], values[drive])) {
+      snprintf(
+          problem, kVMProblemLength + 1, "A disk's path would be too long");
+      return false;
+    }
+    settings[drive].key = kDriveKeys[drive];
+    settings[drive].value = values[drive];
+  }
+  return ConfigFileUpdate(vm->path, settings, kVMDrives, problem);
+}
+
 bool VMSettingsSaveBootDefault(
     const char* name, char problem[kVMProblemLength + 1]) {
   const ConfigFileSetting setting = {.key = kBootDefaultKey, .value = name};

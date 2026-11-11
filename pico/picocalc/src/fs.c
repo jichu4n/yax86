@@ -322,6 +322,32 @@ static FRESULT CopyFile(
   return result != FR_OK ? result : closed;
 }
 
+FRESULT FSWriteZeros(const char* path, uint32_t size, FSTransfer* transfer) {
+  memset(transfer->buffer, 0, transfer->buffer_size);
+  FIL out;
+  FRESULT result = f_open(&out, path, FA_WRITE | FA_CREATE_NEW);
+  if (result != FR_OK) {
+    return result;
+  }
+  uint32_t done = 0;
+  while (result == FR_OK && done < size) {
+    const uint32_t left = size - done;
+    const UINT length =
+        left < transfer->buffer_size ? left : transfer->buffer_size;
+    UINT written = 0;
+    result = f_write(&out, transfer->buffer, length, &written);
+    if (result == FR_OK && written < length) {
+      // FatFs writes short when the card is full.
+      result = FR_DENIED;
+    }
+    done += written;
+    transfer->done += written;
+    transfer->progress(transfer->done, transfer->total);
+  }
+  const FRESULT closed = f_close(&out);
+  return result != FR_OK ? result : closed;
+}
+
 static bool CopyEntry(const FILINFO* info, void* context) {
   const Level* level = context;
   Level below = {

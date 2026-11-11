@@ -5,8 +5,21 @@
 #include <strings.h>
 
 #include "ff.h"
+#include "harddisk.h"
 
 static const char kConfigFile[] = "vm.cfg";
+
+// A blank disk's file, in its VM's folder, for each drive that can have one.
+static const char* const kBlankFiles[kVMDriveC + 1] = {
+    [kVMDriveA] = "floppy_a.img",
+    [kVMDriveB] = "floppy_b.img",
+    [kVMDriveC] = "hdd.img",
+};
+
+enum {
+  // A blank floppy's size: a 360KB disk.
+  kFloppySize = 360 * 1024,
+};
 
 // Check a name typed for a VM, saying why it will not do, and make the VM's
 // entry from it.
@@ -45,7 +58,8 @@ static bool Taken(const VMEntry* vm, char problem[kVMProblemLength + 1]) {
   if (!FSExists(folder)) {
     return false;
   }
-  snprintf(problem, kVMProblemLength + 1, "%s is already taken", vm->name);
+  snprintf(
+      problem, kVMProblemLength + 1, "A VM named %s already exists", vm->name);
   return true;
 }
 
@@ -177,6 +191,50 @@ VMFolderResult VMFolderRename(
     }
   }
   return kVMFolderDone;
+}
+
+VMFolderResult VMFolderCreate(
+    const VMFolderNew* vm, FSTransfer* transfer, VMEntry* created,
+    char problem[kVMProblemLength + 1]) {
+  if (!TakeName(vm->name, created, problem) || Taken(created, problem)) {
+    return kVMFolderBadName;
+  }
+  // The folder and the blank disks' paths: too large for the stack, with
+  // ConfigFileUpdate() under them.
+  static char folder[kFSMaxPath + 1];
+  static char blank_paths[kVMDriveC + 1][kFSMaxPath + 1];
+  FolderOf(created, folder);
+  const char* drives[kVMDrives];
+  transfer->done = 0;
+  transfer->total = 0;
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    drives[drive] = vm->drives[drive] != NULL ? vm->drives[drive] : "";
+    if (drive <= kVMDriveC && vm->blank[drive]) {
+      FSJoin(folder, kBlankFiles[drive], blank_paths[drive]);
+      drives[drive] = blank_paths[drive];
+      transfer->total +=
+          drive == kVMDriveC ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : kFloppySize;
+    }
+  }
+  FRESULT result = f_mkdir(folder);
+  if (result == FR_OK && transfer->total > 0) {
+    transfer->progress(0, transfer->total);
+  }
+  for (uint8_t drive = 0; drive <= kVMDriveC && result == FR_OK; ++drive) {
+    if (vm->blank[drive]) {
+      result = FSWriteZeros(
+          blank_paths[drive],
+          drive == kVMDriveC ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : kFloppySize,
+          transfer);
+    }
+  }
+  if (result != FR_OK) {
+    Describe("make", created, result, problem);
+  } else if (VMConfigCreate(created, drives, problem)) {
+    return kVMFolderDone;
+  }
+  FSDeleteFolder(folder, NULL);
+  return kVMFolderFailed;
 }
 
 VMFolderResult VMFolderClone(
