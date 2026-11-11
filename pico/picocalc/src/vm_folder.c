@@ -9,11 +9,12 @@
 
 static const char kConfigFile[] = "vm.cfg";
 
-// A blank disk's file, in its VM's folder, for each drive that can have one.
-static const char* const kBlankFiles[kVMDriveC + 1] = {
+// A blank disk's file, in its VM's folder, for each drive.
+static const char* const kBlankFiles[kVMDrives] = {
     [kVMDriveA] = "floppy_a.img",
     [kVMDriveB] = "floppy_b.img",
     [kVMDriveC] = "hdd.img",
+    [kVMDriveD] = "hdd_d.img",
 };
 
 enum {
@@ -154,7 +155,7 @@ VMFolderResult VMFolderRename(
     const VMList* list, const VMEntry* vm, const char* name, VMEntry* renamed,
     char problem[kVMProblemLength + 1]) {
   if (!TakeName(name, renamed, problem)) {
-    return kVMFolderBadName;
+    return kVMFolderRefused;
   }
   // The same name, perhaps in other capitals, which the card keeps as one.
   if (strcasecmp(vm->name, renamed->name) == 0) {
@@ -162,7 +163,7 @@ VMFolderResult VMFolderRename(
     return kVMFolderDone;
   }
   if (Taken(renamed, problem)) {
-    return kVMFolderBadName;
+    return kVMFolderRefused;
   }
   // Kept off the stack, which writing a configuration file under them takes
   // much of.
@@ -193,55 +194,142 @@ VMFolderResult VMFolderRename(
   return kVMFolderDone;
 }
 
-VMFolderResult VMFolderCreate(
-    const VMFolderNew* vm, FSTransfer* transfer, VMEntry* created,
-    char problem[kVMProblemLength + 1]) {
-  if (!TakeName(vm->name, created, problem) || Taken(created, problem)) {
-    return kVMFolderBadName;
+// The size of a blank disk for a drive.
+static uint32_t BlankSize(uint8_t drive) {
+  return drive <= kVMDriveB ? kFloppySize : Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
+}
+
+// A free name in folder for a blank disk for a drive: its own, or else
+// disk_c2.img to disk_c9.img. Returns false if none is free.
+static bool BlankPath(
+    const char* folder, uint8_t drive, char path[kFSMaxPath + 1]) {
+  if (FSJoin(folder, kBlankFiles[drive], path) && !FSExists(path)) {
+    return true;
   }
-  // The folder and the blank disks' paths: too large for the stack, with
-  // ConfigFileUpdate() under them.
-  static char folder[kFSMaxPath + 1];
-  static char blank_paths[kVMDriveC + 1][kFSMaxPath + 1];
-  FolderOf(created, folder);
-  const char* drives[kVMDrives];
+  for (char n = '2'; n <= '9'; ++n) {
+    char name[kFSMaxName + 1];
+    snprintf(name, sizeof(name), "disk_%c%c.img", 'a' + drive, n);
+    if (FSJoin(folder, name, path) && !FSExists(path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The blank disks' paths, and the drives' paths with them in: too large for
+// the stack, with ConfigFileUpdate() under them.
+static char g_blank_paths[kVMDrives][kFSMaxPath + 1];
+static const char* g_paths[kVMDrives];
+
+// Work out what vm's drives are to hold, in g_paths, refusing one image in
+// two drives or a blank disk with no free name.
+static bool PlanDrives(
+    const VMEntry* vm, const char* folder, const VMFolderDrives* drives,
+    FSTransfer* transfer, char problem[kVMProblemLength + 1]) {
   transfer->done = 0;
   transfer->total = 0;
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
-    drives[drive] = vm->drives[drive] != NULL ? vm->drives[drive] : "";
-    if (drive <= kVMDriveC && vm->blank[drive]) {
-      FSJoin(folder, kBlankFiles[drive], blank_paths[drive]);
-      drives[drive] = blank_paths[drive];
-      transfer->total +=
-          drive == kVMDriveC ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : kFloppySize;
+    g_paths[drive] = drives->paths[drive] != NULL ? drives->paths[drive] : "";
+    if (!drives->blank[drive]) {
+      continue;
+    }
+    if (!BlankPath(folder, drive, g_blank_paths[drive])) {
+      snprintf(
+          problem, kVMProblemLength + 1, "No name is free in %s for drive %c",
+          vm->name, 'A' + drive);
+      return false;
+    }
+    g_paths[drive] = g_blank_paths[drive];
+    transfer->total += BlankSize(drive);
+  }
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    for (uint8_t earlier = 0; earlier < drive; ++earlier) {
+      if (g_paths[drive][0] != '\0' &&
+          FSSamePath(g_paths[drive], g_paths[earlier])) {
+        char name[kFSMaxName + 1];
+        const char* slash = strrchr(g_paths[drive], '/');
+        snprintf(
+            name, sizeof(name), "%s",
+            slash != NULL ? slash + 1 : g_paths[drive]);
+        snprintf(
+            problem, kVMProblemLength + 1, "%s is in drives %c and %c", name,
+            'A' + earlier, 'A' + drive);
+        return false;
+      }
     }
   }
-  FRESULT result = f_mkdir(folder);
-  if (result == FR_OK && transfer->total > 0) {
+  return true;
+}
+
+// Write the blank disks planned, then vm's file naming every drive. Deletes
+// the blank disks written if it fails.
+static bool WriteDrives(
+    const VMEntry* vm, const VMFolderDrives* drives, FSTransfer* transfer,
+    char problem[kVMProblemLength + 1]) {
+  if (transfer->total > 0) {
     transfer->progress(0, transfer->total);
   }
-  for (uint8_t drive = 0; drive <= kVMDriveC && result == FR_OK; ++drive) {
-    if (vm->blank[drive]) {
-      result = FSWriteZeros(
-          blank_paths[drive],
-          drive == kVMDriveC ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : kFloppySize,
-          transfer);
+  FRESULT result = FR_OK;
+  uint8_t written = 0;
+  for (; written < kVMDrives && result == FR_OK; ++written) {
+    if (drives->blank[written]) {
+      result =
+          FSWriteZeros(g_blank_paths[written], BlankSize(written), transfer);
     }
   }
   if (result != FR_OK) {
+    Describe("make the disks of", vm, result, problem);
+  } else if (VMConfigSaveDrives(vm, g_paths, problem)) {
+    return true;
+  }
+  for (uint8_t drive = 0; drive < written; ++drive) {
+    if (drives->blank[drive]) {
+      f_unlink(g_blank_paths[drive]);
+    }
+  }
+  return false;
+}
+
+VMFolderResult VMFolderCreate(
+    const char* name, const VMFolderDrives* drives, FSTransfer* transfer,
+    VMEntry* created, char problem[kVMProblemLength + 1]) {
+  static char folder[kFSMaxPath + 1];
+  if (!TakeName(name, created, problem) || Taken(created, problem)) {
+    return kVMFolderRefused;
+  }
+  FolderOf(created, folder);
+  if (!PlanDrives(created, folder, drives, transfer, problem)) {
+    return kVMFolderRefused;
+  }
+  const FRESULT result = f_mkdir(folder);
+  if (result != FR_OK) {
     Describe("make", created, result, problem);
-  } else if (VMConfigCreate(created, drives, problem)) {
+    return kVMFolderFailed;
+  }
+  if (WriteDrives(created, drives, transfer, problem)) {
     return kVMFolderDone;
   }
   FSDeleteFolder(folder, NULL);
   return kVMFolderFailed;
 }
 
+VMFolderResult VMFolderEdit(
+    const VMEntry* vm, const VMFolderDrives* drives, FSTransfer* transfer,
+    char problem[kVMProblemLength + 1]) {
+  static char folder[kFSMaxPath + 1];
+  FolderOf(vm, folder);
+  if (!PlanDrives(vm, folder, drives, transfer, problem)) {
+    return kVMFolderRefused;
+  }
+  return WriteDrives(vm, drives, transfer, problem) ? kVMFolderDone
+                                                    : kVMFolderFailed;
+}
+
 VMFolderResult VMFolderClone(
     const VMEntry* vm, const char* name, FSTransfer* transfer, VMEntry* copy,
     char problem[kVMProblemLength + 1]) {
   if (!TakeName(name, copy, problem) || Taken(copy, problem)) {
-    return kVMFolderBadName;
+    return kVMFolderRefused;
   }
   static char from[kFSMaxPath + 1];
   static char to[kFSMaxPath + 1];

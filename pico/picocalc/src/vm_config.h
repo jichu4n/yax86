@@ -111,11 +111,11 @@ bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]);
 bool VMSettingsSaveBootDefault(
     const char* name, char problem[kVMProblemLength + 1]);
 
-// Write a new VM's file, naming the images in its drives - paths from the
-// card's root, or empty for none - as VMConfigSaveDrive() writes them.
-// Returns false, with the problem described, if a path would be too long or
-// the file could not be written.
-bool VMConfigCreate(
+// Write the images in all of a VM's drives - paths from the card's root, or
+// empty for none - to its file, as VMConfigSaveDrive() writes one, making the
+// file if there is none. Returns false, with the problem described, if a path
+// would be too long or the file could not be written.
+bool VMConfigSaveDrives(
     const VMEntry* vm, const char* const drives[kVMDrives],
     char problem[kVMProblemLength + 1]);
 

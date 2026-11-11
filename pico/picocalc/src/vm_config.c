@@ -196,7 +196,7 @@ bool VMConfigSaveDrive(
   return ConfigFileUpdate(config->entry.path, &setting, 1, problem);
 }
 
-bool VMConfigCreate(
+bool VMConfigSaveDrives(
     const VMEntry* vm, const char* const drives[kVMDrives],
     char problem[kVMProblemLength + 1]) {
   // Kept off the stack, with ConfigFileUpdate() under them.

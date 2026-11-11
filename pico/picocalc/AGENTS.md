@@ -349,12 +349,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## Managing VMs
 
-- **Manage VMs, from the list, makes, renames, clones and deletes VMs**,
-  through `src/vm_folder.c`: a page listing New VM and the VMs, a page for
-  each VM with the images in its drives over Rename, Clone and Delete, a
-  name typed for the first two, and a question before the last. Afterwards it shows the list
-  of VMs to manage again with the VM renamed or made chosen, and the list
-  at power on waits for a key, as after USB disk mode.
+- **Manage VMs, from the list, makes, edits, renames, clones and deletes
+  VMs**, through `src/vm_folder.c`: a page listing New VM and the VMs, a
+  page for each VM with the images in its drives - two drives a line, A and
+  B then C and D - over Edit drives, Rename, Clone and Delete, a name typed
+  for Rename and Clone, and a question before Delete. Afterwards it shows
+  the list of VMs to manage again with the VM renamed or made chosen - after
+  Edit drives, the VM's page - and the list at power on waits for a key, as
+  after USB disk mode.
+- **A menu box holds at most `kDisplayMenuMaxRows`, 12**, and `DrawItems()`
+  leaves out text lines past what fits rather than drawing past the box's
+  rows. A VM's page with a line per drive over four items needed 13.
 - **A VM's folder is its own, and an image outside it shared.** Rename
   moves the folder with `f_rename()`, at once whatever is in it; Clone
   copies all of it, at any depth; Delete removes all of it, its `vm.cfg`
@@ -377,20 +382,27 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
-  drives A, B and C, and Create. A floppy drive is Empty, New floppy image
-  (360KB), or Existing floppy image, a 360KB image from the browser; drive
-  C is Empty, New disk image (10MB), or Existing disk image, a 10MB one. An
-  existing image is shared, like any image outside the VM's folder. An
-  empty drive is "empty" wherever the menu says what a drive holds, as the
-  status rows have it. Drive D
-  is left empty, for `vm.cfg` to name. Backspace on the form only ever
-  erases the name - Esc leaves it - so that a press meant for the name does
-  not throw the form away. Create writes `vm.cfg` with all four drives, as
-  paths relative to it, in one `ConfigFileUpdate()`.
+  drives A to D, and Create. A floppy drive is Empty, New floppy image
+  (360KB), or Existing floppy image, a 360KB image from the browser; drives
+  C and D are Empty, New disk image (10MB), or Existing disk image, a 10MB
+  one. An existing image is shared, like any image outside the VM's folder.
+  An empty drive is "empty" wherever the menu says what a drive holds, as
+  the status rows have it. Backspace on the form only ever erases the name -
+  Esc leaves it - so that a press meant for the name does not throw the form
+  away. One image in two drives is refused before anything is written.
+  Create writes `vm.cfg` with all four drives, as paths relative to it, in
+  one `ConfigFileUpdate()` - `VMConfigSaveDrives()`.
+- **Edit drives is the same form on a VM's drives**, as its `vm.cfg` has
+  them, with no name and Save for Create; Save writes the four drives the
+  same way, which keeps the file's comments and other lines. An image of the
+  VM's own a drive stops holding stays in its folder - nothing is deleted
+  behind the user's back - and goes with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
   was**: `floppy_a.img` or `floppy_b.img`, 360KB, for DOS's `FORMAT A:` -
-  which the floppy controller's Format Track makes possible - and
-  `hdd.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`. The
+  which the floppy controller's Format Track makes possible - and `hdd.img`
+  or `hdd_d.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`.
+  A name already in the folder - an edit's new disk beside the old - gives
+  `disk_c2.img` to `disk_c9.img` instead, so nothing is written over. The
   hard disk takes 5.1 seconds to write, a floppy a fifth of a second. Zeros
   rather than space merely allocated, which would hold whatever the card
   held there - an old file's sectors, which FDISK could take for a
@@ -432,7 +444,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hdd.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
-  the boot floppy. Nothing on the device creates one. Its partition starts
+  the boot floppy; New VM and Edit drives make the blank one on the device.
+  Its partition starts
   at sector 17, so mtools reach it as `hdd.img@@8704`.
 - `src/sdcard.c` runs the card in SPI mode on SPI0, from the SD simplified
   physical layer spec: 400kHz to bring it up, then 24MHz - the 48MHz

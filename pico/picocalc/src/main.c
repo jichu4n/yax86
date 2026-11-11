@@ -1483,15 +1483,16 @@ static __noinline void StopSharing(void) {
 }
 
 // After Manage VMs has changed the card, read its VMs afresh, and the
-// settings, and show Manage VMs again with the VM named name chosen.
-static __noinline void ShowManagedVMs(const char* name) {
+// settings, and show Manage VMs again with the VM named name chosen - and
+// with show_vm, its page.
+static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
   // name may be in the list read over.
   char chosen[kVMNameLength + 1];
   snprintf(chosen, sizeof(chosen), "%s", name);
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   ReadSettings(&g_settings, &highlighted);
-  MenuShowManagedVMs(chosen);
+  MenuShowManagedVMs(chosen, show_vm);
 }
 
 // Show why Manage VMs could not do something, and log it.
@@ -1508,11 +1509,11 @@ static __noinline void RenameVM(void) {
   char problem[kVMProblemLength + 1];
   const VMFolderResult result =
       VMFolderRename(&g_vms, &vm, MenuTypedName(), &renamed, problem);
-  if (result == kVMFolderBadName) {
+  if (result == kVMFolderRefused) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name);
+  ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name, false);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
         "vm_renamed", Y_LOG_STRING("from", vm.name),
@@ -1545,11 +1546,11 @@ static __noinline void CloneVM(void) {
       VMFolderClone(&vm, MenuTypedName(), &transfer, &copy, problem);
   // Left as the guest would find RAM at power on, whatever it held.
   memset(g_guest_ram, 0, kCopyBufferSize);
-  if (result == kVMFolderBadName) {
+  if (result == kVMFolderRefused) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name);
+  ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name, false);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
         "vm_cloned", Y_LOG_STRING("from", vm.name),
@@ -1562,8 +1563,8 @@ static __noinline void CloneVM(void) {
 }
 
 static __noinline void CreateVM(void) {
-  VMFolderNew vm;
-  MenuNewVM(&vm);
+  VMFolderDrives drives;
+  MenuFormDrives(&drives);
   VMEntry created;
   char problem[kVMProblemLength + 1];
   const uint64_t start_us = time_us_64();
@@ -1574,19 +1575,20 @@ static __noinline void CreateVM(void) {
       .progress = ShowCopyProgress,
   };
   const VMFolderResult result =
-      VMFolderCreate(&vm, &transfer, &created, problem);
+      VMFolderCreate(MenuTypedName(), &drives, &transfer, &created, problem);
   memset(g_guest_ram, 0, kCopyBufferSize);
-  if (result == kVMFolderBadName) {
+  if (result == kVMFolderRefused) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(created.name);
+  ShowManagedVMs(created.name, false);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_BOOL("blank_a", vm.blank[kVMDriveA]),
-        Y_LOG_BOOL("blank_b", vm.blank[kVMDriveB]),
-        Y_LOG_BOOL("blank_c", vm.blank[kVMDriveC]),
+        Y_LOG_BOOL("blank_a", drives.blank[kVMDriveA]),
+        Y_LOG_BOOL("blank_b", drives.blank[kVMDriveB]),
+        Y_LOG_BOOL("blank_c", drives.blank[kVMDriveC]),
+        Y_LOG_BOOL("blank_d", drives.blank[kVMDriveD]),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
@@ -1597,12 +1599,36 @@ static __noinline void CreateVM(void) {
   }
 }
 
+static __noinline void EditVM(void) {
+  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  VMFolderDrives drives;
+  MenuFormDrives(&drives);
+  char problem[kVMProblemLength + 1];
+  FSTransfer transfer = {
+      .buffer = g_guest_ram,
+      .buffer_size = kCopyBufferSize,
+      .progress = ShowCopyProgress,
+  };
+  const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
+  memset(g_guest_ram, 0, kCopyBufferSize);
+  if (result == kVMFolderRefused) {
+    MenuSetProblem(problem);
+    return;
+  }
+  ShowManagedVMs(vm.name, true);
+  if (result == kVMFolderDone) {
+    SYSTEM_INFO("vm_edited", Y_LOG_STRING("name", vm.name));
+  } else {
+    ShowManageProblem("vm_not_edited", &vm, problem);
+  }
+}
+
 static __noinline void DeleteVM(void) {
   const VMEntry vm = g_vms.vms[MenuManagedVM()];
   char problem[kVMProblemLength + 1];
   const bool deleted = VMFolderDelete(&vm, problem);
   // Gone from the list, it leaves the first VM chosen.
-  ShowManagedVMs(vm.name);
+  ShowManagedVMs(vm.name, false);
   if (deleted) {
     SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
   } else {
@@ -1689,6 +1715,9 @@ static __noinline void ChooseVM(void) {
           break;
         case kMenuActionCreateVM:
           CreateVM();
+          break;
+        case kMenuActionEditVM:
+          EditVM();
           break;
         default:
           break;
