@@ -3508,16 +3508,22 @@ Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
 //
 // This is the slow half of YCPUReadRawMemoryByte(), split out so that the fast
 // half stays small. YCPUReadRawMemoryByte() is inlined into every place the
-// CPU reads memory, and its fast half, the direct window's compare and load,
-// is all most reads need. Everything else, the paged lookup and the host's
-// callback, is in this one copy, and each inlined read carries only a call to
-// it. Y_NOINLINE keeps it that way: the compiler would otherwise inline a
-// small static function back into its callers.
+// CPU reads memory, and its fast half is the direct window's compare and load.
+// Everything else, the paged lookup and the host's callback, is in this one
+// copy, and each inlined read carries only a call to it. Y_NOINLINE keeps it
+// that way: the compiler would otherwise inline a small static function back
+// into its callers.
 //
-// Measured on dos-boot with paging off: the paged lookup inlined into every
-// read cost 2.6%, and with the callback moved out of line as well, dos-boot is
-// 2.6% faster than with the callback inline. Y_HOT puts it in SRAM; in flash it
+// The split favours a host whose guest RAM is in the direct window, such as
+// the bench or SDL, where the fast half is all a read of RAM needs. Measured on
+// dos-boot with paging off: the paged lookup inlined into every read cost
+// 2.6%, and with the callback moved out of line as well, dos-boot is 2.6%
+// faster than with the callback inline. Y_HOT puts it in SRAM; in flash it
 // measured 0.26% slower.
+//
+// A host that pages all of conventional memory has an empty direct window, so
+// every data access fails the compare and makes this call. What that costs,
+// and the changes to try, are in core/AGENTS.md under paged memory.
 Y_FILE_PRIVATE Y_HOT Y_NOINLINE uint8_t
 YCPUReadMemoryByteOutsideDirectWindow(YCPUState* cpu, uint32_t raw_address) {
   const uint8_t* paged =

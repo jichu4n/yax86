@@ -167,7 +167,11 @@ visibility, and how performance work is measured - are in the root
 - **A paged-only build pays for the direct window it does not have**, by
   reading of the disassembly, not yet measured. Every inlined data access
   first loads `direct_data_window.end`, compares and falls through, about 4
-  cycles on a Cortex-M0+, before calling the paged path. And
+  cycles on a Cortex-M0+, and then makes a call: the paged lookup is in the
+  out-of-line `YCPUReadMemoryByteOutsideDirectWindow()` and its write twin,
+  an arrangement measured only with paging off, where it won. So every data
+  access in a paged-only build costs a failed compare, a call and a return
+  before the lookup itself. And
   `paged_data_window` is last in `YCPUState`, past the offsets a Cortex-M0+
   load encodes, so the paged path spends 4-5 instructions forming addresses
   (`adds #117; adds #255`, `movs #186; lsls #1`). It is last so that no field
@@ -178,6 +182,9 @@ visibility, and how performance work is measured - are in the root
   - a core build option compiling the direct check out, the PicoCalc's
     no-PSRAM fallback then paging its 128KB to itself with every page in its
     frame;
+  - in that build, the paged lookup inlined at each access in place of the
+    direct check, so a page in its frame costs no call, weighed against the
+    larger code at every access site, all of it in SRAM;
   - `paged_data_window` near the front of `YCPUState`, checking with
     `objdump` that the direct path's fields stay within reach.
 - **REP string runs plan only over the direct data window**, so in paged
