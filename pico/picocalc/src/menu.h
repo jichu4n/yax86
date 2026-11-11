@@ -20,6 +20,7 @@
 #include "floppy.h"
 #include "southbridge.h"
 #include "vm_config.h"
+#include "vm_folder.h"
 
 enum {
   // The status page's lines, and the longest value one can have.
@@ -78,6 +79,9 @@ typedef enum MenuAction {
   kMenuActionRenameVM,
   kMenuActionCloneVM,
   kMenuActionDeleteVM,
+  // From Manage VMs' New VM: make the VM MenuNewVM() describes. Then as for
+  // a rename.
+  kMenuActionCreateVM,
 } MenuAction;
 
 void MenuInit(const MenuConfig* config);
@@ -89,8 +93,8 @@ bool MenuIsOpen(void);
 // does, with MenuClose(), once a VM chosen has started. list must
 // outlive the choosing.
 //
-// Under the VMs are two more rows: Manage VMs, from which the VMs in
-// `yax86/vm` are renamed, cloned and deleted; and USB disk mode, a page from
+// Under the VMs are two more rows: Manage VMs, from which VMs are made in
+// `yax86/vm`, and renamed, cloned and deleted; and USB disk mode, a page from
 // which the SD card is shared over USB.
 void MenuChooseVMs(const VMList* list, uint8_t highlighted);
 
@@ -112,12 +116,17 @@ const char* MenuChosenImage(uint32_t* size);
 uint8_t MenuManagedVM(void);
 const char* MenuTypedName(void);
 
+// The new VM filled in on New VM's form. Its strings are the menu's, until
+// the form is next shown.
+void MenuNewVM(VMFolderNew* vm);
+
 // Show Manage VMs, once the caller has read the list afresh, with the VM
 // whose file is at path chosen, or the first if it is not there.
 void MenuShowManagedVMs(const char* path);
 
-// Show how far a clone has been copied, in KB: the first call shows the
-// page, which takes no keys until the caller shows another.
+// Show how far a clone has been copied, or a new VM's blank hard disk
+// written, in KB: the first call shows the page, which takes no keys until
+// the caller shows another.
 void MenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb);
 
 // Show the seconds left before the highlighted VM starts by itself, or

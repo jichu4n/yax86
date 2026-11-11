@@ -350,10 +350,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## Managing VMs
 
-- **Manage VMs, from the list, renames, clones and deletes VMs**, through
-  `src/vm_folder.c`: a page listing the VMs, a page for each with the
-  images in its drives over Rename, Clone and Delete, a name typed for the
-  first two, and a question before the last. Afterwards it shows the list
+- **Manage VMs, from the list, makes, renames, clones and deletes VMs**,
+  through `src/vm_folder.c`: a page listing New VM and the VMs, a page for
+  each VM with the images in its drives over Rename, Clone and Delete, a
+  name typed for the first two, and a question before the last. Afterwards it shows the list
   of VMs to manage again with the VM renamed or made chosen, and the list
   at power on waits for a key, as after USB disk mode.
 - **Only the folders in `yax86/vm` are managed**, a VM each. A VM listed
@@ -380,12 +380,30 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   rest, are refused, since DOS cannot open a folder named so. A name that
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
+- **New VM is a form**: the name, typed in place while its row is chosen,
+  drives A, B and C, and Create. A floppy drive is None, a new blank
+  floppy, or a 360KB image from the browser; drive C is None, a new blank
+  10MB disk, or a 10MB image from the browser. An image from the browser is
+  shared, like any image outside the VM's folder. Drive D
+  is left empty, for `vm.cfg` to name. Backspace on the form only ever
+  erases the name - Esc leaves it - so that a press meant for the name does
+  not throw the form away. Create writes `vm.cfg` with all four drives, as
+  paths relative to it, in one `ConfigFileUpdate()`.
+- **A blank disk is zeros, in the VM's folder, unformatted as a new disk
+  was**: `floppy_a.img` or `floppy_b.img`, 360KB, for DOS's `FORMAT A:` -
+  which the floppy controller's Format Track makes possible - and
+  `hdd.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`. The
+  hard disk takes 5.1 seconds to write, a floppy a fifth of a second. Zeros
+  rather than space merely allocated, which would hold whatever the card
+  held there - an old file's sectors, which FDISK could take for a
+  partition table.
 - **A clone copies through 32KB of the guest's RAM**, which is not the
   guest's until a VM starts, and is zeroed after. Whole runs of the card's
   blocks go straight between it and the card - see "A transfer is 8KB" -
   and DOS330's 10MB hard disk copies in 11.2 seconds, about 930KB a second.
-  Its progress is drawn as it goes, and nothing else runs: keys and commands
-  wait for the copy to finish.
+  Blank disks are written from the same 32KB, zeroed first. The
+  progress is drawn as it goes, and nothing else runs: keys and commands
+  wait for it to finish, and a host's command sent meanwhile can time out.
 
 ## The SD card, the floppy drives and the hard disk
 

@@ -2,15 +2,32 @@
 
 #include <stdio.h>
 
+#include "config_file.h"
 #include "ff.h"
+#include "harddisk.h"
 
 static const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
+// A blank disk's file, in its VM's folder, for each drive that can have one.
+static const char* const kBlankFiles[kVMDriveC + 1] = {
+    [kVMDriveA] = "floppy_a.img",
+    [kVMDriveB] = "floppy_b.img",
+    [kVMDriveC] = "hdd.img",
+};
+
+static const char* const kDriveKeys[kVMDrives] = {
+    [kVMDriveA] = "drive_a",
+    [kVMDriveB] = "drive_b",
+    [kVMDriveC] = "drive_c",
+    [kVMDriveD] = "drive_d",
+};
 
 enum {
   // How deep in a VM's folder a copy or a delete goes: folders in folders.
   kMaxDepth = 4,
   kBytesPerKB = 1024,
+  // A blank floppy's size: a 360KB disk.
+  kFloppySize = 360 * 1024,
 };
 
 // Names DOS gives its devices, which a folder named so cannot be opened as
@@ -83,11 +100,8 @@ static bool IsEntry(const FILINFO* info) { return info->fname[0] != '\0'; }
 // skipped to be sure.
 static bool IsDots(const FILINFO* info) { return info->fname[0] == '.'; }
 
-// Why the card would not do something to a VM: "Could not copy DOS330: the
-// card is full".
-static void Describe(
-    const char* verb, const VMEntry* vm, FRESULT result,
-    char problem[kVMProblemLength + 1]) {
+// Why the card would not do something, as a problem says it.
+static const char* Why(FRESULT result) {
   const char* why = "the card failed";
   switch (result) {
     case FR_DENIED:
@@ -106,9 +120,17 @@ static void Describe(
     default:
       break;
   }
+  return why;
+}
+
+// Why the card would not do something to a VM: "Could not copy DOS330: the
+// card is full".
+static void Describe(
+    const char* verb, const VMEntry* vm, FRESULT result,
+    char problem[kVMProblemLength + 1]) {
   snprintf(
       problem, kVMProblemLength + 1, "Could not %s %s: %s", verb, vm->name,
-      why);
+      Why(result));
 }
 
 bool VMFolderIsManaged(const VMEntry* vm) {
@@ -478,6 +500,110 @@ VMFolderResult VMFolderClone(
   }
   return Retarget(path, g_from, g_to, problem) ? kVMFolderDone
                                                : kVMFolderFailed;
+}
+
+// Write a blank disk for a drive as a new file of zeros at path, through
+// buffer: a 360KB floppy for drive A or B, and the core's 10MB hard disk for
+// drive C. Neither is formatted, as a new disk was not: DOS's FORMAT, and for
+// a hard disk FDISK first, make it one DOS can use.
+static FRESULT WriteBlank(const char* path, uint8_t drive, Copy* copy) {
+  const uint32_t size =
+      drive == kVMDriveC ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : kFloppySize;
+  for (uint32_t i = 0; i < copy->buffer_size; ++i) {
+    copy->buffer[i] = 0;
+  }
+  FIL out;
+  FRESULT result = f_open(&out, path, FA_WRITE | FA_CREATE_NEW);
+  if (result != FR_OK) {
+    return result;
+  }
+  uint32_t done = 0;
+  while (result == FR_OK && done < size) {
+    const uint32_t left = size - done;
+    const UINT length = left < copy->buffer_size ? left : copy->buffer_size;
+    UINT written = 0;
+    result = f_write(&out, copy->buffer, length, &written);
+    if (result == FR_OK && written < length) {
+      result = FR_DENIED;
+    }
+    done += written;
+    copy->done += written;
+    copy->progress(
+        (uint32_t)(copy->done / kBytesPerKB),
+        (uint32_t)(copy->total / kBytesPerKB));
+  }
+  const FRESULT closed = f_close(&out);
+  return result != FR_OK ? result : closed;
+}
+
+// Write a new VM's vm.cfg at path, in folder, naming its drives as paths
+// relative to it, as VMConfigSaveDrive() would.
+static bool WriteConfig(
+    const char* path, const char* folder, const char* const drives[kVMDrives],
+    char problem[kVMProblemLength + 1]) {
+  static char values[kVMDrives][kFileListMaxPath + 2];
+  ConfigFileSetting settings[kVMDrives];
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    values[drive][0] = '\0';
+    if (drives[drive][0] != '\0' &&
+        !VMConfigRelativePath(folder, drives[drive], values[drive])) {
+      snprintf(
+          problem, kVMProblemLength + 1, "A disk's path would be too long");
+      return false;
+    }
+    settings[drive].key = kDriveKeys[drive];
+    settings[drive].value = values[drive];
+  }
+  return ConfigFileUpdate(path, settings, kVMDrives, problem);
+}
+
+VMFolderResult VMFolderCreate(
+    const VMFolderNew* vm, uint8_t* buffer, uint32_t buffer_size,
+    VMFolderProgress progress, char path[kFileListMaxPath + 1],
+    char problem[kVMProblemLength + 1]) {
+  if (!FolderFor(vm->name, g_to, problem) || Taken(g_to, problem)) {
+    return kVMFolderBadName;
+  }
+  const uint16_t to_length = Length(g_to);
+  FileListCopyPath(g_to, path);
+  Append(path, to_length, kConfigFile);
+  // The blank disks' paths, from the card's root: too large for the stack.
+  static char blank_paths[kVMDriveC + 1][kFileListMaxPath + 1];
+  const char* drives[kVMDrives];
+  Copy copy = {
+      .buffer = buffer,
+      .buffer_size = buffer_size,
+      .progress = progress,
+  };
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    drives[drive] = vm->drives[drive] != NULL ? vm->drives[drive] : "";
+    if (drive <= kVMDriveC && vm->blank[drive]) {
+      FileListCopyPath(g_to, blank_paths[drive]);
+      Append(blank_paths[drive], to_length, kBlankFiles[drive]);
+      drives[drive] = blank_paths[drive];
+      copy.total +=
+          drive == kVMDriveC ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : kFloppySize;
+    }
+  }
+  FRESULT result = f_mkdir(g_to);
+  if (copy.total > 0) {
+    progress(0, (uint32_t)(copy.total / kBytesPerKB));
+  }
+  for (uint8_t drive = 0; drive <= kVMDriveC && result == FR_OK; ++drive) {
+    if (vm->blank[drive]) {
+      result = WriteBlank(blank_paths[drive], drive, &copy);
+    }
+  }
+  if (result != FR_OK) {
+    snprintf(
+        problem, kVMProblemLength + 1, "Could not make %s: %s",
+        g_to + Length(kVMsFolder) + 1, Why(result));
+  } else if (WriteConfig(path, g_to, drives, problem)) {
+    return kVMFolderDone;
+  }
+  DeleteContents(g_to, to_length, 0, false);
+  f_unlink(g_to);
+  return kVMFolderFailed;
 }
 
 bool VMFolderDelete(const VMEntry* vm, char problem[kVMProblemLength + 1]) {

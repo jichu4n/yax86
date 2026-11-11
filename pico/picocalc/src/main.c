@@ -1556,6 +1556,39 @@ static __noinline void CloneVM(void) {
   }
 }
 
+static __noinline void CreateVM(void) {
+  VMFolderNew vm;
+  MenuNewVM(&vm);
+  char path[kFileListMaxPath + 1];
+  char problem[kVMProblemLength + 1];
+  const uint64_t start_us = time_us_64();
+  // Blank disks are written through the guest's RAM, which is zeroed after.
+  const VMFolderResult result = VMFolderCreate(
+      &vm, g_guest_ram, kCopyBufferSize, ShowCopyProgress, path, problem);
+  for (uint32_t i = 0; i < kCopyBufferSize; ++i) {
+    g_guest_ram[i] = 0;
+  }
+  if (result == kVMFolderBadName) {
+    MenuSetProblem(problem);
+    return;
+  }
+  ShowManagedVMs(path);
+  if (result == kVMFolderDone) {
+    SYSTEM_INFO(
+        "vm_created", Y_LOG_STRING("path", path),
+        Y_LOG_BOOL("blank_a", vm.blank[kVMDriveA]),
+        Y_LOG_BOOL("blank_b", vm.blank[kVMDriveB]),
+        Y_LOG_BOOL("blank_c", vm.blank[kVMDriveC]),
+        Y_LOG_UINT(
+            "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
+  } else {
+    MenuSetProblem(problem);
+    SYSTEM_WARN(
+        "vm_not_created", Y_LOG_STRING("path", path),
+        Y_LOG_STRING("problem", problem));
+  }
+}
+
 static __noinline void DeleteVM(void) {
   const VMEntry vm = g_vms.vms[MenuManagedVM()];
   char problem[kVMProblemLength + 1];
@@ -1645,6 +1678,9 @@ static __noinline void ChooseVM(void) {
           break;
         case kMenuActionDeleteVM:
           DeleteVM();
+          break;
+        case kMenuActionCreateVM:
+          CreateVM();
           break;
         default:
           break;
