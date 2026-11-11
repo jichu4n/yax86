@@ -2374,7 +2374,9 @@ typedef struct YCPUDirectDataWindow {
 enum {
   // The page is in the frame the entry names, and may be read there.
   Y_CPU_PAGED_DATA_RESIDENT = 0x4000,
-  // The page may also be written in its frame.
+  // The page may also be written in its frame. A host leaves this clear to be
+  // told of a page's first write, so that it knows which pages need writing
+  // back - see YPlatformPagedMemory.
   Y_CPU_PAGED_DATA_WRITABLE = 0x8000,
   // Bits 0-13: the frame's number, so up to 16,384 frames.
   Y_CPU_PAGED_DATA_FRAME_MASK = 0x3FFF,
@@ -15300,6 +15302,8 @@ enum {
   // The page is in the frame the entry names, and may be read there.
   Y_PLATFORM_PAGED_MEMORY_RESIDENT = Y_CPU_PAGED_DATA_RESIDENT,
   // The page may also be written in its frame. Never set without RESIDENT.
+  // Left clear, the next write faults - how a host learns a page has become
+  // dirty and must be written back; see YPlatformPagedMemory.
   Y_PLATFORM_PAGED_MEMORY_WRITABLE = Y_CPU_PAGED_DATA_WRITABLE,
   // Bits 0-13: the frame's number.
   Y_PLATFORM_PAGED_MEMORY_FRAME_MASK = Y_CPU_PAGED_DATA_FRAME_MASK,
@@ -15333,12 +15337,29 @@ enum {
 //     the entry still refusing, the read gives 0xFF and the write is dropped,
 //     as for unmapped memory.
 //
-// Using the bits to track pages: a host can tell which pages have been written
-// by bringing pages in without WRITABLE - the first write faults, and only
-// those pages need writing back. It can tell which have been used recently by
-// clearing RESIDENT on a page that stays in its frame, so that the next access
-// faults and the host sets it again; that is how a clock or LRU pager samples
-// use. The platform and CPU read the frame number only when RESIDENT is set.
+// Why WRITABLE exists - telling clean pages from dirty ones: a page that has
+// not been written since it came into its frame still matches its copy in
+// backing memory, so evicting it costs nothing, while a written ("dirty") one
+// has to be written back first. WRITABLE says whether the host already knows a
+// page is dirty:
+//   - Leave it clear on a page brought in for a read. The page's first write
+//     then faults once, page_fault records the page as dirty and sets
+//     WRITABLE, and later writes go straight to the frame. A page that is
+//     never written never faults on a write, and is evicted without a
+//     write-back - for code, which is rarely written, that is most pages.
+//   - Set it when the page is already known dirty - brought in by a write, or
+//     written since - since its writes have nothing more to tell; or on every
+//     page, if the host does not track dirty pages at all, for example because
+//     its frames are the memory itself and nothing is ever written back.
+// A host that clears WRITABLE for another reason - such as sampling use,
+// below - should keep its own dirty flag and restore WRITABLE from it on the
+// next fault, or a dirty page takes a needless second write fault.
+//
+// Using RESIDENT to sample use: clearing RESIDENT on a page that stays in its
+// frame makes the next access fault, and the host sets it again; that is how a
+// clock or LRU pager learns which pages were used recently. WRITABLE has to be
+// cleared with it, since the CPU writes to the frame on WRITABLE alone. The
+// platform and CPU read the frame number only when RESIDENT is set.
 //
 // Rules for the host:
 //   - The page table and frames belong to the host, which may change entries

@@ -340,7 +340,9 @@ typedef struct YCPUDirectDataWindow {
 enum {
   // The page is in the frame the entry names, and may be read there.
   Y_CPU_PAGED_DATA_RESIDENT = 0x4000,
-  // The page may also be written in its frame.
+  // The page may also be written in its frame. A host leaves this clear to be
+  // told of a page's first write, so that it knows which pages need writing
+  // back - see YPlatformPagedMemory.
   Y_CPU_PAGED_DATA_WRITABLE = 0x8000,
   // Bits 0-13: the frame's number, so up to 16,384 frames.
   Y_CPU_PAGED_DATA_FRAME_MASK = 0x3FFF,

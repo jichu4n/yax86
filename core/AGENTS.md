@@ -112,7 +112,11 @@ visibility, and how performance work is measured - are in the root
   entry so that it allows it.
 - **Two bits so that the host learns what it needs and pays nothing per
   access**: bringing a page in without `WRITABLE` makes its first write fault,
-  which is how the host knows which pages to write back; clearing `RESIDENT`
+  which is how the host knows which pages to write back - a page never written
+  is evicted for free. On the PicoCalc that is most code: seven DOS commands
+  brought in 4,971 pages and wrote back 3,394, a Word session 17,502 and
+  7,633. A host that does not track dirty pages sets `WRITABLE` with
+  `RESIDENT` on every page and never takes a write fault. Clearing `RESIDENT`
   on a page it keeps in its frame makes the next access fault, which is how
   it samples which pages are in use. The frame number is read only with
   `RESIDENT` set, so a host may leave it in an entry it has cleared.
