@@ -132,6 +132,7 @@ add_executable(yax86_picocalc
     src/font_4x10.c
     src/keymap.c
     src/lcd.c
+    src/report.c
     src/runtime_log.c
     src/sdcard.c
     src/southbridge.c

@@ -719,7 +719,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A host drives the runtime with commands on the same serial port**, a
   logfmt line each - `id=7 cmd=screen` - answered by `kind=reply` lines with
   that id, the last with `status=ok`, or `status=error` and an `error`.
-  `src/command.c` reads them and `main.c` carries them out:
+  `src/command.c` reads them and `src/report.c` carries them out:
 
   | command | does |
   | --- | --- |
