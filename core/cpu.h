@@ -1488,14 +1488,24 @@ Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
                            (offset & page_mask));
 }
 
-// Read a byte the direct data window does not cover: from its frame if the
-// address is paged and its page is in one, and otherwise from the host, which
-// brings a paged-out page in.
+// Read a byte at an address the direct data window does not cover: from its
+// frame if the address is paged and its page is in one, and otherwise from the
+// host, which brings a paged-out page in.
 //
-// Out of line, so that the paged data window costs the direct window's every
-// caller nothing: inlined into each, it cost dos-boot 2.6% with paging off.
+// This is the slow half of YCPUReadRawMemoryByte(), split out so that the fast
+// half stays small. YCPUReadRawMemoryByte() is inlined into every place the
+// CPU reads memory, and its fast half, the direct window's compare and load,
+// is all most reads need. Everything else, the paged lookup and the host's
+// callback, is in this one copy, and each inlined read carries only a call to
+// it. Y_NOINLINE keeps it that way: the compiler would otherwise inline a
+// small static function back into its callers.
+//
+// Measured on dos-boot with paging off: the paged lookup inlined into every
+// read cost 2.6%, and with the callback moved out of line as well, dos-boot is
+// 2.6% faster than with the callback inline. Y_HOT puts it in SRAM; in flash it
+// measured 0.26% slower.
 Y_FILE_PRIVATE Y_HOT Y_NOINLINE uint8_t
-YCPUReadMemoryByteBeyondWindow(YCPUState* cpu, uint32_t raw_address) {
+YCPUReadMemoryByteOutsideDirectWindow(YCPUState* cpu, uint32_t raw_address) {
   const uint8_t* paged =
       YCPUGetPagedDataByte(cpu, raw_address, Y_CPU_PAGED_DATA_RESIDENT);
   if (paged) {
@@ -1515,7 +1525,7 @@ YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
   if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
-  return YCPUReadMemoryByteBeyondWindow(cpu, raw_address);
+  return YCPUReadMemoryByteOutsideDirectWindow(cpu, raw_address);
 }
 
 // Read a word from memory as a uint16_t.
@@ -1591,10 +1601,13 @@ Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
   return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
-// Write a byte the direct data window does not cover: into its frame if the
-// address is paged and its page is in one and dirty, and otherwise through the
-// host, which brings the page in and marks it dirty.
-Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteBeyondWindow(
+// Write a byte at an address the direct data window does not cover: into its
+// frame if the address is paged and its page is in one and dirty, and
+// otherwise through the host, which brings the page in and marks it dirty.
+//
+// The slow half of YCPUWriteRawMemoryByte(), out of line for the same reason
+// as YCPUReadMemoryByteOutsideDirectWindow().
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteOutsideDirectWindow(
     YCPUState* cpu, uint32_t address, uint8_t value) {
   uint8_t* paged = YCPUGetPagedDataByte(
       cpu, address, Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY);
@@ -1618,7 +1631,7 @@ Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     cpu->direct_data_window.data[address] = value;
     return;
   }
-  YCPUWriteMemoryByteBeyondWindow(cpu, address, value);
+  YCPUWriteMemoryByteOutsideDirectWindow(cpu, address, value);
 }
 
 // Write a byte to memory.
