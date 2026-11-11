@@ -317,6 +317,10 @@ bool ConfigFileUpdate(
       ++first;
     }
     const char* c = line;
+    // Where the line starts in the new file, and whether a pair was removed
+    // from it, which can leave nothing on it.
+    const uint16_t line_start = writer.length;
+    bool removed = false;
     if (first < content_end && *first != '#') {
       const char* pair_start;
       const char* key_end;
@@ -326,24 +330,33 @@ bool ConfigFileUpdate(
         const uint8_t i = SettingFor(settings, count, pair_start, key_end);
         if (i < count) {
           Write(&writer, copied, pair_start);
-          WritePair(&writer, &settings[i]);
+          if (settings[i].value != NULL) {
+            WritePair(&writer, &settings[i]);
+          } else {
+            removed = true;
+          }
           written |= (uint32_t)1 << i;
           copied = pair_end;
         }
       }
       c = copied;
     }
-    Write(&writer, c, end);
-    if (*end == '\0') {
-      line = end;
-    } else {
-      Write(&writer, end, end + 1);
-      line = end + 1;
+    Write(&writer, c, content_end);
+    bool blank = removed;
+    for (uint16_t i = line_start; blank && i < writer.length; ++i) {
+      blank = IsSpace(writer.text[i]);
     }
+    if (blank) {
+      // A line its pairs were all removed from goes with them.
+      writer.length = line_start;
+    } else {
+      Write(&writer, content_end, *end == '\0' ? end : end + 1);
+    }
+    line = *end == '\0' ? end : end + 1;
   }
   const char* const newline = crlf ? "\r\n" : "\n";
   for (uint8_t i = 0; i < count; ++i) {
-    if (written & ((uint32_t)1 << i)) {
+    if ((written & ((uint32_t)1 << i)) || settings[i].value == NULL) {
       continue;
     }
     if (writer.length > 0 && writer.text[writer.length - 1] != '\n') {

@@ -33,7 +33,8 @@ typedef struct VMFolderContents {
 } VMFolderContents;
 
 // What a VM's drives are to hold: each an image, a path from the card's root
-// or empty for none - or a new blank disk of the VM's own.
+// or empty for none, or NULL for floppy disk 2 left out of the machine - or a
+// new blank disk of the VM's own.
 typedef struct VMFolderDrives {
   const char* paths[kVMDrives];
   bool blank[kVMDrives];

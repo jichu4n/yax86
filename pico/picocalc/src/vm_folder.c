@@ -11,8 +11,8 @@ static const char kConfigFile[] = "vm.cfg";
 
 // A blank disk's file, in its VM's folder, for each drive.
 static const char* const kBlankFiles[kVMDrives] = {
-    [kVMDriveA] = "fd1.img",
-    [kVMDriveB] = "fd2.img",
+    [kVMDriveFD1] = "fd1.img",
+    [kVMDriveFD2] = "fd2.img",
     [kVMDriveHD1] = "hd1.img",
     [kVMDriveHD2] = "hd2.img",
 };
@@ -196,14 +196,14 @@ VMFolderResult VMFolderRename(
 
 // The size of a blank disk for a drive.
 static uint32_t BlankSize(uint8_t drive) {
-  return drive <= kVMDriveB ? kFloppySize : Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
+  return drive <= kVMDriveFD2 ? kFloppySize : Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
 }
 
 // The stem of a blank disk's file when its own name is taken, before _2 to
 // _9: fd1_2.img, hd1_2.img.
 static const char* const kBlankStems[kVMDrives] = {
-    [kVMDriveA] = "fd1",
-    [kVMDriveB] = "fd2",
+    [kVMDriveFD1] = "fd1",
+    [kVMDriveFD2] = "fd2",
     [kVMDriveHD1] = "hd1",
     [kVMDriveHD2] = "hd2",
 };
@@ -238,8 +238,8 @@ static bool PlanDrives(
   transfer->done = 0;
   transfer->total = 0;
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
-    g_paths[drive] = drives->paths[drive] != NULL ? drives->paths[drive] : "";
-    if (!drives->blank[drive]) {
+    g_paths[drive] = drives->paths[drive];
+    if (g_paths[drive] == NULL || !drives->blank[drive]) {
       continue;
     }
     if (!BlankPath(folder, drive, g_blank_paths[drive])) {
@@ -253,7 +253,8 @@ static bool PlanDrives(
   }
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     for (uint8_t earlier = 0; earlier < drive; ++earlier) {
-      if (g_paths[drive][0] != '\0' &&
+      if (g_paths[drive] != NULL && g_paths[earlier] != NULL &&
+          g_paths[drive][0] != '\0' &&
           FSSamePath(g_paths[drive], g_paths[earlier])) {
         char name[kFSMaxName + 1];
         const char* slash = strrchr(g_paths[drive], '/');

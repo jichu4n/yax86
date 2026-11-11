@@ -16,22 +16,22 @@ static const char kSettingsPath[] = "yax86/yax86.cfg";
 static const char kBootDefaultKey[] = "boot_default";
 
 const char* const kVMDriveLabels[kVMDrives] = {
-    [kVMDriveA] = "A",
-    [kVMDriveB] = "B",
+    [kVMDriveFD1] = "FD1",
+    [kVMDriveFD2] = "FD2",
     [kVMDriveHD1] = "HD1",
     [kVMDriveHD2] = "HD2",
 };
 
 const char* const kVMDriveNames[kVMDrives] = {
-    [kVMDriveA] = "Drive A",
-    [kVMDriveB] = "Drive B",
+    [kVMDriveFD1] = "Floppy disk 1",
+    [kVMDriveFD2] = "Floppy disk 2",
     [kVMDriveHD1] = "Hard disk 1",
     [kVMDriveHD2] = "Hard disk 2",
 };
 
 static const char* const kDriveKeys[kVMDrives] = {
-    [kVMDriveA] = "fd1",
-    [kVMDriveB] = "fd2",
+    [kVMDriveFD1] = "fd1",
+    [kVMDriveFD2] = "fd2",
     [kVMDriveHD1] = "hd1",
     [kVMDriveHD2] = "hd2",
 };
@@ -118,6 +118,7 @@ static bool TakeVMPair(
     snprintf(problem, kVMProblemLength + 1, "no setting %s", key);
     return false;
   }
+  config->present[drive] = true;
   if (value[0] == '\0') {
     config->drives[drive][0] = '\0';
   } else if (!FSResolvePath(reading->folder, value, config->drives[drive])) {
@@ -133,6 +134,7 @@ bool VMConfigRead(
   config->entry = *vm;
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     config->drives[drive][0] = '\0';
+    config->present[drive] = false;
   }
   VMReading reading = {.config = config};
   FSFolderOf(vm->path, reading.folder);
@@ -220,14 +222,14 @@ bool VMConfigSaveDrives(
   ConfigFileSetting settings[kVMDrives];
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     values[drive][0] = '\0';
-    if (drives[drive][0] != '\0' &&
+    if (drives[drive] != NULL && drives[drive][0] != '\0' &&
         !FSRelativePath(folder, drives[drive], values[drive])) {
       snprintf(
           problem, kVMProblemLength + 1, "A disk's path would be too long");
       return false;
     }
     settings[drive].key = kDriveKeys[drive];
-    settings[drive].value = values[drive];
+    settings[drive].value = drives[drive] != NULL ? values[drive] : NULL;
   }
   return ConfigFileUpdate(vm->path, settings, kVMDrives, problem);
 }

@@ -37,6 +37,9 @@ typedef struct MenuStatusLine {
 typedef struct MenuConfig {
   // Fill in the status page's lines.
   void (*describe_status)(MenuStatusLine lines[kMenuStatusLines]);
+  // How many floppy drives the machine has: floppy disk 2's page is offered
+  // only with two.
+  uint8_t (*floppy_drives)(void);
   // Restart the VM from power on, with the same disks. Does not return.
   void (*reset)(void);
   // Turn the VM off and go back to the list of VMs, which waits for a key.

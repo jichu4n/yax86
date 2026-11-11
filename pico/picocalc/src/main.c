@@ -497,8 +497,8 @@ static size_t FormatDrive(
 
 static void FormatDiskLine(char* buffer, size_t size) {
   const DiskImage* const images[kVMDrives] = {
-      [kVMDriveA] = FloppyGetImage(kFloppyDriveA),
-      [kVMDriveB] = FloppyGetImage(kFloppyDriveB),
+      [kVMDriveFD1] = FloppyGetImage(kFloppyDriveA),
+      [kVMDriveFD2] = FloppyGetImage(kFloppyDriveB),
       [kVMDriveHD1] = HardDiskGetImage(kHardDisk1),
       [kVMDriveHD2] = HardDiskGetImage(kHardDisk2),
   };
@@ -516,7 +516,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
       // What drive A has instead, or why a configured image did not open.
       length += FormatDrive(
           buffer + length, size - length, label, image,
-          drive == kVMDriveA && !g_has_vm ? "built in" : "empty");
+          drive == kVMDriveFD1 && !g_has_vm ? "built in" : "empty");
     }
     card_us += image->stats.read_us + image->stats.write_us;
   }
@@ -591,10 +591,13 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
 static void OfferStatusRows(const StatusBarState* state);
 
 // Compose the status rows from the VM's state.
+static uint8_t FloppyDrives(void);
+
 static void UpdateStatusRows(void) {
   StatusBarState state = {0};
   state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
-  state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
+  state.drives[kFloppyDriveB] =
+      FloppyDrives() > 1 ? FloppyGetImage(kFloppyDriveB) : NULL;
   state.drives[kStatusBarDriveHD1] = HardDiskGetImage(kHardDisk1);
   state.drives[kStatusBarDriveHD2] = HardDiskGetImage(kHardDisk2);
   state.vm = g_has_vm ? g_vm.entry.name : NULL;
@@ -775,6 +778,14 @@ static void SetPCSpeakerFrequency(
   SpeakerSetFrequency(frequency_hz);
 }
 
+// The floppy drives the machine has: two, or one for a VM whose vm.cfg does
+// not name floppy disk 2 - the BIOS's switches then report one, and DOS's B:
+// is drive A by another name. Without a VM, the built-in floppy's machine
+// has two, the one dos-boot measures.
+static uint8_t FloppyDrives(void) {
+  return g_has_vm && !g_vm.present[kVMDriveFD2] ? 1 : kFloppyDrives;
+}
+
 static bool InitVM(void) {
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_vm_log_config;
@@ -782,7 +793,7 @@ static bool InitVM(void) {
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
-  config->floppy_drives = kFloppyDrives;
+  config->floppy_drives = FloppyDrives();
   config->video_text_font.glyphs = &kFont4x10[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -1119,8 +1130,6 @@ static const char* const kDriveNames[kFloppyDrives] = {
     [kFloppyDriveB] = "fd2",
 };
 
-static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
-
 // Take the disk out of a floppy drive, and say so.
 // Save what a floppy drive now holds to the VM's `vm.cfg`, so the next start
 // has it. Without a VM - the built-in floppy - there is nothing to save to.
@@ -1131,18 +1140,18 @@ static void SaveDrive(FloppyDrive drive) {
   const DiskImage* image = FloppyGetImage(drive);
   const char* path = image->status == kDiskImageOpen ? image->path : "";
   char problem[kVMProblemLength + 1];
-  if (!VMConfigSaveDrive(&g_vm, kVMDriveA + drive, path, problem)) {
+  if (!VMConfigSaveDrive(&g_vm, kVMDriveFD1 + drive, path, problem)) {
     char message[kTextColumns + 1];
     snprintf(
-        message, sizeof(message), "Could not save drive %c: %.50s",
-        DriveLetter(drive), problem);
+        message, sizeof(message), "Could not save %s: %.50s",
+        kVMDriveLabels[drive], problem);
     StatusBarPostMessage(message);
     SYSTEM_WARN(
         "drive_not_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
         Y_LOG_STRING("problem", problem));
     return;
   }
-  FSCopyPath(path, g_vm.drives[kVMDriveA + drive]);
+  FSCopyPath(path, g_vm.drives[kVMDriveFD1 + drive]);
   SYSTEM_INFO(
       "drive_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
       Y_LOG_STRING("path", path));
@@ -1152,8 +1161,8 @@ static void EjectDrive(FloppyDrive drive) {
   FloppyEject(&g_platform.fdc, drive);
   char message[kTextColumns + 1];
   snprintf(
-      message, sizeof(message), "Ejected the disk from drive %c",
-      DriveLetter(drive));
+      message, sizeof(message), "Ejected the disk from %s",
+      kVMDriveLabels[drive]);
   StatusBarPostMessage(message);
   DISK_INFO("ejected", Y_LOG_STRING("drive", kDriveNames[drive]));
   SaveDrive(drive);
@@ -1169,8 +1178,8 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
   const FloppyDrive holding = FloppyDriveHolding(path);
   if (holding != kFloppyDrives) {
     snprintf(
-        message, sizeof(message), "%s is already in drive %c", name,
-        DriveLetter(holding));
+        message, sizeof(message), "%s is already in %s", name,
+        kVMDriveLabels[holding]);
     StatusBarPostMessage(message);
     DISK_WARN(
         "insert_failed", Y_LOG_STRING("drive", kDriveNames[drive]),
@@ -1181,8 +1190,8 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
       FloppyInsertImage(&g_platform.fdc, drive, path);
   if (status == kDiskImageOpen) {
     snprintf(
-        message, sizeof(message), "Inserted %s in drive %c", name,
-        DriveLetter(drive));
+        message, sizeof(message), "Inserted %s in %s", name,
+        kVMDriveLabels[drive]);
     DISK_INFO(
         "inserted", Y_LOG_STRING("drive", kDriveNames[drive]),
         Y_LOG_STRING("path", path));
@@ -1586,10 +1595,10 @@ static __noinline void CreateVM(void) {
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_BOOL("blank_a", drives.blank[kVMDriveA]),
-        Y_LOG_BOOL("blank_b", drives.blank[kVMDriveB]),
-        Y_LOG_BOOL("blank_c", drives.blank[kVMDriveHD1]),
-        Y_LOG_BOOL("blank_d", drives.blank[kVMDriveHD2]),
+        Y_LOG_BOOL("blank_fd1", drives.blank[kVMDriveFD1]),
+        Y_LOG_BOOL("blank_fd2", drives.blank[kVMDriveFD2]),
+        Y_LOG_BOOL("blank_hd1", drives.blank[kVMDriveHD1]),
+        Y_LOG_BOOL("blank_hd2", drives.blank[kVMDriveHD2]),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
@@ -1780,7 +1789,7 @@ static __noinline void OpenDrives(void) {
     }
   }
   DiskImageStatus opened[kVMDrives];
-  FloppyOpen(&paths[kVMDriveA], !g_has_vm, &opened[kVMDriveA]);
+  FloppyOpen(&paths[kVMDriveFD1], !g_has_vm, &opened[kVMDriveFD1]);
   HardDiskOpen(&paths[kVMDriveHD1]);
   opened[kVMDriveHD1] = HardDiskGetImage(kHardDisk1)->status;
   opened[kVMDriveHD2] = HardDiskGetImage(kHardDisk2)->status;
@@ -1868,6 +1877,7 @@ int main(void) {
   const MenuConfig menu_config = {
       .describe_status = DescribeStatus,
       .reset = ResetVM,
+      .floppy_drives = FloppyDrives,
       .power_off = PowerOffVM,
       .can_power_off = CanPowerOff,
       .redraw_guest = RedrawGuest,
