@@ -74,6 +74,42 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
          Y_CPU_PHYSICAL_ADDRESS_MASK;
 }
 
+// Where a byte of the paged data window is, or NULL if the address is outside
+// it or its page's entry lacks the flag asked for.
+Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
+    const YCPUState* cpu, uint32_t raw_address, uint16_t flag) {
+  const YCPUPagedDataWindow* window = &cpu->paged_data_window;
+  const uint32_t offset = raw_address - window->start;
+  if (offset >= window->size) {
+    return NULL;
+  }
+  const uint16_t entry = window->pages[offset >> window->page_shift];
+  if (!(entry & flag)) {
+    return NULL;
+  }
+  const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
+  return window->frames + (((uint32_t)(entry & Y_CPU_PAGED_DATA_FRAME_MASK)
+                            << window->page_shift) |
+                           (offset & page_mask));
+}
+
+// Read a byte from memory past the direct data window: paged memory by
+// indexing where its page allows, and the rest from the host.
+//
+// Out of line, so that the paged data window costs the direct window's every
+// caller nothing: inlined into each, it cost dos-boot 2.6% with paging off.
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE uint8_t
+YCPUReadMemoryByteBeyondWindow(YCPUState* cpu, uint32_t raw_address) {
+  const uint8_t* paged =
+      YCPUGetPagedDataByte(cpu, raw_address, Y_CPU_PAGED_DATA_RESIDENT);
+  if (paged) {
+    return *paged;
+  }
+  return cpu->config.read_memory_byte
+             ? cpu->config.read_memory_byte(cpu, raw_address)
+             : 0xFF;
+}
+
 // Read a byte from memory as a uint8_t.
 Y_MODULE_PRIVATE uint8_t
 YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
@@ -83,9 +119,7 @@ YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
   if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
-  return cpu->config.read_memory_byte
-             ? cpu->config.read_memory_byte(cpu, raw_address)
-             : 0xFF;
+  return YCPUReadMemoryByteBeyondWindow(cpu, raw_address);
 }
 
 // Read a word from memory as a uint16_t.
@@ -162,6 +196,21 @@ Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
 }
 
 // Write a byte as uint8_t to memory.
+// Write a byte to memory past the direct data window, as
+// YCPUReadMemoryByteBeyondWindow() reads one.
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteBeyondWindow(
+    YCPUState* cpu, uint32_t address, uint8_t value) {
+  uint8_t* paged =
+      YCPUGetPagedDataByte(cpu, address, Y_CPU_PAGED_DATA_WRITABLE);
+  if (paged) {
+    *paged = value;
+    return;
+  }
+  if (cpu->config.write_memory_byte) {
+    cpu->config.write_memory_byte(cpu, address, value);
+  }
+}
+
 Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     YCPUState* cpu, uint32_t address, uint8_t value) {
   // Every write the CPU makes comes through here - operands, stack pushes and
@@ -172,10 +221,7 @@ Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     cpu->direct_data_window.data[address] = value;
     return;
   }
-  if (!cpu->config.write_memory_byte) {
-    return;
-  }
-  cpu->config.write_memory_byte(cpu, address, value);
+  YCPUWriteMemoryByteBeyondWindow(cpu, address, value);
 }
 
 // Write a byte to memory.

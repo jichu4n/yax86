@@ -97,6 +97,58 @@ visibility, and how performance work is measured - are in the root
   unmapped directly. Guest addresses never reach it - `YCPUToRawAddress()`
   masks them to 20 bits - so this bounds what a host may register.
 
+## platform - paged memory
+
+- **`YPlatformConfig.paged_memory` holds conventional memory above
+  `physical_memory_size` in pages**, for a host with less fast memory than
+  the machine has RAM: the PicoCalc keeps its frames in SRAM and the rest of
+  640KB in PSRAM. The host owns a page table of `uint16_t` entries - a frame
+  number and two flags - and the frames; an access the entry allows goes to
+  the frame, anything else calls `page_fault`, which must make the entry
+  allow it. `physical_memory_size` may be 0, all of conventional memory paged.
+- **Two flags, so that the host learns what it needs and nothing per
+  access**: `RESIDENT` allows reads and `WRITABLE` writes as well. Handing a
+  page out without `WRITABLE` says which pages to write back; clearing
+  `RESIDENT` on a page it holds, which costs the next access a call, is how a
+  host samples which pages are used. The platform reads only the flags and,
+  with `RESIDENT`, the frame, so a host keeps the frame in an entry it has
+  cleared.
+- **Nothing derived from guest memory is dropped when a page leaves its
+  frame**, because what the page holds is unchanged - the decode cache keeps
+  its decodes. The one thing that is not a page's content is instruction
+  fetch's window, a pointer into a frame, so `YPlatformFaultPagedMemory()`
+  drops it after every fault: a frame may have gone to another page. The
+  one-frame tests in `platform_paged_memory_test.cpp`, code and data taking
+  the frame from each other, fail without it.
+- **The CPU indexes the page table itself** - `YCPUPagedDataWindow`, set
+  from the paged entry by `YPlatformUpdateAfterMemoryMapChange()` - so a page
+  in its frame costs a subtract, a compare and two loads, and only a refusal
+  reaches the platform. Through the platform's memory map, as at first, the
+  DOS330 boot at 640KB took 7.00 seconds on the PicoCalc with nothing pinned;
+  indexed, 6.32.
+- **Instruction fetch opens a page in its frame the same way**, without the
+  host, in `YCPUOpenPagedFetchWindow()`: the window is a page, and a jump to
+  another page reopens it.
+- **A write that faults is reported to the decode cache once.** The CPU
+  reports every write it makes, and `YPlatformWriteMemoryByte()` reports the
+  writes it is handed, so a callback write is counted twice - which moves
+  when the cache flushes, so where runs of instructions end, so when the
+  guest takes its timer interrupts. For paged memory that would make the
+  number of frames change what the guest does; `YPlatformCPUCallbackWriteMemoryByte()`
+  sends the CPU's paged writes past the second report. Every other region
+  keeps it, which the `dos-boot` invariant counts. With it, MS-DOS 3.30
+  running five programs at 640KB retires the same instructions with 128
+  frames as with 4, and with 256 as with 2.
+- **REP string runs plan over the direct data window only**, so they go
+  element by element in paged memory, and a boot with more of memory paged
+  retires a few hundred instructions fewer - the difference the bulk runs'
+  decode cache reporting makes (see `src/cpu/AGENTS.md`).
+- **What paging costs where nothing faults**, `dos-boot` at 128KB on the
+  bench with every page in a frame: 2% with the first 64KB direct and the
+  rest paged, 15% with all of it paged - the direct window is a compare and a
+  load, a paged access a call and two more loads. The PicoCalc builds both;
+  see its `AGENTS.md`.
+
 ## platform - idle skipping
 
 - MS-DOS waits for a key by polling, never halting: at the 3.30 prompt the

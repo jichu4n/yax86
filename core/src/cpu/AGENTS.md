@@ -195,6 +195,13 @@ round-trips through memory costs more than its instruction count suggests.**
   callback, so it is correctly excluded. Registration recomputes it.
 - A word straddling the top has its halves take different paths
   (`WordStraddlingTheTopOfTheWindow`).
+- **Past the window, an access is a call to `YCPUReadMemoryByteBeyondWindow()`
+  or `YCPUWriteMemoryByteBeyondWindow()`**, both `Y_HOT` and `Y_NOINLINE`,
+  which try the paged data window and then the host's callback. Inlined into
+  every caller of the window, the paged test cost `dos-boot` 2.6%; out of
+  line, the callback path with it, `dos-boot` is **2.6% faster** than with the
+  callback inline as it was - 4.6269 seconds against 4.7458 - and the
+  helpers in flash rather than SRAM measured 0.26% slower.
 - The 8088 suite supplies a window - a sabotaged read fails within one opcode
   - and `CPUTestHelper` and the mocks run without one.
 

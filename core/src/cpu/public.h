@@ -293,6 +293,32 @@ typedef struct YCPUDirectDataWindow {
 } YCPUDirectDataWindow;
 
 enum {
+  // A paged data window's page table entry: the page is in a frame, which is
+  // the entry's low bits, and may be read there; and may be written there as
+  // well.
+  Y_CPU_PAGED_DATA_RESIDENT = 0x4000,
+  Y_CPU_PAGED_DATA_WRITABLE = 0x8000,
+  Y_CPU_PAGED_DATA_FRAME_MASK = 0x3FFF,
+};
+
+// Guest memory held in pages, in frames of the host's, which the CPU may read
+// and write by indexing while a page's entry allows it - see
+// YPlatformPagedMemory, which is what sets it. Covers the half-open range
+// [start, start + size); size is 0 for none, which is what makes the bounds
+// test a subtract and one unsigned compare.
+//
+// An access the entry does not allow goes through YCPUConfig.read_memory_byte
+// or YCPUConfig.write_memory_byte, which is where the host is asked for the
+// page.
+typedef struct YCPUPagedDataWindow {
+  const uint16_t* pages;
+  uint8_t* frames;
+  uint32_t start;
+  uint32_t size;
+  uint8_t page_shift;
+} YCPUPagedDataWindow;
+
+enum {
   // Granularity at which a write to guest memory discards decoded
   // instructions: 4KB pages over the 8086's 1MB, which is 256 counters. It is
   // the coarsest page that still separates the code a program is running from
@@ -399,6 +425,11 @@ typedef struct YCPUState {
   // path that reads a config field every instruction, and made the config an
   // object the caller had to keep alive for as long as the CPU.
   YCPUConfig config;
+
+  // Guest memory held in pages, as handed over by YCPUSetPagedDataWindow().
+  // Read only where the direct data window does not reach, so it is last,
+  // where it moves no hotter field's offset.
+  YCPUPagedDataWindow paged_data_window;
 } YCPUState;
 
 // Initialize CPU state. The caller zero-initializes the YCPUState and fills in
@@ -476,11 +507,33 @@ Y_PUBLIC_HEADER inline void YCPUSetDirectDataWindow(
   cpu->direct_data_window.end = data ? end : 0;
 }
 
+// Hands the CPU guest memory held in pages to read and write by indexing where
+// a page's entry allows it - see YCPUPagedDataWindow. The window is the
+// host's: entries and frames change under it, and the CPU reads them afresh
+// on every access.
+Y_PUBLIC_HEADER inline void YCPUSetPagedDataWindow(
+    YCPUState* cpu, const uint16_t* pages, uint8_t* frames, uint32_t start,
+    uint32_t size, uint8_t page_shift) {
+  cpu->paged_data_window.pages = pages;
+  cpu->paged_data_window.frames = frames;
+  cpu->paged_data_window.start = start;
+  cpu->paged_data_window.size = pages ? size : 0;
+  cpu->paged_data_window.page_shift = page_shift;
+}
+
 // Discards the direct data window, so that every access goes back through
 // YCPUConfig.read_memory_byte and YCPUConfig.write_memory_byte.
 Y_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
   cpu->direct_data_window.data = NULL;
   cpu->direct_data_window.end = 0;
+}
+
+// Discards the instruction fetch window, so that the next fetch asks
+// YCPUConfig.get_instruction_fetch_window for one again. A host calls this when
+// the storage the window points into stops holding the addresses it covers.
+Y_PUBLIC_HEADER inline void YCPUInvalidateInstructionFetchWindow(
+    YCPUState* cpu) {
+  cpu->instruction_fetch_window.data = NULL;
 }
 
 // Discards every cached decode.
