@@ -44,6 +44,7 @@
 #include "typing.h"
 #include "usb_disk.h"
 #include "vm_config.h"
+#include "vm_folder.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
 // identical but for that, which is what measures what drawing costs.
@@ -59,6 +60,10 @@
 enum {
   // Guest conventional memory. The same 128K pico/bench measures with.
   kGuestRAMSize = 128 * 1024,
+  // The part of the guest's RAM a clone's files are copied through, before a
+  // VM starts and the RAM is the guest's: 64 of the card's blocks, which go to
+  // and from it a run at a time.
+  kCopyBufferSize = 32 * 1024,
 
   // Emulated cycles per pass of the run loop, about ten milliseconds of guest
   // time - the same batch pico/bench runs.
@@ -281,6 +286,47 @@ static StartNote __uninitialized_ram(g_start_note);
 // ============================================================================
 // Reporting
 // ============================================================================
+
+// The two cores' stacks, 4KB each, from the linker script: core 1's directly
+// below core 0's, so that core 0 running past the bottom of its own writes
+// over the frames core 1 is in, which hangs core 1 with nothing said. Each is
+// painted at startup, and the report gives how much of it has ever been
+// written over.
+extern uint32_t __StackBottom;
+extern uint32_t __StackTop;
+extern uint32_t __StackOneBottom;
+extern uint32_t __StackOneTop;
+
+enum {
+  // What the stacks are painted with. Any value does, as long as a stack is
+  // unlikely to hold it.
+  kStackPaint = 0x5AC4DEAD,
+  // What painting core 0's stack leaves of it below the painter's own frame.
+  kStackPaintMargin = 64,
+};
+
+// Paint core 0's stack from its bottom to a little below this function's
+// frame, and core 1's, before core 1 starts on it, whole.
+static __noinline void PaintStacks(void) {
+  volatile uint32_t here = 0;
+  uint32_t* const end = (uint32_t*)((uintptr_t)&here - kStackPaintMargin) - 1;
+  for (uint32_t* word = &__StackBottom; word < end; ++word) {
+    *word = kStackPaint;
+  }
+  for (uint32_t* word = &__StackOneBottom; word < &__StackOneTop; ++word) {
+    *word = kStackPaint;
+  }
+}
+
+// The most of a stack that has been used: from its top down to the lowest
+// word no longer as painted.
+static uint32_t StackUsed(const uint32_t* bottom, const uint32_t* top) {
+  const uint32_t* word = bottom;
+  while (word < top && *word == kStackPaint) {
+    ++word;
+  }
+  return (uint32_t)((uintptr_t)top - (uintptr_t)word);
+}
 
 static bool BootIsOver(void) {
   return g_status.boot_stage == kBootStagePrompt ||
@@ -613,7 +659,13 @@ static void ReplyDiskImage(
 
 // The same facts as the status screen, as a group for each part of the
 // runtime, in answer to a report command.
-static void ReplyReport(const Command* command) {
+// The report is answered in parts, none inlined into another: each group's
+// fields take stack of their own until the function they are in returns, and
+// the report whole would be the deepest call on core 0's stack - see
+// PaintStacks().
+//
+// The board: what it is and how it started.
+static __noinline void ReplyReportBoard(const Command* command) {
   char version[16];
   FormatSouthbridgeVersion(version, sizeof(version));
   REPLY_GROUP(
@@ -625,6 +677,11 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
       Y_LOG_STRING("keyboard_fw", version),
       Y_LOG_UINT("guest_ram_kb", kGuestRAMSize / 1024));
+  REPLY_GROUP(
+      command, "stack",
+      Y_LOG_UINT("size", (uintptr_t)&__StackTop - (uintptr_t)&__StackBottom),
+      Y_LOG_UINT("core0_used", StackUsed(&__StackBottom, &__StackTop)),
+      Y_LOG_UINT("core1_used", StackUsed(&__StackOneBottom, &__StackOneTop)));
   REPLY_GROUP(command, "boot", BOOT_FIELDS());
   const DisplayStats display = DisplayGetStats();
   REPLY_GROUP(
@@ -634,6 +691,10 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("render_us", display.render_us),
       Y_LOG_UINT("frames_late", display.frames_late),
       Y_LOG_UINT("copy_us", display.copy_us));
+}
+
+// The VM's drives, and what has been done with the card and the keyboard.
+static __noinline void ReplyReportDevices(const Command* command) {
   ReplyDiskImage(command, "drive_a", FloppyGetImage(kFloppyDriveA));
   ReplyDiskImage(command, "drive_b", FloppyGetImage(kFloppyDriveB));
   ReplyDiskImage(command, "drive_c", HardDiskGetImage(kHardDiskC));
@@ -658,6 +719,10 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("stale_keys", keyboard.stale_keys),
       Y_LOG_UINT("aborts", keyboard.aborts),
       Y_LOG_UINT("timeouts", keyboard.timeouts));
+}
+
+// The speaker, the menu and the pacing.
+static __noinline void ReplyReportRunning(const Command* command) {
   const SpeakerStats speaker = SpeakerGetStats();
   REPLY_GROUP(
       command, "speaker", Y_LOG_UINT("frequency_hz", speaker.frequency_hz),
@@ -677,6 +742,12 @@ static void ReplyReport(const Command* command) {
       Y_LOG_UINT("command_us", g_command_us),
       Y_LOG_UINT("paused_us", PausedUs()),
       Y_LOG_BOOL("idle_skip", g_platform.is_dos_idle_skip_enabled));
+}
+
+static void ReplyReport(const Command* command) {
+  ReplyReportBoard(command);
+  ReplyReportDevices(command);
+  ReplyReportRunning(command);
   CommandReplyOk(command);
 }
 
@@ -948,7 +1019,7 @@ static void RunKey(const Command* command) {
   }
 }
 
-static void RunCommand(const Command* command) {
+static __noinline void RunCommand(const Command* command) {
   if (CommandIs(command, "ping")) {
     CommandReplyOk(command);
   } else if (CommandIs(command, "report")) {
@@ -1306,7 +1377,7 @@ static void SaveBootDefault(const char* path) {
   SYSTEM_WARN("boot_default_not_saved", Y_LOG_STRING("problem", problem));
 }
 
-static bool TakeVM(uint8_t index) {
+static __noinline bool TakeVM(uint8_t index) {
   const VMEntry* vm = &g_vms.vms[index];
   char problem[kVMProblemLength + 1];
   if (VMConfigRead(vm->path, &g_vm, problem)) {
@@ -1364,7 +1435,7 @@ static char g_usb_image_path[kFileListMaxPath + 1];
 
 // Put the disk image chosen in the browser on USB, the card staying mounted
 // to read it through; or say why it could not be, staying in the browser.
-static void ShareImage(void) {
+static __noinline void ShareImage(void) {
   uint32_t size = 0;
   FileListCopyPath(MenuChosenImage(&size), g_usb_image_path);
   const DiskImageStatus status =
@@ -1391,7 +1462,7 @@ static void ShareImage(void) {
 // computer may have added VMs, removed them, or changed the settings -
 // showing the list again without counting down. An image is closed, writing
 // back the sector it holds.
-static void StopSharing(void) {
+static __noinline void StopSharing(void) {
   const UsbDiskStats stats = UsbDiskGetStats();
   UsbDiskStopSharing();
   if (stats.image_path != NULL) {
@@ -1410,6 +1481,94 @@ static void StopSharing(void) {
   MenuChooseVMs(&g_vms, highlighted);
 }
 
+// After Manage VMs has changed the card, read its VMs afresh - and the
+// settings, which may name one elsewhere - and show Manage VMs again with
+// the VM at path chosen.
+static __noinline void ShowManagedVMs(const char* path) {
+  // path may be in the list read over.
+  char chosen[kFileListMaxPath + 1];
+  FileListCopyPath(path, chosen);
+  VMListRead(&g_vms);
+  uint8_t highlighted = 0;
+  ReadSettings(&g_settings, &highlighted);
+  MenuShowManagedVMs(chosen);
+}
+
+// Show why Manage VMs could not do something, and log it.
+static void ShowManageProblem(
+    const char* event, const VMEntry* vm, const char* problem) {
+  MenuSetProblem(problem);
+  SYSTEM_WARN(
+      event, Y_LOG_STRING("path", vm->path), Y_LOG_STRING("problem", problem));
+}
+
+static __noinline void RenameVM(void) {
+  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  char path[kFileListMaxPath + 1];
+  char problem[kVMProblemLength + 1];
+  const VMFolderResult result =
+      VMFolderRename(&g_vms, &vm, MenuTypedName(), path, problem);
+  if (result == kVMFolderBadName) {
+    MenuSetProblem(problem);
+    return;
+  }
+  ShowManagedVMs(result == kVMFolderDone ? path : vm.path);
+  if (result == kVMFolderDone) {
+    SYSTEM_INFO(
+        "vm_renamed", Y_LOG_STRING("from", vm.path), Y_LOG_STRING("to", path));
+  } else {
+    ShowManageProblem("vm_not_renamed", &vm, problem);
+  }
+}
+
+// Show how far a clone has come, at once: the main loop, which would draw it,
+// is waiting for the clone.
+static void ShowCopyProgress(uint32_t copied_kb, uint32_t total_kb) {
+  MenuSetCopyProgress(copied_kb, total_kb);
+  UpdateChoosingRows();
+  MenuDraw(time_us_64());
+}
+
+static __noinline void CloneVM(void) {
+  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  char path[kFileListMaxPath + 1];
+  char problem[kVMProblemLength + 1];
+  const uint64_t start_us = time_us_64();
+  const VMFolderResult result = VMFolderClone(
+      &vm, MenuTypedName(), g_guest_ram, kCopyBufferSize, ShowCopyProgress,
+      path, problem);
+  // Left as the guest would find RAM at power on, whatever it held.
+  for (uint32_t i = 0; i < kCopyBufferSize; ++i) {
+    g_guest_ram[i] = 0;
+  }
+  if (result == kVMFolderBadName) {
+    MenuSetProblem(problem);
+    return;
+  }
+  ShowManagedVMs(result == kVMFolderDone ? path : vm.path);
+  if (result == kVMFolderDone) {
+    SYSTEM_INFO(
+        "vm_cloned", Y_LOG_STRING("from", vm.path), Y_LOG_STRING("to", path),
+        Y_LOG_UINT(
+            "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
+  } else {
+    ShowManageProblem("vm_not_cloned", &vm, problem);
+  }
+}
+
+static __noinline void DeleteVM(void) {
+  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  char problem[kVMProblemLength + 1];
+  const bool deleted = VMFolderDelete(&vm, problem);
+  // Gone from the list, it leaves the first VM chosen.
+  ShowManagedVMs(vm.path);
+  if (deleted) {
+    SYSTEM_INFO("vm_deleted", Y_LOG_STRING("path", vm.path));
+  } else {
+    ShowManageProblem("vm_not_deleted", &vm, problem);
+  }
+}
+
 // With a card, show the list of its VMs until one is chosen whose
 // configuration reads, or until the default starts by itself, the countdown
 // running until a key is pressed. Settings that ask for no wait start the
@@ -1420,7 +1579,11 @@ static void StopSharing(void) {
 // After a reset the VM reset starts again at once; after a power off the list
 // waits for a key, with the VM turned off highlighted. Either way, a VM that
 // no longer reads leaves the list waiting with its problem.
-static void ChooseVM(void) {
+//
+// It and the handlers of what can be done from the list are kept out of line
+// with __noinline, so that only the one running has its locals on core 0's
+// stack - see PaintStacks().
+static __noinline void ChooseVM(void) {
   StartNote note = {0};
   const bool noted = TakeStartNote(&note);
   VMListRead(&g_vms);
@@ -1474,9 +1637,21 @@ static void ChooseVM(void) {
         case kMenuActionStopSharing:
           StopSharing();
           break;
+        case kMenuActionRenameVM:
+          RenameVM();
+          break;
+        case kMenuActionCloneVM:
+          CloneVM();
+          break;
+        case kMenuActionDeleteVM:
+          DeleteVM();
+          break;
         default:
           break;
       }
+      // The keys for the page the key led to, at once rather than at the
+      // next update.
+      UpdateChoosingRows();
     }
     if (counting) {
       const int64_t left_us =
@@ -1508,7 +1683,7 @@ static void ChooseVM(void) {
 // drive empty, which a message says - as does one named for two drives, which
 // goes in the first: two drives writing one image would each overwrite the
 // other's sectors.
-static void OpenDrives(void) {
+static __noinline void OpenDrives(void) {
   const char* paths[kVMDrives] = {"", "", "", ""};
   char message[kTextColumns + 1];
   if (g_has_vm) {
@@ -1597,6 +1772,9 @@ static OverclockResult Overclock(void) {
 #endif
 
 int main(void) {
+  // First, before anything has used more of the stack than main's frame, or
+  // core 1 has started.
+  PaintStacks();
   stdio_init_all();
 #if YAX86_PICOCALC_SYS_CLK_KHZ
   // Before anything else is brought up, since each works out its clock

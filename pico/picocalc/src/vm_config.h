@@ -104,7 +104,8 @@ bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]);
 
 // Make the VM whose file is at path, from the card's root, the settings'
 // boot_default, through ConfigFileUpdate(), written as VMConfigRelativePath()
-// makes it from `yax86`. Returns false, with the problem described, if the
+// makes it from `yax86`; or with path empty, clear it, so that the first VM
+// listed is the default. Returns false, with the problem described, if the
 // settings could not be read, would be too long, or could not be written.
 bool VMSettingsSaveBootDefault(
     const char* path, char problem[kVMProblemLength + 1]);

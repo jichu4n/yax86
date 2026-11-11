@@ -45,6 +45,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   bench's, the runtime's own modules at `info`, and a third for core 1, since
   a logger builds lines in its own buffer. The SDK's stdio locks around each
   write, so lines come out whole.
+- **Each core has a 4KB stack, core 1's directly below core 0's**, so core 0
+  running past the bottom of its own writes over the frames core 1 is in,
+  which hangs core 1 - drawing and screenshots - with nothing said. Both are
+  painted at startup, and the report's `stack` group gives the most of each
+  ever used. Core 0 peaks at about 3.2KB, renaming a VM other VMs name.
+  Inlined into the list's loop, the handlers of its actions had all their
+  locals on the stack at once, and a report at the list overflowed it; they
+  are kept out of line with `__noinline`. The report is answered in three
+  parts for the same reason: its fields take stack until the function they
+  are in returns, 1.5KB for all of them. `-fstack-usage` gives each
+  function's frame.
 - **Flashing replaces ClockworkPi's factory firmware** - a boot loader at
   offset 0, PicoMite at 200KB, and PicoMite's storage at 968KB. Back it up
   before the first flash:
@@ -292,7 +303,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
   start the default without showing the list.
 - **At power on, with a card, the menu lists its VMs**, before the VM
-  exists, then USB disk mode - see "The USB device". The countdown runs on
+  exists, then Manage VMs - see below - and USB disk mode - see "The USB
+  device". The countdown runs on
   the list's bottom edge until a key is pressed, then the default starts.
   With no VMs the list has only USB disk mode, and nothing counts down or
   starts by itself; the built-in floppy boots only without a card. Every page reached from the list is drawn the list's
@@ -335,6 +347,45 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   share a folder from the root - `../../images/msdos330/disk02.img` from
   a VM in `yax86/vm` - and from the root with a leading `/` when they
   share none. In lower case, FAT names being the same in either.
+
+## Managing VMs
+
+- **Manage VMs, from the list, renames, clones and deletes VMs**, through
+  `src/vm_folder.c`: a page listing the VMs, a page for each with the
+  images in its drives over Rename, Clone and Delete, a name typed for the
+  first two, and a question before the last. Afterwards it shows the list
+  of VMs to manage again with the VM renamed or made chosen, and the list
+  at power on waits for a key, as after USB disk mode.
+- **Only the folders in `yax86/vm` are managed**, a VM each. A VM listed
+  because `boot_default` names it elsewhere is not offered: its folder
+  could be anything, the card's root included.
+- **A VM's folder is its own, and an image outside it shared.** Rename
+  moves the folder with `f_rename()`, at once whatever is in it; Clone
+  copies all of it, at any depth; Delete removes all of it, its `vm.cfg`
+  last, so that a delete cut short still lists a VM to delete again. An
+  image a VM names outside its folder is neither copied nor deleted, and a
+  clone names the same one. `vm.cfg` needs no change for either: its paths
+  are relative to its own folder, which a sibling has at the same depth.
+- **What names a file in a folder that moves follows it**: `boot_default`,
+  and the drives of every VM listed, the moved VM's own included, which
+  are written again by `VMConfigSaveDrive()` - so a path written from the
+  root comes back relative. A clone's drives naming a file in the
+  original's folder are written to name its own copy. Delete leaves other
+  VMs' drives naming a file in the folder as they are, to find it gone when
+  they start, and its question names those VMs; `boot_default` naming the
+  VM is cleared, making the first VM listed the default.
+- **A name is up to 8 letters, digits, `-` and `_`**, in capitals as the
+  card keeps them: a folder's name, with no long names (`FF_USE_LFN` is 0)
+  and no extension. The names of DOS's devices, `CON` and `LPT1` and the
+  rest, are refused, since DOS cannot open a folder named so. A name that
+  will not do says why on the keys row and leaves it to be typed again; a
+  rename to the same name, in any capitals, does nothing.
+- **A clone copies through 32KB of the guest's RAM**, which is not the
+  guest's until a VM starts, and is zeroed after. Whole runs of the card's
+  blocks go straight between it and the card - see "A transfer is 8KB" -
+  and DOS330's 10MB hard disk copies in 11.2 seconds, about 930KB a second.
+  Its progress is drawn as it goes, and nothing else runs: keys and commands
+  wait for the copy to finish.
 
 ## The SD card, the floppy drives and the hard disk
 

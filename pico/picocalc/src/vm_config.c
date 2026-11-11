@@ -382,8 +382,8 @@ bool VMConfigSaveDrive(
 
 bool VMSettingsSaveBootDefault(
     const char* path, char problem[kVMProblemLength + 1]) {
-  char value[kFileListMaxPath + 2];
-  if (!VMConfigRelativePath(kSettingsFolder, path, value)) {
+  char value[kFileListMaxPath + 2] = "";
+  if (path[0] != '\0' && !VMConfigRelativePath(kSettingsFolder, path, value)) {
     snprintf(problem, kVMProblemLength + 1, "path too long");
     return false;
   }

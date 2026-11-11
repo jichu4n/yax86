@@ -7,6 +7,7 @@
 #include "file_list.h"
 #include "harddisk.h"
 #include "usb_disk.h"
+#include "vm_folder.h"
 
 enum {
   // The controller's codes for the keys the menu listens to.
@@ -74,6 +75,14 @@ typedef enum MenuPage {
   kMenuPageUSB,
   kMenuPageSharing,
   kMenuPageStopSharing,
+  // Manage VMs, from the list: the VMs in yax86/vm, the page of the one in
+  // g_vm, the name typed to rename or clone it as, the question before
+  // deleting it, and a clone being copied.
+  kMenuPageManage,
+  kMenuPageVM,
+  kMenuPageName,
+  kMenuPageDelete,
+  kMenuPageCopying,
 } MenuPage;
 
 static const char* const kPageNames[] = {
@@ -87,6 +96,11 @@ static const char* const kPageNames[] = {
     [kMenuPageUSB] = "usb",
     [kMenuPageSharing] = "usb_sharing",
     [kMenuPageStopSharing] = "usb_stop",
+    [kMenuPageManage] = "manage",
+    [kMenuPageVM] = "vm",
+    [kMenuPageName] = "vm_name",
+    [kMenuPageDelete] = "vm_delete",
+    [kMenuPageCopying] = "vm_copying",
 };
 
 // An item of a page, and whether choosing it opens another menu, which a
@@ -166,6 +180,31 @@ static const MenuItem kStopSharingItems[kStopSharingItemCount] = {
     [kStopSharingConfirm] = {"Disconnect anyway", false},
 };
 
+typedef enum VMItem {
+  kVMRename = 0,
+  kVMClone,
+  kVMDelete,
+  kVMItemCount,
+} VMItem;
+
+static const MenuItem kVMItems[kVMItemCount] = {
+    [kVMRename] = {"Rename", true},
+    [kVMClone] = {"Clone", true},
+    [kVMDelete] = {"Delete", false},
+};
+
+typedef enum DeleteItem {
+  kDeleteCancel = 0,
+  kDeleteConfirm,
+  kDeleteItemCount,
+} DeleteItem;
+
+static const MenuItem kDeleteItems[kDeleteItemCount] = {
+    [kDeleteCancel] = {"Cancel", false},
+    [kDeleteConfirm] = {"Delete", false},
+};
+
+static const MenuItem kManageRow = {"Manage VMs", true};
 static const MenuItem kUSBRow = {"USB disk mode", true};
 
 static MenuConfig g_config;
@@ -199,6 +238,24 @@ static bool g_browsing_for_usb;
 static char g_usb_image_path[kFileListMaxPath + 1];
 static uint32_t g_usb_image_size;
 //
+// The VMs Manage VMs lists, as indexes in g_vms: those in yax86/vm.
+static uint8_t g_managed[kVMListMax];
+static uint8_t g_managed_count;
+// The VM whose page shows, an index in g_vms; the names of the images in its
+// drives, empty for none; and whether its vm.cfg read.
+static uint8_t g_vm;
+static char g_vm_drives[kVMDrives][kDiskImageNameLength + 1];
+static bool g_vm_readable;
+// The name being typed, and whether it is for a clone rather than a rename.
+static char g_name[kVMFolderMaxName + 1];
+static uint8_t g_name_length;
+static bool g_cloning;
+// What deleting the VM would take.
+static VMFolderContents g_contents;
+// How far a clone has been copied, in KB.
+static uint32_t g_copied_kb;
+static uint32_t g_copy_kb;
+//
 // The problem is kept in two buffers, used in turn, so that a new one is a
 // new pointer: the status rows tell a change of hint by its pointer.
 static char g_problems[2][kTextColumns + 1];
@@ -221,6 +278,8 @@ const char* MenuPageName(void) {
 static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
 
 static void ShowPage(MenuPage page, uint8_t chosen);
+static MenuAction Choose(void);
+static MenuAction Back(void);
 static void ScrollToChosen(void);
 
 void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
@@ -270,6 +329,13 @@ const char* MenuHint(void) {
   }
   if (g_page == kMenuPageStatus) {
     return "Esc=Back";
+  }
+  if (g_page == kMenuPageName) {
+    return g_cloning ? "Enter=Clone  Backspace=Erase  Esc=Cancel"
+                     : "Enter=Rename  Backspace=Erase  Esc=Cancel";
+  }
+  if (g_page == kMenuPageCopying) {
+    return "";
   }
   if (g_page == kMenuPageBrowse) {
     return "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back";
@@ -384,10 +450,12 @@ static uint8_t DriveItemCount(void) {
   return DriveEmpty() ? kDriveEject : kDriveItemCount;
 }
 
-// The list at power on's rows: a VM each, then USB disk mode.
-static uint8_t VMRowCount(void) { return (uint8_t)(g_vms->count + 1); }
+// The list at power on's rows: a VM each, then Manage VMs and USB disk mode.
+static uint8_t VMRowCount(void) { return (uint8_t)(g_vms->count + 2); }
 
-static uint8_t USBRowIndex(void) { return (uint8_t)(VMRowCount() - 1); }
+static uint8_t ManageRowIndex(void) { return g_vms->count; }
+
+static uint8_t USBRowIndex(void) { return (uint8_t)(g_vms->count + 1); }
 
 // Whether disconnecting would take the card from a computer still using it.
 static bool ComputerHasCard(void) {
@@ -415,10 +483,121 @@ static uint8_t PageItemCount(void) {
       return 1;
     case kMenuPageStopSharing:
       return kStopSharingItemCount;
+    case kMenuPageManage:
+      return g_managed_count;
+    case kMenuPageVM:
+      return kVMItemCount;
+    case kMenuPageDelete:
+      return kDeleteItemCount;
+    case kMenuPageName:
+    case kMenuPageCopying:
     case kMenuPageStatus:
       return 0;
   }
   return 0;
+}
+
+// Show Manage VMs, with the VM at index in g_vms chosen, or the first if it
+// is not listed there.
+static void ShowManaged(uint8_t index) {
+  g_managed_count = 0;
+  uint8_t chosen = 0;
+  for (uint8_t i = 0; i < g_vms->count; ++i) {
+    if (VMFolderIsManaged(&g_vms->vms[i])) {
+      if (i == index) {
+        chosen = g_managed_count;
+      }
+      g_managed[g_managed_count++] = i;
+    }
+  }
+  g_list_top = 0;
+  ShowPage(kMenuPageManage, chosen);
+  ScrollToChosen();
+}
+
+void MenuShowManagedVMs(const char* path) {
+  uint8_t index = kVMListMax;
+  for (uint8_t i = 0; i < g_vms->count; ++i) {
+    if (FileListSamePath(g_vms->vms[i].path, path)) {
+      index = i;
+    }
+  }
+  ShowManaged(index);
+}
+
+// Show a VM's page, with the images in its drives.
+static void ShowVM(uint8_t index) {
+  g_vm = index;
+  VMConfig config;
+  char problem[kVMProblemLength + 1];
+  g_vm_readable = VMConfigRead(g_vms->vms[index].path, &config, problem);
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    g_vm_drives[drive][0] = '\0';
+    if (config.drives[drive][0] != '\0') {
+      DiskImageName(config.drives[drive], g_vm_drives[drive]);
+    }
+  }
+  ShowPage(kMenuPageVM, kVMRename);
+}
+
+// Start typing a name: the VM's own to rename it, and for a clone the same
+// with _2 at the end, in the name's 8 characters.
+static void StartNaming(bool cloning) {
+  g_cloning = cloning;
+  const char* name = g_vms->vms[g_vm].name;
+  g_name_length = 0;
+  while (name[g_name_length] != '\0' && g_name_length < kVMFolderMaxName) {
+    g_name[g_name_length] = name[g_name_length];
+    ++g_name_length;
+  }
+  if (cloning) {
+    if (g_name_length > kVMFolderMaxName - 2) {
+      g_name_length = kVMFolderMaxName - 2;
+    }
+    g_name[g_name_length++] = '_';
+    g_name[g_name_length++] = '2';
+  }
+  g_name[g_name_length] = '\0';
+  ShowPage(kMenuPageName, 0);
+}
+
+// A key on the name's page: a character a name can have to add, Backspace to
+// take the last off, Enter to go ahead, and Esc to go back.
+static MenuAction TypeName(uint8_t key) {
+  switch (key) {
+    case kKeyEnter:
+      return Choose();
+    case kKeyEsc:
+      return Back();
+    case kKeyBackspace:
+      if (g_name_length > 0) {
+        g_name[--g_name_length] = '\0';
+        g_dirty = true;
+      }
+      return kMenuActionNone;
+    default:
+      break;
+  }
+  if (key < 0x80 && VMFolderNameCharacter((char)key) &&
+      g_name_length < kVMFolderMaxName) {
+    g_name[g_name_length++] = Upper((char)key);
+    g_name[g_name_length] = '\0';
+    g_dirty = true;
+  }
+  return kMenuActionNone;
+}
+
+uint8_t MenuManagedVM(void) { return g_vm; }
+
+const char* MenuTypedName(void) { return g_name; }
+
+void MenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb) {
+  if (g_page != kMenuPageCopying) {
+    ShowPage(kMenuPageCopying, 0);
+  }
+  g_copied_kb = copied_kb;
+  g_copy_kb = total_kb;
+  g_dirty = true;
 }
 
 // Disconnect the card: at once if no computer is using it, and after asking if
@@ -469,6 +648,22 @@ static MenuAction Back(void) {
       return Disconnect();
     case kMenuPageStopSharing:
       ShowPage(kMenuPageSharing, 0);
+      break;
+    case kMenuPageManage:
+      ShowPage(kMenuPageVMs, ManageRowIndex());
+      ScrollToChosen();
+      break;
+    case kMenuPageVM:
+      ShowManaged(g_vm);
+      break;
+    case kMenuPageName:
+      ShowPage(kMenuPageVM, g_cloning ? kVMClone : kVMRename);
+      break;
+    case kMenuPageDelete:
+      ShowPage(kMenuPageVM, kVMDelete);
+      break;
+    case kMenuPageCopying:
+      // A copy cannot be stopped part way.
       break;
   }
   return kMenuActionNone;
@@ -556,7 +751,33 @@ static MenuAction Choose(void) {
         ShowPage(kMenuPageUSB, kUSBCard);
         return kMenuActionNone;
       }
+      if (g_chosen == ManageRowIndex()) {
+        ShowManaged(kVMListMax);
+        return kMenuActionNone;
+      }
       return kMenuActionVMChosen;
+    case kMenuPageManage:
+      if (g_managed_count > 0) {
+        ShowVM(g_managed[g_chosen]);
+      }
+      return kMenuActionNone;
+    case kMenuPageVM:
+      if (g_chosen == kVMDelete) {
+        VMFolderDescribe(g_vms, &g_vms->vms[g_vm], &g_contents);
+        ShowPage(kMenuPageDelete, kDeleteCancel);
+      } else {
+        StartNaming(g_chosen == kVMClone);
+      }
+      return kMenuActionNone;
+    case kMenuPageName:
+      return g_cloning ? kMenuActionCloneVM : kMenuActionRenameVM;
+    case kMenuPageDelete:
+      if (g_chosen == kDeleteConfirm) {
+        return kMenuActionDeleteVM;
+      }
+      return Back();
+    case kMenuPageCopying:
+      return kMenuActionNone;
     case kMenuPageUSB:
       if (g_chosen == kUSBImage) {
         g_browsing_for_usb = true;
@@ -617,6 +838,12 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   }
   // A key held down repeats, which moves through the items as a press does.
   if (!g_open || event.state == kSouthbridgeKeyReleased) {
+    return kMenuActionNone;
+  }
+  if (g_page == kMenuPageName) {
+    return TypeName(event.key);
+  }
+  if (g_page == kMenuPageCopying) {
     return kMenuActionNone;
   }
   const uint8_t count = PageItemCount();
@@ -927,6 +1154,8 @@ static void DrawVMsPage(DisplayMenu* menu) {
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= VMRowCount()) {
       BlankRow(row, menu->columns);
+    } else if (index == ManageRowIndex()) {
+      MenuItemRow(row, menu->columns, &kManageRow, index == g_chosen);
     } else if (index == USBRowIndex()) {
       MenuItemRow(row, menu->columns, &kUSBRow, index == g_chosen);
     } else {
@@ -948,6 +1177,158 @@ static void DrawVMsPage(DisplayMenu* menu) {
   if (g_list_top + kBrowseRows < VMRowCount()) {
     menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
   }
+}
+
+// Manage VMs: the VMs in yax86/vm, a row each, with arrows on the border
+// where there are more above or below.
+static void DrawManagePage(DisplayMenu* menu) {
+  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
+  EdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
+  for (uint8_t i = 0; i < kBrowseRows; ++i) {
+    DisplayTextRow* row = &menu->text[1 + i];
+    const uint8_t index = (uint8_t)(g_list_top + i);
+    if (index < g_managed_count) {
+      const MenuItem item = {g_vms->vms[g_managed[index]].name, true};
+      MenuItemRow(row, menu->columns, &item, index == g_chosen);
+      continue;
+    }
+    BlankRow(row, menu->columns);
+    if (i == 0 && g_managed_count == 0) {
+      PutText(row, menu->columns, 3, "No VMs in /YAX86/VM", kAttrText);
+    }
+  }
+  EdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
+  if (g_list_top > 0) {
+    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
+  }
+  if (g_list_top + kBrowseRows < g_managed_count) {
+    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
+  }
+}
+
+// A VM's page: the images in its drives, over what can be done to it.
+static void DrawVMPage(DisplayMenu* menu) {
+  // Room for any name, which the box cuts to its width.
+  char lines[kVMDrives][64];
+  const char* line_pointers[kVMDrives];
+  uint8_t line_count = 0;
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    if (g_vm_drives[drive][0] != '\0') {
+      snprintf(
+          lines[line_count], sizeof(lines[line_count]), "%c: %s",
+          (char)('A' + drive), g_vm_drives[drive]);
+      line_pointers[line_count] = lines[line_count];
+      ++line_count;
+    }
+  }
+  if (!g_vm_readable) {
+    line_pointers[0] = "Its vm.cfg has a problem.";
+    line_count = 1;
+  } else if (line_count == 0) {
+    line_pointers[0] = "No disks.";
+    line_count = 1;
+  }
+  DrawItems(
+      menu, g_vms->vms[g_vm].name, line_pointers, line_count, kVMItems,
+      kVMItemCount);
+}
+
+// The name being typed, in a field marked as the item chosen is, with a
+// cursor after it while there is room.
+static void DrawNamePage(DisplayMenu* menu) {
+  char title[kNarrowColumns];
+  snprintf(
+      title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
+      g_vms->vms[g_vm].name);
+  const char* const lines[] = {
+      g_cloning ? "Name of the copy:" : "New name:",
+      "",
+      "",
+      "Up to 8 letters, digits, - and _.",
+  };
+  DrawItems(menu, title, lines, sizeof(lines) / sizeof(lines[0]), NULL, 0);
+  // The field, on the blank line: the box's edge, a blank row, then the
+  // first line.
+  DisplayTextRow* row = &menu->text[3];
+  char field[kVMFolderMaxName + 1];
+  for (uint8_t i = 0; i < kVMFolderMaxName; ++i) {
+    field[i] = i < g_name_length ? g_name[i] : ' ';
+  }
+  if (g_name_length < kVMFolderMaxName) {
+    field[g_name_length] = '_';
+  }
+  field[kVMFolderMaxName] = '\0';
+  PutText(row, menu->columns, 3, field, kAttrChosen);
+}
+
+// Join names into text as "A, B and C", for as many as fit, then "and N
+// more" for the rest.
+static void JoinNames(
+    char* text, uint8_t size, char (*names)[kFileListMaxName + 1],
+    uint8_t named, uint8_t count) {
+  uint8_t length = 0;
+  text[0] = '\0';
+  for (uint8_t i = 0; i < named; ++i) {
+    const char* separator = i == 0 ? "" : (i + 1 == count ? " and " : ", ");
+    const int written = snprintf(
+        text + length, (size_t)(size - length), "%s%s", separator, names[i]);
+    if (written < 0 || length + written >= size) {
+      text[length] = '\0';
+      break;
+    }
+    length = (uint8_t)(length + written);
+  }
+  if (named < count) {
+    snprintf(
+        text + length, (size_t)(size - length), " and %u more",
+        (unsigned)(count - named));
+  }
+}
+
+// The question before deleting a VM, saying what goes with it, and which VMs
+// lose a disk.
+static void DrawDeletePage(DisplayMenu* menu) {
+  const uint8_t named = g_contents.file_count < kVMFolderNamed
+                            ? g_contents.file_count
+                            : kVMFolderNamed;
+  char question[kNarrowColumns];
+  snprintf(question, sizeof(question), "Delete %s?", g_vms->vms[g_vm].name);
+  char files[kNarrowColumns - 4];
+  JoinNames(
+      files, sizeof(files), g_contents.files, named, g_contents.file_count);
+  char users[64];
+  const char* lines[5] = {question, ""};
+  uint8_t line_count = 1;
+  if (g_contents.file_count > 0 || g_contents.user_count > 0) {
+    ++line_count;
+  }
+  if (g_contents.file_count > 0) {
+    lines[line_count++] = "Deleted with it:";
+    lines[line_count++] = files;
+  }
+  if (g_contents.user_count == 1) {
+    snprintf(users, sizeof(users), "%s will lose a disk.", g_contents.users[0]);
+    lines[line_count++] = users;
+  } else if (g_contents.user_count > 1) {
+    snprintf(
+        users, sizeof(users), "%s and %u more VMs will lose disks.",
+        g_contents.users[0], (unsigned)(g_contents.user_count - 1));
+    lines[line_count++] = users;
+  }
+  DrawItems(menu, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount);
+}
+
+static void DrawCopyingPage(DisplayMenu* menu) {
+  char copying[kNarrowColumns];
+  snprintf(
+      copying, sizeof(copying), "Copying %s to %s...", g_vms->vms[g_vm].name,
+      g_name);
+  char progress[kNarrowColumns];
+  snprintf(
+      progress, sizeof(progress), "%lu of %lu KB", (unsigned long)g_copied_kb,
+      (unsigned long)g_copy_kb);
+  const char* const lines[] = {copying, progress};
+  DrawItems(menu, "Clone", lines, 2, NULL, 0);
 }
 
 // The card while it is on USB: who has it, and how much has moved.
@@ -1044,6 +1425,21 @@ void MenuDraw(uint64_t now_us) {
     case kMenuPageStatus:
       DrawStatusPage(menu);
       g_status_drawn_us = now_us;
+      break;
+    case kMenuPageManage:
+      DrawManagePage(menu);
+      break;
+    case kMenuPageVM:
+      DrawVMPage(menu);
+      break;
+    case kMenuPageName:
+      DrawNamePage(menu);
+      break;
+    case kMenuPageDelete:
+      DrawDeletePage(menu);
+      break;
+    case kMenuPageCopying:
+      DrawCopyingPage(menu);
       break;
   }
   // A box of another size than the last leaves part of the last showing, so
