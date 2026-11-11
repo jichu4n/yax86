@@ -6,8 +6,8 @@
 #include <string.h>
 
 #include "display.h"
-#include "file_list.h"
 #include "harddisk.h"
+#include "menu_browse.h"
 #include "ui_box.h"
 #include "usb_disk.h"
 #include "vm_folder.h"
@@ -25,14 +25,8 @@ enum {
   kKeyPageUp = 0xD6,
   kKeyPageDown = 0xD7,
 
-  // A floppy image's size: the browser lists only files this long.
-  kFloppyImageSize = 360 * 1024,
-  // The browser's rows of entries, which with its edges fill the most rows a
-  // box can have.
-  kBrowseRows = kDisplayMenuMaxRows - 2,
-  // Where an entry's note starts on its row: a folder's <DIR>, and which
-  // drive an image is in.
-  kBrowseNoteColumn = 18,
+  // The list rows, which with its edges fill the most rows a box can have.
+  kListRows = kDisplayMenuMaxRows - 2,
 
   // Box dimensions.
   kNarrowColumns = kUIBoxNarrowColumns,
@@ -260,9 +254,8 @@ static uint64_t g_status_drawn_us;
 static uint8_t g_drawn_columns;
 static uint8_t g_drawn_rows;
 static bool g_box_drawn;
-// The folder the browser shows, and the entry at the top of its rows.
-static FileList g_list;
-static uint8_t g_list_top;
+// The entry at the top of the VM and VM management lists.
+static uint8_t g_vms_top;
 // The VMs to choose from at power on, the seconds before the
 // highlighted one starts by itself, and why the last chosen did not.
 static const VMList* g_vms;
@@ -271,14 +264,6 @@ static Font4x10 g_font = kFont4x10Default;
 // Whether the menu is the list at power on, or a page reached from it, which
 // only starting something closes.
 static bool g_choosing;
-// What the browser is finding an image for: a floppy for a drive, an image of
-// either kind to put on USB, from the list, or an image for a new VM's drive.
-typedef enum BrowsePurpose {
-  kBrowseForDrive = 0,
-  kBrowseForUSB,
-  kBrowseForNewVM,
-} BrowsePurpose;
-static BrowsePurpose g_browsing_for;
 // The image found to put on USB.
 static char g_usb_image_path[kFSMaxPath + 1];
 static uint32_t g_usb_image_size;
@@ -320,7 +305,69 @@ static char* g_problem = g_problems[0];
 static bool g_left_shift_held;
 static bool g_right_shift_held;
 
-void MenuInit(const MenuConfig* config) { g_config = *config; }
+static void ShowPage(MenuPage page, uint8_t chosen);
+static void ShowFormItem(uint8_t item);
+static uint8_t DriveChoiceRow(NewDriveItem choice);
+
+static void OnBrowseSelectedForNewVM(uint8_t new_drive, const char* path) {
+  FSCopyPath(path, g_new_drives[new_drive]);
+  g_new_blank[new_drive] = false;
+  g_new_present[new_drive] = true;
+  ShowFormItem((uint8_t)(kNewDriveA + new_drive));
+}
+
+static void OnBrowseSelectedForUSB(const char* path, uint32_t size) {
+  FSCopyPath(path, g_usb_image_path);
+  g_usb_image_size = size;
+}
+
+static void OnBrowseBackForNewVM(void) {
+  ShowPage(kMenuPageNewDrive, DriveChoiceRow(kNewDriveImage));
+}
+
+static void OnBrowseBackForUSB(void) {
+  ShowPage(kMenuPageUSB, kUSBImage);
+}
+
+static void OnBrowseBackForDrive(FloppyDrive drive) {
+  (void)drive;
+  ShowPage(kMenuPageDrive, kDriveInsert);
+}
+
+static void OnBrowseSetChosen(uint8_t chosen) {
+  g_chosen = chosen;
+  g_dirty = true;
+}
+
+static void OnBrowseSetDirty(void) {
+  g_dirty = true;
+}
+
+static void OnBrowseCloseMenu(void) {
+  g_open = false;
+}
+
+static void OnBrowseShowPage(uint8_t chosen) {
+  ShowPage(kMenuPageBrowse, chosen);
+}
+
+void MenuInit(const MenuConfig* config) {
+  g_config = *config;
+  const MenuBrowseConfig browse_config = {
+      .drive = config->drive,
+      .insert_drive = config->insert_drive,
+      .show_browse_page = OnBrowseShowPage,
+      .on_selected_for_new_vm = OnBrowseSelectedForNewVM,
+      .on_selected_for_usb = OnBrowseSelectedForUSB,
+      .on_back_for_new_vm = OnBrowseBackForNewVM,
+      .on_back_for_usb = OnBrowseBackForUSB,
+      .on_back_for_drive = OnBrowseBackForDrive,
+      .set_chosen = OnBrowseSetChosen,
+      .set_dirty = OnBrowseSetDirty,
+      .close_menu = OnBrowseCloseMenu,
+  };
+  MenuBrowseInit(&browse_config);
+}
 
 bool MenuIsOpen(void) { return g_open; }
 
@@ -329,14 +376,12 @@ const char* MenuPageName(void) {
   return def->get_name != NULL ? def->get_name() : def->name;
 }
 
-static void ShowPage(MenuPage page, uint8_t chosen);
 static MenuAction Choose(void);
 static MenuAction Back(void);
 static void ShowVM(uint8_t index);
 static uint8_t FormFirstItem(void);
 static uint8_t FormItem(void);
 static const NewDriveItem* DriveChoices(uint8_t* count);
-static uint8_t DriveChoiceRow(NewDriveItem choice);
 static void ScrollToChosen(void);
 
 void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
@@ -344,7 +389,7 @@ void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
   g_open = true;
   g_choosing = true;
   g_box_drawn = false;
-  g_list_top = 0;
+  g_vms_top = 0;
   ShowPage(kMenuPageVMs, highlighted);
   ScrollToChosen();
 }
@@ -391,94 +436,18 @@ const char* MenuProblem(void) {
   return g_problem[0] != '\0' ? g_problem : NULL;
 }
 
-// Show the browser on a folder, with the image in the drive chosen if it is
-// there.
-static void Browse(const char* path) {
-  // A floppy drive takes a floppy, drive C a hard disk, and USB either.
-  static const uint32_t kImageSizes[] = {
-      kFloppyImageSize, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE};
-  const uint32_t* sizes = kImageSizes;
-  uint8_t num_sizes = 1;
-  if (g_browsing_for == kBrowseForUSB) {
-    num_sizes = 2;
-  } else if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveHD1) {
-    sizes = &kImageSizes[1];
-  }
-  FileListRead(&g_list, path, sizes, num_sizes);
-  g_page = kMenuPageBrowse;
-  g_chosen = 0;
-  g_list_top = 0;
-  g_dirty = true;
-  // The image to choose: the one in the drive, or chosen for the new VM's.
-  // The drives have no images yet at power on.
-  const char* chosen = NULL;
-  if (g_browsing_for == kBrowseForNewVM) {
-    chosen = g_new_drives[g_new_drive];
-  } else if (g_browsing_for == kBrowseForDrive) {
-    const DiskImage* image = g_config.drive(g_drive);
-    if (image->status == kDiskImageOpen) {
-      chosen = image->path;
-    }
-  }
-  if (chosen == NULL || chosen[0] == '\0') {
+// Keep the chosen entry among the list rows.
+static void ScrollToChosen(void) {
+  if (g_page == kMenuPageBrowse) {
+    MenuBrowseScrollTo(g_chosen);
     return;
   }
-  char path_of_entry[kFSMaxPath + 1];
-  for (uint8_t i = 0; i < g_list.count; ++i) {
-    if (g_list.entries[i].kind == kFileListImage &&
-        FileListEntryPath(&g_list, &g_list.entries[i], path_of_entry) &&
-        FSSamePath(path_of_entry, chosen)) {
-      g_chosen = i;
-      ScrollToChosen();
-    }
-  }
-}
-
-// The folder the browser starts in: that of the image in the drive, or else
-// of the one in the other drive - the next disk of a set is likely beside
-// it - or else yax86.
-static void StartBrowsing(void) {
-  g_browsing_for = kBrowseForDrive;
-  const DiskImage* image = g_config.drive(g_drive);
-  if (image->status != kDiskImageOpen) {
-    image = g_config.drive(
-        g_drive == kFloppyDriveA ? kFloppyDriveB : kFloppyDriveA);
-  }
-  char folder[kFSMaxPath + 1];
-  if (image->status == kDiskImageOpen) {
-    FSFolderOf(image->path, folder);
-  } else {
-    FSCopyPath("yax86", folder);
-  }
-  Browse(folder);
-}
-
-// Keep the chosen entry among the browser's rows.
-static void ScrollToChosen(void) {
   uint8_t row = g_chosen;
   if ((g_page == kMenuPageVMs || g_page == kMenuPageManage) &&
       g_vms->count > 0 && g_chosen >= g_vms->count) {
     ++row;
   }
-  UIBoxScrollTo(row, &g_list_top, kBrowseRows);
-}
-
-// Show the browser on the folder above, with the folder just left chosen.
-static void BrowseUp(void) {
-  char left[kFSMaxPath + 1];
-  char parent[kFSMaxPath + 1];
-  FSCopyPath(g_list.path, left);
-  FSFolderOf(left, parent);
-  Browse(parent);
-  char path_of_entry[kFSMaxPath + 1];
-  for (uint8_t i = 0; i < g_list.count; ++i) {
-    if (g_list.entries[i].kind == kFileListFolder &&
-        FileListEntryPath(&g_list, &g_list.entries[i], path_of_entry) &&
-        FSSamePath(path_of_entry, left)) {
-      g_chosen = i;
-      ScrollToChosen();
-    }
-  }
+  UIBoxScrollTo(row, &g_vms_top, kListRows);
 }
 
 static void ShowPage(MenuPage page, uint8_t chosen) {
@@ -562,7 +531,6 @@ static bool ComputerHasCard(void) {
 
 static uint8_t ResetItemCount(void) { return kResetItemCount; }
 static uint8_t PowerOffItemCount(void) { return kPowerOffItemCount; }
-static uint8_t BrowseItemCount(void) { return g_list.count; }
 static uint8_t USBItemCount(void) { return kUSBItemCount; }
 static uint8_t SharingItemCount(void) { return 1; }
 static uint8_t StopSharingItemCount(void) { return kStopSharingItemCount; }
@@ -586,7 +554,7 @@ static uint8_t PageItemCount(void) {
 // Show Manage VMs - a row for each VM, then New VM - with the item at index
 // chosen.
 static void ShowManaged(uint8_t index) {
-  g_list_top = 0;
+  g_vms_top = 0;
   ShowPage(kMenuPageManage, index);
   ScrollToChosen();
 }
@@ -770,14 +738,7 @@ static void ChooseNewDrive(void) {
   const NewDriveItem choice = DriveChoices(&count)[g_chosen];
   char* path = g_new_drives[g_new_drive];
   if (choice == kNewDriveImage) {
-    g_browsing_for = kBrowseForNewVM;
-    char folder[kFSMaxPath + 1];
-    if (path[0] != '\0') {
-      FSFolderOf(path, folder);
-    } else {
-      FSCopyPath("yax86", folder);
-    }
-    Browse(folder);
+    MenuBrowseForNewVM(g_new_drive, path);
     return;
   }
   path[0] = '\0';
@@ -885,16 +846,6 @@ static MenuAction BackDrive(void) {
   return kMenuActionNone;
 }
 
-static MenuAction BackBrowse(void) {
-  if (g_browsing_for == kBrowseForUSB) {
-    ShowPage(kMenuPageUSB, kUSBImage);
-  } else if (g_browsing_for == kBrowseForNewVM) {
-    ShowPage(kMenuPageNewDrive, DriveChoiceRow(kNewDriveImage));
-  } else {
-    ShowPage(kMenuPageDrive, kDriveInsert);
-  }
-  return kMenuActionNone;
-}
 
 static MenuAction BackUSB(void) {
   ShowPage(kMenuPageVMs, USBItemIndex());
@@ -958,40 +909,8 @@ static MenuAction Back(void) {
   return def->back != NULL ? def->back() : kMenuActionNone;
 }
 
-// Open the chosen entry of the browser: a folder to look in, or an image to
-// put in the drive, which closes the menu.
-static MenuAction OpenEntry(void) {
-  if (g_chosen >= g_list.count) {
-    return kMenuActionNone;
-  }
-  const FileListEntry* entry = &g_list.entries[g_chosen];
-  char path[kFSMaxPath + 1];
-  if (!FileListEntryPath(&g_list, entry, path)) {
-    return kMenuActionNone;
-  }
-  if (entry->kind == kFileListParent) {
-    BrowseUp();
-    return kMenuActionNone;
-  }
-  if (entry->kind == kFileListFolder) {
-    Browse(path);
-    return kMenuActionNone;
-  }
-  if (g_browsing_for == kBrowseForNewVM) {
-    FSCopyPath(path, g_new_drives[g_new_drive]);
-    g_new_blank[g_new_drive] = false;
-    g_new_present[g_new_drive] = true;
-    ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
-    return kMenuActionNone;
-  }
-  if (g_browsing_for == kBrowseForUSB) {
-    FSCopyPath(path, g_usb_image_path);
-    g_usb_image_size = entry->size;
-    return kMenuActionShareImage;
-  }
-  g_config.insert_drive(g_drive, path);
-  g_open = false;
-  return kMenuActionClosed;
+static MenuAction ChooseBrowse(void) {
+  return MenuBrowseChoose(g_chosen);
 }
 
 const char* MenuChosenImage(uint32_t* size) {
@@ -1037,7 +956,7 @@ static MenuAction ChoosePowerOff(void) {
 
 static MenuAction ChooseDrive(void) {
   if (g_chosen == kDriveInsert) {
-    StartBrowsing();
+    MenuBrowseForDrive(g_drive);
   } else {
     g_config.eject_drive(g_drive);
     ShowPage(kMenuPageDrive, kDriveInsert);
@@ -1123,8 +1042,7 @@ static MenuAction ChooseDelete(void) {
 
 static MenuAction ChooseUSB(void) {
   if (g_chosen == kUSBImage) {
-    g_browsing_for = kBrowseForUSB;
-    Browse("yax86");
+    MenuBrowseForUSB();
     return kMenuActionNone;
   }
   return kMenuActionShareCard;
@@ -1210,15 +1128,15 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     case kKeyPageUp:
       if (count > 0) {
         g_chosen =
-            g_chosen > kBrowseRows ? (uint8_t)(g_chosen - kBrowseRows) : 0;
+            g_chosen > kListRows ? (uint8_t)(g_chosen - kListRows) : 0;
         g_dirty = true;
       }
       ScrollToChosen();
       return kMenuActionNone;
     case kKeyPageDown:
       if (count > 0) {
-        g_chosen = g_chosen + kBrowseRows < count
-                       ? (uint8_t)(g_chosen + kBrowseRows)
+        g_chosen = g_chosen + kListRows < count
+                       ? (uint8_t)(g_chosen + kListRows)
                        : (uint8_t)(count - 1);
         g_dirty = true;
       }
@@ -1229,8 +1147,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
       return Choose();
     case kKeyBackspace:
       // Up a folder in the browser, until the card's root.
-      if (g_page == kMenuPageBrowse && g_list.path[0] != '\0') {
-        BrowseUp();
+      if (g_page == kMenuPageBrowse && MenuBrowseHandleBackspace()) {
         return kMenuActionNone;
       }
       return Back();
@@ -1300,93 +1217,19 @@ static void DrawDrivePage(DisplayMenu* menu) {
       DriveItemCount());
 }
 
-// What the browser says of a folder with nothing to choose in it.
-static const char* BrowseEmpty(void) {
-  if (g_browsing_for == kBrowseForUSB) {
-    return "No folders or disk images";
-  }
-  if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveHD1) {
-    return "No folders or hard disk images";
-  }
-  return "No folders or floppy images";
-}
-
-// The browser: the folder as the title, and a row for each entry that
-// shows, with arrows on the border where there is more above or below.
 static void DrawBrowsePage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
-  // The folder, from the card's root, keeping its end if it is too long.
-  char title[kNarrowColumns - 6 + 1];
-  const uint8_t room = sizeof(title) - 1;
-  char full[kFSMaxPath + 2];
-  snprintf(full, sizeof(full), "/%s", g_list.path);
-  for (char* c = full; *c != '\0'; ++c) {
-    *c = (char)toupper((unsigned char)*c);
-  }
-  const size_t length = strlen(full);
-  if (length > room) {
-    snprintf(title, sizeof(title), "..%s", &full[length - room + 2]);
-  } else {
-    snprintf(title, sizeof(title), "%s", full);
-  }
-  UIBoxEdgeRow(&menu->text[0], menu->columns, true, title);
-  for (uint8_t i = 0; i < kBrowseRows; ++i) {
-    DisplayTextRow* row = &menu->text[1 + i];
-    const uint8_t index = (uint8_t)(g_list_top + i);
-    if (index >= g_list.count) {
-      UIBoxBlankRow(row, menu->columns);
-      if (i == 0 && !g_list.readable) {
-        UIBoxPutText(row, menu->columns, 3, "The card cannot be read", kUIBoxAttrText);
-      } else if (i == 1 && g_list.count <= 1) {
-        UIBoxPutText(row, menu->columns, 3, BrowseEmpty(), kUIBoxAttrText);
-      }
-      continue;
-    }
-    const FileListEntry* entry = &g_list.entries[index];
-    UIBoxItemRow(row, menu->columns, entry->name, index == g_chosen);
-    const uint8_t attr = index == g_chosen ? kUIBoxAttrChosen : kUIBoxAttrText;
-    char path[kFSMaxPath + 1];
-    if (entry->kind != kFileListImage) {
-      UIBoxPutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
-      continue;
-    }
-    if (g_browsing_for == kBrowseForUSB) {
-      UIBoxPutText(
-          row, menu->columns, kBrowseNoteColumn,
-          entry->size == kFloppyImageSize ? "floppy" : "hard disk", attr);
-      continue;
-    }
-    if (g_browsing_for == kBrowseForNewVM) {
-      continue;
-    }
-    if (!FileListEntryPath(&g_list, entry, path)) {
-      continue;
-    }
-    for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
-      const DiskImage* image = g_config.drive((FloppyDrive)drive);
-      if (image->status == kDiskImageOpen && FSSamePath(path, image->path)) {
-        char note[16];
-        snprintf(note, sizeof(note), "in %s", kVMDriveLabels[drive]);
-        UIBoxPutText(row, menu->columns, kBrowseNoteColumn, note, attr);
-      }
-    }
-  }
-  // A folder with more entries than a list holds says so on the bottom edge.
-  UIBoxEdgeRow(
-      &menu->text[kBrowseRows + 1], menu->columns, false,
-      g_list.truncated ? "the first 64 entries" : NULL);
-  UIBoxDrawScrollArrows(menu, g_list_top, kBrowseRows, g_list.count);
+  MenuBrowseDraw(menu, g_chosen);
 }
 
 // The VMs to start: a row each, with a line under them if there are any,
 // arrows on the border where there are more above or below, and the
 // countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kNarrowColumns, kListRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
-  for (uint8_t i = 0; i < kBrowseRows; ++i) {
+  for (uint8_t i = 0; i < kListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
-    const uint8_t index = (uint8_t)(g_list_top + i);
+    const uint8_t index = (uint8_t)(g_vms_top + i);
     if (index >= VMsRowCount()) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
@@ -1411,20 +1254,20 @@ static void DrawVMsPage(DisplayMenu* menu) {
         (unsigned)g_countdown);
   }
   UIBoxEdgeRow(
-      &menu->text[kBrowseRows + 1], menu->columns, false,
+      &menu->text[kListRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
-  UIBoxDrawScrollArrows(menu, g_list_top, kBrowseRows, VMsRowCount());
+  UIBoxDrawScrollArrows(menu, g_vms_top, kListRows, VMsRowCount());
 }
 
 // Manage VMs: the VMs in yax86/vm, a row each, then New VM after a line if
 // there are any, with arrows on the border where there are more above or
 // below.
 static void DrawManagePage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kNarrowColumns, kListRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
-  for (uint8_t i = 0; i < kBrowseRows; ++i) {
+  for (uint8_t i = 0; i < kListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
-    const uint8_t index = (uint8_t)(g_list_top + i);
+    const uint8_t index = (uint8_t)(g_vms_top + i);
     if (index >= ManageRowCount()) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
@@ -1436,8 +1279,8 @@ static void DrawManagePage(DisplayMenu* menu) {
       UIBoxMenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
     }
   }
-  UIBoxEdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
-  UIBoxDrawScrollArrows(menu, g_list_top, kBrowseRows, ManageRowCount());
+  UIBoxEdgeRow(&menu->text[kListRows + 1], menu->columns, false, NULL);
+  UIBoxDrawScrollArrows(menu, g_vms_top, kListRows, ManageRowCount());
 }
 
 // A VM's page: the images in its drives, over what can be done to it.
@@ -1765,10 +1608,10 @@ static const MenuPageDef kPageDefs[kMenuPageCount] = {
     [kMenuPageBrowse] = {
         .name = "browse",
         .hint = "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back",
-        .item_count = BrowseItemCount,
+        .item_count = MenuBrowseItemCount,
         .draw = DrawBrowsePage,
-        .choose = OpenEntry,
-        .back = BackBrowse,
+        .choose = ChooseBrowse,
+        .back = MenuBrowseBack,
     },
     [kMenuPageVMs] = {
         .name = "vms",
