@@ -7,11 +7,12 @@ reports and why.
 
 - It is a consumer of the core: `src/main.c` uses only the public interface,
   and nothing in `core` knows it exists.
-- **CI does not build it** - GitHub's runners have no RP2040 toolchain. It
-  shares `core/tools/generate-rom-data-files.js` with the core build, so a
-  generator change can pass CI and break this: test generator changes with
-  `pico/bench/build.sh O3` against a fresh `build-pico`, so the floppy source
-  is regenerated.
+- **CI builds it and `pico/picocalc`**, in the `pico` job of
+  `.github/workflows/build.yaml`: their `build.sh` against the Pico SDK
+  release pinned there, with apt's ARM GCC. It catches a change to the core's
+  interface or to `core/tools/generate-rom-data-files.js` that breaks them.
+  It only builds them - nothing runs without a board - so a change that
+  touches either still needs a run on hardware.
 - A standalone CMake project, because the top level builds native code that
   does not cross-compile, and the Pico SDK must own the toolchain from before
   `project()`.
