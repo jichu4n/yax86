@@ -48,13 +48,17 @@ enum {
   kAttrChosen = 0x70,
   kAttrTitle = 0x1E,
 
-  // Code page 437's double lined box.
+  // Code page 437's double lined box, and the single line that separates
+  // sections inside it.
   kBoxTopLeft = 0xC9,
   kBoxTopRight = 0xBB,
   kBoxBottomLeft = 0xC8,
   kBoxBottomRight = 0xBC,
   kBoxHorizontal = 0xCD,
   kBoxVertical = 0xBA,
+  kBoxSeparatorLeft = 0xC7,
+  kBoxSeparatorRight = 0xB6,
+  kBoxSeparator = 0xC4,
   // Code page 437's up and down arrows, which mark more of a list above or
   // below what shows.
   kArrowUp = 0x18,
@@ -89,7 +93,8 @@ typedef enum MenuPage {
   // g_new_drive.
   kMenuPageNew,
   kMenuPageNewDrive,
-  // Font, from the list: the 4x10 fonts.
+  // Settings, from the list, and Font, from Settings: the 4x10 fonts.
+  kMenuPageSettings,
   kMenuPageFont,
 } MenuPage;
 
@@ -111,6 +116,7 @@ static const char* const kPageNames[] = {
     [kMenuPageCopying] = "vm_copying",
     [kMenuPageNew] = "new_vm",
     [kMenuPageNewDrive] = "new_vm_drive",
+    [kMenuPageSettings] = "settings",
     [kMenuPageFont] = "font",
 };
 
@@ -269,7 +275,11 @@ static const NewDriveItem kHardDiskChoices[] = {
 static const MenuItem kNewVMRow = {"New VM", true};
 static const MenuItem kManageRow = {"Manage VMs", true};
 static const MenuItem kUSBRow = {"USB disk mode", true};
-static const MenuItem kFontRow = {"Font", true};
+static const MenuItem kSettingsRow = {"Settings", true};
+static const MenuItem kSettingsItems[] = {{"Font", true}};
+enum {
+  kSettingsItemCount = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
+};
 
 static MenuConfig g_config;
 static bool g_open;
@@ -503,10 +513,15 @@ static void StartBrowsing(void) {
 
 // Keep the chosen entry among the browser's rows.
 static void ScrollToChosen(void) {
-  if (g_chosen < g_list_top) {
-    g_list_top = g_chosen;
-  } else if (g_chosen >= g_list_top + kBrowseRows) {
-    g_list_top = (uint8_t)(g_chosen - kBrowseRows + 1);
+  uint8_t row = g_chosen;
+  if ((g_page == kMenuPageVMs || g_page == kMenuPageManage) &&
+      g_vms->count > 0 && g_chosen >= g_vms->count) {
+    ++row;
+  }
+  if (row < g_list_top) {
+    g_list_top = row;
+  } else if (row >= g_list_top + kBrowseRows) {
+    g_list_top = (uint8_t)(row - kBrowseRows + 1);
   }
 }
 
@@ -582,15 +597,24 @@ static uint8_t DriveItemCount(void) {
   return DriveEmpty() ? kDriveEject : kDriveItemCount;
 }
 
-// The list at power on's rows: a VM each, then Manage VMs, USB disk mode and
-// Font.
-static uint8_t VMRowCount(void) { return (uint8_t)(g_vms->count + 3); }
+// The list at power on's items: a VM each, then Manage VMs, USB disk mode and
+// Settings, with a separator row between the VMs and the rest when there is at
+// least one VM.
+static uint8_t VMsItemCount(void) { return (uint8_t)(g_vms->count + 3); }
 
-static uint8_t ManageRowIndex(void) { return g_vms->count; }
+static uint8_t VMsRowCount(void) {
+  return (uint8_t)(g_vms->count + (g_vms->count > 0 ? 4 : 3));
+}
 
-static uint8_t USBRowIndex(void) { return (uint8_t)(g_vms->count + 1); }
+static uint8_t ManageItemIndex(void) { return g_vms->count; }
 
-static uint8_t FontRowIndex(void) { return (uint8_t)(g_vms->count + 2); }
+static uint8_t USBItemIndex(void) { return (uint8_t)(g_vms->count + 1); }
+
+static uint8_t SettingsItemIndex(void) { return (uint8_t)(g_vms->count + 2); }
+
+static uint8_t ManageRowCount(void) {
+  return (uint8_t)(g_vms->count + (g_vms->count > 0 ? 2 : 1));
+}
 
 // Whether disconnecting would take the card from a computer still using it.
 static bool ComputerHasCard(void) {
@@ -611,7 +635,7 @@ static uint8_t PageItemCount(void) {
     case kMenuPageBrowse:
       return g_list.count;
     case kMenuPageVMs:
-      return VMRowCount();
+      return VMsItemCount();
     case kMenuPageUSB:
       return kUSBItemCount;
     case kMenuPageSharing:
@@ -624,6 +648,8 @@ static uint8_t PageItemCount(void) {
       return (uint8_t)(kNewItemCount - FormFirstItem());
     case kMenuPageNewDrive:
       return DriveChoiceRow(kNewDriveItemCount);
+    case kMenuPageSettings:
+      return kSettingsItemCount;
     case kMenuPageFont:
       return kFont4x10Count;
     case kMenuPageVM:
@@ -638,17 +664,17 @@ static uint8_t PageItemCount(void) {
   return 0;
 }
 
-// Show Manage VMs - New VM, then a row for each VM - with the VM at index in
-// the list chosen, or New VM if there is none there.
+// Show Manage VMs - a row for each VM, then New VM - with the item at index
+// chosen.
 static void ShowManaged(uint8_t index) {
   g_list_top = 0;
-  ShowPage(kMenuPageManage, index < g_vms->count ? (uint8_t)(index + 1) : 0);
+  ShowPage(kMenuPageManage, index);
   ScrollToChosen();
 }
 
 void MenuShowManagedVMs(const char* name, bool show_vm) {
   const uint8_t index = VMListFind(g_vms, name);
-  ShowManaged(index);
+  ShowManaged(index < g_vms->count ? index : 0);
   if (show_vm && index < g_vms->count) {
     ShowVM(index);
   }
@@ -913,7 +939,7 @@ static MenuAction Back(void) {
       // There is no VM to go back to yet.
       break;
     case kMenuPageUSB:
-      ShowPage(kMenuPageVMs, USBRowIndex());
+      ShowPage(kMenuPageVMs, USBItemIndex());
       ScrollToChosen();
       break;
     case kMenuPageSharing:
@@ -922,7 +948,7 @@ static MenuAction Back(void) {
       ShowPage(kMenuPageSharing, 0);
       break;
     case kMenuPageManage:
-      ShowPage(kMenuPageVMs, ManageRowIndex());
+      ShowPage(kMenuPageVMs, ManageItemIndex());
       ScrollToChosen();
       break;
     case kMenuPageVM:
@@ -941,15 +967,18 @@ static MenuAction Back(void) {
       if (g_editing) {
         ShowPage(kMenuPageVM, kVMEdit);
       } else {
-        ShowManaged(kVMListMax);
+        ShowManaged(g_vms->count);
       }
       break;
     case kMenuPageNewDrive:
       ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
       break;
-    case kMenuPageFont:
-      ShowPage(kMenuPageVMs, FontRowIndex());
+    case kMenuPageSettings:
+      ShowPage(kMenuPageVMs, SettingsItemIndex());
       ScrollToChosen();
+      break;
+    case kMenuPageFont:
+      ShowPage(kMenuPageSettings, 0);
       break;
   }
   return kMenuActionNone;
@@ -1040,29 +1069,31 @@ static MenuAction Choose(void) {
     case kMenuPageBrowse:
       return OpenEntry();
     case kMenuPageVMs:
-      if (g_chosen == FontRowIndex()) {
-        ShowPage(kMenuPageFont, g_font);
+      if (g_chosen == SettingsItemIndex()) {
+        ShowPage(kMenuPageSettings, 0);
         return kMenuActionNone;
       }
-      if (g_chosen == USBRowIndex()) {
+      if (g_chosen == USBItemIndex()) {
         ShowPage(kMenuPageUSB, kUSBCard);
         return kMenuActionNone;
       }
-      if (g_chosen == ManageRowIndex()) {
-        ShowManaged(kVMListMax);
+      if (g_chosen == ManageItemIndex()) {
+        ShowManaged(0);
         return kMenuActionNone;
       }
       return kMenuActionVMChosen;
+    case kMenuPageSettings:
+      ShowPage(kMenuPageFont, g_font);
+      return kMenuActionNone;
     case kMenuPageFont:
       g_font = (Font4x10)g_chosen;
-      ShowPage(kMenuPageVMs, FontRowIndex());
-      ScrollToChosen();
+      ShowPage(kMenuPageSettings, 0);
       return kMenuActionFontChosen;
     case kMenuPageManage:
-      if (g_chosen == 0) {
+      if (g_chosen == g_vms->count) {
         StartNewVM();
       } else {
-        ShowVM((uint8_t)(g_chosen - 1));
+        ShowVM(g_chosen);
       }
       return kMenuActionNone;
     case kMenuPageNew:
@@ -1266,6 +1297,18 @@ static void EdgeRow(
   row->attrs[column] = kAttrTitle;
 }
 
+// A horizontal line across the box, separating groups of items.
+static void SeparatorRow(DisplayTextRow* row, uint8_t columns) {
+  row->chars[0] = (char)kBoxSeparatorLeft;
+  for (uint8_t i = 1; i + 1 < columns; ++i) {
+    row->chars[i] = (char)kBoxSeparator;
+  }
+  row->chars[columns - 1] = (char)kBoxSeparatorRight;
+  for (uint8_t i = 0; i < columns; ++i) {
+    row->attrs[i] = kAttrFrame;
+  }
+}
+
 // Put text inside a row of the box from column, clipped at its border.
 static void PutText(
     DisplayTextRow* row, uint8_t columns, uint8_t column, const char* text,
@@ -1329,7 +1372,9 @@ static void DrawItems(
   PlaceBox(menu, kNarrowColumns, rows);
   uint8_t row = 0;
   EdgeRow(&menu->text[row++], menu->columns, true, title);
-  BlankRow(&menu->text[row++], menu->columns);
+  if (!g_choosing || line_count > 0) {
+    BlankRow(&menu->text[row++], menu->columns);
+  }
   for (uint8_t i = 0; i < line_count; ++i) {
     BlankRow(&menu->text[row], menu->columns);
     PutText(&menu->text[row++], menu->columns, 3, lines[i], kAttrText);
@@ -1476,24 +1521,30 @@ static void DrawBrowsePage(DisplayMenu* menu) {
   }
 }
 
-// The VMs to start: a row each, with arrows on the border where there
-// are more above or below, and the countdown on the bottom edge.
+// The VMs to start: a row each, with a line under them if there are any,
+// arrows on the border where there are more above or below, and the
+// countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
   PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
   EdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
-    if (index >= VMRowCount()) {
+    if (index >= VMsRowCount()) {
       BlankRow(row, menu->columns);
-    } else if (index == ManageRowIndex()) {
-      MenuItemRow(row, menu->columns, &kManageRow, index == g_chosen);
-    } else if (index == USBRowIndex()) {
-      MenuItemRow(row, menu->columns, &kUSBRow, index == g_chosen);
-    } else if (index == FontRowIndex()) {
-      MenuItemRow(row, menu->columns, &kFontRow, index == g_chosen);
-    } else {
+    } else if (index < g_vms->count) {
       ItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
+    } else if (g_vms->count > 0 && index == g_vms->count) {
+      SeparatorRow(row, menu->columns);
+    } else {
+      const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
+      if (item == ManageItemIndex()) {
+        MenuItemRow(row, menu->columns, &kManageRow, item == g_chosen);
+      } else if (item == USBItemIndex()) {
+        MenuItemRow(row, menu->columns, &kUSBRow, item == g_chosen);
+      } else {
+        MenuItemRow(row, menu->columns, &kSettingsRow, item == g_chosen);
+      }
     }
   }
   char countdown[kNarrowColumns];
@@ -1508,33 +1559,36 @@ static void DrawVMsPage(DisplayMenu* menu) {
   if (g_list_top > 0) {
     menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
   }
-  if (g_list_top + kBrowseRows < VMRowCount()) {
+  if (g_list_top + kBrowseRows < VMsRowCount()) {
     menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
   }
 }
 
-// Manage VMs: the VMs in yax86/vm, a row each, with arrows on the border
-// where there are more above or below.
+// Manage VMs: the VMs in yax86/vm, a row each, then New VM after a line if
+// there are any, with arrows on the border where there are more above or
+// below.
 static void DrawManagePage(DisplayMenu* menu) {
   PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
   EdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
-    if (index == 0) {
-      MenuItemRow(row, menu->columns, &kNewVMRow, index == g_chosen);
-    } else if (index <= g_vms->count) {
-      const MenuItem item = {g_vms->vms[index - 1].name, true};
-      MenuItemRow(row, menu->columns, &item, index == g_chosen);
-    } else {
+    if (index >= ManageRowCount()) {
       BlankRow(row, menu->columns);
+    } else if (index < g_vms->count) {
+      const MenuItem item = {g_vms->vms[index].name, true};
+      MenuItemRow(row, menu->columns, &item, index == g_chosen);
+    } else if (g_vms->count > 0 && index == g_vms->count) {
+      SeparatorRow(row, menu->columns);
+    } else {
+      MenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
     }
   }
   EdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
   if (g_list_top > 0) {
     menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
   }
-  if (g_list_top + kBrowseRows < g_vms->count + 1) {
+  if (g_list_top + kBrowseRows < ManageRowCount()) {
     menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
   }
 }
@@ -1873,6 +1927,9 @@ void MenuDraw(uint64_t now_us) {
       break;
     case kMenuPageNewDrive:
       DrawNewDrivePage(menu);
+      break;
+    case kMenuPageSettings:
+      DrawItems(menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount);
       break;
     case kMenuPageFont:
       DrawFontPage(menu);

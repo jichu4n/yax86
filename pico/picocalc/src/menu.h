@@ -88,7 +88,7 @@ typedef enum MenuAction {
   // the VM's page with MenuShowManagedVMs().
   kMenuActionCreateVM,
   kMenuActionEditVM,
-  // From the list's Font page: use and save MenuChosenFont().
+  // From Settings' Font page: use and save MenuChosenFont().
   kMenuActionFontChosen,
 } MenuAction;
 
@@ -103,7 +103,7 @@ bool MenuIsOpen(void);
 //
 // Under the VMs are three more rows: Manage VMs, from which VMs are made in
 // `yax86/vm`, and renamed, cloned and deleted; USB disk mode, a page from
-// which the SD card is shared over USB; and Font, which chooses the 4x10
+// which the SD card is shared over USB; and Settings, which chooses the 4x10
 // font.
 void MenuChooseVMs(const VMList* list, uint8_t highlighted);
 

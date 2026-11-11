@@ -13,12 +13,12 @@ enum {
 };
 
 typedef enum Font4x10 {
-  kFont4x10Original = 0,
+  kFont4x10Ymini = 0,
   kFont4x10Atari800,
   kFont4x10Miniwi,
-  kFont4x10Custom,
+  kFont4x10Creep,
   kFont4x10Count,
-  kFont4x10Default = kFont4x10Atari800,
+  kFont4x10Default = kFont4x10Ymini,
 } Font4x10;
 
 // One byte per row, top to bottom, in the low four bits: bit 3 is the leftmost

@@ -316,14 +316,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the name
   of the VM to highlight and start - `boot_default=DOS330` - `boot_delay`,
   the seconds the list waits for a key, 5 without it, 0 to start the default
-  without showing the list, and `font`, the 4x10 font (`original`,
-  `atari800`, `miniwi` or `custom`, `atari800` without it).
+  without showing the list, and `font`, the 4x10 font (`ymini`, `atari800`,
+  `miniwi` or `creep`, `ymini` without it).
 - **At power on, with a card, the menu lists its VMs**, before the VM
-  exists, then Manage VMs - see below - USB disk mode - see "The USB
-  device" - and Font. The countdown runs on
+  exists, then a separator line, Manage VMs - see below - USB disk mode -
+  see "The USB device" - and Settings (which holds Font). The countdown runs on
   the list's bottom edge until a key is pressed, then the default starts.
-  With no VMs the list has Manage VMs, USB disk mode and Font, and nothing
-  counts down or starts by itself; the built-in floppy boots only without a
+  With no VMs the list has Manage VMs, USB disk mode and Settings, with no
+  separator, and nothing counts down or starts by itself; the built-in floppy boots only without a
   card. Every page reached from the list is drawn the list's
   size, as there is no guest's screen yet to draw under a smaller box. A file that does not read keeps
   the list up with its problem on the keys row - `BROKEN: line 2: no
@@ -368,7 +368,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ## Managing VMs
 
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
-  VMs**, through `src/vm_folder.c`: a page listing New VM and the VMs, a
+  VMs**, through `src/vm_folder.c`: a page listing the VMs and then New VM
+  (after a separator line if there are any VMs), a
   page for each VM with the images in its drives - two drives a line, A and
   B then HD1 and HD2 - over Edit drives, Rename, Clone and Delete, a name typed
   for Rename and Clone, and a question before Delete. Afterwards it shows

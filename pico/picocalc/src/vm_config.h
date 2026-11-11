@@ -21,7 +21,7 @@
 //
 //   boot_default=DOS330
 //   boot_delay=5
-//   font=atari800
+//   font=ymini
 //
 // boot_default is a VM's name. It is the VM the list highlights, and starts
 // by itself after boot_delay seconds with no key pressed; 0 starts it at
