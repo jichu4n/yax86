@@ -8,6 +8,7 @@
 #include "display.h"
 #include "file_list.h"
 #include "harddisk.h"
+#include "ui_box.h"
 #include "usb_disk.h"
 #include "vm_folder.h"
 
@@ -33,36 +34,11 @@ enum {
   // drive an image is in.
   kBrowseNoteColumn = 18,
 
-  // A page's box: the main page and the question are narrow, centered on the
-  // guest's screen, and the status page takes its whole width.
-  kGuestScreenRows = 25,
-  kNarrowColumns = 40,
-  kWideColumns = kTextColumns,
+  // Box dimensions.
+  kNarrowColumns = kUIBoxNarrowColumns,
+  kWideColumns = kUIBoxWideColumns,
   // A label's column on the status page.
   kStatusLabelColumns = 9,
-
-  // CGA attributes: white on blue for the box, and black on light gray for
-  // the item chosen.
-  kAttrFrame = 0x1F,
-  kAttrText = 0x17,
-  kAttrChosen = 0x70,
-  kAttrTitle = 0x1E,
-
-  // Code page 437's double lined box, and the single line that separates
-  // sections inside it.
-  kBoxTopLeft = 0xC9,
-  kBoxTopRight = 0xBB,
-  kBoxBottomLeft = 0xC8,
-  kBoxBottomRight = 0xBC,
-  kBoxHorizontal = 0xCD,
-  kBoxVertical = 0xBA,
-  kBoxSeparatorLeft = 0xC7,
-  kBoxSeparatorRight = 0xB6,
-  kBoxSeparator = 0xC4,
-  // Code page 437's up and down arrows, which mark more of a list above or
-  // below what shows.
-  kArrowUp = 0x18,
-  kArrowDown = 0x19,
 
   kStatusRefreshUs = 1000 * 1000,
 };
@@ -120,12 +96,6 @@ static const char* const kPageNames[] = {
     [kMenuPageFont] = "font",
 };
 
-// An item of a page, and whether choosing it opens another menu, which a
-// chevron at its end says.
-typedef struct MenuItem {
-  const char* text;
-  bool opens_menu;
-} MenuItem;
 
 typedef enum MainItem {
   // The drives' items, in the order of FloppyDrive.
@@ -518,11 +488,7 @@ static void ScrollToChosen(void) {
       g_vms->count > 0 && g_chosen >= g_vms->count) {
     ++row;
   }
-  if (row < g_list_top) {
-    g_list_top = row;
-  } else if (row >= g_list_top + kBrowseRows) {
-    g_list_top = (uint8_t)(row - kBrowseRows + 1);
-  }
+  UIBoxScrollTo(row, &g_list_top, kBrowseRows);
 }
 
 // Show the browser on the folder above, with the folder just left chosen.
@@ -1258,156 +1224,31 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
 // Drawing
 // ============================================================================
 
-// Fill a row of the box: its border, and its inside blank.
-static void BlankRow(DisplayTextRow* row, uint8_t columns) {
-  row->chars[0] = (char)kBoxVertical;
-  row->attrs[0] = kAttrFrame;
-  for (uint8_t i = 1; i + 1 < columns; ++i) {
-    row->chars[i] = ' ';
-    row->attrs[i] = kAttrText;
-  }
-  row->chars[columns - 1] = (char)kBoxVertical;
-  row->attrs[columns - 1] = kAttrFrame;
-}
-
-// The top or bottom edge of the box, with a title centered in the top one.
-static void EdgeRow(
-    DisplayTextRow* row, uint8_t columns, bool top, const char* title) {
-  row->chars[0] = (char)(top ? kBoxTopLeft : kBoxBottomLeft);
-  for (uint8_t i = 1; i + 1 < columns; ++i) {
-    row->chars[i] = (char)kBoxHorizontal;
-  }
-  row->chars[columns - 1] = (char)(top ? kBoxTopRight : kBoxBottomRight);
-  for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kAttrFrame;
-  }
-  if (title == NULL) {
-    return;
-  }
-  const uint8_t length = (uint8_t)strlen(title);
-  // The title, with a space either side, over the middle of the edge.
-  uint8_t column = (uint8_t)((columns - length - 2) / 2);
-  row->chars[column] = ' ';
-  row->attrs[column++] = kAttrTitle;
-  for (uint8_t i = 0; i < length; ++i) {
-    row->chars[column] = title[i];
-    row->attrs[column++] = kAttrTitle;
-  }
-  row->chars[column] = ' ';
-  row->attrs[column] = kAttrTitle;
-}
-
-// A horizontal line across the box, separating groups of items.
-static void SeparatorRow(DisplayTextRow* row, uint8_t columns) {
-  row->chars[0] = (char)kBoxSeparatorLeft;
-  for (uint8_t i = 1; i + 1 < columns; ++i) {
-    row->chars[i] = (char)kBoxSeparator;
-  }
-  row->chars[columns - 1] = (char)kBoxSeparatorRight;
-  for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kAttrFrame;
-  }
-}
-
-// Put text inside a row of the box from column, clipped at its border.
-static void PutText(
-    DisplayTextRow* row, uint8_t columns, uint8_t column, const char* text,
-    uint8_t attr) {
-  while (*text != '\0' && column + 1 < columns) {
-    row->chars[column] = *text++;
-    row->attrs[column++] = attr;
-  }
-}
-
-// An item's row: its text, and the whole width inside the border marked if
-// it is the item chosen.
-static void ItemRow(
-    DisplayTextRow* row, uint8_t columns, const char* text, bool chosen) {
-  BlankRow(row, columns);
-  if (chosen) {
-    for (uint8_t i = 1; i + 1 < columns; ++i) {
-      row->attrs[i] = kAttrChosen;
-    }
-  }
-  PutText(row, columns, 3, text, chosen ? kAttrChosen : kAttrText);
-}
-
-// A menu item's row, with a chevron near the right border if it opens
-// another menu.
-static void MenuItemRow(
-    DisplayTextRow* row, uint8_t columns, const MenuItem* item, bool chosen) {
-  ItemRow(row, columns, item->text, chosen);
-  if (item->opens_menu) {
-    row->chars[columns - 3] = '>';
-  }
-}
-
-// Lay out a box of rows, centered on the guest's screen.
-static void PlaceBox(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
-  menu->columns = columns;
-  menu->rows = rows;
-  menu->column = (uint8_t)((kTextColumns - columns) / 2);
-  menu->row = (uint8_t)((kGuestScreenRows - rows) / 2);
-}
-
 // A page of items, under lines of text, if any.
 static void DrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
     uint8_t line_count, const MenuItem* items, uint8_t count) {
-  // The box holds kDisplayMenuMaxRows: lines past what fits are left out,
-  // rather than drawn past its rows.
-  if (count + 4 + line_count + 1 > kDisplayMenuMaxRows) {
-    line_count = count + 5 < kDisplayMenuMaxRows
-                     ? (uint8_t)(kDisplayMenuMaxRows - count - 5)
-                     : 0;
-  }
-  const uint8_t text_rows = line_count > 0 ? (uint8_t)(line_count + 1) : 0;
-  // The edges, a blank row either side of the items, and the lines with a
-  // blank row under them - or at power on, the list's size, as there is no
-  // guest's screen to draw under a smaller box to hide the list's.
-  uint8_t rows = (uint8_t)(count + 4 + text_rows);
-  if (g_choosing && rows < kBrowseRows + 2) {
-    rows = kBrowseRows + 2;
-  }
-  PlaceBox(menu, kNarrowColumns, rows);
-  uint8_t row = 0;
-  EdgeRow(&menu->text[row++], menu->columns, true, title);
-  if (!g_choosing || line_count > 0) {
-    BlankRow(&menu->text[row++], menu->columns);
-  }
-  for (uint8_t i = 0; i < line_count; ++i) {
-    BlankRow(&menu->text[row], menu->columns);
-    PutText(&menu->text[row++], menu->columns, 3, lines[i], kAttrText);
-  }
-  if (line_count > 0) {
-    BlankRow(&menu->text[row++], menu->columns);
-  }
-  for (uint8_t i = 0; i < count; ++i) {
-    MenuItemRow(&menu->text[row++], menu->columns, &items[i], i == g_chosen);
-  }
-  while (row + 1 < rows) {
-    BlankRow(&menu->text[row++], menu->columns);
-  }
-  EdgeRow(&menu->text[row], menu->columns, false, NULL);
+  UIBoxDrawItems(
+      menu, title, lines, line_count, items, count, g_chosen, g_choosing);
 }
 
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  PlaceBox(menu, kWideColumns, kMenuStatusLines + 4);
+  UIBoxPlace(menu, kWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
-  EdgeRow(&menu->text[row++], menu->columns, true, "Status");
-  BlankRow(&menu->text[row++], menu->columns);
+  UIBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
+  UIBoxBlankRow(&menu->text[row++], menu->columns);
   for (uint8_t i = 0; i < kMenuStatusLines; ++i) {
     DisplayTextRow* text = &menu->text[row++];
-    BlankRow(text, menu->columns);
-    PutText(text, menu->columns, 2, lines[i].label, kAttrTitle);
-    PutText(
+    UIBoxBlankRow(text, menu->columns);
+    UIBoxPutText(text, menu->columns, 2, lines[i].label, kUIBoxAttrTitle);
+    UIBoxPutText(
         text, menu->columns, 2 + kStatusLabelColumns, lines[i].value,
-        kAttrText);
+        kUIBoxAttrText);
   }
-  BlankRow(&menu->text[row++], menu->columns);
-  EdgeRow(&menu->text[row], menu->columns, false, NULL);
+  UIBoxBlankRow(&menu->text[row++], menu->columns);
+  UIBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
 static void DrawDrivePage(DisplayMenu* menu) {
@@ -1452,7 +1293,7 @@ static const char* BrowseEmpty(void) {
 // The browser: the folder as the title, and a row for each entry that
 // shows, with arrows on the border where there is more above or below.
 static void DrawBrowsePage(DisplayMenu* menu) {
-  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
   // The folder, from the card's root, keeping its end if it is too long.
   char title[kNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
@@ -1467,29 +1308,29 @@ static void DrawBrowsePage(DisplayMenu* menu) {
   } else {
     snprintf(title, sizeof(title), "%s", full);
   }
-  EdgeRow(&menu->text[0], menu->columns, true, title);
+  UIBoxEdgeRow(&menu->text[0], menu->columns, true, title);
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= g_list.count) {
-      BlankRow(row, menu->columns);
+      UIBoxBlankRow(row, menu->columns);
       if (i == 0 && !g_list.readable) {
-        PutText(row, menu->columns, 3, "The card cannot be read", kAttrText);
+        UIBoxPutText(row, menu->columns, 3, "The card cannot be read", kUIBoxAttrText);
       } else if (i == 1 && g_list.count <= 1) {
-        PutText(row, menu->columns, 3, BrowseEmpty(), kAttrText);
+        UIBoxPutText(row, menu->columns, 3, BrowseEmpty(), kUIBoxAttrText);
       }
       continue;
     }
     const FileListEntry* entry = &g_list.entries[index];
-    ItemRow(row, menu->columns, entry->name, index == g_chosen);
-    const uint8_t attr = index == g_chosen ? kAttrChosen : kAttrText;
+    UIBoxItemRow(row, menu->columns, entry->name, index == g_chosen);
+    const uint8_t attr = index == g_chosen ? kUIBoxAttrChosen : kUIBoxAttrText;
     char path[kFSMaxPath + 1];
     if (entry->kind != kFileListImage) {
-      PutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
+      UIBoxPutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
       continue;
     }
     if (g_browsing_for == kBrowseForUSB) {
-      PutText(
+      UIBoxPutText(
           row, menu->columns, kBrowseNoteColumn,
           entry->size == kFloppyImageSize ? "floppy" : "hard disk", attr);
       continue;
@@ -1505,45 +1346,40 @@ static void DrawBrowsePage(DisplayMenu* menu) {
       if (image->status == kDiskImageOpen && FSSamePath(path, image->path)) {
         char note[16];
         snprintf(note, sizeof(note), "in %s", kVMDriveLabels[drive]);
-        PutText(row, menu->columns, kBrowseNoteColumn, note, attr);
+        UIBoxPutText(row, menu->columns, kBrowseNoteColumn, note, attr);
       }
     }
   }
   // A folder with more entries than a list holds says so on the bottom edge.
-  EdgeRow(
+  UIBoxEdgeRow(
       &menu->text[kBrowseRows + 1], menu->columns, false,
       g_list.truncated ? "the first 64 entries" : NULL);
-  if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
-  }
-  if (g_list_top + kBrowseRows < g_list.count) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
-  }
+  UIBoxDrawScrollArrows(menu, g_list_top, kBrowseRows, g_list.count);
 }
 
 // The VMs to start: a row each, with a line under them if there are any,
 // arrows on the border where there are more above or below, and the
 // countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
-  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
-  EdgeRow(&menu->text[0], menu->columns, true, "YAX86");
+  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= VMsRowCount()) {
-      BlankRow(row, menu->columns);
+      UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
-      ItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
+      UIBoxItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
     } else if (g_vms->count > 0 && index == g_vms->count) {
-      SeparatorRow(row, menu->columns);
+      UIBoxSeparatorRow(row, menu->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
       if (item == ManageItemIndex()) {
-        MenuItemRow(row, menu->columns, &kManageRow, item == g_chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kManageRow, item == g_chosen);
       } else if (item == USBItemIndex()) {
-        MenuItemRow(row, menu->columns, &kUSBRow, item == g_chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, item == g_chosen);
       } else {
-        MenuItemRow(row, menu->columns, &kSettingsRow, item == g_chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, item == g_chosen);
       }
     }
   }
@@ -1553,44 +1389,34 @@ static void DrawVMsPage(DisplayMenu* menu) {
         countdown, sizeof(countdown), "starting in %u s",
         (unsigned)g_countdown);
   }
-  EdgeRow(
+  UIBoxEdgeRow(
       &menu->text[kBrowseRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
-  if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
-  }
-  if (g_list_top + kBrowseRows < VMsRowCount()) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
-  }
+  UIBoxDrawScrollArrows(menu, g_list_top, kBrowseRows, VMsRowCount());
 }
 
 // Manage VMs: the VMs in yax86/vm, a row each, then New VM after a line if
 // there are any, with arrows on the border where there are more above or
 // below.
 static void DrawManagePage(DisplayMenu* menu) {
-  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
-  EdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
+  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= ManageRowCount()) {
-      BlankRow(row, menu->columns);
+      UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
       const MenuItem item = {g_vms->vms[index].name, true};
-      MenuItemRow(row, menu->columns, &item, index == g_chosen);
+      UIBoxMenuItemRow(row, menu->columns, &item, index == g_chosen);
     } else if (g_vms->count > 0 && index == g_vms->count) {
-      SeparatorRow(row, menu->columns);
+      UIBoxSeparatorRow(row, menu->columns);
     } else {
-      MenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
+      UIBoxMenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
     }
   }
-  EdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
-  if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
-  }
-  if (g_list_top + kBrowseRows < ManageRowCount()) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
-  }
+  UIBoxEdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
+  UIBoxDrawScrollArrows(menu, g_list_top, kBrowseRows, ManageRowCount());
 }
 
 // A VM's page: the images in its drives, over what can be done to it.
@@ -1664,7 +1490,7 @@ static void DrawNamePage(DisplayMenu* menu) {
     field[g_name_length] = '_';
   }
   field[kFSMaxFolderName] = '\0';
-  PutText(row, menu->columns, 3, field, kAttrChosen);
+  UIBoxPutText(row, menu->columns, 3, field, kUIBoxAttrChosen);
 }
 
 // Join names into text as "A, B and C", or with fewer shown, "A, B and 2
