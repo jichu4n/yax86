@@ -12,15 +12,13 @@ enum {
   kPagerMaxFrames = 128 * 1024 / kPagerPageSize,
   // A frame holding no page.
   kPagerNoPage = 0xFFFF,
-  kPagerAccess = Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_WRITABLE,
 };
 
 static YPlatformPagedMemory g_memory;
 static uint16_t g_pages[kPagerMaxPages];
-// The page in each frame, or kPagerNoPage, and whether it has been written
-// since it came in.
+// The page in each frame, or kPagerNoPage. Whether it has been written since
+// it came in is its entry's DIRTY bit, which the hand's sweep leaves alone.
 static uint16_t g_frame_pages[kPagerMaxFrames];
-static bool g_frame_dirty[kPagerMaxFrames];
 // Whether each page has ever been written back, and so whether PSRAM holds
 // it. One that has not is zeros, as SRAM guest RAM starts.
 static uint8_t g_backed[kPagerMaxPages / 8];
@@ -39,7 +37,6 @@ YPlatformPagedMemory* PagerInit(
   }
   for (uint32_t i = 0; i < g_num_frames; ++i) {
     g_frame_pages[i] = kPagerNoPage;
-    g_frame_dirty[i] = false;
   }
   memset(g_pages, 0, sizeof(g_pages));
   memset(g_backed, 0, sizeof(g_backed));
@@ -73,10 +70,10 @@ static uint32_t __not_in_flash_func(PagerTakeFrame)(void) {
     }
     uint16_t* entry = &g_pages[page];
     if (*entry & Y_CPU_PAGED_DATA_RESIDENT) {
-      *entry &= (uint16_t)~kPagerAccess;
+      *entry &= (uint16_t)~Y_CPU_PAGED_DATA_RESIDENT;
       continue;
     }
-    if (g_frame_dirty[frame]) {
+    if (*entry & Y_CPU_PAGED_DATA_DIRTY) {
       if (!PsramWrite(
               page << kPagerPageShift, PagerFrame(frame), kPagerPageSize)) {
         ++g_stats.errors;
@@ -117,17 +114,14 @@ static void __not_in_flash_func(PagerPageFault)(
       ++g_stats.zero_fills;
     }
     g_frame_pages[frame] = (uint16_t)page;
-    g_frame_dirty[frame] = false;
+    g_pages[page] = (uint16_t)frame;
   }
-  uint16_t entry = (uint16_t)(frame | Y_CPU_PAGED_DATA_RESIDENT);
+  // A page that stayed in its frame keeps its DIRTY bit; one just brought in
+  // has none.
+  g_pages[page] |= Y_CPU_PAGED_DATA_RESIDENT;
   if (write) {
-    g_frame_dirty[frame] = true;
+    g_pages[page] |= Y_CPU_PAGED_DATA_DIRTY;
   }
-  // A page already written needs no telling of the next write.
-  if (g_frame_dirty[frame]) {
-    entry |= Y_CPU_PAGED_DATA_WRITABLE;
-  }
-  g_pages[page] = entry;
   g_stats.fault_us += time_us_32() - start_us;
 }
 
