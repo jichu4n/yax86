@@ -145,9 +145,13 @@ round-trips through memory costs more than its instruction count suggests.**
   the obvious early return for the no-cache path - makes `-O2` stop inlining
   it into flash behind a veneer, **2.54% slower at `-O2`**. That is why the
   no-cache path joins the cached one instead of returning early.
-- **256 entries, 6KB.** 512 is 0.11% faster for another 6KB, 1024 0.04%
-  slower, 128 0.83% slower. At 256 the image leaves room for 192KB of guest
-  RAM.
+- **512 entries, 12KB, sized on real programs rather than `dos-boot`.**
+  `dos-boot` hardly cares - 512 is 0.48% faster than 256, 128 was 0.83%
+  slower - but on the PicoCalc at 640KB, seven commands compiling and running
+  programs under DOS took 174.2 seconds of processor time with 512 entries
+  against 179.8 with 256, and QBasic interpreting a program 77.5 against
+  81.7: an interpreter's loop is larger than a boot's. 1024 entries took
+  173.5, not worth 12KB more - the PicoCalc would have 3KB of SRAM left.
 - **`code_page_generation` is the whole invalidation mechanism**: one
   wrapping byte per 4KB page, recorded by each entry and compared on use. The
   CPU bumps it in `YCPUWriteRawMemoryByte()`, where operands, stack pushes
