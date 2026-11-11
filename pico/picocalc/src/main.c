@@ -219,9 +219,10 @@ typedef struct RuntimeStatus {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
-// The VMs on the card, and the one started, if one was: without one
-// drive A holds the built-in floppy and no other drive has a disk.
+// The VMs on the card, the card's settings, and the VM started, if one was:
+// without one drive A holds the built-in floppy and no other drive has a disk.
 static VMList g_vms;
+static VMSettings g_settings;
 static VMConfig g_vm;
 static bool g_has_vm;
 static RuntimeStatus g_status;
@@ -693,6 +694,7 @@ static __noinline void ReplyReportBoard(const Command* command) {
   const DisplayStats display = DisplayGetStats();
   REPLY_GROUP(
       command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
+      Y_LOG_STRING("font", Font4x10Name(g_settings.font)),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
       Y_LOG_UINT("pixels_drawn", display.pixels_drawn),
       Y_LOG_UINT("render_us", display.render_us),
@@ -794,7 +796,7 @@ static bool InitVM(void) {
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->floppy_drives = FloppyDrives();
-  config->video_text_font.glyphs = &kFont4x10[0][0];
+  config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings.font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
   config->set_pc_speaker_frequency = SetPCSpeakerFrequency;
@@ -1365,11 +1367,6 @@ static void UpdateChoosingRows(void) {
   OfferStatusRows(&state);
 }
 
-// Read the configuration of the VM at index in the list, to start it.
-// Returns false if it could not be read, with why shown on the list.
-// The card's settings, as read at power on.
-static VMSettings g_settings;
-
 // Make the VM named name the one to start at the next power on, if it is not
 // already. Writing the card only when it changes keeps a board that starts
 // its default every time from writing at all.
@@ -1414,6 +1411,8 @@ static __noinline bool TakeVM(uint8_t index) {
 static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   char problem[kVMProblemLength + 1];
   bool read = VMSettingsRead(settings, problem);
+  DisplaySetFont(settings->font);
+  MenuSetFont(settings->font);
   *highlighted = 0;
   if (read && settings->boot_default[0] != '\0') {
     // Past the list's end, the first is highlighted instead.
@@ -1429,6 +1428,24 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
     SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
   }
   return read;
+}
+
+static __noinline void ChooseFont(void) {
+  const Font4x10 font = MenuChosenFont();
+  DisplaySetFont(font);
+  if (font == g_settings.font) {
+    return;
+  }
+  g_settings.font = font;
+  char problem[kVMProblemLength + 1];
+  if (VMSettingsSaveFont(font, problem)) {
+    SYSTEM_INFO("font_saved", Y_LOG_STRING("font", Font4x10Name(font)));
+    return;
+  }
+  char message[kTextColumns + 1];
+  snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
+  MenuSetProblem(message);
+  SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
 }
 
 // Share the SD card over USB: the card is unmounted first, as
@@ -1713,6 +1730,9 @@ static __noinline void ChooseVM(void) {
           break;
         case kMenuActionStopSharing:
           StopSharing();
+          break;
+        case kMenuActionFontChosen:
+          ChooseFont();
           break;
         case kMenuActionRenameVM:
           RenameVM();

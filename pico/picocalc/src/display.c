@@ -57,6 +57,7 @@ typedef enum DisplayMessage {
   kDisplayMessageTurnOn,
   kDisplayMessageScreenshot,
   kDisplayMessageMenu,
+  kDisplayMessageFont,
 } DisplayMessage;
 
 // What core 0 hands over. Each has a flag that only core 0 sets, once it has
@@ -71,6 +72,7 @@ static DisplayStatus g_status;
 static volatile bool g_status_busy;
 static DisplayMenu g_menu;
 static volatile bool g_menu_busy;
+static volatile Font4x10 g_font = kFont4x10Default;
 // The id of the command a screenshot answers.
 static uint32_t g_screenshot_id;
 static volatile bool g_screenshot_busy;
@@ -335,6 +337,17 @@ static void DisplayMain(void) {
         DrawMenu();
         GiveBack(&g_menu_busy);
         break;
+      case kDisplayMessageFont:
+        TextSetFont(g_font);
+        if (g_status_drawn) {
+          for (uint8_t row = 0; row < kDisplayStatusRows; ++row) {
+            const DisplayTextRow* text = &g_drawn_status.rows[row];
+            TextDrawCells(
+                0, (uint8_t)(kStatusFirstRow + row), text->chars, text->attrs,
+                kTextColumns, g_palette);
+          }
+        }
+        break;
       case kDisplayMessageScreenshot:
         SendScreenshot(g_screenshot_id);
         GiveBack(&g_screenshot_busy);
@@ -380,9 +393,9 @@ bool DisplayOfferFrame(YVideoState* video) {
   g_frame.config.begin_render_region = BeginRenderRegion;
   g_frame.config.write_pixels = WriteGuestPixels;
   g_frame.config.end_render_region = EndRenderRegion;
-  const uint64_t copy_us = time_us_64() - start_us;
+  const uint64_t copy_us = time_us_64();
   critical_section_enter_blocking(&g_stats_lock);
-  g_stats.copy_us += copy_us;
+  g_stats.copy_us += copy_us - start_us;
   critical_section_exit(&g_stats_lock);
   HandOver(kDisplayMessageFrame, &g_frame_busy);
   return true;
@@ -397,6 +410,15 @@ void DisplayEndStatus(void) { HandOver(kDisplayMessageStatus, &g_status_busy); }
 DisplayMenu* DisplayBeginMenu(void) { return g_menu_busy ? NULL : &g_menu; }
 
 void DisplayEndMenu(void) { HandOver(kDisplayMessageMenu, &g_menu_busy); }
+
+void DisplaySetFont(Font4x10 font) {
+  if (font == g_font) {
+    return;
+  }
+  g_font = font;
+  __dmb();
+  multicore_fifo_push_blocking(kDisplayMessageFont);
+}
 
 void DisplayTurnOff(void) {
   __dmb();

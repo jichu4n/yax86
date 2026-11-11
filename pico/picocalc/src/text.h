@@ -15,6 +15,9 @@ enum {
   kTextRows = kLcdHeight / kFont4x10Height,
 };
 
+// Set the font TextDrawString() and TextDrawCells() draw in.
+void TextSetFont(Font4x10 font);
+
 // Draw a string of code page 437 characters starting at a cell, clipped at the
 // right edge of the screen.
 void TextDrawString(

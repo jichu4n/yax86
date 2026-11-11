@@ -14,6 +14,7 @@ static const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
 static const char kSettingsPath[] = "yax86/yax86.cfg";
 static const char kBootDefaultKey[] = "boot_default";
+static const char kFontKey[] = "font";
 
 const char* const kVMDriveLabels[kVMDrives] = {
     [kVMDriveFD1] = "FD1",
@@ -169,6 +170,13 @@ static bool TakeSettingsPair(
     settings->boot_delay = (uint8_t)seconds;
     return true;
   }
+  if (strcmp(key, kFontKey) == 0) {
+    if (!Font4x10FromName(value, &settings->font)) {
+      snprintf(problem, kVMProblemLength + 1, "no font %s", value);
+      return false;
+    }
+    return true;
+  }
   snprintf(problem, kVMProblemLength + 1, "no setting %s", key);
   return false;
 }
@@ -176,6 +184,7 @@ static bool TakeSettingsPair(
 bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]) {
   settings->boot_default[0] = '\0';
   settings->boot_delay = kVMDefaultBootDelay;
+  settings->font = kFont4x10Default;
   const ConfigFileResult result =
       ConfigFileRead(kSettingsPath, TakeSettingsPair, settings, problem);
   if (result == kConfigFileMissing) {
@@ -237,5 +246,11 @@ bool VMConfigSaveDrives(
 bool VMSettingsSaveBootDefault(
     const char* name, char problem[kVMProblemLength + 1]) {
   const ConfigFileSetting setting = {.key = kBootDefaultKey, .value = name};
+  return ConfigFileUpdate(kSettingsPath, &setting, 1, problem);
+}
+
+bool VMSettingsSaveFont(Font4x10 font, char problem[kVMProblemLength + 1]) {
+  const ConfigFileSetting setting = {
+      .key = kFontKey, .value = Font4x10Name(font)};
   return ConfigFileUpdate(kSettingsPath, &setting, 1, problem);
 }
