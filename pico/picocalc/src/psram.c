@@ -5,6 +5,7 @@
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
+#include "hardware/sync.h"
 #include "pico/time.h"
 #include "psram.pio.h"
 
@@ -90,6 +91,11 @@ static bool __not_in_flash_func(PsramTransfer)(
   const uint32_t tx_empty = 1u << (PIO_FSTAT_TXEMPTY_LSB + g_sm);
   const uint32_t rx_empty = 1u << (PIO_FSTAT_RXEMPTY_LSB + g_sm);
 
+  // Nothing may hold chip select low past the chip's 8us, which an interrupt
+  // taken part way through would: USB's ran past the timeout, the state
+  // machine stalled on its FIFO meanwhile, and words came back wrong. A burst
+  // is 5us, which is what interrupts wait at most.
+  const uint32_t interrupts = save_and_disable_interrupts();
   gpio_put(kPsramPinCS, 0);
   *txf = ((write_bits - 1) << 16) | (read_bits ? read_bits - 1 : 0);
   *txf = command;
@@ -121,6 +127,7 @@ static bool __not_in_flash_func(PsramTransfer)(
     }
   }
   gpio_put(kPsramPinCS, 1);
+  restore_interrupts(interrupts);
   if (!ok) {
     ++g_stats.timeouts;
     g_stats.state = kPsramTimedOut;

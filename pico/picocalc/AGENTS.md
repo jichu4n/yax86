@@ -534,8 +534,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   taken for the next header, desynchronizing every transaction after it.
   Memory's little-endian words are swapped on the way through. Words are
   what let the CPU keep up with the wire without DMA - a 512-byte block reads
-  in 90us and writes in 82us, against 76us and 74us on the wire. Shifting a
+  in 94us and writes in 83us, against 76us and 74us on the wire. Shifting a
   byte at a time and realigning it in software took 120us.
+- **Interrupts are off for each burst.** One taken part way through holds
+  chip select low past 8us while the state machine stalls on its FIFO: with
+  them on, writing 2MB of noise and reading it back found 66 bad words and
+  ran a transfer past its timeout, USB's interrupt the likely one. With them
+  off, two runs of 4MB each found none. A burst is about 5us, which is the
+  most an interrupt waits.
 - **A transfer holds chip select at most 32 bytes**, 4.8us with the command:
   the chip must see it raised within 8us to refresh itself. Bursts are
   aligned to 32 bytes, so none crosses the chip's 1KB pages.
