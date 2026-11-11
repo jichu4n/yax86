@@ -164,10 +164,11 @@ Y_FILE_PRIVATE inline Y_HOT uint8_t YCPUFetchNextInstructionByte(
       cpu, YCPUToRawAddress(cpu, Y_CPU_CS, fetch_state->next_byte_offset++));
 }
 
-// Opens the fetch window on the page of the paged data window an address is
-// in, if its entry allows reading it. Each page is a window of its own, so a
-// jump to another reopens it, and asking the host every time is a call and a
-// memory map lookup: this is two loads.
+// If an address is paged and its page is in a frame, points the fetch window
+// at that frame and returns true. The window covers only that one page,
+// because the next page's frame can be anywhere, so running or jumping onto
+// another page comes back here. Doing this without asking the host saves a
+// call and a memory map lookup each time.
 Y_FILE_PRIVATE Y_HOT Y_NOINLINE bool YCPUOpenPagedFetchWindow(
     YCPUState* cpu, uint32_t raw_address) {
   const YCPUPagedDataWindow* paged = &cpu->paged_data_window;
@@ -209,9 +210,9 @@ Y_FILE_PRIVATE Y_HOT void YCPUInitInstructionFetchState(
       &cpu->instruction_fetch_window;
   if (window->data == NULL || raw_address < window->start ||
       raw_address >= window->end) {
-    // Nothing open covers this address, so ask for a window that does: the
-    // page of paged memory it is in, if that is in a frame, and otherwise
-    // the host, which fills one in or sets its data to NULL to decline.
+    // Nothing open covers this address, so open a window that does: its page's
+    // frame if it is paged and in one, and otherwise whatever the host offers.
+    // The host fills one in, or sets its data to NULL to decline.
     if (YCPUOpenPagedFetchWindow(cpu, raw_address)) {
       // Opened.
     } else if (cpu->config.get_instruction_fetch_window != NULL) {

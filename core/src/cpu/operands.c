@@ -74,8 +74,9 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
          Y_CPU_PHYSICAL_ADDRESS_MASK;
 }
 
-// Where a byte of the paged data window is, or NULL if the address is outside
-// it or its page's entry lacks the flag asked for.
+// The byte in its frame that a guest address in the paged range refers to, or
+// NULL if the address is outside the range or its page's entry lacks flag -
+// Y_CPU_PAGED_DATA_RESIDENT for a read, Y_CPU_PAGED_DATA_WRITABLE for a write.
 Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
     const YCPUState* cpu, uint32_t raw_address, uint16_t flag) {
   const YCPUPagedDataWindow* window = &cpu->paged_data_window;
@@ -93,8 +94,9 @@ Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
                            (offset & page_mask));
 }
 
-// Read a byte from memory past the direct data window: paged memory by
-// indexing where its page allows, and the rest from the host.
+// Read a byte the direct data window does not cover: from its frame if the
+// address is paged and its page is in one, and otherwise from the host, which
+// brings a paged-out page in.
 //
 // Out of line, so that the paged data window costs the direct window's every
 // caller nothing: inlined into each, it cost dos-boot 2.6% with paging off.
@@ -195,9 +197,9 @@ Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
   return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
-// Write a byte as uint8_t to memory.
-// Write a byte to memory past the direct data window, as
-// YCPUReadMemoryByteBeyondWindow() reads one.
+// Write a byte the direct data window does not cover: into its frame if the
+// address is paged and its page is in one and writable, and otherwise through
+// the host, which brings the page in or marks it writable.
 Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteBeyondWindow(
     YCPUState* cpu, uint32_t address, uint8_t value) {
   uint8_t* paged =
@@ -211,6 +213,7 @@ Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteBeyondWindow(
   }
 }
 
+// Write a byte as uint8_t to memory.
 Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     YCPUState* cpu, uint32_t address, uint8_t value) {
   // Every write the CPU makes comes through here - operands, stack pushes and
