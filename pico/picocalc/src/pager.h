@@ -18,10 +18,11 @@
 #include "core/platform.h"
 
 enum {
-  // A page, and a frame: 512 bytes. Measured against traces of MS-DOS
-  // programs at 640KB, 4KB pages thrash a 128KB pool and 512 bytes stalls
-  // least, short of 256 bytes' page table.
-  kPagerPageShift = 9,
+  // A page, and a frame: 256 bytes, the smallest whose page table - 5KB for
+  // 640KB - the SRAM has room for. On the device, a Word 5.5 session spent
+  // 1.3% of its time in faults with 256-byte pages, 2.8% with 512 and 6.9%
+  // with 1KB, and smaller pages cost nothing measurable where nothing faults.
+  kPagerPageShift = 8,
   kPagerPageSize = 1 << kPagerPageShift,
 };
 

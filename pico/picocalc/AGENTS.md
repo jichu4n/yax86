@@ -570,16 +570,31 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   algorithm, writing a page back only if it was written. The report's
   `paging` group has the counts and `fault_us`, the time in the fault
   handler.
-- **Pages are 512 bytes.** Against traces of MS-DOS 3.30 running Turbo C++,
-  Turbo Pascal, QuickBASIC, QBasic and Word 5.5, 4KB pages thrash 128KB of
-  frames - a 128KB pool stalled 50% to 260% of run time - and 512 bytes
-  stalls least short of 256 bytes' larger page table.
+- **Pages are 256 bytes**, measured on the device with the workloads below,
+  nothing pinned - the share of processor time in faults:
+
+  | page | seven commands | Word session | Word's pages in |
+  | --- | --- | --- | --- |
+  | 256 bytes | 0.6% | **1.3%** | 17,502 |
+  | 512 bytes | 0.7% | 2.8% | 21,360 |
+  | 1KB | 1.0% | 6.9% | 29,380 |
+
+  A fault moves a whole page through the PSRAM at about 0.18us a byte, and
+  more of a large page is never used, so fewer bytes moved beats fewer
+  faults. Smaller pages cost nothing measurable where
+  nothing faults: the DOS330 boot took 6.305, 6.320 and 6.346 seconds. The
+  page table is 2 bytes a page, 5KB at 256 bytes; 128 bytes' 10KB is more
+  than the SRAM has spare. Traces on a desktop had already ruled out 4KB,
+  which thrashes 128KB of frames.
 - **Nothing is pinned by default**: `YAX86_PICOCALC_PINNED_KB` holds that much
   of guest RAM from address 0 in SRAM instead, under the CPU's direct data
   window, with the rest of the 128KB as frames. Pinning makes an access
-  cheaper and leaves fewer frames, and on the device the two came out even:
-  seven DOS commands - see below - took 179.7 seconds of processor time with
-  nothing pinned and 179.0 with 64KB, faults 0.7% and 1.1% of it. Where
+  cheaper and leaves fewer frames, and on the device, with 512-byte pages,
+  the two came out even: seven DOS commands - see below - took 179.7 seconds
+  of processor time with nothing pinned and 179.0 with 64KB, faults 0.7% and
+  1.1% of it; but the Word session's faults went from 2.8% to 6.0%. The
+  programs' code and data are above 64KB, so pinning speeds up little of
+  what they do. Where
   nothing faults, `dos-boot` on the bench with all of 128KB paged is 15%
   slower than direct, and with 64KB pinned 2%; the DOS330 boot at 640KB takes
   6.32 seconds pinning nothing and 5.65 pinning 64KB.
@@ -601,23 +616,23 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
   | command | processor time | faults |
   | --- | --- | --- |
-  | `TCC` compiling and linking a 40-line program | 18.9s | 2.6% |
+  | `TCC` compiling and linking a 40-line program | 18.8s | 1.9% |
   | running it | 7.0s | 0.1% |
-  | `TPC /B BREAKOUT`, six units | 11.3s | 0.6% |
-  | `TPC QSORT` | 2.2s | 3.0% |
+  | `TPC /B BREAKOUT`, six units | 11.3s | 0.5% |
+  | `TPC QSORT` | 2.2s | 2.5% |
   | `BC QCARDS.BAS` | 32.1s | 0.3% |
-  | `LINK QCARDS` | 26.7s | 0.8% |
-  | `QBASIC /RUN`, arrays and strings | 81.5s | 0.5% |
-  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 563.2s | 0.2% |
-  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 84.3s | 2.8% |
+  | `LINK QCARDS` | 26.7s | 0.5% |
+  | `QBASIC /RUN`, arrays and strings | 81.7s | 0.4% |
+  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 561.4s | 0.1% |
+  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 83.5s | 1.3% |
 
-  Word is what pages most - 21,424 pages in from PSRAM in 84 seconds - and
-  where pinning loses: with 64KB pinned its faults were 6.0% of 85.2
-  seconds. The other commands came out even.
+  These run at 67% to 121% of a real PC/XT, 78% for the seven commands
+  together, against 120% for the 128KB machine's boot: faults are not what
+  holds them back.
 - **A run's disk changes the next run**: the compilers leave their output,
   and Word's Setup records the name typed on its own files and skips asking
-  next time. `workloads/word.txt` deletes `C:\WORD` after, and a second run of Setup
-  has one screen fewer.
+  next time. `workloads/word.txt` deletes `C:\WORD` after; a second run of
+  Setup needs its two name screens' steps taken out.
 
 ## The speaker
 
