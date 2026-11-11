@@ -1,5 +1,6 @@
-# The paging workloads, from the BENCH VM's A> prompt - see AGENTS.md,
-# "Paging guest RAM". ./debug.js run workloads/bench.txt --timeout 600
+# Seven DOS commands, from the BENCH VM's A> prompt on the PicoCalc. See
+# pico/bench/AGENTS.md, "PicoCalc workloads". From the repository root:
+# pico/picocalc/debug.js run pico/bench/workloads/bench.txt --timeout 600
 type C:\r
 type A:CHKDSK C:\r
 wait bytes available on disk[\s\S]*^C> *$

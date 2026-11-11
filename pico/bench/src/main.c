@@ -13,6 +13,12 @@
 // reports is an invariant: if that number moves, the change altered behaviour
 // and the times either side of it are not comparable.
 //
+// Guest memory is laid out as pico/picocalc lays it out, by whether the
+// PSRAM answers at startup (yax86_pico.h): on a PicoCalc, 640KB paged through
+// the PSRAM, and on a bare Pico, 128KB held directly in SRAM. The two boot
+// differently, the BIOS testing and DOS sizing more memory, so each has its
+// own invariant, and the header's paging field says which a run had.
+//
 // Timing discipline: host I/O on this target is expensive enough to swamp what
 // is being measured - a blocking UART write costs orders of magnitude more
 // than the guest instruction it would be reporting on. So nothing is printed
@@ -32,18 +38,14 @@
 #include "hardware/timer.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
+#include "pager.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "psram.h"
+#include "yax86_pico.h"
 // Generated into the build directory rather than the source tree - see the
 // floppy image section of CMakeLists.txt.
 #include "generated/dos_floppy_data.h"
-
-// Guest RAM in kilobytes, chosen at build time by the YAX86_PICO_GUEST_RAM_KB
-// CMake option. Period-accurate XT sizes only: an IBM PC/XT shipped with 64K
-// to 640K, and what fits alongside the SDK in 264KB of SRAM is the low end.
-#ifndef YAX86_PICO_GUEST_RAM_KB
-#define YAX86_PICO_GUEST_RAM_KB 128
-#endif
 
 // The optimization level the firmware was built at, for the result header.
 // Supplied by CMake so that a pasted result says which build produced it.
@@ -52,8 +54,9 @@
 #endif
 
 enum {
-  // Guest conventional memory, in bytes.
-  kGuestRAMSize = YAX86_PICO_GUEST_RAM_KB * 1024,
+  // The SRAM guest memory has: conventional memory itself without the
+  // PSRAM, and the frames it is paged through with it.
+  kGuestRAMSize = kPicoGuestSRAMSize,
 
   // Emulated cycles per pass of the run loop, about ten milliseconds of guest
   // time. Short enough that the watchdog is fed often and the screen is
@@ -69,6 +72,8 @@ enum {
   // is survived. Any value does, as long as uninitialized RAM is unlikely to
   // hold it.
   kOverclockAttemptMarker = 0x0C10C4ED,
+  // The same for g_psram_marker, across bringing the PSRAM up.
+  kPsramAttemptMarker = 0x95A3B007,
 
   // The CGA text screen, which the run watches to know how far DOS has got.
   // Character and attribute alternate, so the characters are the even bytes of
@@ -97,11 +102,15 @@ enum {
   kUSBConnectPollMs = 100,
 };
 
-// The guest's conventional memory and the CGA adapter's frame buffer. Static
+// The guest's memory in SRAM and the CGA adapter's frame buffer. Static
 // rather than allocated: this target has no heap worth the name, and these two
 // arrays are most of what the machine costs in RAM.
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
+// Whether guest RAM is paged through the PSRAM, and how much there is. Set
+// once the PSRAM has been brought up, before the first run.
+static bool g_paging;
+static uint32_t g_guest_ram_size = kGuestRAMSize;
 static YPlatformState g_platform;
 // What the machine logs through: errors only, since the core's warnings come
 // in numbers during a boot and writing them out would be host I/O in the
@@ -130,6 +139,8 @@ static const YLogModule kBenchLogModule = {
 // Deliberately not zeroed at startup - see where it is read.
 static uint32_t __uninitialized_ram(g_overclock_marker);
 #endif
+// The same for the PSRAM - see StartPsram().
+static uint32_t __uninitialized_ram(g_psram_marker);
 
 // What a run produced. Filled in during the run and printed after it, so that
 // no host I/O happens while the guest is executing.
@@ -182,8 +193,14 @@ static bool ResetMachine(void) {
 
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_machine_log_config;
-  config->direct_memory_size = kGuestRAMSize;
-  config->direct_memory = g_guest_ram;
+  if (g_paging) {
+    // Every page starts as zeros, as the SRAM does without paging.
+    config->paged_memory =
+        PagerInit(g_guest_ram, kGuestRAMSize, kPicoPagedGuestRAMSize);
+  } else {
+    config->direct_memory_size = kGuestRAMSize;
+    config->direct_memory = g_guest_ram;
+  }
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   // The DOS idle skip is left off. The run stops at the command prompt,
@@ -491,6 +508,31 @@ static Y_NOINLINE void LogResult(const BenchResult* r) {
   }
 }
 
+// The PSRAM's state, which says why a run did not page, and what paging did
+// in the run. The pager's counts follow from what the guest touched, so they
+// repeat run to run; fault_us is host time.
+static Y_NOINLINE void LogPaging(void) {
+  const PsramStats psram = PsramGetStats();
+  BENCH_INFO(
+      "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
+      Y_LOG_UINT("read_512_us", psram.read_512_us),
+      Y_LOG_UINT("write_512_us", psram.write_512_us),
+      Y_LOG_UINT("timeouts", psram.timeouts));
+  if (!g_paging) {
+    return;
+  }
+  const PagerStats pager = PagerGetStats();
+  BENCH_INFO(
+      "paging", Y_LOG_UINT("frames", pager.frames),
+      Y_LOG_UINT("page_bytes", 1u << kPicoPageShift),
+      Y_LOG_UINT("page_ins", pager.page_ins),
+      Y_LOG_UINT("zero_fills", pager.zero_fills),
+      Y_LOG_UINT("write_backs", pager.write_backs),
+      Y_LOG_UINT("soft_faults", pager.soft_faults),
+      Y_LOG_UINT("errors", pager.errors),
+      Y_LOG_UINT("fault_us", pager.fault_us));
+}
+
 // ============================================================================
 // Stack high water mark
 // ============================================================================
@@ -568,7 +610,8 @@ static Y_NOINLINE void LogHeader(void) {
   BENCH_INFO(
       "header", Y_LOG_STRING("emulator", "yax86"),
       Y_LOG_STRING("target", "rp2040"), Y_LOG_STRING("opt", YAX86_PICO_OPT),
-      Y_LOG_UINT("guest_ram_kb", YAX86_PICO_GUEST_RAM_KB),
+      Y_LOG_UINT("guest_ram_kb", g_guest_ram_size / 1024),
+      Y_LOG_BOOL("paging", g_paging),
       Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / 1000),
       Y_LOG_BOOL("profile", YAX86_PICO_PROFILE),
       Y_LOG_UINT("state_bytes", sizeof(YPlatformState)));
@@ -615,6 +658,32 @@ static void Overclock(void) {
 }
 #endif
 
+// Bring the PSRAM up, and page guest RAM through it if it works. After the
+// clock change, since the PSRAM's serial clock is divided from it.
+//
+// Done under the watchdog with a marker, as Overclock() is, so that a chip
+// that hangs the board costs one reboot, after which the bench runs without
+// it. The watchdog is left as it was found: armed if Overclock() armed it.
+static void StartPsram(void) {
+  if (g_psram_marker == kPsramAttemptMarker) {
+    g_psram_marker = 0;
+    PsramInit(true);
+    BENCH_WARN("psram_skipped_after_hang");
+    return;
+  }
+  const bool watchdog_was_armed = watchdog_hw->ctrl & WATCHDOG_CTRL_ENABLE_BITS;
+  g_psram_marker = kPsramAttemptMarker;
+  watchdog_enable(kWatchdogTimeoutMs, true);
+  g_paging = PsramInit(false);
+  g_psram_marker = 0;
+  if (!watchdog_was_armed) {
+    watchdog_disable();
+  }
+  if (g_paging) {
+    g_guest_ram_size = kPicoPagedGuestRAMSize;
+  }
+}
+
 int main(void) {
   stdio_init_all();
   // Wait for the host to attach before printing anything. USB CDC drops
@@ -640,6 +709,7 @@ int main(void) {
 #ifdef YAX86_PICO_SYS_CLK_KHZ
   Overclock();
 #endif
+  StartPsram();
 
   LogHeader();
   // Painted from main's frame, before anything deep runs, so that the whole of
@@ -650,6 +720,7 @@ int main(void) {
 
   watchdog_disable();
   LogResult(&result);
+  LogPaging();
 #if YAX86_PICO_PROFILE
   ProfileLog();
 #endif

@@ -1,5 +1,6 @@
-# Word 5.5's Setup and a session, from the WORD VM's A> prompt - see AGENTS.md,
-# "Paging guest RAM". ./debug.js run workloads/word.txt --timeout 900
+# Word 5.5's Setup and a session, from the WORD VM's A> prompt on the
+# PicoCalc. See pico/bench/AGENTS.md, "PicoCalc workloads". From the repository root:
+# pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
 type C:\r
 wait ^C> *$
 type CD \\WINST\r
