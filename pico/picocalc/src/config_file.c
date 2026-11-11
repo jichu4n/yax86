@@ -1,11 +1,12 @@
 #include "config_file.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "core/platform.h"
 #include "disk_image.h"
 #include "ff.h"
-#include "file_list.h"
+#include "fs.h"
 
 enum {
   // The most pairs a line may have.
@@ -228,30 +229,15 @@ static uint8_t SettingFor(
 }
 
 // path with its extension, if it has one, replaced by .new.
-static bool NewPath(const char* path, char new_path[kFileListMaxPath + 1]) {
-  uint16_t length = 0;
-  uint16_t dot = 0;
-  bool has_dot = false;
-  for (; path[length] != '\0'; ++length) {
-    if (path[length] == '/') {
-      has_dot = false;
-    } else if (path[length] == '.') {
-      dot = length;
-      has_dot = true;
-    }
-  }
-  const uint16_t stem = has_dot ? dot : length;
-  if (stem + 1 + sizeof(kNewExtension) - 1 > kFileListMaxPath) {
-    return false;
-  }
-  for (uint16_t i = 0; i < stem; ++i) {
-    new_path[i] = path[i];
-  }
-  new_path[stem] = '.';
-  for (uint16_t i = 0; i < sizeof(kNewExtension); ++i) {
-    new_path[stem + 1 + i] = kNewExtension[i];
-  }
-  return true;
+static bool NewPath(const char* path, char new_path[kFSMaxPath + 1]) {
+  const char* slash = strrchr(path, '/');
+  const char* dot = strrchr(path, '.');
+  const int stem = dot != NULL && (slash == NULL || dot > slash)
+                       ? (int)(dot - path)
+                       : (int)strlen(path);
+  const int length =
+      snprintf(new_path, kFSMaxPath + 1, "%.*s.%s", stem, path, kNewExtension);
+  return length >= 0 && length <= kFSMaxPath;
 }
 
 // Write writer's text to path, through a file beside it at new_path.
@@ -294,7 +280,7 @@ bool ConfigFileUpdate(
     Describe(problem, "too many settings at once");
     return false;
   }
-  char new_path[kFileListMaxPath + 1];
+  char new_path[kFSMaxPath + 1];
   if (!NewPath(path, new_path)) {
     Describe(problem, "path too long");
     return false;

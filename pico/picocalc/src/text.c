@@ -1,5 +1,7 @@
 #include "text.h"
 
+#include <string.h>
+
 // One scan line of the string being drawn. A string is sent as a single window
 // a line at a time, rather than a window per glyph, which would be three
 // commands for every 40 pixels.
@@ -44,10 +46,7 @@ void TextDrawString(
   if (column >= kTextColumns || row >= kTextRows) {
     return;
   }
-  uint8_t length = 0;
-  while (text[length] != '\0' && column + length < kTextColumns) {
-    ++length;
-  }
+  const uint8_t length = (uint8_t)strnlen(text, kTextColumns - column);
   if (length == 0) {
     return;
   }

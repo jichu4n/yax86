@@ -1,6 +1,6 @@
 #include "floppy.h"
 
-#include "file_list.h"
+#include "fs.h"
 // Generated into the build directory - see the floppy image section of
 // CMakeLists.txt.
 #include "generated/dos_floppy_data.h"
@@ -15,7 +15,7 @@ enum {
 
 static DiskImage g_images[kFloppyDrives];
 // The paths of the images, which the images point to.
-static char g_inserted_paths[kFloppyDrives][kFileListMaxPath + 1];
+static char g_inserted_paths[kFloppyDrives][kFSMaxPath + 1];
 // Whether drive A holds the floppy built into flash.
 static bool g_built_in;
 
@@ -27,7 +27,7 @@ void FloppyOpen(
     if (paths[drive] == NULL || paths[drive][0] == '\0') {
       image->status = kDiskImageEjected;
     } else {
-      FileListCopyPath(paths[drive], g_inserted_paths[drive]);
+      FSCopyPath(paths[drive], g_inserted_paths[drive]);
       DiskImageOpen(image, g_inserted_paths[drive], kImageSize);
     }
     opened[drive] = image->status;
@@ -52,8 +52,7 @@ const DiskImage* FloppyGetImage(FloppyDrive drive) { return &g_images[drive]; }
 FloppyDrive FloppyDriveHolding(const char* path) {
   for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
     const DiskImage* image = &g_images[drive];
-    if (image->status == kDiskImageOpen &&
-        FileListSamePath(image->path, path)) {
+    if (image->status == kDiskImageOpen && FSSamePath(image->path, path)) {
       return (FloppyDrive)drive;
     }
   }
@@ -102,7 +101,7 @@ DiskImageStatus FloppyInsertImage(
     YFDCState* fdc, FloppyDrive drive, const char* path) {
   FloppyEject(fdc, drive);
   char* inserted_path = g_inserted_paths[drive];
-  FileListCopyPath(path, inserted_path);
+  FSCopyPath(path, inserted_path);
   DiskImage* image = &g_images[drive];
   const DiskImageStatus status =
       DiskImageOpen(image, inserted_path, kImageSize);

@@ -96,12 +96,7 @@ void StatusBarPostMessage(const char* text) {
   }
   char* slot =
       g_messages[(g_message_head + g_message_count) % kMessageQueueSize];
-  uint8_t length = 0;
-  while (text[length] != '\0' && length < kTextColumns) {
-    slot[length] = text[length];
-    ++length;
-  }
-  slot[length] = '\0';
+  snprintf(slot, kTextColumns + 1, "%s", text);
   ++g_message_count;
 }
 

@@ -1,5 +1,8 @@
 #include "disk_image.h"
 
+#include <ctype.h>
+#include <string.h>
+
 #include "pico/time.h"
 
 enum {
@@ -93,21 +96,13 @@ const char* DiskImageDescribeStatus(DiskImageStatus status) {
 }
 
 void DiskImageName(const char* path, char name[kDiskImageNameLength + 1]) {
-  const char* start = path;
-  for (const char* c = path; *c != '\0'; ++c) {
-    if (*c == '/') {
-      start = c + 1;
-    }
-  }
-  uint8_t length = 0;
-  while (start[length] != '\0') {
-    ++length;
-  }
-  const uint8_t kept =
+  const char* slash = strrchr(path, '/');
+  const char* start = slash != NULL ? slash + 1 : path;
+  const size_t length = strlen(start);
+  const size_t kept =
       length > kDiskImageNameLength ? kDiskImageNameLength - 1 : length;
-  for (uint8_t i = 0; i < kept; ++i) {
-    const char c = start[i];
-    name[i] = (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+  for (size_t i = 0; i < kept; ++i) {
+    name[i] = (char)toupper((unsigned char)start[i]);
   }
   if (length > kDiskImageNameLength) {
     name[kept] = '~';

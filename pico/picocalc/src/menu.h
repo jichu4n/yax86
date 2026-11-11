@@ -71,6 +71,13 @@ typedef enum MenuAction {
   // From the same page, through the browser: put a disk image on USB - see
   // MenuChosenImage() - then show it with MenuShowSharing().
   kMenuActionShareImage,
+  // From Manage VMs: rename the VM MenuManagedVM() says to MenuTypedName(),
+  // clone it as that name, or delete it. Then show Manage VMs again with
+  // MenuShowManagedVMs(), or for a name that will not do, MenuSetProblem()
+  // alone, which leaves the name to be typed again.
+  kMenuActionRenameVM,
+  kMenuActionCloneVM,
+  kMenuActionDeleteVM,
 } MenuAction;
 
 void MenuInit(const MenuConfig* config);
@@ -82,8 +89,9 @@ bool MenuIsOpen(void);
 // does, with MenuClose(), once a VM chosen has started. list must
 // outlive the choosing.
 //
-// Under the VMs is one more row, USB disk mode, a page from which the SD card
-// is shared over USB.
+// Under the VMs are two more rows: Manage VMs, from which the VMs in
+// `yax86/vm` are renamed, cloned and deleted; and USB disk mode, a page from
+// which the SD card is shared over USB.
 void MenuChooseVMs(const VMList* list, uint8_t highlighted);
 
 void MenuClose(void);
@@ -98,6 +106,19 @@ void MenuShowSharing(void);
 // The disk image chosen to put on USB, a path from the card's root, and its
 // size, which is a floppy's or the hard disk's.
 const char* MenuChosenImage(uint32_t* size);
+
+// The index in the list of the VM Manage VMs is acting on, and the name typed
+// for it.
+uint8_t MenuManagedVM(void);
+const char* MenuTypedName(void);
+
+// Show Manage VMs, once the caller has read the list afresh, with the VM
+// named name chosen, or the first if it is not there.
+void MenuShowManagedVMs(const char* name);
+
+// Show how far a clone has been copied, in KB: the first call shows the
+// page, which takes no keys until the caller shows another.
+void MenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb);
 
 // Show the seconds left before the highlighted VM starts by itself, or
 // stop showing them with 0.
