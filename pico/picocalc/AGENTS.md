@@ -161,7 +161,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Text renders 320x250 in the 4x10 font**, handed to the core through
   `YPlatformConfig.video_text_font`, in the top 250 rows; the status rows
-  take the bottom 30. The core renders only what changed, as rectangles, and the panel
+  take the bottom 20. The core renders only what changed, as rectangles, and the panel
   keeps its own frame memory, so each region goes straight to it:
   `begin_render_region` opens a window and `write_pixels` streams RGB565.
 - **The CGA's graphics modes render 640x200 and are drawn at 320x250**, in
@@ -534,40 +534,51 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## The status rows
 
-- **Three rows of the 4x10 font at the bottom of the panel**, composed by
+- **Two rows of the 4x10 font at the bottom of the panel**, composed by
   `src/status_bar.c` on core 0 and drawn by core 1, which draws only the
   rows that changed. A line a pixel high in dark grey, two pixels above
   them, sets them off from the guest's screen; the rows between are black.
+  They hold what is worth a glance and no more - a status bar that fills
+  its space with what rarely matters is one nobody reads.
 
   ```
-  Inserted GAMES.IMG in drive B                                         <- messages
-  FD1:DISK01.IMG  FD2:GAMES.IMG  HD1:HD1.IMG                            <- drives
-  DOS33             CAPS NUM SCRL INS     00:44:51        ↑+↑=Menu  [████] 100%
+  Inserted GAMES.IMG in FD2                                              <- messages and keys
+  DOS330         FD1  FD2 ■HD1             CAPS                   ▌▌▌▌▌ 100%  <- the machine
   ```
 
-- **Messages** are queued and shown four seconds each, without moving
-  anything on the rows below. While the menu is open the row shows its
-  keys, and while the VM is dropping time it shows `SLOW` and its
-  speed in yellow.
-- **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
-  pairs two spaces apart - `↑↓=Move  Enter=Select  Esc=Back` - the action
-  brighter than the key, so the two read apart in the 4x10 font. The menu
-  key on the bottom row, `↑+↑=Menu`, is the same a step dimmer.
-- **Drives** follow each other two columns apart: the image's file name,
-  without its folders, in capitals, `built-in` for the floppy in flash, or
-  `empty` for a floppy drive without a disk. A drive not there - floppy
-  disk 2 or a hard disk - is left out. The card keeps 8.3 names, so a name fits; a longer one would
-  keep 11 characters and end in `~`. The label - `FD1`, `HD1` - is the
-  drive's light, green for 0.2 seconds after a sector is read or written.
-- **Indicators**: the VM's name, if one was started; the guest BIOS's
-  own lock and insert flags, at
-  `0040:0017` - a PC/XT keyboard has no lights - bright when on; the
-  guest's time of day; the menu's key; and the battery, from the keyboard
+- **The machine's row, at the bottom edge**: the VM's name; its drives;
+  the guest BIOS's lock and insert flags, at `0040:0017` - a PC/XT
+  keyboard has no lights - each shown only while it is on; and the battery.
+- **A drive is its label alone**, grey after a blank space, and while it is
+  in use - for 0.2 seconds after a sector is read or written - a green full
+  block before it and the label bright white, as a PC's front panel lights
+  a drive. Drives follow each other a space apart, so a light does not run
+  into the drive before it, and a drive the machine does not have -
+  floppy disk 2 disabled, a hard disk with no image - is left out. The
+  images' names are on the status page and in Edit drives: they are mostly
+  `fd1.img` and `hd1.img`, and not worth the row.
+- **The battery is five cells, a fifth of a charge each**, a cell for each
+  fifth begun - 78% is four - in green, yellow below half and red below a
+  fifth, then the percentage and `+` while charging. A cell is code page
+  437's left half block, which leaves two columns between cells; full
+  blocks, and small squares, run together into a bar in the 4x10 font,
+  where they fill the cell's width. The battery comes from the keyboard
   controller's register `0x0B`, which the key FIFO poll reads every ten
   seconds in its place. The controller measures it every 20 seconds, and
-  answers 0% with no battery, which is shown as no battery. While the list
-  of VMs shows at power on there is no guest and the menu key does
-  nothing, so the row has only the battery.
+  answers 0% with no battery, which is shown as no battery.
+- **The messages row** shows a message four seconds at a time; the menu's
+  keys while it is open, or a problem in their place until the next key;
+  and otherwise, while a VM runs, the menu's own key, `Shift+Shift=Menu`,
+  dim. Shift is spelled out: the arrows that stood for it read as the up
+  arrow key.
+- **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
+  pairs two spaces apart - `↑↓=Move  Enter=Select  Esc=Back` - the action
+  brighter than the key, so the two read apart in the 4x10 font.
+- **Left off**: a warning when the VM falls behind real time, which nobody
+  can act on; the guest's time of day, which with no clock to set it from is
+  the time since the boot; and the locks that are off.
+- **While the list of VMs shows at power on** there is no guest and the
+  menu key does nothing, so the machine's row has only the battery.
 - **They are composed ten times a second**, so that a light comes on while
   its drive is in use, and composing is skipped while nothing they show has
   changed. Composing every time cost the boot 0.74% against master; skipping

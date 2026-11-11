@@ -19,8 +19,8 @@
 #include "text.h"
 
 enum {
-  // The status rows: the three text rows at the bottom of the panel.
-  kDisplayStatusRows = 3,
+  // The status rows: the two text rows at the bottom of the panel.
+  kDisplayStatusRows = 2,
   // The most rows the menu's box can take: its tallest page, the status
   // page, needs 10. A row is 160 bytes of SRAM.
   kDisplayMenuMaxRows = 12,
@@ -34,7 +34,8 @@ typedef struct DisplayTextRow {
   uint8_t attrs[kTextColumns];
 } DisplayTextRow;
 
-// The status rows, top to bottom: messages, the drives, and the indicators.
+// The status rows, top to bottom: messages, and the machine's - see
+// status_bar.h.
 typedef struct DisplayStatus {
   DisplayTextRow rows[kDisplayStatusRows];
 } DisplayStatus;

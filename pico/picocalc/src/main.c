@@ -100,9 +100,6 @@ enum {
   // light comes on while it is in use; core 1 is only handed them, and draws
   // only the rows that changed, when something has.
   kStatusUpdateMs = 100,
-  // How long the window is that the VM's speed is judged over, for the
-  // status rows' warning that it has fallen behind real time.
-  kSlowWindowUs = 1000 * 1000,
   // The battery level below which the status rows say it is low, and the one
   // it has to come back above before they say so again.
   kBatteryLowPercent = 10,
@@ -549,32 +546,6 @@ static void DescribeStatus(MenuStatusLine lines[kMenuStatusLines]) {
   FormatDiskLine(lines[5].value, size);
 }
 
-// How fast the VM has run against real time over the last window, in
-// percent, if it has fallen behind and dropped time in it; 0 if it has kept
-// up.
-static uint32_t SlowPercent(void) {
-  static uint64_t window_start_us;
-  static uint64_t window_start_cycles;
-  static uint64_t window_start_dropped_us;
-  static uint32_t percent;
-  const uint64_t now_us = time_us_64();
-  if (now_us - window_start_us < kSlowWindowUs) {
-    return percent;
-  }
-  const uint64_t real_us = now_us - window_start_us;
-  const uint64_t emulated_us = (g_clock.cycles - window_start_cycles) *
-                               kMicrosecondsPerSecond /
-                               Y_PLATFORM_CPU_CYCLES_PER_SECOND;
-  const bool dropped = g_clock.dropped_us != window_start_dropped_us;
-  percent = dropped && !MenuIsOpen() && window_start_us != 0
-                ? (uint32_t)(emulated_us * 100 / real_us)
-                : 0;
-  window_start_us = now_us;
-  window_start_cycles = g_clock.cycles;
-  window_start_dropped_us = g_clock.dropped_us;
-  return percent;
-}
-
 // Say once that the battery is low, until it has charged back up.
 static void WarnOfLowBattery(SouthbridgeBattery battery) {
   static bool warned;
@@ -604,9 +575,7 @@ static void UpdateStatusRows(void) {
   state.vm = g_has_vm ? g_vm.entry.name : NULL;
   state.running = true;
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
-  state.guest_seconds = (uint32_t)(GuestClockMs() / kMillisecondsPerSecond);
   state.battery = SouthbridgeGetBattery();
-  state.slow_percent = SlowPercent();
   state.hint = MenuIsOpen() ? MenuHint() : NULL;
   WarnOfLowBattery(state.battery);
   OfferStatusRows(&state);
