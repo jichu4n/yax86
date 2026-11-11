@@ -295,8 +295,9 @@ typedef struct YFDCState {
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.
-    uint16_t
-        sector_byte_index;  // Current byte index within the current sector.
+    // Current byte index within the current sector; for Format Track, the
+    // ID bytes taken so far.
+    uint16_t sector_byte_index;
     uint8_t data_register;  // Buffer for the byte currently being transferred.
     bool dma_request_active;  // DREQ is asserted, waiting for DMA access.
     bool tc_received;         // TC (Terminal Count) signal received from DMA.
@@ -576,25 +577,23 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   }
 
   // Execution Loop.
-
-  // Check for Terminal Count (TC).
-  if (fdc->transfer.tc_received) {
-    // Transfer complete.
-    uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
-    uint8_t head_address = (fdc->transfer.head & 0x01);
-    YFDCFinishReadWrite(
-        fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index, 0,
-        0);
-    return;
-  }
-
-  // If DREQ is active, wait for the system to service it (write byte to us).
-  if (fdc->transfer.dma_request_active) {
-    return;
-  }
-
-  // Data has arrived in data_register. Write it to image.
   uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
+  uint8_t head_address = (fdc->transfer.head & 0x01);
+
+  // While DREQ is active, wait for the system to write a byte to us - unless
+  // the DMA's count has run out without one.
+  if (fdc->transfer.dma_request_active) {
+    if (fdc->transfer.tc_received) {
+      YFDCFinishReadWrite(
+          fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index,
+          0, 0);
+    }
+    return;
+  }
+
+  // A byte has arrived in data_register: write it to the image. The DMA's
+  // terminal count comes with the last byte of the transfer, so that byte is
+  // written before the command ends.
   if (fdc->config.write_image_byte) {
     fdc->config.write_image_byte(
         fdc->config.context, drive_index, fdc->transfer.current_offset,
@@ -615,52 +614,157 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   }
 
   // Check for sector boundary.
+  bool end_of_track = false;
   if (fdc->transfer.sector_byte_index >= sector_size) {
-    // Sector done.
-    if (fdc->transfer.sector >= fdc->transfer.eot) {
-      // End of Track reached.
-      if (fdc->transfer.multi_track && (fdc->transfer.head & 1) == 0) {
+    YFDCDriveState* drive = &fdc->drives[drive_index];
+    if (fdc->transfer.sector >= fdc->transfer.eot &&
+        !(fdc->transfer.multi_track && (fdc->transfer.head & 1) == 0)) {
+      // End of Track reached, with no other head to go on to.
+      fdc->transfer.sector++;
+      end_of_track = true;
+    } else {
+      if (fdc->transfer.sector >= fdc->transfer.eot) {
         // Multi-Track rollover.
         fdc->transfer.head ^= 1;
         fdc->transfer.sector = 1;
-        fdc->transfer.sector_byte_index = 0;
-
-        // Recompute offset.
-        YFDCDriveState* drive = &fdc->drives[drive_index];
-        fdc->transfer.current_offset = YFDCComputeOffset(
-            *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
-            fdc->transfer.sector, 0);
-
-        if (fdc->transfer.current_offset == Y_FDC_INVALID_OFFSET) {
-          fdc->transfer.tc_received = true;
-          return;  // Stop here, don't request next byte.
-        }
       } else {
-        // Terminate.
+        // Next sector.
         fdc->transfer.sector++;
-        fdc->transfer.tc_received = true;
-        return;  // Stop here.
       }
-    } else {
-      // Next sector.
-      fdc->transfer.sector++;
       fdc->transfer.sector_byte_index = 0;
-      YFDCDriveState* drive = &fdc->drives[drive_index];
       fdc->transfer.current_offset = YFDCComputeOffset(
           *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
           fdc->transfer.sector, 0);
-
-      if (fdc->transfer.current_offset == Y_FDC_INVALID_OFFSET) {
-        fdc->transfer.tc_received = true;
-        return;
-      }
+      end_of_track = fdc->transfer.current_offset == Y_FDC_INVALID_OFFSET;
     }
+  }
+
+  if (end_of_track || fdc->transfer.tc_received) {
+    head_address = (fdc->transfer.head & 0x01);
+    YFDCFinishReadWrite(
+        fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index, 0,
+        0);
+    return;
   }
 
   // Request next byte via DMA.
   fdc->transfer.dma_request_active = true;
   if (fdc->config.request_dma) {
     fdc->config.request_dma(fdc->config.context);
+  }
+}
+
+enum {
+  // Format Track's parameters, after the command byte: the head and drive,
+  // the sector size code, the sectors to format, the gap length, and the
+  // byte to fill each sector with.
+  Y_FDC_FORMAT_PARAM_HEAD_AND_DRIVE = 1,
+  Y_FDC_FORMAT_PARAM_SECTORS = 3,
+  Y_FDC_FORMAT_PARAM_FILL_BYTE = 5,
+  // The ID the guest gives each sector, by DMA: cylinder, head, sector
+  // number and sector size code.
+  Y_FDC_FORMAT_ID_CYLINDER = 0,
+  Y_FDC_FORMAT_ID_HEAD,
+  Y_FDC_FORMAT_ID_SECTOR,
+  Y_FDC_FORMAT_ID_SIZE_CODE,
+  Y_FDC_FORMAT_ID_BYTES,
+};
+
+// Take one byte of a sector's ID during Format Track, and with its last, fill
+// the sector with the fill byte. Returns whether every sector has been
+// formatted.
+//
+// An image holds the standard layout and nothing else, so a sector is found
+// where the image keeps the sector its ID numbers, on the track the head is
+// over and the head the command names; the ID's cylinder and head are only
+// reported back. A sector the image has no place for - a number past the
+// track's, say - is left as it was.
+Y_FILE_PRIVATE bool YFDCTakeFormatIDByte(YFDCState* fdc, uint8_t value) {
+  const uint8_t drive_head = *YFDCCommandBufferGet(
+      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_HEAD_AND_DRIVE);
+  const uint8_t drive_index = drive_head & 0x03;
+  switch (fdc->transfer.sector_byte_index % Y_FDC_FORMAT_ID_BYTES) {
+    case Y_FDC_FORMAT_ID_CYLINDER:
+      fdc->transfer.cylinder = value;
+      break;
+    case Y_FDC_FORMAT_ID_HEAD:
+      fdc->transfer.head = value;
+      break;
+    case Y_FDC_FORMAT_ID_SECTOR:
+      fdc->transfer.sector = value;
+      break;
+    case Y_FDC_FORMAT_ID_SIZE_CODE: {
+      fdc->transfer.sector_size_code = value;
+      const YFDCDriveState* drive = &fdc->drives[drive_index];
+      const uint8_t physical_head = (drive_head >> 2) & 0x01;
+      const uint32_t offset = YFDCComputeOffset(
+          *drive->format, physical_head, drive->track, fdc->transfer.sector,
+          0);
+      const uint8_t fill = *YFDCCommandBufferGet(
+          &fdc->command_buffer, Y_FDC_FORMAT_PARAM_FILL_BYTE);
+      if (offset != Y_FDC_INVALID_OFFSET && fdc->config.write_image_byte) {
+        for (uint16_t i = 0; i < drive->format->sector_size; ++i) {
+          fdc->config.write_image_byte(
+              fdc->config.context, drive_index, offset + i, fill);
+        }
+      }
+      break;
+    }
+  }
+  ++fdc->transfer.sector_byte_index;
+  const uint8_t sectors = *YFDCCommandBufferGet(
+      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_SECTORS);
+  return fdc->transfer.sector_byte_index >=
+         (uint16_t)sectors * Y_FDC_FORMAT_ID_BYTES;
+}
+
+// Handler for Format Track: write a track's sectors, each filled with the fill
+// byte, from the IDs the guest hands over by DMA, four bytes a sector. It
+// ends once every sector the command names is formatted, or at the DMA's
+// terminal count - which arrives with the last ID byte, so that byte is
+// taken first.
+Y_FILE_PRIVATE void YFDCHandleFormatTrack(YFDCState* fdc) {
+  const uint8_t drive_head = *YFDCCommandBufferGet(
+      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_HEAD_AND_DRIVE);
+  const uint8_t drive_index = drive_head & 0x03;
+  const uint8_t head_address = (drive_head >> 2) & 0x01;
+  if (fdc->current_command_ticks == 0) {
+    fdc->transfer.cylinder = fdc->drives[drive_index].track;
+    fdc->transfer.head = head_address;
+    fdc->transfer.sector = 1;
+    fdc->transfer.sector_size_code = *YFDCCommandBufferGet(
+        &fdc->command_buffer, 2);
+    if (!fdc->drives[drive_index].present) {
+      YFDCFinishReadWrite(
+          fdc,
+          Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY |
+              head_address << 2 | drive_index,
+          0, 0);
+      return;
+    }
+    fdc->transfer.sector_byte_index = 0;
+    fdc->transfer.tc_received = false;
+    fdc->transfer.dma_request_active = true;
+    if (fdc->config.request_dma) {
+      fdc->config.request_dma(fdc->config.context);
+    }
+    return;
+  }
+
+  bool done = fdc->transfer.tc_received;
+  if (!fdc->transfer.dma_request_active) {
+    done = YFDCTakeFormatIDByte(fdc, fdc->transfer.data_register) || done;
+    if (!done) {
+      fdc->transfer.dma_request_active = true;
+      if (fdc->config.request_dma) {
+        fdc->config.request_dma(fdc->config.context);
+      }
+    }
+  }
+  if (done) {
+    YFDCFinishReadWrite(
+        fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index,
+        0, 0);
   }
 }
 
@@ -896,7 +1000,9 @@ Y_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
      .num_param_bytes = 8,
      .handler = NULL},
     // Format a Track
-    {.opcode = Y_FDC_CMD_FORMAT_TRACK, .num_param_bytes = 5, .handler = NULL},
+    {.opcode = Y_FDC_CMD_FORMAT_TRACK,
+     .num_param_bytes = 5,
+     .handler = YFDCHandleFormatTrack},
     // Seek
     {.opcode = Y_FDC_CMD_SEEK, .num_param_bytes = 2, .handler = YFDCHandleSeek},
     // Scan Equal

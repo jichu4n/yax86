@@ -160,6 +160,32 @@ visibility, and how performance work is measured - are in the root
   abandons any transfer. The ROM uses neither, but an unanswered alternate
   status would read 0xFF, a permanently busy drive.
 
+## fdc - the floppy controller
+
+- **Format Track fills a track's sectors from the IDs the guest gives it**,
+  four bytes a sector by DMA: cylinder, head, sector number and size code.
+  An image holds the standard layout and nothing else, so a sector is
+  written where the image keeps the sector its ID numbers, on the track the
+  head is over and the head the command names; the ID's cylinder and head
+  are only reported back. A sector numbered past the track is left alone.
+  With it DOS's FORMAT formats an image of zeros, `/S` included.
+- **The DMA's terminal count comes with the last byte of a transfer**: the
+  BIOS sets the count to the transfer's exact length. So Write Data and
+  Format Track take a byte that has arrived before ending on the count.
+  Ending first loses the last byte of every multi-sector floppy write: a
+  file DOS copies reads back with byte 511 wrong in the sector each write
+  ends on.
+- **A DMA verify cycle takes the device's byte and drops it** - the 8237
+  acknowledges the device as for a transfer to memory, and leaves out only
+  the memory write. The BIOS verifies sectors so, as DOS's FORMAT does each
+  track, and a controller whose byte is never taken never finishes the read.
+  Verify shares the write's device read in `YDMATransferByte()`: a case of
+  its own grew the function by 108 bytes and cost `dos-boot` 0.11%.
+- **The code costs `dos-boot` 0.43% without running**: none of it runs in
+  the boot, and the invariant holds, but the FDC is bundled ahead of most
+  modules and 490 bytes more of it moves them along in flash - 4.7457
+  seconds against 4.7253 at 250MHz, `-O3`.
+
 ## video - host text fonts
 
 - The adapters draw text in 8x8 (CGA) or 9x14 (MDA) cells, 640 or 720 pixels
