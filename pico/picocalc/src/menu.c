@@ -89,6 +89,8 @@ typedef enum MenuPage {
   // g_new_drive.
   kMenuPageNew,
   kMenuPageNewDrive,
+  // Font, from the list: the 4x10 fonts.
+  kMenuPageFont,
 } MenuPage;
 
 static const char* const kPageNames[] = {
@@ -109,6 +111,7 @@ static const char* const kPageNames[] = {
     [kMenuPageCopying] = "vm_copying",
     [kMenuPageNew] = "new_vm",
     [kMenuPageNewDrive] = "new_vm_drive",
+    [kMenuPageFont] = "font",
 };
 
 // An item of a page, and whether choosing it opens another menu, which a
@@ -266,6 +269,7 @@ static const NewDriveItem kHardDiskChoices[] = {
 static const MenuItem kNewVMRow = {"New VM", true};
 static const MenuItem kManageRow = {"Manage VMs", true};
 static const MenuItem kUSBRow = {"USB disk mode", true};
+static const MenuItem kFontRow = {"Font", true};
 
 static MenuConfig g_config;
 static bool g_open;
@@ -289,6 +293,7 @@ static uint8_t g_list_top;
 // highlighted one starts by itself, and why the last chosen did not.
 static const VMList* g_vms;
 static uint8_t g_countdown;
+static Font4x10 g_font = kFont4x10Default;
 // Whether the menu is the list at power on, or a page reached from it, which
 // only starting something closes.
 static bool g_choosing;
@@ -373,6 +378,15 @@ void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
 }
 
 uint8_t MenuChosenVM(void) { return g_chosen; }
+
+Font4x10 MenuChosenFont(void) { return g_font; }
+
+void MenuSetFont(Font4x10 font) {
+  if (font != g_font) {
+    g_font = font;
+    g_dirty = true;
+  }
+}
 
 void MenuClose(void) {
   g_open = false;
@@ -568,12 +582,15 @@ static uint8_t DriveItemCount(void) {
   return DriveEmpty() ? kDriveEject : kDriveItemCount;
 }
 
-// The list at power on's rows: a VM each, then Manage VMs and USB disk mode.
-static uint8_t VMRowCount(void) { return (uint8_t)(g_vms->count + 2); }
+// The list at power on's rows: a VM each, then Manage VMs, USB disk mode and
+// Font.
+static uint8_t VMRowCount(void) { return (uint8_t)(g_vms->count + 3); }
 
 static uint8_t ManageRowIndex(void) { return g_vms->count; }
 
 static uint8_t USBRowIndex(void) { return (uint8_t)(g_vms->count + 1); }
+
+static uint8_t FontRowIndex(void) { return (uint8_t)(g_vms->count + 2); }
 
 // Whether disconnecting would take the card from a computer still using it.
 static bool ComputerHasCard(void) {
@@ -607,6 +624,8 @@ static uint8_t PageItemCount(void) {
       return (uint8_t)(kNewItemCount - FormFirstItem());
     case kMenuPageNewDrive:
       return DriveChoiceRow(kNewDriveItemCount);
+    case kMenuPageFont:
+      return kFont4x10Count;
     case kMenuPageVM:
       return kVMItemCount;
     case kMenuPageDelete:
@@ -928,6 +947,10 @@ static MenuAction Back(void) {
     case kMenuPageNewDrive:
       ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
       break;
+    case kMenuPageFont:
+      ShowPage(kMenuPageVMs, FontRowIndex());
+      ScrollToChosen();
+      break;
   }
   return kMenuActionNone;
 }
@@ -1017,6 +1040,10 @@ static MenuAction Choose(void) {
     case kMenuPageBrowse:
       return OpenEntry();
     case kMenuPageVMs:
+      if (g_chosen == FontRowIndex()) {
+        ShowPage(kMenuPageFont, g_font);
+        return kMenuActionNone;
+      }
       if (g_chosen == USBRowIndex()) {
         ShowPage(kMenuPageUSB, kUSBCard);
         return kMenuActionNone;
@@ -1026,6 +1053,11 @@ static MenuAction Choose(void) {
         return kMenuActionNone;
       }
       return kMenuActionVMChosen;
+    case kMenuPageFont:
+      g_font = (Font4x10)g_chosen;
+      ShowPage(kMenuPageVMs, FontRowIndex());
+      ScrollToChosen();
+      return kMenuActionFontChosen;
     case kMenuPageManage:
       if (g_chosen == 0) {
         StartNewVM();
@@ -1458,6 +1490,8 @@ static void DrawVMsPage(DisplayMenu* menu) {
       MenuItemRow(row, menu->columns, &kManageRow, index == g_chosen);
     } else if (index == USBRowIndex()) {
       MenuItemRow(row, menu->columns, &kUSBRow, index == g_chosen);
+    } else if (index == FontRowIndex()) {
+      MenuItemRow(row, menu->columns, &kFontRow, index == g_chosen);
     } else {
       ItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
     }
@@ -1716,6 +1750,14 @@ static void DrawNewDrivePage(DisplayMenu* menu) {
   DrawItems(menu, kVMDriveNames[g_new_drive], NULL, 0, items, count);
 }
 
+static void DrawFontPage(DisplayMenu* menu) {
+  MenuItem items[kFont4x10Count];
+  for (uint8_t i = 0; i < kFont4x10Count; ++i) {
+    items[i] = (MenuItem){Font4x10Label((Font4x10)i), false};
+  }
+  DrawItems(menu, "Font", NULL, 0, items, kFont4x10Count);
+}
+
 // The card while it is on USB: who has it, and how much has moved.
 static void DrawSharingPage(DisplayMenu* menu) {
   const UsbDiskStats stats = UsbDiskGetStats();
@@ -1831,6 +1873,9 @@ void MenuDraw(uint64_t now_us) {
       break;
     case kMenuPageNewDrive:
       DrawNewDrivePage(menu);
+      break;
+    case kMenuPageFont:
+      DrawFontPage(menu);
       break;
   }
   // A box of another size than the last leaves part of the last showing, so

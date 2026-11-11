@@ -21,12 +21,13 @@
 //
 //   boot_default=DOS330
 //   boot_delay=5
+//   font=atari800
 //
 // boot_default is a VM's name. It is the VM the list highlights, and starts
 // by itself after boot_delay seconds with no key pressed; 0 starts it at
 // once. Without settings, or with a boot_default naming no VM, the first VM
 // listed is the default, after 5 seconds. Whichever VM starts becomes
-// boot_default for the next power on.
+// boot_default for the next power on. font names the 4x10 font.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -34,6 +35,7 @@
 #include <stdint.h>
 
 #include "config_file.h"
+#include "font_4x10.h"
 #include "fs.h"
 
 enum {
@@ -71,6 +73,7 @@ typedef struct VMSettings {
   // listed.
   char boot_default[kVMNameLength + 1];
   uint8_t boot_delay;
+  Font4x10 font;
 } VMSettings;
 
 // A VM: its name, in capitals, and its file's path from the card's root,
@@ -126,6 +129,10 @@ bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]);
 // settings could not be read or written.
 bool VMSettingsSaveBootDefault(
     const char* name, char problem[kVMProblemLength + 1]);
+
+// Save font as the settings' font, through ConfigFileUpdate(). Returns false,
+// with the problem described, if the settings could not be read or written.
+bool VMSettingsSaveFont(Font4x10 font, char problem[kVMProblemLength + 1]);
 
 // Write the images in all of a VM's drives - paths from the card's root,
 // empty for none, or NULL for a drive not there, whose line is removed - to

@@ -314,15 +314,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   C:. 1 and 2 are FDISK's own numbers for them. The floppies follow the same
   pattern, though DOS calls them A: and B:.
 - **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the name
-  of the VM to highlight and start - `boot_default=DOS330` - and
-  `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
-  start the default without showing the list.
+  of the VM to highlight and start - `boot_default=DOS330` - `boot_delay`,
+  the seconds the list waits for a key, 5 without it, 0 to start the default
+  without showing the list, and `font`, the 4x10 font (`original`,
+  `atari800`, `miniwi` or `custom`, `atari800` without it).
 - **At power on, with a card, the menu lists its VMs**, before the VM
-  exists, then Manage VMs - see below - and USB disk mode - see "The USB
-  device". The countdown runs on
+  exists, then Manage VMs - see below - USB disk mode - see "The USB
+  device" - and Font. The countdown runs on
   the list's bottom edge until a key is pressed, then the default starts.
-  With no VMs the list has only USB disk mode, and nothing counts down or
-  starts by itself; the built-in floppy boots only without a card. Every page reached from the list is drawn the list's
+  With no VMs the list has Manage VMs, USB disk mode and Font, and nothing
+  counts down or starts by itself; the built-in floppy boots only without a
+  card. Every page reached from the list is drawn the list's
   size, as there is no guest's screen yet to draw under a smaller box. A file that does not read keeps
   the list up with its problem on the keys row - `BROKEN: line 2: no
   setting drive_e` - as do bad settings, which start the countdown anyway
@@ -772,18 +774,26 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the echo's line instead; the board answers it with an error under id 0,
   which nothing waits for, and ignores empty lines.
 
-## The 4x10 font
+## The 4x10 fonts
 
 - 80 columns in 320 pixels is four pixels a character, and a 640-pixel text
   screen shrunk to fit is unreadable. What works is a font drawn for the
   cell - C64 80-column software used 4x8.
-- `src/font_4x10.c` is the only complete code page 437 font of that width
-  taller than five rows that turned up. Its ASCII glyphs are rugosi's, from
-  picocalc_runCPM, under MIT - the notice is in the file - and the rest,
-  every box drawing and block character included, Serg Podtynnyi's under
-  GPLv3-or-later.
+- `src/font_4x10.c` holds four complete code page 437 fonts of that size,
+  chosen by `font` in `yax86/yax86.cfg` or from the list at power on (`Font`),
+  for both the guest's text modes and the menu and status rows:
+  - `atari800` (Atari800, the default): 3+1 glyphs (three columns of ink and
+    a blank fourth column) with 6-row capitals and 5-row lower case, from
+    Atari800's 4x8 font under GPLv2-or-later, with a stepped diagonal `N`.
+  - `original` (Original): 4-column glyphs whose ASCII range is rugosi's,
+    from picocalc_runCPM under MIT, and the rest, every box drawing and block
+    character included, Serg Podtynnyi's under GPLv3-or-later.
+  - `miniwi` (Miniwi-8): 3+1 glyphs with 5-row capitals and 4-row lower case,
+    from josuah's miniwi under MIT/X11.
+  - `custom` (Custom): 3+1 glyphs with uniform 7-row capitals and digits and
+    5-row lower case.
 - Every glyph outside the box drawing range sits one row lower than the box
   drawing ones, leaving a blank row between lines of text while box drawing
-  fills the cell and joins. The shift is in the table, so it is a plain font.
-  The three glyphs using the bottom row - `0x02`, `0x0F`, `0x16`, cell-filling
-  patterns - are not shifted.
+  fills the cell and joins. The shift is in the table, so each is a plain
+  font. The three glyphs using the bottom row - `0x02`, `0x0F`, `0x16`,
+  cell-filling patterns - are not shifted.

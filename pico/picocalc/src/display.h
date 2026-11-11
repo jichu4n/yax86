@@ -87,6 +87,10 @@ void DisplayEndStatus(void);
 DisplayMenu* DisplayBeginMenu(void);
 void DisplayEndMenu(void);
 
+// Set the font the runtime's own text - the menu and the status rows - is
+// drawn in, redrawing the status rows if they are already showing.
+void DisplaySetFont(Font4x10 font);
+
 // Turn the panel off, after whatever core 1 has already been handed, and on
 // again. The panel keeps what it showed while it is off, so only what changed
 // meanwhile needs drawing once it is back on. Turning it on takes core 1
