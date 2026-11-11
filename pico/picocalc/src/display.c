@@ -20,7 +20,7 @@ enum {
   kGuestScreenWidth = kGuestScreenColumns * kFont4x10Width,
   kGuestScreenHeight = kGuestScreenRows * kFont4x10Height,
 
-  // The status rows, the panel's last three rows of 4x10 cells, and the line
+  // The status rows, the panel's last two rows of 4x10 cells, and the line
   // a pixel high that sets them off from the guest's screen, two pixels above
   // them. The rows between are left black.
   kStatusFirstRow = kTextRows - kDisplayStatusRows,

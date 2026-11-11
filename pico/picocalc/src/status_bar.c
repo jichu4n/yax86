@@ -6,8 +6,7 @@
 
 enum {
   kRowMessages = 0,
-  kRowDrives,
-  kRowIndicators,
+  kRowMachine,
 
   // CGA attributes: the foreground in the low nibble, on black.
   kAttrNormal = 0x07,
@@ -18,18 +17,17 @@ enum {
   kAttrBatteryHigh = 0x0A,
   kAttrBatteryLow = 0x0C,
 
-  // The drives follow each other along their row, this many columns apart.
-  kDriveGapColumns = 2,
   // How long a drive's light stays on after it was last used, so that a
   // single sector shows.
   kDriveLightUs = 200 * 1000,
 
-  // Where the indicators start on their row.
-  kLocksColumn = 18,
-  kClockColumn = 40,
-  kMenuKeyColumn = 56,
-  kBatteryColumn = 67,
-  kBatteryCells = 4,
+  // Where things start on the machine's row: the drives after the longest
+  // VM name, the locks, and the battery, whose widest - five cells, a space,
+  // "100%" and "+" - ends at the row's end.
+  kDrivesColumn = 14,
+  kLocksColumn = 40,
+  kBatteryCells = 5,
+  kBatteryColumn = kTextColumns - kBatteryCells - 6,
   kBatteryHighPercent = 50,
   kBatteryLowPercent = 20,
 
@@ -43,16 +41,13 @@ enum {
   kMessageQueueSize = 4,
   kMessageUs = 4 * 1000 * 1000,
 
-  kSecondsPerMinute = 60,
-  kSecondsPerHour = 60 * 60,
-  kSecondsPerDay = 24 * 60 * 60,
   kPercent = 100,
 
-  // Code page 437: the full block and light shade the battery is drawn in,
-  // and the up arrow that stands for Shift.
+  // Code page 437's full block, a busy drive's light; and its left half
+  // block, a battery cell, which in the 4x10 font leaves two columns between
+  // one cell and the next, where full blocks or small squares run together.
   kCharFullBlock = 0xDB,
-  kCharLightShade = 0xB0,
-  kCharShift = 0x18,
+  kCharBatteryCell = 0xDD,
 };
 
 // A drive's light: how much it had done at the last look, and until when the
@@ -72,18 +67,16 @@ static uint64_t g_message_shown_us;
 static DriveLight g_lights[kStatusBarDrives];
 
 // What the rows were last composed from. Composing takes a few snprintf()
-// calls and three rows' worth of writes, which ten times a second cost a boot
-// about 0.4%, so it is skipped while none of this changes - which between a
-// disk's bursts of reads is everything but the clock.
+// calls and the rows' writes, which ten times a second cost a boot about
+// 0.4%, so it is skipped while none of this changes - which between a disk's
+// bursts of reads is nearly always.
 typedef struct ComposedFrom {
   bool lit[kStatusBarDrives];
   DiskImageStatus status[kStatusBarDrives];
   const char* vm;
   bool running;
   uint8_t keyboard_flags;
-  uint32_t guest_seconds;
   SouthbridgeBattery battery;
-  uint32_t slow_percent;
   const char* hint;
   const char* problem;
   const char* message;
@@ -180,24 +173,20 @@ static bool DriveLit(
   return now_us < light->lit_until_us;
 }
 
-// A drive: its letter, lit while in use, and its image's name, or what it has
-// instead. Returns the column after it.
+// A drive: a space and its label in grey, or while it is in use, a green
+// block and its label bright white - after a space, so that a light does not
+// run into the drive before it. Returns the column after it.
 static uint8_t PutDrive(
-    DisplayTextRow* row, uint8_t column, const char* label,
-    const DiskImage* image, bool lit) {
-  const bool open = image->status == kDiskImageOpen;
-  column = Put(row, column, label, lit ? kAttrLit : kAttrNormal);
-  column = PutChar(row, column, ':', kAttrNormal);
-  if (open) {
-    char name[kDiskImageNameLength + 1];
-    DiskImageName(image->path, name);
-    return Put(row, column, name, kAttrNormal);
-  }
-  return Put(
-      row, column, image->status == kDiskImageEjected ? "empty" : "built-in",
-      kAttrNormal);
+    DisplayTextRow* row, uint8_t column, const char* label, bool lit) {
+  ++column;
+  column = PutChar(
+      row, column, lit ? (char)kCharFullBlock : ' ',
+      lit ? kAttrLit : kAttrNormal);
+  return Put(row, column, label, lit ? kAttrBright : kAttrNormal);
 }
 
+// The messages row: a problem, the menu's keys, a message, or with nothing
+// else and a VM running, the menu's own key, dim, it being always there.
 static void ComposeMessages(
     const StatusBarState* state, const char* message, DisplayTextRow* row) {
   if (state->problem != NULL) {
@@ -206,29 +195,24 @@ static void ComposeMessages(
     PutKeys(row, 0, state->hint, kAttrNormal, kAttrBright);
   } else if (message != NULL) {
     Put(row, 0, message, kAttrBright);
-  } else if (state->slow_percent > 0) {
-    char text[kTextColumns + 1];
-    snprintf(
-        text, sizeof(text), "SLOW %lu%% - running behind real time",
-        (unsigned long)state->slow_percent);
-    Put(row, 0, text, kAttrWarning);
+  } else if (state->running) {
+    PutKeys(row, 0, "Shift+Shift=Menu", kAttrDim, kAttrNormal);
   }
 }
 
+// The drives the machine has, one after another: a floppy drive always, and
+// a hard disk while it has an image.
 static void ComposeDrives(
     const StatusBarState* state, const bool lit[kStatusBarDrives],
     DisplayTextRow* row) {
-  uint8_t column = 0;
+  uint8_t column = kDrivesColumn;
   for (uint8_t drive = 0; drive < kStatusBarDrives; ++drive) {
     const DiskImage* image = state->drives[drive];
     if (image == NULL ||
         (drive >= kStatusBarDriveHD1 && image->status != kDiskImageOpen)) {
       continue;
     }
-    if (column > 0) {
-      column = (uint8_t)(column + kDriveGapColumns);
-    }
-    column = PutDrive(row, column, kVMDriveLabels[drive], image, lit[drive]);
+    column = PutDrive(row, column, kVMDriveLabels[drive], lit[drive]);
   }
 }
 
@@ -241,16 +225,14 @@ static void ComposeBattery(
                        : battery->percent >= kBatteryLowPercent
                            ? kAttrWarning
                            : kAttrBatteryLow;
-  // At least one cell for any charge at all.
+  // A cell for each fifth of a charge begun, so at least one for any charge.
   const uint8_t filled =
       (uint8_t)((battery->percent * kBatteryCells + kPercent - 1) / kPercent);
-  uint8_t column = PutChar(row, kBatteryColumn, '[', kAttrNormal);
+  uint8_t column = kBatteryColumn;
   for (uint8_t i = 0; i < kBatteryCells; ++i) {
     column = PutChar(
-        row, column, (char)(i < filled ? kCharFullBlock : kCharLightShade),
-        attr);
+        row, column, (char)kCharBatteryCell, i < filled ? attr : kAttrDim);
   }
-  column = PutChar(row, column, ']', kAttrNormal);
   char text[8];
   snprintf(
       text, sizeof(text), " %u%%%s", (unsigned)battery->percent,
@@ -258,8 +240,11 @@ static void ComposeBattery(
   Put(row, column, text, attr);
 }
 
-static void ComposeIndicators(
-    const StatusBarState* state, DisplayTextRow* row) {
+// The machine's row: the VM's name, its drives, the guest's locks that are
+// on, and the battery.
+static void ComposeMachine(
+    const StatusBarState* state, const bool lit[kStatusBarDrives],
+    DisplayTextRow* row) {
   static const struct {
     const char* name;
     uint8_t flag;
@@ -270,31 +255,18 @@ static void ComposeIndicators(
       {"INS", kFlagInsert},
   };
   if (state->vm != NULL) {
-    Put(row, 0, state->vm, kAttrBright);
+    Put(row, 0, state->vm, kAttrNormal);
   }
+  ComposeDrives(state, lit, row);
   if (state->running) {
     uint8_t column = kLocksColumn;
     for (uint8_t i = 0; i < sizeof(kLocks) / sizeof(kLocks[0]); ++i) {
-      const bool on = (state->keyboard_flags & kLocks[i].flag) != 0;
-      column = Put(row, column, kLocks[i].name, on ? kAttrBright : kAttrDim);
-      ++column;
+      if (state->keyboard_flags & kLocks[i].flag) {
+        column = Put(row, column, kLocks[i].name, kAttrBright);
+        ++column;
+      }
     }
-
-    const uint32_t seconds = state->guest_seconds % kSecondsPerDay;
-    char clock[9];
-    snprintf(
-        clock, sizeof(clock), "%02lu:%02lu:%02lu",
-        (unsigned long)(seconds / kSecondsPerHour),
-        (unsigned long)(seconds / kSecondsPerMinute % kSecondsPerMinute),
-        (unsigned long)(seconds % kSecondsPerMinute));
-    Put(row, kClockColumn, clock, kAttrNormal);
-
-    const char menu_key[] = {
-        (char)kCharShift, '+', (char)kCharShift, '=', 'M', 'e', 'n', 'u', '\0'};
-    // Dimmer than the menu's own keys, being always there.
-    PutKeys(row, kMenuKeyColumn, menu_key, kAttrDim, kAttrNormal);
   }
-
   ComposeBattery(&state->battery, row);
 }
 
@@ -307,11 +279,9 @@ static bool ComposedFromEqual(const ComposedFrom* a, const ComposedFrom* b) {
   }
   return a->vm == b->vm && a->running == b->running &&
          a->keyboard_flags == b->keyboard_flags &&
-         a->guest_seconds == b->guest_seconds &&
          a->battery.known == b->battery.known &&
          a->battery.percent == b->battery.percent &&
-         a->battery.charging == b->battery.charging &&
-         a->slow_percent == b->slow_percent && a->hint == b->hint &&
+         a->battery.charging == b->battery.charging && a->hint == b->hint &&
          a->problem == b->problem && a->message == b->message;
 }
 
@@ -327,9 +297,7 @@ bool StatusBarCompose(
   from.vm = state->vm;
   from.running = state->running;
   from.keyboard_flags = state->keyboard_flags;
-  from.guest_seconds = state->guest_seconds;
   from.battery = state->battery;
-  from.slow_percent = state->slow_percent;
   from.hint = state->hint;
   from.problem = state->problem;
   from.message = CurrentMessage(now_us);
@@ -342,7 +310,6 @@ bool StatusBarCompose(
     ClearRow(&rows->rows[row]);
   }
   ComposeMessages(state, from.message, &rows->rows[kRowMessages]);
-  ComposeDrives(state, from.lit, &rows->rows[kRowDrives]);
-  ComposeIndicators(state, &rows->rows[kRowIndicators]);
+  ComposeMachine(state, from.lit, &rows->rows[kRowMachine]);
   return true;
 }

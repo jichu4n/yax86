@@ -1,14 +1,18 @@
 // The status rows at the bottom of the panel, composed on core 0 and drawn by
-// core 1:
+// core 1 - two, with no more on them than is worth a glance:
 //
-//   row 29  messages, a few seconds each, and the menu's keys while it is open
-//   row 30  the drives: each one's letter, lit while it is in use, and image
-//   row 31  the VM's name, the guest's lock flags, its time of day, the
-//           menu key, the battery
+//   row 30  messages, a few seconds each; the menu's keys while it is open, or
+//           a problem in their place; and otherwise the menu's own key
+//   row 31  the VM's name, its drives, the guest's locks that are on, and the
+//           battery
 //
-//   Inserted GAMES.IMG in drive A
-//   A:DISK01.IMG  B:empty  C:HDD.IMG
-//   DOS33             CAPS NUM SCRL INS     12:34:56     ↑+↑=Menu  [■■■ ] 78%+
+//   Inserted GAMES.IMG in FD2
+//   DOS330        FD1  FD2 ■HD1            CAPS                     ▮▮▮▮▯ 78%+
+//
+// A drive is its label alone, grey, with a green block before it and the
+// label bright white while it is in use, as a PC's front panel lights a
+// drive. A drive the machine does not have is left out. The images' names
+// are on the status page and Edit drives.
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H
 
@@ -20,7 +24,8 @@
 #include "southbridge.h"
 
 enum {
-  // Drives A and B, and hard disks 1 and 2, in the order of a VM's drives.
+  // Floppy disks 1 and 2 and hard disks 1 and 2, in the order of a VM's
+  // drives.
   kStatusBarDrives = 4,
   kStatusBarDriveHD1 = 2,
   kStatusBarDriveHD2 = 3,
@@ -28,26 +33,21 @@ enum {
 
 // What the status rows show, gathered by the caller.
 typedef struct StatusBarState {
-  // The drives' images, A to D, which are shown when they are open. Without
-  // one, drive A has the floppy built into flash or is empty, drive B is
-  // empty, and drives C and D are not shown. NULL, before the VM has
-  // drives, shows nothing.
+  // The drives' images, in the order of a VM's drives, or NULL for a drive
+  // the machine does not have - floppy disk 2 disabled, and before a VM has
+  // drives. A hard disk is shown only while it has an image open, as one with
+  // none is not there either; a floppy drive always.
   const DiskImage* drives[kStatusBarDrives];
   // The VM's name, or NULL without a VM.
   const char* vm;
-  // Whether a VM is running. Its lock flags, time of day and the menu
-  // key show only while one is: the list at power on has no guest, and the
-  // menu key does nothing there.
+  // Whether a VM is running. Its locks and the menu key show only while one
+  // is: the list at power on has no guest, and the menu key does nothing
+  // there.
   bool running;
   // The guest BIOS's keyboard flags, at 0040:0017, which hold its lock and
   // insert states.
   uint8_t keyboard_flags;
-  // The guest's time of day, in seconds since midnight.
-  uint32_t guest_seconds;
   SouthbridgeBattery battery;
-  // How fast the VM has run against real time over the last second, in
-  // percent, while it has been falling behind; 0 otherwise.
-  uint32_t slow_percent;
   // Keys to show on the message row in place of messages, such as the menu's
   // while it is open, or NULL: Key=Action pairs two spaces apart, the way
   // MS-DOS's own programs label theirs - "\x18\x19=Move  Enter=Select".
