@@ -12,8 +12,7 @@ enum {
   kPagerMaxFrames = 128 * 1024 / kPagerPageSize,
   // A frame holding no page.
   kPagerNoPage = 0xFFFF,
-  kPagerAccess = Y_PLATFORM_PAGED_MEMORY_RESIDENT |
-      Y_PLATFORM_PAGED_MEMORY_WRITABLE,
+  kPagerAccess = Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_WRITABLE,
 };
 
 static YPlatformPagedMemory g_memory;
@@ -73,7 +72,7 @@ static uint32_t __not_in_flash_func(PagerTakeFrame)(void) {
       return frame;
     }
     uint16_t* entry = &g_pages[page];
-    if (*entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT) {
+    if (*entry & Y_CPU_PAGED_DATA_RESIDENT) {
       *entry &= (uint16_t)~kPagerAccess;
       continue;
     }
@@ -97,7 +96,7 @@ static void __not_in_flash_func(PagerPageFault)(
     YPlatformPagedMemory* memory, uint32_t page, bool write) {
   (void)memory;
   const uint32_t start_us = time_us_32();
-  uint32_t frame = g_pages[page] & Y_PLATFORM_PAGED_MEMORY_FRAME_MASK;
+  uint32_t frame = g_pages[page] & Y_CPU_PAGED_DATA_FRAME_MASK;
   if (frame < g_num_frames && g_frame_pages[frame] == page) {
     ++g_stats.soft_faults;
   } else {
@@ -120,13 +119,13 @@ static void __not_in_flash_func(PagerPageFault)(
     g_frame_pages[frame] = (uint16_t)page;
     g_frame_dirty[frame] = false;
   }
-  uint16_t entry = (uint16_t)(frame | Y_PLATFORM_PAGED_MEMORY_RESIDENT);
+  uint16_t entry = (uint16_t)(frame | Y_CPU_PAGED_DATA_RESIDENT);
   if (write) {
     g_frame_dirty[frame] = true;
   }
   // A page already written needs no telling of the next write.
   if (g_frame_dirty[frame]) {
-    entry |= Y_PLATFORM_PAGED_MEMORY_WRITABLE;
+    entry |= Y_CPU_PAGED_DATA_WRITABLE;
   }
   g_pages[page] = entry;
   g_stats.fault_us += time_us_32() - start_us;
