@@ -68,8 +68,9 @@ VMFolderResult VMFolderRename(
 // blank disks, written through transfer's buffer, calling its progress as it
 // goes. A blank disk is zeros, unformatted as a new disk was, for DOS's
 // FORMAT - and for a hard disk, FDISK first: a 360KB floppy for drive A or B,
-// `floppy_a.img` or `floppy_b.img`, and the core's 10MB hard disk for C or D,
-// `hdd.img` or `hdd_d.img` - or `disk_c2.img` and on, if the name is taken.
+// `fd1.img` or `fd2.img`, and the core's 10MB hard disk for hard disk 1 or
+// 2, `hd1.img` or `hd2.img` - or `fd1_2.img`, `hd1_2.img` and on, if the name
+// is taken.
 // One image in two drives is refused. created is the new VM. Anything but
 // kVMFolderDone comes with the problem described, as for VMFolderRename(); a
 // VM that could not be made has what was made of it deleted.

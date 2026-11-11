@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+#include "vm_config.h"
+
 enum {
   kRowMessages = 0,
   kRowDrives,
@@ -181,10 +183,10 @@ static bool DriveLit(
 // A drive: its letter, lit while in use, and its image's name, or what it has
 // instead. Returns the column after it.
 static uint8_t PutDrive(
-    DisplayTextRow* row, uint8_t column, char letter, const DiskImage* image,
-    bool lit) {
+    DisplayTextRow* row, uint8_t column, const char* label,
+    const DiskImage* image, bool lit) {
   const bool open = image->status == kDiskImageOpen;
-  column = PutChar(row, column, letter, lit ? kAttrLit : kAttrNormal);
+  column = Put(row, column, label, lit ? kAttrLit : kAttrNormal);
   column = PutChar(row, column, ':', kAttrNormal);
   if (open) {
     char name[kDiskImageNameLength + 1];
@@ -220,13 +222,13 @@ static void ComposeDrives(
   for (uint8_t drive = 0; drive < kStatusBarDrives; ++drive) {
     const DiskImage* image = state->drives[drive];
     if (image == NULL ||
-        (drive >= kStatusBarDriveC && image->status != kDiskImageOpen)) {
+        (drive >= kStatusBarDriveHD1 && image->status != kDiskImageOpen)) {
       continue;
     }
     if (column > 0) {
       column = (uint8_t)(column + kDriveGapColumns);
     }
-    column = PutDrive(row, column, (char)('A' + drive), image, lit[drive]);
+    column = PutDrive(row, column, kVMDriveLabels[drive], image, lit[drive]);
   }
 }
 

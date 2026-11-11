@@ -20,10 +20,10 @@
 #include "southbridge.h"
 
 enum {
-  // Drives A, B, C and D.
+  // Drives A and B, and hard disks 1 and 2, in the order of a VM's drives.
   kStatusBarDrives = 4,
-  kStatusBarDriveC = 2,
-  kStatusBarDriveD = 3,
+  kStatusBarDriveHD1 = 2,
+  kStatusBarDriveHD2 = 3,
 };
 
 // What the status rows show, gathered by the caller.

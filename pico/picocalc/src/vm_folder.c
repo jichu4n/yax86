@@ -11,10 +11,10 @@ static const char kConfigFile[] = "vm.cfg";
 
 // A blank disk's file, in its VM's folder, for each drive.
 static const char* const kBlankFiles[kVMDrives] = {
-    [kVMDriveA] = "floppy_a.img",
-    [kVMDriveB] = "floppy_b.img",
-    [kVMDriveC] = "hdd.img",
-    [kVMDriveD] = "hdd_d.img",
+    [kVMDriveA] = "fd1.img",
+    [kVMDriveB] = "fd2.img",
+    [kVMDriveHD1] = "hd1.img",
+    [kVMDriveHD2] = "hd2.img",
 };
 
 enum {
@@ -199,8 +199,17 @@ static uint32_t BlankSize(uint8_t drive) {
   return drive <= kVMDriveB ? kFloppySize : Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
 }
 
+// The stem of a blank disk's file when its own name is taken, before _2 to
+// _9: fd1_2.img, hd1_2.img.
+static const char* const kBlankStems[kVMDrives] = {
+    [kVMDriveA] = "fd1",
+    [kVMDriveB] = "fd2",
+    [kVMDriveHD1] = "hd1",
+    [kVMDriveHD2] = "hd2",
+};
+
 // A free name in folder for a blank disk for a drive: its own, or else
-// disk_c2.img to disk_c9.img. Returns false if none is free.
+// hd1_2.img to hd1_9.img and the like. Returns false if none is free.
 static bool BlankPath(
     const char* folder, uint8_t drive, char path[kFSMaxPath + 1]) {
   if (FSJoin(folder, kBlankFiles[drive], path) && !FSExists(path)) {
@@ -208,7 +217,7 @@ static bool BlankPath(
   }
   for (char n = '2'; n <= '9'; ++n) {
     char name[kFSMaxName + 1];
-    snprintf(name, sizeof(name), "disk_%c%c.img", 'a' + drive, n);
+    snprintf(name, sizeof(name), "%s_%c.img", kBlankStems[drive], n);
     if (FSJoin(folder, name, path) && !FSExists(path)) {
       return true;
     }
@@ -235,8 +244,8 @@ static bool PlanDrives(
     }
     if (!BlankPath(folder, drive, g_blank_paths[drive])) {
       snprintf(
-          problem, kVMProblemLength + 1, "No name is free in %s for drive %c",
-          vm->name, 'A' + drive);
+          problem, kVMProblemLength + 1, "No name is free in %s for %s",
+          vm->name, kVMDriveLabels[drive]);
       return false;
     }
     g_paths[drive] = g_blank_paths[drive];
@@ -252,8 +261,8 @@ static bool PlanDrives(
             name, sizeof(name), "%s",
             slash != NULL ? slash + 1 : g_paths[drive]);
         snprintf(
-            problem, kVMProblemLength + 1, "%s is in drives %c and %c", name,
-            'A' + earlier, 'A' + drive);
+            problem, kVMProblemLength + 1, "%s is in both %s and %s", name,
+            kVMDriveLabels[earlier], kVMDriveLabels[drive]);
         return false;
       }
     }

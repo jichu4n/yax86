@@ -4,9 +4,9 @@
 // is the VM DOS330 - and the list at power on is every folder there with a
 // `vm.cfg`. There are no VMs anywhere else.
 //
-//   drive_a=../../images/msdos330/disk01.img
-//   drive_c=hdd.img
-//   drive_d=/shared/tools.img
+//   fd1=../../images/msdos330/disk01.img
+//   hd1=hd1.img
+//   hd2=/shared/tools.img
 //
 // Each line is logfmt - any number of key=value pairs - and a line starting
 // with # is a comment. A path is relative to the folder the file is in, or
@@ -33,12 +33,14 @@
 #include "fs.h"
 
 enum {
-  // Drives A and B, floppies, and C and D, the hard disk controller's master
-  // and slave.
+  // Drives A and B, floppies, and hard disks 1 and 2, the hard disk
+  // controller's master and slave. Not C and D: DOS gives the hard disks'
+  // partitions letters - each disk's primary partition, then each one's
+  // logical drives - so neither disk is always C: or D:.
   kVMDriveA = 0,
   kVMDriveB,
-  kVMDriveC,
-  kVMDriveD,
+  kVMDriveHD1,
+  kVMDriveHD2,
   kVMDrives,
 
   // The most VMs listed: the first found past this are left out.
@@ -52,6 +54,11 @@ enum {
   kVMDefaultBootDelay = 5,
   kVMMaxBootDelay = 60,
 };
+
+// Each drive's label - A, B, HD1, HD2 - and name - Drive A ... Hard disk 2 -
+// as the menu and status rows show them.
+extern const char* const kVMDriveLabels[kVMDrives];
+extern const char* const kVMDriveNames[kVMDrives];
 
 typedef struct VMSettings {
   // The name of the VM to highlight and start, or empty for the first

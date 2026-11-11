@@ -15,11 +15,25 @@ static const char kConfigFile[] = "vm.cfg";
 static const char kSettingsPath[] = "yax86/yax86.cfg";
 static const char kBootDefaultKey[] = "boot_default";
 
+const char* const kVMDriveLabels[kVMDrives] = {
+    [kVMDriveA] = "A",
+    [kVMDriveB] = "B",
+    [kVMDriveHD1] = "HD1",
+    [kVMDriveHD2] = "HD2",
+};
+
+const char* const kVMDriveNames[kVMDrives] = {
+    [kVMDriveA] = "Drive A",
+    [kVMDriveB] = "Drive B",
+    [kVMDriveHD1] = "Hard disk 1",
+    [kVMDriveHD2] = "Hard disk 2",
+};
+
 static const char* const kDriveKeys[kVMDrives] = {
-    [kVMDriveA] = "drive_a",
-    [kVMDriveB] = "drive_b",
-    [kVMDriveC] = "drive_c",
-    [kVMDriveD] = "drive_d",
+    [kVMDriveA] = "fd1",
+    [kVMDriveB] = "fd2",
+    [kVMDriveHD1] = "hd1",
+    [kVMDriveHD2] = "hd2",
 };
 
 // Add a VM where it belongs, keeping the list sorted by name.

@@ -327,7 +327,7 @@ bool MenuIsOpen(void) { return g_open; }
 
 const char* MenuPageName(void) {
   if (g_page == kMenuPageDrive) {
-    return g_drive == kFloppyDriveA ? "drive_a" : "drive_b";
+    return g_drive == kFloppyDriveA ? "fd1" : "fd2";
   }
   return kPageNames[g_page];
 }
@@ -415,7 +415,7 @@ static void Browse(const char* path) {
   uint8_t num_sizes = 1;
   if (g_browsing_for == kBrowseForUSB) {
     num_sizes = 2;
-  } else if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveC) {
+  } else if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveHD1) {
     sizes = &kImageSizes[1];
   }
   FileListRead(&g_list, path, sizes, num_sizes);
@@ -1267,7 +1267,7 @@ static const char* BrowseEmpty(void) {
   if (g_browsing_for == kBrowseForUSB) {
     return "No folders or disk images";
   }
-  if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveC) {
+  if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveHD1) {
     return "No folders or hard disk images";
   }
   return "No folders or floppy images";
@@ -1408,21 +1408,26 @@ static void DrawManagePage(DisplayMenu* menu) {
 
 // A VM's page: the images in its drives, over what can be done to it.
 static void DrawVMPage(DisplayMenu* menu) {
-  // A line for each pair of drives - A and B, C and D - that holds anything,
+  // A line for each pair of drives - A and B, HD1 and HD2 - that holds
+  // anything,
   // with room for any name, which the box cuts to its width.
   char lines[kVMDrives / 2][64];
   const char* line_pointers[kVMDrives / 2];
   uint8_t line_count = 0;
   for (uint8_t first = 0; first < kVMDrives; first += 2) {
+    char label_a[8];
+    char label_b[8];
+    snprintf(label_a, sizeof(label_a), "%s:", kVMDriveLabels[first]);
+    snprintf(label_b, sizeof(label_b), "%s:", kVMDriveLabels[first + 1]);
     const char* a = g_vm_drives[first];
     const char* b = g_vm_drives[first + 1];
     if (a[0] == '\0' && b[0] == '\0') {
       continue;
     }
     snprintf(
-        lines[line_count], sizeof(lines[line_count]), "%c: %-12.12s  %c: %.12s",
-        (char)('A' + first), a[0] != '\0' ? a : "empty", (char)('B' + first),
-        b[0] != '\0' ? b : "empty");
+        lines[line_count], sizeof(lines[line_count]),
+        "%-4s %-12.12s %-4s %.12s", label_a, a[0] != '\0' ? a : "empty",
+        label_b, b[0] != '\0' ? b : "empty");
     line_pointers[line_count] = lines[line_count];
     ++line_count;
   }
@@ -1554,21 +1559,21 @@ static void DrawNewPage(DisplayMenu* menu) {
   const char* cursor =
       FormItem() == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
   snprintf(
-      rows[kNewName], sizeof(rows[kNewName]), "Name     %s%s", g_name, cursor);
+      rows[kNewName], sizeof(rows[kNewName]), "%-12s %s%s", "Name", g_name,
+      cursor);
   items[kNewName] = (MenuItem){rows[kNewName], false};
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const uint8_t item = (uint8_t)(kNewDriveA + drive);
     const char* what = "empty";
     char name[kDiskImageNameLength + 1];
     if (g_new_blank[drive]) {
-      what = drive >= kVMDriveC ? "new disk image" : "new floppy image";
+      what = drive >= kVMDriveHD1 ? "new disk image" : "new floppy image";
     } else if (g_new_drives[drive][0] != '\0') {
       DiskImageName(g_new_drives[drive], name);
       what = name;
     }
     snprintf(
-        rows[item], sizeof(rows[item]), "Drive %c  %s", (char)('A' + drive),
-        what);
+        rows[item], sizeof(rows[item]), "%-12s %s", kVMDriveNames[drive], what);
     items[item] = (MenuItem){rows[item], true};
   }
   items[kNewCreate] = (MenuItem){g_editing ? "Save" : "Create", false};
@@ -1579,11 +1584,9 @@ static void DrawNewPage(DisplayMenu* menu) {
 
 // The choices for one of a new VM's drives.
 static void DrawNewDrivePage(DisplayMenu* menu) {
-  const char title[] = {'D', 'r', 'i', 'v', 'e', ' ', (char)('A' + g_new_drive),
-                        '\0'};
   DrawItems(
-      menu, title, NULL, 0,
-      g_new_drive >= kVMDriveC ? kNewHardDiskItems : kNewFloppyItems,
+      menu, kVMDriveNames[g_new_drive], NULL, 0,
+      g_new_drive >= kVMDriveHD1 ? kNewHardDiskItems : kNewFloppyItems,
       kNewDriveItemCount);
 }
 

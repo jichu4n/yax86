@@ -499,15 +499,16 @@ static void FormatDiskLine(char* buffer, size_t size) {
   const DiskImage* const images[kVMDrives] = {
       [kVMDriveA] = FloppyGetImage(kFloppyDriveA),
       [kVMDriveB] = FloppyGetImage(kFloppyDriveB),
-      [kVMDriveC] = HardDiskGetImage(kHardDiskC),
-      [kVMDriveD] = HardDiskGetImage(kHardDiskD),
+      [kVMDriveHD1] = HardDiskGetImage(kHardDisk1),
+      [kVMDriveHD2] = HardDiskGetImage(kHardDisk2),
   };
   size_t length = 0;
   uint64_t card_us = 0;
   bool any_open = false;
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const DiskImage* image = images[drive];
-    const char label[] = {(char)('A' + drive), ':', '\0'};
+    char label[8];
+    snprintf(label, sizeof(label), "%s:", kVMDriveLabels[drive]);
     if (image->status == kDiskImageOpen) {
       any_open = true;
       length += FormatDrive(buffer + length, size - length, label, image, "");
@@ -594,8 +595,8 @@ static void UpdateStatusRows(void) {
   StatusBarState state = {0};
   state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
   state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
-  state.drives[kStatusBarDriveC] = HardDiskGetImage(kHardDiskC);
-  state.drives[kStatusBarDriveD] = HardDiskGetImage(kHardDiskD);
+  state.drives[kStatusBarDriveHD1] = HardDiskGetImage(kHardDisk1);
+  state.drives[kStatusBarDriveHD2] = HardDiskGetImage(kHardDisk2);
   state.vm = g_has_vm ? g_vm.entry.name : NULL;
   state.running = true;
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
@@ -698,10 +699,10 @@ static __noinline void ReplyReportBoard(const Command* command) {
 
 // The VM's drives, and what has been done with the card and the keyboard.
 static __noinline void ReplyReportDevices(const Command* command) {
-  ReplyDiskImage(command, "drive_a", FloppyGetImage(kFloppyDriveA));
-  ReplyDiskImage(command, "drive_b", FloppyGetImage(kFloppyDriveB));
-  ReplyDiskImage(command, "drive_c", HardDiskGetImage(kHardDiskC));
-  ReplyDiskImage(command, "drive_d", HardDiskGetImage(kHardDiskD));
+  ReplyDiskImage(command, "fd1", FloppyGetImage(kFloppyDriveA));
+  ReplyDiskImage(command, "fd2", FloppyGetImage(kFloppyDriveB));
+  ReplyDiskImage(command, "hd1", HardDiskGetImage(kHardDisk1));
+  ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
       Y_LOG_UINT("vms", g_vms.count));
@@ -1114,8 +1115,8 @@ static void PowerOffVM(void) {
 static bool CanPowerOff(void) { return g_has_vm; }
 
 static const char* const kDriveNames[kFloppyDrives] = {
-    [kFloppyDriveA] = "a",
-    [kFloppyDriveB] = "b",
+    [kFloppyDriveA] = "fd1",
+    [kFloppyDriveB] = "fd2",
 };
 
 static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
@@ -1587,8 +1588,8 @@ static __noinline void CreateVM(void) {
         "vm_created", Y_LOG_STRING("name", created.name),
         Y_LOG_BOOL("blank_a", drives.blank[kVMDriveA]),
         Y_LOG_BOOL("blank_b", drives.blank[kVMDriveB]),
-        Y_LOG_BOOL("blank_c", drives.blank[kVMDriveC]),
-        Y_LOG_BOOL("blank_d", drives.blank[kVMDriveD]),
+        Y_LOG_BOOL("blank_c", drives.blank[kVMDriveHD1]),
+        Y_LOG_BOOL("blank_d", drives.blank[kVMDriveHD2]),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
@@ -1770,8 +1771,8 @@ static __noinline void OpenDrives(void) {
           char name[kDiskImageNameLength + 1];
           DiskImageName(paths[drive], name);
           snprintf(
-              message, sizeof(message), "Drive %c: %s is already in drive %c",
-              (char)('A' + drive), name, (char)('A' + earlier));
+              message, sizeof(message), "%s: %s is already in %s",
+              kVMDriveLabels[drive], name, kVMDriveLabels[earlier]);
           StatusBarPostMessage(message);
           paths[drive] = "";
         }
@@ -1780,9 +1781,9 @@ static __noinline void OpenDrives(void) {
   }
   DiskImageStatus opened[kVMDrives];
   FloppyOpen(&paths[kVMDriveA], !g_has_vm, &opened[kVMDriveA]);
-  HardDiskOpen(&paths[kVMDriveC]);
-  opened[kVMDriveC] = HardDiskGetImage(kHardDiskC)->status;
-  opened[kVMDriveD] = HardDiskGetImage(kHardDiskD)->status;
+  HardDiskOpen(&paths[kVMDriveHD1]);
+  opened[kVMDriveHD1] = HardDiskGetImage(kHardDisk1)->status;
+  opened[kVMDriveHD2] = HardDiskGetImage(kHardDisk2)->status;
   if (!g_has_vm) {
     return;
   }
@@ -1793,8 +1794,8 @@ static __noinline void OpenDrives(void) {
     char name[kDiskImageNameLength + 1];
     DiskImageName(paths[drive], name);
     snprintf(
-        message, sizeof(message), "Drive %c: could not open %s: %s",
-        (char)('A' + drive), name, DiskImageDescribeStatus(opened[drive]));
+        message, sizeof(message), "%s: could not open %s: %s",
+        kVMDriveLabels[drive], name, DiskImageDescribeStatus(opened[drive]));
     StatusBarPostMessage(message);
     DISK_WARN(
         "open_failed", Y_LOG_UINT("drive", drive),

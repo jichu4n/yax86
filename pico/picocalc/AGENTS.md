@@ -289,14 +289,22 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
   ```
   # yax86/vm/dos330/vm.cfg
-  drive_a=../../images/msdos330/disk01.img
-  drive_b=../../images/msdos330/disk02.img
-  drive_c=hdd.img
+  fd1=../../images/msdos330/disk01.img
+  fd2=../../images/msdos330/disk02.img
+  hd1=hd1.img
   ```
 
-  `drive_a` and `drive_b` are 360KB floppies, `drive_c` and `drive_d` the
-  hard disk controller's master and slave, each the core's 10MB drive. A
-  drive not named is empty.
+  `fd1` and `fd2` are 360KB floppies, `hd1` and `hd2` the hard disk
+  controller's master and slave, each the core's 10MB drive. A drive not
+  named is empty.
+- **Hard disks are hard disk 1 and 2, HD1 and HD2, not C and D** -
+  in `vm.cfg`, the menu, the status rows and the report. DOS gives letters to
+  partitions: each disk's primary partition, first disk then second, then
+  each one's logical drives. So a second partition on hard disk 1 comes after
+  hard disk 2's first, and with hard disk 1 blank, hard disk 2's partition is
+  C:. 1 and 2 are FDISK's own numbers for them. The floppies are `fd1` and
+  `fd2` in `vm.cfg`, their files and the report, for the same pattern, but
+  A and B on the screen, which DOS calls them whatever is in them.
 - **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the name
   of the VM to highlight and start - `boot_default=DOS330` - and
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
@@ -338,7 +346,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   time never writes. A failure says why on the message row and the VM
   starts anyway.
 - **A floppy swapped or ejected in the menu is saved to the VM's
-  `vm.cfg`**, so the next start has the same disks: `drive_b=""` once
+  `vm.cfg`**, so the next start has the same disks: `fd2=""` once
   ejected, and an insert that fails leaves the drive empty and saves it
   so. Without a VM there is no file, and nothing is saved.
 - **Paths are written as a person would**, by `FSRelativePath()`:
@@ -352,7 +360,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
   VMs**, through `src/vm_folder.c`: a page listing New VM and the VMs, a
   page for each VM with the images in its drives - two drives a line, A and
-  B then C and D - over Edit drives, Rename, Clone and Delete, a name typed
+  B then HD1 and HD2 - over Edit drives, Rename, Clone and Delete, a name typed
   for Rename and Clone, and a question before Delete. Afterwards it shows
   the list of VMs to manage again with the VM renamed or made chosen - after
   Edit drives, the VM's page - and the list at power on waits for a key, as
@@ -382,9 +390,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
-  drives A to D, and Create. A floppy drive is Empty, New floppy image
-  (360KB), or Existing floppy image, a 360KB image from the browser; drives
-  C and D are Empty, New disk image (10MB), or Existing disk image, a 10MB
+  drives A and B and hard disks 1 and 2, and Create. A floppy drive is
+  Empty, New floppy image (360KB), or Existing floppy image, a 360KB image
+  from the browser; a hard disk is Empty, New disk image (10MB), or Existing disk image, a 10MB
   one. An existing image is shared, like any image outside the VM's folder.
   An empty drive is "empty" wherever the menu says what a drive holds, as
   the status rows have it. Backspace on the form only ever erases the name -
@@ -398,11 +406,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   VM's own a drive stops holding stays in its folder - nothing is deleted
   behind the user's back - and goes with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
-  was**: `floppy_a.img` or `floppy_b.img`, 360KB, for DOS's `FORMAT A:` -
-  which the floppy controller's Format Track makes possible - and `hdd.img`
-  or `hdd_d.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`.
+  was**: `fd1.img` or `fd2.img`, 360KB, for DOS's `FORMAT A:` -
+  which the floppy controller's Format Track makes possible - and `hd1.img`
+  or `hd2.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`.
   A name already in the folder - an edit's new disk beside the old - gives
-  `disk_c2.img` to `disk_c9.img` instead, so nothing is written over. The
+  `hd1_2.img` to `hd1_9.img` and the like instead, so nothing is written
+  over. The
   hard disk takes 5.1 seconds to write, a floppy a fifth of a second. Zeros
   rather than space merely allocated, which would hold whatever the card
   held there - an old file's sectors, which FDISK could take for a
@@ -442,11 +451,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   entries left out. It holds 64, and says when a folder had more. Names are
   8.3, as FatFs is built without long names.
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
-  10,653,696 bytes. A blank one is `dd if=/dev/zero of=hdd.img bs=512
+  10,653,696 bytes. A blank one is `dd if=/dev/zero of=hd1.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
   the boot floppy; New VM and Edit drives make the blank one on the device.
   Its partition starts
-  at sector 17, so mtools reach it as `hdd.img@@8704`.
+  at sector 17, so mtools reach it as `hd1.img@@8704`.
 - `src/sdcard.c` runs the card in SPI mode on SPI0, from the SD simplified
   physical layer spec: 400kHz to bring it up, then 24MHz - the 48MHz
   peripheral clock divided evenly, under the 25MHz default speed limit. Each
@@ -515,7 +524,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
   ```
   Inserted GAMES.IMG in drive B                                         <- messages
-  A:DISK01.IMG  B:GAMES.IMG  C:DOS33.IMG                                <- drives
+  A:DISK01.IMG  B:GAMES.IMG  HD1:HD1.IMG                                 <- drives
   DOS33             CAPS NUM SCRL INS     00:44:51        ↑+↑=Menu  [████] 100%
   ```
 
@@ -531,8 +540,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   without its folders, in capitals, `built-in` for the floppy in flash, or
   `empty` for a floppy drive without a disk. A hard disk with no image is
   left out. The card keeps 8.3 names, so a name fits; a longer one would
-  keep 11 characters and end in `~`. The letter is the drive's light, green
-  for 0.2 seconds after a sector is read or written.
+  keep 11 characters and end in `~`. The label - `A`, `HD1` - is the
+  drive's light, green for 0.2 seconds after a sector is read or written.
 - **Indicators**: the VM's name, if one was started; the guest BIOS's
   own lock and insert flags, at
   `0040:0017` - a PC/XT keyboard has no lights - bright when on; the
@@ -686,7 +695,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `drive_a` to `drive_d`, `vm`, `usb`, `keyboard`, `speaker`, `menu`, `pacing` |
+  | `report` | a line for each group of the status - `system`, `boot`, `display`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `usb`, `keyboard`, `speaker`, `menu`, `pacing` |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
