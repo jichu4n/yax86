@@ -97,6 +97,111 @@ visibility, and how performance work is measured - are in the root
   unmapped directly. Guest addresses never reach it - `YCPUToRawAddress()`
   masks them to 20 bits - so this bounds what a host may register.
 
+## platform - paged memory
+
+- **What it is for**: a host with less fast memory than the guest has RAM sets
+  `YPlatformConfig.paged_memory`, and conventional memory above
+  `direct_memory_size` is then held in pages, only some of them in fast
+  memory ("frames") at a time - a microcontroller, say, holding the pages in
+  slower external memory. `direct_memory_size` may be 0. The PicoCalc port
+  is the user today; its `AGENTS.md` has how it pages and what it measured.
+- **The host owns the page table and the frames**: one `uint16_t` per page,
+  bit 15 `DIRTY`, bit 14 `RESIDENT`, bits 0-13 the frame number - laid out
+  at `Y_CPU_PAGED_DATA_RESIDENT`. An access the entry allows goes to the
+  frame; anything else calls the host's `page_fault_fn`, which must set the
+  entry so that it allows it.
+- **Two bits so that the host learns what it needs and pays nothing per
+  access**: bringing a page in without `DIRTY` makes its first write fault,
+  which is how the host knows which pages to write back - a page never written
+  is evicted for free. With `pico/picocalc` on the PicoCalc that is most code:
+  seven DOS commands brought in 4,971 pages and wrote back 3,394, a Word
+  session 17,502 and 7,633. A host that does not track dirty pages sets
+  `DIRTY` with `RESIDENT` on every page and never takes a write fault.
+  Clearing `RESIDENT` on a page it keeps in its frame makes the next access
+  fault, which is how it samples which pages are in use. The frame number is
+  read only with `RESIDENT` set.
+- **The bit is `DIRTY`, not `WRITABLE`, and a write needs both bits.** Every
+  page is writable - a write with `DIRTY` clear goes through the host - so
+  `WRITABLE` read as "read-only" when clear. With the CPU writing on
+  `RESIDENT` and `DIRTY` together, clearing `RESIDENT` to sample use leaves
+  `DIRTY` alone, and the entry is the one record of whether a page needs
+  writing back; when the CPU wrote on the one bit, sampling had to clear both
+  and a host had to keep its own dirty flag.
+- **The CPU reads the page table itself**: `YCPUPagedDataWindow`, which
+  `YPlatformUpdateAfterMemoryMapChange()` assigns from the paged entry, so an
+  access to a page in its frame is a subtract, a compare and two loads, and
+  only a fault reaches the platform. Going through the platform's memory map
+  for every access instead, the DOS330 boot at 640KB took 7.00 seconds with
+  `pico/picocalc` on the PicoCalc's RP2040 at 250MHz, nothing pinned; with
+  the CPU indexing, 6.32.
+- **Instruction fetch opens a page's frame the same way**, without asking the
+  host, in `YCPUOpenPagedFetchWindow()`. The fetch window is one page, since
+  the next page's frame can be anywhere, so running or jumping onto another
+  page reopens it.
+- **A page leaving its frame discards nothing the CPU derived from it**: its
+  bytes have not changed, so the decode cache keeps its decodes. The one
+  thing that points into a frame rather than at a page's contents is the
+  fetch window, so `YPlatformFaultPagedMemory()` drops it after every fault,
+  in case the host gave that frame to another page. The one-frame tests in
+  `platform_paged_memory_test.cpp`, with code and data taking the frame from
+  each other, fail without it.
+- **A write that faults is reported to the decode cache once, not twice.** The
+  CPU reports every write it makes, and `YPlatformWriteMemoryByte()` reports
+  every write it is handed, so a write that goes through the callback is
+  counted twice. That changes when page counters wrap, so where runs of
+  instructions end, so when the guest takes its timer interrupts. For paged
+  memory it would mean the number of frames changes what the guest does, so
+  `YPlatformCPUCallbackWriteMemoryByte()` sends the CPU's paged writes past
+  the second report. Every other region is still counted twice, and the
+  instruction and cycle counts that `pico/bench`'s `dos-boot` workload is held
+  to depend on that. With this, MS-DOS 3.30 running five programs at 640KB, in
+  an off-tree harness, retires the same instructions with 128 frames as with
+  4, and with 256 as with 2.
+- **Both data windows stay, and a host may set either, both or neither.** The
+  direct window could be modelled as a paged one - frames over
+  `direct_memory`, entry *i* `RESIDENT | DIRTY | i` - but every host that does
+  not page would pay for it: `dos-boot` (`pico/bench`, RP2040 at 250MHz,
+  `-O3`) with all of 128KB paged and every page in its frame is 15% slower
+  than direct. Nor is there a switch between them: an empty window already is
+  one (`end` 0, `size` 0), the CPU's code is the same whichever are set, and a
+  flag would cost the same test. Each combination has a user: direct only for
+  `pico/bench`, SDL and `pico/picocalc` without PSRAM; paged only for
+  `pico/picocalc`'s default; both for its `YAX86_PICOCALC_PINNED_KB`; neither
+  for the CPU tests' helper and mocks.
+- **A paged-only build pays for the direct window it does not have**, by
+  reading of the disassembly, not yet measured. Every inlined data access
+  first loads `direct_data_window.end`, compares and falls through, about 4
+  cycles on a Cortex-M0+, and then makes a call: the paged lookup is in the
+  out-of-line `YCPUReadMemoryByteOutsideDirectWindow()` and its write twin, an
+  arrangement measured only with paging off, where it won. So every data
+  access in a paged-only build costs a failed compare, a call and a return
+  before the lookup itself. And `paged_data_window` is last in `YCPUState`,
+  past the offsets a Cortex-M0+ load encodes, so the paged path spends 4-5
+  instructions forming addresses (`adds #117; adds #255`,
+  `movs #186; lsls #1`). It is last so that no field the direct path reads moves. Against
+  roughly 500 host cycles an emulated instruction on that board, each is
+  probably around 1%. Changes to try, measured with `pico/picocalc` on the
+  PicoCalc's RP2040 at 250MHz, `-O3`, running its seven DOS commands and the
+  DOS330 boot; and with `dos-boot` (`pico/bench`, RP2040 at 250MHz, `-O3`) to
+  show direct-only builds lose nothing:
+  - a core build option compiling the direct check out, the PicoCalc's
+    no-PSRAM fallback then paging its 128KB to itself with every page in its
+    frame;
+  - in that build, the paged lookup inlined at each access in place of the
+    direct check, so a page in its frame costs no call, weighed against the
+    larger code at every access site, all of it in SRAM;
+  - `paged_data_window` near the front of `YCPUState`, checking with
+    `objdump` that the direct path's fields stay within reach.
+- **REP string runs plan only over the direct data window**, so in paged
+  memory they go element by element, and a boot with more of memory paged
+  retires a few hundred fewer instructions - the difference the bulk runs'
+  decode cache reporting makes (see `src/cpu/AGENTS.md`).
+- **What paging costs when nothing faults**: `dos-boot` (`pico/bench`, RP2040
+  at 250MHz, `-O3`) at 128KB, with every page in a frame, is 2% slower with
+  the first 64KB direct and the rest paged, and 15% slower with all of it
+  paged. A direct access is a compare and a load, a paged one a call and two
+  more loads. `pico/picocalc` builds both; see its `AGENTS.md`.
+
 ## platform - idle skipping
 
 - MS-DOS waits for a key by polling, never halting: at the 3.30 prompt the

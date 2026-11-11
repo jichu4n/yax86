@@ -775,8 +775,8 @@ static uint8_t FloppyDrives(void) {
 static bool InitVM(void) {
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_vm_log_config;
-  config->physical_memory_size = kGuestRAMSize;
-  config->physical_memory = g_guest_ram;
+  config->direct_memory_size = kGuestRAMSize;
+  config->direct_memory = g_guest_ram;
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->floppy_drives = FloppyDrives();

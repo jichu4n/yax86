@@ -33,9 +33,9 @@ enum : uint8_t {
 class PlatformDirectDataWindowTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.direct_memory_size = sizeof(ram_);
     platform_.config.context = this;
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
     // Named rather than left to default, since kCGASegment below and the size
     // of vram_ both depend on which adapter is mapped.

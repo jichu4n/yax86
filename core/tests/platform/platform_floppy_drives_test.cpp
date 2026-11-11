@@ -15,8 +15,8 @@ enum : uint8_t {
 class PlatformFloppyDrivesTest : public ::testing::Test {
  protected:
   void Init(uint8_t floppy_drives) {
-    platform_.config.physical_memory_size = sizeof(ram_);
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory_size = sizeof(ram_);
+    platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
     platform_.config.floppy_drives = floppy_drives;
     ASSERT_TRUE(YPlatformInit(&platform_));
