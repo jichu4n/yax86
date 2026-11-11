@@ -237,9 +237,9 @@ int main(int argc, char* argv[]) {
   g_platform = kEmptyPlatform;
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_logger_config;
-  config->physical_memory_size =
+  config->direct_memory_size =
       640 * 1024;  // Use max allowed conventional memory
-  config->physical_memory = g_memory;
+  config->direct_memory = g_memory;
   // Video memory is a window into the same array, above conventional memory.
   config->vram = g_memory + g_video_adapter_metadata->vram_address;
   if (audio_available) {
@@ -260,7 +260,7 @@ int main(int argc, char* argv[]) {
   YPlatformSetDOSIdleSkip(&g_platform, true);
 
   APP_DEBUG(
-      "started", Y_LOG_UINT("memory_kb", config->physical_memory_size / 1024));
+      "started", Y_LOG_UINT("memory_kb", config->direct_memory_size / 1024));
 
   // Mount the boot floppy. Without one the BIOS still runs, so a failure here
   // is reported but not fatal.

@@ -104,15 +104,15 @@ Y_FILE_PRIVATE void YPlatformUpdateMemoryPageMapForEntry(
 }
 
 // Whether a paged region is usable: a supported page size, a page table,
-// frames and a page_fault, and a size that is exactly the region's and a whole
-// number of pages.
+// frames and a page_fault_fn, and a size that is exactly the region's and a
+// whole number of pages.
 Y_FILE_PRIVATE bool YPlatformIsPagedMemoryValid(
     const YPlatformMemoryMapEntry* entry) {
   const YPlatformPagedMemory* memory = entry->paged_memory;
   if (memory->page_shift == 0 ||
       memory->page_shift > Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT ||
       memory->pages == NULL || memory->frames == NULL ||
-      memory->page_fault == NULL) {
+      memory->page_fault_fn == NULL) {
     return false;
   }
   const uint32_t page_mask = ((uint32_t)1 << memory->page_shift) - 1;
@@ -233,14 +233,14 @@ Y_PUBLIC Y_HOT YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryByType(
   return NULL;
 }
 
-// Calls the host's page_fault for a page and returns the page's entry
+// Calls the host's page_fault_fn for a page and returns the page's entry
 // afterwards. To make room the host may have moved another page out of the
 // frame instruction fetch is reading from, so the fetch window is dropped and
 // the next fetch opens a fresh one.
 Y_FILE_PRIVATE Y_NOINLINE uint16_t YPlatformFaultPagedMemory(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t page,
     bool write) {
-  memory->page_fault(memory, page, write);
+  memory->page_fault_fn(memory, page, write);
   YCPUInvalidateInstructionFetchWindow(&platform->cpu);
   return memory->pages[page];
 }
@@ -255,7 +255,7 @@ Y_FILE_PRIVATE inline uint8_t* YPlatformGetPagedMemoryByte(
                            (offset & page_mask));
 }
 
-// Read the byte at offset into a paged region, calling page_fault first if
+// Read the byte at offset into a paged region, calling page_fault_fn first if
 // its page is not in a frame.
 Y_FILE_PRIVATE Y_HOT uint8_t YPlatformReadPagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset) {
@@ -270,16 +270,19 @@ Y_FILE_PRIVATE Y_HOT uint8_t YPlatformReadPagedMemoryByte(
   return *YPlatformGetPagedMemoryByte(memory, page_entry, offset);
 }
 
-// Write the byte at offset into a paged region, calling page_fault first if
+// Write the byte at offset into a paged region, calling page_fault_fn first if
 // its page is not in a frame or not writable.
 Y_FILE_PRIVATE Y_HOT void YPlatformWritePagedMemoryByte(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset,
     uint8_t value) {
   const uint32_t page = offset >> memory->page_shift;
+  // A write needs the page in its frame and already dirty; otherwise the host
+  // is told, so that it can mark the page dirty.
+  const uint16_t writable = Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY;
   uint16_t page_entry = memory->pages[page];
-  if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
+  if ((page_entry & writable) != writable) {
     page_entry = YPlatformFaultPagedMemory(platform, memory, page, true);
-    if (!(page_entry & Y_CPU_PAGED_DATA_WRITABLE)) {
+    if ((page_entry & writable) != writable) {
       return;
     }
   }
@@ -446,8 +449,8 @@ YPlatformCPUCallbackReadMemoryByte(YCPUState* cpu, uint32_t address) {
 // its decode cache about the write, and YPlatformWriteMemoryByte() would tell
 // it again. Counting a write twice changes when the cache discards decodes,
 // which changes where runs of instructions end and so when the guest takes
-// its timer interrupts - so the number of frames, which decides which writes
-// fault, would change what the guest does. Writes to every other region are
+// its timer interrupts. The number of frames decides which writes fault, so
+// it would change what the guest does. Writes to every other region are
 // still counted twice; the dos-boot invariant depends on that.
 Y_FILE_PRIVATE Y_NOINLINE void YPlatformCPUWritePagedMemoryByte(
     YPlatformState* platform, uint32_t address, uint8_t value) {
@@ -767,7 +770,7 @@ YPlatformCPUCallbackHandleInterrupt(YCPUState* cpu, uint8_t interrupt_number) {
 }
 
 // Points instruction fetch at the frame holding the page an address is in,
-// calling page_fault first if the page is not in a frame.
+// calling page_fault_fn first if the page is not in a frame.
 //
 // The window covers that one page, since the next page's frame can be
 // anywhere; fetching past its end comes back here.
@@ -856,24 +859,24 @@ Y_FILE_PRIVATE void YPlatformInitMemoryMap(YPlatformState* platform) {
   for (uint32_t page = 0; page < Y_PLATFORM_NUM_MEMORY_PAGES; ++page) {
     platform->memory_page_map[page] = Y_PLATFORM_MEMORY_PAGE_UNMAPPED;
   }
-  const uint32_t physical_memory_size = platform->config.physical_memory_size;
-  if (physical_memory_size > 0) {
+  const uint32_t direct_memory_size = platform->config.direct_memory_size;
+  if (direct_memory_size > 0) {
     YPlatformMemoryMapEntry conventional_memory = {
         .context = platform,
         .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL,
         .start = 0x0000,
-        .end = physical_memory_size - 1,
+        .end = direct_memory_size - 1,
         // Conventional memory is the caller's buffer, accessed directly.
-        .read_data = platform->config.physical_memory,
-        .write_data = platform->config.physical_memory};
+        .read_data = platform->config.direct_memory,
+        .write_data = platform->config.direct_memory};
     YPlatformRegisterMemoryMapEntry(platform, &conventional_memory);
   }
   if (platform->config.paged_memory) {
     YPlatformMemoryMapEntry paged_memory = {
         .context = platform,
         .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY,
-        .start = physical_memory_size,
-        .end = physical_memory_size + platform->config.paged_memory->size - 1,
+        .start = direct_memory_size,
+        .end = direct_memory_size + platform->config.paged_memory->size - 1,
         .paged_memory = platform->config.paged_memory};
     YPlatformRegisterMemoryMapEntry(platform, &paged_memory);
   }
@@ -1082,46 +1085,45 @@ Y_FILE_PRIVATE bool YPlatformGetLogLocation(
 
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
+//   - Conventional memory, direct and paged, is not between 64K and 640K.
 Y_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
   YLoggerInit(&platform->logger, platform->config.logger_config);
 
   const YPlatformPagedMemory* paged_memory = platform->config.paged_memory;
-  const uint32_t memory_size = platform->config.physical_memory_size +
+  const uint32_t memory_size = platform->config.direct_memory_size +
                                (paged_memory ? paged_memory->size : 0);
-  if (memory_size < Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE ||
-      memory_size > Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE) {
+  if (memory_size < Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE ||
+      memory_size > Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE) {
     Y_PLATFORM_ERROR(
-        "invalid_physical_memory_size", Y_LOG_UINT("size", memory_size),
-        Y_LOG_UINT("min", Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE),
-        Y_LOG_UINT("max", Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE));
+        "invalid_conventional_memory_size", Y_LOG_UINT("size", memory_size),
+        Y_LOG_UINT("min", Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE),
+        Y_LOG_UINT("max", Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE));
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
-  if (platform->config.physical_memory_size > 0 &&
-      platform->config.physical_memory == NULL) {
-    Y_PLATFORM_ERROR("missing_physical_memory");
+  if (platform->config.direct_memory_size > 0 &&
+      platform->config.direct_memory == NULL) {
+    Y_PLATFORM_ERROR("missing_direct_memory");
     return false;
   }
-  // Paged memory starts where physical memory ends. That has to be on a 4KB
+  // Paged memory starts where direct memory ends. That has to be on a 4KB
   // boundary, the granularity the memory map indexes regions at, and the
   // region has to be a usable size for its pages.
   if (paged_memory) {
     const YPlatformMemoryMapEntry entry = {
-        .start = platform->config.physical_memory_size,
+        .start = platform->config.direct_memory_size,
         .end = memory_size - 1,
         .paged_memory = platform->config.paged_memory};
-    if ((platform->config.physical_memory_size &
+    if ((platform->config.direct_memory_size &
          (Y_PLATFORM_MEMORY_PAGE_SIZE - 1)) != 0 ||
         !YPlatformIsPagedMemoryValid(&entry)) {
       Y_PLATFORM_ERROR(
           "invalid_paged_memory",
-          Y_LOG_UINT(
-              "physical_memory_size", platform->config.physical_memory_size),
+          Y_LOG_UINT("direct_memory_size", platform->config.direct_memory_size),
           Y_LOG_UINT("size", paged_memory->size),
           Y_LOG_UINT("page_shift", paged_memory->page_shift));
       return false;
