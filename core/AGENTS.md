@@ -144,6 +144,32 @@ visibility, and how performance work is measured - are in the root
   and the `dos-boot` invariant depends on that. With this, MS-DOS 3.30
   running five programs at 640KB retires the same instructions with 128
   frames as with 4, and with 256 as with 2.
+- **Both data windows stay, and a host may set either, both or neither.**
+  The direct window could be modelled as a paged one - frames over
+  `physical_memory`, entry *i* `RESIDENT | WRITABLE | i` - but every host that
+  does not page would pay for it: `dos-boot` with all of 128KB paged and every
+  page in its frame is 15% slower than direct. Nor is there a switch between
+  them: an empty window already is one (`end` 0, `size` 0), the CPU's code is
+  the same whichever are set, and a flag would cost the same test. Each
+  combination has a user: direct only for the bench, SDL and the PicoCalc
+  without PSRAM; paged only for the PicoCalc's default; both for its
+  `YAX86_PICOCALC_PINNED_KB`; neither for the CPU tests' helper and mocks.
+- **A paged-only build pays for the direct window it does not have**, by
+  reading of the disassembly, not yet measured. Every inlined data access
+  first loads `direct_data_window.end`, compares and falls through, about 4
+  cycles on a Cortex-M0+, before calling the paged path. And
+  `paged_data_window` is last in `YCPUState`, past the offsets a Cortex-M0+
+  load encodes, so the paged path spends 4-5 instructions forming addresses
+  (`adds #117; adds #255`, `movs #186; lsls #1`). It is last so that no field
+  the direct path reads moves. Against roughly 500 host cycles an emulated
+  instruction, each is probably around 1%. Two changes to try, measured on
+  the PicoCalc - seven commands and the DOS330 boot - with `dos-boot` on the
+  bench to show direct-only builds lose nothing:
+  - a core build option compiling the direct check out, the PicoCalc's
+    no-PSRAM fallback then paging its 128KB to itself with every page in its
+    frame;
+  - `paged_data_window` near the front of `YCPUState`, checking with
+    `objdump` that the direct path's fields stay within reach.
 - **REP string runs plan only over the direct data window**, so in paged
   memory they go element by element, and a boot with more of memory paged
   retires a few hundred fewer instructions - the difference the bulk runs'
