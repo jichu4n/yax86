@@ -68,7 +68,7 @@ class PlatformPagedMemoryTest : public ::testing::Test {
       return;
     }
     uint16_t& entry = self->pages_[page];
-    if (!(entry & Y_PLATFORM_PAGED_MEMORY_RESIDENT)) {
+    if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
       uint32_t frame;
       if (self->frames_used_ < self->num_frames_) {
         frame = self->frames_used_++;
@@ -81,17 +81,17 @@ class PlatformPagedMemoryTest : public ::testing::Test {
           &self->frames_[frame * kPageSize], &self->backing_[page * kPageSize],
           kPageSize);
       self->frame_page_[frame] = page;
-      entry = static_cast<uint16_t>(frame | Y_PLATFORM_PAGED_MEMORY_RESIDENT);
+      entry = static_cast<uint16_t>(frame | Y_CPU_PAGED_DATA_RESIDENT);
     }
     if (write) {
-      entry |= Y_PLATFORM_PAGED_MEMORY_WRITABLE;
+      entry |= Y_CPU_PAGED_DATA_WRITABLE;
     }
   }
 
   void Evict(uint32_t page) {
     const uint16_t entry = pages_[page];
-    const uint32_t frame = entry & Y_PLATFORM_PAGED_MEMORY_FRAME_MASK;
-    if (entry & Y_PLATFORM_PAGED_MEMORY_WRITABLE) {
+    const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
+    if (entry & Y_CPU_PAGED_DATA_WRITABLE) {
       std::memcpy(
           &backing_[page * kPageSize], &frames_[frame * kPageSize], kPageSize);
     }
@@ -183,7 +183,7 @@ TEST_F(PlatformPagedMemoryTest, AReadHandsThePageOutReadOnly) {
 TEST_F(PlatformPagedMemoryTest, ClearingResidentAsksAboutTheNextRead) {
   ASSERT_TRUE(Init());
   YPlatformReadMemoryByte(&platform_, kPagedStart);
-  pages_[0] &= static_cast<uint16_t>(~Y_PLATFORM_PAGED_MEMORY_RESIDENT);
+  pages_[0] &= static_cast<uint16_t>(~Y_CPU_PAGED_DATA_RESIDENT);
   EXPECT_EQ(YPlatformReadMemoryByte(&platform_, kPagedStart), backing_[0]);
   ASSERT_EQ(faults_.size(), 2u);
   EXPECT_EQ(faults_[1].page, 0u);
@@ -272,7 +272,7 @@ TEST_F(PlatformPagedMemoryTest, TheCPUAsksOnlyWhatTheEntryDoesNotAllow) {
       backing_[0x401]);
 
   pages_[2] &= static_cast<uint16_t>(
-      ~(Y_PLATFORM_PAGED_MEMORY_RESIDENT | Y_PLATFORM_PAGED_MEMORY_WRITABLE));
+      ~(Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_WRITABLE));
   platform_.cpu.registers[Y_CPU_IP] = 0x100;
   platform_.cpu.is_halted = false;
   RunUntilHalt();
