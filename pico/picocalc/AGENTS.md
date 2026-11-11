@@ -11,8 +11,8 @@ PicoCalc's keyboard as its own and plays the PC speaker. DOS's date and time
 questions are answered by watching the screen, as `pico/bench` does - there
 is no clock to set them from, and it keeps the boot the `dos-boot` workload.
 
-Like `pico/bench` it uses only the core's public interface and is not built
-in CI. Measuring follows `pico/bench/AGENTS.md` and the root `AGENTS.md`.
+Like `pico/bench` it uses only the core's public interface. CI builds it -
+see `pico/bench/AGENTS.md`. Measuring follows `pico/bench/AGENTS.md` and the root `AGENTS.md`.
 
 ## The hardware
 
@@ -915,16 +915,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - `src/font_4x10.c` holds four complete code page 437 fonts of that size,
   chosen by `font` in `yax86/yax86.cfg` or from the list at power on (`Font`),
   for both the guest's text modes and the menu and status rows:
-  - `atari800` (Atari800, the default): 3+1 glyphs (three columns of ink and
-    a blank fourth column) with 6-row capitals and 5-row lower case, from
-    Atari800's 4x8 font under GPLv2-or-later, with a stepped diagonal `N`.
-  - `original` (Original): 4-column glyphs whose ASCII range is rugosi's,
-    from picocalc_runCPM under MIT, and the rest, every box drawing and block
-    character included, Serg Podtynnyi's under GPLv3-or-later.
-  - `miniwi` (Miniwi-8): 3+1 glyphs with 5-row capitals and 4-row lower case,
-    from josuah's miniwi under MIT/X11.
-  - `custom` (Custom): 3+1 glyphs with uniform 7-row capitals and digits and
-    5-row lower case.
+  - `ymini` (Ymini, the default): 3+1 glyphs (three columns of ink and a
+    blank fourth column) drawn for this cell, with 7-row capitals and digits.
+  - `atari800` (Atari800): 3+1 glyphs with 6-row capitals, from Atari800's
+    4x8 font.
+  - `miniwi` (Miniwi-8): 3+1 glyphs with 5-row capitals, from miniwi-8.
+  - `creep` (Creep): 4-column glyphs, rugosi's ASCII range from
+    picocalc_runCPM and Serg Podtynnyi's rest of code page 437.
+
+  Where each font's glyphs come from, and under which license, is at the top
+  of `src/font_4x10.c`.
 - Every glyph outside the box drawing range sits one row lower than the box
   drawing ones, leaving a blank row between lines of text while box drawing
   fills the cell and joins. The shift is in the table, so each is a plain
