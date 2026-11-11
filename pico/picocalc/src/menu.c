@@ -72,29 +72,23 @@ typedef enum MenuPage {
   // Settings, from the list, and Font, from Settings: the 4x10 fonts.
   kMenuPageSettings,
   kMenuPageFont,
+  kMenuPageCount,
 } MenuPage;
 
-static const char* const kPageNames[] = {
-    [kMenuPageMain] = "main",
-    [kMenuPageStatus] = "status",
-    [kMenuPageReset] = "reset",
-    [kMenuPagePowerOff] = "power_off",
-    [kMenuPageDrive] = "drive",
-    [kMenuPageBrowse] = "browse",
-    [kMenuPageVMs] = "vms",
-    [kMenuPageUSB] = "usb",
-    [kMenuPageSharing] = "usb_sharing",
-    [kMenuPageStopSharing] = "usb_stop",
-    [kMenuPageManage] = "manage",
-    [kMenuPageVM] = "vm",
-    [kMenuPageName] = "vm_name",
-    [kMenuPageDelete] = "vm_delete",
-    [kMenuPageCopying] = "vm_copying",
-    [kMenuPageNew] = "new_vm",
-    [kMenuPageNewDrive] = "new_vm_drive",
-    [kMenuPageSettings] = "settings",
-    [kMenuPageFont] = "font",
-};
+// A menu page definition for table-driven dispatch.
+typedef struct MenuPageDef {
+  const char* name;
+  const char* (*get_name)(void);
+  const char* (*get_hint)(void);
+  const char* hint;
+  uint8_t (*item_count)(void);
+  void (*draw)(DisplayMenu* menu);
+  MenuAction (*choose)(void);
+  MenuAction (*back)(void);
+  bool (*handle_key)(SouthbridgeKeyEvent event, MenuAction* action);
+} MenuPageDef;
+
+static const MenuPageDef kPageDefs[kMenuPageCount];
 
 
 typedef enum MainItem {
@@ -331,10 +325,8 @@ void MenuInit(const MenuConfig* config) { g_config = *config; }
 bool MenuIsOpen(void) { return g_open; }
 
 const char* MenuPageName(void) {
-  if (g_page == kMenuPageDrive) {
-    return g_drive == kFloppyDriveA ? "fd1" : "fd2";
-  }
-  return kPageNames[g_page];
+  const MenuPageDef* def = &kPageDefs[g_page];
+  return def->get_name != NULL ? def->get_name() : def->name;
 }
 
 static void ShowPage(MenuPage page, uint8_t chosen);
@@ -388,31 +380,11 @@ void MenuSetProblem(const char* problem) {
 }
 
 const char* MenuHint(void) {
-  if (g_page == kMenuPageVMs) {
-    return "\x18\x19=Move  Enter=Select";
+  const MenuPageDef* def = &kPageDefs[g_page];
+  if (def->get_hint != NULL) {
+    return def->get_hint();
   }
-  if (g_page == kMenuPageSharing) {
-    return "Enter=Disconnect";
-  }
-  if (g_page == kMenuPageStatus) {
-    return "Esc=Back";
-  }
-  if (g_page == kMenuPageName) {
-    return g_cloning ? "Enter=Clone  Backspace=Erase  Esc=Cancel"
-                     : "Enter=Rename  Backspace=Erase  Esc=Cancel";
-  }
-  if (g_page == kMenuPageCopying) {
-    return "";
-  }
-  if (g_page == kMenuPageNew) {
-    return FormItem() == kNewName
-               ? "Type the name  \x18\x19=Move  Backspace=Erase  Esc=Cancel"
-               : "\x18\x19=Move  Enter=Select  Esc=Cancel";
-  }
-  if (g_page == kMenuPageBrowse) {
-    return "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back";
-  }
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
+  return def->hint != NULL ? def->hint : "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
 const char* MenuProblem(void) {
@@ -588,46 +560,27 @@ static bool ComputerHasCard(void) {
   return stats.connected && stats.seen && !stats.ejected;
 }
 
+static uint8_t ResetItemCount(void) { return kResetItemCount; }
+static uint8_t PowerOffItemCount(void) { return kPowerOffItemCount; }
+static uint8_t BrowseItemCount(void) { return g_list.count; }
+static uint8_t USBItemCount(void) { return kUSBItemCount; }
+static uint8_t SharingItemCount(void) { return 1; }
+static uint8_t StopSharingItemCount(void) { return kStopSharingItemCount; }
+static uint8_t ManageItemCount(void) { return (uint8_t)(g_vms->count + 1); }
+static uint8_t VMItemCount(void) { return kVMItemCount; }
+static uint8_t DeleteItemCount(void) { return kDeleteItemCount; }
+static uint8_t NewItemCount(void) {
+  return (uint8_t)(kNewItemCount - FormFirstItem());
+}
+static uint8_t NewDriveItemCount(void) {
+  return DriveChoiceRow(kNewDriveItemCount);
+}
+static uint8_t SettingsItemCount(void) { return kSettingsItemCount; }
+static uint8_t FontItemCount(void) { return kFont4x10Count; }
+
 static uint8_t PageItemCount(void) {
-  switch (g_page) {
-    case kMenuPageMain:
-      return MainItemCount();
-    case kMenuPageReset:
-      return kResetItemCount;
-    case kMenuPagePowerOff:
-      return kPowerOffItemCount;
-    case kMenuPageDrive:
-      return DriveItemCount();
-    case kMenuPageBrowse:
-      return g_list.count;
-    case kMenuPageVMs:
-      return VMsItemCount();
-    case kMenuPageUSB:
-      return kUSBItemCount;
-    case kMenuPageSharing:
-      return 1;
-    case kMenuPageStopSharing:
-      return kStopSharingItemCount;
-    case kMenuPageManage:
-      return (uint8_t)(g_vms->count + 1);
-    case kMenuPageNew:
-      return (uint8_t)(kNewItemCount - FormFirstItem());
-    case kMenuPageNewDrive:
-      return DriveChoiceRow(kNewDriveItemCount);
-    case kMenuPageSettings:
-      return kSettingsItemCount;
-    case kMenuPageFont:
-      return kFont4x10Count;
-    case kMenuPageVM:
-      return kVMItemCount;
-    case kMenuPageDelete:
-      return kDeleteItemCount;
-    case kMenuPageName:
-    case kMenuPageCopying:
-    case kMenuPageStatus:
-      return 0;
-  }
-  return 0;
+  const MenuPageDef* def = &kPageDefs[g_page];
+  return def->item_count != NULL ? def->item_count() : 0;
 }
 
 // Show Manage VMs - a row for each VM, then New VM - with the item at index
@@ -872,82 +825,137 @@ static MenuAction Disconnect(void) {
   return kMenuActionStopSharing;
 }
 
-// Go back a page, or close the menu from the main one.
-static MenuAction Back(void) {
-  if (g_page == kMenuPageMain) {
-    g_open = false;
-    return kMenuActionClosed;
+static const char* DrivePageName(void) {
+  return g_drive == kFloppyDriveA ? "fd1" : "fd2";
+}
+
+static const char* NamePageHint(void) {
+  return g_cloning ? "Enter=Clone  Backspace=Erase  Esc=Cancel"
+                   : "Enter=Rename  Backspace=Erase  Esc=Cancel";
+}
+
+static const char* NewPageHint(void) {
+  return FormItem() == kNewName
+             ? "Type the name  \x18\x19=Move  Backspace=Erase  Esc=Cancel"
+             : "\x18\x19=Move  Enter=Select  Esc=Cancel";
+}
+
+static bool HandleKeyName(SouthbridgeKeyEvent event, MenuAction* action) {
+  *action = TypeName(event.key);
+  return true;
+}
+
+static bool HandleKeyCopying(SouthbridgeKeyEvent event, MenuAction* action) {
+  (void)event;
+  *action = kMenuActionNone;
+  return true;
+}
+
+static bool HandleKeyNew(SouthbridgeKeyEvent event, MenuAction* action) {
+  if ((FormItem() == kNewName && TypeNewName(event.key)) ||
+      event.key == kKeyBackspace) {
+    *action = kMenuActionNone;
+    return true;
   }
-  switch (g_page) {
-    case kMenuPageBrowse:
-      if (g_browsing_for == kBrowseForUSB) {
-        ShowPage(kMenuPageUSB, kUSBImage);
-      } else if (g_browsing_for == kBrowseForNewVM) {
-        ShowPage(kMenuPageNewDrive, DriveChoiceRow(kNewDriveImage));
-      } else {
-        ShowPage(kMenuPageDrive, kDriveInsert);
-      }
-      break;
-    case kMenuPageReset:
-      ShowMainItem(kMainReset);
-      break;
-    case kMenuPagePowerOff:
-      ShowMainItem(kMainPowerOff);
-      break;
-    case kMenuPageDrive:
-      ShowMainItem((MainItem)(kMainDriveA + g_drive));
-      break;
-    case kMenuPageStatus:
-    case kMenuPageMain:
-      ShowMainItem(kMainStatus);
-      break;
-    case kMenuPageVMs:
-      // There is no VM to go back to yet.
-      break;
-    case kMenuPageUSB:
-      ShowPage(kMenuPageVMs, USBItemIndex());
-      ScrollToChosen();
-      break;
-    case kMenuPageSharing:
-      return Disconnect();
-    case kMenuPageStopSharing:
-      ShowPage(kMenuPageSharing, 0);
-      break;
-    case kMenuPageManage:
-      ShowPage(kMenuPageVMs, ManageItemIndex());
-      ScrollToChosen();
-      break;
-    case kMenuPageVM:
-      ShowManaged(g_vm);
-      break;
-    case kMenuPageName:
-      ShowPage(kMenuPageVM, g_cloning ? kVMClone : kVMRename);
-      break;
-    case kMenuPageDelete:
-      ShowPage(kMenuPageVM, kVMDelete);
-      break;
-    case kMenuPageCopying:
-      // A copy cannot be stopped part way.
-      break;
-    case kMenuPageNew:
-      if (g_editing) {
-        ShowPage(kMenuPageVM, kVMEdit);
-      } else {
-        ShowManaged(g_vms->count);
-      }
-      break;
-    case kMenuPageNewDrive:
-      ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
-      break;
-    case kMenuPageSettings:
-      ShowPage(kMenuPageVMs, SettingsItemIndex());
-      ScrollToChosen();
-      break;
-    case kMenuPageFont:
-      ShowPage(kMenuPageSettings, 0);
-      break;
+  return false;
+}
+
+static MenuAction BackMain(void) {
+  g_open = false;
+  return kMenuActionClosed;
+}
+
+static MenuAction BackStatus(void) {
+  ShowMainItem(kMainStatus);
+  return kMenuActionNone;
+}
+
+static MenuAction BackReset(void) {
+  ShowMainItem(kMainReset);
+  return kMenuActionNone;
+}
+
+static MenuAction BackPowerOff(void) {
+  ShowMainItem(kMainPowerOff);
+  return kMenuActionNone;
+}
+
+static MenuAction BackDrive(void) {
+  ShowMainItem((MainItem)(kMainDriveA + g_drive));
+  return kMenuActionNone;
+}
+
+static MenuAction BackBrowse(void) {
+  if (g_browsing_for == kBrowseForUSB) {
+    ShowPage(kMenuPageUSB, kUSBImage);
+  } else if (g_browsing_for == kBrowseForNewVM) {
+    ShowPage(kMenuPageNewDrive, DriveChoiceRow(kNewDriveImage));
+  } else {
+    ShowPage(kMenuPageDrive, kDriveInsert);
   }
   return kMenuActionNone;
+}
+
+static MenuAction BackUSB(void) {
+  ShowPage(kMenuPageVMs, USBItemIndex());
+  ScrollToChosen();
+  return kMenuActionNone;
+}
+
+static MenuAction BackStopSharing(void) {
+  ShowPage(kMenuPageSharing, 0);
+  return kMenuActionNone;
+}
+
+static MenuAction BackManage(void) {
+  ShowPage(kMenuPageVMs, ManageItemIndex());
+  ScrollToChosen();
+  return kMenuActionNone;
+}
+
+static MenuAction BackVM(void) {
+  ShowManaged(g_vm);
+  return kMenuActionNone;
+}
+
+static MenuAction BackName(void) {
+  ShowPage(kMenuPageVM, g_cloning ? kVMClone : kVMRename);
+  return kMenuActionNone;
+}
+
+static MenuAction BackDelete(void) {
+  ShowPage(kMenuPageVM, kVMDelete);
+  return kMenuActionNone;
+}
+
+static MenuAction BackNew(void) {
+  if (g_editing) {
+    ShowPage(kMenuPageVM, kVMEdit);
+  } else {
+    ShowManaged(g_vms->count);
+  }
+  return kMenuActionNone;
+}
+
+static MenuAction BackNewDrive(void) {
+  ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
+  return kMenuActionNone;
+}
+
+static MenuAction BackSettings(void) {
+  ShowPage(kMenuPageVMs, SettingsItemIndex());
+  ScrollToChosen();
+  return kMenuActionNone;
+}
+
+static MenuAction BackFont(void) {
+  ShowPage(kMenuPageSettings, 0);
+  return kMenuActionNone;
+}
+
+static MenuAction Back(void) {
+  const MenuPageDef* def = &kPageDefs[g_page];
+  return def->back != NULL ? def->back() : kMenuActionNone;
 }
 
 // Open the chosen entry of the browser: a folder to look in, or an image to
@@ -991,127 +999,147 @@ const char* MenuChosenImage(uint32_t* size) {
   return g_usb_image_path;
 }
 
-static MenuAction Choose(void) {
-  switch (g_page) {
-    case kMenuPageMain:
-      switch (ChosenMainItem()) {
-        case kMainDriveA:
-        case kMainDriveB:
-          g_drive = (FloppyDrive)(ChosenMainItem() - kMainDriveA);
-          ShowPage(kMenuPageDrive, kDriveInsert);
-          return kMenuActionNone;
-        case kMainStatus:
-          ShowPage(kMenuPageStatus, 0);
-          return kMenuActionNone;
-        case kMainReset:
-          ShowPage(kMenuPageReset, kResetCancel);
-          return kMenuActionNone;
-        case kMainPowerOff:
-          ShowPage(kMenuPagePowerOff, kPowerOffCancel);
-          return kMenuActionNone;
-        case kMainItemCount:
-          break;
-      }
+static MenuAction ChooseMain(void) {
+  switch (ChosenMainItem()) {
+    case kMainDriveA:
+    case kMainDriveB:
+      g_drive = (FloppyDrive)(ChosenMainItem() - kMainDriveA);
+      ShowPage(kMenuPageDrive, kDriveInsert);
+      return kMenuActionNone;
+    case kMainStatus:
+      ShowPage(kMenuPageStatus, 0);
+      return kMenuActionNone;
+    case kMainReset:
+      ShowPage(kMenuPageReset, kResetCancel);
+      return kMenuActionNone;
+    case kMainPowerOff:
+      ShowPage(kMenuPagePowerOff, kPowerOffCancel);
+      return kMenuActionNone;
+    case kMainItemCount:
       break;
-    case kMenuPageReset:
-      if (g_chosen == kResetConfirm) {
-        g_config.reset();
-      }
-      return Back();
-    case kMenuPagePowerOff:
-      if (g_chosen == kPowerOffConfirm) {
-        g_config.power_off();
-      }
-      return Back();
-    case kMenuPageDrive:
-      if (g_chosen == kDriveInsert) {
-        StartBrowsing();
-      } else {
-        g_config.eject_drive(g_drive);
-        // Eject goes with the disk.
-        ShowPage(kMenuPageDrive, kDriveInsert);
-      }
-      return kMenuActionNone;
-    case kMenuPageBrowse:
-      return OpenEntry();
-    case kMenuPageVMs:
-      if (g_chosen == SettingsItemIndex()) {
-        ShowPage(kMenuPageSettings, 0);
-        return kMenuActionNone;
-      }
-      if (g_chosen == USBItemIndex()) {
-        ShowPage(kMenuPageUSB, kUSBCard);
-        return kMenuActionNone;
-      }
-      if (g_chosen == ManageItemIndex()) {
-        ShowManaged(0);
-        return kMenuActionNone;
-      }
-      return kMenuActionVMChosen;
-    case kMenuPageSettings:
-      ShowPage(kMenuPageFont, g_font);
-      return kMenuActionNone;
-    case kMenuPageFont:
-      g_font = (Font4x10)g_chosen;
-      ShowPage(kMenuPageSettings, 0);
-      return kMenuActionFontChosen;
-    case kMenuPageManage:
-      if (g_chosen == g_vms->count) {
-        StartNewVM();
-      } else {
-        ShowVM(g_chosen);
-      }
-      return kMenuActionNone;
-    case kMenuPageNew:
-      if (FormItem() == kNewCreate) {
-        return g_editing ? kMenuActionEditVM : kMenuActionCreateVM;
-      }
-      if (FormItem() == kNewName) {
-        ShowFormItem(kNewDriveA);
-      } else {
-        ShowNewDrive((uint8_t)(FormItem() - kNewDriveA));
-      }
-      return kMenuActionNone;
-    case kMenuPageNewDrive:
-      ChooseNewDrive();
-      return kMenuActionNone;
-    case kMenuPageVM:
-      if (g_chosen == kVMEdit) {
-        StartEditVM();
-      } else if (g_chosen == kVMDelete) {
-        VMFolderDescribe(g_vms, &g_vms->vms[g_vm], &g_contents);
-        ShowPage(kMenuPageDelete, kDeleteCancel);
-      } else {
-        StartNaming(g_chosen == kVMClone);
-      }
-      return kMenuActionNone;
-    case kMenuPageName:
-      return g_cloning ? kMenuActionCloneVM : kMenuActionRenameVM;
-    case kMenuPageDelete:
-      if (g_chosen == kDeleteConfirm) {
-        return kMenuActionDeleteVM;
-      }
-      return Back();
-    case kMenuPageCopying:
-      return kMenuActionNone;
-    case kMenuPageUSB:
-      if (g_chosen == kUSBImage) {
-        g_browsing_for = kBrowseForUSB;
-        Browse("yax86");
-        return kMenuActionNone;
-      }
-      return kMenuActionShareCard;
-    case kMenuPageSharing:
-      return Disconnect();
-    case kMenuPageStopSharing:
-      if (g_chosen == kStopSharingConfirm) {
-        return kMenuActionStopSharing;
-      }
-      return Back();
-    case kMenuPageStatus:
-      return Back();
   }
   return kMenuActionNone;
+}
+
+static MenuAction ChooseReset(void) {
+  if (g_chosen == kResetConfirm) {
+    g_config.reset();
+  }
+  return BackReset();
+}
+
+static MenuAction ChoosePowerOff(void) {
+  if (g_chosen == kPowerOffConfirm) {
+    g_config.power_off();
+  }
+  return BackPowerOff();
+}
+
+static MenuAction ChooseDrive(void) {
+  if (g_chosen == kDriveInsert) {
+    StartBrowsing();
+  } else {
+    g_config.eject_drive(g_drive);
+    ShowPage(kMenuPageDrive, kDriveInsert);
+  }
+  return kMenuActionNone;
+}
+
+static MenuAction ChooseVMs(void) {
+  if (g_chosen == SettingsItemIndex()) {
+    ShowPage(kMenuPageSettings, 0);
+    return kMenuActionNone;
+  }
+  if (g_chosen == USBItemIndex()) {
+    ShowPage(kMenuPageUSB, kUSBCard);
+    return kMenuActionNone;
+  }
+  if (g_chosen == ManageItemIndex()) {
+    ShowManaged(0);
+    return kMenuActionNone;
+  }
+  return kMenuActionVMChosen;
+}
+
+static MenuAction ChooseSettings(void) {
+  ShowPage(kMenuPageFont, g_font);
+  return kMenuActionNone;
+}
+
+static MenuAction ChooseFont(void) {
+  g_font = (Font4x10)g_chosen;
+  ShowPage(kMenuPageSettings, 0);
+  return kMenuActionFontChosen;
+}
+
+static MenuAction ChooseManage(void) {
+  if (g_chosen == g_vms->count) {
+    StartNewVM();
+  } else {
+    ShowVM(g_chosen);
+  }
+  return kMenuActionNone;
+}
+
+static MenuAction ChooseNew(void) {
+  if (FormItem() == kNewCreate) {
+    return g_editing ? kMenuActionEditVM : kMenuActionCreateVM;
+  }
+  if (FormItem() == kNewName) {
+    ShowFormItem(kNewDriveA);
+  } else {
+    ShowNewDrive((uint8_t)(FormItem() - kNewDriveA));
+  }
+  return kMenuActionNone;
+}
+
+static MenuAction ChooseNewDriveOption(void) {
+  ChooseNewDrive();
+  return kMenuActionNone;
+}
+
+static MenuAction ChooseVM(void) {
+  if (g_chosen == kVMEdit) {
+    StartEditVM();
+  } else if (g_chosen == kVMDelete) {
+    VMFolderDescribe(g_vms, &g_vms->vms[g_vm], &g_contents);
+    ShowPage(kMenuPageDelete, kDeleteCancel);
+  } else {
+    StartNaming(g_chosen == kVMClone);
+  }
+  return kMenuActionNone;
+}
+
+static MenuAction ChooseName(void) {
+  return g_cloning ? kMenuActionCloneVM : kMenuActionRenameVM;
+}
+
+static MenuAction ChooseDelete(void) {
+  if (g_chosen == kDeleteConfirm) {
+    return kMenuActionDeleteVM;
+  }
+  return BackDelete();
+}
+
+static MenuAction ChooseUSB(void) {
+  if (g_chosen == kUSBImage) {
+    g_browsing_for = kBrowseForUSB;
+    Browse("yax86");
+    return kMenuActionNone;
+  }
+  return kMenuActionShareCard;
+}
+
+static MenuAction ChooseStopSharing(void) {
+  if (g_chosen == kStopSharingConfirm) {
+    return kMenuActionStopSharing;
+  }
+  return BackStopSharing();
+}
+
+static MenuAction Choose(void) {
+  const MenuPageDef* def = &kPageDefs[g_page];
+  return def->choose != NULL ? def->choose() : kMenuActionNone;
 }
 
 // Track the Shift keys, and return whether this event completes the hotkey:
@@ -1156,18 +1184,11 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   if (!g_open || event.state == kSouthbridgeKeyReleased) {
     return kMenuActionNone;
   }
-  if (g_page == kMenuPageName) {
-    return TypeName(event.key);
-  }
-  if (g_page == kMenuPageCopying) {
-    return kMenuActionNone;
-  }
-  if (g_page == kMenuPageNew) {
-    // Backspace erases the name rather than leaving the form, wherever it
-    // is: Esc leaves it.
-    if ((FormItem() == kNewName && TypeNewName(event.key)) ||
-        event.key == kKeyBackspace) {
-      return kMenuActionNone;
+  const MenuPageDef* def = &kPageDefs[g_page];
+  if (def->handle_key != NULL) {
+    MenuAction action = kMenuActionNone;
+    if (def->handle_key(event, &action)) {
+      return action;
     }
   }
   const uint8_t count = PageItemCount();
@@ -1674,6 +1695,177 @@ static void DrawSharingPage(DisplayMenu* menu) {
       kSharingItems, 1);
 }
 
+static void DrawResetPage(DisplayMenu* menu) {
+  DrawItems(
+      menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
+      kResetItemCount);
+}
+
+static void DrawPowerOffPage(DisplayMenu* menu) {
+  DrawItems(
+      menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
+      kPowerOffItems, kPowerOffItemCount);
+}
+
+static void DrawUSBPage(DisplayMenu* menu) {
+  DrawItems(menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount);
+}
+
+static void DrawStopSharingPage(DisplayMenu* menu) {
+  DrawItems(
+      menu, "USB disk mode",
+      (const char* const[]){
+          "The computer has not ejected the",
+          "disk, and may not have finished",
+          "writing to it.",
+      },
+      3, kStopSharingItems, kStopSharingItemCount);
+}
+
+static void DrawSettingsPage(DisplayMenu* menu) {
+  DrawItems(menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount);
+}
+
+static const MenuPageDef kPageDefs[kMenuPageCount] = {
+    [kMenuPageMain] = {
+        .name = "main",
+        .item_count = MainItemCount,
+        .draw = DrawMainPage,
+        .choose = ChooseMain,
+        .back = BackMain,
+    },
+    [kMenuPageStatus] = {
+        .name = "status",
+        .hint = "Esc=Back",
+        .draw = DrawStatusPage,
+        .choose = BackStatus,
+        .back = BackStatus,
+    },
+    [kMenuPageReset] = {
+        .name = "reset",
+        .item_count = ResetItemCount,
+        .draw = DrawResetPage,
+        .choose = ChooseReset,
+        .back = BackReset,
+    },
+    [kMenuPagePowerOff] = {
+        .name = "power_off",
+        .item_count = PowerOffItemCount,
+        .draw = DrawPowerOffPage,
+        .choose = ChoosePowerOff,
+        .back = BackPowerOff,
+    },
+    [kMenuPageDrive] = {
+        .get_name = DrivePageName,
+        .item_count = DriveItemCount,
+        .draw = DrawDrivePage,
+        .choose = ChooseDrive,
+        .back = BackDrive,
+    },
+    [kMenuPageBrowse] = {
+        .name = "browse",
+        .hint = "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back",
+        .item_count = BrowseItemCount,
+        .draw = DrawBrowsePage,
+        .choose = OpenEntry,
+        .back = BackBrowse,
+    },
+    [kMenuPageVMs] = {
+        .name = "vms",
+        .hint = "\x18\x19=Move  Enter=Select",
+        .item_count = VMsItemCount,
+        .draw = DrawVMsPage,
+        .choose = ChooseVMs,
+    },
+    [kMenuPageUSB] = {
+        .name = "usb",
+        .item_count = USBItemCount,
+        .draw = DrawUSBPage,
+        .choose = ChooseUSB,
+        .back = BackUSB,
+    },
+    [kMenuPageSharing] = {
+        .name = "usb_sharing",
+        .hint = "Enter=Disconnect",
+        .item_count = SharingItemCount,
+        .draw = DrawSharingPage,
+        .choose = Disconnect,
+        .back = Disconnect,
+    },
+    [kMenuPageStopSharing] = {
+        .name = "usb_stop",
+        .item_count = StopSharingItemCount,
+        .draw = DrawStopSharingPage,
+        .choose = ChooseStopSharing,
+        .back = BackStopSharing,
+    },
+    [kMenuPageManage] = {
+        .name = "manage",
+        .item_count = ManageItemCount,
+        .draw = DrawManagePage,
+        .choose = ChooseManage,
+        .back = BackManage,
+    },
+    [kMenuPageVM] = {
+        .name = "vm",
+        .item_count = VMItemCount,
+        .draw = DrawVMPage,
+        .choose = ChooseVM,
+        .back = BackVM,
+    },
+    [kMenuPageName] = {
+        .name = "vm_name",
+        .get_hint = NamePageHint,
+        .draw = DrawNamePage,
+        .choose = ChooseName,
+        .back = BackName,
+        .handle_key = HandleKeyName,
+    },
+    [kMenuPageDelete] = {
+        .name = "vm_delete",
+        .item_count = DeleteItemCount,
+        .draw = DrawDeletePage,
+        .choose = ChooseDelete,
+        .back = BackDelete,
+    },
+    [kMenuPageCopying] = {
+        .name = "vm_copying",
+        .hint = "",
+        .draw = DrawCopyingPage,
+        .handle_key = HandleKeyCopying,
+    },
+    [kMenuPageNew] = {
+        .name = "new_vm",
+        .get_hint = NewPageHint,
+        .item_count = NewItemCount,
+        .draw = DrawNewPage,
+        .choose = ChooseNew,
+        .back = BackNew,
+        .handle_key = HandleKeyNew,
+    },
+    [kMenuPageNewDrive] = {
+        .name = "new_vm_drive",
+        .item_count = NewDriveItemCount,
+        .draw = DrawNewDrivePage,
+        .choose = ChooseNewDriveOption,
+        .back = BackNewDrive,
+    },
+    [kMenuPageSettings] = {
+        .name = "settings",
+        .item_count = SettingsItemCount,
+        .draw = DrawSettingsPage,
+        .choose = ChooseSettings,
+        .back = BackSettings,
+    },
+    [kMenuPageFont] = {
+        .name = "font",
+        .item_count = FontItemCount,
+        .draw = DrawFontPage,
+        .choose = ChooseFont,
+        .back = BackFont,
+    },
+};
+
 void MenuDraw(uint64_t now_us) {
   if (!g_open) {
     return;
@@ -1689,77 +1881,12 @@ void MenuDraw(uint64_t now_us) {
   if (menu == NULL) {
     return;
   }
-  switch (g_page) {
-    case kMenuPageMain:
-      DrawMainPage(menu);
-      break;
-    case kMenuPageReset:
-      DrawItems(
-          menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
-          kResetItemCount);
-      break;
-    case kMenuPagePowerOff:
-      DrawItems(
-          menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
-          kPowerOffItems, kPowerOffItemCount);
-      break;
-    case kMenuPageDrive:
-      DrawDrivePage(menu);
-      break;
-    case kMenuPageBrowse:
-      DrawBrowsePage(menu);
-      break;
-    case kMenuPageVMs:
-      DrawVMsPage(menu);
-      break;
-    case kMenuPageUSB:
-      DrawItems(menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount);
-      break;
-    case kMenuPageSharing:
-      DrawSharingPage(menu);
-      g_status_drawn_us = now_us;
-      break;
-    case kMenuPageStopSharing:
-      DrawItems(
-          menu, "USB disk mode",
-          (const char* const[]){
-              "The computer has not ejected the",
-              "disk, and may not have finished",
-              "writing to it.",
-          },
-          3, kStopSharingItems, kStopSharingItemCount);
-      break;
-    case kMenuPageStatus:
-      DrawStatusPage(menu);
-      g_status_drawn_us = now_us;
-      break;
-    case kMenuPageManage:
-      DrawManagePage(menu);
-      break;
-    case kMenuPageVM:
-      DrawVMPage(menu);
-      break;
-    case kMenuPageName:
-      DrawNamePage(menu);
-      break;
-    case kMenuPageDelete:
-      DrawDeletePage(menu);
-      break;
-    case kMenuPageCopying:
-      DrawCopyingPage(menu);
-      break;
-    case kMenuPageNew:
-      DrawNewPage(menu);
-      break;
-    case kMenuPageNewDrive:
-      DrawNewDrivePage(menu);
-      break;
-    case kMenuPageSettings:
-      DrawItems(menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount);
-      break;
-    case kMenuPageFont:
-      DrawFontPage(menu);
-      break;
+  const MenuPageDef* def = &kPageDefs[g_page];
+  if (def->draw != NULL) {
+    def->draw(menu);
+  }
+  if (g_page == kMenuPageStatus || g_page == kMenuPageSharing) {
+    g_status_drawn_us = now_us;
   }
   // A box of another size than the last leaves part of the last showing, so
   // the guest's screen goes under it first. If core 1 cannot take that yet,
