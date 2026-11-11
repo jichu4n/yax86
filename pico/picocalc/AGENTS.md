@@ -283,7 +283,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A VM is a folder in `yax86/vm`**, `src/vm_config.c`,
   holding `vm.cfg`, which names its drives' images, and the images that
   are its own. Every folder there with a `vm.cfg` is one, named for the
-  folder. Each line is logfmt, `#` starts a comment, and a path is
+  folder, and there are no VMs anywhere else. Each line is logfmt, `#` starts a comment, and a path is
   relative to the file's folder - `..` followed - or to the card's root
   with a leading `/`, so VMs can share images and keep their own:
 
@@ -297,9 +297,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `drive_a` and `drive_b` are 360KB floppies, `drive_c` and `drive_d` the
   hard disk controller's master and slave, each the core's 10MB drive. A
   drive not named is empty.
-- **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the path
-  of the `vm.cfg` to highlight and start, relative to its own folder or the
-  root, and listed even when it is outside `yax86/vm`; and
+- **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the name
+  of the VM to highlight and start - `boot_default=DOS330` - and
   `boot_delay`, the seconds the list waits for a key, 5 without it, 0 to
   start the default without showing the list.
 - **At power on, with a card, the menu lists its VMs**, before the VM
@@ -311,8 +310,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   size, as there is no guest's screen yet to draw under a smaller box. A file that does not read keeps
   the list up with its problem on the keys row - `BROKEN: line 2: no
   setting drive_e` - as do bad settings, which start the countdown anyway
-  with what was read. A `boot_default` naming no file is one, and the
-  first VM listed is the default instead, so a mistyped path still
+  with what was read. A `boot_default` naming no VM is one, and the
+  first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
   host measuring the boot, still boot.
 - **A VM's image that does not open leaves its drive empty**, and the
@@ -342,7 +341,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `vm.cfg`**, so the next start has the same disks: `drive_b=""` once
   ejected, and an insert that fails leaves the drive empty and saves it
   so. Without a VM there is no file, and nothing is saved.
-- **Paths are written as a person would**, by `VMConfigRelativePath()`:
+- **Paths are written as a person would**, by `FSRelativePath()`:
   relative to the file's folder, climbing out with `..`, when the two
   share a folder from the root - `../../images/msdos330/disk02.img` from
   a VM in `yax86/vm` - and from the root with a leading `/` when they
@@ -356,9 +355,6 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   name typed for the first two, and a question before the last. Afterwards it shows the list
   of VMs to manage again with the VM renamed or made chosen, and the list
   at power on waits for a key, as after USB disk mode.
-- **Only the folders in `yax86/vm` are managed**, a VM each. A VM listed
-  because `boot_default` names it elsewhere is not offered: its folder
-  could be anything, the card's root included.
 - **A VM's folder is its own, and an image outside it shared.** Rename
   moves the folder with `f_rename()`, at once whatever is in it; Clone
   copies all of it, at any depth; Delete removes all of it, its `vm.cfg`
@@ -366,10 +362,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   image a VM names outside its folder is neither copied nor deleted, and a
   clone names the same one. `vm.cfg` needs no change for either: its paths
   are relative to its own folder, which a sibling has at the same depth.
-- **What names a file in a folder that moves follows it**: `boot_default`,
-  and the drives of every VM listed, the moved VM's own included, which
-  are written again by `VMConfigSaveDrive()` - so a path written from the
-  root comes back relative. A clone's drives naming a file in the
+- **What names a renamed VM or a file in its folder follows it**:
+  `boot_default`, and the drives of every VM listed, the moved VM's own
+  included, which are written again by `VMConfigSaveDrive()` - so a path
+  written from the root comes back relative. A clone's drives naming a file in the
   original's folder are written to name its own copy. Delete leaves other
   VMs' drives naming a file in the folder as they are, to find it gone when
   they start, and its question names those VMs; `boot_default` naming the
@@ -421,11 +417,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   a sector, so two drives writing one file would each overwrite the other's
   changes; inserting an image the other drive holds is refused with a
   message.
+- **`src/fs.c` is the file system beyond a file's bytes**: paths -
+  FatFs's, with no leading slash, compared ignoring case as FAT does, and
+  resolved or written relative to a folder - the names the runtime gives
+  what it makes, listing a folder, and whole folders: their size, a copy
+  and a delete, walking down to four folders deep with one pair of paths
+  added to and put back, so a level costs the stack only its lengths.
 - `src/file_list.c` lists a folder for the menu's browser: `..`, folders,
   then files exactly the image size, each by name, with hidden and system
   entries left out. It holds 64, and says when a folder had more. Names are
-  8.3, as FatFs is built without long names, and paths are FatFs's, with no
-  leading slash.
+  8.3, as FatFs is built without long names.
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hdd.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
@@ -447,7 +448,6 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `FF_FS_TINY`, `FF_FS_NORTC` and `FF_USE_FASTSEEK`; long names and exFAT are
   off. `configure_file()` copies it over the stock one - `ff.h` includes it
   from its own directory first - and reconfigures when it changes.
-- FatFs is the only thing in the image that calls `memcpy()` and `memset()`.
 - **Both controllers move a byte at a time, and `src/disk_image.c` keeps one
   sector of each image**, so a sector costs one card access. A written sector
   goes to the card as soon as its last byte is in, so nothing waits to be

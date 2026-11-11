@@ -121,8 +121,8 @@ const char* MenuTypedName(void);
 void MenuNewVM(VMFolderNew* vm);
 
 // Show Manage VMs, once the caller has read the list afresh, with the VM
-// whose file is at path chosen, or the first if it is not there.
-void MenuShowManagedVMs(const char* path);
+// named name chosen, or the first if it is not there.
+void MenuShowManagedVMs(const char* name);
 
 // Show how far a clone has been copied, or a new VM's blank hard disk
 // written, in KB: the first call shows the page, which takes no keys until
