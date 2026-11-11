@@ -120,15 +120,6 @@ Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
   // them, so OR-ing them is the same as adding them.
   return window->frames + (frame_start | offset_in_page);
 }
-const uint16_t entry = window->pages[offset >> window->page_shift];
-if ((entry & flags) != flags) {
-  return NULL;
-}
-const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
-return window->frames + (((uint32_t)(entry & Y_CPU_PAGED_DATA_FRAME_MASK)
-                          << window->page_shift) |
-                         (offset & page_mask));
-}
 
 // Read a byte at an address the direct data window does not cover: from its
 // frame if the address is paged and its page is in one, and otherwise from the
