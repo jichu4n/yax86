@@ -127,9 +127,8 @@ enum {
 };
 
 // Guest memory that the host keeps in pages, only some of them in fast memory
-// at a time - for a host with less fast memory than the machine has RAM. The
-// PicoCalc pages 640KB of guest memory through 128KB of SRAM, keeping the
-// pages themselves in PSRAM.
+// at a time - for a host with less fast memory than the machine has RAM, such
+// as a microcontroller holding the pages in slower external memory.
 //
 // Terms:
 //   - A page is a fixed-size block of the region's guest addresses: page 0 is
@@ -2128,13 +2127,19 @@ Y_FILE_PRIVATE void YPlatformUpdatePagedDataWindow(YPlatformState* platform) {
   const YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
       platform, Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY);
   if (entry == NULL) {
-    YCPUSetPagedDataWindow(&platform->cpu, NULL, NULL, 0, 0, 0);
+    // size 0 puts every address outside the window.
+    const YCPUPagedDataWindow none = {0};
+    platform->cpu.paged_data_window = none;
     return;
   }
   const YPlatformPagedMemory* memory = entry->paged_memory;
-  YCPUSetPagedDataWindow(
-      &platform->cpu, memory->pages, memory->frames, entry->start, memory->size,
-      memory->page_shift);
+  const YCPUPagedDataWindow window = {
+      .pages = memory->pages,
+      .frames = memory->frames,
+      .start = entry->start,
+      .size = memory->size,
+      .page_shift = memory->page_shift};
+  platform->cpu.paged_data_window = window;
 }
 
 

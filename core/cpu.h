@@ -291,6 +291,28 @@ typedef struct YCPUInstructionFetchWindow {
   uint32_t end;
 } YCPUInstructionFetchWindow;
 
+// How the CPU reaches guest memory for data reads and writes, cheapest first:
+//
+//   1. The direct data window, YCPUDirectDataWindow: one host buffer holding
+//      guest addresses [0, end). An access is a compare and a load, inline.
+//   2. The paged data window, YCPUPagedDataWindow: guest addresses
+//      [start, start + size), held in pages the host keeps in frames. Tried
+//      only for an address the direct window does not cover; an access to a
+//      page in its frame is a call and a few loads.
+//   3. YCPUConfig.read_memory_byte and write_memory_byte: everything else -
+//      ROM, video memory, devices - and any paged access whose page's entry
+//      does not allow it.
+//
+// A host may set either window, both or neither, and the two must not
+// overlap. The platform uses both when paged memory is configured: the direct
+// window is physical_memory, [0, physical_memory_size), and the paged window
+// starts right where it ends, so together they cover conventional memory. With
+// physical_memory_size 0 the direct window is empty and all of it is paged.
+//
+// Instruction fetch does not go through either data window. It keeps its own
+// YCPUInstructionFetchWindow, which opens on a page in its frame by itself
+// and asks the host for anything else.
+
 // Guest memory the CPU may read and write by indexing, covering the half-open
 // range of linear addresses [0, end), with data pointing at the byte at 0.
 //
@@ -347,10 +369,10 @@ enum {
 // Paged guest memory that the CPU reads and writes itself, without a call,
 // whenever the page is in a frame. The host keeps a range of guest memory in
 // pages, keeps only some of those pages in fast memory at a time, and brings
-// the rest in on demand: the PicoCalc pages all 640KB of guest memory
-// through 128KB of frames in SRAM, the pages themselves living in PSRAM.
-// YPlatformPagedMemory describes the host's side; the platform copies its
-// fields here with YCPUSetPagedDataWindow().
+// the rest in on demand - for example a microcontroller with less internal
+// RAM than the guest has, holding the pages in slower external memory.
+// YPlatformPagedMemory describes the host's side, and the platform copies its
+// fields here.
 //
 // The CPU translates an address in the range like this:
 //
@@ -493,7 +515,9 @@ typedef struct YCPUState {
   // object the caller had to keep alive for as long as the CPU.
   YCPUConfig config;
 
-  // Paged guest memory, as set by YCPUSetPagedDataWindow().
+  // Paged guest memory, assigned whole by whoever sets it up - the platform,
+  // from YPlatformConfig.paged_memory. Zero for none. Changing page table
+  // entries needs no update here: the CPU reads them on every access.
   // Read only where the direct data window does not reach, so it is last,
   // where it moves no hotter field's offset.
   YCPUPagedDataWindow paged_data_window;
@@ -572,20 +596,6 @@ Y_PUBLIC_HEADER inline void YCPUSetDirectDataWindow(
     YCPUState* cpu, uint8_t* data, uint32_t end) {
   cpu->direct_data_window.data = data;
   cpu->direct_data_window.end = data ? end : 0;
-}
-
-// Tells the CPU where paged guest memory is and how to find a page in its
-// frame - see YCPUPagedDataWindow for what each argument is. Passing NULL for
-// pages removes the paged range. Called again only if the page table, the
-// frames or the range move; changing entries needs no call.
-Y_PUBLIC_HEADER inline void YCPUSetPagedDataWindow(
-    YCPUState* cpu, const uint16_t* pages, uint8_t* frames, uint32_t start,
-    uint32_t size, uint8_t page_shift) {
-  cpu->paged_data_window.pages = pages;
-  cpu->paged_data_window.frames = frames;
-  cpu->paged_data_window.start = start;
-  cpu->paged_data_window.size = pages ? size : 0;
-  cpu->paged_data_window.page_shift = page_shift;
 }
 
 // Discards the direct data window, so that every access goes back through

@@ -102,8 +102,9 @@ visibility, and how performance work is measured - are in the root
 - **What it is for**: a host with less fast memory than the guest has RAM sets
   `YPlatformConfig.paged_memory`, and conventional memory above
   `physical_memory_size` is then held in pages, only some of them in fast
-  memory ("frames") at a time. The PicoCalc pages all 640KB through 128KB of
-  SRAM frames, the pages living in PSRAM. `physical_memory_size` may be 0.
+  memory ("frames") at a time - a microcontroller, say, holding the pages in
+  slower external memory. `physical_memory_size` may be 0. The PicoCalc port
+  is the user today; its `AGENTS.md` has how it pages and what it measured.
 - **The host owns the page table and the frames**: one `uint16_t` per page,
   bit 15 `WRITABLE`, bit 14 `RESIDENT`, bits 0-13 the frame number - laid out
   at `Y_CPU_PAGED_DATA_RESIDENT`. An access the entry allows goes to the
@@ -116,7 +117,7 @@ visibility, and how performance work is measured - are in the root
   it samples which pages are in use. The frame number is read only with
   `RESIDENT` set, so a host may leave it in an entry it has cleared.
 - **The CPU reads the page table itself**: `YCPUPagedDataWindow`, which
-  `YPlatformUpdateAfterMemoryMapChange()` sets from the paged entry, so an
+  `YPlatformUpdateAfterMemoryMapChange()` assigns from the paged entry, so an
   access to a page in its frame is a subtract, a compare and two loads, and
   only a fault reaches the platform. Going through the platform's memory map
   for every access instead, the DOS330 boot at 640KB took 7.00 seconds on the

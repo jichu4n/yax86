@@ -107,9 +107,8 @@ enum {
 };
 
 // Guest memory that the host keeps in pages, only some of them in fast memory
-// at a time - for a host with less fast memory than the machine has RAM. The
-// PicoCalc pages 640KB of guest memory through 128KB of SRAM, keeping the
-// pages themselves in PSRAM.
+// at a time - for a host with less fast memory than the machine has RAM, such
+// as a microcontroller holding the pages in slower external memory.
 //
 // Terms:
 //   - A page is a fixed-size block of the region's guest addresses: page 0 is
