@@ -131,6 +131,7 @@ add_executable(yax86_picocalc
     src/harddisk.c
     src/font_4x10.c
     src/keymap.c
+    src/launcher.c
     src/lcd.c
     src/menu_browse.c
     src/report.c

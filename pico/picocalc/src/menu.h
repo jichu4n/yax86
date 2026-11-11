@@ -3,10 +3,10 @@
 //
 // It is a box drawn over the guest's screen, with a page at a time: the main
 // page's items, a page for each floppy drive and the browser that finds it an
-// image, the status page, and a question before a reset or a power off. At
-// power on, before the VM starts, it is the list of VMs to start. Up and Down
-// move, Enter or Space chooses, and Esc or Backspace goes back a page, or
-// closes the menu from the main one. Both Shift keys again close it too.
+// image, the status page, and a question before a reset or a power off.
+// Up and Down move, Enter or Space chooses, and Esc or Backspace goes back a
+// page, or closes the menu from the main one. Both Shift keys again close it
+// too.
 //
 // This holds the menu's state and draws it; what its items do is the
 // caller's, through the actions in MenuConfig.
@@ -19,8 +19,6 @@
 #include "disk_image.h"
 #include "floppy.h"
 #include "southbridge.h"
-#include "vm_config.h"
-#include "vm_folder.h"
 
 enum {
   // The status page's lines, and the longest value one can have.
@@ -66,90 +64,12 @@ typedef enum MenuAction {
   kMenuActionNone = 0,
   kMenuActionOpened,
   kMenuActionClosed,
-  // A VM was chosen from the list: see MenuChosenVM().
-  kMenuActionVMChosen,
-  // From the list's USB disk page: put the SD card on USB, then show it with
-  // MenuShowSharing(); and take it back, then show the list again.
-  kMenuActionShareCard,
-  kMenuActionStopSharing,
-  // From the same page, through the browser: put a disk image on USB - see
-  // MenuChosenImage() - then show it with MenuShowSharing().
-  kMenuActionShareImage,
-  // From Manage VMs: rename the VM MenuManagedVM() says to MenuTypedName(),
-  // clone it as that name, or delete it. Then show Manage VMs again with
-  // MenuShowManagedVMs(), or for a name that will not do, MenuSetProblem()
-  // alone, which leaves the name to be typed again.
-  kMenuActionRenameVM,
-  kMenuActionCloneVM,
-  kMenuActionDeleteVM,
-  // From Manage VMs' New VM: make the VM named MenuTypedName() with the
-  // drives MenuFormDrives() describes; and from a VM's Edit drives, give
-  // MenuManagedVM() those drives. Then as for a rename - for an edit, showing
-  // the VM's page with MenuShowManagedVMs().
-  kMenuActionCreateVM,
-  kMenuActionEditVM,
-  // From Settings' Font page: use and save MenuChosenFont().
-  kMenuActionFontChosen,
 } MenuAction;
 
 void MenuInit(const MenuConfig* config);
 
 bool MenuIsOpen(void);
-
-// Open the menu on the list of VMs, to choose one to start, with the
-// one at index highlighted. Neither the hotkey nor Esc closes it: the caller
-// does, with MenuClose(), once a VM chosen has started. list must
-// outlive the choosing.
-//
-// Under the VMs are three more rows: Manage VMs, from which VMs are made in
-// `yax86/vm`, and renamed, cloned and deleted; USB disk mode, a page from
-// which the SD card is shared over USB; and Settings, which chooses the 4x10
-// font.
-void MenuChooseVMs(const VMList* list, uint8_t highlighted);
-
-void MenuClose(void);
-
-// The index in the list of the VM chosen, or highlighted.
-uint8_t MenuChosenVM(void);
-
-// The font chosen on the Font page, and set the one it shows as chosen.
-Font4x10 MenuChosenFont(void);
-void MenuSetFont(Font4x10 font);
-
-// Show the SD card's page, once the caller has put it on USB: who has it,
-// and Disconnect, which asks first if a computer is still using it.
-void MenuShowSharing(void);
-
-// The disk image chosen to put on USB, a path from the card's root, and its
-// size, which is a floppy's or the hard disk's.
-const char* MenuChosenImage(uint32_t* size);
-
-// The index in the list of the VM Manage VMs is acting on, and the name typed
-// for it.
-uint8_t MenuManagedVM(void);
-const char* MenuTypedName(void);
-
-// The drives filled in on the form, New VM's or Edit drives'. Its strings
-// are the menu's, until the form is next shown.
-void MenuFormDrives(VMFolderDrives* drives);
-
-// Show Manage VMs, once the caller has read the list afresh, with the VM
-// named name chosen, or the first if it is not there - and with show_vm, the
-// VM's own page.
-void MenuShowManagedVMs(const char* name, bool show_vm);
-
-// Show how far a clone has been copied, or a new VM's blank hard disk
-// written, in KB: the first call shows the page, which takes no keys until
-// the caller shows another.
-void MenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb);
-
-// Show the seconds left before the highlighted VM starts by itself, or
-// stop showing them with 0.
-void MenuSetCountdown(uint8_t seconds);
-
-// Set why the VM chosen could not start, for MenuProblem(), until
-// another key is pressed; NULL for nothing. The text is copied.
-void MenuSetProblem(const char* problem);
+const char* MenuPageName(void);
 
 // Hand the menu a key event - every one, whether the menu is open or not,
 // since the hotkey is two keys held together. While the menu is closed, only
@@ -164,12 +84,5 @@ void MenuDraw(uint64_t now_us);
 // The keys to show on the status bar's message row while the menu is open,
 // as Key=Action pairs.
 const char* MenuHint(void);
-
-// Why the VM chosen could not start, to show in place of the keys, or
-// NULL.
-const char* MenuProblem(void);
-
-// The page showing, as the report gives it.
-const char* MenuPageName(void);
 
 #endif  // YAX86_PICOCALC_MENU_H

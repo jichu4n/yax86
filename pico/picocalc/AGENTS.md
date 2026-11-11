@@ -318,7 +318,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the seconds the list waits for a key, 5 without it, 0 to start the default
   without showing the list, and `font`, the 4x10 font (`ymini`, `atari800`,
   `miniwi` or `creep`, `ymini` without it).
-- **At power on, with a card, the menu lists its VMs**, before the VM
+- **At power on, with a card, the pre-boot launcher (`src/launcher.c`) lists its VMs**, before the VM
   exists, then a separator line, Manage VMs - see below - USB disk mode -
   see "The USB device" - and Settings (which holds Font). The countdown runs on
   the list's bottom edge until a key is pressed, then the default starts.
@@ -589,8 +589,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ## The menu
 
 - **Both Shift keys held together open it**, which nothing in DOS does and
-  typing never does, and close it again. `src/menu.c` keeps its state and
-  page dispatch table; `src/menu_browse.c` manages file browsing on the SD
+  typing never does, and close it again. `src/launcher.c` runs the pre-boot
+  launcher and VM manager; `src/menu.c` handles the runtime in-VM menu and
+  its page dispatch table; `src/menu_browse.c` manages file browsing on the SD
   card; `main.c` carries out what its items do, through the callbacks in
   `MenuConfig`.
 - **The VM is paused while it is open**: no batches run and no frames

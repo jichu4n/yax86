@@ -219,7 +219,7 @@ MenuAction MenuBrowseChoose(uint8_t chosen) {
   }
   if (g_browsing_for == kBrowseForUSB) {
     g_config.on_selected_for_usb(path, entry->size);
-    return kMenuActionShareImage;
+    return kMenuActionNone;
   }
   g_config.insert_drive(g_drive, path);
   g_config.close_menu();
