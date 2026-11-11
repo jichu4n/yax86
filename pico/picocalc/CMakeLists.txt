@@ -132,6 +132,7 @@ add_executable(yax86_picocalc
     src/font_4x10.c
     src/keymap.c
     src/lcd.c
+    src/psram.c
     src/runtime_log.c
     src/sdcard.c
     src/southbridge.c
@@ -202,5 +203,7 @@ pico_enable_stdio_uart(yax86_picocalc 0)
 
 # The LCD's serial interface - see src/lcd.c.
 pico_generate_pio_header(yax86_picocalc "${CMAKE_CURRENT_SOURCE_DIR}/src/lcd.pio")
+# The PSRAM's - see src/psram.c.
+pico_generate_pio_header(yax86_picocalc "${CMAKE_CURRENT_SOURCE_DIR}/src/psram.pio")
 
 pico_add_extra_outputs(yax86_picocalc)

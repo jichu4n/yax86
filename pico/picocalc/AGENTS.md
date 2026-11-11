@@ -513,6 +513,40 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   and none of its code running in the boot, while everything linked after
   `main.c` and `menu.c` moved 3.5KB along in flash.
 
+## The PSRAM
+
+- **8MB, an ESP-PSRAM64H on one-bit SPI, driven by PIO** - `src/psram.c`,
+  `src/psram.pio`, on pio1, the LCD having pio0. Reads are Fast Read
+  (`0x0B`), writes `0x02`; its ID's second byte, known good die, reads
+  `0x5D`. Nothing uses it yet beyond the self-test at startup; the report's
+  `psram` group has its state, the self-test's times and what has moved.
+- **The serial clock is 62.5MHz**, from 250MHz or 125MHz divided evenly; any
+  other system clock leaves it off as `unsupported_clock`. 83MHz and 125MHz
+  read back wrong.
+- **Each bit is taken one rising edge late**: the board delays the chip's
+  output 12-16ns past the falling edge it changes on, which at 62.5MHz is
+  after the next rising edge, 8ns on. So a read clocks nine cycles before the
+  first bit it keeps - Fast Read's eight dummy cycles and one more - with the
+  input synchronizer bypassed, which would add two more cycles. At 31.25MHz
+  the bit is valid at its own edge, but only just: one in 128KB flipped.
+- **The state machine moves whole words**, header and data, so the output
+  shift register is empty between transactions: a part word left over is
+  taken for the next header, desynchronizing every transaction after it.
+  Memory's little-endian words are swapped on the way through. Words are
+  what let the CPU keep up with the wire without DMA - a 512-byte block reads
+  in 90us and writes in 82us, against 76us and 74us on the wire. Shifting a
+  byte at a time and realigning it in software took 120us.
+- **A transfer holds chip select at most 32 bytes**, 4.8us with the command:
+  the chip must see it raised within 8us to refresh itself. Bursts are
+  aligned to 32 bytes, so none crosses the chip's 1KB pages.
+- **Every wait is bounded**, 100us a transfer; a timeout restarts the state
+  machine and turns the PSRAM off as `timed_out`. Bringing it up is the
+  overclock's pattern besides, with the watchdog armed and a marker in RAM
+  startup does not clear, so a hang nothing foresaw starts the next boot
+  without it, as `skipped_after_hang`.
+- **It costs the boot nothing it runs**: 5.0459 seconds against 5.0644 on
+  master, the DOS330 VM, three runs each - flash layout.
+
 ## The speaker
 
 - **The PC speaker plays on both speakers** from `src/speaker.c`. The core

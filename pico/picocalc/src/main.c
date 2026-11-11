@@ -38,6 +38,7 @@
 #include "menu.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "psram.h"
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
@@ -122,6 +123,9 @@ enum {
   // is survived. Any value does, as long as uninitialized RAM is unlikely to
   // hold it.
   kOverclockAttemptMarker = 0x0C10C4ED,
+  // Written to g_psram_marker across bringing the PSRAM up, and cleared once
+  // it is survived - see StartPsram().
+  kPsramAttemptMarker = 0x95A3B007,
   // Written to g_start_note's marker by a reset or a power off, for the
   // start after the reboot - see LeaveStartNote().
   kStartNoteMarker = 0x5747A27E,
@@ -262,6 +266,8 @@ static RunClock g_clock;
 // Deliberately not zeroed at startup - see Overclock().
 static uint32_t __uninitialized_ram(g_overclock_marker);
 #endif
+// The same for the PSRAM - see StartPsram().
+static uint32_t __uninitialized_ram(g_psram_marker);
 
 // What the start after a reboot is to do, left by the menu's Reset and Power
 // off.
@@ -654,6 +660,15 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
       Y_LOG_STRING("keyboard_fw", version),
       Y_LOG_UINT("guest_ram_kb", kGuestRAMSize / 1024));
+  const PsramStats psram = PsramGetStats();
+  REPLY_GROUP(
+      command, "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
+      Y_LOG_UINT("serial_hz", psram.serial_hz), Y_LOG_HEX8("kgd", psram.kgd),
+      Y_LOG_UINT("read_512_us", psram.read_512_us),
+      Y_LOG_UINT("write_512_us", psram.write_512_us),
+      Y_LOG_UINT("bytes_read", psram.bytes_read),
+      Y_LOG_UINT("bytes_written", psram.bytes_written),
+      Y_LOG_UINT("timeouts", psram.timeouts));
   REPLY_GROUP(
       command, "stack",
       Y_LOG_UINT("size", (uintptr_t)&__StackTop - (uintptr_t)&__StackBottom),
@@ -1843,6 +1858,24 @@ static OverclockResult Overclock(void) {
 }
 #endif
 
+// Bring the PSRAM up with the watchdog armed, as the overclock is raised: the
+// driver bounds every wait, so a hang here would be something it did not
+// foresee, and the reboot it turns into starts without the PSRAM. The marker
+// is the overclock's kind, and the watchdog disarmed after for the same
+// reason - see Overclock().
+static void StartPsram(void) {
+  if (g_psram_marker == kPsramAttemptMarker) {
+    g_psram_marker = 0;
+    PsramInit(true);
+    return;
+  }
+  g_psram_marker = kPsramAttemptMarker;
+  watchdog_enable(kWatchdogTimeoutMs, true);
+  PsramInit(false);
+  watchdog_disable();
+  g_psram_marker = 0;
+}
+
 int main(void) {
   // First, before anything has used more of the stack than main's frame, or
   // core 1 has started.
@@ -1855,6 +1888,8 @@ int main(void) {
   // moves to the 48MHz USB PLL.
   g_status.overclock = Overclock();
 #endif
+  // After the clock, which it divides for its own.
+  StartPsram();
 
   RuntimeLogInit();
 
