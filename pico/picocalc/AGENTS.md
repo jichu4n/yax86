@@ -81,7 +81,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   It reaches `A>` in 2,328,818 instructions, the bench's 2,328,128 and 690
   for the BIOS and DOS looking at drive B, which is what says the two run
   the same machine. A VM's count depends on its images: DOS330, the two
-  MS-DOS 3.30 floppies and a hard disk, takes 2,416,050. At 250MHz, off
+  MS-DOS 3.30 floppies and a hard disk, takes 2,416,289. At 250MHz, off
   the floppy in flash, it takes 4.72 seconds of processor time without
   drawing and 4.82 with it - 123% and 121% of a real PC/XT - and 4.89 off the
   card; at 125MHz, 9.44 with drawing, 61.5%.

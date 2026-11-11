@@ -348,6 +348,20 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu) {
   }
 }
 
+Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
+  page &= Y_CPU_NUM_CODE_PAGES - 1;
+  cpu->code_page_generation[page] = 0;
+  YCPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
+    return;
+  }
+  for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
+    if ((cache[i].address >> Y_CPU_CODE_PAGE_SHIFT) == page) {
+      cache[i].valid = false;
+    }
+  }
+}
+
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
 Y_FILE_PRIVATE Y_ALWAYS_INLINE bool YCPUIsDecodeCacheHit(
@@ -420,6 +434,12 @@ YCPUFetchNextInstructionCached(
   if (cache != NULL &&
       (address & Y_CPU_CODE_PAGE_OFFSET_MASK) + size <= Y_CPU_CODE_PAGE_SIZE &&
       (uint32_t)ip + size <= Y_CPU_SEGMENT_SIZE) {
+    // The first decode kept from a page is what starts its writes being
+    // counted.
+    if (generation == 0) {
+      generation = 1;
+      cpu->code_page_generation[address >> Y_CPU_CODE_PAGE_SHIFT] = 1;
+    }
     target->address = address;
     target->generation = generation;
     target->valid = true;

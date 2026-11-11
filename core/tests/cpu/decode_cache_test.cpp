@@ -172,19 +172,74 @@ TEST_F(DecodeCacheTest, AWriteToAnotherPageKeepsTheDecode) {
   EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
 }
 
-// A page generation is a byte, so 256 writes bring it back to what a decode
+// A page generation is a byte, so enough writes bring it back to what a decode
 // taken before them recorded. Nothing about the entry says it is stale at that
-// point, which is why the wrap discards the whole cache instead.
-TEST_F(DecodeCacheTest, AGenerationComingBackRoundDiscardsEverything) {
+// point, which is why the wrap discards the page's decodes.
+TEST_F(DecodeCacheTest, AGenerationComingBackRoundDiscardsThePagesDecodes) {
+  const uint32_t other = kProgramAddress + 0x21;
   Write(kProgramAddress, {kOpMovAlImm8, 0x11});
+  Write(other, {kOpMovBlImm8, 0x33});
   RunAt(kProgramAddress);
 
-  for (int i = 0; i < 256; ++i) {
+  // Exactly as many as bring the count back to where a page starts, then a
+  // decode of something else on the page to start it counting again: the
+  // generation now reads what the first decode recorded.
+  for (int i = 0; i < 255; ++i) {
     YCPUNotifyMemoryWrite(&cpu_, kProgramAddress);
   }
+  RunAt(other);
   PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
   RunAt(kProgramAddress);
   EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
+}
+
+// Only that page's: a program writes its stack and data far more often than
+// its code, and what is cached from the pages around them is still good.
+TEST_F(DecodeCacheTest, AGenerationComingBackRoundKeepsOtherPagesDecodes) {
+  const uint32_t other_page = kProgramAddress + Y_CPU_CODE_PAGE_SIZE + 0x21;
+  Write(kProgramAddress, {kOpMovAlImm8, 0x11});
+  Write(other_page, {kOpMovBlImm8, 0x33});
+  RunAt(kProgramAddress);
+  RunAt(other_page);
+
+  for (int i = 0; i < 255; ++i) {
+    YCPUNotifyMemoryWrite(&cpu_, other_page);
+  }
+  PokeBehindTheCPUsBack(kProgramAddress, {kOpMovAlImm8, 0x22});
+  RunAt(kProgramAddress);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x11);
+}
+
+// A page nothing is cached from has nothing to discard, so writes to it are
+// not counted, however many - and the first decode kept from it afterwards is
+// discarded by the first write after that.
+TEST_F(DecodeCacheTest, WritesToAPageHoldingNoDecodesAreNotCounted) {
+  for (int i = 0; i < 1000; ++i) {
+    YCPUNotifyMemoryWrite(&cpu_, kProgramAddress);
+  }
+  EXPECT_EQ(cpu_.code_page_generation[0], 0);
+
+  Write(kProgramAddress, {kOpMovAlImm8, 0x11});
+  RunAt(kProgramAddress);
+  EXPECT_EQ(cpu_.code_page_generation[0], 1);
+
+  Write(kProgramAddress, {kOpMovAlImm8, 0x22});
+  RunAt(kProgramAddress);
+  EXPECT_EQ(cpu_.registers[Y_CPU_AX] & 0xFF, 0x22);
+}
+
+// The page count goes back to uncounted when its decodes are discarded, so a
+// page that once held code and now holds a stack stops costing a walk of the
+// cache every 255 writes.
+TEST_F(DecodeCacheTest, DiscardingAPagesDecodesStopsItsWritesBeingCounted) {
+  Write(kProgramAddress, {kOpMovAlImm8, 0x11});
+  RunAt(kProgramAddress);
+  for (int i = 0; i < 255; ++i) {
+    YCPUNotifyMemoryWrite(&cpu_, kProgramAddress);
+  }
+  EXPECT_EQ(cpu_.code_page_generation[0], 0);
+  YCPUNotifyMemoryWrite(&cpu_, kProgramAddress);
+  EXPECT_EQ(cpu_.code_page_generation[0], 0);
 }
 
 // An instruction is keyed on the page its first byte is on, which says nothing

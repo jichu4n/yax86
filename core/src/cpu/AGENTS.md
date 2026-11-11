@@ -152,15 +152,25 @@ round-trips through memory costs more than its instruction count suggests.**
   against 179.8 with 256, and QBasic interpreting a program 77.5 against
   81.7: an interpreter's loop is larger than a boot's. 1024 entries took
   173.5, not worth 12KB more - the PicoCalc would have 3KB of SRAM left.
-- **`code_page_generation` is the whole invalidation mechanism**: one
-  wrapping byte per 4KB page, recorded by each entry and compared on use. The
-  CPU bumps it in `YCPUWriteRawMemoryByte()`, where operands, stack pushes
-  and vector writes end up, so a host reports only writes made some other
-  way - the platform does, in `YPlatformWriteMemoryByte()`, for DMA. Without
-  it DOS loads over the boot sector unseen: the first prototype retired
-  13,247,281 instructions.
-- **A counter wrap flushes the whole cache**, since an entry taken 256 writes
-  ago would look current. That is about 2,100 256-iteration loops over a run.
+- **`code_page_generation` is the whole invalidation mechanism**: one byte
+  per 4KB page, recorded by each entry and compared on use. Zero says the
+  cache holds no decode from the page; anything else is a wrapping count of
+  the writes to it since one was cached. The CPU counts in
+  `YCPUWriteRawMemoryByte()`, where operands, stack pushes and vector writes
+  end up, so a host reports only writes made some other way - the platform
+  does, in `YPlatformWriteMemoryByte()`, for DMA. Without it DOS loads over
+  the boot sector unseen: the first prototype retired 13,247,281
+  instructions.
+- **A count coming back round discards that page's decodes and no others**,
+  since an entry taken 255 writes ago would look current.
+  `YCPUInvalidateDecodeCachePage()` walks the cache for them and leaves the
+  page at zero, so its writes go uncounted until an instruction is cached
+  from it again. A stack or data page therefore never causes a walk.
+  Discarding every decode instead, and counting writes to every page, is
+  what this replaced: the stack alone wrapped a counter every 256 pushes,
+  and QBasic interpreting a program decoded 50.6% of the instructions it ran
+  where it now decodes 32.7%; two compilers and a linker went from 44-45% to
+  28-30%.
 - **Not caching is as load-bearing as caching**: an instruction that spills
   onto the next page or off the end of the segment is not cached, since its
   page says nothing about its later bytes. A failing decode clears the entry's

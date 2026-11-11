@@ -296,8 +296,8 @@ seconds, emulated MHz = `C / t / 1e6`, MIPS = `I / t / 1e6`, vs a real 8088 =
 
 Alongside the table state:
 
-- **The invariant, and that it did not move**: `dos-boot` retires 2,328,128
-  instructions in 27,702,858 emulated cycles, at every level, every run. If
+- **The invariant, and that it did not move**: `dos-boot` retires 2,328,231
+  instructions in 27,704,200 emulated cycles, at every level, every run. If
   either moved, behaviour changed and the times are not comparable - say so
   and explain why instead of presenting a speedup.
 - **How the baseline was obtained**: rebuilt from its own commit through

@@ -23,7 +23,7 @@ reports and why.
   DOS's date and time questions by watching the CGA text buffer. The whole
   machine - CPU, PIT, PIC, video, FDC - running what the BIOS and DOS do, so
   it compares only against another yax86 build.
-- **It is deterministic: 27,702,858 emulated cycles and 2,328,128 retired
+- **It is deterministic: 27,704,200 emulated cycles and 2,328,231 retired
   instructions, every run, at every level.** If either moves, behaviour
   changed and the times are not comparable.
 - The floppy is compiled into flash by the ROM generator, generated into the

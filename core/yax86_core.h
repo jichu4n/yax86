@@ -2416,14 +2416,14 @@ typedef struct YCPUState {
   // Derived by YCPUInit().
   uint32_t decode_cache_index_mask;
 
-  // How many times each 4KB page has been written, as a wrapping byte. A
-  // cached decode records what its page stood at and is discarded once the two
+  // One byte per 4KB page: 0 while the decode cache holds nothing from the
+  // page, and otherwise a count of the writes to it that wraps. A cached
+  // decode records what its page stood at and is discarded once the two
   // disagree, which is what makes caching safe against code that writes over
   // itself or is loaded over an earlier program.
   //
-  // Maintained whether or not a decode cache exists: a write cannot cheaply
-  // tell whether anything holds a decode of the page it lands on, and the test
-  // to find out would cost about what the counter does.
+  // A write to a page at 0 is not counted, so a page of stack or data never
+  // disturbs the cache. Caching a decode from such a page starts it at 1.
   uint8_t code_page_generation[Y_CPU_NUM_CODE_PAGES];
 
   // Caller-provided runtime configuration. Filled in before YCPUInit(), which
@@ -2524,6 +2524,10 @@ Y_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
 // are covered by YCPUNotifyMemoryWrite() instead.
 Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 
+// Discards every cached decode taken from one 4KB page, and marks the page as
+// holding none.
+Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page);
+
 // Tells the CPU that the byte at a linear address has been written, so that
 // any decode taken from that page stops being used.
 //
@@ -2531,18 +2535,27 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 // report is a write it makes some other way - by DMA, or through the memory
 // map from outside a tick.
 //
-// The counter is a byte, so it comes back round every 256 writes to a page, at
-// which point a decode taken exactly that long ago would look current again -
-// hence the flush. The address is masked rather than range checked: aliasing
-// onto a page costs a spurious invalidation, where indexing past the array
-// would corrupt whatever follows it.
+// A page nothing is cached from has nothing to discard, and most writes land
+// on one: a program's stack and data. The counter is a byte, so it comes back
+// round after 255 writes to a page, at which point a decode taken that long
+// ago would look current again - hence discarding the page's decodes there,
+// which leaves it uncounted until something is cached from it again. The
+// address is masked rather than range checked: aliasing onto a
+// page costs a spurious invalidation, where indexing past the array would
+// corrupt whatever follows it.
 Y_PUBLIC_HEADER inline void YCPUNotifyMemoryWrite(
     YCPUState* cpu, uint32_t address) {
   const uint32_t page =
       (address >> Y_CPU_CODE_PAGE_SHIFT) & (Y_CPU_NUM_CODE_PAGES - 1);
-  if (++cpu->code_page_generation[page] == 0) {
-    YCPUInvalidateDecodeCache(cpu);
+  const uint8_t generation = cpu->code_page_generation[page];
+  if (generation == 0) {
+    return;
   }
+  if (generation == 0xFF) {
+    YCPUInvalidateDecodeCachePage(cpu, page);
+    return;
+  }
+  cpu->code_page_generation[page] = (uint8_t)(generation + 1);
 }
 
 // ============================================================================
@@ -9352,6 +9365,20 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu) {
   }
 }
 
+Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
+  page &= Y_CPU_NUM_CODE_PAGES - 1;
+  cpu->code_page_generation[page] = 0;
+  YCPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
+    return;
+  }
+  for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
+    if ((cache[i].address >> Y_CPU_CODE_PAGE_SHIFT) == page) {
+      cache[i].valid = false;
+    }
+  }
+}
+
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
 Y_FILE_PRIVATE Y_ALWAYS_INLINE bool YCPUIsDecodeCacheHit(
@@ -9424,6 +9451,12 @@ YCPUFetchNextInstructionCached(
   if (cache != NULL &&
       (address & Y_CPU_CODE_PAGE_OFFSET_MASK) + size <= Y_CPU_CODE_PAGE_SIZE &&
       (uint32_t)ip + size <= Y_CPU_SEGMENT_SIZE) {
+    // The first decode kept from a page is what starts its writes being
+    // counted.
+    if (generation == 0) {
+      generation = 1;
+      cpu->code_page_generation[address >> Y_CPU_CODE_PAGE_SHIFT] = 1;
+    }
     target->address = address;
     target->generation = generation;
     target->valid = true;
