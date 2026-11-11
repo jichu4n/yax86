@@ -3514,12 +3514,12 @@ Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
 // that way: the compiler would otherwise inline a small static function back
 // into its callers.
 //
-// The split favours a host whose guest RAM is in the direct window, such as
-// the bench or SDL, where the fast half is all a read of RAM needs. Measured on
-// dos-boot with paging off: the paged lookup inlined into every read cost
-// 2.6%, and with the callback moved out of line as well, dos-boot is 2.6%
-// faster than with the callback inline. Y_HOT puts it in SRAM; in flash it
-// measured 0.26% slower.
+// The split favours a host whose guest RAM is in the direct window, where the
+// fast half is all a read of RAM needs. Measured with pico/bench's dos-boot
+// workload on an RP2040 at 250MHz, -O3, with paging off: the paged lookup
+// inlined into every read cost 2.6%, and with the callback moved out of line
+// as well, the boot is 2.6% faster than with the callback inline. Y_HOT puts
+// it in SRAM; in flash it measured 0.26% slower.
 //
 // A host that pages all of conventional memory has an empty direct window, so
 // every data access fails the compare and makes this call. What that costs,
@@ -16351,7 +16351,8 @@ YPlatformCPUCallbackReadMemoryByte(YCPUState* cpu, uint32_t address) {
 // which changes where runs of instructions end and so when the guest takes
 // its timer interrupts. The number of frames decides which writes fault, so
 // it would change what the guest does. Writes to every other region are
-// still counted twice; the dos-boot invariant depends on that.
+// still counted twice, and the instruction and cycle counts pico/bench's
+// dos-boot workload is held to depend on that.
 Y_FILE_PRIVATE Y_NOINLINE void YPlatformCPUWritePagedMemoryByte(
     YPlatformState* platform, uint32_t address, uint8_t value) {
   YPlatformMemoryMapEntry* entry =

@@ -30,9 +30,9 @@ constexpr uint16_t kPagedSegment = kPagedStart >> 4;
 // A frame holding no page.
 constexpr uint32_t kNoPage = 0xFFFFFFFF;
 
-// A host as the PicoCalc's is: a few frames, the pages in a backing store of
-// their own, a frame given to the page longest in one when none is free, and a
-// page written back only once written.
+// A small paging host: a few frames, the pages in a backing store of their
+// own, a frame given to the page longest in one when none is free, and a page
+// written back only once written.
 class PlatformPagedMemoryTest : public ::testing::Test {
  protected:
   void SetUp() override {
