@@ -4,14 +4,18 @@
 // is the VM DOS330 - and the list at power on is every folder there with a
 // `vm.cfg`. There are no VMs anywhere else.
 //
-//   drive_a=../../images/msdos330/disk01.img
-//   drive_c=hdd.img
-//   drive_d=/shared/tools.img
+//   fd1=../../images/msdos330/disk01.img
+//   hd1=hd1.img
+//   hd2=/shared/tools.img
 //
 // Each line is logfmt - any number of key=value pairs - and a line starting
 // with # is a comment. A path is relative to the folder the file is in, or
-// to the card's root with a leading /. A drive not named is empty. Floppy
-// images are 360KB and hard disk images the core's 10MB drive.
+// to the card's root with a leading /. Floppy disk 1 not named has no disk
+// in it. Floppy disk 2 not named is not there - the BIOS reports one floppy
+// drive, and DOS's B: is drive A by another name - and named as fd2="" it is
+// a drive with no disk. A hard disk not named, or named as "", is not there:
+// a hard disk with no image is no disk at all. Floppy images are 360KB and
+// hard disk images the core's 10MB drive.
 //
 // The card's own settings are `yax86/yax86.cfg`, in the same form:
 //
@@ -33,12 +37,15 @@
 #include "fs.h"
 
 enum {
-  // Drives A and B, floppies, and C and D, the hard disk controller's master
-  // and slave.
-  kVMDriveA = 0,
-  kVMDriveB,
-  kVMDriveC,
-  kVMDriveD,
+  // Floppy disks 1 and 2, the floppy controller's drives 0 and 1, which DOS
+  // calls A: and B:; and hard disks 1 and 2, the hard disk controller's
+  // master and slave. Not C and D: DOS gives the hard disks'
+  // partitions letters - each disk's primary partition, then each one's
+  // logical drives - so neither disk is always C: or D:.
+  kVMDriveFD1 = 0,
+  kVMDriveFD2,
+  kVMDriveHD1,
+  kVMDriveHD2,
   kVMDrives,
 
   // The most VMs listed: the first found past this are left out.
@@ -52,6 +59,12 @@ enum {
   kVMDefaultBootDelay = 5,
   kVMMaxBootDelay = 60,
 };
+
+// Each drive's label - FD1, FD2, HD1, HD2 - and name - Floppy disk 1 ...
+// Hard disk 2 -
+// as the menu and status rows show them.
+extern const char* const kVMDriveLabels[kVMDrives];
+extern const char* const kVMDriveNames[kVMDrives];
 
 typedef struct VMSettings {
   // The name of the VM to highlight and start, or empty for the first
@@ -78,6 +91,9 @@ typedef struct VMConfig {
   VMEntry entry;
   // Each drive's image, as a path from the card's root, or empty.
   char drives[kVMDrives][kFSMaxPath + 1];
+  // Whether the file names each drive, even as empty. Floppy disk 2 is there
+  // only if it does; a hard disk not named is empty either way.
+  bool present[kVMDrives];
 } VMConfig;
 
 // List the VMs in `yax86/vm`, sorted by name. An empty list, with
@@ -111,11 +127,12 @@ bool VMSettingsRead(VMSettings* settings, char problem[kVMProblemLength + 1]);
 bool VMSettingsSaveBootDefault(
     const char* name, char problem[kVMProblemLength + 1]);
 
-// Write a new VM's file, naming the images in its drives - paths from the
-// card's root, or empty for none - as VMConfigSaveDrive() writes them.
-// Returns false, with the problem described, if a path would be too long or
-// the file could not be written.
-bool VMConfigCreate(
+// Write the images in all of a VM's drives - paths from the card's root,
+// empty for none, or NULL for a drive not there, whose line is removed - to
+// its file, as VMConfigSaveDrive() writes one, making the file if there is
+// none. Returns false, with the problem described, if a path
+// would be too long or the file could not be written.
+bool VMConfigSaveDrives(
     const VMEntry* vm, const char* const drives[kVMDrives],
     char problem[kVMProblemLength + 1]);
 

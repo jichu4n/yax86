@@ -37,6 +37,9 @@ typedef struct MenuStatusLine {
 typedef struct MenuConfig {
   // Fill in the status page's lines.
   void (*describe_status)(MenuStatusLine lines[kMenuStatusLines]);
+  // How many floppy drives the machine has: floppy disk 2's page is offered
+  // only with two.
+  uint8_t (*floppy_drives)(void);
   // Restart the VM from power on, with the same disks. Does not return.
   void (*reset)(void);
   // Turn the VM off and go back to the list of VMs, which waits for a key.
@@ -79,9 +82,12 @@ typedef enum MenuAction {
   kMenuActionRenameVM,
   kMenuActionCloneVM,
   kMenuActionDeleteVM,
-  // From Manage VMs' New VM: make the VM MenuNewVM() describes. Then as for
-  // a rename.
+  // From Manage VMs' New VM: make the VM named MenuTypedName() with the
+  // drives MenuFormDrives() describes; and from a VM's Edit drives, give
+  // MenuManagedVM() those drives. Then as for a rename - for an edit, showing
+  // the VM's page with MenuShowManagedVMs().
   kMenuActionCreateVM,
+  kMenuActionEditVM,
 } MenuAction;
 
 void MenuInit(const MenuConfig* config);
@@ -116,13 +122,14 @@ const char* MenuChosenImage(uint32_t* size);
 uint8_t MenuManagedVM(void);
 const char* MenuTypedName(void);
 
-// The new VM filled in on New VM's form. Its strings are the menu's, until
-// the form is next shown.
-void MenuNewVM(VMFolderNew* vm);
+// The drives filled in on the form, New VM's or Edit drives'. Its strings
+// are the menu's, until the form is next shown.
+void MenuFormDrives(VMFolderDrives* drives);
 
 // Show Manage VMs, once the caller has read the list afresh, with the VM
-// named name chosen, or the first if it is not there.
-void MenuShowManagedVMs(const char* name);
+// named name chosen, or the first if it is not there - and with show_vm, the
+// VM's own page.
+void MenuShowManagedVMs(const char* name, bool show_vm);
 
 // Show how far a clone has been copied, or a new VM's blank hard disk
 // written, in KB: the first call shows the page, which takes no keys until

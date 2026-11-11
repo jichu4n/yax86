@@ -32,19 +32,20 @@ typedef struct VMFolderContents {
   char users[kVMFolderNamed][kVMNameLength + 1];
 } VMFolderContents;
 
-// A new VM: its name, and the images in its drives, paths from the card's
-// root or empty for none - or for drives A to C, a blank disk of its own.
-typedef struct VMFolderNew {
-  const char* name;
-  const char* drives[kVMDrives];
-  bool blank[kVMDriveC + 1];
-} VMFolderNew;
+// What a VM's drives are to hold: each an image, a path from the card's root
+// or empty for none, or NULL for floppy disk 2 left out of the machine - or a
+// new blank disk of the VM's own.
+typedef struct VMFolderDrives {
+  const char* paths[kVMDrives];
+  bool blank[kVMDrives];
+} VMFolderDrives;
 
 // How making, renaming or cloning a VM went.
 typedef enum VMFolderResult {
   kVMFolderDone = 0,
-  // The name will not do, and nothing was changed.
-  kVMFolderBadName,
+  // What was asked will not do - a name, or one image in two drives - and
+  // nothing was changed.
+  kVMFolderRefused,
   // The card would not do it, or did part of it.
   kVMFolderFailed,
 } VMFolderResult;
@@ -64,16 +65,26 @@ VMFolderResult VMFolderRename(
     const VMList* list, const VMEntry* vm, const char* name, VMEntry* renamed,
     char problem[kVMProblemLength + 1]);
 
-// Make a new VM, vm->name: its folder, with a vm.cfg naming its drives, and
-// its blank disks, written through transfer's buffer, calling its progress as
-// it goes. A blank disk is zeros, unformatted as a new disk was, for DOS's
-// FORMAT - and for a hard disk, FDISK first: a 360KB floppy, `floppy_a.img`
-// or `floppy_b.img`, or the core's 10MB hard disk, `hdd.img`. created is the
-// new VM. Anything but kVMFolderDone comes with the problem described, as for
-// VMFolderRename(); a VM that could not be made has what was made of it
-// deleted.
+// Make a new VM, name: its folder, with a vm.cfg naming its drives, and its
+// blank disks, written through transfer's buffer, calling its progress as it
+// goes. A blank disk is zeros, unformatted as a new disk was, for DOS's
+// FORMAT - and for a hard disk, FDISK first: a 360KB floppy for drive A or B,
+// `fd1.img` or `fd2.img`, and the core's 10MB hard disk for hard disk 1 or
+// 2, `hd1.img` or `hd2.img` - or `fd1_2.img`, `hd1_2.img` and on, if the name
+// is taken.
+// One image in two drives is refused. created is the new VM. Anything but
+// kVMFolderDone comes with the problem described, as for VMFolderRename(); a
+// VM that could not be made has what was made of it deleted.
 VMFolderResult VMFolderCreate(
-    const VMFolderNew* vm, FSTransfer* transfer, VMEntry* created,
+    const char* name, const VMFolderDrives* drives, FSTransfer* transfer,
+    VMEntry* created, char problem[kVMProblemLength + 1]);
+
+// Change what vm's drives hold, as VMFolderCreate() makes them. An image of
+// the VM's own that a drive no longer holds stays in its folder, deleted with
+// the VM. Anything but kVMFolderDone comes with the problem described; blank
+// disks made for a change that could not be saved are deleted.
+VMFolderResult VMFolderEdit(
+    const VMEntry* vm, const VMFolderDrives* drives, FSTransfer* transfer,
     char problem[kVMProblemLength + 1]);
 
 // Copy vm's folder as a new VM, name, moving the files through transfer's

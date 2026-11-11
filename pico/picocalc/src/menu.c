@@ -130,8 +130,10 @@ typedef enum MainItem {
 } MainItem;
 
 static const MenuItem kMainItems[kMainItemCount] = {
-    [kMainDriveA] = {"Drive A", true},      [kMainDriveB] = {"Drive B", true},
-    [kMainStatus] = {"Status", true},       [kMainReset] = {"Reset", false},
+    [kMainDriveA] = {"Floppy disk 1", true},
+    [kMainDriveB] = {"Floppy disk 2", true},
+    [kMainStatus] = {"Status", true},
+    [kMainReset] = {"Reset", false},
     [kMainPowerOff] = {"Power off", false},
 };
 
@@ -189,13 +191,15 @@ static const MenuItem kStopSharingItems[kStopSharingItemCount] = {
 };
 
 typedef enum VMItem {
-  kVMRename = 0,
+  kVMEdit = 0,
+  kVMRename,
   kVMClone,
   kVMDelete,
   kVMItemCount,
 } VMItem;
 
 static const MenuItem kVMItems[kVMItemCount] = {
+    [kVMEdit] = {"Edit drives", true},
     [kVMRename] = {"Rename", true},
     [kVMClone] = {"Clone", true},
     [kVMDelete] = {"Delete", false},
@@ -218,30 +222,46 @@ typedef enum NewItem {
   kNewDriveA,
   kNewDriveB,
   kNewDriveC,
+  kNewDriveD,
   kNewCreate,
   kNewItemCount,
 } NewItem;
 
 // The choices for a new VM's drive: a blank floppy for a floppy drive, and a
 // blank hard disk for drive C.
+// A drive's choices on the form.
 typedef enum NewDriveItem {
-  kNewDriveNone = 0,
+  // Left out of the machine: floppy disk 2, or a hard disk.
+  kNewDriveDisabled = 0,
+  // A floppy drive with no disk in it.
+  kNewDriveNone,
   kNewDriveBlank,
   kNewDriveImage,
   kNewDriveItemCount,
 } NewDriveItem;
 
 static const MenuItem kNewFloppyItems[kNewDriveItemCount] = {
+    [kNewDriveDisabled] = {"Disabled", false},
     [kNewDriveNone] = {"Empty", false},
     [kNewDriveBlank] = {"New floppy image (360KB)", false},
     [kNewDriveImage] = {"Existing floppy image", true},
 };
 
 static const MenuItem kNewHardDiskItems[kNewDriveItemCount] = {
-    [kNewDriveNone] = {"Empty", false},
+    [kNewDriveDisabled] = {"Disabled", false},
     [kNewDriveBlank] = {"New disk image (10MB)", false},
     [kNewDriveImage] = {"Existing disk image", true},
 };
+
+// The choices each drive offers, in order: floppy disk 1 is always there;
+// floppy disk 2 can be left out too; and a hard disk is there only with an
+// image - with none there is no disk, rather than a drive with nothing in it.
+static const NewDriveItem kFloppy1Choices[] = {
+    kNewDriveNone, kNewDriveBlank, kNewDriveImage};
+static const NewDriveItem kFloppy2Choices[] = {
+    kNewDriveDisabled, kNewDriveNone, kNewDriveBlank, kNewDriveImage};
+static const NewDriveItem kHardDiskChoices[] = {
+    kNewDriveDisabled, kNewDriveBlank, kNewDriveImage};
 
 static const MenuItem kNewVMRow = {"New VM", true};
 static const MenuItem kManageRow = {"Manage VMs", true};
@@ -288,6 +308,7 @@ static uint32_t g_usb_image_size;
 // drives, empty for none; and whether its vm.cfg read.
 static uint8_t g_vm;
 static char g_vm_drives[kVMDrives][kDiskImageNameLength + 1];
+static bool g_vm_present[kVMDrives];
 static bool g_vm_readable;
 // The name being typed, and whether it is for a clone rather than a rename.
 static char g_name[kFSMaxFolderName + 1];
@@ -303,9 +324,14 @@ static bool g_creating;
 // A new VM: its name is g_name; the images in its floppy drives and drive C,
 // paths from the card's root or empty for none; whether each is a blank disk
 // hard disk of its own instead; and the drive whose choices show.
-static char g_new_drives[kVMDriveC + 1][kFSMaxPath + 1];
-static bool g_new_blank[kVMDriveC + 1];
+static char g_new_drives[kVMDrives][kFSMaxPath + 1];
+static bool g_new_blank[kVMDrives];
+// Whether each drive is there: false for floppy disk 2 disabled.
+static bool g_new_present[kVMDrives];
 static uint8_t g_new_drive;
+// Whether the form is editing the drives of the VM in g_vm, rather than
+// making a new one; it then has no name, and saves rather than creates.
+static bool g_editing;
 //
 // The problem is kept in two buffers, used in turn, so that a new one is a
 // new pointer: the status rows tell a change of hint by its pointer.
@@ -321,16 +347,19 @@ bool MenuIsOpen(void) { return g_open; }
 
 const char* MenuPageName(void) {
   if (g_page == kMenuPageDrive) {
-    return g_drive == kFloppyDriveA ? "drive_a" : "drive_b";
+    return g_drive == kFloppyDriveA ? "fd1" : "fd2";
   }
   return kPageNames[g_page];
 }
 
-static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
-
 static void ShowPage(MenuPage page, uint8_t chosen);
 static MenuAction Choose(void);
 static MenuAction Back(void);
+static void ShowVM(uint8_t index);
+static uint8_t FormFirstItem(void);
+static uint8_t FormItem(void);
+static const NewDriveItem* DriveChoices(uint8_t* count);
+static uint8_t DriveChoiceRow(NewDriveItem choice);
 static void ScrollToChosen(void);
 
 void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
@@ -382,7 +411,7 @@ const char* MenuHint(void) {
     return "";
   }
   if (g_page == kMenuPageNew) {
-    return g_chosen == kNewName
+    return FormItem() == kNewName
                ? "Type the name  \x18\x19=Move  Backspace=Erase  Esc=Cancel"
                : "\x18\x19=Move  Enter=Select  Esc=Cancel";
   }
@@ -406,7 +435,7 @@ static void Browse(const char* path) {
   uint8_t num_sizes = 1;
   if (g_browsing_for == kBrowseForUSB) {
     num_sizes = 2;
-  } else if (g_browsing_for == kBrowseForNewVM && g_new_drive == kVMDriveC) {
+  } else if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveHD1) {
     sizes = &kImageSizes[1];
   }
   FileListRead(&g_list, path, sizes, num_sizes);
@@ -495,8 +524,44 @@ static bool DriveEmpty(void) {
   return g_config.drive(g_drive)->status == kDiskImageEjected;
 }
 
+// The main page's items, as they show: Floppy disk 2 only with a second
+// floppy drive, and Power off only with a list to go back to. Returns how
+// many.
+static uint8_t MainItems(MainItem items[kMainItemCount]) {
+  uint8_t count = 0;
+  for (uint8_t item = 0; item < kMainItemCount; ++item) {
+    if ((item == kMainDriveB && g_config.floppy_drives() < 2) ||
+        (item == kMainPowerOff && !g_config.can_power_off())) {
+      continue;
+    }
+    items[count++] = (MainItem)item;
+  }
+  return count;
+}
+
 static uint8_t MainItemCount(void) {
-  return g_config.can_power_off() ? kMainItemCount : kMainPowerOff;
+  MainItem items[kMainItemCount];
+  return MainItems(items);
+}
+
+// The main page's item on the row chosen.
+static MainItem ChosenMainItem(void) {
+  MainItem items[kMainItemCount];
+  const uint8_t count = MainItems(items);
+  return g_chosen < count ? items[g_chosen] : kMainItemCount;
+}
+
+// Show the main page with an item chosen, or the first if it is not shown.
+static void ShowMainItem(MainItem item) {
+  MainItem items[kMainItemCount];
+  const uint8_t count = MainItems(items);
+  uint8_t row = 0;
+  for (uint8_t i = 0; i < count; ++i) {
+    if (items[i] == item) {
+      row = i;
+    }
+  }
+  ShowPage(kMenuPageMain, row);
 }
 
 static uint8_t DriveItemCount(void) {
@@ -539,9 +604,9 @@ static uint8_t PageItemCount(void) {
     case kMenuPageManage:
       return (uint8_t)(g_vms->count + 1);
     case kMenuPageNew:
-      return kNewItemCount;
+      return (uint8_t)(kNewItemCount - FormFirstItem());
     case kMenuPageNewDrive:
-      return kNewDriveItemCount;
+      return DriveChoiceRow(kNewDriveItemCount);
     case kMenuPageVM:
       return kVMItemCount;
     case kMenuPageDelete:
@@ -562,8 +627,12 @@ static void ShowManaged(uint8_t index) {
   ScrollToChosen();
 }
 
-void MenuShowManagedVMs(const char* name) {
-  ShowManaged(VMListFind(g_vms, name));
+void MenuShowManagedVMs(const char* name, bool show_vm) {
+  const uint8_t index = VMListFind(g_vms, name);
+  ShowManaged(index);
+  if (show_vm && index < g_vms->count) {
+    ShowVM(index);
+  }
 }
 
 // Show a VM's page, with the images in its drives.
@@ -577,8 +646,12 @@ static void ShowVM(uint8_t index) {
     if (config.drives[drive][0] != '\0') {
       DiskImageName(config.drives[drive], g_vm_drives[drive]);
     }
+    g_vm_present[drive] =
+        drive == kVMDriveFD1 ||
+        (drive == kVMDriveFD2 ? config.present[drive]
+                              : config.drives[drive][0] != '\0');
   }
-  ShowPage(kMenuPageVM, kVMRename);
+  ShowPage(kMenuPageVM, kVMEdit);
 }
 
 // Start typing a name: the VM's own to rename it, and for a clone the same
@@ -642,34 +715,97 @@ void MenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb) {
   g_dirty = true;
 }
 
-// Start a new VM's form: no name, and every drive empty.
-static void StartNewVM(void) {
-  g_name[0] = '\0';
-  g_name_length = 0;
-  for (uint8_t drive = 0; drive <= kVMDriveC; ++drive) {
-    g_new_drives[drive][0] = '\0';
-    g_new_blank[drive] = false;
-  }
-  ShowPage(kMenuPageNew, kNewName);
+// The form's first item: its name for a new VM; editing one, it starts at
+// the drives. g_chosen counts from it.
+static uint8_t FormFirstItem(void) { return g_editing ? kNewDriveA : kNewName; }
+
+static uint8_t FormItem(void) { return (uint8_t)(g_chosen + FormFirstItem()); }
+
+static void ShowFormItem(uint8_t item) {
+  ShowPage(kMenuPageNew, (uint8_t)(item - FormFirstItem()));
 }
 
-// Show the choices for a new VM's drive, with what it has chosen.
+// Start a new VM's form: no name, and every drive empty.
+static void StartNewVM(void) {
+  g_editing = false;
+  g_name[0] = '\0';
+  g_name_length = 0;
+  // Floppy disk 1 empty, floppy disk 2 and hard disk 2 disabled, and a new
+  // disk image as hard disk 1.
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    g_new_drives[drive][0] = '\0';
+    g_new_blank[drive] = drive == kVMDriveHD1;
+    g_new_present[drive] = drive == kVMDriveFD1 || drive == kVMDriveHD1;
+  }
+  ShowFormItem(kNewName);
+}
+
+// Start the form on the drives of the VM whose page shows, as its vm.cfg has
+// them.
+static void StartEditVM(void) {
+  g_editing = true;
+  static VMConfig config;
+  char problem[kVMProblemLength + 1];
+  VMConfigRead(&g_vms->vms[g_vm], &config, problem);
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    FSCopyPath(config.drives[drive], g_new_drives[drive]);
+    g_new_blank[drive] = false;
+    g_new_present[drive] =
+        drive == kVMDriveFD1 ||
+        (drive == kVMDriveFD2 ? config.present[drive]
+                              : config.drives[drive][0] != '\0');
+  }
+  ShowFormItem(kNewDriveA);
+}
+
+// The choices the drive on show offers, and how many.
+static const NewDriveItem* DriveChoices(uint8_t* count) {
+  if (g_new_drive == kVMDriveFD1) {
+    *count = sizeof(kFloppy1Choices) / sizeof(kFloppy1Choices[0]);
+    return kFloppy1Choices;
+  }
+  if (g_new_drive == kVMDriveFD2) {
+    *count = sizeof(kFloppy2Choices) / sizeof(kFloppy2Choices[0]);
+    return kFloppy2Choices;
+  }
+  *count = sizeof(kHardDiskChoices) / sizeof(kHardDiskChoices[0]);
+  return kHardDiskChoices;
+}
+
+// The row of a choice on the drive's page, or with kNewDriveItemCount, how
+// many rows there are.
+static uint8_t DriveChoiceRow(NewDriveItem choice) {
+  uint8_t count = 0;
+  const NewDriveItem* choices = DriveChoices(&count);
+  for (uint8_t row = 0; row < count; ++row) {
+    if (choices[row] == choice) {
+      return row;
+    }
+  }
+  return choice == kNewDriveItemCount ? count : 0;
+}
+
+// Show the choices for a drive on the form, with what it has chosen.
 static void ShowNewDrive(uint8_t drive) {
   g_new_drive = drive;
   uint8_t chosen = kNewDriveNone;
-  if (g_new_blank[drive]) {
+  if (!g_new_present[drive]) {
+    chosen = kNewDriveDisabled;
+  } else if (g_new_blank[drive]) {
     chosen = kNewDriveBlank;
   } else if (g_new_drives[drive][0] != '\0') {
     chosen = kNewDriveImage;
   }
-  ShowPage(kMenuPageNewDrive, chosen);
+  ShowPage(kMenuPageNewDrive, DriveChoiceRow((NewDriveItem)chosen));
 }
 
-// Take a choice for the new VM's drive, back to the form; or for an image,
+// Take a choice for a drive on the form, back to the form; or for an image,
 // find it in the browser, starting where the one chosen is, if one is.
 static void ChooseNewDrive(void) {
+  uint8_t count = 0;
+  const NewDriveItem choice = DriveChoices(&count)[g_chosen];
   char* path = g_new_drives[g_new_drive];
-  if (g_chosen == kNewDriveImage) {
+  if (choice == kNewDriveImage) {
     g_browsing_for = kBrowseForNewVM;
     char folder[kFSMaxPath + 1];
     if (path[0] != '\0') {
@@ -681,8 +817,9 @@ static void ChooseNewDrive(void) {
     return;
   }
   path[0] = '\0';
-  g_new_blank[g_new_drive] = g_chosen == kNewDriveBlank;
-  ShowPage(kMenuPageNew, (uint8_t)(kNewDriveA + g_new_drive));
+  g_new_blank[g_new_drive] = choice == kNewDriveBlank;
+  g_new_present[g_new_drive] = choice != kNewDriveDisabled;
+  ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
 }
 
 // A key on the new VM's form while its name is chosen: a character a name
@@ -707,13 +844,10 @@ static bool TypeNewName(uint8_t key) {
   return true;
 }
 
-void MenuNewVM(VMFolderNew* vm) {
-  vm->name = g_name;
+void MenuFormDrives(VMFolderDrives* drives) {
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
-    vm->drives[drive] = drive <= kVMDriveC ? g_new_drives[drive] : "";
-  }
-  for (uint8_t drive = 0; drive <= kVMDriveC; ++drive) {
-    vm->blank[drive] = g_new_blank[drive];
+    drives->paths[drive] = g_new_present[drive] ? g_new_drives[drive] : NULL;
+    drives->blank[drive] = g_new_blank[drive];
   }
 }
 
@@ -738,23 +872,23 @@ static MenuAction Back(void) {
       if (g_browsing_for == kBrowseForUSB) {
         ShowPage(kMenuPageUSB, kUSBImage);
       } else if (g_browsing_for == kBrowseForNewVM) {
-        ShowPage(kMenuPageNewDrive, kNewDriveImage);
+        ShowPage(kMenuPageNewDrive, DriveChoiceRow(kNewDriveImage));
       } else {
         ShowPage(kMenuPageDrive, kDriveInsert);
       }
       break;
     case kMenuPageReset:
-      ShowPage(kMenuPageMain, kMainReset);
+      ShowMainItem(kMainReset);
       break;
     case kMenuPagePowerOff:
-      ShowPage(kMenuPageMain, kMainPowerOff);
+      ShowMainItem(kMainPowerOff);
       break;
     case kMenuPageDrive:
-      ShowPage(kMenuPageMain, (uint8_t)(kMainDriveA + g_drive));
+      ShowMainItem((MainItem)(kMainDriveA + g_drive));
       break;
     case kMenuPageStatus:
     case kMenuPageMain:
-      ShowPage(kMenuPageMain, kMainStatus);
+      ShowMainItem(kMainStatus);
       break;
     case kMenuPageVMs:
       // There is no VM to go back to yet.
@@ -785,10 +919,14 @@ static MenuAction Back(void) {
       // A copy cannot be stopped part way.
       break;
     case kMenuPageNew:
-      ShowManaged(kVMListMax);
+      if (g_editing) {
+        ShowPage(kMenuPageVM, kVMEdit);
+      } else {
+        ShowManaged(kVMListMax);
+      }
       break;
     case kMenuPageNewDrive:
-      ShowPage(kMenuPageNew, (uint8_t)(kNewDriveA + g_new_drive));
+      ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
       break;
   }
   return kMenuActionNone;
@@ -816,7 +954,8 @@ static MenuAction OpenEntry(void) {
   if (g_browsing_for == kBrowseForNewVM) {
     FSCopyPath(path, g_new_drives[g_new_drive]);
     g_new_blank[g_new_drive] = false;
-    ShowPage(kMenuPageNew, (uint8_t)(kNewDriveA + g_new_drive));
+    g_new_present[g_new_drive] = true;
+    ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
     return kMenuActionNone;
   }
   if (g_browsing_for == kBrowseForUSB) {
@@ -837,10 +976,10 @@ const char* MenuChosenImage(uint32_t* size) {
 static MenuAction Choose(void) {
   switch (g_page) {
     case kMenuPageMain:
-      switch ((MainItem)g_chosen) {
+      switch (ChosenMainItem()) {
         case kMainDriveA:
         case kMainDriveB:
-          g_drive = (FloppyDrive)(g_chosen - kMainDriveA);
+          g_drive = (FloppyDrive)(ChosenMainItem() - kMainDriveA);
           ShowPage(kMenuPageDrive, kDriveInsert);
           return kMenuActionNone;
         case kMainStatus:
@@ -895,20 +1034,22 @@ static MenuAction Choose(void) {
       }
       return kMenuActionNone;
     case kMenuPageNew:
-      if (g_chosen == kNewCreate) {
-        return kMenuActionCreateVM;
+      if (FormItem() == kNewCreate) {
+        return g_editing ? kMenuActionEditVM : kMenuActionCreateVM;
       }
-      if (g_chosen == kNewName) {
-        ShowPage(kMenuPageNew, kNewDriveA);
+      if (FormItem() == kNewName) {
+        ShowFormItem(kNewDriveA);
       } else {
-        ShowNewDrive((uint8_t)(g_chosen - kNewDriveA));
+        ShowNewDrive((uint8_t)(FormItem() - kNewDriveA));
       }
       return kMenuActionNone;
     case kMenuPageNewDrive:
       ChooseNewDrive();
       return kMenuActionNone;
     case kMenuPageVM:
-      if (g_chosen == kVMDelete) {
+      if (g_chosen == kVMEdit) {
+        StartEditVM();
+      } else if (g_chosen == kVMDelete) {
         VMFolderDescribe(g_vms, &g_vms->vms[g_vm], &g_contents);
         ShowPage(kMenuPageDelete, kDeleteCancel);
       } else {
@@ -977,7 +1118,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     g_open = !g_open;
     if (g_open) {
       g_box_drawn = false;
-      ShowPage(kMenuPageMain, kMainDriveA);
+      ShowMainItem(kMainDriveA);
       return kMenuActionOpened;
     }
     return kMenuActionClosed;
@@ -995,7 +1136,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   if (g_page == kMenuPageNew) {
     // Backspace erases the name rather than leaving the form, wherever it
     // is: Esc leaves it.
-    if ((g_chosen == kNewName && TypeNewName(event.key)) ||
+    if ((FormItem() == kNewName && TypeNewName(event.key)) ||
         event.key == kKeyBackspace) {
       return kMenuActionNone;
     }
@@ -1138,6 +1279,13 @@ static void PlaceBox(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
 static void DrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
     uint8_t line_count, const MenuItem* items, uint8_t count) {
+  // The box holds kDisplayMenuMaxRows: lines past what fits are left out,
+  // rather than drawn past its rows.
+  if (count + 4 + line_count + 1 > kDisplayMenuMaxRows) {
+    line_count = count + 5 < kDisplayMenuMaxRows
+                     ? (uint8_t)(kDisplayMenuMaxRows - count - 5)
+                     : 0;
+  }
   const uint8_t text_rows = line_count > 0 ? (uint8_t)(line_count + 1) : 0;
   // The edges, a blank row either side of the items, and the lines with a
   // blank row under them - or at power on, the list's size, as there is no
@@ -1207,8 +1355,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
       "Change disks only while DOS is",
       "not using the drive.",
   };
-  const char title[] = {'D', 'r', 'i', 'v', 'e', ' ', DriveLetter(g_drive),
-                        '\0'};
+  const char* title = kVMDriveNames[kVMDriveFD1 + g_drive];
   DrawItems(
       menu, title, lines, sizeof(lines) / sizeof(lines[0]), items,
       DriveItemCount());
@@ -1219,7 +1366,7 @@ static const char* BrowseEmpty(void) {
   if (g_browsing_for == kBrowseForUSB) {
     return "No folders or disk images";
   }
-  if (g_browsing_for == kBrowseForNewVM && g_new_drive == kVMDriveC) {
+  if (g_browsing_for == kBrowseForNewVM && g_new_drive >= kVMDriveHD1) {
     return "No folders or hard disk images";
   }
   return "No folders or floppy images";
@@ -1279,8 +1426,8 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
       const DiskImage* image = g_config.drive((FloppyDrive)drive);
       if (image->status == kDiskImageOpen && FSSamePath(path, image->path)) {
-        char note[] = "in drive A";
-        note[sizeof(note) - 2] = DriveLetter((FloppyDrive)drive);
+        char note[16];
+        snprintf(note, sizeof(note), "in %s", kVMDriveLabels[drive]);
         PutText(row, menu->columns, kBrowseNoteColumn, note, attr);
       }
     }
@@ -1359,19 +1506,38 @@ static void DrawManagePage(DisplayMenu* menu) {
 }
 
 // A VM's page: the images in its drives, over what can be done to it.
+// What a VM's drive holds, for its page: an image's name, "empty" for a
+// floppy drive with none, or "disabled" for a drive not there.
+static const char* DriveShown(uint8_t drive, const char* name) {
+  if (name[0] != '\0') {
+    return name;
+  }
+  return g_vm_present[drive] ? "empty" : "disabled";
+}
+
 static void DrawVMPage(DisplayMenu* menu) {
-  // Room for any name, which the box cuts to its width.
-  char lines[kVMDrives][64];
-  const char* line_pointers[kVMDrives];
+  // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds
+  // anything,
+  // with room for any name, which the box cuts to its width.
+  char lines[kVMDrives / 2][64];
+  const char* line_pointers[kVMDrives / 2];
   uint8_t line_count = 0;
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
-    if (g_vm_drives[drive][0] != '\0') {
-      snprintf(
-          lines[line_count], sizeof(lines[line_count]), "%c: %s",
-          (char)('A' + drive), g_vm_drives[drive]);
-      line_pointers[line_count] = lines[line_count];
-      ++line_count;
+  for (uint8_t first = 0; first < kVMDrives; first += 2) {
+    char label_a[8];
+    char label_b[8];
+    snprintf(label_a, sizeof(label_a), "%s:", kVMDriveLabels[first]);
+    snprintf(label_b, sizeof(label_b), "%s:", kVMDriveLabels[first + 1]);
+    const char* a = g_vm_drives[first];
+    const char* b = g_vm_drives[first + 1];
+    if (a[0] == '\0' && b[0] == '\0') {
+      continue;
     }
+    snprintf(
+        lines[line_count], sizeof(lines[line_count]),
+        "%-4s %-12.12s %-4s %.12s", label_a, DriveShown(first, a), label_b,
+        DriveShown((uint8_t)(first + 1), b));
+    line_pointers[line_count] = lines[line_count];
+    ++line_count;
   }
   if (!g_vm_readable) {
     line_pointers[0] = "Its vm.cfg has a problem.";
@@ -1413,27 +1579,27 @@ static void DrawNamePage(DisplayMenu* menu) {
   PutText(row, menu->columns, 3, field, kAttrChosen);
 }
 
-// Join names into text as "A, B and C", for as many as fit, then "and N
-// more" for the rest.
+// Join names into text as "A, B and C", or with fewer shown, "A, B and 2
+// more": as many of the first named as fit with the rest counted after.
 static void JoinNames(
     char* text, uint8_t size, char (*names)[kFSMaxName + 1], uint8_t named,
     uint8_t count) {
-  uint8_t length = 0;
-  text[0] = '\0';
-  for (uint8_t i = 0; i < named; ++i) {
-    const char* separator = i == 0 ? "" : (i + 1 == count ? " and " : ", ");
-    const int written = snprintf(
-        text + length, (size_t)(size - length), "%s%s", separator, names[i]);
-    if (written < 0 || length + written >= size) {
-      text[length] = '\0';
-      break;
+  for (uint8_t shown = named;; --shown) {
+    size_t length = 0;
+    text[0] = '\0';
+    for (uint8_t i = 0; i < shown && length < size; ++i) {
+      const char* separator = i == 0 ? "" : (i + 1 == count ? " and " : ", ");
+      length += (size_t)snprintf(
+          text + length, size - length, "%s%s", separator, names[i]);
     }
-    length = (uint8_t)(length + written);
-  }
-  if (named < count) {
-    snprintf(
-        text + length, (size_t)(size - length), " and %u more",
-        (unsigned)(count - named));
+    if (shown < count && length < size) {
+      length += (size_t)snprintf(
+          text + length, size - length, "%s%u more", shown > 0 ? " and " : "",
+          (unsigned)(count - shown));
+    }
+    if (length < size || shown == 0) {
+      return;
+    }
   }
 }
 
@@ -1474,7 +1640,9 @@ static void DrawDeletePage(DisplayMenu* menu) {
 static void DrawCopyingPage(DisplayMenu* menu) {
   char copying[kNarrowColumns];
   if (g_creating) {
-    snprintf(copying, sizeof(copying), "Writing %s's blank disks...", g_name);
+    snprintf(
+        copying, sizeof(copying), "Writing %s's blank disks...",
+        g_editing ? g_vms->vms[g_vm].name : g_name);
   } else {
     snprintf(
         copying, sizeof(copying), "Copying %s to %s...", g_vms->vms[g_vm].name,
@@ -1485,46 +1653,67 @@ static void DrawCopyingPage(DisplayMenu* menu) {
       progress, sizeof(progress), "%lu of %lu KB", (unsigned long)g_copied_kb,
       (unsigned long)g_copy_kb);
   const char* const lines[] = {copying, progress};
-  DrawItems(menu, g_creating ? "New VM" : "Clone", lines, 2, NULL, 0);
+  DrawItems(
+      menu, g_creating ? (g_editing ? "Edit drives" : "New VM") : "Clone",
+      lines, 2, NULL, 0);
 }
 
-// A new VM's form: its name, typed in place with a cursor while it is chosen,
-// and its drives, with what each has.
+// The form: a new VM's name, typed in place with a cursor while it is
+// chosen, and the drives, with what each holds - or editing a VM's drives,
+// the drives alone, under its name.
 static void DrawNewPage(DisplayMenu* menu) {
   char rows[kNewItemCount][kNarrowColumns];
   MenuItem items[kNewItemCount];
   const char* cursor =
-      g_chosen == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
+      FormItem() == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
   snprintf(
-      rows[kNewName], sizeof(rows[kNewName]), "Name     %s%s", g_name, cursor);
+      rows[kNewName], sizeof(rows[kNewName]), "%-15s %s%s", "Name", g_name,
+      cursor);
   items[kNewName] = (MenuItem){rows[kNewName], false};
-  for (uint8_t drive = 0; drive <= kVMDriveC; ++drive) {
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const uint8_t item = (uint8_t)(kNewDriveA + drive);
     const char* what = "empty";
     char name[kDiskImageNameLength + 1];
-    if (g_new_blank[drive]) {
-      what = drive == kVMDriveC ? "new disk image" : "new floppy image";
+    if (!g_new_present[drive]) {
+      what = "disabled";
+    } else if (g_new_blank[drive]) {
+      what = drive >= kVMDriveHD1 ? "new disk image" : "new floppy image";
     } else if (g_new_drives[drive][0] != '\0') {
       DiskImageName(g_new_drives[drive], name);
       what = name;
     }
     snprintf(
-        rows[item], sizeof(rows[item]), "Drive %c  %s", (char)('A' + drive),
-        what);
+        rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (MenuItem){rows[item], true};
   }
-  items[kNewCreate] = (MenuItem){"Create", false};
-  DrawItems(menu, "New VM", NULL, 0, items, kNewItemCount);
+  items[kNewCreate] = (MenuItem){g_editing ? "Save" : "Create", false};
+  DrawItems(
+      menu, g_editing ? g_vms->vms[g_vm].name : "New VM", NULL, 0,
+      &items[FormFirstItem()], (uint8_t)(kNewItemCount - FormFirstItem()));
 }
 
-// The choices for one of a new VM's drives.
+// The main page: its items as they show.
+static void DrawMainPage(DisplayMenu* menu) {
+  MainItem shown[kMainItemCount];
+  const uint8_t count = MainItems(shown);
+  MenuItem items[kMainItemCount];
+  for (uint8_t i = 0; i < count; ++i) {
+    items[i] = kMainItems[shown[i]];
+  }
+  DrawItems(menu, "yax86", NULL, 0, items, count);
+}
+
+// The choices for one of the form's drives.
 static void DrawNewDrivePage(DisplayMenu* menu) {
-  const char title[] = {'D', 'r', 'i', 'v', 'e', ' ', (char)('A' + g_new_drive),
-                        '\0'};
-  DrawItems(
-      menu, title, NULL, 0,
-      g_new_drive == kVMDriveC ? kNewHardDiskItems : kNewFloppyItems,
-      kNewDriveItemCount);
+  uint8_t count = 0;
+  const NewDriveItem* choices = DriveChoices(&count);
+  const MenuItem* labels =
+      g_new_drive >= kVMDriveHD1 ? kNewHardDiskItems : kNewFloppyItems;
+  MenuItem items[kNewDriveItemCount];
+  for (uint8_t row = 0; row < count; ++row) {
+    items[row] = labels[choices[row]];
+  }
+  DrawItems(menu, kVMDriveNames[g_new_drive], NULL, 0, items, count);
 }
 
 // The card while it is on USB: who has it, and how much has moved.
@@ -1580,7 +1769,7 @@ void MenuDraw(uint64_t now_us) {
   }
   switch (g_page) {
     case kMenuPageMain:
-      DrawItems(menu, "yax86", NULL, 0, kMainItems, MainItemCount());
+      DrawMainPage(menu);
       break;
     case kMenuPageReset:
       DrawItems(

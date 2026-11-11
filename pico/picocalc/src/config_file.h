@@ -44,7 +44,9 @@ ConfigFileResult ConfigFileRead(
     const char* path, ConfigFileTakePair take, void* context,
     char problem[kConfigFileProblemLength + 1]);
 
-// A key to set, and its new value, written quoted if logfmt needs it to be.
+// A key to set, and its new value, written quoted if logfmt needs it to be -
+// or NULL to remove the key's pairs, and with them a line left with nothing
+// else on it.
 typedef struct ConfigFileSetting {
   const char* key;
   const char* value;

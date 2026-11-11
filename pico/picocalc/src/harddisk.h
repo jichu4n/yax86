@@ -11,8 +11,8 @@
 #include "disk_image.h"
 
 typedef enum HardDiskDrive {
-  kHardDiskC = 0,
-  kHardDiskD,
+  kHardDisk1 = 0,
+  kHardDisk2,
   kHardDisks,
 } HardDiskDrive;
 

@@ -497,17 +497,18 @@ static size_t FormatDrive(
 
 static void FormatDiskLine(char* buffer, size_t size) {
   const DiskImage* const images[kVMDrives] = {
-      [kVMDriveA] = FloppyGetImage(kFloppyDriveA),
-      [kVMDriveB] = FloppyGetImage(kFloppyDriveB),
-      [kVMDriveC] = HardDiskGetImage(kHardDiskC),
-      [kVMDriveD] = HardDiskGetImage(kHardDiskD),
+      [kVMDriveFD1] = FloppyGetImage(kFloppyDriveA),
+      [kVMDriveFD2] = FloppyGetImage(kFloppyDriveB),
+      [kVMDriveHD1] = HardDiskGetImage(kHardDisk1),
+      [kVMDriveHD2] = HardDiskGetImage(kHardDisk2),
   };
   size_t length = 0;
   uint64_t card_us = 0;
   bool any_open = false;
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const DiskImage* image = images[drive];
-    const char label[] = {(char)('A' + drive), ':', '\0'};
+    char label[8];
+    snprintf(label, sizeof(label), "%s:", kVMDriveLabels[drive]);
     if (image->status == kDiskImageOpen) {
       any_open = true;
       length += FormatDrive(buffer + length, size - length, label, image, "");
@@ -515,7 +516,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
       // What drive A has instead, or why a configured image did not open.
       length += FormatDrive(
           buffer + length, size - length, label, image,
-          drive == kVMDriveA && !g_has_vm ? "built in" : "empty");
+          drive == kVMDriveFD1 && !g_has_vm ? "built in" : "empty");
     }
     card_us += image->stats.read_us + image->stats.write_us;
   }
@@ -590,12 +591,15 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
 static void OfferStatusRows(const StatusBarState* state);
 
 // Compose the status rows from the VM's state.
+static uint8_t FloppyDrives(void);
+
 static void UpdateStatusRows(void) {
   StatusBarState state = {0};
   state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
-  state.drives[kFloppyDriveB] = FloppyGetImage(kFloppyDriveB);
-  state.drives[kStatusBarDriveC] = HardDiskGetImage(kHardDiskC);
-  state.drives[kStatusBarDriveD] = HardDiskGetImage(kHardDiskD);
+  state.drives[kFloppyDriveB] =
+      FloppyDrives() > 1 ? FloppyGetImage(kFloppyDriveB) : NULL;
+  state.drives[kStatusBarDriveHD1] = HardDiskGetImage(kHardDisk1);
+  state.drives[kStatusBarDriveHD2] = HardDiskGetImage(kHardDisk2);
   state.vm = g_has_vm ? g_vm.entry.name : NULL;
   state.running = true;
   state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
@@ -698,10 +702,10 @@ static __noinline void ReplyReportBoard(const Command* command) {
 
 // The VM's drives, and what has been done with the card and the keyboard.
 static __noinline void ReplyReportDevices(const Command* command) {
-  ReplyDiskImage(command, "drive_a", FloppyGetImage(kFloppyDriveA));
-  ReplyDiskImage(command, "drive_b", FloppyGetImage(kFloppyDriveB));
-  ReplyDiskImage(command, "drive_c", HardDiskGetImage(kHardDiskC));
-  ReplyDiskImage(command, "drive_d", HardDiskGetImage(kHardDiskD));
+  ReplyDiskImage(command, "fd1", FloppyGetImage(kFloppyDriveA));
+  ReplyDiskImage(command, "fd2", FloppyGetImage(kFloppyDriveB));
+  ReplyDiskImage(command, "hd1", HardDiskGetImage(kHardDisk1));
+  ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
       Y_LOG_UINT("vms", g_vms.count));
@@ -774,6 +778,14 @@ static void SetPCSpeakerFrequency(
   SpeakerSetFrequency(frequency_hz);
 }
 
+// The floppy drives the machine has: two, or one for a VM whose vm.cfg does
+// not name floppy disk 2 - the BIOS's switches then report one, and DOS's B:
+// is drive A by another name. Without a VM, the built-in floppy's machine
+// has two, the one dos-boot measures.
+static uint8_t FloppyDrives(void) {
+  return g_has_vm && !g_vm.present[kVMDriveFD2] ? 1 : kFloppyDrives;
+}
+
 static bool InitVM(void) {
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_vm_log_config;
@@ -781,7 +793,7 @@ static bool InitVM(void) {
   config->physical_memory = g_guest_ram;
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
-  config->floppy_drives = kFloppyDrives;
+  config->floppy_drives = FloppyDrives();
   config->video_text_font.glyphs = &kFont4x10[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -1114,11 +1126,9 @@ static void PowerOffVM(void) {
 static bool CanPowerOff(void) { return g_has_vm; }
 
 static const char* const kDriveNames[kFloppyDrives] = {
-    [kFloppyDriveA] = "a",
-    [kFloppyDriveB] = "b",
+    [kFloppyDriveA] = "fd1",
+    [kFloppyDriveB] = "fd2",
 };
-
-static char DriveLetter(FloppyDrive drive) { return (char)('A' + drive); }
 
 // Take the disk out of a floppy drive, and say so.
 // Save what a floppy drive now holds to the VM's `vm.cfg`, so the next start
@@ -1130,18 +1140,18 @@ static void SaveDrive(FloppyDrive drive) {
   const DiskImage* image = FloppyGetImage(drive);
   const char* path = image->status == kDiskImageOpen ? image->path : "";
   char problem[kVMProblemLength + 1];
-  if (!VMConfigSaveDrive(&g_vm, kVMDriveA + drive, path, problem)) {
+  if (!VMConfigSaveDrive(&g_vm, kVMDriveFD1 + drive, path, problem)) {
     char message[kTextColumns + 1];
     snprintf(
-        message, sizeof(message), "Could not save drive %c: %.50s",
-        DriveLetter(drive), problem);
+        message, sizeof(message), "Could not save %s: %.50s",
+        kVMDriveLabels[drive], problem);
     StatusBarPostMessage(message);
     SYSTEM_WARN(
         "drive_not_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
         Y_LOG_STRING("problem", problem));
     return;
   }
-  FSCopyPath(path, g_vm.drives[kVMDriveA + drive]);
+  FSCopyPath(path, g_vm.drives[kVMDriveFD1 + drive]);
   SYSTEM_INFO(
       "drive_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
       Y_LOG_STRING("path", path));
@@ -1151,8 +1161,8 @@ static void EjectDrive(FloppyDrive drive) {
   FloppyEject(&g_platform.fdc, drive);
   char message[kTextColumns + 1];
   snprintf(
-      message, sizeof(message), "Ejected the disk from drive %c",
-      DriveLetter(drive));
+      message, sizeof(message), "Ejected the disk from %s",
+      kVMDriveLabels[drive]);
   StatusBarPostMessage(message);
   DISK_INFO("ejected", Y_LOG_STRING("drive", kDriveNames[drive]));
   SaveDrive(drive);
@@ -1168,8 +1178,8 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
   const FloppyDrive holding = FloppyDriveHolding(path);
   if (holding != kFloppyDrives) {
     snprintf(
-        message, sizeof(message), "%s is already in drive %c", name,
-        DriveLetter(holding));
+        message, sizeof(message), "%s is already in %s", name,
+        kVMDriveLabels[holding]);
     StatusBarPostMessage(message);
     DISK_WARN(
         "insert_failed", Y_LOG_STRING("drive", kDriveNames[drive]),
@@ -1180,8 +1190,8 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
       FloppyInsertImage(&g_platform.fdc, drive, path);
   if (status == kDiskImageOpen) {
     snprintf(
-        message, sizeof(message), "Inserted %s in drive %c", name,
-        DriveLetter(drive));
+        message, sizeof(message), "Inserted %s in %s", name,
+        kVMDriveLabels[drive]);
     DISK_INFO(
         "inserted", Y_LOG_STRING("drive", kDriveNames[drive]),
         Y_LOG_STRING("path", path));
@@ -1483,15 +1493,16 @@ static __noinline void StopSharing(void) {
 }
 
 // After Manage VMs has changed the card, read its VMs afresh, and the
-// settings, and show Manage VMs again with the VM named name chosen.
-static __noinline void ShowManagedVMs(const char* name) {
+// settings, and show Manage VMs again with the VM named name chosen - and
+// with show_vm, its page.
+static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
   // name may be in the list read over.
   char chosen[kVMNameLength + 1];
   snprintf(chosen, sizeof(chosen), "%s", name);
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   ReadSettings(&g_settings, &highlighted);
-  MenuShowManagedVMs(chosen);
+  MenuShowManagedVMs(chosen, show_vm);
 }
 
 // Show why Manage VMs could not do something, and log it.
@@ -1508,11 +1519,11 @@ static __noinline void RenameVM(void) {
   char problem[kVMProblemLength + 1];
   const VMFolderResult result =
       VMFolderRename(&g_vms, &vm, MenuTypedName(), &renamed, problem);
-  if (result == kVMFolderBadName) {
+  if (result == kVMFolderRefused) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name);
+  ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name, false);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
         "vm_renamed", Y_LOG_STRING("from", vm.name),
@@ -1545,11 +1556,11 @@ static __noinline void CloneVM(void) {
       VMFolderClone(&vm, MenuTypedName(), &transfer, &copy, problem);
   // Left as the guest would find RAM at power on, whatever it held.
   memset(g_guest_ram, 0, kCopyBufferSize);
-  if (result == kVMFolderBadName) {
+  if (result == kVMFolderRefused) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name);
+  ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name, false);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
         "vm_cloned", Y_LOG_STRING("from", vm.name),
@@ -1562,8 +1573,8 @@ static __noinline void CloneVM(void) {
 }
 
 static __noinline void CreateVM(void) {
-  VMFolderNew vm;
-  MenuNewVM(&vm);
+  VMFolderDrives drives;
+  MenuFormDrives(&drives);
   VMEntry created;
   char problem[kVMProblemLength + 1];
   const uint64_t start_us = time_us_64();
@@ -1574,19 +1585,20 @@ static __noinline void CreateVM(void) {
       .progress = ShowCopyProgress,
   };
   const VMFolderResult result =
-      VMFolderCreate(&vm, &transfer, &created, problem);
+      VMFolderCreate(MenuTypedName(), &drives, &transfer, &created, problem);
   memset(g_guest_ram, 0, kCopyBufferSize);
-  if (result == kVMFolderBadName) {
+  if (result == kVMFolderRefused) {
     MenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(created.name);
+  ShowManagedVMs(created.name, false);
   if (result == kVMFolderDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_BOOL("blank_a", vm.blank[kVMDriveA]),
-        Y_LOG_BOOL("blank_b", vm.blank[kVMDriveB]),
-        Y_LOG_BOOL("blank_c", vm.blank[kVMDriveC]),
+        Y_LOG_BOOL("blank_fd1", drives.blank[kVMDriveFD1]),
+        Y_LOG_BOOL("blank_fd2", drives.blank[kVMDriveFD2]),
+        Y_LOG_BOOL("blank_hd1", drives.blank[kVMDriveHD1]),
+        Y_LOG_BOOL("blank_hd2", drives.blank[kVMDriveHD2]),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
@@ -1597,12 +1609,36 @@ static __noinline void CreateVM(void) {
   }
 }
 
+static __noinline void EditVM(void) {
+  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  VMFolderDrives drives;
+  MenuFormDrives(&drives);
+  char problem[kVMProblemLength + 1];
+  FSTransfer transfer = {
+      .buffer = g_guest_ram,
+      .buffer_size = kCopyBufferSize,
+      .progress = ShowCopyProgress,
+  };
+  const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
+  memset(g_guest_ram, 0, kCopyBufferSize);
+  if (result == kVMFolderRefused) {
+    MenuSetProblem(problem);
+    return;
+  }
+  ShowManagedVMs(vm.name, true);
+  if (result == kVMFolderDone) {
+    SYSTEM_INFO("vm_edited", Y_LOG_STRING("name", vm.name));
+  } else {
+    ShowManageProblem("vm_not_edited", &vm, problem);
+  }
+}
+
 static __noinline void DeleteVM(void) {
   const VMEntry vm = g_vms.vms[MenuManagedVM()];
   char problem[kVMProblemLength + 1];
   const bool deleted = VMFolderDelete(&vm, problem);
   // Gone from the list, it leaves the first VM chosen.
-  ShowManagedVMs(vm.name);
+  ShowManagedVMs(vm.name, false);
   if (deleted) {
     SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
   } else {
@@ -1690,6 +1726,9 @@ static __noinline void ChooseVM(void) {
         case kMenuActionCreateVM:
           CreateVM();
           break;
+        case kMenuActionEditVM:
+          EditVM();
+          break;
         default:
           break;
       }
@@ -1741,8 +1780,8 @@ static __noinline void OpenDrives(void) {
           char name[kDiskImageNameLength + 1];
           DiskImageName(paths[drive], name);
           snprintf(
-              message, sizeof(message), "Drive %c: %s is already in drive %c",
-              (char)('A' + drive), name, (char)('A' + earlier));
+              message, sizeof(message), "%s: %s is already in %s",
+              kVMDriveLabels[drive], name, kVMDriveLabels[earlier]);
           StatusBarPostMessage(message);
           paths[drive] = "";
         }
@@ -1750,10 +1789,10 @@ static __noinline void OpenDrives(void) {
     }
   }
   DiskImageStatus opened[kVMDrives];
-  FloppyOpen(&paths[kVMDriveA], !g_has_vm, &opened[kVMDriveA]);
-  HardDiskOpen(&paths[kVMDriveC]);
-  opened[kVMDriveC] = HardDiskGetImage(kHardDiskC)->status;
-  opened[kVMDriveD] = HardDiskGetImage(kHardDiskD)->status;
+  FloppyOpen(&paths[kVMDriveFD1], !g_has_vm, &opened[kVMDriveFD1]);
+  HardDiskOpen(&paths[kVMDriveHD1]);
+  opened[kVMDriveHD1] = HardDiskGetImage(kHardDisk1)->status;
+  opened[kVMDriveHD2] = HardDiskGetImage(kHardDisk2)->status;
   if (!g_has_vm) {
     return;
   }
@@ -1764,8 +1803,8 @@ static __noinline void OpenDrives(void) {
     char name[kDiskImageNameLength + 1];
     DiskImageName(paths[drive], name);
     snprintf(
-        message, sizeof(message), "Drive %c: could not open %s: %s",
-        (char)('A' + drive), name, DiskImageDescribeStatus(opened[drive]));
+        message, sizeof(message), "%s: could not open %s: %s",
+        kVMDriveLabels[drive], name, DiskImageDescribeStatus(opened[drive]));
     StatusBarPostMessage(message);
     DISK_WARN(
         "open_failed", Y_LOG_UINT("drive", drive),
@@ -1838,6 +1877,7 @@ int main(void) {
   const MenuConfig menu_config = {
       .describe_status = DescribeStatus,
       .reset = ResetVM,
+      .floppy_drives = FloppyDrives,
       .power_off = PowerOffVM,
       .can_power_off = CanPowerOff,
       .redraw_guest = RedrawGuest,

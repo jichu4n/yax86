@@ -31,7 +31,7 @@ bool FSSamePath(const char* a, const char* b);
 // Whether path is a file or folder inside folder, at any depth.
 bool FSInFolder(const char* path, const char* folder);
 
-// The folder a path is in: "yax86/vm/dos330" for "yax86/vm/dos330/hdd.img",
+// The folder a path is in: "yax86/vm/dos330" for "yax86/vm/dos330/hd1.img",
 // "" for a file at the root.
 void FSFolderOf(const char* path, char folder[kFSMaxPath + 1]);
 

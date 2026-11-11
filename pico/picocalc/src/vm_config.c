@@ -15,11 +15,25 @@ static const char kConfigFile[] = "vm.cfg";
 static const char kSettingsPath[] = "yax86/yax86.cfg";
 static const char kBootDefaultKey[] = "boot_default";
 
+const char* const kVMDriveLabels[kVMDrives] = {
+    [kVMDriveFD1] = "FD1",
+    [kVMDriveFD2] = "FD2",
+    [kVMDriveHD1] = "HD1",
+    [kVMDriveHD2] = "HD2",
+};
+
+const char* const kVMDriveNames[kVMDrives] = {
+    [kVMDriveFD1] = "Floppy disk 1",
+    [kVMDriveFD2] = "Floppy disk 2",
+    [kVMDriveHD1] = "Hard disk 1",
+    [kVMDriveHD2] = "Hard disk 2",
+};
+
 static const char* const kDriveKeys[kVMDrives] = {
-    [kVMDriveA] = "drive_a",
-    [kVMDriveB] = "drive_b",
-    [kVMDriveC] = "drive_c",
-    [kVMDriveD] = "drive_d",
+    [kVMDriveFD1] = "fd1",
+    [kVMDriveFD2] = "fd2",
+    [kVMDriveHD1] = "hd1",
+    [kVMDriveHD2] = "hd2",
 };
 
 // Add a VM where it belongs, keeping the list sorted by name.
@@ -104,6 +118,7 @@ static bool TakeVMPair(
     snprintf(problem, kVMProblemLength + 1, "no setting %s", key);
     return false;
   }
+  config->present[drive] = true;
   if (value[0] == '\0') {
     config->drives[drive][0] = '\0';
   } else if (!FSResolvePath(reading->folder, value, config->drives[drive])) {
@@ -119,6 +134,7 @@ bool VMConfigRead(
   config->entry = *vm;
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     config->drives[drive][0] = '\0';
+    config->present[drive] = false;
   }
   VMReading reading = {.config = config};
   FSFolderOf(vm->path, reading.folder);
@@ -196,7 +212,7 @@ bool VMConfigSaveDrive(
   return ConfigFileUpdate(config->entry.path, &setting, 1, problem);
 }
 
-bool VMConfigCreate(
+bool VMConfigSaveDrives(
     const VMEntry* vm, const char* const drives[kVMDrives],
     char problem[kVMProblemLength + 1]) {
   // Kept off the stack, with ConfigFileUpdate() under them.
@@ -206,14 +222,14 @@ bool VMConfigCreate(
   ConfigFileSetting settings[kVMDrives];
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     values[drive][0] = '\0';
-    if (drives[drive][0] != '\0' &&
+    if (drives[drive] != NULL && drives[drive][0] != '\0' &&
         !FSRelativePath(folder, drives[drive], values[drive])) {
       snprintf(
           problem, kVMProblemLength + 1, "A disk's path would be too long");
       return false;
     }
     settings[drive].key = kDriveKeys[drive];
-    settings[drive].value = values[drive];
+    settings[drive].value = drives[drive] != NULL ? values[drive] : NULL;
   }
   return ConfigFileUpdate(vm->path, settings, kVMDrives, problem);
 }
