@@ -46,6 +46,21 @@ TEST_F(DMATransferTest, MemoryReadTransfer) {
   EXPECT_EQ(g_data_to_device, 0xCD);
 }
 
+TEST_F(DMATransferTest, VerifyTransferTakesTheDeviceByteAndWritesNothing) {
+  SetUpChannel2ForTransfer(Y_DMA_MODE_TRANSFER_TYPE_VERIFY, 2);
+  g_data_from_device = 0xAB;
+
+  YDMATransferByte(&dma_, 2);
+  YDMATransferByte(&dma_, 2);
+
+  // The device saw both bytes taken, as it would a transfer to memory.
+  EXPECT_EQ(g_device_reads, 2);
+  EXPECT_EQ(g_mock_memory[0x011234], 0x00);
+  EXPECT_EQ(g_mock_memory[0x011235], 0x00);
+  // And the count ran out as for any transfer.
+  EXPECT_EQ(dma_.status_register, (1 << 2));
+}
+
 TEST_F(DMATransferTest, AddressDecrement) {
   // Arrange: Configure Ch 2 for a memory write with address decrement.
   SetUpChannel2ForTransfer(
