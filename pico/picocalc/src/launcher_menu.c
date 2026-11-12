@@ -35,9 +35,6 @@ typedef enum ListPage {
   // g_new_drive.
   kListPageNew,
   kListPageNewDrive,
-  // Settings, from the list, and Font, from Settings: the 4x10 fonts.
-  kListPageSettings,
-  kListPageFont,
   // The browser, finding an image to put on USB or for a new VM's drive.
   kListPageBrowse,
 } ListPage;
@@ -54,8 +51,6 @@ static const char* const kPageNames[] = {
     [kListPageCopying] = "vm_copying",
     [kListPageNew] = "new_vm",
     [kListPageNewDrive] = "new_vm_drive",
-    [kListPageSettings] = "settings",
-    [kListPageFont] = "font",
     [kListPageBrowse] = "browse",
 };
 
@@ -160,10 +155,6 @@ static const UIBoxItem kNewVMRow = {"New VM", true};
 static const UIBoxItem kManageRow = {"Manage VMs", true};
 static const UIBoxItem kUSBRow = {"USB disk mode", true};
 static const UIBoxItem kSettingsRow = {"Settings", true};
-static const UIBoxItem kSettingsItems[] = {{"Font", true}};
-enum {
-  kSettingsItemCount = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
-};
 
 static ListPage g_page;
 static uint8_t g_chosen;
@@ -177,7 +168,6 @@ static uint8_t g_list_top;
 // highlighted one starts by itself, and why the last chosen did not.
 static const VMList* g_vms;
 static uint8_t g_countdown;
-static Font4x10 g_font = kFont4x10Default;
 // What the browser is finding an image for: an image of either kind to put
 // on USB, or an image for a new VM's drive.
 typedef enum BrowsePurpose {
@@ -239,14 +229,7 @@ void LauncherMenuOpen(const VMList* list, uint8_t highlighted) {
 
 uint8_t LauncherMenuChosenVM(void) { return g_chosen; }
 
-Font4x10 LauncherMenuChosenFont(void) { return g_font; }
-
-void LauncherMenuSetFont(Font4x10 font) {
-  if (font != g_font) {
-    g_font = font;
-    g_dirty = true;
-  }
-}
+void LauncherMenuResume(void) { g_dirty = true; }
 
 void LauncherMenuShowSharing(void) { ShowPage(kListPageSharing, 0); }
 
@@ -375,10 +358,6 @@ static uint8_t PageItemCount(void) {
       return (uint8_t)(kNewItemCount - FormFirstItem());
     case kListPageNewDrive:
       return DriveChoiceRow(kNewDriveItemCount);
-    case kListPageSettings:
-      return kSettingsItemCount;
-    case kListPageFont:
-      return kFont4x10Count;
     case kListPageVM:
       return kVMItemCount;
     case kListPageDelete:
@@ -680,13 +659,6 @@ static LauncherMenuAction Back(void) {
     case kListPageNewDrive:
       ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
       break;
-    case kListPageSettings:
-      ShowPage(kListPageVMs, SettingsItemIndex());
-      ScrollToChosen();
-      break;
-    case kListPageFont:
-      ShowPage(kListPageSettings, 0);
-      break;
   }
   return kLauncherMenuActionNone;
 }
@@ -729,8 +701,7 @@ static LauncherMenuAction Choose(void) {
       return OpenEntry();
     case kListPageVMs:
       if (g_chosen == SettingsItemIndex()) {
-        ShowPage(kListPageSettings, 0);
-        return kLauncherMenuActionNone;
+        return kLauncherMenuActionOpenSettings;
       }
       if (g_chosen == USBItemIndex()) {
         ShowPage(kListPageUSB, kUSBCard);
@@ -741,13 +712,6 @@ static LauncherMenuAction Choose(void) {
         return kLauncherMenuActionNone;
       }
       return kLauncherMenuActionVMChosen;
-    case kListPageSettings:
-      ShowPage(kListPageFont, g_font);
-      return kLauncherMenuActionNone;
-    case kListPageFont:
-      g_font = (Font4x10)g_chosen;
-      ShowPage(kListPageSettings, 0);
-      return kLauncherMenuActionFontChosen;
     case kListPageManage:
       if (g_chosen == g_vms->count) {
         StartNewVM();
@@ -1134,14 +1098,6 @@ static void DrawNewDrivePage(DisplayMenu* menu) {
       menu, kVMDriveNames[g_new_drive], NULL, 0, items, count, g_chosen, true);
 }
 
-static void DrawFontPage(DisplayMenu* menu) {
-  UIBoxItem items[kFont4x10Count];
-  for (uint8_t i = 0; i < kFont4x10Count; ++i) {
-    items[i] = (UIBoxItem){Font4x10Label((Font4x10)i), false};
-  }
-  UIPageDrawItems(menu, "Font", NULL, 0, items, kFont4x10Count, g_chosen, true);
-}
-
 // The card while it is on USB: who has it, and how much has moved.
 static void DrawSharingPage(DisplayMenu* menu) {
   const UsbDiskStats stats = UsbDiskGetStats();
@@ -1236,14 +1192,6 @@ void LauncherMenuDraw(uint64_t now_us) {
       break;
     case kListPageNewDrive:
       DrawNewDrivePage(menu);
-      break;
-    case kListPageSettings:
-      UIPageDrawItems(
-          menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
-          g_chosen, true);
-      break;
-    case kListPageFont:
-      DrawFontPage(menu);
       break;
   }
   // Every page is drawn the list's size, so the box never changes size, and

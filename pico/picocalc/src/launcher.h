@@ -1,5 +1,6 @@
 // The list of VMs at power on, and what can be done from it: starting a VM,
-// managing VMs, sharing the card or an image over USB, and choosing a font.
+// managing VMs, sharing the card or an image over USB, and opening Settings
+// with the card's settings, which the launcher holds.
 // main.c runs the list's loop, answering commands, updating the status rows
 // and drawing the menu, and the launcher decides what the list does: which
 // VM starts, when the countdown ends, and what a key leads to.
@@ -47,8 +48,8 @@ const Settings* LauncherSettings(void);
 // and either take a VM at once into *vm or show the list.
 LauncherStartResult LauncherStart(VMConfig* vm);
 
-// The list and every page reached from it, as one screen. Its keys stop
-// the countdown, and its time runs it.
+// The list and the pages reached from it other than Settings, as one screen.
+// Its keys stop the countdown, and its time runs it.
 extern const Screen kLauncherScreen;
 
 // Take the VM chosen into *vm, if its configuration reads. Returns false,
