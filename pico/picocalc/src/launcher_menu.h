@@ -1,14 +1,14 @@
-// The list of VMs at power on, and the pages reached from it, drawn as a box
-// the size of the list. Up and Down move, Enter or Space chooses, and Esc or
-// Backspace goes back a page, though no further than the list: nothing
-// closes it but starting a VM.
+// The list of VMs at power on, drawn as a box the size of the list. Up and
+// Down move, and Enter or Space chooses; Esc and Backspace go nowhere, since
+// nothing closes it but starting a VM.
 //
-// Under the VMs are three more rows: Manage VMs, from which VMs are made in
-// yax86/vm, and renamed, cloned and deleted; USB disk mode, launcher_usb.h's,
-// from which the SD card or an image is shared over USB; and Settings,
-// launcher_settings.h's, which chooses the 4x10 font.
+// Under the VMs are three more rows, each opening a page of its own: Manage
+// VMs, launcher_manage.h's, from which VMs are made in yax86/vm, and renamed,
+// cloned and deleted; USB disk mode, launcher_usb.h's, from which the SD card
+// or an image is shared over USB; and Settings, launcher_settings.h's, which
+// chooses the 4x10 font.
 //
-// This holds the pages' state and draws them; what is chosen on them is
+// This holds the list's state and draws it; what is chosen on it is
 // launcher.c's to carry out, from the actions LauncherMenuHandleKey()
 // returns.
 #ifndef YAX86_PICOCALC_LAUNCHER_MENU_H
@@ -17,11 +17,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "disk_image.h"
-#include "font_4x10.h"
 #include "southbridge.h"
 #include "vm_config.h"
-#include "vm_folder.h"
 
 // What a key did on the list.
 typedef enum LauncherMenuAction {
@@ -29,25 +26,11 @@ typedef enum LauncherMenuAction {
   kLauncherMenuActionNone = 0,
   // A VM was chosen from the list: see LauncherMenuChosenVM().
   kLauncherMenuActionVMChosen,
-  // USB disk mode was chosen from the list: see launcher_usb.h. Show the list
-  // again after it with LauncherMenuShowUSBRow().
+  // A row under the VMs was chosen. Show the list again after what it opens
+  // with LauncherMenuShowManageRow(), LauncherMenuShowUSBRow() or
+  // LauncherMenuShowSettingsRow().
+  kLauncherMenuActionOpenManage,
   kLauncherMenuActionOpenUSB,
-  // From Manage VMs: rename the VM LauncherMenuManagedVM() says to
-  // LauncherMenuTypedName(), clone it as that name, or delete it. Then show
-  // Manage VMs again with LauncherMenuShowManagedVMs(), or for a name that
-  // will not do, LauncherSetProblem() alone, which leaves the name to be
-  // typed again.
-  kLauncherMenuActionRenameVM,
-  kLauncherMenuActionCloneVM,
-  kLauncherMenuActionDeleteVM,
-  // From Manage VMs' New VM: make the VM named LauncherMenuTypedName() with
-  // the drives LauncherMenuFormDrives() describes; and from a VM's Edit
-  // drives, give LauncherMenuManagedVM() those drives. Then as for a rename -
-  // for an edit, showing the VM's page with LauncherMenuShowManagedVMs().
-  kLauncherMenuActionCreateVM,
-  kLauncherMenuActionEditVM,
-  // Settings was chosen from the list: see launcher_settings.h. Show the list
-  // again after it with LauncherMenuShowSettingsRow().
   kLauncherMenuActionOpenSettings,
 } LauncherMenuAction;
 
@@ -63,31 +46,11 @@ bool LauncherMenuIsOpen(void);
 // The index in the list of the VM chosen, or highlighted.
 uint8_t LauncherMenuChosenVM(void);
 
-// Show the list again with USB disk mode's row chosen, when USB disk mode
+// Show the list again with a row under the VMs chosen, when what it opened
 // is left.
+void LauncherMenuShowManageRow(void);
 void LauncherMenuShowUSBRow(void);
-
-// Show the list again with Settings' row chosen, when Settings is left.
 void LauncherMenuShowSettingsRow(void);
-
-// The index in the list of the VM Manage VMs is acting on, and the name typed
-// for it.
-uint8_t LauncherMenuManagedVM(void);
-const char* LauncherMenuTypedName(void);
-
-// The drives filled in on the form, New VM's or Edit drives'. Its strings
-// are the list's, until the form is next shown.
-void LauncherMenuFormDrives(VMFolderDrives* drives);
-
-// Show Manage VMs, once the caller has read the list afresh, with the VM
-// named name chosen, or the first if it is not there - and with show_vm, the
-// VM's own page.
-void LauncherMenuShowManagedVMs(const char* name, bool show_vm);
-
-// Show how far a clone has been copied, or a new VM's blank hard disk
-// written, in KB: the first call shows the page, which takes no keys until
-// the caller shows another.
-void LauncherMenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb);
 
 // Show the seconds left before the highlighted VM starts by itself, or
 // stop showing them with 0.

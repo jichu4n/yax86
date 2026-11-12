@@ -78,6 +78,10 @@ const char* LauncherPageName(void);
 void LauncherSetProblem(const char* problem);
 bool LauncherClearProblem(void);
 
+// For Manage VMs, after it has changed the card: read the card's VMs and
+// settings afresh.
+void LauncherReadCard(void);
+
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the list with it highlighted.
 void LauncherLeaveStartNote(StartIntent intent, const char* name);
