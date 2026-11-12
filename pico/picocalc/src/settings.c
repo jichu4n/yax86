@@ -15,6 +15,10 @@ static bool TakeSettingsPair(
     const char* key, const char* value, void* context,
     char problem[kConfigFileProblemLength + 1]) {
   Settings* settings = context;
+  // Every pair as the file has it, before it is checked, so that the log
+  // shows what the settings were read from.
+  SYSTEM_INFO(
+      "settings_key", Y_LOG_STRING("key", key), Y_LOG_STRING("value", value));
   if (strcmp(key, kBootDefaultKey) == 0) {
     VMEntry entry;
     settings->boot_default[0] = '\0';
