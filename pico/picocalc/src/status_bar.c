@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+#include "pico/time.h"
 #include "vm_config.h"
 
 enum {
@@ -84,6 +85,10 @@ typedef struct ComposedFrom {
 
 static ComposedFrom g_composed_from;
 static bool g_composed;
+// Status rows composed that core 1 has not been handed yet, because it was
+// still drawing the last ones.
+static DisplayStatus g_status_rows;
+static bool g_status_rows_pending;
 
 void StatusBarPostMessage(const char* text) {
   if (g_message_count == kMessageQueueSize) {
@@ -312,4 +317,20 @@ bool StatusBarCompose(
   ComposeMessages(state, from.message, &rows->rows[kRowMessages]);
   ComposeMachine(state, from.lit, &rows->rows[kRowMachine]);
   return true;
+}
+
+void StatusBarOffer(const StatusBarState* state) {
+  if (StatusBarCompose(state, time_us_64(), &g_status_rows)) {
+    g_status_rows_pending = true;
+  }
+  if (!g_status_rows_pending) {
+    return;
+  }
+  DisplayStatus* rows = DisplayBeginStatus();
+  if (rows == NULL) {
+    return;
+  }
+  *rows = g_status_rows;
+  DisplayEndStatus();
+  g_status_rows_pending = false;
 }

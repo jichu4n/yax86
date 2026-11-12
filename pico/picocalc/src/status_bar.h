@@ -66,4 +66,8 @@ void StatusBarPostMessage(const char* text);
 bool StatusBarCompose(
     const StatusBarState* state, uint64_t now_us, DisplayStatus* rows);
 
+// Compose the status rows from state, and hand them to core 1 if they
+// changed, or are still waiting from the last time it was busy.
+void StatusBarOffer(const StatusBarState* state);
+
 #endif  // YAX86_PICOCALC_STATUS_BAR_H

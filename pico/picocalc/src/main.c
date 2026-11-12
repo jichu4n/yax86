@@ -35,6 +35,7 @@
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
 #include "keymap.h"
+#include "launcher.h"
 #include "menu.h"
 #include "pager.h"
 #include "pico/stdio_usb.h"
@@ -66,10 +67,6 @@ enum {
   // The SRAM guest memory has: conventional memory itself without the
   // PSRAM, and the frames it is paged through with it - see yax86_pico.h.
   kGuestRAMSize = kPicoGuestSRAMSize,
-  // The part of the guest's RAM a clone's files are copied through, before a
-  // VM starts and the RAM is the guest's: 64 of the card's blocks, which go to
-  // and from it a run at a time.
-  kCopyBufferSize = 32 * 1024,
 
   // Emulated cycles per pass of the run loop, about ten milliseconds of guest
   // time - the same batch pico/bench runs.
@@ -128,9 +125,6 @@ enum {
   // Written to g_fault_marker by the hard fault handler, for the start after
   // the reboot it makes - see isr_hardfault().
   kFaultMarker = 0xFA017ED0,
-  // Written to g_start_note's marker by a reset or a power off, for the
-  // start after the reboot - see LeaveStartNote().
-  kStartNoteMarker = 0x5747A27E,
   // How long the core voltage is given to settle before the clock is raised.
   kVoltageSettleUs = 10 * 1000,
 
@@ -151,7 +145,6 @@ enum {
   kCyclesPerRender = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 60,
 
   kMicrosecondsPerMillisecond = 1000,
-  kBytesPerKB = 1024,
   kMillisecondsPerSecond = 1000,
   kMicrosecondsPerSecond = 1000 * 1000,
   kMaxLagUs = kMaxLagMs * kMicrosecondsPerMillisecond,
@@ -222,10 +215,8 @@ typedef struct RuntimeStatus {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
-// The VMs on the card, the card's settings, and the VM started, if one was:
-// without one drive A holds the built-in floppy and no other drive has a disk.
-static VMList g_vms;
-static VMSettings g_settings;
+// The VM started, if one was: without one drive A holds the built-in floppy
+// and no other drive has a disk.
 static VMConfig g_vm;
 static bool g_has_vm;
 static RuntimeStatus g_status;
@@ -233,10 +224,6 @@ static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
 // them is that much slower for.
 static uint64_t g_command_us;
-// Status rows composed that core 1 has not been handed yet, because it was
-// still drawing the last ones.
-static DisplayStatus g_status_rows;
-static bool g_status_rows_pending;
 
 // How far the VM has got in emulated time, and what pacing it against
 // real time has cost.
@@ -279,27 +266,6 @@ static bool g_after_fault;
 // no guest RAM to read.
 static bool g_paging;
 static bool g_vm_up;
-
-// What the start after a reboot is to do, left by the menu's Reset and Power
-// off.
-typedef enum StartIntent {
-  // Start the VM again at once, without the list.
-  kStartIntentRestart = 0,
-  // Show the list, with the VM highlighted, and wait for a key.
-  kStartIntentList,
-} StartIntent;
-
-typedef struct StartNote {
-  // kStartNoteMarker while the note is to be acted on.
-  uint32_t marker;
-  StartIntent intent;
-  // The VM's name.
-  char name[kVMNameLength + 1];
-} StartNote;
-
-// Deliberately not zeroed at startup, so that it survives the reboot - see
-// LeaveStartNote().
-static StartNote __uninitialized_ram(g_start_note);
 
 // ============================================================================
 // Reporting
@@ -589,8 +555,6 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
   }
 }
 
-static void OfferStatusRows(const StatusBarState* state);
-
 // Compose the status rows from the VM's state.
 static uint8_t FloppyDrives(void);
 
@@ -607,25 +571,7 @@ static void UpdateStatusRows(void) {
   state.battery = SouthbridgeGetBattery();
   state.hint = MenuIsOpen() ? MenuHint() : NULL;
   WarnOfLowBattery(state.battery);
-  OfferStatusRows(&state);
-}
-
-// Compose the status rows from state, and hand them to core 1 if they
-// changed, or are still waiting from the last time it was busy.
-static void OfferStatusRows(const StatusBarState* state) {
-  if (StatusBarCompose(state, time_us_64(), &g_status_rows)) {
-    g_status_rows_pending = true;
-  }
-  if (!g_status_rows_pending) {
-    return;
-  }
-  DisplayStatus* rows = DisplayBeginStatus();
-  if (rows == NULL) {
-    return;
-  }
-  *rows = g_status_rows;
-  DisplayEndStatus();
-  g_status_rows_pending = false;
+  StatusBarOffer(&state);
 }
 
 // How far the boot has got, and what it took: the fields of a boot_stage
@@ -713,7 +659,7 @@ static __noinline void ReplyReportBoard(const Command* command) {
   const DisplayStats display = DisplayGetStats();
   REPLY_GROUP(
       command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
-      Y_LOG_STRING("font", Font4x10Name(g_settings.font)),
+      Y_LOG_STRING("font", Font4x10Name(LauncherSettings()->font)),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
       Y_LOG_UINT("pixels_drawn", display.pixels_drawn),
       Y_LOG_UINT("render_us", display.render_us),
@@ -729,7 +675,7 @@ static __noinline void ReplyReportDevices(const Command* command) {
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
-      Y_LOG_UINT("vms", g_vms.count));
+      Y_LOG_UINT("vms", LauncherVMs()->count));
   const UsbDiskStats usb = UsbDiskGetStats();
   REPLY_GROUP(
       command, "usb", Y_LOG_BOOL("sharing", usb.sharing),
@@ -831,7 +777,8 @@ static bool InitVM(void) {
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->floppy_drives = FloppyDrives();
-  config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings.font))[0][0];
+  config->video_text_font.glyphs =
+      &(*Font4x10Glyphs(LauncherSettings()->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
   config->set_pc_speaker_frequency = SetPCSpeakerFrequency;
@@ -1107,41 +1054,6 @@ static bool RedrawGuest(void) {
   return !YAX86_PICOCALC_DRAW_SCREEN || DisplayOfferFrame(&g_platform.video);
 }
 
-// Restart the board, leaving a note for the start after it, which takes it
-// - see TakeStartNote(). Every start, whether from power on, a reset or a power
-// off, begins from the same state. Nothing is lost: the keyboard controller
-// keeps its power, and the guest's disks have every sector it wrote on the
-// card.
-//
-// The note is in RAM that startup does not clear, as g_overclock_marker is: it
-// survives the reboot but not a power cycle. It is only ever set across the
-// reboot, and the start after takes it whatever it does next, so a later
-// reboot - picotool's, or the power button's - never finds one left from
-// before.
-static void LeaveStartNote(StartIntent intent) {
-  g_start_note.intent = intent;
-  memcpy(g_start_note.name, g_vm.entry.name, sizeof(g_start_note.name));
-  g_start_note.marker = kStartNoteMarker;
-  watchdog_reboot(0, 0, 0);
-  for (;;) {
-    tight_loop_contents();
-  }
-}
-
-// Take the note a reset or power off left, if one did: returns whether there
-// was one.
-static bool TakeStartNote(StartNote* note) {
-  if (g_start_note.marker != kStartNoteMarker) {
-    return false;
-  }
-  g_start_note.marker = 0;
-  note->intent = g_start_note.intent;
-  // The name may have been left unterminated by RAM it never wrote.
-  g_start_note.name[kVMNameLength] = '\0';
-  memcpy(note->name, g_start_note.name, sizeof(note->name));
-  return true;
-}
-
 // The VM again from power on, with the disks it has now, without the list.
 // Without a VM there is no card, and a plain reboot boots the built-in floppy
 // again.
@@ -1153,13 +1065,13 @@ static void ResetVM(void) {
       tight_loop_contents();
     }
   }
-  LeaveStartNote(kStartIntentRestart);
+  LauncherLeaveStartNote(kStartIntentRestart, g_vm.entry.name);
 }
 
 // Back to the list, which waits for a key with the VM left highlighted.
 static void PowerOffVM(void) {
   SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm.entry.path));
-  LeaveStartNote(kStartIntentList);
+  LauncherLeaveStartNote(kStartIntentList, g_vm.entry.name);
 }
 
 // Whether there is a list to power off to: there is one only with a card, and
@@ -1398,312 +1310,6 @@ static void RunVM(bool vm_ready) {
 // Choosing a VM
 // ============================================================================
 
-// The status rows while the list of VMs shows: the list's keys, or why
-// a VM did not start, and the battery. There are no drives yet.
-static void UpdateChoosingRows(void) {
-  StatusBarState state = {0};
-  state.battery = SouthbridgeGetBattery();
-  state.hint = MenuHint();
-  state.problem = MenuProblem();
-  OfferStatusRows(&state);
-}
-
-// Make the VM named name the one to start at the next power on, if it is not
-// already. Writing the card only when it changes keeps a board that starts
-// its default every time from writing at all.
-static void SaveBootDefault(const char* name) {
-  if (strcasecmp(g_settings.boot_default, name) == 0) {
-    return;
-  }
-  char problem[kVMProblemLength + 1];
-  if (VMSettingsSaveBootDefault(name, problem)) {
-    snprintf(
-        g_settings.boot_default, sizeof(g_settings.boot_default), "%s", name);
-    SYSTEM_INFO("boot_default_saved", Y_LOG_STRING("name", name));
-    return;
-  }
-  char message[kTextColumns + 1];
-  snprintf(
-      message, sizeof(message), "Could not save boot_default: %.50s", problem);
-  StatusBarPostMessage(message);
-  SYSTEM_WARN("boot_default_not_saved", Y_LOG_STRING("problem", problem));
-}
-
-static __noinline bool TakeVM(uint8_t index) {
-  const VMEntry* vm = &g_vms.vms[index];
-  char problem[kVMProblemLength + 1];
-  if (VMConfigRead(vm, &g_vm, problem)) {
-    g_has_vm = true;
-    SYSTEM_INFO("vm_chosen", Y_LOG_STRING("path", vm->path));
-    SaveBootDefault(vm->name);
-    return true;
-  }
-  char message[kTextColumns + 1];
-  snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
-  MenuSetProblem(message);
-  SYSTEM_WARN(
-      "vm_config_problem", Y_LOG_STRING("path", vm->path),
-      Y_LOG_STRING("problem", problem));
-  return false;
-}
-
-// The card's settings, and the index of the default VM in the list.
-// Returns false, with the problem shown on the list, if the settings had one.
-static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
-  char problem[kVMProblemLength + 1];
-  bool read = VMSettingsRead(settings, problem);
-  DisplaySetFont(settings->font);
-  MenuSetFont(settings->font);
-  *highlighted = 0;
-  if (read && settings->boot_default[0] != '\0') {
-    // Past the list's end, the first is highlighted instead.
-    const uint8_t index = VMListFind(&g_vms, settings->boot_default);
-    if (index < kVMListMax) {
-      *highlighted = index;
-    }
-  }
-  if (!read) {
-    char message[kTextColumns + 1];
-    snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
-    MenuSetProblem(message);
-    SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
-  }
-  return read;
-}
-
-static __noinline void ChooseFont(void) {
-  const Font4x10 font = MenuChosenFont();
-  DisplaySetFont(font);
-  if (font == g_settings.font) {
-    return;
-  }
-  g_settings.font = font;
-  char problem[kVMProblemLength + 1];
-  if (VMSettingsSaveFont(font, problem)) {
-    SYSTEM_INFO("font_saved", Y_LOG_STRING("font", Font4x10Name(font)));
-    return;
-  }
-  char message[kTextColumns + 1];
-  snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
-  MenuSetProblem(message);
-  SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
-}
-
-// Share the SD card over USB: the card is unmounted first, as
-// nothing here may touch it while the computer has it.
-static void ShareCard(void) {
-  DiskImageUnmountCard();
-  UsbDiskShareCard();
-  MenuShowSharing();
-  SYSTEM_INFO("usb_card_shared");
-}
-
-// The disk image on USB, while one is, and its path.
-static DiskImage g_usb_image;
-static char g_usb_image_path[kFSMaxPath + 1];
-
-// Put the disk image chosen in the browser on USB, the card staying mounted
-// to read it through; or say why it could not be, staying in the browser.
-static __noinline void ShareImage(void) {
-  uint32_t size = 0;
-  FSCopyPath(MenuChosenImage(&size), g_usb_image_path);
-  const DiskImageStatus status =
-      DiskImageOpen(&g_usb_image, g_usb_image_path, size);
-  if (status != kDiskImageOpen) {
-    char name[kDiskImageNameLength + 1];
-    DiskImageName(g_usb_image_path, name);
-    char message[kTextColumns + 1];
-    snprintf(
-        message, sizeof(message), "Could not open %s: %s", name,
-        DiskImageDescribeStatus(status));
-    MenuSetProblem(message);
-    SYSTEM_WARN(
-        "usb_image_not_shared", Y_LOG_STRING("path", g_usb_image_path),
-        Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
-    return;
-  }
-  UsbDiskShareImage(&g_usb_image);
-  MenuShowSharing();
-  SYSTEM_INFO("usb_image_shared", Y_LOG_STRING("path", g_usb_image_path));
-}
-
-// Take the card or image back from USB and read the card afresh - the
-// computer may have added VMs, removed them, or changed the settings -
-// showing the list again without counting down. An image is closed, writing
-// back the sector it holds.
-static __noinline void StopSharing(void) {
-  const UsbDiskStats stats = UsbDiskGetStats();
-  UsbDiskStopSharing();
-  if (stats.image_path != NULL) {
-    DiskImageClose(&g_usb_image);
-  }
-  SYSTEM_INFO(
-      "usb_returned",
-      Y_LOG_STRING("image", stats.image_path != NULL ? stats.image_path : ""),
-      Y_LOG_BOOL("ejected", stats.ejected),
-      Y_LOG_UINT("blocks_read", stats.blocks_read),
-      Y_LOG_UINT("blocks_written", stats.blocks_written),
-      Y_LOG_UINT("errors", stats.errors));
-  VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  ReadSettings(&g_settings, &highlighted);
-  MenuChooseVMs(&g_vms, highlighted);
-}
-
-// After Manage VMs has changed the card, read its VMs afresh, and the
-// settings, and show Manage VMs again with the VM named name chosen - and
-// with show_vm, its page.
-static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
-  // name may be in the list read over.
-  char chosen[kVMNameLength + 1];
-  snprintf(chosen, sizeof(chosen), "%s", name);
-  VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  ReadSettings(&g_settings, &highlighted);
-  MenuShowManagedVMs(chosen, show_vm);
-}
-
-// Show why Manage VMs could not do something, and log it.
-static void ShowManageProblem(
-    const char* event, const VMEntry* vm, const char* problem) {
-  MenuSetProblem(problem);
-  SYSTEM_WARN(
-      event, Y_LOG_STRING("path", vm->path), Y_LOG_STRING("problem", problem));
-}
-
-static __noinline void RenameVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
-  VMEntry renamed;
-  char problem[kVMProblemLength + 1];
-  const VMFolderResult result =
-      VMFolderRename(&g_vms, &vm, MenuTypedName(), &renamed, problem);
-  if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name, false);
-  if (result == kVMFolderDone) {
-    SYSTEM_INFO(
-        "vm_renamed", Y_LOG_STRING("from", vm.name),
-        Y_LOG_STRING("to", renamed.name));
-  } else {
-    ShowManageProblem("vm_not_renamed", &vm, problem);
-  }
-}
-
-// Show how far a clone has come, at once: the main loop, which would draw it,
-// is waiting for the clone.
-static void ShowCopyProgress(uint64_t done, uint64_t total) {
-  MenuSetCopyProgress(
-      (uint32_t)(done / kBytesPerKB), (uint32_t)(total / kBytesPerKB));
-  UpdateChoosingRows();
-  MenuDraw(time_us_64());
-}
-
-static __noinline void CloneVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
-  VMEntry copy;
-  char problem[kVMProblemLength + 1];
-  const uint64_t start_us = time_us_64();
-  FSTransfer transfer = {
-      .buffer = g_guest_ram,
-      .buffer_size = kCopyBufferSize,
-      .progress = ShowCopyProgress,
-  };
-  const VMFolderResult result =
-      VMFolderClone(&vm, MenuTypedName(), &transfer, &copy, problem);
-  // Left as the guest would find RAM at power on, whatever it held.
-  memset(g_guest_ram, 0, kCopyBufferSize);
-  if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name, false);
-  if (result == kVMFolderDone) {
-    SYSTEM_INFO(
-        "vm_cloned", Y_LOG_STRING("from", vm.name),
-        Y_LOG_STRING("to", copy.name),
-        Y_LOG_UINT(
-            "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
-  } else {
-    ShowManageProblem("vm_not_cloned", &vm, problem);
-  }
-}
-
-static __noinline void CreateVM(void) {
-  VMFolderDrives drives;
-  MenuFormDrives(&drives);
-  VMEntry created;
-  char problem[kVMProblemLength + 1];
-  const uint64_t start_us = time_us_64();
-  // Blank disks are written through the guest's RAM, which is zeroed after.
-  FSTransfer transfer = {
-      .buffer = g_guest_ram,
-      .buffer_size = kCopyBufferSize,
-      .progress = ShowCopyProgress,
-  };
-  const VMFolderResult result =
-      VMFolderCreate(MenuTypedName(), &drives, &transfer, &created, problem);
-  memset(g_guest_ram, 0, kCopyBufferSize);
-  if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(created.name, false);
-  if (result == kVMFolderDone) {
-    SYSTEM_INFO(
-        "vm_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_BOOL("blank_fd1", drives.blank[kVMDriveFD1]),
-        Y_LOG_BOOL("blank_fd2", drives.blank[kVMDriveFD2]),
-        Y_LOG_BOOL("blank_hd1", drives.blank[kVMDriveHD1]),
-        Y_LOG_BOOL("blank_hd2", drives.blank[kVMDriveHD2]),
-        Y_LOG_UINT(
-            "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
-  } else {
-    MenuSetProblem(problem);
-    SYSTEM_WARN(
-        "vm_not_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_STRING("problem", problem));
-  }
-}
-
-static __noinline void EditVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
-  VMFolderDrives drives;
-  MenuFormDrives(&drives);
-  char problem[kVMProblemLength + 1];
-  FSTransfer transfer = {
-      .buffer = g_guest_ram,
-      .buffer_size = kCopyBufferSize,
-      .progress = ShowCopyProgress,
-  };
-  const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
-  memset(g_guest_ram, 0, kCopyBufferSize);
-  if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(vm.name, true);
-  if (result == kVMFolderDone) {
-    SYSTEM_INFO("vm_edited", Y_LOG_STRING("name", vm.name));
-  } else {
-    ShowManageProblem("vm_not_edited", &vm, problem);
-  }
-}
-
-static __noinline void DeleteVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
-  char problem[kVMProblemLength + 1];
-  const bool deleted = VMFolderDelete(&vm, problem);
-  // Gone from the list, it leaves the first VM chosen.
-  ShowManagedVMs(vm.name, false);
-  if (deleted) {
-    SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
-  } else {
-    ShowManageProblem("vm_not_deleted", &vm, problem);
-  }
-}
-
 // With a card, show the list of its VMs until one is chosen whose
 // configuration reads, or until the default starts by itself, the countdown
 // running until a key is pressed. Settings that ask for no wait start the
@@ -1719,35 +1325,15 @@ static __noinline void DeleteVM(void) {
 // with __noinline, so that only the one running has its locals on core 0's
 // stack - see PaintStacks().
 static __noinline void ChooseVM(void) {
-  StartNote note = {0};
-  const bool noted = TakeStartNote(&note);
-  VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  const bool settings_read = ReadSettings(&g_settings, &highlighted);
-  // Without a card there is nothing to choose, or to put on USB.
-  if (DiskImageMountCard() != kDiskImageOpen) {
-    return;
+  switch (LauncherStart(&g_vm)) {
+    case kLauncherTookVM:
+      g_has_vm = true;
+      return;
+    case kLauncherNoCard:
+      return;
+    case kLauncherShowsList:
+      break;
   }
-  if (noted) {
-    SYSTEM_INFO(
-        note.intent == kStartIntentRestart ? "restarting" : "powered_off",
-        Y_LOG_STRING("name", note.name));
-    const uint8_t index = VMListFind(&g_vms, note.name);
-    if (index < kVMListMax) {
-      highlighted = index;
-      if (note.intent == kStartIntentRestart && TakeVM(index)) {
-        return;
-      }
-    }
-  } else if (
-      settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
-      TakeVM(highlighted)) {
-    return;
-  }
-  MenuChooseVMs(&g_vms, highlighted);
-  const absolute_time_t start_at =
-      make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
-  bool counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
@@ -1757,65 +1343,22 @@ static __noinline void ChooseVM(void) {
     bool chosen = false;
     SouthbridgeKeyEvent key;
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      counting = false;
-      MenuSetCountdown(0);
-      switch (MenuHandleKey(key)) {
-        case kMenuActionVMChosen:
-          chosen = true;
-          break;
-        case kMenuActionShareCard:
-          ShareCard();
-          break;
-        case kMenuActionShareImage:
-          ShareImage();
-          break;
-        case kMenuActionStopSharing:
-          StopSharing();
-          break;
-        case kMenuActionFontChosen:
-          ChooseFont();
-          break;
-        case kMenuActionRenameVM:
-          RenameVM();
-          break;
-        case kMenuActionCloneVM:
-          CloneVM();
-          break;
-        case kMenuActionDeleteVM:
-          DeleteVM();
-          break;
-        case kMenuActionCreateVM:
-          CreateVM();
-          break;
-        case kMenuActionEditVM:
-          EditVM();
-          break;
-        default:
-          break;
-      }
+      chosen = LauncherHandleKey(key);
       // The keys for the page the key led to, at once rather than at the
       // next update.
-      UpdateChoosingRows();
+      LauncherUpdateRows();
     }
-    if (counting) {
-      const int64_t left_us =
-          absolute_time_diff_us(get_absolute_time(), start_at);
-      if (left_us <= 0) {
-        counting = false;
-        MenuSetCountdown(0);
-        chosen = true;
-      } else {
-        MenuSetCountdown((uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
-                                   kMicrosecondsPerSecond));
-      }
+    if (LauncherCountDown()) {
+      chosen = true;
     }
-    if (chosen && TakeVM(MenuChosenVM())) {
+    if (chosen && LauncherTakeChosen(&g_vm)) {
+      g_has_vm = true;
       MenuClose();
       return;
     }
     if (time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      UpdateChoosingRows();
+      LauncherUpdateRows();
     }
     MenuDraw(time_us_64());
     sleep_ms(kPausedPollMs);
