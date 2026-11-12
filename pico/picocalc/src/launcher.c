@@ -129,7 +129,9 @@ static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
 
 // The card's settings, and the index of the default VM in the list.
 // Returns false, with the problem shown on the list, if the settings had one.
-static bool ReadSettings(Settings* settings, uint8_t* highlighted) {
+// Kept out of line, so that its message is on core 0's stack only while it
+// runs rather than in the frames of the callers it would be inlined into.
+static __noinline bool ReadSettings(Settings* settings, uint8_t* highlighted) {
   char problem[kVMProblemLength + 1];
   bool read = SettingsRead(settings, problem);
   DisplaySetFont(settings->font);
@@ -146,7 +148,6 @@ static bool ReadSettings(Settings* settings, uint8_t* highlighted) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
     UIStatusSetProblem(message);
-    SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
   }
   return read;
 }

@@ -56,7 +56,8 @@ static bool TakeSettingsPair(
   return true;
 }
 
-bool SettingsRead(
+// SettingsRead(), but for logging its problem.
+static bool ReadFile(
     Settings* settings, char problem[kConfigFileProblemLength + 1]) {
   settings->boot_default[0] = '\0';
   settings->boot_delay = kSettingsDefaultBootDelay;
@@ -79,6 +80,15 @@ bool SettingsRead(
     return false;
   }
   return true;
+}
+
+bool SettingsRead(
+    Settings* settings, char problem[kConfigFileProblemLength + 1]) {
+  if (ReadFile(settings, problem)) {
+    return true;
+  }
+  SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
+  return false;
 }
 
 bool SettingsSaveBootDefault(
