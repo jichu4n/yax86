@@ -15356,11 +15356,10 @@ enum {
   // Maximum number of memory map entries.
   Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES = 16,
 
-  // How many decoded instructions the CPU is given room to keep: 512 entries,
-  // 12KB. A boot to the DOS prompt barely notices the size, since 256 entries
-  // already skip the decode on two thirds of its instructions. Programs that
-  // run longer do notice, because an interpreter's loop is larger than a
-  // boot's. See src/cpu/AGENTS.md.
+  // How many decoded instructions the CPU keeps so that it can skip decoding
+  // them again: 512 entries, 12KB. More entries help programs whose hot code
+  // is large, such as compilers and interpreters, and make little difference
+  // to booting DOS. The measurements are in src/cpu/AGENTS.md.
   Y_PLATFORM_DECODE_CACHE_ENTRIES = 512,
 
   // The memory map is indexed by page so that a lookup is a load rather than a
