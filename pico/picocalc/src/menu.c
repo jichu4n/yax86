@@ -28,9 +28,6 @@ enum {
   // The list rows, which with its edges fill the most rows a box can have.
   kListRows = kDisplayMenuMaxRows - 2,
 
-  // Box dimensions.
-  kNarrowColumns = kUIBoxNarrowColumns,
-  kWideColumns = kUIBoxWideColumns,
   // A label's column on the status page.
   kStatusLabelColumns = 9,
 
@@ -69,21 +66,36 @@ typedef enum MenuPage {
   kMenuPageCount,
 } MenuPage;
 
-// A menu page definition for table-driven dispatch.
+// What a page of the menu does, as kPageDefs gives it for each page. Each
+// callback acts on the page showing, and any left NULL does the default its
+// comment gives.
 typedef struct MenuPageDef {
+  // The page's name, as MenuPageName() gives it a host: name, or for a page
+  // whose name changes, what name_fn returns.
   const char* name;
-  const char* (*get_name)(void);
-  const char* (*get_hint)(void);
+  const char* (*name_fn)(void);
+  // What the status row says the keys do on the page: hint, or for a page
+  // whose keys change, what hint_fn returns. With neither, the keys move
+  // through the items, choose one, and go back.
   const char* hint;
-  uint8_t (*item_count)(void);
-  void (*draw)(DisplayMenu* menu);
-  MenuAction (*choose)(void);
-  MenuAction (*back)(void);
-  bool (*handle_key)(SouthbridgeKeyEvent event, MenuAction* action);
+  const char* (*hint_fn)(void);
+  // How many items the page has to move through. None without it.
+  uint8_t (*item_count_fn)(void);
+  // Draws the page into the menu's box.
+  void (*draw_fn)(DisplayMenu* menu);
+  // Called for Enter on the chosen item, and returns what the runtime is to
+  // do. Nothing without it.
+  MenuAction (*choose_fn)(void);
+  // Called for Esc and Backspace, to go back a page, and returns what the
+  // runtime is to do. Nothing without it: the page cannot be left that way.
+  MenuAction (*back_fn)(void);
+  // Called with each key pressed before the keys that move, choose and go
+  // back are looked at. Returns true if it took the key, with *action what
+  // the runtime is to do, and false to leave the key to them.
+  bool (*handle_key_fn)(SouthbridgeKeyEvent event, MenuAction* action);
 } MenuPageDef;
 
 static const MenuPageDef kPageDefs[kMenuPageCount];
-
 
 typedef enum MainItem {
   // The drives' items, in the order of FloppyDrive.
@@ -339,10 +351,6 @@ static void OnBrowseSetChosen(uint8_t chosen) {
   g_dirty = true;
 }
 
-static void OnBrowseSetDirty(void) {
-  g_dirty = true;
-}
-
 static void OnBrowseCloseMenu(void) {
   g_open = false;
 }
@@ -354,17 +362,16 @@ static void OnBrowseShowPage(uint8_t chosen) {
 void MenuInit(const MenuConfig* config) {
   g_config = *config;
   const MenuBrowseConfig browse_config = {
-      .drive = config->drive,
-      .insert_drive = config->insert_drive,
-      .show_browse_page = OnBrowseShowPage,
-      .on_selected_for_new_vm = OnBrowseSelectedForNewVM,
-      .on_selected_for_usb = OnBrowseSelectedForUSB,
-      .on_back_for_new_vm = OnBrowseBackForNewVM,
-      .on_back_for_usb = OnBrowseBackForUSB,
-      .on_back_for_drive = OnBrowseBackForDrive,
-      .set_chosen = OnBrowseSetChosen,
-      .set_dirty = OnBrowseSetDirty,
-      .close_menu = OnBrowseCloseMenu,
+      .drive_fn = config->drive,
+      .insert_drive_fn = config->insert_drive,
+      .show_page_fn = OnBrowseShowPage,
+      .chose_for_new_vm_fn = OnBrowseSelectedForNewVM,
+      .chose_for_usb_fn = OnBrowseSelectedForUSB,
+      .back_to_new_vm_fn = OnBrowseBackForNewVM,
+      .back_to_usb_fn = OnBrowseBackForUSB,
+      .back_to_drive_fn = OnBrowseBackForDrive,
+      .set_chosen_fn = OnBrowseSetChosen,
+      .close_menu_fn = OnBrowseCloseMenu,
   };
   MenuBrowseInit(&browse_config);
 }
@@ -373,7 +380,7 @@ bool MenuIsOpen(void) { return g_open; }
 
 const char* MenuPageName(void) {
   const MenuPageDef* def = &kPageDefs[g_page];
-  return def->get_name != NULL ? def->get_name() : def->name;
+  return def->name_fn != NULL ? def->name_fn() : def->name;
 }
 
 static MenuAction Choose(void);
@@ -426,10 +433,11 @@ void MenuSetProblem(const char* problem) {
 
 const char* MenuHint(void) {
   const MenuPageDef* def = &kPageDefs[g_page];
-  if (def->get_hint != NULL) {
-    return def->get_hint();
+  if (def->hint_fn != NULL) {
+    return def->hint_fn();
   }
-  return def->hint != NULL ? def->hint : "\x18\x19=Move  Enter=Select  Esc=Back";
+  return def->hint != NULL ? def->hint
+                           : "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
 const char* MenuProblem(void) {
@@ -548,7 +556,7 @@ static uint8_t FontItemCount(void) { return kFont4x10Count; }
 
 static uint8_t PageItemCount(void) {
   const MenuPageDef* def = &kPageDefs[g_page];
-  return def->item_count != NULL ? def->item_count() : 0;
+  return def->item_count_fn != NULL ? def->item_count_fn() : 0;
 }
 
 // Show Manage VMs - a row for each VM, then New VM - with the item at index
@@ -806,13 +814,15 @@ static bool HandleKeyName(SouthbridgeKeyEvent event, MenuAction* action) {
   return true;
 }
 
-static bool HandleKeyCopying(SouthbridgeKeyEvent event, MenuAction* action) {
-  (void)event;
+static bool HandleKeyCopying(
+    Y_UNUSED SouthbridgeKeyEvent event, MenuAction* action) {
   *action = kMenuActionNone;
   return true;
 }
 
 static bool HandleKeyNew(SouthbridgeKeyEvent event, MenuAction* action) {
+  // Backspace erases the name rather than leaving the form, wherever it
+  // is: Esc leaves it.
   if ((FormItem() == kNewName && TypeNewName(event.key)) ||
       event.key == kKeyBackspace) {
     *action = kMenuActionNone;
@@ -904,9 +914,10 @@ static MenuAction BackFont(void) {
   return kMenuActionNone;
 }
 
+// Go back a page, or close the menu from the main one.
 static MenuAction Back(void) {
   const MenuPageDef* def = &kPageDefs[g_page];
-  return def->back != NULL ? def->back() : kMenuActionNone;
+  return def->back_fn != NULL ? def->back_fn() : kMenuActionNone;
 }
 
 static MenuAction ChooseBrowse(void) {
@@ -959,6 +970,7 @@ static MenuAction ChooseDrive(void) {
     MenuBrowseForDrive(g_drive);
   } else {
     g_config.eject_drive(g_drive);
+    // Eject goes with the disk.
     ShowPage(kMenuPageDrive, kDriveInsert);
   }
   return kMenuActionNone;
@@ -1057,7 +1069,7 @@ static MenuAction ChooseStopSharing(void) {
 
 static MenuAction Choose(void) {
   const MenuPageDef* def = &kPageDefs[g_page];
-  return def->choose != NULL ? def->choose() : kMenuActionNone;
+  return def->choose_fn != NULL ? def->choose_fn() : kMenuActionNone;
 }
 
 // Track the Shift keys, and return whether this event completes the hotkey:
@@ -1103,9 +1115,9 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     return kMenuActionNone;
   }
   const MenuPageDef* def = &kPageDefs[g_page];
-  if (def->handle_key != NULL) {
+  if (def->handle_key_fn != NULL) {
     MenuAction action = kMenuActionNone;
-    if (def->handle_key(event, &action)) {
+    if (def->handle_key_fn(event, &action)) {
       return action;
     }
   }
@@ -1173,7 +1185,7 @@ static void DrawItems(
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  UIBoxPlace(menu, kWideColumns, kMenuStatusLines + 4);
+  UIBoxPlace(menu, kUIBoxWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
   UIBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
   UIBoxBlankRow(&menu->text[row++], menu->columns);
@@ -1191,7 +1203,7 @@ static void DrawStatusPage(DisplayMenu* menu) {
 
 static void DrawDrivePage(DisplayMenu* menu) {
   const DiskImage* image = g_config.drive(g_drive);
-  char line[kNarrowColumns];
+  char line[kUIBoxNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
   const bool empty = DriveEmpty();
@@ -1225,7 +1237,7 @@ static void DrawBrowsePage(DisplayMenu* menu) {
 // arrows on the border where there are more above or below, and the
 // countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kListRows + 2);
+  UIBoxPlace(menu, kUIBoxNarrowColumns, kListRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
@@ -1233,7 +1245,8 @@ static void DrawVMsPage(DisplayMenu* menu) {
     if (index >= VMsRowCount()) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
-      UIBoxItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
+      UIBoxItemRow(
+          row, menu->columns, g_vms->vms[index].name, index == g_chosen);
     } else if (g_vms->count > 0 && index == g_vms->count) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
@@ -1247,7 +1260,7 @@ static void DrawVMsPage(DisplayMenu* menu) {
       }
     }
   }
-  char countdown[kNarrowColumns];
+  char countdown[kUIBoxNarrowColumns];
   if (g_countdown > 0) {
     snprintf(
         countdown, sizeof(countdown), "starting in %u s",
@@ -1263,7 +1276,7 @@ static void DrawVMsPage(DisplayMenu* menu) {
 // there are any, with arrows on the border where there are more above or
 // below.
 static void DrawManagePage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kListRows + 2);
+  UIBoxPlace(menu, kUIBoxNarrowColumns, kListRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
@@ -1276,7 +1289,8 @@ static void DrawManagePage(DisplayMenu* menu) {
     } else if (g_vms->count > 0 && index == g_vms->count) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
-      UIBoxMenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
+      UIBoxMenuItemRow(
+          row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
     }
   }
   UIBoxEdgeRow(&menu->text[kListRows + 1], menu->columns, false, NULL);
@@ -1332,7 +1346,7 @@ static void DrawVMPage(DisplayMenu* menu) {
 // The name being typed, in a field marked as the item chosen is, with a
 // cursor after it while there is room.
 static void DrawNamePage(DisplayMenu* menu) {
-  char title[kNarrowColumns];
+  char title[kUIBoxNarrowColumns];
   snprintf(
       title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
       g_vms->vms[g_vm].name);
@@ -1387,9 +1401,9 @@ static void DrawDeletePage(DisplayMenu* menu) {
   const uint8_t named = g_contents.file_count < kVMFolderNamed
                             ? g_contents.file_count
                             : kVMFolderNamed;
-  char question[kNarrowColumns];
+  char question[kUIBoxNarrowColumns];
   snprintf(question, sizeof(question), "Delete %s?", g_vms->vms[g_vm].name);
-  char files[kNarrowColumns - 4];
+  char files[kUIBoxNarrowColumns - 4];
   JoinNames(
       files, sizeof(files), g_contents.files, named, g_contents.file_count);
   char users[64];
@@ -1416,7 +1430,7 @@ static void DrawDeletePage(DisplayMenu* menu) {
 
 // A clone being copied, or a new VM's blank disks being written.
 static void DrawCopyingPage(DisplayMenu* menu) {
-  char copying[kNarrowColumns];
+  char copying[kUIBoxNarrowColumns];
   if (g_creating) {
     snprintf(
         copying, sizeof(copying), "Writing %s's blank disks...",
@@ -1426,7 +1440,7 @@ static void DrawCopyingPage(DisplayMenu* menu) {
         copying, sizeof(copying), "Copying %s to %s...", g_vms->vms[g_vm].name,
         g_name);
   }
-  char progress[kNarrowColumns];
+  char progress[kUIBoxNarrowColumns];
   snprintf(
       progress, sizeof(progress), "%lu of %lu KB", (unsigned long)g_copied_kb,
       (unsigned long)g_copy_kb);
@@ -1440,7 +1454,7 @@ static void DrawCopyingPage(DisplayMenu* menu) {
 // chosen, and the drives, with what each holds - or editing a VM's drives,
 // the drives alone, under its name.
 static void DrawNewPage(DisplayMenu* menu) {
-  char rows[kNewItemCount][kNarrowColumns];
+  char rows[kNewItemCount][kUIBoxNarrowColumns];
   MenuItem items[kNewItemCount];
   const char* cursor =
       FormItem() == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
@@ -1519,7 +1533,7 @@ static void DrawSharingPage(DisplayMenu* menu) {
       moved, sizeof(moved), "Read %lu KB, written %lu KB",
       (unsigned long)(stats.blocks_read / 2),
       (unsigned long)(stats.blocks_written / 2));
-  char what[kNarrowColumns];
+  char what[kUIBoxNarrowColumns];
   if (stats.image_path != NULL) {
     char name[kDiskImageNameLength + 1];
     DiskImageName(stats.image_path, name);
@@ -1572,140 +1586,142 @@ static void DrawSettingsPage(DisplayMenu* menu) {
 static const MenuPageDef kPageDefs[kMenuPageCount] = {
     [kMenuPageMain] = {
         .name = "main",
-        .item_count = MainItemCount,
-        .draw = DrawMainPage,
-        .choose = ChooseMain,
-        .back = BackMain,
+        .item_count_fn = MainItemCount,
+        .draw_fn = DrawMainPage,
+        .choose_fn = ChooseMain,
+        .back_fn = BackMain,
     },
     [kMenuPageStatus] = {
         .name = "status",
         .hint = "Esc=Back",
-        .draw = DrawStatusPage,
-        .choose = BackStatus,
-        .back = BackStatus,
+        .draw_fn = DrawStatusPage,
+        .choose_fn = BackStatus,
+        .back_fn = BackStatus,
     },
     [kMenuPageReset] = {
         .name = "reset",
-        .item_count = ResetItemCount,
-        .draw = DrawResetPage,
-        .choose = ChooseReset,
-        .back = BackReset,
+        .item_count_fn = ResetItemCount,
+        .draw_fn = DrawResetPage,
+        .choose_fn = ChooseReset,
+        .back_fn = BackReset,
     },
     [kMenuPagePowerOff] = {
         .name = "power_off",
-        .item_count = PowerOffItemCount,
-        .draw = DrawPowerOffPage,
-        .choose = ChoosePowerOff,
-        .back = BackPowerOff,
+        .item_count_fn = PowerOffItemCount,
+        .draw_fn = DrawPowerOffPage,
+        .choose_fn = ChoosePowerOff,
+        .back_fn = BackPowerOff,
     },
     [kMenuPageDrive] = {
-        .get_name = DrivePageName,
-        .item_count = DriveItemCount,
-        .draw = DrawDrivePage,
-        .choose = ChooseDrive,
-        .back = BackDrive,
+        .name_fn = DrivePageName,
+        .item_count_fn = DriveItemCount,
+        .draw_fn = DrawDrivePage,
+        .choose_fn = ChooseDrive,
+        .back_fn = BackDrive,
     },
     [kMenuPageBrowse] = {
         .name = "browse",
         .hint = "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back",
-        .item_count = MenuBrowseItemCount,
-        .draw = DrawBrowsePage,
-        .choose = ChooseBrowse,
-        .back = MenuBrowseBack,
+        .item_count_fn = MenuBrowseItemCount,
+        .draw_fn = DrawBrowsePage,
+        .choose_fn = ChooseBrowse,
+        .back_fn = MenuBrowseBack,
     },
     [kMenuPageVMs] = {
         .name = "vms",
         .hint = "\x18\x19=Move  Enter=Select",
-        .item_count = VMsItemCount,
-        .draw = DrawVMsPage,
-        .choose = ChooseVMs,
+        .item_count_fn = VMsItemCount,
+        .draw_fn = DrawVMsPage,
+        .choose_fn = ChooseVMs,
+        // No back_fn: there is no VM to go back to yet.
     },
     [kMenuPageUSB] = {
         .name = "usb",
-        .item_count = USBItemCount,
-        .draw = DrawUSBPage,
-        .choose = ChooseUSB,
-        .back = BackUSB,
+        .item_count_fn = USBItemCount,
+        .draw_fn = DrawUSBPage,
+        .choose_fn = ChooseUSB,
+        .back_fn = BackUSB,
     },
     [kMenuPageSharing] = {
         .name = "usb_sharing",
         .hint = "Enter=Disconnect",
-        .item_count = SharingItemCount,
-        .draw = DrawSharingPage,
-        .choose = Disconnect,
-        .back = Disconnect,
+        .item_count_fn = SharingItemCount,
+        .draw_fn = DrawSharingPage,
+        .choose_fn = Disconnect,
+        .back_fn = Disconnect,
     },
     [kMenuPageStopSharing] = {
         .name = "usb_stop",
-        .item_count = StopSharingItemCount,
-        .draw = DrawStopSharingPage,
-        .choose = ChooseStopSharing,
-        .back = BackStopSharing,
+        .item_count_fn = StopSharingItemCount,
+        .draw_fn = DrawStopSharingPage,
+        .choose_fn = ChooseStopSharing,
+        .back_fn = BackStopSharing,
     },
     [kMenuPageManage] = {
         .name = "manage",
-        .item_count = ManageItemCount,
-        .draw = DrawManagePage,
-        .choose = ChooseManage,
-        .back = BackManage,
+        .item_count_fn = ManageItemCount,
+        .draw_fn = DrawManagePage,
+        .choose_fn = ChooseManage,
+        .back_fn = BackManage,
     },
     [kMenuPageVM] = {
         .name = "vm",
-        .item_count = VMItemCount,
-        .draw = DrawVMPage,
-        .choose = ChooseVM,
-        .back = BackVM,
+        .item_count_fn = VMItemCount,
+        .draw_fn = DrawVMPage,
+        .choose_fn = ChooseVM,
+        .back_fn = BackVM,
     },
     [kMenuPageName] = {
         .name = "vm_name",
-        .get_hint = NamePageHint,
-        .draw = DrawNamePage,
-        .choose = ChooseName,
-        .back = BackName,
-        .handle_key = HandleKeyName,
+        .hint_fn = NamePageHint,
+        .draw_fn = DrawNamePage,
+        .choose_fn = ChooseName,
+        .back_fn = BackName,
+        .handle_key_fn = HandleKeyName,
     },
     [kMenuPageDelete] = {
         .name = "vm_delete",
-        .item_count = DeleteItemCount,
-        .draw = DrawDeletePage,
-        .choose = ChooseDelete,
-        .back = BackDelete,
+        .item_count_fn = DeleteItemCount,
+        .draw_fn = DrawDeletePage,
+        .choose_fn = ChooseDelete,
+        .back_fn = BackDelete,
     },
     [kMenuPageCopying] = {
         .name = "vm_copying",
         .hint = "",
-        .draw = DrawCopyingPage,
-        .handle_key = HandleKeyCopying,
+        .draw_fn = DrawCopyingPage,
+        // No choose_fn or back_fn: a copy cannot be stopped part way.
+        .handle_key_fn = HandleKeyCopying,
     },
     [kMenuPageNew] = {
         .name = "new_vm",
-        .get_hint = NewPageHint,
-        .item_count = NewItemCount,
-        .draw = DrawNewPage,
-        .choose = ChooseNew,
-        .back = BackNew,
-        .handle_key = HandleKeyNew,
+        .hint_fn = NewPageHint,
+        .item_count_fn = NewItemCount,
+        .draw_fn = DrawNewPage,
+        .choose_fn = ChooseNew,
+        .back_fn = BackNew,
+        .handle_key_fn = HandleKeyNew,
     },
     [kMenuPageNewDrive] = {
         .name = "new_vm_drive",
-        .item_count = NewDriveItemCount,
-        .draw = DrawNewDrivePage,
-        .choose = ChooseNewDriveOption,
-        .back = BackNewDrive,
+        .item_count_fn = NewDriveItemCount,
+        .draw_fn = DrawNewDrivePage,
+        .choose_fn = ChooseNewDriveOption,
+        .back_fn = BackNewDrive,
     },
     [kMenuPageSettings] = {
         .name = "settings",
-        .item_count = SettingsItemCount,
-        .draw = DrawSettingsPage,
-        .choose = ChooseSettings,
-        .back = BackSettings,
+        .item_count_fn = SettingsItemCount,
+        .draw_fn = DrawSettingsPage,
+        .choose_fn = ChooseSettings,
+        .back_fn = BackSettings,
     },
     [kMenuPageFont] = {
         .name = "font",
-        .item_count = FontItemCount,
-        .draw = DrawFontPage,
-        .choose = ChooseFont,
-        .back = BackFont,
+        .item_count_fn = FontItemCount,
+        .draw_fn = DrawFontPage,
+        .choose_fn = ChooseFont,
+        .back_fn = BackFont,
     },
 };
 
@@ -1725,8 +1741,8 @@ void MenuDraw(uint64_t now_us) {
     return;
   }
   const MenuPageDef* def = &kPageDefs[g_page];
-  if (def->draw != NULL) {
-    def->draw(menu);
+  if (def->draw_fn != NULL) {
+    def->draw_fn(menu);
   }
   if (g_page == kMenuPageStatus || g_page == kMenuPageSharing) {
     g_status_drawn_us = now_us;

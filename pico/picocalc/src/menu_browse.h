@@ -1,7 +1,6 @@
-// File browser page in the PicoCalc runtime menu.
-//
-// Browses the SD card filesystem for floppy and hard disk images to insert into
-// emulated drives, share over USB, or configure for a new or edited VM.
+// The menu's file browser: the folders and disk images on the card, for
+// choosing an image for a floppy drive, for a new VM's drive, or to share over
+// USB. menu.c shows it as one of its pages and carries out what is chosen.
 #ifndef YAX86_PICOCALC_MENU_BROWSE_H
 #define YAX86_PICOCALC_MENU_BROWSE_H
 
@@ -11,44 +10,64 @@
 #include "display.h"
 #include "menu.h"
 
-enum {
-  kMenuBrowseRows = kDisplayMenuMaxRows - 2,
-  kMenuBrowseNoteColumn = 18,
-};
-
+// What the browser asks of the menu that shows it. Each callback is called
+// as the browser needs it, with the menu's own state still in place.
 typedef struct MenuBrowseConfig {
-  const DiskImage* (*drive)(FloppyDrive drive);
-  void (*insert_drive)(FloppyDrive drive, const char* path);
-  void (*show_browse_page)(uint8_t chosen);
-  void (*on_selected_for_new_vm)(uint8_t new_drive, const char* path);
-  void (*on_selected_for_usb)(const char* path, uint32_t size);
-  void (*on_back_for_new_vm)(void);
-  void (*on_back_for_usb)(void);
-  void (*on_back_for_drive)(FloppyDrive drive);
-  void (*set_chosen)(uint8_t chosen);
-  void (*set_dirty)(void);
-  void (*close_menu)(void);
+  // The image in a floppy drive, which the browser starts beside and marks.
+  const DiskImage* (*drive_fn)(FloppyDrive drive);
+  // Puts the image at path in a floppy drive, when one is chosen for it.
+  void (*insert_drive_fn)(FloppyDrive drive, const char* path);
+  // Shows the browser's page with the entry at chosen marked, when the
+  // browser has opened a folder.
+  void (*show_page_fn)(uint8_t chosen);
+  // Marks the entry at chosen, when going up a folder finds the one left.
+  void (*set_chosen_fn)(uint8_t chosen);
+  // Called when an image is chosen for a new VM's drive, or to share over
+  // USB, to take it and show the page that asked for it.
+  void (*chose_for_new_vm_fn)(uint8_t new_drive, const char* path);
+  void (*chose_for_usb_fn)(const char* path, uint32_t size);
+  // Called when the browser is left without choosing, to show the page it
+  // was opened from.
+  void (*back_to_new_vm_fn)(void);
+  void (*back_to_usb_fn)(void);
+  void (*back_to_drive_fn)(FloppyDrive drive);
+  // Closes the menu, once an image is in a drive.
+  void (*close_menu_fn)(void);
 } MenuBrowseConfig;
 
 void MenuBrowseInit(const MenuBrowseConfig* config);
 
-// Start browsing for a floppy drive.
+// Start browsing for an image for a floppy drive, in the folder of the image
+// in it, or else of the one in the other drive, or else yax86.
 void MenuBrowseForDrive(FloppyDrive drive);
 
-// Start browsing for a disk image to share over USB.
+// Start browsing for an image of either kind to share over USB.
 void MenuBrowseForUSB(void);
 
-// Start browsing for a floppy or hard disk image for a new/edited VM.
-void MenuBrowseForNewVM(uint8_t new_drive, const char* current_path);
+// Start browsing for an image for a new VM's drive: a floppy for its floppy
+// drives, a hard disk for its hard disks. image is the one chosen for the
+// drive so far, or empty, and must stay as it is while the browser is open.
+void MenuBrowseForNewVM(uint8_t new_drive, const char* image);
 
-// Page callbacks for MenuPageDef.
+// How many entries the folder showing has.
 uint8_t MenuBrowseItemCount(void);
+
+// The browser: the folder as the title, and a row for each entry that
+// shows, with arrows on the border where there is more above or below.
 void MenuBrowseDraw(DisplayMenu* menu, uint8_t chosen);
+
+// Open the chosen entry of the browser: a folder to look in, or an image to
+// put in the drive, which closes the menu.
 MenuAction MenuBrowseChoose(uint8_t chosen);
+
+// Leave the browser for the page it was opened from.
 MenuAction MenuBrowseBack(void);
 
-// Keyboard and scrolling helpers.
+// Go up a folder for Backspace, until the card's root. Returns false at the
+// root, where Backspace goes back a page instead.
 bool MenuBrowseHandleBackspace(void);
+
+// Keep the chosen entry among the browser's rows.
 void MenuBrowseScrollTo(uint8_t chosen);
 
 #endif  // YAX86_PICOCALC_MENU_BROWSE_H

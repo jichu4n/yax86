@@ -1,3 +1,6 @@
+// The boxes the menu and the list at power on are drawn in: code page 437's
+// double lined frame over the guest's screen, rows of text and items inside
+// it, and arrows on its border where a list runs past what shows.
 #ifndef YAX86_PICOCALC_UI_BOX_H
 #define YAX86_PICOCALC_UI_BOX_H
 
@@ -7,7 +10,8 @@
 #include "display.h"
 
 enum {
-  // Common box dimensions.
+  // A page's box: the main page and the question are narrow, centered on the
+  // guest's screen, and the status page takes its whole width.
   kUIBoxGuestScreenRows = 25,
   kUIBoxNarrowColumns = 40,
   kUIBoxWideColumns = kTextColumns,
@@ -72,7 +76,9 @@ void UIBoxMenuItemRow(
 // Lay out a box of rows, centered on the guest's screen.
 void UIBoxPlace(DisplayMenu* menu, uint8_t columns, uint8_t rows);
 
-// A page of items, under lines of text, if any.
+// A page of items, under lines of text, if any. chosen is the item marked,
+// and choosing is true at power on, when the box takes the list's size since
+// there is no guest's screen under it to hide the list's.
 void UIBoxDrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
     uint8_t line_count, const MenuItem* items, uint8_t count, uint8_t chosen,

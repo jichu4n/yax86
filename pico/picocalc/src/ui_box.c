@@ -28,6 +28,7 @@ void UIBoxEdgeRow(
     return;
   }
   const uint8_t length = (uint8_t)strlen(title);
+  // The title, with a space either side, over the middle of the edge.
   uint8_t column = (uint8_t)((columns - length - 2) / 2);
   row->chars[column] = ' ';
   row->attrs[column++] = kUIBoxAttrTitle;
@@ -67,7 +68,8 @@ void UIBoxItemRow(
       row->attrs[i] = kUIBoxAttrChosen;
     }
   }
-  UIBoxPutText(row, columns, 3, text, chosen ? kUIBoxAttrChosen : kUIBoxAttrText);
+  UIBoxPutText(
+      row, columns, 3, text, chosen ? kUIBoxAttrChosen : kUIBoxAttrText);
 }
 
 void UIBoxMenuItemRow(
@@ -89,12 +91,17 @@ void UIBoxDrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
     uint8_t line_count, const MenuItem* items, uint8_t count, uint8_t chosen,
     bool choosing) {
+  // The box holds kDisplayMenuMaxRows: lines past what fits are left out,
+  // rather than drawn past its rows.
   if (count + 4 + line_count + 1 > kDisplayMenuMaxRows) {
     line_count = count + 5 < kDisplayMenuMaxRows
                      ? (uint8_t)(kDisplayMenuMaxRows - count - 5)
                      : 0;
   }
   const uint8_t text_rows = line_count > 0 ? (uint8_t)(line_count + 1) : 0;
+  // The edges, a blank row either side of the items, and the lines with a
+  // blank row under them - or at power on, the list's size, as there is no
+  // guest's screen to draw under a smaller box to hide the list's.
   uint8_t rows = (uint8_t)(count + 4 + text_rows);
   if (choosing && rows < kDisplayMenuMaxRows) {
     rows = kDisplayMenuMaxRows;
@@ -114,8 +121,7 @@ void UIBoxDrawItems(
     UIBoxBlankRow(&menu->text[row++], menu->columns);
   }
   for (uint8_t i = 0; i < count; ++i) {
-    UIBoxMenuItemRow(
-        &menu->text[row++], menu->columns, &items[i], i == chosen);
+    UIBoxMenuItemRow(&menu->text[row++], menu->columns, &items[i], i == chosen);
   }
   while (row + 1 < rows) {
     UIBoxBlankRow(&menu->text[row++], menu->columns);
