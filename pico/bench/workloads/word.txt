@@ -1,0 +1,334 @@
+# Word 5.5's Setup and a session, from the WORD VM's A> prompt on the
+# PicoCalc. See pico/bench/AGENTS.md, "PicoCalc workloads". From the repository root:
+# pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
+type C:\r
+wait ^C> *$
+type CD \\WINST\r
+sleep 1
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type SETUP\r
+wait Press Enter to continue
+sleep 1
+type \r
+wait To install Word you need to know
+sleep 1
+type \r
+wait Set up hard disk
+sleep 1
+type \r
+wait Install a new version of Word
+sleep 1
+type \r
+wait Setup proposes the following directory
+sleep 1
+type \r
+wait Please select your country
+sleep 1
+key down
+sleep 0.5
+type \r
+wait select your keyboard from the menu below
+sleep 1
+key down
+key down
+sleep 0.5
+type \r
+wait Choose the type of computer you have
+sleep 1
+type \r
+wait Choose the type of display adapter
+sleep 1
+type \r
+wait Do not install printer drivers
+sleep 1
+key down
+sleep 0.5
+type \r
+wait Do not install the spell checker
+sleep 1
+type \r
+wait Do not install the thesaurus
+sleep 1
+key down
+sleep 0.5
+type \r
+wait Do not install Learning Word lessons
+sleep 1
+key down
+sleep 0.5
+type \r
+wait Do not update the mouse driver
+sleep 1
+key down
+sleep 0.5
+type \r
+wait Do not customize Word settings
+sleep 1
+type \r
+wait Run Word in graphics mode
+sleep 1
+type \r
+wait Use Word 5.0 function keys
+sleep 1
+type \r
+wait Insert will insert from the scrap
+sleep 1
+type \r
+wait Describe what you see in the box above
+sleep 1
+type \r
+wait Letter \(8 1/2 by 11 inches\)
+sleep 1
+type \r
+wait Type your full name
+sleep 1
+type Test User\r
+wait Do you want to change the name
+sleep 1
+key down
+sleep 0.5
+type \r
+wait Do not update the system files
+sleep 1
+key down
+sleep 0.5
+type \r
+wait You have chosen not to have Setup modify
+sleep 1
+type \r
+wait Press Enter to end Setup
+sleep 1
+type \r
+wait ^C> *$
+report
+type CD \\WORD\r
+sleep 1
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type WORD\r
+wait Edit document or press Alt
+sleep 1
+type The quick brown fox jumpd over the lazy dog. Word processing on an emulated PC is a fine test of memory paging.\r
+sleep 2
+key alt press
+key u
+key alt release
+wait Checks spelling
+sleep 1
+type \r
+wait continue checking spelling from the beginning
+sleep 1
+type \r
+wait Not found
+sleep 1
+type \r
+wait words checked
+sleep 1
+key alt press
+key f
+key alt release
+wait Save As
+sleep 1
+type a
+wait File Name
+sleep 1
+type TEST\r
+wait Summary for TEST.DOC
+sleep 1
+type \r
+sleep 3
+key alt press
+key f
+key alt release
+wait Save As
+sleep 1
+type o
+wait File Name
+sleep 1
+type README.DOC\r
+wait This file supplements
+sleep 1
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+key shift press
+key down
+key shift release
+sleep 0.4
+sleep 2
+key alt press
+key f
+key alt release
+wait Exit Word
+sleep 1
+type x
+wait ^C> *$
+report
+type CD \\\r
+sleep 1
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+type DEL C:\\WORD\\*.*\r
+wait Are you sure
+type y\r
+sleep 3
+type RD C:\\WORD\r
+sleep 3
+type DIR C:\\\r
+wait bytes free

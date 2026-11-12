@@ -204,7 +204,7 @@ bool __not_in_flash_func(PsramWrite)(
 }
 
 // Start the state machine. The input synchronizer is bypassed: it would add
-// two cycles to a path already a bit late - see src/psram.pio.
+// two cycles to a path already a bit late - see psram.pio.
 static void PsramInitSerial(uint32_t divider) {
   g_offset = (uint)pio_add_program(kPsramPIO, &psram_program);
   g_sm = (uint)pio_claim_unused_sm(kPsramPIO, true);

@@ -91,6 +91,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   floppy that is not `resources`' byte for byte, or a hard disk image - see
   the SD card section. Compare against a baseline with the same VM, or
   none.
+- **These counts are the 128KB machine's**, which the runtime runs without
+  the PSRAM or after a crash. With the PSRAM it pages 640KB (see "Paging
+  guest RAM"), and DOS330 boots in 2,443,404 instructions and 29,160,390
+  cycles, the BIOS testing and DOS sizing more memory; the bench's 640KB
+  `dos-boot` takes 2,356,813 and 27,964,698. The runtime with no VMs has not
+  been counted at 640KB.
 
 ## Running in real time
 
@@ -515,11 +521,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## The PSRAM
 
-- **8MB, an ESP-PSRAM64H on one-bit SPI, driven by PIO** - `src/psram.c`,
-  `src/psram.pio`, on pio1, the LCD having pio0. Reads are Fast Read
+- **8MB, an ESP-PSRAM64H on one-bit SPI, driven by PIO**:
+  `pico/common/psram.c` and `psram.pio`, shared with `pico/bench`, on pio1,
+  the LCD having pio0. Reads are Fast Read
   (`0x0B`), writes `0x02`; its ID's second byte, known good die, reads
-  `0x5D`. Nothing uses it yet beyond the self-test at startup; the report's
-  `psram` group has its state, the self-test's times and what has moved.
+  `0x5D`. It holds the guest RAM SRAM does not - see "Paging guest RAM".
+  The report's `psram` group has its state, the self-test's times and what
+  has moved.
 - **The serial clock is 62.5MHz**, from 250MHz or 125MHz divided evenly; any
   other system clock leaves it off as `unsupported_clock`. 83MHz and 125MHz
   read back wrong.
@@ -552,6 +560,50 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   without it, as `skipped_after_hang`.
 - **It costs the boot nothing it runs**: 5.0459 seconds against 5.0644 on
   master, the DOS330 VM, three runs each - flash layout.
+
+## Paging guest RAM
+
+- **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames,
+  and PSRAM behind them**, through the core's `YPlatformConfig.paged_memory`
+  (`core/AGENTS.md`). `pico/common/pager.c` does the paging, and the SRAM
+  given to the guest is in `pico/common/yax86_pico.h`, a header per board so
+  that a Pico 2 can have its own. Both are shared with `pico/bench`, so that
+  it measures what runs here. The pager brings a page into a frame when the
+  guest first touches it, from PSRAM, or as zeros if it has never been
+  written back, and takes frames back by the clock algorithm, writing a page
+  back only if it was written. The report's `paging` group has the counts
+  and `fault_us`, the time in the fault handler.
+- **Pages are 256 bytes**, measured on the device with `pico/bench`'s
+  PicoCalc workloads, the share of processor time in faults:
+
+  | page | seven commands | Word session | Word's pages in |
+  | --- | --- | --- | --- |
+  | 256 bytes | 0.6% | **1.3%** | 17,502 |
+  | 512 bytes | 0.7% | 2.8% | 21,360 |
+  | 1KB | 1.0% | 6.9% | 29,380 |
+
+  A fault moves a whole page through the PSRAM at about 0.18us a byte, and
+  more of a large page is never used, so fewer bytes moved beats fewer
+  faults. Smaller pages cost nothing measurable where nothing faults: the
+  DOS330 boot took 6.305, 6.320 and 6.346 seconds. The page table is 2 bytes
+  a page, 5KB at 256 bytes; 128 bytes' 10KB is more than the SRAM has spare.
+  Traces on a desktop had already ruled out 4KB, which thrashes 128KB of
+  frames.
+- **No guest RAM is held directly in SRAM.** Holding the first 64KB there,
+  under the CPU's direct data window, with the other 64KB as frames, came
+  out even on the seven commands with 512-byte pages, 179.0 seconds of
+  processor time against 179.7, and more than doubled the Word session's
+  share in faults, 2.8% to 6.0%. The programs' code and data are above
+  64KB, so it sped up little of what they do, and it left half the frames.
+- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM** held
+  directly. A hard fault on either core reboots the board through
+  `isr_hardfault()`, which replaces the SDK's breakpoint, and leaves a marker
+  in RAM startup does not clear; the start after it pages nothing, says so
+  on the message row, and reports `off_after_fault`. Paging is the newest
+  code a fault could come from, and a board that halts on one needs its
+  cable replugged.
+- **The runtime reads the BIOS data area through the memory map**,
+  `GuestRAMByte()`, since with the PSRAM it is paged.
 
 ## The speaker
 
