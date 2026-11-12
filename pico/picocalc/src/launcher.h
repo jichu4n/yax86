@@ -10,8 +10,10 @@
 #include <stdint.h>
 
 #include "screen.h"
+#include "settings.h"
 #include "southbridge.h"
 #include "vm_config.h"
+#include "vm_list.h"
 
 // What the start after a reboot is to do, left by the menu's Reset and Power
 // off.
@@ -36,6 +38,10 @@ typedef enum LauncherStartResult {
 // Lend the launcher copy_buffer, kCopyBufferSize bytes of guest RAM, which
 // copying a VM's files borrows before the VM starts.
 void LauncherInit(uint8_t* copy_buffer);
+
+// The VMs on the card, and the card's settings, as last read.
+const VMList* LauncherVMs(void);
+const Settings* LauncherSettings(void);
 
 // Read the card's VMs and settings, and the note a reset or power off left,
 // and either take a VM at once into *vm or show the list.

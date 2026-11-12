@@ -50,8 +50,7 @@
 #include "typing.h"
 #include "usb_disk.h"
 #include "vm_config.h"
-#include "vm_folder.h"
-#include "vm_store.h"
+#include "vm_list.h"
 #include "yax86_pico.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
@@ -665,7 +664,7 @@ static __noinline void ReplyReportBoard(const Command* command) {
   const DisplayStats display = DisplayGetStats();
   REPLY_GROUP(
       command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
-      Y_LOG_STRING("font", Font4x10Name(VMStoreSettings()->font)),
+      Y_LOG_STRING("font", Font4x10Name(LauncherSettings()->font)),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
       Y_LOG_UINT("pixels_drawn", display.pixels_drawn),
       Y_LOG_UINT("render_us", display.render_us),
@@ -681,7 +680,7 @@ static __noinline void ReplyReportDevices(const Command* command) {
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
-      Y_LOG_UINT("vms", VMStoreList()->count));
+      Y_LOG_UINT("vms", LauncherVMs()->count));
   const UsbDiskStats usb = UsbDiskGetStats();
   REPLY_GROUP(
       command, "usb", Y_LOG_BOOL("sharing", usb.sharing),
@@ -784,7 +783,7 @@ static bool InitVM(void) {
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->floppy_drives = FloppyDrives();
   config->video_text_font.glyphs =
-      &(*Font4x10Glyphs(VMStoreSettings()->font))[0][0];
+      &(*Font4x10Glyphs(LauncherSettings()->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
   config->set_pc_speaker_frequency = SetPCSpeakerFrequency;

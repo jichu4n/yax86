@@ -286,6 +286,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## VMs
 
+- **The card's data is three models**, each a struct and the functions
+  that act on one through a pointer, with the caller owning the instance:
+  `src/settings.c`, the card's settings; `src/vm_config.c`, one VM's
+  `vm.cfg`; and `src/vm_list.c`, the list of VMs and what changes them as
+  folders, which are create, edit drives, rename, clone and delete. Rename
+  and delete keep `boot_default` naming a VM that is there.
 - **A VM is a folder in `yax86/vm`**, `src/vm_config.c`,
   holding `vm.cfg`, which names its drives' images, and the images that
   are its own. Every folder there with a `vm.cfg` is one, named for the
@@ -346,10 +352,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   draw, and composes the status rows from its keys. A `Screen` is those
   functions, with its page's name for the report. For now the launcher is
   the one screen: the list and every page reached from it. Calls go one
-  way, from `main.c` to the screen and from the screen down. The card's VMs
-  and settings, as last read, are in `src/vm_store.c`, which `main.c`, the
-  launcher and its pages all read them from. It reads and saves them and
-  logs what failed, and leaves showing a problem to its caller.
+  way, from `main.c` to the screen and from the screen down.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the
@@ -388,7 +391,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ## Managing VMs
 
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
-  VMs**, through `src/vm_folder.c`: a page listing the VMs and then New VM
+  VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
   (after a separator line if there are any VMs), a
   page for each VM with the images in its drives - two drives a line, A and
   B then HD1 and HD2 - over Edit drives, Rename, Clone and Delete, a name typed
@@ -673,11 +676,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   seconds in its place. The controller measures it every 20 seconds, and
   answers 0% with no battery, which is shown as no battery.
 - **The messages row** shows a message four seconds at a time; the menu's
-  keys while it is open, or a problem in their place until the next key;
-  and otherwise, while a VM runs, the menu's own key, `Shift+Shift=Menu`,
-  dim. While the list at power on shows, `src/ui_status.c` keeps the problem
-  and composes the rows from the keys of the page showing. Shift is spelled out: the arrows that stood for it read as the up
-  arrow key.
+  keys while it is open, or a problem in their place until the next key; and
+  otherwise, while a VM runs, the menu's own key, `Shift+Shift=Menu`, dim.
+  While the list at power on shows, `src/ui_status.c` keeps the problem and
+  composes the rows from the keys of the page showing. Shift is spelled out:
+  the arrows that stood for it read as the up arrow key.
 - **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
   pairs two spaces apart - `↑↓=Move  Enter=Select  Esc=Back` - the action
   brighter than the key, so the two read apart in the 4x10 font.
