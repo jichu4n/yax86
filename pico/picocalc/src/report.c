@@ -24,10 +24,6 @@
 #include "typing.h"
 #include "usb_disk.h"
 
-#ifndef YAX86_PICOCALC_DRAW_SCREEN
-#define YAX86_PICOCALC_DRAW_SCREEN 1
-#endif
-
 enum {
   // What the stacks are painted with. Any value does, as long as a stack is
   // unlikely to hold it.
@@ -82,6 +78,11 @@ static const char* const kBootStageEvents[] = {
     [kBootStageFailed] = "failed",
 };
 
+// The two cores' stacks, 4KB each, from the linker script: core 1's directly
+// below core 0's, so that core 0 running past the bottom of its own writes
+// over the frames core 1 is in, which hangs core 1 with nothing said. Each is
+// painted at startup, and the report gives how much of it has ever been
+// written over.
 extern uint32_t __StackBottom;
 extern uint32_t __StackTop;
 extern uint32_t __StackOneBottom;
@@ -89,11 +90,8 @@ extern uint32_t __StackOneTop;
 
 static ReportConfig g_config;
 static bool g_host_attached;
-static uint64_t g_command_us;
 
 void ReportInit(const ReportConfig* config) { g_config = *config; }
-
-uint64_t ReportCommandUs(void) { return g_command_us; }
 
 // Paint core 0's stack from its bottom to a little below this function's
 // frame, and core 1's, before core 1 starts on it, whole.
@@ -118,20 +116,9 @@ static uint32_t StackUsed(const uint32_t* bottom, const uint32_t* top) {
   return (uint32_t)((uintptr_t)top - (uintptr_t)word);
 }
 
-static bool BootIsOver(void) {
-  return g_config.status->boot_stage == kBootStagePrompt ||
-         g_config.status->boot_stage == kBootStageFailed;
-}
-
-static uint64_t ElapsedUs(void) {
-  return time_us_64() - g_config.clock->start_us;
-}
-
-static uint64_t PausedUs(void) {
-  return g_config.clock->paused_us +
-         (MenuIsOpen() ? time_us_64() - g_config.clock->pause_start_us : 0);
-}
-
+// The time of day the guest's BIOS keeps, which is what DOS reports, in
+// milliseconds. It counts from POST, since the date and time questions are
+// answered with Enter.
 static uint64_t GuestClockMs(void) {
   uint64_t ticks = 0;
   for (uint32_t i = 0; i < 4; ++i) {
@@ -141,6 +128,9 @@ static uint64_t GuestClockMs(void) {
   return ticks * kPITCountsPerBIOSTick * kMillisecondsPerSecond / kPITInputHz;
 }
 
+// How fast the boot ran, as tenths of a percent of a real PC/XT's speed.
+// Taken from the host time spent running it rather than the time it took,
+// which pacing holds to real time.
 static uint32_t BootSpeedPermille(void) {
   if (g_config.status->boot_busy_us == 0) {
     return 0;
@@ -193,11 +183,13 @@ static void FormatSpeedLine(char* buffer, size_t size) {
       permille >= 1000 ? "paced to real time" : "slower than real time");
 }
 
+// The guest's clock against the real one, and how busy the host has been
+// since the last time the line was drawn.
 static void FormatClockLine(char* buffer, size_t size) {
   static uint64_t window_start_us;
   static uint64_t window_idle_us;
-  const uint64_t now_us = ElapsedUs();
-  const uint64_t idle_now_us = g_config.clock->waited_us + PausedUs();
+  const uint64_t now_us = RuntimeElapsedUs();
+  const uint64_t idle_now_us = g_config.clock->waited_us + RuntimePausedUs();
   const uint64_t window_us = now_us - window_start_us;
   const uint64_t waited_us = idle_now_us - window_idle_us;
   const uint32_t busy_percent =
@@ -217,6 +209,9 @@ static void FormatClockLine(char* buffer, size_t size) {
       (unsigned long)busy_percent);
 }
 
+// The bounds on the keyboard's version and the guest RAM size change
+// nothing printed, since neither comes near them: they let the compiler see
+// that the line fits, which it cannot from a size read through a callback.
 static void FormatSystemLine(char* buffer, size_t size) {
   char version[16];
   FormatSouthbridgeVersion(version, sizeof(version));
@@ -245,6 +240,8 @@ static void FormatDisplayLine(char* buffer, size_t size) {
       (unsigned long)stats.frames_late);
 }
 
+// How much of a buffer of size an snprintf() that returned written filled,
+// leaving room for the terminator.
 static size_t Filled(int written, size_t size) {
   if (written < 0) {
     return 0;
@@ -252,6 +249,9 @@ static size_t Filled(int written, size_t size) {
   return (size_t)written < size ? (size_t)written : size - 1;
 }
 
+// One drive's part of the Disk line: what it has read and written from its
+// image on the card, or what it has instead and why. Returns how much of
+// buffer it filled.
 static size_t FormatDrive(
     char* buffer, size_t size, const char* drive, const DiskImage* image,
     const char* instead) {
@@ -305,6 +305,8 @@ static void FormatDiskLine(char* buffer, size_t size) {
       (unsigned long long)(card_ms % kMillisecondsPerSecond));
 }
 
+// The menu's status page: what the runtime found, and what running the VM
+// has cost so far.
 void ReportDescribeStatus(MenuStatusLine lines[kMenuStatusLines]) {
   static const char* const kLabels[kMenuStatusLines] = {
       "System", "Boot", "Speed", "Clock", "Display", "Disk",
@@ -321,25 +323,29 @@ void ReportDescribeStatus(MenuStatusLine lines[kMenuStatusLines]) {
   FormatDiskLine(lines[5].value, size);
 }
 
-#define BOOT_FIELDS()                                                    \
-  Y_LOG_STRING("stage", kBootStageEvents[g_config.status->boot_stage]),  \
-      Y_LOG_UINT("instructions", g_config.status->instructions),         \
-      Y_LOG_UINT("cycles", g_config.status->boot_cycles),                \
-      Y_LOG_UINT(                                                        \
-          "emulated_us", g_config.status->boot_cycles*                   \
-                             kMicrosecondsPerSecond /                    \
-                             Y_PLATFORM_CPU_CYCLES_PER_SECOND),          \
-      Y_LOG_UINT("real_us", g_config.status->boot_elapsed_us),           \
-      Y_LOG_UINT("busy_us", g_config.status->boot_busy_us),              \
+// How far the boot has got, and what it took: the fields of a boot_stage
+// log, and of the boot's group of a report.
+#define BOOT_FIELDS()                                                   \
+  Y_LOG_STRING("stage", kBootStageEvents[g_config.status->boot_stage]), \
+      Y_LOG_UINT("instructions", g_config.status->instructions),        \
+      Y_LOG_UINT("cycles", g_config.status->boot_cycles),               \
+      Y_LOG_UINT(                                                       \
+          "emulated_us",                                                \
+          g_config.status->boot_cycles* kMicrosecondsPerSecond /        \
+              Y_PLATFORM_CPU_CYCLES_PER_SECOND),                        \
+      Y_LOG_UINT("real_us", g_config.status->boot_elapsed_us),          \
+      Y_LOG_UINT("busy_us", g_config.status->boot_busy_us),             \
       Y_LOG_UINT("speed_pm", BootSpeedPermille())
 
 void ReportLogBootStage(void) { BOOT_INFO("boot_stage", BOOT_FIELDS()); }
 
+// A line of a reply to a report command: one group of its facts.
 #define REPLY_GROUP(command, group, ...)                 \
   Y_LOG_REPLY(                                           \
       &g_runtime_logger, (command)->id, (command)->name, \
       Y_LOG_STRING("group", (group)), __VA_ARGS__)
 
+// A drive's group of a report.
 static void ReplyDiskImage(
     const Command* command, const char* group, const DiskImage* image) {
   const DiskImageStats* stats = &image->stats;
@@ -355,6 +361,14 @@ static void ReplyDiskImage(
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
+// The same facts as the status screen, as a group for each part of the
+// runtime, in answer to a report command.
+// The report is answered in parts, none inlined into another: each group's
+// fields take stack of their own until the function they are in returns, and
+// the report whole would be the deepest call on core 0's stack - see
+// ReportPaintStacks().
+//
+// The board: what it is and how it started.
 static __noinline void ReplyReportBoard(const Command* command) {
   char version[16];
   FormatSouthbridgeVersion(version, sizeof(version));
@@ -405,6 +419,7 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("copy_us", display.copy_us));
 }
 
+// The VM's drives, and what has been done with the card and the keyboard.
 static __noinline void ReplyReportDevices(const Command* command) {
   ReplyDiskImage(command, "fd1", FloppyGetImage(kFloppyDriveA));
   ReplyDiskImage(command, "fd2", FloppyGetImage(kFloppyDriveB));
@@ -433,6 +448,7 @@ static __noinline void ReplyReportDevices(const Command* command) {
       Y_LOG_UINT("timeouts", keyboard.timeouts));
 }
 
+// The speaker, the menu and the pacing.
 static __noinline void ReplyReportRunning(const Command* command) {
   const SpeakerStats speaker = SpeakerGetStats();
   REPLY_GROUP(
@@ -443,15 +459,15 @@ static __noinline void ReplyReportRunning(const Command* command) {
       command, "menu", Y_LOG_BOOL("open", MenuIsOpen()),
       Y_LOG_STRING("page", MenuPageName()));
   REPLY_GROUP(
-      command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
+      command, "pacing", Y_LOG_UINT("real_us", RuntimeElapsedUs()),
       Y_LOG_UINT(
           "emulated_us", g_config.clock->cycles * kMicrosecondsPerSecond /
                              Y_PLATFORM_CPU_CYCLES_PER_SECOND),
       Y_LOG_UINT("guest_clock_ms", GuestClockMs()),
       Y_LOG_UINT("waited_us", g_config.clock->waited_us),
       Y_LOG_UINT("dropped_us", g_config.clock->dropped_us),
-      Y_LOG_UINT("command_us", g_command_us),
-      Y_LOG_UINT("paused_us", PausedUs()),
+      Y_LOG_UINT("command_us", RuntimeCommandUs()),
+      Y_LOG_UINT("paused_us", RuntimePausedUs()),
       Y_LOG_BOOL("idle_skip", g_config.platform->is_dos_idle_skip_enabled));
 }
 
@@ -462,14 +478,21 @@ static void ReplyReport(const Command* command) {
   CommandReplyOk(command);
 }
 
+// Say the boot is over to a host that has attached since the last look, if
+// it is: one that attached after the boot would otherwise not know. Cheap
+// enough to call every batch: it reads a flag the USB stack keeps.
 void ReportAnnounceToNewHost(void) {
   const bool attached = stdio_usb_connected();
-  if (attached && !g_host_attached && BootIsOver()) {
+  if (attached && !g_host_attached && RuntimeBootIsOver()) {
     BOOT_INFO("done");
   }
   g_host_attached = attached;
 }
 
+// The guest's text screen: the mode, the cursor, then a line for each row of
+// the screen with its characters as hex, as the guest's code page has them,
+// and with attrs=true another with their attributes. Hex, because a row of
+// box drawing characters escaped as text would not fit on a line.
 static void RunScreen(const Command* command) {
   const YVideoState* video = &g_config.platform->video;
   const YVideoModeMetadata* mode = YVideoGetModeMetadata(video);
@@ -486,6 +509,7 @@ static void RunScreen(const Command* command) {
       ((uint32_t)registers[kCRTCCursorHigh] << 8) | registers[kCRTCCursorLow];
   const uint32_t cells = (uint32_t)mode->columns * mode->rows;
   const uint32_t vram_size = YVideoGetAdapterMetadata(video)->vram_size;
+  // Where the cursor is on the screen, if it is on it at all.
   const uint32_t cursor_cell = cursor - start;
   if (cursor >= start && cursor_cell < cells) {
     Y_LOG_REPLY(
@@ -504,11 +528,14 @@ static void RunScreen(const Command* command) {
     uint8_t characters[kMaxTextColumns];
     uint8_t attributes[kMaxTextColumns];
     for (uint8_t column = 0; column < mode->columns; ++column) {
+      // The screen can start anywhere, and wraps at the end of video memory.
       const uint32_t cell = start + (uint32_t)row * mode->columns + column;
       const uint32_t offset = (cell * kBytesPerTextCell) % vram_size;
       characters[column] = g_config.vram[offset];
       attributes[column] = g_config.vram[(offset + 1) % vram_size];
     }
+    // Two hex digits a byte, and room for the null snprintf() writes after
+    // the last pair.
     char hex[kMaxTextColumns * 2 + 1];
     for (uint8_t column = 0; column < mode->columns; ++column) {
       snprintf(&hex[column * 2], 3, "%02X", characters[column]);
@@ -528,6 +555,11 @@ static void RunScreen(const Command* command) {
   CommandReplyOk(command);
 }
 
+// Press, release or, by default, tap a key, by name. The key goes through the
+// keymap as a key pressed on the PicoCalc does, a key event a batch, and the
+// reply comes once it is queued. A host sending keys faster than they go is
+// told the queue is full, and nothing is queued, so the key can be sent
+// again.
 static void RunKey(const Command* command) {
   const char* name = CommandArgument(command, "name");
   const char* state = CommandArgument(command, "state");
@@ -549,8 +581,7 @@ static void RunKey(const Command* command) {
   }
 }
 
-void ReportRunCommand(const Command* command) {
-  const uint64_t start_us = time_us_64();
+__noinline void ReportRunCommand(const Command* command) {
   if (CommandIs(command, "ping")) {
     CommandReplyOk(command);
   } else if (CommandIs(command, "report")) {
@@ -558,6 +589,7 @@ void ReportRunCommand(const Command* command) {
   } else if (CommandIs(command, "screen")) {
     RunScreen(command);
   } else if (CommandIs(command, "screenshot")) {
+    // Core 1 owns the panel, so it reads it back and sends the reply.
     if (!DisplaySendScreenshot(command->id)) {
       CommandReplyError(command, "busy");
     }
@@ -566,5 +598,4 @@ void ReportRunCommand(const Command* command) {
   } else {
     CommandReplyError(command, "unknown_command");
   }
-  g_command_us += time_us_64() - start_us;
 }
