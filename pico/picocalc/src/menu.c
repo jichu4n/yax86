@@ -9,35 +9,17 @@
 #include "file_list.h"
 #include "harddisk.h"
 #include "ui_box.h"
+#include "ui_page.h"
 #include "usb_disk.h"
 #include "vm_folder.h"
 
 enum {
-  // The controller's codes for the keys the menu listens to.
-  kKeyLeftShift = 0xA2,
-  kKeyRightShift = 0xA3,
-  kKeyUp = 0xB5,
-  kKeyDown = 0xB6,
-  kKeyEnter = 0x0A,
-  kKeySpace = ' ',
-  kKeyEsc = 0xB1,
-  kKeyBackspace = 0x08,
-  kKeyPageUp = 0xD6,
-  kKeyPageDown = 0xD7,
-
   // A floppy image's size: the browser lists only files this long.
   kFloppyImageSize = 360 * 1024,
-  // The browser's rows of entries, which with its edges fill the most rows a
-  // box can have.
-  kBrowseRows = kDisplayMenuMaxRows - 2,
   // Where an entry's note starts on its row: a folder's <DIR>, and which
   // drive an image is in.
   kBrowseNoteColumn = 18,
 
-  // A page's box: the main page and the question are narrow, centered on the
-  // guest's screen, and the status page takes its whole width.
-  kNarrowColumns = 40,
-  kWideColumns = kTextColumns,
   // A label's column on the status page.
   kStatusLabelColumns = 9,
 
@@ -262,10 +244,8 @@ static uint8_t g_chosen;
 static bool g_dirty;
 static uint64_t g_status_drawn_us;
 // The box last drawn, whose size a new one has to match for nothing of it to
-// be left showing, and whether there is one.
-static uint8_t g_drawn_columns;
-static uint8_t g_drawn_rows;
-static bool g_box_drawn;
+// be left showing.
+static UIPageBox g_box;
 // The folder the browser shows, and the entry at the top of its rows.
 static FileList g_list;
 static uint8_t g_list_top;
@@ -351,7 +331,7 @@ void MenuChooseVMs(const VMList* list, uint8_t highlighted) {
   g_vms = list;
   g_open = true;
   g_choosing = true;
-  g_box_drawn = false;
+  g_box.drawn = false;
   g_list_top = 0;
   ShowPage(kMenuPageVMs, highlighted);
   ScrollToChosen();
@@ -488,11 +468,7 @@ static void ScrollToChosen(void) {
       g_vms->count > 0 && g_chosen >= g_vms->count) {
     ++row;
   }
-  if (row < g_list_top) {
-    g_list_top = row;
-  } else if (row >= g_list_top + kBrowseRows) {
-    g_list_top = (uint8_t)(row - kBrowseRows + 1);
-  }
+  UIPageScrollTo(row, &g_list_top);
 }
 
 // Show the browser on the folder above, with the folder just left chosen.
@@ -694,11 +670,11 @@ static void StartNaming(bool cloning) {
 // take the last off, Enter to go ahead, and Esc to go back.
 static MenuAction TypeName(uint8_t key) {
   switch (key) {
-    case kKeyEnter:
+    case kKeyCodeEnter:
       return Choose();
-    case kKeyEsc:
+    case kKeyCodeEsc:
       return Back();
-    case kKeyBackspace:
+    case kKeyCodeBackspace:
       if (g_name_length > 0) {
         g_name[--g_name_length] = '\0';
         g_dirty = true;
@@ -841,7 +817,7 @@ static void ChooseNewDrive(void) {
 // can have to add, and Backspace to take the last off. Returns whether the
 // key was the name's.
 static bool TypeNewName(uint8_t key) {
-  if (key == kKeyBackspace) {
+  if (key == kKeyCodeBackspace) {
     if (g_name_length > 0) {
       g_name[--g_name_length] = '\0';
       g_dirty = true;
@@ -1122,9 +1098,9 @@ static MenuAction Choose(void) {
 // both held, the second just pressed.
 static bool TrackHotkey(SouthbridgeKeyEvent event) {
   bool* held = NULL;
-  if (event.key == kKeyLeftShift) {
+  if (event.key == kKeyCodeLeftShift) {
     held = &g_left_shift_held;
-  } else if (event.key == kKeyRightShift) {
+  } else if (event.key == kKeyCodeRightShift) {
     held = &g_right_shift_held;
   } else {
     return false;
@@ -1139,8 +1115,9 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   if (g_open && g_choosing) {
     // Nothing closes the list but starting something, and Esc goes back no
     // further than it.
-    if (hotkey || (g_page == kMenuPageVMs &&
-                   (event.key == kKeyEsc || event.key == kKeyBackspace))) {
+    if (hotkey ||
+        (g_page == kMenuPageVMs &&
+         (event.key == kKeyCodeEsc || event.key == kKeyCodeBackspace))) {
       return kMenuActionNone;
     }
     if (event.state != kSouthbridgeKeyReleased && g_problem[0] != '\0') {
@@ -1150,7 +1127,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   } else if (hotkey) {
     g_open = !g_open;
     if (g_open) {
-      g_box_drawn = false;
+      g_box.drawn = false;
       ShowMainItem(kMainDriveA);
       return kMenuActionOpened;
     }
@@ -1170,54 +1147,29 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     // Backspace erases the name rather than leaving the form, wherever it
     // is: Esc leaves it.
     if ((FormItem() == kNewName && TypeNewName(event.key)) ||
-        event.key == kKeyBackspace) {
+        event.key == kKeyCodeBackspace) {
       return kMenuActionNone;
     }
   }
-  const uint8_t count = PageItemCount();
+  if (UIPageIsMoveKey(event.key)) {
+    if (UIPageMove(event.key, PageItemCount(), &g_chosen)) {
+      g_dirty = true;
+    }
+    ScrollToChosen();
+    return kMenuActionNone;
+  }
   switch (event.key) {
-    case kKeyUp:
-      if (count > 0) {
-        g_chosen = (uint8_t)((g_chosen + count - 1) % count);
-        g_dirty = true;
-      }
-      ScrollToChosen();
-      return kMenuActionNone;
-    case kKeyDown:
-      if (count > 0) {
-        g_chosen = (uint8_t)((g_chosen + 1) % count);
-        g_dirty = true;
-      }
-      ScrollToChosen();
-      return kMenuActionNone;
-    case kKeyPageUp:
-      if (count > 0) {
-        g_chosen =
-            g_chosen > kBrowseRows ? (uint8_t)(g_chosen - kBrowseRows) : 0;
-        g_dirty = true;
-      }
-      ScrollToChosen();
-      return kMenuActionNone;
-    case kKeyPageDown:
-      if (count > 0) {
-        g_chosen = g_chosen + kBrowseRows < count
-                       ? (uint8_t)(g_chosen + kBrowseRows)
-                       : (uint8_t)(count - 1);
-        g_dirty = true;
-      }
-      ScrollToChosen();
-      return kMenuActionNone;
-    case kKeyEnter:
-    case kKeySpace:
+    case kKeyCodeEnter:
+    case kKeyCodeSpace:
       return Choose();
-    case kKeyBackspace:
+    case kKeyCodeBackspace:
       // Up a folder in the browser, until the card's root.
       if (g_page == kMenuPageBrowse && g_list.path[0] != '\0') {
         BrowseUp();
         return kMenuActionNone;
       }
       return Back();
-    case kKeyEsc:
+    case kKeyCodeEsc:
       return Back();
     default:
       return kMenuActionNone;
@@ -1228,53 +1180,10 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
 // Drawing
 // ============================================================================
 
-// A page of items, under lines of text, if any.
-static void DrawItems(
-    DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const UIBoxItem* items, uint8_t count) {
-  // The box holds kDisplayMenuMaxRows: lines past what fits are left out,
-  // rather than drawn past its rows.
-  if (count + 4 + line_count + 1 > kDisplayMenuMaxRows) {
-    line_count = count + 5 < kDisplayMenuMaxRows
-                     ? (uint8_t)(kDisplayMenuMaxRows - count - 5)
-                     : 0;
-  }
-  const uint8_t text_rows = line_count > 0 ? (uint8_t)(line_count + 1) : 0;
-  // The edges, a blank row either side of the items, and the lines with a
-  // blank row under them - or at power on, the list's size, as there is no
-  // guest's screen to draw under a smaller box to hide the list's.
-  uint8_t rows = (uint8_t)(count + 4 + text_rows);
-  if (g_choosing && rows < kBrowseRows + 2) {
-    rows = kBrowseRows + 2;
-  }
-  UIBoxPlace(menu, kNarrowColumns, rows);
-  uint8_t row = 0;
-  UIBoxEdgeRow(&menu->text[row++], menu->columns, true, title);
-  if (!g_choosing || line_count > 0) {
-    UIBoxBlankRow(&menu->text[row++], menu->columns);
-  }
-  for (uint8_t i = 0; i < line_count; ++i) {
-    UIBoxBlankRow(&menu->text[row], menu->columns);
-    UIBoxPutText(
-        &menu->text[row++], menu->columns, 3, lines[i], kUIBoxAttrText);
-  }
-  if (line_count > 0) {
-    UIBoxBlankRow(&menu->text[row++], menu->columns);
-  }
-  for (uint8_t i = 0; i < count; ++i) {
-    UIBoxMenuItemRow(
-        &menu->text[row++], menu->columns, &items[i], i == g_chosen);
-  }
-  while (row + 1 < rows) {
-    UIBoxBlankRow(&menu->text[row++], menu->columns);
-  }
-  UIBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
-}
-
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  UIBoxPlace(menu, kWideColumns, kMenuStatusLines + 4);
+  UIBoxPlace(menu, kUIPageWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
   UIBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
   UIBoxBlankRow(&menu->text[row++], menu->columns);
@@ -1292,7 +1201,7 @@ static void DrawStatusPage(DisplayMenu* menu) {
 
 static void DrawDrivePage(DisplayMenu* menu) {
   const DiskImage* image = g_config.drive(g_drive);
-  char line[kNarrowColumns];
+  char line[kUIPageNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
   const bool empty = DriveEmpty();
@@ -1313,9 +1222,9 @@ static void DrawDrivePage(DisplayMenu* menu) {
       "not using the drive.",
   };
   const char* title = kVMDriveNames[kVMDriveFD1 + g_drive];
-  DrawItems(
+  UIPageDrawItems(
       menu, title, lines, sizeof(lines) / sizeof(lines[0]), items,
-      DriveItemCount());
+      DriveItemCount(), g_chosen, g_choosing);
 }
 
 // What the browser says of a folder with nothing to choose in it.
@@ -1332,9 +1241,9 @@ static const char* BrowseEmpty(void) {
 // The browser: the folder as the title, and a row for each entry that
 // shows, with arrows on the border where there is more above or below.
 static void DrawBrowsePage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kUIPageNarrowColumns, kUIPageListRows + 2);
   // The folder, from the card's root, keeping its end if it is too long.
-  char title[kNarrowColumns - 6 + 1];
+  char title[kUIPageNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
   char full[kFSMaxPath + 2];
   snprintf(full, sizeof(full), "/%s", g_list.path);
@@ -1348,7 +1257,7 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     snprintf(title, sizeof(title), "%s", full);
   }
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, title);
-  for (uint8_t i = 0; i < kBrowseRows; ++i) {
+  for (uint8_t i = 0; i < kUIPageListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= g_list.count) {
@@ -1392,23 +1301,18 @@ static void DrawBrowsePage(DisplayMenu* menu) {
   }
   // A folder with more entries than a list holds says so on the bottom edge.
   UIBoxEdgeRow(
-      &menu->text[kBrowseRows + 1], menu->columns, false,
+      &menu->text[kUIPageListRows + 1], menu->columns, false,
       g_list.truncated ? "the first 64 entries" : NULL);
-  if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kUIBoxArrowUp;
-  }
-  if (g_list_top + kBrowseRows < g_list.count) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kUIBoxArrowDown;
-  }
+  UIPageDrawScrollArrows(menu, g_list_top, g_list.count);
 }
 
 // The VMs to start: a row each, with a line under them if there are any,
 // arrows on the border where there are more above or below, and the
 // countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kUIPageNarrowColumns, kUIPageListRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
-  for (uint8_t i = 0; i < kBrowseRows; ++i) {
+  for (uint8_t i = 0; i < kUIPageListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= VMsRowCount()) {
@@ -1429,30 +1333,25 @@ static void DrawVMsPage(DisplayMenu* menu) {
       }
     }
   }
-  char countdown[kNarrowColumns];
+  char countdown[kUIPageNarrowColumns];
   if (g_countdown > 0) {
     snprintf(
         countdown, sizeof(countdown), "starting in %u s",
         (unsigned)g_countdown);
   }
   UIBoxEdgeRow(
-      &menu->text[kBrowseRows + 1], menu->columns, false,
+      &menu->text[kUIPageListRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
-  if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kUIBoxArrowUp;
-  }
-  if (g_list_top + kBrowseRows < VMsRowCount()) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kUIBoxArrowDown;
-  }
+  UIPageDrawScrollArrows(menu, g_list_top, VMsRowCount());
 }
 
 // Manage VMs: the VMs in yax86/vm, a row each, then New VM after a line if
 // there are any, with arrows on the border where there are more above or
 // below.
 static void DrawManagePage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kUIPageNarrowColumns, kUIPageListRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
-  for (uint8_t i = 0; i < kBrowseRows; ++i) {
+  for (uint8_t i = 0; i < kUIPageListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= ManageRowCount()) {
@@ -1467,13 +1366,8 @@ static void DrawManagePage(DisplayMenu* menu) {
           row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
     }
   }
-  UIBoxEdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
-  if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kUIBoxArrowUp;
-  }
-  if (g_list_top + kBrowseRows < ManageRowCount()) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kUIBoxArrowDown;
-  }
+  UIBoxEdgeRow(&menu->text[kUIPageListRows + 1], menu->columns, false, NULL);
+  UIPageDrawScrollArrows(menu, g_list_top, ManageRowCount());
 }
 
 // A VM's page: the images in its drives, over what can be done to it.
@@ -1517,15 +1411,15 @@ static void DrawVMPage(DisplayMenu* menu) {
     line_pointers[0] = "No disks.";
     line_count = 1;
   }
-  DrawItems(
+  UIPageDrawItems(
       menu, g_vms->vms[g_vm].name, line_pointers, line_count, kVMItems,
-      kVMItemCount);
+      kVMItemCount, g_chosen, g_choosing);
 }
 
 // The name being typed, in a field marked as the item chosen is, with a
 // cursor after it while there is room.
 static void DrawNamePage(DisplayMenu* menu) {
-  char title[kNarrowColumns];
+  char title[kUIPageNarrowColumns];
   snprintf(
       title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
       g_vms->vms[g_vm].name);
@@ -1535,7 +1429,9 @@ static void DrawNamePage(DisplayMenu* menu) {
       "",
       "Up to 8 letters, digits, - and _.",
   };
-  DrawItems(menu, title, lines, sizeof(lines) / sizeof(lines[0]), NULL, 0);
+  UIPageDrawItems(
+      menu, title, lines, sizeof(lines) / sizeof(lines[0]), NULL, 0, g_chosen,
+      g_choosing);
   // The field, on the blank line: the box's edge, a blank row, then the
   // first line.
   DisplayTextRow* row = &menu->text[3];
@@ -1580,9 +1476,9 @@ static void DrawDeletePage(DisplayMenu* menu) {
   const uint8_t named = g_contents.file_count < kVMFolderNamed
                             ? g_contents.file_count
                             : kVMFolderNamed;
-  char question[kNarrowColumns];
+  char question[kUIPageNarrowColumns];
   snprintf(question, sizeof(question), "Delete %s?", g_vms->vms[g_vm].name);
-  char files[kNarrowColumns - 4];
+  char files[kUIPageNarrowColumns - 4];
   JoinNames(
       files, sizeof(files), g_contents.files, named, g_contents.file_count);
   char users[64];
@@ -1604,12 +1500,14 @@ static void DrawDeletePage(DisplayMenu* menu) {
         g_contents.users[0], (unsigned)(g_contents.user_count - 1));
     lines[line_count++] = users;
   }
-  DrawItems(menu, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount);
+  UIPageDrawItems(
+      menu, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
+      g_chosen, g_choosing);
 }
 
 // A clone being copied, or a new VM's blank disks being written.
 static void DrawCopyingPage(DisplayMenu* menu) {
-  char copying[kNarrowColumns];
+  char copying[kUIPageNarrowColumns];
   if (g_creating) {
     snprintf(
         copying, sizeof(copying), "Writing %s's blank disks...",
@@ -1619,21 +1517,21 @@ static void DrawCopyingPage(DisplayMenu* menu) {
         copying, sizeof(copying), "Copying %s to %s...", g_vms->vms[g_vm].name,
         g_name);
   }
-  char progress[kNarrowColumns];
+  char progress[kUIPageNarrowColumns];
   snprintf(
       progress, sizeof(progress), "%lu of %lu KB", (unsigned long)g_copied_kb,
       (unsigned long)g_copy_kb);
   const char* const lines[] = {copying, progress};
-  DrawItems(
+  UIPageDrawItems(
       menu, g_creating ? (g_editing ? "Edit drives" : "New VM") : "Clone",
-      lines, 2, NULL, 0);
+      lines, 2, NULL, 0, g_chosen, g_choosing);
 }
 
 // The form: a new VM's name, typed in place with a cursor while it is
 // chosen, and the drives, with what each holds - or editing a VM's drives,
 // the drives alone, under its name.
 static void DrawNewPage(DisplayMenu* menu) {
-  char rows[kNewItemCount][kNarrowColumns];
+  char rows[kNewItemCount][kUIPageNarrowColumns];
   UIBoxItem items[kNewItemCount];
   const char* cursor =
       FormItem() == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
@@ -1658,9 +1556,10 @@ static void DrawNewPage(DisplayMenu* menu) {
     items[item] = (UIBoxItem){rows[item], true};
   }
   items[kNewCreate] = (UIBoxItem){g_editing ? "Save" : "Create", false};
-  DrawItems(
+  UIPageDrawItems(
       menu, g_editing ? g_vms->vms[g_vm].name : "New VM", NULL, 0,
-      &items[FormFirstItem()], (uint8_t)(kNewItemCount - FormFirstItem()));
+      &items[FormFirstItem()], (uint8_t)(kNewItemCount - FormFirstItem()),
+      g_chosen, g_choosing);
 }
 
 // The main page: its items as they show.
@@ -1671,7 +1570,7 @@ static void DrawMainPage(DisplayMenu* menu) {
   for (uint8_t i = 0; i < count; ++i) {
     items[i] = kMainItems[shown[i]];
   }
-  DrawItems(menu, "yax86", NULL, 0, items, count);
+  UIPageDrawItems(menu, "yax86", NULL, 0, items, count, g_chosen, g_choosing);
 }
 
 // The choices for one of the form's drives.
@@ -1684,7 +1583,9 @@ static void DrawNewDrivePage(DisplayMenu* menu) {
   for (uint8_t row = 0; row < count; ++row) {
     items[row] = labels[choices[row]];
   }
-  DrawItems(menu, kVMDriveNames[g_new_drive], NULL, 0, items, count);
+  UIPageDrawItems(
+      menu, kVMDriveNames[g_new_drive], NULL, 0, items, count, g_chosen,
+      g_choosing);
 }
 
 static void DrawFontPage(DisplayMenu* menu) {
@@ -1692,7 +1593,8 @@ static void DrawFontPage(DisplayMenu* menu) {
   for (uint8_t i = 0; i < kFont4x10Count; ++i) {
     items[i] = (UIBoxItem){Font4x10Label((Font4x10)i), false};
   }
-  DrawItems(menu, "Font", NULL, 0, items, kFont4x10Count);
+  UIPageDrawItems(
+      menu, "Font", NULL, 0, items, kFont4x10Count, g_chosen, g_choosing);
 }
 
 // The card while it is on USB: who has it, and how much has moved.
@@ -1712,7 +1614,7 @@ static void DrawSharingPage(DisplayMenu* menu) {
       moved, sizeof(moved), "Read %lu KB, written %lu KB",
       (unsigned long)(stats.blocks_read / 2),
       (unsigned long)(stats.blocks_written / 2));
-  char what[kNarrowColumns];
+  char what[kUIPageNarrowColumns];
   if (stats.image_path != NULL) {
     char name[kDiskImageNameLength + 1];
     DiskImageName(stats.image_path, name);
@@ -1726,9 +1628,9 @@ static void DrawSharingPage(DisplayMenu* menu) {
       moved,
       ComputerHasCard() ? "Eject it on the computer first." : "",
   };
-  DrawItems(
+  UIPageDrawItems(
       menu, "USB disk mode", lines, sizeof(lines) / sizeof(lines[0]),
-      kSharingItems, 1);
+      kSharingItems, 1, g_chosen, g_choosing);
 }
 
 void MenuDraw(uint64_t now_us) {
@@ -1751,14 +1653,14 @@ void MenuDraw(uint64_t now_us) {
       DrawMainPage(menu);
       break;
     case kMenuPageReset:
-      DrawItems(
+      UIPageDrawItems(
           menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
-          kResetItemCount);
+          kResetItemCount, g_chosen, g_choosing);
       break;
     case kMenuPagePowerOff:
-      DrawItems(
+      UIPageDrawItems(
           menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
-          kPowerOffItems, kPowerOffItemCount);
+          kPowerOffItems, kPowerOffItemCount, g_chosen, g_choosing);
       break;
     case kMenuPageDrive:
       DrawDrivePage(menu);
@@ -1770,21 +1672,23 @@ void MenuDraw(uint64_t now_us) {
       DrawVMsPage(menu);
       break;
     case kMenuPageUSB:
-      DrawItems(menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount);
+      UIPageDrawItems(
+          menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount, g_chosen,
+          g_choosing);
       break;
     case kMenuPageSharing:
       DrawSharingPage(menu);
       g_status_drawn_us = now_us;
       break;
     case kMenuPageStopSharing:
-      DrawItems(
+      UIPageDrawItems(
           menu, "USB disk mode",
           (const char* const[]){
               "The computer has not ejected the",
               "disk, and may not have finished",
               "writing to it.",
           },
-          3, kStopSharingItems, kStopSharingItemCount);
+          3, kStopSharingItems, kStopSharingItemCount, g_chosen, g_choosing);
       break;
     case kMenuPageStatus:
       DrawStatusPage(menu);
@@ -1812,7 +1716,9 @@ void MenuDraw(uint64_t now_us) {
       DrawNewDrivePage(menu);
       break;
     case kMenuPageSettings:
-      DrawItems(menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount);
+      UIPageDrawItems(
+          menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
+          g_chosen, g_choosing);
       break;
     case kMenuPageFont:
       DrawFontPage(menu);
@@ -1821,14 +1727,10 @@ void MenuDraw(uint64_t now_us) {
   // A box of another size than the last leaves part of the last showing, so
   // the guest's screen goes under it first. If core 1 cannot take that yet,
   // the box is laid out again next time.
-  if (g_box_drawn &&
-      (menu->columns != g_drawn_columns || menu->rows != g_drawn_rows) &&
-      !g_config.redraw_guest()) {
+  if (UIPageBoxResized(&g_box, menu) && !g_config.redraw_guest()) {
     return;
   }
   DisplayEndMenu();
-  g_drawn_columns = menu->columns;
-  g_drawn_rows = menu->rows;
-  g_box_drawn = true;
+  UIPageBoxDrawn(&g_box, menu);
   g_dirty = false;
 }

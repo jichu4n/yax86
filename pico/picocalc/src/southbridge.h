@@ -37,6 +37,37 @@ typedef struct SouthbridgeKeyEvent {
   uint8_t key;
 } SouthbridgeKeyEvent;
 
+// The controller's codes for the named keys that are not printable ASCII,
+// and Space, which the menu chooses with as well as Enter. They are kKeyCode*
+// rather than led by the module's word, as an exception: a key's code is
+// what the whole runtime calls it.
+enum {
+  kKeyCodeBackspace = 0x08,
+  kKeyCodeTab = 0x09,
+  kKeyCodeEnter = 0x0A,
+  kKeyCodeAlt = 0xA1,
+  kKeyCodeLeftShift = 0xA2,
+  kKeyCodeRightShift = 0xA3,
+  kKeyCodeCtrl = 0xA5,
+  kKeyCodeEsc = 0xB1,
+  kKeyCodeLeft = 0xB4,
+  kKeyCodeUp = 0xB5,
+  kKeyCodeDown = 0xB6,
+  kKeyCodeRight = 0xB7,
+  kKeyCodeCapsLock = 0xC1,
+  kKeyCodeBreak = 0xD0,
+  kKeyCodeInsert = 0xD1,
+  kKeyCodeHome = 0xD2,
+  kKeyCodeDelete = 0xD4,
+  kKeyCodeEnd = 0xD5,
+  kKeyCodePageUp = 0xD6,
+  kKeyCodePageDown = 0xD7,
+  kKeyCodeF1 = 0x81,
+  kKeyCodeF6 = 0x86,
+  kKeyCodeF10 = 0x90,
+  kKeyCodeSpace = ' ',
+};
+
 // How the key FIFO poll has gone, for the report.
 typedef struct SouthbridgePollStats {
   // Reads that completed, the battery's included, and how many held a key.

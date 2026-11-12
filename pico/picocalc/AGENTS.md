@@ -682,8 +682,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Both Shift keys held together open it**, which nothing in DOS does and
   typing never does, and close it again. `src/menu.c` keeps its state and
-  draws it, in boxes and rows from `src/ui_box.c`; `main.c` carries out
-  what its items do, through the callbacks in `MenuConfig`.
+  draws it, in boxes and rows from `src/ui_box.c`. What its pages have in
+  common is in `src/ui_page.c`: moving the chosen item, scrolling a list,
+  and a page of items. `main.c` carries out what its items do, through the
+  callbacks in `MenuConfig`.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,
