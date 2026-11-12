@@ -3,8 +3,8 @@
 #include "southbridge.h"
 
 bool UIPageIsMoveKey(uint8_t key) {
-  return key == kSouthbridgeKeyCodeUp || key == kSouthbridgeKeyCodeDown ||
-         key == kSouthbridgeKeyCodePageUp || key == kSouthbridgeKeyCodePageDown;
+  return key == kKeyCodeUp || key == kKeyCodeDown || key == kKeyCodePageUp ||
+         key == kKeyCodePageDown;
 }
 
 bool UIPageMove(uint8_t key, uint8_t count, uint8_t* chosen) {
@@ -12,17 +12,17 @@ bool UIPageMove(uint8_t key, uint8_t count, uint8_t* chosen) {
     return false;
   }
   switch (key) {
-    case kSouthbridgeKeyCodeUp:
+    case kKeyCodeUp:
       *chosen = (uint8_t)((*chosen + count - 1) % count);
       break;
-    case kSouthbridgeKeyCodeDown:
+    case kKeyCodeDown:
       *chosen = (uint8_t)((*chosen + 1) % count);
       break;
-    case kSouthbridgeKeyCodePageUp:
+    case kKeyCodePageUp:
       *chosen =
           *chosen > kUIPageListRows ? (uint8_t)(*chosen - kUIPageListRows) : 0;
       break;
-    case kSouthbridgeKeyCodePageDown:
+    case kKeyCodePageDown:
       *chosen = *chosen + kUIPageListRows < count
                     ? (uint8_t)(*chosen + kUIPageListRows)
                     : (uint8_t)(count - 1);

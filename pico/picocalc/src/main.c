@@ -1273,10 +1273,10 @@ static void HandleKey(SouthbridgeKeyEvent key, bool running) {
     // The guest has seen both Shift keys go down, and while the menu has the
     // keyboard it would not see them come up, so it is told now.
     if (running) {
-      TypeKey((SouthbridgeKeyEvent){
-          kSouthbridgeKeyReleased, kSouthbridgeKeyCodeLeftShift});
-      TypeKey((SouthbridgeKeyEvent){
-          kSouthbridgeKeyReleased, kSouthbridgeKeyCodeRightShift});
+      TypeKey(
+          (SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeLeftShift});
+      TypeKey(
+          (SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeRightShift});
     }
     g_clock.pause_start_us = time_us_64();
     SYSTEM_INFO("menu_opened");

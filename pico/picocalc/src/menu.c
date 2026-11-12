@@ -670,11 +670,11 @@ static void StartNaming(bool cloning) {
 // take the last off, Enter to go ahead, and Esc to go back.
 static MenuAction TypeName(uint8_t key) {
   switch (key) {
-    case kSouthbridgeKeyCodeEnter:
+    case kKeyCodeEnter:
       return Choose();
-    case kSouthbridgeKeyCodeEsc:
+    case kKeyCodeEsc:
       return Back();
-    case kSouthbridgeKeyCodeBackspace:
+    case kKeyCodeBackspace:
       if (g_name_length > 0) {
         g_name[--g_name_length] = '\0';
         g_dirty = true;
@@ -817,7 +817,7 @@ static void ChooseNewDrive(void) {
 // can have to add, and Backspace to take the last off. Returns whether the
 // key was the name's.
 static bool TypeNewName(uint8_t key) {
-  if (key == kSouthbridgeKeyCodeBackspace) {
+  if (key == kKeyCodeBackspace) {
     if (g_name_length > 0) {
       g_name[--g_name_length] = '\0';
       g_dirty = true;
@@ -1098,9 +1098,9 @@ static MenuAction Choose(void) {
 // both held, the second just pressed.
 static bool TrackHotkey(SouthbridgeKeyEvent event) {
   bool* held = NULL;
-  if (event.key == kSouthbridgeKeyCodeLeftShift) {
+  if (event.key == kKeyCodeLeftShift) {
     held = &g_left_shift_held;
-  } else if (event.key == kSouthbridgeKeyCodeRightShift) {
+  } else if (event.key == kKeyCodeRightShift) {
     held = &g_right_shift_held;
   } else {
     return false;
@@ -1115,9 +1115,9 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   if (g_open && g_choosing) {
     // Nothing closes the list but starting something, and Esc goes back no
     // further than it.
-    if (hotkey || (g_page == kMenuPageVMs &&
-                   (event.key == kSouthbridgeKeyCodeEsc ||
-                    event.key == kSouthbridgeKeyCodeBackspace))) {
+    if (hotkey ||
+        (g_page == kMenuPageVMs &&
+         (event.key == kKeyCodeEsc || event.key == kKeyCodeBackspace))) {
       return kMenuActionNone;
     }
     if (event.state != kSouthbridgeKeyReleased && g_problem[0] != '\0') {
@@ -1147,7 +1147,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     // Backspace erases the name rather than leaving the form, wherever it
     // is: Esc leaves it.
     if ((FormItem() == kNewName && TypeNewName(event.key)) ||
-        event.key == kSouthbridgeKeyCodeBackspace) {
+        event.key == kKeyCodeBackspace) {
       return kMenuActionNone;
     }
   }
@@ -1159,17 +1159,17 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     return kMenuActionNone;
   }
   switch (event.key) {
-    case kSouthbridgeKeyCodeEnter:
-    case kSouthbridgeKeyCodeSpace:
+    case kKeyCodeEnter:
+    case kKeyCodeSpace:
       return Choose();
-    case kSouthbridgeKeyCodeBackspace:
+    case kKeyCodeBackspace:
       // Up a folder in the browser, until the card's root.
       if (g_page == kMenuPageBrowse && g_list.path[0] != '\0') {
         BrowseUp();
         return kMenuActionNone;
       }
       return Back();
-    case kSouthbridgeKeyCodeEsc:
+    case kKeyCodeEsc:
       return Back();
     default:
       return kMenuActionNone;
