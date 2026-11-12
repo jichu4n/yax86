@@ -9,6 +9,7 @@
 #include "ui_box.h"
 #include "ui_browser.h"
 #include "ui_page.h"
+#include "ui_status.h"
 #include "usb_disk.h"
 #include "vm_store.h"
 
@@ -220,11 +221,6 @@ static uint8_t g_new_drive;
 // Whether the form is editing the drives of the VM in g_vm, rather than
 // making a new one; it then has no name, and saves rather than creates.
 static bool g_editing;
-//
-// The problem is kept in two buffers, used in turn, so that a new one is a
-// new pointer: the status rows tell a change of hint by its pointer.
-static char g_problems[2][kTextColumns + 1];
-static char* g_problem = g_problems[0];
 bool LauncherMenuIsOpen(void) { return g_open; }
 
 const char* LauncherMenuPageName(void) { return kPageNames[g_page]; }
@@ -262,11 +258,6 @@ void LauncherMenuSetCountdown(uint8_t seconds) {
   }
 }
 
-void LauncherMenuSetProblem(const char* problem) {
-  g_problem = g_problem == g_problems[0] ? g_problems[1] : g_problems[0];
-  snprintf(g_problem, kTextColumns + 1, "%s", problem != NULL ? problem : "");
-}
-
 const char* LauncherMenuHint(void) {
   if (g_page == kListPageVMs) {
     return "\x18\x19=Move  Enter=Select";
@@ -290,10 +281,6 @@ const char* LauncherMenuHint(void) {
     return "\x18\x19=Move  Enter=Open  Backspace=Up a folder  Esc=Back";
   }
   return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
-
-const char* LauncherMenuProblem(void) {
-  return g_problem[0] != '\0' ? g_problem : NULL;
 }
 
 // Show the browser on a folder, with the image in the drive chosen if it is
@@ -828,8 +815,7 @@ LauncherMenuAction LauncherMenuHandleKey(SouthbridgeKeyEvent event) {
       (event.key == kKeyCodeEsc || event.key == kKeyCodeBackspace)) {
     return kLauncherMenuActionNone;
   }
-  if (event.state != kSouthbridgeKeyReleased && g_problem[0] != '\0') {
-    g_problem[0] = '\0';
+  if (event.state != kSouthbridgeKeyReleased && UIStatusClearProblem()) {
     g_dirty = true;
   }
   // A key held down repeats, which moves through the items as a press does.

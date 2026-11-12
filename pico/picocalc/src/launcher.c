@@ -14,6 +14,7 @@
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
+#include "ui_status.h"
 #include "usb_disk.h"
 #include "vm_folder.h"
 #include "vm_store.h"
@@ -110,7 +111,7 @@ static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
-  LauncherMenuSetProblem(message);
+  UIStatusSetProblem(message);
   SYSTEM_WARN(
       "vm_config_problem", Y_LOG_STRING("path", vm->path),
       Y_LOG_STRING("problem", problem));
@@ -129,7 +130,7 @@ static __noinline bool ReadCard(uint8_t* highlighted) {
   if (!read) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
-    LauncherMenuSetProblem(message);
+    UIStatusSetProblem(message);
   }
   return read;
 }
@@ -143,7 +144,7 @@ static __noinline void ChooseFont(void) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
-  LauncherMenuSetProblem(message);
+  UIStatusSetProblem(message);
 }
 
 // Share the SD card over USB: the card is unmounted first, as
@@ -173,7 +174,7 @@ static __noinline void ShareImage(void) {
     snprintf(
         message, sizeof(message), "Could not open %s: %s", name,
         DiskImageDescribeStatus(status));
-    LauncherMenuSetProblem(message);
+    UIStatusSetProblem(message);
     SYSTEM_WARN(
         "usb_image_not_shared", Y_LOG_STRING("path", g_usb_image_path),
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
@@ -221,7 +222,7 @@ static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
 // Show why Manage VMs could not do something, and log it.
 static void ShowManageProblem(
     const char* event, const VMEntry* vm, const char* problem) {
-  LauncherMenuSetProblem(problem);
+  UIStatusSetProblem(problem);
   SYSTEM_WARN(
       event, Y_LOG_STRING("path", vm->path), Y_LOG_STRING("problem", problem));
 }
@@ -233,7 +234,7 @@ static __noinline void RenameVM(void) {
   const VMFolderResult result = VMFolderRename(
       VMStoreList(), &vm, LauncherMenuTypedName(), &renamed, problem);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    UIStatusSetProblem(problem);
     return;
   }
   ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name, false);
@@ -270,7 +271,7 @@ static __noinline void CloneVM(void) {
   // Left as the guest would find RAM at power on, whatever it held.
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    UIStatusSetProblem(problem);
     return;
   }
   ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name, false);
@@ -301,7 +302,7 @@ static __noinline void CreateVM(void) {
       LauncherMenuTypedName(), &drives, &transfer, &created, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    UIStatusSetProblem(problem);
     return;
   }
   ShowManagedVMs(created.name, false);
@@ -315,7 +316,7 @@ static __noinline void CreateVM(void) {
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
-    LauncherMenuSetProblem(problem);
+    UIStatusSetProblem(problem);
     SYSTEM_WARN(
         "vm_not_created", Y_LOG_STRING("name", created.name),
         Y_LOG_STRING("problem", problem));
@@ -335,7 +336,7 @@ static __noinline void EditVM(void) {
   const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    UIStatusSetProblem(problem);
     return;
   }
   ShowManagedVMs(vm.name, true);
@@ -359,13 +360,7 @@ static __noinline void DeleteVM(void) {
   }
 }
 
-void LauncherUpdateRows(void) {
-  StatusBarState state = {0};
-  state.battery = SouthbridgeGetBattery();
-  state.hint = LauncherMenuHint();
-  state.problem = LauncherMenuProblem();
-  StatusBarOffer(&state);
-}
+void LauncherUpdateRows(void) { UIStatusOffer(LauncherMenuHint()); }
 
 void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
 

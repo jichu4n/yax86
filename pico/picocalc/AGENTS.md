@@ -671,7 +671,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **The messages row** shows a message four seconds at a time; the menu's
   keys while it is open, or a problem in their place until the next key;
   and otherwise, while a VM runs, the menu's own key, `Shift+Shift=Menu`,
-  dim. Shift is spelled out: the arrows that stood for it read as the up
+  dim. While the list at power on shows, `src/ui_status.c` keeps the problem
+  and composes the rows from the keys of the page showing. Shift is spelled out: the arrows that stood for it read as the up
   arrow key.
 - **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
   pairs two spaces apart - `↑↓=Move  Enter=Select  Esc=Back` - the action

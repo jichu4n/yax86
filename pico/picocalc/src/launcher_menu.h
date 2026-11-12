@@ -39,7 +39,7 @@ typedef enum LauncherMenuAction {
   // From Manage VMs: rename the VM LauncherMenuManagedVM() says to
   // LauncherMenuTypedName(), clone it as that name, or delete it. Then show
   // Manage VMs again with LauncherMenuShowManagedVMs(), or for a name that
-  // will not do, LauncherMenuSetProblem() alone, which leaves the name to be
+  // will not do, UIStatusSetProblem() alone, which leaves the name to be
   // typed again.
   kLauncherMenuActionRenameVM,
   kLauncherMenuActionCloneVM,
@@ -100,10 +100,6 @@ void LauncherMenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb);
 // stop showing them with 0.
 void LauncherMenuSetCountdown(uint8_t seconds);
 
-// Set why the VM chosen could not start, for LauncherMenuProblem(), until
-// another key is pressed; NULL for nothing. The text is copied.
-void LauncherMenuSetProblem(const char* problem);
-
 // Hand the list a key event, while it shows.
 LauncherMenuAction LauncherMenuHandleKey(SouthbridgeKeyEvent event);
 
@@ -113,10 +109,6 @@ void LauncherMenuDraw(uint64_t now_us);
 
 // The keys to show on the status bar's message row, as Key=Action pairs.
 const char* LauncherMenuHint(void);
-
-// Why the VM chosen could not start, to show in place of the keys, or
-// NULL.
-const char* LauncherMenuProblem(void);
 
 // The page showing, as the report gives it.
 const char* LauncherMenuPageName(void);
