@@ -21,7 +21,7 @@
 #include "font_4x10.h"
 #include "southbridge.h"
 #include "vm_config.h"
-#include "vm_folder.h"
+#include "vm_list.h"
 
 // What a key did on the list.
 typedef enum LauncherMenuAction {
@@ -85,7 +85,7 @@ const char* LauncherMenuTypedName(void);
 
 // The drives filled in on the form, New VM's or Edit drives'. Its strings
 // are the list's, until the form is next shown.
-void LauncherMenuFormDrives(VMFolderDrives* drives);
+void LauncherMenuFormDrives(VMListDrives* drives);
 
 // Show Manage VMs, once the caller has read the list afresh, with the VM
 // named name chosen, or the first if it is not there - and with show_vm, the

@@ -286,6 +286,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## VMs
 
+- **The card's data is three models**, each a struct and the functions
+  that act on one through a pointer, with the caller owning the instance:
+  `src/settings.c`, the card's settings; `src/vm_config.c`, one VM's
+  `vm.cfg`; and `src/vm_list.c`, the list of VMs and what changes them as
+  folders, which are create, edit drives, rename, clone and delete. Rename
+  and delete keep `boot_default` naming a VM that is there.
 - **A VM is a folder in `yax86/vm`**, `src/vm_config.c`,
   holding `vm.cfg`, which names its drives' images, and the images that
   are its own. Every folder there with a `vm.cfg` is one, named for the
@@ -323,7 +329,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   of the VM to highlight and start - `boot_default=DOS330` - `boot_delay`,
   the seconds the list waits for a key, 5 without it, 0 to start the default
   without showing the list, and `font`, the 4x10 font (`ymini`, `atari800`,
-  `miniwi` or `creep`, `ymini` without it).
+  `miniwi` or `creep`, `ymini` without it). Each key read is logged as
+  `settings_key`, with its value. A key it does not know is logged as
+  `settings_key_ignored` and skipped, so a file written by a later firmware
+  still reads. A problem, such as a bad value, is logged as
+  `settings_problem`.
 - **At power on, with a card, the menu lists its VMs**, before the VM
   exists, then a separator line, Manage VMs - see below - USB disk mode -
   see "The USB device" - and Settings (which holds Font). The countdown runs on
@@ -381,7 +391,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ## Managing VMs
 
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
-  VMs**, through `src/vm_folder.c`: a page listing the VMs and then New VM
+  VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
   (after a separator line if there are any VMs), a
   page for each VM with the images in its drives - two drives a line, A and
   B then HD1 and HD2 - over Edit drives, Rename, Clone and Delete, a name typed

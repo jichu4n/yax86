@@ -50,7 +50,7 @@
 #include "typing.h"
 #include "usb_disk.h"
 #include "vm_config.h"
-#include "vm_folder.h"
+#include "vm_list.h"
 #include "yax86_pico.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image

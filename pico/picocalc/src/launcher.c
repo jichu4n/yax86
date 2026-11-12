@@ -16,7 +16,7 @@
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "usb_disk.h"
-#include "vm_folder.h"
+#include "vm_list.h"
 
 enum {
   // The part of the guest's RAM a clone's files are copied through, before a
@@ -47,7 +47,7 @@ static StartNote __uninitialized_ram(g_start_note);
 
 // The VMs on the card, and the card's settings.
 static VMList g_vms;
-static VMSettings g_settings;
+static Settings g_settings;
 // Guest RAM, lent before the VM starts - see LauncherInit().
 static uint8_t* g_copy_buffer;
 // When the default VM starts by itself, and whether it is still counting
@@ -98,9 +98,7 @@ static void SaveBootDefault(const char* name) {
     return;
   }
   char problem[kVMProblemLength + 1];
-  if (VMSettingsSaveBootDefault(name, problem)) {
-    snprintf(
-        g_settings.boot_default, sizeof(g_settings.boot_default), "%s", name);
+  if (SettingsSaveBootDefault(&g_settings, name, problem)) {
     SYSTEM_INFO("boot_default_saved", Y_LOG_STRING("name", name));
     return;
   }
@@ -130,9 +128,11 @@ static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
 
 // The card's settings, and the index of the default VM in the list.
 // Returns false, with the problem shown on the list, if the settings had one.
-static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
+// Kept out of line, so that its message is on core 0's stack only while it
+// runs rather than in the frames of the callers it would be inlined into.
+static __noinline bool ReadSettings(Settings* settings, uint8_t* highlighted) {
   char problem[kVMProblemLength + 1];
-  bool read = VMSettingsRead(settings, problem);
+  bool read = SettingsRead(settings, problem);
   DisplaySetFont(settings->font);
   LauncherMenuSetFont(settings->font);
   *highlighted = 0;
@@ -147,7 +147,6 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
     LauncherMenuSetProblem(message);
-    SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
   }
   return read;
 }
@@ -158,9 +157,8 @@ static __noinline void ChooseFont(void) {
   if (font == g_settings.font) {
     return;
   }
-  g_settings.font = font;
   char problem[kVMProblemLength + 1];
-  if (VMSettingsSaveFont(font, problem)) {
+  if (SettingsSaveFont(&g_settings, font, problem)) {
     SYSTEM_INFO("font_saved", Y_LOG_STRING("font", Font4x10Name(font)));
     return;
   }
@@ -256,14 +254,14 @@ static __noinline void RenameVM(void) {
   const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   VMEntry renamed;
   char problem[kVMProblemLength + 1];
-  const VMFolderResult result =
-      VMFolderRename(&g_vms, &vm, LauncherMenuTypedName(), &renamed, problem);
-  if (result == kVMFolderRefused) {
+  const VMListResult result =
+      VMListRename(&g_vms, &vm, LauncherMenuTypedName(), &renamed, problem);
+  if (result == kVMListRefused) {
     LauncherMenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name, false);
-  if (result == kVMFolderDone) {
+  ShowManagedVMs(result == kVMListDone ? renamed.name : vm.name, false);
+  if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_renamed", Y_LOG_STRING("from", vm.name),
         Y_LOG_STRING("to", renamed.name));
@@ -291,16 +289,16 @@ static __noinline void CloneVM(void) {
       .buffer_size = kCopyBufferSize,
       .progress = ShowCopyProgress,
   };
-  const VMFolderResult result =
-      VMFolderClone(&vm, LauncherMenuTypedName(), &transfer, &copy, problem);
+  const VMListResult result =
+      VMListClone(&vm, LauncherMenuTypedName(), &transfer, &copy, problem);
   // Left as the guest would find RAM at power on, whatever it held.
   memset(g_copy_buffer, 0, kCopyBufferSize);
-  if (result == kVMFolderRefused) {
+  if (result == kVMListRefused) {
     LauncherMenuSetProblem(problem);
     return;
   }
-  ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name, false);
-  if (result == kVMFolderDone) {
+  ShowManagedVMs(result == kVMListDone ? copy.name : vm.name, false);
+  if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_cloned", Y_LOG_STRING("from", vm.name),
         Y_LOG_STRING("to", copy.name),
@@ -312,7 +310,7 @@ static __noinline void CloneVM(void) {
 }
 
 static __noinline void CreateVM(void) {
-  VMFolderDrives drives;
+  VMListDrives drives;
   LauncherMenuFormDrives(&drives);
   VMEntry created;
   char problem[kVMProblemLength + 1];
@@ -323,15 +321,15 @@ static __noinline void CreateVM(void) {
       .buffer_size = kCopyBufferSize,
       .progress = ShowCopyProgress,
   };
-  const VMFolderResult result = VMFolderCreate(
+  const VMListResult result = VMListCreate(
       LauncherMenuTypedName(), &drives, &transfer, &created, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
-  if (result == kVMFolderRefused) {
+  if (result == kVMListRefused) {
     LauncherMenuSetProblem(problem);
     return;
   }
   ShowManagedVMs(created.name, false);
-  if (result == kVMFolderDone) {
+  if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
         Y_LOG_BOOL("blank_fd1", drives.blank[kVMDriveFD1]),
@@ -350,7 +348,7 @@ static __noinline void CreateVM(void) {
 
 static __noinline void EditVM(void) {
   const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
-  VMFolderDrives drives;
+  VMListDrives drives;
   LauncherMenuFormDrives(&drives);
   char problem[kVMProblemLength + 1];
   FSTransfer transfer = {
@@ -358,14 +356,14 @@ static __noinline void EditVM(void) {
       .buffer_size = kCopyBufferSize,
       .progress = ShowCopyProgress,
   };
-  const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
+  const VMListResult result = VMListEdit(&vm, &drives, &transfer, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
-  if (result == kVMFolderRefused) {
+  if (result == kVMListRefused) {
     LauncherMenuSetProblem(problem);
     return;
   }
   ShowManagedVMs(vm.name, true);
-  if (result == kVMFolderDone) {
+  if (result == kVMListDone) {
     SYSTEM_INFO("vm_edited", Y_LOG_STRING("name", vm.name));
   } else {
     ShowManageProblem("vm_not_edited", &vm, problem);
@@ -375,7 +373,7 @@ static __noinline void EditVM(void) {
 static __noinline void DeleteVM(void) {
   const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   char problem[kVMProblemLength + 1];
-  const bool deleted = VMFolderDelete(&vm, problem);
+  const bool deleted = VMListDelete(&vm, problem);
   // Gone from the list, it leaves the first VM chosen.
   ShowManagedVMs(vm.name, false);
   if (deleted) {
@@ -397,7 +395,7 @@ void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
 
 const VMList* LauncherVMs(void) { return &g_vms; }
 
-const VMSettings* LauncherSettings(void) { return &g_settings; }
+const Settings* LauncherSettings(void) { return &g_settings; }
 
 LauncherStartResult LauncherStart(VMConfig* vm) {
   StartNote note = {0};

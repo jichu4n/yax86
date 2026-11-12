@@ -125,8 +125,9 @@ add_executable(yax86_picocalc
     src/file_list.c
     src/fs.c
     src/config_file.c
+    src/settings.c
     src/vm_config.c
-    src/vm_folder.c
+    src/vm_list.c
     src/floppy.c
     src/harddisk.c
     src/font_4x10.c
