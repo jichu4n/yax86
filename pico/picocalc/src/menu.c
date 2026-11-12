@@ -8,6 +8,7 @@
 #include "display.h"
 #include "file_list.h"
 #include "harddisk.h"
+#include "ui_box.h"
 #include "usb_disk.h"
 #include "vm_folder.h"
 
@@ -35,34 +36,10 @@ enum {
 
   // A page's box: the main page and the question are narrow, centered on the
   // guest's screen, and the status page takes its whole width.
-  kGuestScreenRows = 25,
   kNarrowColumns = 40,
   kWideColumns = kTextColumns,
   // A label's column on the status page.
   kStatusLabelColumns = 9,
-
-  // CGA attributes: white on blue for the box, and black on light gray for
-  // the item chosen.
-  kAttrFrame = 0x1F,
-  kAttrText = 0x17,
-  kAttrChosen = 0x70,
-  kAttrTitle = 0x1E,
-
-  // Code page 437's double lined box, and the single line that separates
-  // sections inside it.
-  kBoxTopLeft = 0xC9,
-  kBoxTopRight = 0xBB,
-  kBoxBottomLeft = 0xC8,
-  kBoxBottomRight = 0xBC,
-  kBoxHorizontal = 0xCD,
-  kBoxVertical = 0xBA,
-  kBoxSeparatorLeft = 0xC7,
-  kBoxSeparatorRight = 0xB6,
-  kBoxSeparator = 0xC4,
-  // Code page 437's up and down arrows, which mark more of a list above or
-  // below what shows.
-  kArrowUp = 0x18,
-  kArrowDown = 0x19,
 
   kStatusRefreshUs = 1000 * 1000,
 };
@@ -120,13 +97,6 @@ static const char* const kPageNames[] = {
     [kMenuPageFont] = "font",
 };
 
-// An item of a page, and whether choosing it opens another menu, which a
-// chevron at its end says.
-typedef struct MenuItem {
-  const char* text;
-  bool opens_menu;
-} MenuItem;
-
 typedef enum MainItem {
   // The drives' items, in the order of FloppyDrive.
   kMainDriveA = 0,
@@ -138,7 +108,7 @@ typedef enum MainItem {
   kMainItemCount,
 } MainItem;
 
-static const MenuItem kMainItems[kMainItemCount] = {
+static const UIBoxItem kMainItems[kMainItemCount] = {
     [kMainDriveA] = {"Floppy disk 1", true},
     [kMainDriveB] = {"Floppy disk 2", true},
     [kMainStatus] = {"Status", true},
@@ -159,7 +129,7 @@ typedef enum ResetItem {
   kResetItemCount,
 } ResetItem;
 
-static const MenuItem kResetItems[kResetItemCount] = {
+static const UIBoxItem kResetItems[kResetItemCount] = {
     [kResetCancel] = {"Cancel", false},
     [kResetConfirm] = {"Reset", false},
 };
@@ -170,7 +140,7 @@ typedef enum PowerOffItem {
   kPowerOffItemCount,
 } PowerOffItem;
 
-static const MenuItem kPowerOffItems[kPowerOffItemCount] = {
+static const UIBoxItem kPowerOffItems[kPowerOffItemCount] = {
     [kPowerOffCancel] = {"Cancel", false},
     [kPowerOffConfirm] = {"Power off", false},
 };
@@ -181,12 +151,12 @@ typedef enum USBItem {
   kUSBItemCount,
 } USBItem;
 
-static const MenuItem kUSBItems[kUSBItemCount] = {
+static const UIBoxItem kUSBItems[kUSBItemCount] = {
     [kUSBCard] = {"Whole SD card", false},
     [kUSBImage] = {"Disk image", true},
 };
 
-static const MenuItem kSharingItems[] = {{"Disconnect", false}};
+static const UIBoxItem kSharingItems[] = {{"Disconnect", false}};
 
 typedef enum StopSharingItem {
   kStopSharingCancel = 0,
@@ -194,7 +164,7 @@ typedef enum StopSharingItem {
   kStopSharingItemCount,
 } StopSharingItem;
 
-static const MenuItem kStopSharingItems[kStopSharingItemCount] = {
+static const UIBoxItem kStopSharingItems[kStopSharingItemCount] = {
     [kStopSharingCancel] = {"Cancel", false},
     [kStopSharingConfirm] = {"Disconnect anyway", false},
 };
@@ -207,7 +177,7 @@ typedef enum VMItem {
   kVMItemCount,
 } VMItem;
 
-static const MenuItem kVMItems[kVMItemCount] = {
+static const UIBoxItem kVMItems[kVMItemCount] = {
     [kVMEdit] = {"Edit drives", true},
     [kVMRename] = {"Rename", true},
     [kVMClone] = {"Clone", true},
@@ -220,7 +190,7 @@ typedef enum DeleteItem {
   kDeleteItemCount,
 } DeleteItem;
 
-static const MenuItem kDeleteItems[kDeleteItemCount] = {
+static const UIBoxItem kDeleteItems[kDeleteItemCount] = {
     [kDeleteCancel] = {"Cancel", false},
     [kDeleteConfirm] = {"Delete", false},
 };
@@ -249,14 +219,14 @@ typedef enum NewDriveItem {
   kNewDriveItemCount,
 } NewDriveItem;
 
-static const MenuItem kNewFloppyItems[kNewDriveItemCount] = {
+static const UIBoxItem kNewFloppyItems[kNewDriveItemCount] = {
     [kNewDriveDisabled] = {"Disabled", false},
     [kNewDriveNone] = {"Empty", false},
     [kNewDriveBlank] = {"New floppy image (360KB)", false},
     [kNewDriveImage] = {"Existing floppy image", true},
 };
 
-static const MenuItem kNewHardDiskItems[kNewDriveItemCount] = {
+static const UIBoxItem kNewHardDiskItems[kNewDriveItemCount] = {
     [kNewDriveDisabled] = {"Disabled", false},
     [kNewDriveBlank] = {"New disk image (10MB)", false},
     [kNewDriveImage] = {"Existing disk image", true},
@@ -272,11 +242,11 @@ static const NewDriveItem kFloppy2Choices[] = {
 static const NewDriveItem kHardDiskChoices[] = {
     kNewDriveDisabled, kNewDriveBlank, kNewDriveImage};
 
-static const MenuItem kNewVMRow = {"New VM", true};
-static const MenuItem kManageRow = {"Manage VMs", true};
-static const MenuItem kUSBRow = {"USB disk mode", true};
-static const MenuItem kSettingsRow = {"Settings", true};
-static const MenuItem kSettingsItems[] = {{"Font", true}};
+static const UIBoxItem kNewVMRow = {"New VM", true};
+static const UIBoxItem kManageRow = {"Manage VMs", true};
+static const UIBoxItem kUSBRow = {"USB disk mode", true};
+static const UIBoxItem kSettingsRow = {"Settings", true};
+static const UIBoxItem kSettingsItems[] = {{"Font", true}};
 enum {
   kSettingsItemCount = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
 };
@@ -1258,102 +1228,10 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
 // Drawing
 // ============================================================================
 
-// Fill a row of the box: its border, and its inside blank.
-static void BlankRow(DisplayTextRow* row, uint8_t columns) {
-  row->chars[0] = (char)kBoxVertical;
-  row->attrs[0] = kAttrFrame;
-  for (uint8_t i = 1; i + 1 < columns; ++i) {
-    row->chars[i] = ' ';
-    row->attrs[i] = kAttrText;
-  }
-  row->chars[columns - 1] = (char)kBoxVertical;
-  row->attrs[columns - 1] = kAttrFrame;
-}
-
-// The top or bottom edge of the box, with a title centered in the top one.
-static void EdgeRow(
-    DisplayTextRow* row, uint8_t columns, bool top, const char* title) {
-  row->chars[0] = (char)(top ? kBoxTopLeft : kBoxBottomLeft);
-  for (uint8_t i = 1; i + 1 < columns; ++i) {
-    row->chars[i] = (char)kBoxHorizontal;
-  }
-  row->chars[columns - 1] = (char)(top ? kBoxTopRight : kBoxBottomRight);
-  for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kAttrFrame;
-  }
-  if (title == NULL) {
-    return;
-  }
-  const uint8_t length = (uint8_t)strlen(title);
-  // The title, with a space either side, over the middle of the edge.
-  uint8_t column = (uint8_t)((columns - length - 2) / 2);
-  row->chars[column] = ' ';
-  row->attrs[column++] = kAttrTitle;
-  for (uint8_t i = 0; i < length; ++i) {
-    row->chars[column] = title[i];
-    row->attrs[column++] = kAttrTitle;
-  }
-  row->chars[column] = ' ';
-  row->attrs[column] = kAttrTitle;
-}
-
-// A horizontal line across the box, separating groups of items.
-static void SeparatorRow(DisplayTextRow* row, uint8_t columns) {
-  row->chars[0] = (char)kBoxSeparatorLeft;
-  for (uint8_t i = 1; i + 1 < columns; ++i) {
-    row->chars[i] = (char)kBoxSeparator;
-  }
-  row->chars[columns - 1] = (char)kBoxSeparatorRight;
-  for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kAttrFrame;
-  }
-}
-
-// Put text inside a row of the box from column, clipped at its border.
-static void PutText(
-    DisplayTextRow* row, uint8_t columns, uint8_t column, const char* text,
-    uint8_t attr) {
-  while (*text != '\0' && column + 1 < columns) {
-    row->chars[column] = *text++;
-    row->attrs[column++] = attr;
-  }
-}
-
-// An item's row: its text, and the whole width inside the border marked if
-// it is the item chosen.
-static void ItemRow(
-    DisplayTextRow* row, uint8_t columns, const char* text, bool chosen) {
-  BlankRow(row, columns);
-  if (chosen) {
-    for (uint8_t i = 1; i + 1 < columns; ++i) {
-      row->attrs[i] = kAttrChosen;
-    }
-  }
-  PutText(row, columns, 3, text, chosen ? kAttrChosen : kAttrText);
-}
-
-// A menu item's row, with a chevron near the right border if it opens
-// another menu.
-static void MenuItemRow(
-    DisplayTextRow* row, uint8_t columns, const MenuItem* item, bool chosen) {
-  ItemRow(row, columns, item->text, chosen);
-  if (item->opens_menu) {
-    row->chars[columns - 3] = '>';
-  }
-}
-
-// Lay out a box of rows, centered on the guest's screen.
-static void PlaceBox(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
-  menu->columns = columns;
-  menu->rows = rows;
-  menu->column = (uint8_t)((kTextColumns - columns) / 2);
-  menu->row = (uint8_t)((kGuestScreenRows - rows) / 2);
-}
-
 // A page of items, under lines of text, if any.
 static void DrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const MenuItem* items, uint8_t count) {
+    uint8_t line_count, const UIBoxItem* items, uint8_t count) {
   // The box holds kDisplayMenuMaxRows: lines past what fits are left out,
   // rather than drawn past its rows.
   if (count + 4 + line_count + 1 > kDisplayMenuMaxRows) {
@@ -1369,45 +1247,47 @@ static void DrawItems(
   if (g_choosing && rows < kBrowseRows + 2) {
     rows = kBrowseRows + 2;
   }
-  PlaceBox(menu, kNarrowColumns, rows);
+  UIBoxPlace(menu, kNarrowColumns, rows);
   uint8_t row = 0;
-  EdgeRow(&menu->text[row++], menu->columns, true, title);
+  UIBoxEdgeRow(&menu->text[row++], menu->columns, true, title);
   if (!g_choosing || line_count > 0) {
-    BlankRow(&menu->text[row++], menu->columns);
+    UIBoxBlankRow(&menu->text[row++], menu->columns);
   }
   for (uint8_t i = 0; i < line_count; ++i) {
-    BlankRow(&menu->text[row], menu->columns);
-    PutText(&menu->text[row++], menu->columns, 3, lines[i], kAttrText);
+    UIBoxBlankRow(&menu->text[row], menu->columns);
+    UIBoxPutText(
+        &menu->text[row++], menu->columns, 3, lines[i], kUIBoxAttrText);
   }
   if (line_count > 0) {
-    BlankRow(&menu->text[row++], menu->columns);
+    UIBoxBlankRow(&menu->text[row++], menu->columns);
   }
   for (uint8_t i = 0; i < count; ++i) {
-    MenuItemRow(&menu->text[row++], menu->columns, &items[i], i == g_chosen);
+    UIBoxMenuItemRow(
+        &menu->text[row++], menu->columns, &items[i], i == g_chosen);
   }
   while (row + 1 < rows) {
-    BlankRow(&menu->text[row++], menu->columns);
+    UIBoxBlankRow(&menu->text[row++], menu->columns);
   }
-  EdgeRow(&menu->text[row], menu->columns, false, NULL);
+  UIBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  PlaceBox(menu, kWideColumns, kMenuStatusLines + 4);
+  UIBoxPlace(menu, kWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
-  EdgeRow(&menu->text[row++], menu->columns, true, "Status");
-  BlankRow(&menu->text[row++], menu->columns);
+  UIBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
+  UIBoxBlankRow(&menu->text[row++], menu->columns);
   for (uint8_t i = 0; i < kMenuStatusLines; ++i) {
     DisplayTextRow* text = &menu->text[row++];
-    BlankRow(text, menu->columns);
-    PutText(text, menu->columns, 2, lines[i].label, kAttrTitle);
-    PutText(
+    UIBoxBlankRow(text, menu->columns);
+    UIBoxPutText(text, menu->columns, 2, lines[i].label, kUIBoxAttrTitle);
+    UIBoxPutText(
         text, menu->columns, 2 + kStatusLabelColumns, lines[i].value,
-        kAttrText);
+        kUIBoxAttrText);
   }
-  BlankRow(&menu->text[row++], menu->columns);
-  EdgeRow(&menu->text[row], menu->columns, false, NULL);
+  UIBoxBlankRow(&menu->text[row++], menu->columns);
+  UIBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
 static void DrawDrivePage(DisplayMenu* menu) {
@@ -1422,7 +1302,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
   } else if (empty) {
     in_drive = "empty";
   }
-  const MenuItem items[kDriveItemCount] = {
+  const UIBoxItem items[kDriveItemCount] = {
       [kDriveInsert] = {empty ? "Choose disk image" : "Swap disk image", true},
       [kDriveEject] = {"Eject", false},
   };
@@ -1452,7 +1332,7 @@ static const char* BrowseEmpty(void) {
 // The browser: the folder as the title, and a row for each entry that
 // shows, with arrows on the border where there is more above or below.
 static void DrawBrowsePage(DisplayMenu* menu) {
-  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
   // The folder, from the card's root, keeping its end if it is too long.
   char title[kNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
@@ -1467,29 +1347,30 @@ static void DrawBrowsePage(DisplayMenu* menu) {
   } else {
     snprintf(title, sizeof(title), "%s", full);
   }
-  EdgeRow(&menu->text[0], menu->columns, true, title);
+  UIBoxEdgeRow(&menu->text[0], menu->columns, true, title);
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= g_list.count) {
-      BlankRow(row, menu->columns);
+      UIBoxBlankRow(row, menu->columns);
       if (i == 0 && !g_list.readable) {
-        PutText(row, menu->columns, 3, "The card cannot be read", kAttrText);
+        UIBoxPutText(
+            row, menu->columns, 3, "The card cannot be read", kUIBoxAttrText);
       } else if (i == 1 && g_list.count <= 1) {
-        PutText(row, menu->columns, 3, BrowseEmpty(), kAttrText);
+        UIBoxPutText(row, menu->columns, 3, BrowseEmpty(), kUIBoxAttrText);
       }
       continue;
     }
     const FileListEntry* entry = &g_list.entries[index];
-    ItemRow(row, menu->columns, entry->name, index == g_chosen);
-    const uint8_t attr = index == g_chosen ? kAttrChosen : kAttrText;
+    UIBoxItemRow(row, menu->columns, entry->name, index == g_chosen);
+    const uint8_t attr = index == g_chosen ? kUIBoxAttrChosen : kUIBoxAttrText;
     char path[kFSMaxPath + 1];
     if (entry->kind != kFileListImage) {
-      PutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
+      UIBoxPutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
       continue;
     }
     if (g_browsing_for == kBrowseForUSB) {
-      PutText(
+      UIBoxPutText(
           row, menu->columns, kBrowseNoteColumn,
           entry->size == kFloppyImageSize ? "floppy" : "hard disk", attr);
       continue;
@@ -1505,19 +1386,19 @@ static void DrawBrowsePage(DisplayMenu* menu) {
       if (image->status == kDiskImageOpen && FSSamePath(path, image->path)) {
         char note[16];
         snprintf(note, sizeof(note), "in %s", kVMDriveLabels[drive]);
-        PutText(row, menu->columns, kBrowseNoteColumn, note, attr);
+        UIBoxPutText(row, menu->columns, kBrowseNoteColumn, note, attr);
       }
     }
   }
   // A folder with more entries than a list holds says so on the bottom edge.
-  EdgeRow(
+  UIBoxEdgeRow(
       &menu->text[kBrowseRows + 1], menu->columns, false,
       g_list.truncated ? "the first 64 entries" : NULL);
   if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
+    menu->text[1].chars[menu->columns - 1] = (char)kUIBoxArrowUp;
   }
   if (g_list_top + kBrowseRows < g_list.count) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
+    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kUIBoxArrowDown;
   }
 }
 
@@ -1525,25 +1406,26 @@ static void DrawBrowsePage(DisplayMenu* menu) {
 // arrows on the border where there are more above or below, and the
 // countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
-  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
-  EdgeRow(&menu->text[0], menu->columns, true, "YAX86");
+  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= VMsRowCount()) {
-      BlankRow(row, menu->columns);
+      UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
-      ItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
+      UIBoxItemRow(
+          row, menu->columns, g_vms->vms[index].name, index == g_chosen);
     } else if (g_vms->count > 0 && index == g_vms->count) {
-      SeparatorRow(row, menu->columns);
+      UIBoxSeparatorRow(row, menu->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
       if (item == ManageItemIndex()) {
-        MenuItemRow(row, menu->columns, &kManageRow, item == g_chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kManageRow, item == g_chosen);
       } else if (item == USBItemIndex()) {
-        MenuItemRow(row, menu->columns, &kUSBRow, item == g_chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, item == g_chosen);
       } else {
-        MenuItemRow(row, menu->columns, &kSettingsRow, item == g_chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, item == g_chosen);
       }
     }
   }
@@ -1553,14 +1435,14 @@ static void DrawVMsPage(DisplayMenu* menu) {
         countdown, sizeof(countdown), "starting in %u s",
         (unsigned)g_countdown);
   }
-  EdgeRow(
+  UIBoxEdgeRow(
       &menu->text[kBrowseRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
   if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
+    menu->text[1].chars[menu->columns - 1] = (char)kUIBoxArrowUp;
   }
   if (g_list_top + kBrowseRows < VMsRowCount()) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
+    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kUIBoxArrowDown;
   }
 }
 
@@ -1568,28 +1450,29 @@ static void DrawVMsPage(DisplayMenu* menu) {
 // there are any, with arrows on the border where there are more above or
 // below.
 static void DrawManagePage(DisplayMenu* menu) {
-  PlaceBox(menu, kNarrowColumns, kBrowseRows + 2);
-  EdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
+  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_list_top + i);
     if (index >= ManageRowCount()) {
-      BlankRow(row, menu->columns);
+      UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
-      const MenuItem item = {g_vms->vms[index].name, true};
-      MenuItemRow(row, menu->columns, &item, index == g_chosen);
+      const UIBoxItem item = {g_vms->vms[index].name, true};
+      UIBoxMenuItemRow(row, menu->columns, &item, index == g_chosen);
     } else if (g_vms->count > 0 && index == g_vms->count) {
-      SeparatorRow(row, menu->columns);
+      UIBoxSeparatorRow(row, menu->columns);
     } else {
-      MenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
+      UIBoxMenuItemRow(
+          row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
     }
   }
-  EdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
+  UIBoxEdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
   if (g_list_top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kArrowUp;
+    menu->text[1].chars[menu->columns - 1] = (char)kUIBoxArrowUp;
   }
   if (g_list_top + kBrowseRows < ManageRowCount()) {
-    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kArrowDown;
+    menu->text[kBrowseRows].chars[menu->columns - 1] = (char)kUIBoxArrowDown;
   }
 }
 
@@ -1664,7 +1547,7 @@ static void DrawNamePage(DisplayMenu* menu) {
     field[g_name_length] = '_';
   }
   field[kFSMaxFolderName] = '\0';
-  PutText(row, menu->columns, 3, field, kAttrChosen);
+  UIBoxPutText(row, menu->columns, 3, field, kUIBoxAttrChosen);
 }
 
 // Join names into text as "A, B and C", or with fewer shown, "A, B and 2
@@ -1751,13 +1634,13 @@ static void DrawCopyingPage(DisplayMenu* menu) {
 // the drives alone, under its name.
 static void DrawNewPage(DisplayMenu* menu) {
   char rows[kNewItemCount][kNarrowColumns];
-  MenuItem items[kNewItemCount];
+  UIBoxItem items[kNewItemCount];
   const char* cursor =
       FormItem() == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
   snprintf(
       rows[kNewName], sizeof(rows[kNewName]), "%-15s %s%s", "Name", g_name,
       cursor);
-  items[kNewName] = (MenuItem){rows[kNewName], false};
+  items[kNewName] = (UIBoxItem){rows[kNewName], false};
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const uint8_t item = (uint8_t)(kNewDriveA + drive);
     const char* what = "empty";
@@ -1772,9 +1655,9 @@ static void DrawNewPage(DisplayMenu* menu) {
     }
     snprintf(
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
-    items[item] = (MenuItem){rows[item], true};
+    items[item] = (UIBoxItem){rows[item], true};
   }
-  items[kNewCreate] = (MenuItem){g_editing ? "Save" : "Create", false};
+  items[kNewCreate] = (UIBoxItem){g_editing ? "Save" : "Create", false};
   DrawItems(
       menu, g_editing ? g_vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FormFirstItem()], (uint8_t)(kNewItemCount - FormFirstItem()));
@@ -1784,7 +1667,7 @@ static void DrawNewPage(DisplayMenu* menu) {
 static void DrawMainPage(DisplayMenu* menu) {
   MainItem shown[kMainItemCount];
   const uint8_t count = MainItems(shown);
-  MenuItem items[kMainItemCount];
+  UIBoxItem items[kMainItemCount];
   for (uint8_t i = 0; i < count; ++i) {
     items[i] = kMainItems[shown[i]];
   }
@@ -1795,9 +1678,9 @@ static void DrawMainPage(DisplayMenu* menu) {
 static void DrawNewDrivePage(DisplayMenu* menu) {
   uint8_t count = 0;
   const NewDriveItem* choices = DriveChoices(&count);
-  const MenuItem* labels =
+  const UIBoxItem* labels =
       g_new_drive >= kVMDriveHD1 ? kNewHardDiskItems : kNewFloppyItems;
-  MenuItem items[kNewDriveItemCount];
+  UIBoxItem items[kNewDriveItemCount];
   for (uint8_t row = 0; row < count; ++row) {
     items[row] = labels[choices[row]];
   }
@@ -1805,9 +1688,9 @@ static void DrawNewDrivePage(DisplayMenu* menu) {
 }
 
 static void DrawFontPage(DisplayMenu* menu) {
-  MenuItem items[kFont4x10Count];
+  UIBoxItem items[kFont4x10Count];
   for (uint8_t i = 0; i < kFont4x10Count; ++i) {
-    items[i] = (MenuItem){Font4x10Label((Font4x10)i), false};
+    items[i] = (UIBoxItem){Font4x10Label((Font4x10)i), false};
   }
   DrawItems(menu, "Font", NULL, 0, items, kFont4x10Count);
 }

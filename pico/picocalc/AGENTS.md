@@ -682,8 +682,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Both Shift keys held together open it**, which nothing in DOS does and
   typing never does, and close it again. `src/menu.c` keeps its state and
-  draws it; `main.c` carries out what its items do, through the callbacks
-  in `MenuConfig`.
+  draws it, in boxes and rows from `src/ui_box.c`; `main.c` carries out
+  what its items do, through the callbacks in `MenuConfig`.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,
@@ -723,6 +723,22 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A test drives it as a hand would**, with `key shift press`, `key rshift
   press` and their releases, and checks it with `screenshot`; the report's
   `menu` group says whether it is open and which page shows.
+- **A change to the menu or the list at power on is checked against master
+  on the board, screen by screen.** Build master's image and the branch's,
+  and with each: boot DOS330, walk the same pages with `key`, and take a
+  `screenshot` of each. Compare each pair with ImageMagick's `compare -metric
+  AE`, which counts the pixels that differ. A change meant to change nothing
+  shows nothing, but the Status page's measured times; anything else is a
+  change to explain in the PR.
+  - The walk covers the menu and each of its pages: a drive's page, the
+    browser, Status, and the questions before Reset and Power off. Then,
+    powered off to the list: the list itself, Manage VMs, a VM's page, the
+    New VM form and a drive's choices on it, USB disk mode, Settings and
+    Font.
+  - It only looks and backs out, with Esc or Cancel, so the card is as it
+    was. Pages reached only by acting, such as copying or sharing, need a
+    VM or an image made for the test, and deleted after.
+  - Leave the board on master's image afterwards, at `A>`.
 
 ## The USB device
 
