@@ -37,18 +37,33 @@ typedef struct SouthbridgeKeyEvent {
   uint8_t key;
 } SouthbridgeKeyEvent;
 
-// Some of the key codes: the ones the runtime and the menu listen for.
+// The controller's codes for the named keys that are not printable ASCII,
+// and Space, which the menu chooses with as well as Enter.
 enum {
-  kSouthbridgeKeyCodeEnter = 0x0A,
   kSouthbridgeKeyCodeBackspace = 0x08,
-  kSouthbridgeKeyCodeSpace = ' ',
+  kSouthbridgeKeyCodeTab = 0x09,
+  kSouthbridgeKeyCodeEnter = 0x0A,
+  kSouthbridgeKeyCodeAlt = 0xA1,
   kSouthbridgeKeyCodeLeftShift = 0xA2,
   kSouthbridgeKeyCodeRightShift = 0xA3,
+  kSouthbridgeKeyCodeCtrl = 0xA5,
   kSouthbridgeKeyCodeEsc = 0xB1,
+  kSouthbridgeKeyCodeLeft = 0xB4,
   kSouthbridgeKeyCodeUp = 0xB5,
   kSouthbridgeKeyCodeDown = 0xB6,
+  kSouthbridgeKeyCodeRight = 0xB7,
+  kSouthbridgeKeyCodeCapsLock = 0xC1,
+  kSouthbridgeKeyCodeBreak = 0xD0,
+  kSouthbridgeKeyCodeInsert = 0xD1,
+  kSouthbridgeKeyCodeHome = 0xD2,
+  kSouthbridgeKeyCodeDelete = 0xD4,
+  kSouthbridgeKeyCodeEnd = 0xD5,
   kSouthbridgeKeyCodePageUp = 0xD6,
   kSouthbridgeKeyCodePageDown = 0xD7,
+  kSouthbridgeKeyCodeF1 = 0x81,
+  kSouthbridgeKeyCodeF6 = 0x86,
+  kSouthbridgeKeyCodeF10 = 0x90,
+  kSouthbridgeKeyCodeSpace = ' ',
 };
 
 // How the key FIFO poll has gone, for the report.
