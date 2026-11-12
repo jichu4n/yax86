@@ -41,6 +41,7 @@
 #include "pico/stdlib.h"
 #include "psram.h"
 #include "report.h"
+#include "runtime.h"
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
@@ -51,12 +52,6 @@
 #include "vm_config.h"
 #include "vm_folder.h"
 #include "yax86_pico.h"
-
-// Whether the guest's screen is drawn. Building with it off gives an image
-// identical but for that, which is what measures what drawing costs.
-#ifndef YAX86_PICOCALC_DRAW_SCREEN
-#define YAX86_PICOCALC_DRAW_SCREEN 1
-#endif
 
 // The system clock in kHz, or 0 for the stock 125MHz. Set by CMakeLists.txt.
 #ifndef YAX86_PICOCALC_SYS_CLK_KHZ
@@ -143,13 +138,6 @@ enum {
   // states.
   kBIOSKeyboardFlagsAddress = 0x417,
 
-  // The BIOS's count of timer ticks since midnight, in the BIOS data area,
-  // which is the time of day DOS reports. A tick is 65,536 counts of the
-  // PIT's 1,193,182Hz input clock, about 18.2 a second.
-  kBIOSTickCountAddress = 0x46C,
-  kPITInputHz = 1193182,
-  kPITCountsPerBIOSTick = 65536,
-
   // Emulated cycles between renders: once a frame of the CGA's 60Hz display.
   // Drawing more often shows nothing new, since a frame is the most often the
   // guest's screen can change as it would be seen.
@@ -160,7 +148,6 @@ enum {
   kMillisecondsPerSecond = 1000,
   kMicrosecondsPerSecond = 1000 * 1000,
   kMaxLagUs = kMaxLagMs * kMicrosecondsPerMillisecond,
-  kHzPerKHz = 1000,
 };
 
 static uint8_t g_guest_ram[kGuestRAMSize];
@@ -173,6 +160,9 @@ static VMSettings g_settings;
 static VMConfig g_vm;
 static bool g_has_vm;
 static RuntimeStatus g_status;
+// Host time spent carrying out commands a host sent, which a boot that took
+// them is that much slower for.
+static uint64_t g_command_us;
 // Status rows composed that core 1 has not been handed yet, because it was
 // still drawing the last ones.
 static DisplayStatus g_status_rows;
@@ -216,18 +206,18 @@ typedef struct StartNote {
 // LeaveStartNote().
 static StartNote __uninitialized_ram(g_start_note);
 
-
-
-static bool BootIsOver(void) {
+bool RuntimeBootIsOver(void) {
   return g_status.boot_stage == kBootStagePrompt ||
          g_status.boot_stage == kBootStageFailed;
 }
 
 // Host time since power on, and how much of it went to running the VM
 // rather than waiting for real time to catch up with it.
-static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
+uint64_t RuntimeElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
-static uint64_t PausedUs(void) {
+uint64_t RuntimeCommandUs(void) { return g_command_us; }
+
+uint64_t RuntimePausedUs(void) {
   return g_clock.paused_us +
          (MenuIsOpen() ? time_us_64() - g_clock.pause_start_us : 0);
 }
@@ -244,7 +234,7 @@ static uint8_t GuestRAMByte(uint32_t address) {
 }
 
 static uint64_t BusyUs(void) {
-  return ElapsedUs() - g_clock.waited_us - PausedUs();
+  return RuntimeElapsedUs() - g_clock.waited_us - RuntimePausedUs();
 }
 
 // Say once that the battery is low, until it has charged back up.
@@ -416,7 +406,7 @@ static BootStage AdvanceBoot(BootStage stage) {
 static void SetBootStage(BootStage stage) {
   g_status.boot_stage = stage;
   g_status.boot_cycles = g_clock.cycles;
-  g_status.boot_elapsed_us = ElapsedUs();
+  g_status.boot_elapsed_us = RuntimeElapsedUs();
   g_status.boot_busy_us = BusyUs();
   g_status.instructions = YCPUInstructionsRetired(&g_platform.cpu);
   ReportLogBootStage();
@@ -704,7 +694,9 @@ static void RunVM(bool vm_ready) {
 
     Command command;
     if (CommandPoll(&command)) {
+      const uint64_t start_us = time_us_64();
       ReportRunCommand(&command);
+      g_command_us += time_us_64() - start_us;
     }
     // Between batches, so the keyboard is never written while the VM
     // runs, and a key a host typed only in a batch the keyboard had none, so
@@ -718,7 +710,7 @@ static void RunVM(bool vm_ready) {
         DisplayTurnOn();
         screen_on = true;
       }
-      if (BootIsOver()) {
+      if (RuntimeBootIsOver()) {
         blank_at = make_timeout_time_ms(kScreenOnMs);
       }
     }
@@ -732,7 +724,7 @@ static void RunVM(bool vm_ready) {
       }
     }
 
-    if (!BootIsOver() && !MenuIsOpen()) {
+    if (!RuntimeBootIsOver() && !MenuIsOpen()) {
       BootStage stage = g_status.boot_stage;
       if (!running || g_clock.cycles >= max_boot_cycles) {
         stage = kBootStageFailed;
@@ -745,7 +737,7 @@ static void RunVM(bool vm_ready) {
       if (stage != g_status.boot_stage) {
         SetBootStage(stage);
       }
-      if (BootIsOver()) {
+      if (RuntimeBootIsOver()) {
         // DOS polls for a key at the prompt rather than halting, and the
         // idle skip is what keeps that from costing a real time loop's worth
         // of emulation. Not before now: DOS idles at the date and time
