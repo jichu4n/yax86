@@ -35,11 +35,18 @@ typedef struct Settings {
   Font4x10 font;
 } Settings;
 
-// Read the card's settings into settings, which without `yax86/yax86.cfg`
-// are the defaults. A key it does not know is logged and ignored. Returns
-// false, with the problem described, if the file has a line or a value that
-// is not understood, settings then holding what was understood before it;
-// or if boot_default names no VM, which is then left empty.
+// Read `yax86/yax86.cfg` into settings.
+//
+// Settings the file leaves out keep their defaults, as does every setting if
+// there is no card or no file. Keys this firmware does not know are logged
+// and skipped.
+//
+// Returns false, with the problem described, in two cases:
+//   - The file cannot be read, a line cannot be parsed, or a known key has a
+//     bad value. Reading stops there, so settings has the values read before
+//     it and the defaults for the rest.
+//   - boot_default names a VM that does not exist. boot_default is then left
+//     empty, so the first VM listed is the default.
 bool SettingsRead(
     Settings* settings, char problem[kConfigFileProblemLength + 1]);
 
