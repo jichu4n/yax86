@@ -145,18 +145,62 @@ round-trips through memory costs more than its instruction count suggests.**
   the obvious early return for the no-cache path - makes `-O2` stop inlining
   it into flash behind a veneer, **2.54% slower at `-O2`**. That is why the
   no-cache path joins the cached one instead of returning early.
-- **256 entries, 6KB.** 512 is 0.11% faster for another 6KB, 1024 0.04%
-  slower, 128 0.83% slower. At 256 the image leaves room for 192KB of guest
-  RAM.
-- **`code_page_generation` is the whole invalidation mechanism**: one
-  wrapping byte per 4KB page, recorded by each entry and compared on use. The
-  CPU bumps it in `YCPUWriteRawMemoryByte()`, where operands, stack pushes
-  and vector writes end up, so a host reports only writes made some other
-  way - the platform does, in `YPlatformWriteMemoryByte()`, for DMA. Without
-  it DOS loads over the boot sector unseen: the first prototype retired
-  13,247,281 instructions.
-- **A counter wrap flushes the whole cache**, since an entry taken 256 writes
-  ago would look current. That is about 2,100 256-iteration loops over a run.
+- **512 entries, 12KB, sized on real programs rather than `dos-boot`.** On
+  the PicoCalc at 640KB, seven commands compiling and running programs under
+  DOS (`pico/bench`'s PicoCalc workloads) took 174.1 seconds of processor
+  time with 512 entries against 179.7 with 256, and QBasic interpreting a
+  program 77.7 against 81.5: an interpreter's loop is larger than a boot's.
+  `dos-boot` hardly cares: with 512, 0.27% faster direct and 0.13% slower
+  paged, and 128 was 0.83% slower than 256. 1024 entries saved another 0.4%
+  on the seven commands, not worth 12KB more, which would leave the PicoCalc
+  3KB of SRAM.
+- **The cache's size moves `dos-boot`'s paged count**, from 2,356,813
+  instructions and 27,964,698 cycles at 256 entries to 2,356,942 and
+  27,966,123 at 512, and none of it is emulation: with
+  `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1, both give 2,356,713 and 27,963,388.
+  A run continues only into cached code, so the size changes where runs end,
+  and with them where the bench's screen poll lands. The direct count
+  happened not to move.
+- **`code_page_generation` is the whole invalidation mechanism**: one byte
+  per code page, recorded by each entry and compared on use. Zero says the
+  cache holds no decode from the page; anything else is a wrapping count of
+  the writes to it since one was cached. The CPU counts in
+  `YCPUWriteRawMemoryByte()`, where operands, stack pushes and vector writes
+  end up, so a host reports only writes made some other way - the platform
+  does, in `YPlatformWriteMemoryByte()`, for DMA. Without it DOS loads over
+  the boot sector unseen: the first prototype retired 13,247,281
+  instructions.
+- **A count coming back round discards that page's decodes and no others**,
+  since an entry taken 255 writes ago would look current.
+  `YCPUInvalidateDecodeCachePage()` walks the cache for them and leaves the
+  page at zero, so its writes go uncounted until an instruction is cached
+  from it again. A stack or data page therefore never causes a walk.
+  Discarding every decode instead, and counting writes to every page, is
+  what this replaced: the stack alone wrapped a counter every 256 pushes,
+  and QBasic interpreting a program decoded 50.6% of the instructions it ran
+  where it now decodes 32.7%; two compilers and a linker went from 44-45% to
+  28-30%. On the PicoCalc at 640KB the seven commands took 156.6 seconds of
+  processor time against 174.2, and QBasic 69.5 against 77.7. `dos-boot`
+  gained 2.86% paged and 2.52% direct.
+- **Discarding less moves both `dos-boot` counts**: paged from 2,356,942
+  instructions and 27,966,123 cycles to 2,353,177 and 27,922,089, and direct
+  from 2,328,128 and 27,702,858 to 2,328,231 and 27,704,200. It is where runs
+  end again, not emulation: with `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1 both
+  sides give 2,356,713 and 27,963,388 paged, and 2,328,015 and 27,701,507
+  direct.
+- **Code pages are 512 bytes, sized on real programs.** Writes to a page
+  send its instructions back through the decoder, and DOS programs keep the
+  data they write close to the code they run: at 4KB, QBasic decoded 6.9% of
+  all its instructions again only because its page had been written, and
+  none at 1KB. Counted on a desktop build, the share of instructions decoded
+  went from 32.7% to 25.6% for QBasic and from 28.3% to 23.3% for Turbo C.
+  On the PicoCalc at 640KB the seven commands took 151.9 seconds against
+  156.5 at 4KB and 152.3 at 1KB; the 1KB more of counters bought the
+  compiled sieve 4.8%. Below 512 bytes more instructions cross into the next
+  page, which are never cached, and the share rises again: 26.5% for QBasic
+  at 256 bytes. `dos-boot` gained 0.76% paged and 0.79% direct, and moved
+  to 2,353,188 and 27,922,137 paged and 2,328,491 and 27,707,022 direct; with
+  `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1 both sides give the counts above.
 - **Not caching is as load-bearing as caching**: an instruction that spills
   onto the next page or off the end of the segment is not cached, since its
   page says nothing about its later bytes. A failing decode clears the entry's
@@ -195,6 +239,17 @@ round-trips through memory costs more than its instruction count suggests.**
   callback, so it is correctly excluded. Registration recomputes it.
 - A word straddling the top has its halves take different paths
   (`WordStraddlingTheTopOfTheWindow`).
+- **Outside the direct window, an access is a call to
+  `YCPUReadMemoryByteOutsideDirectWindow()` or
+  `YCPUWriteMemoryByteOutsideDirectWindow()`**, both `Y_HOT` and `Y_NOINLINE`,
+  which try the paged data window and then the host's callback. They are the
+  slow halves of `YCPUReadRawMemoryByte()` and `YCPUWriteRawMemoryByte()`,
+  which are inlined at every memory access, so each inlined copy carries only
+  the direct window's compare and load and a call. Measured with paging off,
+  with `dos-boot` (`pico/bench`, RP2040 at 250MHz, `-O3`): the paged test
+  inlined into every access cost 2.6%. With the callback moved out of line as
+  well, it is **2.6% faster** than with the callback inline: 4.6269 seconds
+  against 4.7458. The helpers in flash rather than SRAM measured 0.26% slower.
 - The 8088 suite supplies a window - a sabotaged read fails within one opcode
   - and `CPUTestHelper` and the mocks run without one.
 
@@ -378,7 +433,7 @@ round-trips through memory costs more than its instruction count suggests.**
   for 296 bytes of SRAM, and `Y_ALWAYS_INLINE` 0.73% slower, though it makes
   the core 216 bytes smaller. It runs once per
   repeat, not per element - hot by name, not by traffic.
-- **A run reports one write per 4KB page to the decode cache**, which is all
+- **A run reports one write per code page to the decode cache**, which is all
   a generation change needs, and wraps the counter after 256 runs rather
   than 256 bytes. That moved the invariant without changing emulation:
   fewer flushes change where runs end, so the Enter answering DOS's date
@@ -398,8 +453,8 @@ round-trips through memory costs more than its instruction count suggests.**
   strands an interrupt silently -
   `HintReadingFalseSuppressesTheAcknowledgeCycle` states the contract.
 - `YPICUpdateUnmaskedRequest()` is the sole writer, called from all six sites
-  that change `irr` or `imr`: `YPICInit()`, `YPICRaiseIRQ()`, `YPICLowerIRQ()`,
-  ICW1, OCW1 and the acknowledge.
+  that change `irr` or `imr`: `YPICInit()`, `YPICRaiseIRQ()`,
+  `YPICLowerIRQ()`, ICW1, OCW1 and the acknowledge.
 - **A pointer into the PIC's state, not a value handed over**, so a change is
   seen at the next instruction with nothing to synchronize.
 - A dropped recompute leaves the flag conservatively true - a pure slowdown
