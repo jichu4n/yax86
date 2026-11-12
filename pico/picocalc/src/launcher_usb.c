@@ -67,9 +67,11 @@ static bool g_dirty;
 static uint64_t g_status_drawn_us;
 // The browser, finding an image to put on USB.
 static UIBrowser g_browser;
-// The disk image on USB, while one is, and its path.
+// The disk image on USB, while one is, and its path; and the size the
+// browser found it to have.
 static DiskImage g_usb_image;
 static char g_usb_image_path[kFSMaxPath + 1];
+static uint32_t g_usb_image_size;
 
 static void ShowPage(UsbPage page, uint8_t chosen) {
   g_page = page;
@@ -108,10 +110,9 @@ static void ShareCard(void) {
 
 // Put the disk image chosen in the browser on USB, the card staying mounted
 // to read it through; or say why it could not be, staying in the browser.
-static __noinline void ShareImage(const char* path, uint32_t size) {
-  FSCopyPath(path, g_usb_image_path);
+static __noinline void ShareImage(void) {
   const DiskImageStatus status =
-      DiskImageOpen(&g_usb_image, g_usb_image_path, size);
+      DiskImageOpen(&g_usb_image, g_usb_image_path, g_usb_image_size);
   if (status != kDiskImageOpen) {
     char name[kDiskImageNameLength + 1];
     DiskImageName(g_usb_image_path, name);
@@ -177,21 +178,27 @@ static LauncherUsbResult Back(void) {
 }
 
 // Open the chosen entry of the browser: a folder to look in, or an image to
-// put on USB.
-static void OpenEntry(void) {
+// put on USB, which it keeps for ShareImage(). Returns whether it was an
+// image.
+//
+// Kept out of line, and returning before the image is shared: its path's
+// buffer would otherwise stay on core 0's stack under ShareImage().
+static __noinline bool OpenEntry(void) {
   uint8_t chosen = g_chosen;
   char path[kFSMaxPath + 1];
   uint32_t size = 0;
   switch (UIBrowserChoose(&g_browser, &chosen, path, &size)) {
     case kUIBrowserNothing:
-      return;
+      return false;
     case kUIBrowserOpened:
       ShowPage(kUsbPageBrowse, chosen);
-      return;
+      return false;
     case kUIBrowserChoseImage:
       break;
   }
-  ShareImage(path, size);
+  FSCopyPath(path, g_usb_image_path);
+  g_usb_image_size = size;
+  return true;
 }
 
 static LauncherUsbResult Choose(void) {
@@ -209,7 +216,9 @@ static LauncherUsbResult Choose(void) {
       ShareCard();
       return kLauncherUsbStays;
     case kUsbPageBrowse:
-      OpenEntry();
+      if (OpenEntry()) {
+        ShareImage();
+      }
       return kLauncherUsbStays;
     case kUsbPageSharing:
       return Disconnect();
