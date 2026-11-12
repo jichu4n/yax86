@@ -145,13 +145,22 @@ round-trips through memory costs more than its instruction count suggests.**
   the obvious early return for the no-cache path - makes `-O2` stop inlining
   it into flash behind a veneer, **2.54% slower at `-O2`**. That is why the
   no-cache path joins the cached one instead of returning early.
-- **512 entries, 12KB, sized on real programs rather than `dos-boot`.**
-  `dos-boot` hardly cares - 512 is 0.48% faster than 256, 128 was 0.83%
-  slower - but on the PicoCalc at 640KB, seven commands compiling and running
-  programs under DOS took 174.2 seconds of processor time with 512 entries
-  against 179.8 with 256, and QBasic interpreting a program 77.5 against
-  81.7: an interpreter's loop is larger than a boot's. 1024 entries took
-  173.5, not worth 12KB more - the PicoCalc would have 3KB of SRAM left.
+- **512 entries, 12KB, sized on real programs rather than `dos-boot`.** On
+  the PicoCalc at 640KB, seven commands compiling and running programs under
+  DOS (`pico/bench`'s PicoCalc workloads) took 174.1 seconds of processor
+  time with 512 entries against 179.7 with 256, and QBasic interpreting a
+  program 77.7 against 81.5: an interpreter's loop is larger than a boot's.
+  `dos-boot` hardly cares: with 512, 0.27% faster direct and 0.13% slower
+  paged, and 128 was 0.83% slower than 256. 1024 entries saved another 0.4%
+  on the seven commands, not worth 12KB more, which would leave the PicoCalc
+  3KB of SRAM.
+- **The cache's size moves `dos-boot`'s paged count**, from 2,356,813
+  instructions and 27,964,698 cycles at 256 entries to 2,356,942 and
+  27,966,123 at 512, and none of it is emulation: with
+  `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1, both give 2,356,713 and 27,963,388.
+  A run continues only into cached code, so the size changes where runs end,
+  and with them where the bench's screen poll lands. The direct count
+  happened not to move.
 - **`code_page_generation` is the whole invalidation mechanism**: one byte
   per 4KB page, recorded by each entry and compared on use. Zero says the
   cache holds no decode from the page; anything else is a wrapping count of
@@ -209,6 +218,17 @@ round-trips through memory costs more than its instruction count suggests.**
   callback, so it is correctly excluded. Registration recomputes it.
 - A word straddling the top has its halves take different paths
   (`WordStraddlingTheTopOfTheWindow`).
+- **Outside the direct window, an access is a call to
+  `YCPUReadMemoryByteOutsideDirectWindow()` or
+  `YCPUWriteMemoryByteOutsideDirectWindow()`**, both `Y_HOT` and `Y_NOINLINE`,
+  which try the paged data window and then the host's callback. They are the
+  slow halves of `YCPUReadRawMemoryByte()` and `YCPUWriteRawMemoryByte()`,
+  which are inlined at every memory access, so each inlined copy carries only
+  the direct window's compare and load and a call. Measured with paging off,
+  with `dos-boot` (`pico/bench`, RP2040 at 250MHz, `-O3`): the paged test
+  inlined into every access cost 2.6%. With the callback moved out of line as
+  well, it is **2.6% faster** than with the callback inline: 4.6269 seconds
+  against 4.7458. The helpers in flash rather than SRAM measured 0.26% slower.
 - The 8088 suite supplies a window - a sabotaged read fails within one opcode
   - and `CPUTestHelper` and the mocks run without one.
 
@@ -412,8 +432,8 @@ round-trips through memory costs more than its instruction count suggests.**
   strands an interrupt silently -
   `HintReadingFalseSuppressesTheAcknowledgeCycle` states the contract.
 - `YPICUpdateUnmaskedRequest()` is the sole writer, called from all six sites
-  that change `irr` or `imr`: `YPICInit()`, `YPICRaiseIRQ()`, `YPICLowerIRQ()`,
-  ICW1, OCW1 and the acknowledge.
+  that change `irr` or `imr`: `YPICInit()`, `YPICRaiseIRQ()`,
+  `YPICLowerIRQ()`, ICW1, OCW1 and the acknowledge.
 - **A pointer into the PIC's state, not a value handed over**, so a change is
   seen at the next instruction with nothing to synchronize.
 - A dropped recompute leaves the flag conservatively true - a pure slowdown

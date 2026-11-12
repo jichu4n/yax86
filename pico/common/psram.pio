@@ -1,0 +1,34 @@
+; The PSRAM's serial interface: SPI mode 0, one bit every two cycles, the
+; clock on the side-set pin. Chip select is the CPU's.
+;
+; A transaction is a header word, then whole words to write, most significant
+; bit first: the header's upper half is the bits to write less one, its lower
+; half the bits to read less one, or 0 for none. Words keep the output shift
+; register empty between transactions, which a write of a part word would not:
+; its leftover bits would be taken for the next header.
+;
+; A read clocks nine cycles before the first bit it keeps: the eight dummy
+; cycles of the chip's Fast Read, and one more because the board's path delays
+; each bit past the next rising edge at 62.5MHz. Each bit is taken at the
+; rising edge after the one it was meant for - see psram.c.
+
+.program psram
+.side_set 1
+
+.wrap_target
+    out x, 16           side 0
+    out y, 16           side 0
+write_loop:
+    out pins, 1         side 0
+    jmp x--, write_loop side 1
+    jmp !y, done        side 0
+    set x, 8            side 0
+skip_loop:
+    nop                 side 1
+    jmp x--, skip_loop  side 0
+read_loop:
+    in pins, 1          side 1
+    jmp y--, read_loop  side 0
+done:
+    nop                 side 0
+.wrap

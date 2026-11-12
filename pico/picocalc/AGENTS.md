@@ -11,8 +11,8 @@ PicoCalc's keyboard as its own and plays the PC speaker. DOS's date and time
 questions are answered by watching the screen, as `pico/bench` does - there
 is no clock to set them from, and it keeps the boot the `dos-boot` workload.
 
-Like `pico/bench` it uses only the core's public interface and is not built
-in CI. Measuring follows `pico/bench/AGENTS.md` and the root `AGENTS.md`.
+Like `pico/bench` it uses only the core's public interface. CI builds it -
+see `pico/bench/AGENTS.md`. Measuring follows `pico/bench/AGENTS.md` and the root `AGENTS.md`.
 
 ## The hardware
 
@@ -91,6 +91,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   floppy that is not `resources`' byte for byte, or a hard disk image - see
   the SD card section. Compare against a baseline with the same VM, or
   none.
+- **These counts are the 128KB machine's**, which the runtime runs without
+  the PSRAM or after a crash. With the PSRAM it pages 640KB (see "Paging
+  guest RAM"), and DOS330 boots in 2,443,404 instructions and 29,160,390
+  cycles, the BIOS testing and DOS sizing more memory; the bench's 640KB
+  `dos-boot` takes 2,356,813 and 27,964,698. The runtime with no VMs has not
+  been counted at 640KB.
 
 ## Running in real time
 
@@ -513,6 +519,92 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   and none of its code running in the boot, while everything linked after
   `main.c` and `menu.c` moved 3.5KB along in flash.
 
+## The PSRAM
+
+- **8MB, an ESP-PSRAM64H on one-bit SPI, driven by PIO**:
+  `pico/common/psram.c` and `psram.pio`, shared with `pico/bench`, on pio1,
+  the LCD having pio0. Reads are Fast Read
+  (`0x0B`), writes `0x02`; its ID's second byte, known good die, reads
+  `0x5D`. It holds the guest RAM SRAM does not - see "Paging guest RAM".
+  The report's `psram` group has its state, the self-test's times and what
+  has moved.
+- **The serial clock is 62.5MHz**, from 250MHz or 125MHz divided evenly; any
+  other system clock leaves it off as `unsupported_clock`. 83MHz and 125MHz
+  read back wrong.
+- **Each bit is taken one rising edge late**: the board delays the chip's
+  output 12-16ns past the falling edge it changes on, which at 62.5MHz is
+  after the next rising edge, 8ns on. So a read clocks nine cycles before the
+  first bit it keeps - Fast Read's eight dummy cycles and one more - with the
+  input synchronizer bypassed, which would add two more cycles. At 31.25MHz
+  the bit is valid at its own edge, but only just: one in 128KB flipped.
+- **The state machine moves whole words**, header and data, so the output
+  shift register is empty between transactions: a part word left over is
+  taken for the next header, desynchronizing every transaction after it.
+  Memory's little-endian words are swapped on the way through. Words are
+  what let the CPU keep up with the wire without DMA - a 512-byte block reads
+  in 94us and writes in 83us, against 76us and 74us on the wire. Shifting a
+  byte at a time and realigning it in software took 120us.
+- **Interrupts are off for each burst.** One taken part way through holds
+  chip select low past 8us while the state machine stalls on its FIFO: with
+  them on, writing 2MB of noise and reading it back found 66 bad words and
+  ran a transfer past its timeout, USB's interrupt the likely one. With them
+  off, two runs of 4MB each found none. A burst is about 5us, which is the
+  most an interrupt waits.
+- **A transfer holds chip select at most 32 bytes**, 4.8us with the command:
+  the chip must see it raised within 8us to refresh itself. Bursts are
+  aligned to 32 bytes, so none crosses the chip's 1KB pages.
+- **Every wait is bounded**, 100us a transfer; a timeout restarts the state
+  machine and turns the PSRAM off as `timed_out`. Bringing it up is the
+  overclock's pattern besides, with the watchdog armed and a marker in RAM
+  startup does not clear, so a hang nothing foresaw starts the next boot
+  without it, as `skipped_after_hang`.
+- **It costs the boot nothing it runs**: 5.0459 seconds against 5.0644 on
+  master, the DOS330 VM, three runs each - flash layout.
+
+## Paging guest RAM
+
+- **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames,
+  and PSRAM behind them**, through the core's `YPlatformConfig.paged_memory`
+  (`core/AGENTS.md`). `pico/common/pager.c` does the paging, and the SRAM
+  given to the guest is in `pico/common/yax86_pico.h`, a header per board so
+  that a Pico 2 can have its own. Both are shared with `pico/bench`, so that
+  it measures what runs here. The pager brings a page into a frame when the
+  guest first touches it, from PSRAM, or as zeros if it has never been
+  written back, and takes frames back by the clock algorithm, writing a page
+  back only if it was written. The report's `paging` group has the counts
+  and `fault_us`, the time in the fault handler.
+- **Pages are 256 bytes**, measured on the device with `pico/bench`'s
+  PicoCalc workloads, the share of processor time in faults:
+
+  | page | seven commands | Word session | Word's pages in |
+  | --- | --- | --- | --- |
+  | 256 bytes | 0.6% | **1.3%** | 17,502 |
+  | 512 bytes | 0.7% | 2.8% | 21,360 |
+  | 1KB | 1.0% | 6.9% | 29,380 |
+
+  A fault moves a whole page through the PSRAM at about 0.18us a byte, and
+  more of a large page is never used, so fewer bytes moved beats fewer
+  faults. Smaller pages cost nothing measurable where nothing faults: the
+  DOS330 boot took 6.305, 6.320 and 6.346 seconds. The page table is 2 bytes
+  a page, 5KB at 256 bytes; 128 bytes' 10KB is more than the SRAM has spare.
+  Traces on a desktop had already ruled out 4KB, which thrashes 128KB of
+  frames.
+- **No guest RAM is held directly in SRAM.** Holding the first 64KB there,
+  under the CPU's direct data window, with the other 64KB as frames, came
+  out even on the seven commands with 512-byte pages, 179.0 seconds of
+  processor time against 179.7, and more than doubled the Word session's
+  share in faults, 2.8% to 6.0%. The programs' code and data are above
+  64KB, so it sped up little of what they do, and it left half the frames.
+- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM** held
+  directly. A hard fault on either core reboots the board through
+  `isr_hardfault()`, which replaces the SDK's breakpoint, and leaves a marker
+  in RAM startup does not clear; the start after it pages nothing, says so
+  on the message row, and reports `off_after_fault`. Paging is the newest
+  code a fault could come from, and a board that halts on one needs its
+  cable replugged.
+- **The runtime reads the BIOS data area through the memory map**,
+  `GuestRAMByte()`, since with the PSRAM it is paged.
+
 ## The speaker
 
 - **The PC speaker plays on both speakers** from `src/speaker.c`. The core
@@ -794,16 +886,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - `src/font_4x10.c` holds four complete code page 437 fonts of that size,
   chosen by `font` in `yax86/yax86.cfg` or from the list at power on (`Font`),
   for both the guest's text modes and the menu and status rows:
-  - `atari800` (Atari800, the default): 3+1 glyphs (three columns of ink and
-    a blank fourth column) with 6-row capitals and 5-row lower case, from
-    Atari800's 4x8 font under GPLv2-or-later, with a stepped diagonal `N`.
-  - `original` (Original): 4-column glyphs whose ASCII range is rugosi's,
-    from picocalc_runCPM under MIT, and the rest, every box drawing and block
-    character included, Serg Podtynnyi's under GPLv3-or-later.
-  - `miniwi` (Miniwi-8): 3+1 glyphs with 5-row capitals and 4-row lower case,
-    from josuah's miniwi under MIT/X11.
-  - `custom` (Custom): 3+1 glyphs with uniform 7-row capitals and digits and
-    5-row lower case.
+  - `ymini` (Ymini, the default): 3+1 glyphs (three columns of ink and a
+    blank fourth column) drawn for this cell, with 7-row capitals and digits.
+  - `atari800` (Atari800): 3+1 glyphs with 6-row capitals, from Atari800's
+    4x8 font.
+  - `miniwi` (Miniwi-8): 3+1 glyphs with 5-row capitals, from miniwi-8.
+  - `creep` (Creep): 4-column glyphs, rugosi's ASCII range from
+    picocalc_runCPM and Serg Podtynnyi's rest of code page 437.
+
+  Where each font's glyphs come from, and under which license, is at the top
+  of `src/font_4x10.c`.
 - Every glyph outside the box drawing range sits one row lower than the box
   drawing ones, leaving a blank row between lines of text while box drawing
   fills the cell and joins. The shift is in the table, so each is a plain

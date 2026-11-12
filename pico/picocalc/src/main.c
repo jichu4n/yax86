@@ -36,8 +36,10 @@
 #include "hardware/watchdog.h"
 #include "keymap.h"
 #include "menu.h"
+#include "pager.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "psram.h"
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
@@ -47,6 +49,7 @@
 #include "usb_disk.h"
 #include "vm_config.h"
 #include "vm_folder.h"
+#include "yax86_pico.h"
 
 // Whether the guest's screen is drawn. Building with it off gives an image
 // identical but for that, which is what measures what drawing costs.
@@ -60,8 +63,9 @@
 #endif
 
 enum {
-  // Guest conventional memory. The same 128K pico/bench measures with.
-  kGuestRAMSize = 128 * 1024,
+  // The SRAM guest memory has: conventional memory itself without the
+  // PSRAM, and the frames it is paged through with it - see yax86_pico.h.
+  kGuestRAMSize = kPicoGuestSRAMSize,
   // The part of the guest's RAM a clone's files are copied through, before a
   // VM starts and the RAM is the guest's: 64 of the card's blocks, which go to
   // and from it a run at a time.
@@ -122,6 +126,12 @@ enum {
   // is survived. Any value does, as long as uninitialized RAM is unlikely to
   // hold it.
   kOverclockAttemptMarker = 0x0C10C4ED,
+  // Written to g_psram_marker across bringing the PSRAM up, and cleared once
+  // it is survived - see StartPsram().
+  kPsramAttemptMarker = 0x95A3B007,
+  // Written to g_fault_marker by the hard fault handler, for the start after
+  // the reboot it makes - see isr_hardfault().
+  kFaultMarker = 0xFA017ED0,
   // Written to g_start_note's marker by a reset or a power off, for the
   // start after the reboot - see LeaveStartNote().
   kStartNoteMarker = 0x5747A27E,
@@ -262,6 +272,17 @@ static RunClock g_clock;
 // Deliberately not zeroed at startup - see Overclock().
 static uint32_t __uninitialized_ram(g_overclock_marker);
 #endif
+// The same for the PSRAM - see StartPsram().
+static uint32_t __uninitialized_ram(g_psram_marker);
+// The same for a hard fault - see isr_hardfault().
+static uint32_t __uninitialized_ram(g_fault_marker);
+// Whether the last start ended in a hard fault, which leaves paging off for
+// this one.
+static bool g_after_fault;
+// Whether guest RAM is paged, and whether the VM is up, before which there is
+// no guest RAM to read.
+static bool g_paging;
+static bool g_vm_up;
 
 // What the start after a reboot is to do, left by the menu's Reset and Power
 // off.
@@ -343,6 +364,17 @@ static uint64_t PausedUs(void) {
          (MenuIsOpen() ? time_us_64() - g_clock.pause_start_us : 0);
 }
 
+// How much guest RAM the VM has.
+static uint32_t GuestRAMSize(void) {
+  return g_paging ? Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE : kGuestRAMSize;
+}
+
+// A byte of guest RAM, read through the memory map since it may be paged. 0
+// before the VM is up, which is what guest RAM starts as.
+static uint8_t GuestRAMByte(uint32_t address) {
+  return g_vm_up ? YPlatformReadMemoryByte(&g_platform, address) : 0;
+}
+
 static uint64_t BusyUs(void) {
   return ElapsedUs() - g_clock.waited_us - PausedUs();
 }
@@ -351,9 +383,10 @@ static uint64_t BusyUs(void) {
 // milliseconds. It counts from POST, since the date and time questions are
 // answered with Enter.
 static uint64_t GuestClockMs(void) {
-  const uint8_t* const count = &g_guest_ram[kBIOSTickCountAddress];
-  const uint64_t ticks = (uint64_t)count[0] | (uint64_t)count[1] << 8 |
-                         (uint64_t)count[2] << 16 | (uint64_t)count[3] << 24;
+  uint64_t ticks = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    ticks |= (uint64_t)GuestRAMByte(kBIOSTickCountAddress + i) << (8 * i);
+  }
   return ticks * kPITCountsPerBIOSTick * kMillisecondsPerSecond / kPITInputHz;
 }
 
@@ -445,7 +478,7 @@ static void FormatSystemLine(char* buffer, size_t size) {
       (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
       (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
       (unsigned long)SouthbridgeGetPollStats().keys,
-      (unsigned)(kGuestRAMSize / 1024));
+      (unsigned)(GuestRAMSize() / 1024));
 }
 
 static void FormatDisplayLine(char* buffer, size_t size) {
@@ -574,7 +607,7 @@ static void UpdateStatusRows(void) {
   state.drives[kStatusBarDriveHD2] = HardDiskGetImage(kHardDisk2);
   state.vm = g_has_vm ? g_vm.entry.name : NULL;
   state.running = true;
-  state.keyboard_flags = g_guest_ram[kBIOSKeyboardFlagsAddress];
+  state.keyboard_flags = GuestRAMByte(kBIOSKeyboardFlagsAddress);
   state.battery = SouthbridgeGetBattery();
   state.hint = MenuIsOpen() ? MenuHint() : NULL;
   WarnOfLowBattery(state.battery);
@@ -653,7 +686,28 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
       Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
       Y_LOG_STRING("keyboard_fw", version),
-      Y_LOG_UINT("guest_ram_kb", kGuestRAMSize / 1024));
+      Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024));
+  const PsramStats psram = PsramGetStats();
+  REPLY_GROUP(
+      command, "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
+      Y_LOG_UINT("serial_hz", psram.serial_hz), Y_LOG_HEX8("kgd", psram.kgd),
+      Y_LOG_UINT("read_512_us", psram.read_512_us),
+      Y_LOG_UINT("write_512_us", psram.write_512_us),
+      Y_LOG_UINT("bytes_read", psram.bytes_read),
+      Y_LOG_UINT("bytes_written", psram.bytes_written),
+      Y_LOG_UINT("timeouts", psram.timeouts));
+  const PagerStats pager = PagerGetStats();
+  REPLY_GROUP(
+      command, "paging", Y_LOG_BOOL("on", g_paging),
+      Y_LOG_BOOL("off_after_fault", g_after_fault),
+      Y_LOG_UINT("frames", pager.frames),
+      Y_LOG_UINT("page_bytes", kPagerPageSize),
+      Y_LOG_UINT("page_ins", pager.page_ins),
+      Y_LOG_UINT("zero_fills", pager.zero_fills),
+      Y_LOG_UINT("write_backs", pager.write_backs),
+      Y_LOG_UINT("soft_faults", pager.soft_faults),
+      Y_LOG_UINT("errors", pager.errors),
+      Y_LOG_UINT("fault_us", pager.fault_us));
   REPLY_GROUP(
       command, "stack",
       Y_LOG_UINT("size", (uintptr_t)&__StackTop - (uintptr_t)&__StackBottom),
@@ -757,11 +811,27 @@ static uint8_t FloppyDrives(void) {
   return g_has_vm && !g_vm.present[kVMDriveFD2] ? 1 : kFloppyDrives;
 }
 
+// Page all of guest RAM through the PSRAM if it came up, and the last start
+// did not end in a hard fault: paging is the newest thing a fault could come
+// from, and without it the VM has the SRAM alone - see yax86_pico.h.
+static void ConfigureGuestRAM(YPlatformConfig* config) {
+  g_paging = PsramGetStats().state == kPsramOk && !g_after_fault;
+  if (!g_paging) {
+    config->direct_memory_size = kGuestRAMSize;
+    config->direct_memory = g_guest_ram;
+    config->paged_memory = NULL;
+    return;
+  }
+  config->direct_memory_size = 0;
+  config->direct_memory = NULL;
+  config->paged_memory = PagerInit(
+      g_guest_ram, kGuestRAMSize, Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE);
+}
+
 static bool InitVM(void) {
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_vm_log_config;
-  config->physical_memory_size = kGuestRAMSize;
-  config->physical_memory = g_guest_ram;
+  ConfigureGuestRAM(config);
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->floppy_drives = FloppyDrives();
@@ -774,6 +844,10 @@ static bool InitVM(void) {
   }
   FloppyAttach(&g_platform.fdc);
   HardDiskAttach(&g_platform.hdc);
+  g_vm_up = true;
+  if (g_after_fault) {
+    StatusBarPostMessage("Paging off: the last start crashed");
+  }
   return true;
 }
 
@@ -1843,7 +1917,38 @@ static OverclockResult Overclock(void) {
 }
 #endif
 
+// Bring the PSRAM up with the watchdog armed, as the overclock is raised: the
+// driver bounds every wait, so a hang here would be something it did not
+// foresee, and the reboot it turns into starts without the PSRAM. The marker
+// is the overclock's kind, and the watchdog disarmed after for the same
+// reason - see Overclock().
+static void StartPsram(void) {
+  if (g_psram_marker == kPsramAttemptMarker) {
+    g_psram_marker = 0;
+    PsramInit(true);
+    return;
+  }
+  g_psram_marker = kPsramAttemptMarker;
+  watchdog_enable(kWatchdogTimeoutMs, true);
+  PsramInit(false);
+  watchdog_disable();
+  g_psram_marker = 0;
+}
+
+// A hard fault, on either core, reboots the board rather than leaving it hung
+// with nothing on USB, and the start after it runs without paging - see
+// ConfigureGuestRAM(). Replaces the SDK's handler, a breakpoint, which halts.
+void isr_hardfault(void) {
+  g_fault_marker = kFaultMarker;
+  watchdog_reboot(0, 0, 0);
+  for (;;) {
+  }
+}
+
 int main(void) {
+  // Before anything can fault again.
+  g_after_fault = g_fault_marker == kFaultMarker;
+  g_fault_marker = 0;
   // First, before anything has used more of the stack than main's frame, or
   // core 1 has started.
   PaintStacks();
@@ -1855,6 +1960,8 @@ int main(void) {
   // moves to the 48MHz USB PLL.
   g_status.overclock = Overclock();
 #endif
+  // After the clock, which it divides for its own.
+  StartPsram();
 
   RuntimeLogInit();
 

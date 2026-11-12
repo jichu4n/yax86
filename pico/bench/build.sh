@@ -12,7 +12,6 @@
 #   YAX86_CORE_ROOT           Checkout whose core/ is compiled in, for A/B'ing
 #                             two core revisions against the same harness.
 #                             Defaults to this one.
-#   YAX86_PICO_GUEST_RAM_KB   Guest RAM, 128 or 192. Defaults to 128.
 #   YAX86_PICO_SYS_CLK_KHZ    System clock. Defaults to the stock 125000.
 #   YAX86_PICO_PROFILE        1 to build in the sampling profiler.
 #   PICO_SDK_PATH             Where the Pico SDK lives.
@@ -22,7 +21,6 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 BUILD_ROOT="$(cd ../.. && pwd)/build-pico"
 CORE_ROOT="$(cd "${YAX86_CORE_ROOT:-../..}" && pwd)"
-GUEST_RAM_KB="${YAX86_PICO_GUEST_RAM_KB:-128}"
 SYS_CLK_KHZ="${YAX86_PICO_SYS_CLK_KHZ:-}"
 PROFILE="${YAX86_PICO_PROFILE:-0}"
 OPT_LEVELS=()
@@ -46,10 +44,9 @@ if [ -z "${PICO_SDK_PATH:-}" ]; then
 fi
 
 for opt in "${OPT_LEVELS[@]}"; do
-    echo "==> Building -$opt with ${GUEST_RAM_KB}K guest RAM from $CORE_ROOT"
+    echo "==> Building -$opt from $CORE_ROOT"
     cmake -S . -B "$BUILD_ROOT/$opt" \
         -DYAX86_PICO_OPT="$opt" \
-        -DYAX86_PICO_GUEST_RAM_KB="$GUEST_RAM_KB" \
         -DYAX86_PICO_SYS_CLK_KHZ="$SYS_CLK_KHZ" \
         -DYAX86_PICO_PROFILE="$PROFILE" \
         -DYAX86_CORE_ROOT="$CORE_ROOT" >/dev/null
