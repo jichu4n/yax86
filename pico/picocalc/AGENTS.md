@@ -340,10 +340,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   host measuring the boot, still boot. `src/launcher_menu.c` holds the
   list's pages and draws them, and says what was chosen on them;
   `src/launcher.c` decides what the list does: which VM starts, the
-  countdown, and what each choice carries out. `main.c` runs its loop, which
-  also answers commands and draws the list. Calls go one way, from `main.c`
-  to the launcher and from the launcher to its pages. The card's VMs and
-  settings, as last read, are in `src/vm_store.c`, which `main.c`, the
+  countdown, and what each choice carries out. `main.c` runs the loop,
+  which answers commands and, through `src/screen.c`, hands the screen
+  showing its keys, a tick for what happens with time, and the chance to
+  draw, and composes the status rows from its keys. A `Screen` is those
+  functions, with its page's name for the report. For now the launcher is
+  the one screen: the list and every page reached from it. Calls go one
+  way, from `main.c` to the screen and from the screen down. The card's VMs
+  and settings, as last read, are in `src/vm_store.c`, which `main.c`, the
   launcher and its pages all read them from. It reads and saves them and
   logs what failed, and leaves showing a problem to its caller.
 - **The report gives the list as the menu**, `open=true` with its page, and

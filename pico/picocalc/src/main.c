@@ -36,13 +36,13 @@
 #include "hardware/watchdog.h"
 #include "keymap.h"
 #include "launcher.h"
-#include "launcher_menu.h"
 #include "menu.h"
 #include "pager.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "psram.h"
 #include "runtime_log.h"
+#include "screen.h"
 #include "sdcard.h"
 #include "southbridge.h"
 #include "speaker.h"
@@ -325,7 +325,7 @@ static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
 // Whether a menu shows: the menu over the VM, or the list at power on before
 // one starts, which the report gives as the menu and pacing counts as paused.
-static bool MenuShowing(void) { return MenuIsOpen() || LauncherMenuIsOpen(); }
+static bool MenuShowing(void) { return MenuIsOpen() || ScreenIsOpen(); }
 
 static uint64_t PausedUs(void) {
   return g_clock.paused_us +
@@ -710,9 +710,7 @@ static __noinline void ReplyReportRunning(const Command* command) {
       Y_LOG_UINT("changes", speaker.changes));
   REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", MenuShowing()),
-      Y_LOG_STRING(
-          "page",
-          LauncherMenuIsOpen() ? LauncherMenuPageName() : MenuPageName()));
+      Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : MenuPageName()));
   REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
@@ -1342,33 +1340,34 @@ static __noinline void ChooseVM(void) {
     case kLauncherShowsList:
       break;
   }
+  ScreenShow(&kLauncherScreen);
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
     if (CommandPoll(&command)) {
       RunCommand(&command);
     }
-    bool chosen = false;
+    ScreenResult result = kScreenStays;
     SouthbridgeKeyEvent key;
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      chosen = LauncherHandleKey(key);
+      result = ScreenHandleKey(key);
       // The keys for the page the key led to, at once rather than at the
       // next update.
-      LauncherUpdateRows();
+      ScreenUpdateRows();
     }
-    if (LauncherCountDown()) {
-      chosen = true;
+    if (ScreenTick() == kScreenChoseVM) {
+      result = kScreenChoseVM;
     }
-    if (chosen && LauncherTakeChosen(&g_vm)) {
+    if (result == kScreenChoseVM && LauncherTakeChosen(&g_vm)) {
       g_has_vm = true;
-      LauncherMenuClose();
+      ScreenClose();
       return;
     }
     if (time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      LauncherUpdateRows();
+      ScreenUpdateRows();
     }
-    LauncherMenuDraw(time_us_64());
+    ScreenDraw(time_us_64());
     sleep_ms(kPausedPollMs);
   }
 }

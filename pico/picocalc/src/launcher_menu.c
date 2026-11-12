@@ -166,8 +166,6 @@ enum {
   kSettingsItemCount = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
 };
 
-// Whether the list shows: from LauncherMenuOpen() until LauncherMenuClose().
-static bool g_open;
 static ListPage g_page;
 static uint8_t g_chosen;
 // Whether what is on the panel is out of date, and when the sharing page was
@@ -221,8 +219,6 @@ static uint8_t g_new_drive;
 // Whether the form is editing the drives of the VM in g_vm, rather than
 // making a new one; it then has no name, and saves rather than creates.
 static bool g_editing;
-bool LauncherMenuIsOpen(void) { return g_open; }
-
 const char* LauncherMenuPageName(void) { return kPageNames[g_page]; }
 
 static void ShowPage(ListPage page, uint8_t chosen);
@@ -237,7 +233,6 @@ static void ScrollToChosen(void);
 
 void LauncherMenuOpen(uint8_t highlighted) {
   g_vms = VMStoreList();
-  g_open = true;
   g_list_top = 0;
   ShowPage(kListPageVMs, highlighted);
   ScrollToChosen();
@@ -246,8 +241,6 @@ void LauncherMenuOpen(uint8_t highlighted) {
 uint8_t LauncherMenuChosenVM(void) { return g_chosen; }
 
 Font4x10 LauncherMenuChosenFont(void) { return g_font; }
-
-void LauncherMenuClose(void) { g_open = false; }
 
 void LauncherMenuShowSharing(void) { ShowPage(kListPageSharing, 0); }
 
@@ -1180,9 +1173,6 @@ static void DrawSharingPage(DisplayMenu* menu) {
 }
 
 void LauncherMenuDraw(uint64_t now_us) {
-  if (!g_open) {
-    return;
-  }
   if (g_page == kListPageSharing &&
       now_us - g_status_drawn_us >= kStatusRefreshUs) {
     g_dirty = true;

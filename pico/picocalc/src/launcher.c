@@ -252,7 +252,7 @@ static __noinline void RenameVM(void) {
 static void ShowCopyProgress(uint64_t done, uint64_t total) {
   LauncherMenuSetCopyProgress(
       (uint32_t)(done / kBytesPerKB), (uint32_t)(total / kBytesPerKB));
-  LauncherUpdateRows();
+  UIStatusOffer(LauncherMenuHint());
   LauncherMenuDraw(time_us_64());
 }
 
@@ -360,8 +360,6 @@ static __noinline void DeleteVM(void) {
   }
 }
 
-void LauncherUpdateRows(void) { UIStatusOffer(LauncherMenuHint()); }
-
 void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
 
 LauncherStartResult LauncherStart(VMConfig* vm) {
@@ -397,13 +395,15 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
   return kLauncherShowsList;
 }
 
-bool LauncherHandleKey(SouthbridgeKeyEvent key) {
+// A key pressed while the list shows: stops the countdown, and carries out
+// what the menu makes of it.
+static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
   g_counting = false;
   LauncherMenuSetCountdown(0);
-  bool chosen = false;
+  ScreenResult result = kScreenStays;
   switch (LauncherMenuHandleKey(key)) {
     case kLauncherMenuActionVMChosen:
-      chosen = true;
+      result = kScreenChoseVM;
       break;
     case kLauncherMenuActionShareCard:
       ShareCard();
@@ -435,26 +435,36 @@ bool LauncherHandleKey(SouthbridgeKeyEvent key) {
     default:
       break;
   }
-  return chosen;
+  return result;
 }
 
-bool LauncherCountDown(void) {
-  bool chosen = false;
+// Count down to the default VM, showing the seconds left, which chooses it
+// once they run out.
+static ScreenResult CountDown(void) {
+  ScreenResult result = kScreenStays;
   if (g_counting) {
     const int64_t left_us =
         absolute_time_diff_us(get_absolute_time(), g_start_at);
     if (left_us <= 0) {
       g_counting = false;
       LauncherMenuSetCountdown(0);
-      chosen = true;
+      result = kScreenChoseVM;
     } else {
       LauncherMenuSetCountdown(
           (uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
                     kMicrosecondsPerSecond));
     }
   }
-  return chosen;
+  return result;
 }
+
+const Screen kLauncherScreen = {
+    .handle_key = HandleKey,
+    .tick = CountDown,
+    .draw = LauncherMenuDraw,
+    .hint = LauncherMenuHint,
+    .page_name = LauncherMenuPageName,
+};
 
 bool LauncherTakeChosen(VMConfig* vm) {
   return TakeVM(LauncherMenuChosenVM(), vm);

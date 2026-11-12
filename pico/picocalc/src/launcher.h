@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "screen.h"
 #include "southbridge.h"
 #include "vm_config.h"
 
@@ -32,10 +33,6 @@ typedef enum LauncherStartResult {
   kLauncherShowsList,
 } LauncherStartResult;
 
-// The status rows while the list of VMs shows: the list's keys, or why
-// a VM did not start, and the battery. There are no drives yet.
-void LauncherUpdateRows(void);
-
 // Lend the launcher copy_buffer, kCopyBufferSize bytes of guest RAM, which
 // copying a VM's files borrows before the VM starts.
 void LauncherInit(uint8_t* copy_buffer);
@@ -44,13 +41,9 @@ void LauncherInit(uint8_t* copy_buffer);
 // and either take a VM at once into *vm or show the list.
 LauncherStartResult LauncherStart(VMConfig* vm);
 
-// A key pressed while the list shows: stops the countdown, and carries out
-// what the menu makes of it. Returns whether it chose a VM to start.
-bool LauncherHandleKey(SouthbridgeKeyEvent key);
-
-// Count down to the default VM, showing the seconds left. Returns whether
-// the countdown has run out, which chooses it.
-bool LauncherCountDown(void);
+// The list and every page reached from it, as one screen. Its keys stop
+// the countdown, and its time runs it.
+extern const Screen kLauncherScreen;
 
 // Take the VM chosen into *vm, if its configuration reads. Returns false,
 // with its problem shown on the list, if it does not.
