@@ -4,6 +4,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "core/fdc.h"
 #include "ff.h"
 #include "harddisk.h"
 
@@ -15,11 +16,6 @@ static const char* const kBlankFiles[kVMDrives] = {
     [kVMDriveFD2] = "fd2.img",
     [kVMDriveHD1] = "hd1.img",
     [kVMDriveHD2] = "hd2.img",
-};
-
-enum {
-  // A blank floppy's size: a 360KB disk.
-  kFloppySize = 360 * 1024,
 };
 
 // Check a name typed for a VM, saying why it will not do, and make the VM's
@@ -196,7 +192,8 @@ VMFolderResult VMFolderRename(
 
 // The size of a blank disk for a drive.
 static uint32_t BlankSize(uint8_t drive) {
-  return drive <= kVMDriveFD2 ? kFloppySize : Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
+  return drive <= kVMDriveFD2 ? Y_FDC_FORMAT_360KB_IMAGE_SIZE
+                              : Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
 }
 
 // The stem of a blank disk's file when its own name is taken, before _2 to

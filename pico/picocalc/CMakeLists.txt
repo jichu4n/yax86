@@ -142,6 +142,7 @@ add_executable(yax86_picocalc
     src/text.c
     src/typing.c
     src/ui_box.c
+    src/ui_browser.c
     src/ui_page.c
     src/usb_descriptors.c
     src/usb_disk.c
