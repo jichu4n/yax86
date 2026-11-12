@@ -161,15 +161,33 @@ round-trips through memory costs more than its instruction count suggests.**
   A run continues only into cached code, so the size changes where runs end,
   and with them where the bench's screen poll lands. The direct count
   happened not to move.
-- **`code_page_generation` is the whole invalidation mechanism**: one
-  wrapping byte per 4KB page, recorded by each entry and compared on use. The
-  CPU bumps it in `YCPUWriteRawMemoryByte()`, where operands, stack pushes
-  and vector writes end up, so a host reports only writes made some other
-  way - the platform does, in `YPlatformWriteMemoryByte()`, for DMA. Without
-  it DOS loads over the boot sector unseen: the first prototype retired
-  13,247,281 instructions.
-- **A counter wrap flushes the whole cache**, since an entry taken 256 writes
-  ago would look current. That is about 2,100 256-iteration loops over a run.
+- **`code_page_generation` is the whole invalidation mechanism**: one byte
+  per 4KB page, recorded by each entry and compared on use. Zero says the
+  cache holds no decode from the page; anything else is a wrapping count of
+  the writes to it since one was cached. The CPU counts in
+  `YCPUWriteRawMemoryByte()`, where operands, stack pushes and vector writes
+  end up, so a host reports only writes made some other way - the platform
+  does, in `YPlatformWriteMemoryByte()`, for DMA. Without it DOS loads over
+  the boot sector unseen: the first prototype retired 13,247,281
+  instructions.
+- **A count coming back round discards that page's decodes and no others**,
+  since an entry taken 255 writes ago would look current.
+  `YCPUInvalidateDecodeCachePage()` walks the cache for them and leaves the
+  page at zero, so its writes go uncounted until an instruction is cached
+  from it again. A stack or data page therefore never causes a walk.
+  Discarding every decode instead, and counting writes to every page, is
+  what this replaced: the stack alone wrapped a counter every 256 pushes,
+  and QBasic interpreting a program decoded 50.6% of the instructions it ran
+  where it now decodes 32.7%; two compilers and a linker went from 44-45% to
+  28-30%. On the PicoCalc at 640KB the seven commands took 156.6 seconds of
+  processor time against 174.2, and QBasic 69.5 against 77.7. `dos-boot`
+  gained 2.86% paged and 2.52% direct.
+- **Discarding less moves both `dos-boot` counts**: paged from 2,356,942
+  instructions and 27,966,123 cycles to 2,353,177 and 27,922,089, and direct
+  from 2,328,128 and 27,702,858 to 2,328,231 and 27,704,200. It is where runs
+  end again, not emulation: with `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1 both
+  sides give 2,356,713 and 27,963,388 paged, and 2,328,015 and 27,701,507
+  direct.
 - **Not caching is as load-bearing as caching**: an instruction that spills
   onto the next page or off the end of the segment is not cached, since its
   page says nothing about its later bytes. A failing decode clears the entry's

@@ -34,8 +34,8 @@ reports and why.
   | a bare Pico | 128KB held directly in SRAM | `paging=false guest_ram_kb=128` |
 
 - **It is deterministic, with an invariant for each layout, every run, at
-  every level**: paged, 2,356,813 retired instructions and 27,964,698
-  emulated cycles; direct, 2,328,128 and 27,702,858. The BIOS tests and DOS
+  every level**: paged, 2,353,177 retired instructions and 27,922,089
+  emulated cycles; direct, 2,328,231 and 27,704,200. The BIOS tests and DOS
   sizes more memory at 640KB. If either moves, behaviour changed and the
   times are not comparable.
 - **After the result come `psram`**, its state, which says why a run did not
@@ -109,17 +109,17 @@ Notes on the machinery:
 ## Current figures
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.1, 250MHz, `-O3`, hot path in SRAM, on a
-PicoCalc's Pico, at #145:
+PicoCalc's Pico, at #149:
 
 | guest memory | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ------------ | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| 640KB paged | **5.920891** | **4.723** | **0.398** | **99.0%** | 477,148 | 189,064 | 90,004 |
-| 128KB direct | 4.626773 | 5.988 | 0.503 | 125.5% | 477,148 | 189,064 | 90,004 |
+| 640KB paged | **5.754725** | **4.852** | **0.409** | **101.7%** | 476,980 | 195,176 | 90,052 |
+| 128KB direct | 4.501438 | 6.155 | 0.517 | 129.0% | 476,980 | 195,176 | 90,052 |
 
 - The direct row was measured by building the same image with paging
   turned off at startup, the layout a bare Pico gets.
 - **Paging costs the boot 28%**: every data access goes through the paged
-  lookup (`core/AGENTS.md`, paged memory), and the 640KB boot runs 1.2%
+  lookup (`core/AGENTS.md`, paged memory), and the 640KB boot runs 1.1%
   more instructions, with 0.13 seconds in the fault handler.
 
 At #89, 128K of guest RAM, GCC 16.2.0, SDK 2.3.0, picotool 2.3.0:
