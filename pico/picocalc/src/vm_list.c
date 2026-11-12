@@ -1,12 +1,14 @@
-#include "vm_folder.h"
+#include "vm_list.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
 
 #include "core/fdc.h"
+#include "disk_image.h"
 #include "ff.h"
 #include "harddisk.h"
+#include "settings.h"
 
 static const char kConfigFile[] = "vm.cfg";
 
@@ -20,6 +22,53 @@ static const char* const kBlankFiles[kVMDrives] = {
 
 // Check a name typed for a VM, saying why it will not do, and make the VM's
 // entry from it.
+// Add a VM where it belongs, keeping the list sorted by name.
+static void Insert(VMList* list, const VMEntry* entry) {
+  if (list->count == kVMListMax) {
+    list->truncated = true;
+    return;
+  }
+  uint8_t i = list->count;
+  while (i > 0 && strcmp(list->vms[i - 1].name, entry->name) > 0) {
+    list->vms[i] = list->vms[i - 1];
+    --i;
+  }
+  list->vms[i] = *entry;
+  ++list->count;
+}
+
+uint8_t VMListFind(const VMList* list, const char* name) {
+  for (uint8_t i = 0; i < list->count; ++i) {
+    if (strcasecmp(list->vms[i].name, name) == 0) {
+      return i;
+    }
+  }
+  return kVMListMax;
+}
+
+// Add a folder of the VMs folder to the list, if it is a VM: a folder,
+// neither hidden nor a system folder, with a vm.cfg in it.
+static bool TakeVMFolder(const FILINFO* info, void* context) {
+  VMList* list = context;
+  VMEntry entry;
+  FILINFO config;
+  if ((info->fattrib & AM_DIR) && !(info->fattrib & (AM_HID | AM_SYS)) &&
+      VMEntryMake(info->fname, &entry) &&
+      f_stat(entry.path, &config) == FR_OK && !(config.fattrib & AM_DIR)) {
+    Insert(list, &entry);
+  }
+  return true;
+}
+
+void VMListRead(VMList* list) {
+  list->count = 0;
+  list->truncated = false;
+  if (DiskImageMountCard() != kDiskImageOpen) {
+    return;
+  }
+  FSListFolder(kVMsFolder, TakeVMFolder, list);
+}
+
 static bool TakeName(
     const char* name, VMEntry* entry, char problem[kVMProblemLength + 1]) {
   const size_t length = strlen(name);
@@ -70,7 +119,7 @@ static void Describe(
       FSDescribeResult(result));
 }
 
-// The VM read by Retarget() and VMFolderDescribe(): too large for the stack,
+// The VM read by Retarget() and VMListDescribe(): too large for the stack,
 // with ConfigFileUpdate() under it.
 static VMConfig g_config;
 
@@ -102,13 +151,13 @@ static bool Retarget(
   return true;
 }
 
-// A look through a VM's folder for VMFolderDescribe().
+// A look through a VM's folder for VMListDescribe().
 static bool CountFile(const FILINFO* info, void* context) {
-  VMFolderContents* contents = context;
+  VMListContents* contents = context;
   if (strcasecmp(info->fname, kConfigFile) == 0) {
     return true;
   }
-  if (contents->file_count < kVMFolderNamed) {
+  if (contents->file_count < kVMListNamed) {
     snprintf(
         contents->files[contents->file_count],
         sizeof(contents->files[contents->file_count]), "%s", info->fname);
@@ -119,8 +168,8 @@ static bool CountFile(const FILINFO* info, void* context) {
   return true;
 }
 
-void VMFolderDescribe(
-    const VMList* list, const VMEntry* vm, VMFolderContents* contents) {
+void VMListDescribe(
+    const VMList* list, const VMEntry* vm, VMListContents* contents) {
   contents->file_count = 0;
   contents->user_count = 0;
   char folder[kFSMaxPath + 1];
@@ -135,7 +184,7 @@ void VMFolderDescribe(
     VMConfigRead(other, &g_config, ignored);
     for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
       if (FSInFolder(g_config.drives[drive], folder)) {
-        if (contents->user_count < kVMFolderNamed) {
+        if (contents->user_count < kVMListNamed) {
           memcpy(
               contents->users[contents->user_count], other->name,
               sizeof(other->name));
@@ -147,47 +196,47 @@ void VMFolderDescribe(
   }
 }
 
-VMFolderResult VMFolderRename(
+VMListResult VMListRename(
     const VMList* list, const VMEntry* vm, const char* name, VMEntry* renamed,
     char problem[kVMProblemLength + 1]) {
   if (!TakeName(name, renamed, problem)) {
-    return kVMFolderRefused;
+    return kVMListRefused;
   }
   // The same name, perhaps in other capitals, which the card keeps as one.
   if (strcasecmp(vm->name, renamed->name) == 0) {
     *renamed = *vm;
-    return kVMFolderDone;
+    return kVMListDone;
   }
   if (Taken(renamed, problem)) {
-    return kVMFolderRefused;
+    return kVMListRefused;
   }
   // Kept off the stack, which writing a configuration file under them takes
   // much of.
   static char from[kFSMaxPath + 1];
   static char to[kFSMaxPath + 1];
-  static VMSettings settings;
+  static Settings settings;
   FolderOf(vm, from);
   FolderOf(renamed, to);
   char ignored[kVMProblemLength + 1];
-  VMSettingsRead(&settings, ignored);
+  SettingsRead(&settings, ignored);
   const FRESULT result = f_rename(from, to);
   if (result != FR_OK) {
     Describe("rename", vm, result, problem);
-    return kVMFolderFailed;
+    return kVMListFailed;
   }
   if (strcasecmp(settings.boot_default, vm->name) == 0 &&
-      !VMSettingsSaveBootDefault(renamed->name, problem)) {
-    return kVMFolderFailed;
+      !SettingsSaveBootDefault(&settings, renamed->name, problem)) {
+    return kVMListFailed;
   }
   for (uint8_t i = 0; i < list->count; ++i) {
     const VMEntry* other = &list->vms[i];
     if (!Retarget(
             strcasecmp(other->name, vm->name) == 0 ? renamed : other, from, to,
             problem)) {
-      return kVMFolderFailed;
+      return kVMListFailed;
     }
   }
-  return kVMFolderDone;
+  return kVMListDone;
 }
 
 // The size of a blank disk for a drive.
@@ -230,7 +279,7 @@ static const char* g_paths[kVMDrives];
 // Work out what vm's drives are to hold, in g_paths, refusing one image in
 // two drives or a blank disk with no free name.
 static bool PlanDrives(
-    const VMEntry* vm, const char* folder, const VMFolderDrives* drives,
+    const VMEntry* vm, const char* folder, const VMListDrives* drives,
     FSTransfer* transfer, char problem[kVMProblemLength + 1]) {
   transfer->done = 0;
   transfer->total = 0;
@@ -271,7 +320,7 @@ static bool PlanDrives(
 // Write the blank disks planned, then vm's file naming every drive. Deletes
 // the blank disks written if it fails.
 static bool WriteDrives(
-    const VMEntry* vm, const VMFolderDrives* drives, FSTransfer* transfer,
+    const VMEntry* vm, const VMListDrives* drives, FSTransfer* transfer,
     char problem[kVMProblemLength + 1]) {
   if (transfer->total > 0) {
     transfer->progress(0, transfer->total);
@@ -297,46 +346,46 @@ static bool WriteDrives(
   return false;
 }
 
-VMFolderResult VMFolderCreate(
-    const char* name, const VMFolderDrives* drives, FSTransfer* transfer,
+VMListResult VMListCreate(
+    const char* name, const VMListDrives* drives, FSTransfer* transfer,
     VMEntry* created, char problem[kVMProblemLength + 1]) {
   static char folder[kFSMaxPath + 1];
   if (!TakeName(name, created, problem) || Taken(created, problem)) {
-    return kVMFolderRefused;
+    return kVMListRefused;
   }
   FolderOf(created, folder);
   if (!PlanDrives(created, folder, drives, transfer, problem)) {
-    return kVMFolderRefused;
+    return kVMListRefused;
   }
   const FRESULT result = f_mkdir(folder);
   if (result != FR_OK) {
     Describe("make", created, result, problem);
-    return kVMFolderFailed;
+    return kVMListFailed;
   }
   if (WriteDrives(created, drives, transfer, problem)) {
-    return kVMFolderDone;
+    return kVMListDone;
   }
   FSDeleteFolder(folder, NULL);
-  return kVMFolderFailed;
+  return kVMListFailed;
 }
 
-VMFolderResult VMFolderEdit(
-    const VMEntry* vm, const VMFolderDrives* drives, FSTransfer* transfer,
+VMListResult VMListEdit(
+    const VMEntry* vm, const VMListDrives* drives, FSTransfer* transfer,
     char problem[kVMProblemLength + 1]) {
   static char folder[kFSMaxPath + 1];
   FolderOf(vm, folder);
   if (!PlanDrives(vm, folder, drives, transfer, problem)) {
-    return kVMFolderRefused;
+    return kVMListRefused;
   }
-  return WriteDrives(vm, drives, transfer, problem) ? kVMFolderDone
-                                                    : kVMFolderFailed;
+  return WriteDrives(vm, drives, transfer, problem) ? kVMListDone
+                                                    : kVMListFailed;
 }
 
-VMFolderResult VMFolderClone(
+VMListResult VMListClone(
     const VMEntry* vm, const char* name, FSTransfer* transfer, VMEntry* copy,
     char problem[kVMProblemLength + 1]) {
   if (!TakeName(name, copy, problem) || Taken(copy, problem)) {
-    return kVMFolderRefused;
+    return kVMListRefused;
   }
   static char from[kFSMaxPath + 1];
   static char to[kFSMaxPath + 1];
@@ -348,15 +397,15 @@ VMFolderResult VMFolderClone(
   const FRESULT result = FSCopyFolder(from, to, transfer);
   if (result != FR_OK) {
     Describe("copy", vm, result, problem);
-    return kVMFolderFailed;
+    return kVMListFailed;
   }
-  return Retarget(copy, from, to, problem) ? kVMFolderDone : kVMFolderFailed;
+  return Retarget(copy, from, to, problem) ? kVMListDone : kVMListFailed;
 }
 
-bool VMFolderDelete(const VMEntry* vm, char problem[kVMProblemLength + 1]) {
-  static VMSettings settings;
+bool VMListDelete(const VMEntry* vm, char problem[kVMProblemLength + 1]) {
+  static Settings settings;
   char ignored[kVMProblemLength + 1];
-  VMSettingsRead(&settings, ignored);
+  SettingsRead(&settings, ignored);
   char folder[kFSMaxPath + 1];
   FolderOf(vm, folder);
   const FRESULT result = FSDeleteFolder(folder, kConfigFile);
@@ -365,7 +414,7 @@ bool VMFolderDelete(const VMEntry* vm, char problem[kVMProblemLength + 1]) {
     return false;
   }
   if (strcasecmp(settings.boot_default, vm->name) == 0) {
-    return VMSettingsSaveBootDefault("", problem);
+    return SettingsSaveBootDefault(&settings, "", problem);
   }
   return true;
 }
