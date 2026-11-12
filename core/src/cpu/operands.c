@@ -74,6 +74,79 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
          Y_CPU_PHYSICAL_ADDRESS_MASK;
 }
 
+// The byte in its frame that a guest address in the paged range refers to, or
+// NULL if the address is outside the range or its page's entry lacks any of
+// flags. A read passes Y_CPU_PAGED_DATA_RESIDENT, and a write that and
+// Y_CPU_PAGED_DATA_DIRTY. NULL sends the access to the host's callback.
+//
+// This is the translation described at YCPUPagedDataWindow. With 256-byte
+// pages starting at 0x10000, guest address 0x11234 whose page's entry is
+// 0x4005 is byte 0x34 of page 0x12, held in frame 5: frames + 0x534.
+Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
+    const YCPUState* cpu, uint32_t raw_address, uint16_t flags) {
+  const YCPUPagedDataWindow* window = &cpu->paged_data_window;
+
+  // How far into the paged range the address is. An address below start
+  // wraps to a huge value, so this one unsigned compare rejects addresses on
+  // both sides of the range, and every address when size is 0.
+  const uint32_t offset = raw_address - window->start;
+  if (offset >= window->size) {
+    return NULL;
+  }
+
+  // The page the address is in, and the page's entry in the page table.
+  const uint32_t page = offset >> window->page_shift;
+  const uint16_t entry = window->pages[page];
+
+  // The access needs every bit in flags. Testing that any one is set would let
+  // a write through to a dirty page whose RESIDENT the host cleared to sample
+  // use, and the host would never hear of it.
+  if ((entry & flags) != flags) {
+    return NULL;
+  }
+
+  // How far into its page the address is: the offset's low page_shift bits.
+  const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
+  const uint32_t offset_in_page = offset & page_mask;
+
+  // The byte is that far into the page's frame.
+  return YCPUGetPagedFrame(window, entry) + offset_in_page;
+}
+
+// Read a byte at an address the direct data window does not cover: from its
+// frame if the address is paged and its page is in one, and otherwise from the
+// host, which brings a paged-out page in.
+//
+// This is the slow half of YCPUReadRawMemoryByte(), split out so that the fast
+// half stays small. YCPUReadRawMemoryByte() is inlined into every place the
+// CPU reads memory, and its fast half is the direct window's compare and load.
+// Everything else, the paged lookup and the host's callback, is in this one
+// copy, and each inlined read carries only a call to it. Y_NOINLINE keeps it
+// that way: the compiler would otherwise inline a small static function back
+// into its callers.
+//
+// The split favours a host whose guest RAM is in the direct window, where the
+// fast half is all a read of RAM needs. Measured with pico/bench's dos-boot
+// workload on an RP2040 at 250MHz, -O3, with paging off: the paged lookup
+// inlined into every read cost 2.6%, and with the callback moved out of line
+// as well, the boot is 2.6% faster than with the callback inline. Y_HOT puts
+// it in SRAM; in flash it measured 0.26% slower.
+//
+// A host that pages all of conventional memory has an empty direct window, so
+// every data access fails the compare and makes this call. What that costs,
+// and the changes to try, are in core/AGENTS.md under paged memory.
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE uint8_t
+YCPUReadMemoryByteOutsideDirectWindow(YCPUState* cpu, uint32_t raw_address) {
+  const uint8_t* paged =
+      YCPUGetPagedDataByte(cpu, raw_address, Y_CPU_PAGED_DATA_RESIDENT);
+  if (paged) {
+    return *paged;
+  }
+  return cpu->config.read_memory_byte
+             ? cpu->config.read_memory_byte(cpu, raw_address)
+             : 0xFF;
+}
+
 // Read a byte from memory as a uint8_t.
 Y_MODULE_PRIVATE uint8_t
 YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
@@ -83,9 +156,7 @@ YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
   if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
-  return cpu->config.read_memory_byte
-             ? cpu->config.read_memory_byte(cpu, raw_address)
-             : 0xFF;
+  return YCPUReadMemoryByteOutsideDirectWindow(cpu, raw_address);
 }
 
 // Read a word from memory as a uint16_t.
@@ -161,6 +232,25 @@ Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
   return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
+// Write a byte at an address the direct data window does not cover: into its
+// frame if the address is paged and its page is in one and dirty, and
+// otherwise through the host, which brings the page in and marks it dirty.
+//
+// The slow half of YCPUWriteRawMemoryByte(), out of line for the same reason
+// as YCPUReadMemoryByteOutsideDirectWindow().
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteOutsideDirectWindow(
+    YCPUState* cpu, uint32_t address, uint8_t value) {
+  uint8_t* paged = YCPUGetPagedDataByte(
+      cpu, address, Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY);
+  if (paged) {
+    *paged = value;
+    return;
+  }
+  if (cpu->config.write_memory_byte) {
+    cpu->config.write_memory_byte(cpu, address, value);
+  }
+}
+
 // Write a byte as uint8_t to memory.
 Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     YCPUState* cpu, uint32_t address, uint8_t value) {
@@ -172,10 +262,7 @@ Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     cpu->direct_data_window.data[address] = value;
     return;
   }
-  if (!cpu->config.write_memory_byte) {
-    return;
-  }
-  cpu->config.write_memory_byte(cpu, address, value);
+  YCPUWriteMemoryByteOutsideDirectWindow(cpu, address, value);
 }
 
 // Write a byte to memory.

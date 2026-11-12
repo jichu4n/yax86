@@ -27,8 +27,9 @@ typedef struct LauncherConfig {
   VMSettings* settings;
   VMConfig* vm;
   bool* has_vm;
+  // Guest RAM, of which copying a VM's files borrows the first 32KB before
+  // the VM starts.
   uint8_t* guest_ram;
-  size_t guest_ram_size;
 } LauncherConfig;
 
 // Run the pre-boot supervisor to choose a VM or start the default.

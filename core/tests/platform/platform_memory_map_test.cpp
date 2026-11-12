@@ -11,9 +11,9 @@ enum {
 class PlatformMemoryMapTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    platform_.config.physical_memory_size = sizeof(ram_);  // 64KB RAM
+    platform_.config.direct_memory_size = sizeof(ram_);  // 64KB RAM
     platform_.config.context = this;
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
 
     ASSERT_TRUE(YPlatformInit(&platform_));

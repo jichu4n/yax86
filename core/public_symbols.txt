@@ -5,6 +5,7 @@ T YCPUExecuteInstruction
 T YCPUFetchNextInstruction
 T YCPUInit
 T YCPUInvalidateDecodeCache
+T YCPUInvalidateDecodeCachePage
 T YCPUTick
 T YDMAInit
 T YDMAReadPort

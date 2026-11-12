@@ -8,8 +8,8 @@ namespace {
 class PlatformVideoTest : public ::testing::Test {
  protected:
   void Init(YVideoAdapter adapter) {
-    platform_.config.physical_memory_size = sizeof(ram_);
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory_size = sizeof(ram_);
+    platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
     platform_.config.video_adapter = adapter;
     ASSERT_TRUE(YPlatformInit(&platform_));

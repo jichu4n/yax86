@@ -53,8 +53,8 @@ struct IdleMachine {
   bool Init(
       bool enable_idle_skip, uint8_t vector = kDOSIdleVector,
       bool program_timer = true) {
-    platform.config.physical_memory_size = sizeof(ram);
-    platform.config.physical_memory = ram;
+    platform.config.direct_memory_size = sizeof(ram);
+    platform.config.direct_memory = ram;
     platform.config.vram = vram;
     if (!YPlatformInit(&platform)) {
       return false;

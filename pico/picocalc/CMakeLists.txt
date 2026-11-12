@@ -134,6 +134,8 @@ add_executable(yax86_picocalc
     src/launcher.c
     src/lcd.c
     src/menu_browse.c
+    ../common/pager.c
+    ../common/psram.c
     src/report.c
     src/runtime_log.c
     src/sdcard.c
@@ -153,6 +155,7 @@ add_executable(yax86_picocalc
 target_include_directories(yax86_picocalc PRIVATE
     "${YAX86_ROOT}"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../common"
     "${fatfs_dir}"
     # Where the generated boot floppy header lands.
     "${CMAKE_CURRENT_BINARY_DIR}"
@@ -206,5 +209,7 @@ pico_enable_stdio_uart(yax86_picocalc 0)
 
 # The LCD's serial interface - see src/lcd.c.
 pico_generate_pio_header(yax86_picocalc "${CMAKE_CURRENT_SOURCE_DIR}/src/lcd.pio")
+# The PSRAM's - see pico/common/psram.c.
+pico_generate_pio_header(yax86_picocalc "${CMAKE_CURRENT_SOURCE_DIR}/../common/psram.pio")
 
 pico_add_extra_outputs(yax86_picocalc)

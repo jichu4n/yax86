@@ -49,6 +49,13 @@ enum {
   kMillisecondsPerSecond = 1000,
   kMicrosecondsPerSecond = 1000 * 1000,
 
+  // The part of the guest's RAM a clone's files are copied through, before a
+  // VM starts and the RAM is the guest's: 64 of the card's blocks, which go to
+  // and from it a run at a time.
+  kCopyBufferSize = 32 * 1024,
+
+  // Written to g_start_note's marker by a reset or a power off, for the
+  // start after the reboot - see LauncherLeaveStartNote().
   kStartNoteMarker = 0x5747A27E,
 };
 
@@ -593,12 +600,12 @@ static __noinline void CloneVM(void) {
   const uint64_t start_us = time_us_64();
   FSTransfer transfer = {
       .buffer = g_config.guest_ram,
-      .buffer_size = g_config.guest_ram_size,
+      .buffer_size = kCopyBufferSize,
       .progress = ShowCopyProgress,
   };
   const VMFolderResult result =
       VMFolderClone(&vm, g_name, &transfer, &copy, problem);
-  memset(g_config.guest_ram, 0, g_config.guest_ram_size);
+  memset(g_config.guest_ram, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
     SetProblem(problem);
     return;
@@ -626,12 +633,12 @@ static __noinline void CreateVM(void) {
   const uint64_t start_us = time_us_64();
   FSTransfer transfer = {
       .buffer = g_config.guest_ram,
-      .buffer_size = g_config.guest_ram_size,
+      .buffer_size = kCopyBufferSize,
       .progress = ShowCopyProgress,
   };
   const VMFolderResult result =
       VMFolderCreate(g_name, &drives, &transfer, &created, problem);
-  memset(g_config.guest_ram, 0, g_config.guest_ram_size);
+  memset(g_config.guest_ram, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
     SetProblem(problem);
     return;
@@ -664,11 +671,11 @@ static __noinline void EditVM(void) {
   char problem[kVMProblemLength + 1];
   FSTransfer transfer = {
       .buffer = g_config.guest_ram,
-      .buffer_size = g_config.guest_ram_size,
+      .buffer_size = kCopyBufferSize,
       .progress = ShowCopyProgress,
   };
   const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
-  memset(g_config.guest_ram, 0, g_config.guest_ram_size);
+  memset(g_config.guest_ram, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
     SetProblem(problem);
     return;
