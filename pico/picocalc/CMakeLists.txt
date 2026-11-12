@@ -147,6 +147,7 @@ add_executable(yax86_picocalc
     src/ui_box.c
     src/ui_browser.c
     src/ui_page.c
+    src/ui_status.c
     src/usb_descriptors.c
     src/usb_disk.c
     "${fatfs_dir}/ff.c"
