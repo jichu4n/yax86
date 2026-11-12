@@ -278,8 +278,10 @@ settle a question about it. `pico/bench` is the harness - see its
 
 A results table measured on hardware with the `dos-boot` workload:
 
-- **`-O3`**, GCC, at **250MHz**, hot path in SRAM, the default 128K of guest
-  RAM. `-O2` and `-Os` are not reported.
+- **`-O3`**, GCC, at **250MHz**, hot path in SRAM, on a PicoCalc's Pico,
+  which pages 640KB of guest RAM through the PSRAM. Say which layout ran:
+  the header's `paging` (`pico/bench/AGENTS.md`). `-O2` and `-Os` are not
+  reported.
 - **Seconds, emulated MHz, MIPS and "vs a real 8088"** for the baseline and
   the branch, and the **gain** as the increase in emulated MHz.
 
@@ -293,15 +295,16 @@ A results table measured on hardware with the `dos-boot` workload:
 The harness reports `elapsed_us`, `cycles` and `instructions` as integers and
 `run.js` derives the rest: for `C` cycles and `I` instructions over `t`
 seconds, emulated MHz = `C / t / 1e6`, MIPS = `I / t / 1e6`, vs a real 8088 =
-`(C / 4.77e6) / t` (a real 8088 takes **5.807 seconds**), and gain =
-`t_baseline / t - 1`.
+`(C / 4.77e6) / t` (a real 8088 takes **5.854 seconds** paged, 5.809
+direct), and gain = `t_baseline / t - 1`.
 
 Alongside the table state:
 
-- **The invariant, and that it did not move**: `dos-boot` retires 2,328,128
-  instructions in 27,702,858 emulated cycles, at every level, every run. If
-  either moved, behaviour changed and the times are not comparable - say so
-  and explain why instead of presenting a speedup.
+- **The invariant, and that it did not move**: `dos-boot` retires 2,353,188
+  instructions in 27,922,137 emulated cycles paged at 640KB, and 2,328,491
+  in 27,707,022 direct at 128KB, at every level, every run. If either
+  moved, behaviour changed and the times are not comparable - say so and
+  explain why instead of presenting a speedup.
 - **How the baseline was obtained**: rebuilt from its own commit through
   `YAX86_CORE_ROOT` against the same harness, on the same board, in the same
   session. A figure from an earlier PR is a cross-check, not a baseline.

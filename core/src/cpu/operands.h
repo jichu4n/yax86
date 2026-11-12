@@ -27,6 +27,23 @@ Y_MODULE_PRIVATE uint32_t YCPUFromOperand(const YCPUOperand* operand);
 Y_MODULE_PRIVATE int32_t
 YCPUFromSignedOperand(YCPUWidth width, const YCPUOperand* operand);
 
+// Where the frame a page table entry names starts in the paged data window's
+// frames. Frames are a page long and laid out back to back, so frame n starts
+// n pages in. The frame number is the entry with RESIDENT and DIRTY masked
+// off, widened before the shift so the arithmetic is unsigned. With 256-byte
+// pages, entry 0x4005 names frame 5, which starts at frames + 0x500.
+//
+// Only the entry's frame number is read: the caller checks the flags first.
+// YCPUGetPagedDataByte() and YCPUOpenPagedFetchWindow() share this, each
+// keeping its own checks inline: moving those here as well changed which way
+// the compiler laid out the branches, making a page in its frame the taken
+// branch, a cycle slower on a Cortex-M0+.
+Y_MODULE_PRIVATE_HEADER inline uint8_t* YCPUGetPagedFrame(
+    const YCPUPagedDataWindow* window, uint16_t entry) {
+  const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
+  return window->frames + (frame << window->page_shift);
+}
+
 // Computes the raw address a segment register and an offset address.
 Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
     const YCPUState* cpu, uint8_t segment_register_index, uint16_t offset);

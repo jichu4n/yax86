@@ -31,9 +31,9 @@ enum {
 class PlatformPCSpeakerTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.direct_memory_size = sizeof(ram_);
     platform_.config.context = this;
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
     platform_.config.set_pc_speaker_frequency = [](YPlatformState* p,
                                                    uint32_t frequency_hz) {

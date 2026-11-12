@@ -2305,6 +2305,28 @@ typedef struct YCPUInstructionFetchWindow {
   uint32_t end;
 } YCPUInstructionFetchWindow;
 
+// How the CPU reaches guest memory for data reads and writes, cheapest first:
+//
+//   1. The direct data window, YCPUDirectDataWindow: one host buffer holding
+//      guest addresses [0, end). An access is a compare and a load, inline.
+//   2. The paged data window, YCPUPagedDataWindow: guest addresses
+//      [start, start + size), held in pages the host keeps in frames. Tried
+//      only for an address the direct window does not cover; an access to a
+//      page in its frame is a call and a few loads.
+//   3. YCPUConfig.read_memory_byte and write_memory_byte: everything else,
+//      such as ROM, video memory and devices, and any paged access whose
+//      page's entry does not allow it.
+//
+// A host may set either window, both or neither, and the two must not
+// overlap. The platform uses both when paged memory is configured: the direct
+// window is direct_memory, [0, direct_memory_size), and the paged window
+// starts right where it ends, so together they cover conventional memory. With
+// direct_memory_size 0 the direct window is empty and all of it is paged.
+//
+// Instruction fetch does not go through either data window. It keeps its own
+// YCPUInstructionFetchWindow, which opens on a page in its frame by itself
+// and asks the host for anything else.
+
 // Guest memory the CPU may read and write by indexing, covering the half-open
 // range of linear addresses [0, end), with data pointing at the byte at 0.
 //
@@ -2326,12 +2348,111 @@ typedef struct YCPUDirectDataWindow {
   uint32_t end;
 } YCPUDirectDataWindow;
 
+// Paged memory: guest memory that the host keeps in pages, only some of them
+// in fast memory at a time, bringing the rest in on demand. It is for a host
+// with less fast memory than the guest has RAM, such as a microcontroller
+// holding the pages in slower external memory.
+//
+// Terms:
+//   - A page is a fixed-size block of the paged range's guest addresses: page
+//     0 is its first 1 << page_shift bytes, page 1 the next, and so on.
+//   - A frame is a page-sized block of the host's fast memory, holding one
+//     page's bytes while that page is in use.
+//   - The page table has one uint16_t entry per page, saying whether the page
+//     is in a frame, which one, and whether it has been written there:
+//
+//     bit   15         14         13 ........................ 0
+//         +----------+----------+-------------------------------+
+//         |  DIRTY   | RESIDENT |         frame number          |
+//         +----------+----------+-------------------------------+
+//
+// What the CPU does with an entry:
+//   - RESIDENT clear: every read and write of the page goes to the host. The
+//     page is not in a frame, or the host wants to hear of the next access to
+//     it. The frame number is not read.
+//   - RESIDENT set, DIRTY clear: the CPU reads the page in the frame numbered
+//     by bits 0-13, and a write goes to the host, which sets DIRTY.
+//   - RESIDENT and DIRTY set: the CPU reads and writes the page in its frame.
+// Every page is writable: DIRTY clear only means a write goes through the host
+// first. So 0x0000 is "not in a frame", 0x4005 "in frame 5, not written
+// since it came in", and 0xC005 "in frame 5, written".
+//
+// How an access goes: one the entry allows goes straight to the frame, with
+// no call; YCPUPagedDataWindow shows the arithmetic. Any other goes to the
+// host through YCPUConfig.read_memory_byte or write_memory_byte, and the host
+// sets the entry so that it allows the access. In the platform, those
+// callbacks call YPlatformPagedMemory.page_fault_fn.
+//
+// Why DIRTY exists: a page not written since it came into its frame still
+// matches its copy in backing memory, so evicting it costs nothing, while a
+// written ("dirty") one has to be written back first. Bringing a page in with
+// DIRTY clear sends its first write to the host, once, which sets DIRTY; at
+// eviction DIRTY says whether to write the page back. A page that is never
+// written, as most code is not, is evicted without a write-back. A host that
+// writes
+// every page back, or whose frames are the memory itself, sets DIRTY on every
+// page and never sees a write.
+//
+// Using RESIDENT to sample use: clearing RESIDENT on a page that stays in its
+// frame sends the next access to the host, which sets it again; that is how a
+// clock or LRU pager learns which pages were used recently. DIRTY is left as
+// it is, so it stays the record of whether the page needs writing back.
+//
+// Rules for the host:
+//   - The page table and frames are the host's. It may change entries at any
+//     time between accesses: the CPU never writes one, and reads it afresh on
+//     every access.
+//   - A page's bytes must not change except through the guest's own writes,
+//     since the CPU keeps instructions it has decoded from a page while the
+//     page is out of its frame.
 enum {
-  // Granularity at which a write to guest memory discards decoded
-  // instructions: 4KB pages over the 8086's 1MB, which is 256 counters. It is
-  // the coarsest page that still separates the code a program is running from
-  // the data it is writing, and a finer one would only cost more memory.
-  Y_CPU_CODE_PAGE_SHIFT = 12,
+  // The page is in the frame the entry names, and may be read there.
+  Y_CPU_PAGED_DATA_RESIDENT = 0x4000,
+  // The page has been written since it came into its frame. With RESIDENT,
+  // the CPU writes it in the frame; without, a write goes to the host, which
+  // is how a host learns which pages need writing back.
+  Y_CPU_PAGED_DATA_DIRTY = 0x8000,
+  // Bits 0-13: the frame's number, so up to 16,384 frames.
+  Y_CPU_PAGED_DATA_FRAME_MASK = 0x3FFF,
+};
+
+// Where the paged range is and how to find a page in its frame. Paging itself
+// is described above Y_CPU_PAGED_DATA_RESIDENT. The platform fills this in
+// from YPlatformPagedMemory. The CPU translates an address like this:
+//
+//     offset = address - start                (outside if offset >= size)
+//     entry  = pages[offset >> page_shift]
+//     frame  = entry & Y_CPU_PAGED_DATA_FRAME_MASK
+//     byte   = frames[(frame << page_shift) | (offset & (page size - 1))]
+//
+// and goes to the host instead if the entry lacks the bits the access needs -
+// RESIDENT to read, RESIDENT and DIRTY to write.
+typedef struct YCPUPagedDataWindow {
+  // The page table: entry i covers the guest addresses from
+  // start + (i << page_shift) up to the next page.
+  const uint16_t* pages;
+  // Where the frames are. Frame n is the page-sized block starting
+  // n << page_shift bytes in.
+  uint8_t* frames;
+  // The first guest linear address of the paged range.
+  uint32_t start;
+  // The paged range's size in bytes, a whole number of pages; 0 when there is
+  // no paged memory. With 0 every address falls outside the range, so the CPU
+  // needs only the bounds test, one subtract and one unsigned compare, and
+  // never checks pages against NULL.
+  uint32_t size;
+  // log2 of the page size: a page, and a frame, is 1 << page_shift bytes.
+  uint8_t page_shift;
+} YCPUPagedDataWindow;
+
+enum {
+  // The pages the decode cache counts writes to guest memory in: 512-byte
+  // pages over the 8086's 1MB, which is 2,048 counters. Writes to a page make the
+  // cache decode its instructions again, so a page has to be small enough
+  // that the data a program writes seldom shares one with the code it is
+  // running. Smaller pages split more instructions across two pages, and an
+  // instruction split that way is never cached. See src/cpu/AGENTS.md.
+  Y_CPU_CODE_PAGE_SHIFT = 9,
   Y_CPU_CODE_PAGE_SIZE = 1 << Y_CPU_CODE_PAGE_SHIFT,
   Y_CPU_CODE_PAGE_OFFSET_MASK = Y_CPU_CODE_PAGE_SIZE - 1,
   Y_CPU_NUM_CODE_PAGES = 0x100000 >> Y_CPU_CODE_PAGE_SHIFT,
@@ -2416,14 +2537,14 @@ typedef struct YCPUState {
   // Derived by YCPUInit().
   uint32_t decode_cache_index_mask;
 
-  // How many times each 4KB page has been written, as a wrapping byte. A
-  // cached decode records what its page stood at and is discarded once the two
+  // One byte per code page: 0 while the decode cache holds nothing from the
+  // page, and otherwise a count of the writes to it that wraps. A cached
+  // decode records what its page stood at and is discarded once the two
   // disagree, which is what makes caching safe against code that writes over
   // itself or is loaded over an earlier program.
   //
-  // Maintained whether or not a decode cache exists: a write cannot cheaply
-  // tell whether anything holds a decode of the page it lands on, and the test
-  // to find out would cost about what the counter does.
+  // A write to a page at 0 is not counted, so a page of stack or data never
+  // disturbs the cache. Caching a decode from such a page starts it at 1.
   uint8_t code_page_generation[Y_CPU_NUM_CODE_PAGES];
 
   // Caller-provided runtime configuration. Filled in before YCPUInit(), which
@@ -2433,6 +2554,13 @@ typedef struct YCPUState {
   // path that reads a config field every instruction, and made the config an
   // object the caller had to keep alive for as long as the CPU.
   YCPUConfig config;
+
+  // Paged guest memory. The platform assigns it whole from
+  // YPlatformConfig.paged_memory, and leaves it zero for none. Changing page
+  // table entries needs no update here: the CPU reads them on every access.
+  // Read only where the direct data window does not reach, so it is last,
+  // where it moves no hotter field's offset.
+  YCPUPagedDataWindow paged_data_window;
 } YCPUState;
 
 // Initialize CPU state. The caller zero-initializes the YCPUState and fills in
@@ -2517,12 +2645,24 @@ Y_PUBLIC_HEADER inline void YCPUInvalidateDirectDataWindow(YCPUState* cpu) {
   cpu->direct_data_window.end = 0;
 }
 
+// Discards the instruction fetch window, so that the next fetch asks
+// YCPUConfig.get_instruction_fetch_window for one again. A host calls this when
+// the storage the window points into stops holding the addresses it covers.
+Y_PUBLIC_HEADER inline void YCPUInvalidateInstructionFetchWindow(
+    YCPUState* cpu) {
+  cpu->instruction_fetch_window.data = NULL;
+}
+
 // Discards every cached decode.
 //
 // A host calls this when it changes what an address means rather than what is
 // stored at it - remapping memory is the case that matters. Ordinary writes
 // are covered by YCPUNotifyMemoryWrite() instead.
 Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
+
+// Discards every cached decode taken from one code page, and marks the page as
+// holding none.
+Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page);
 
 // Tells the CPU that the byte at a linear address has been written, so that
 // any decode taken from that page stops being used.
@@ -2531,18 +2671,27 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 // report is a write it makes some other way - by DMA, or through the memory
 // map from outside a tick.
 //
-// The counter is a byte, so it comes back round every 256 writes to a page, at
-// which point a decode taken exactly that long ago would look current again -
-// hence the flush. The address is masked rather than range checked: aliasing
-// onto a page costs a spurious invalidation, where indexing past the array
-// would corrupt whatever follows it.
+// A page nothing is cached from has nothing to discard, and most writes land
+// on one: a program's stack and data. The counter is a byte, so it comes back
+// round after 255 writes to a page, at which point a decode taken that long
+// ago would look current again - hence discarding the page's decodes there,
+// which leaves it uncounted until something is cached from it again. The
+// address is masked rather than range checked: aliasing onto a
+// page costs a spurious invalidation, where indexing past the array would
+// corrupt whatever follows it.
 Y_PUBLIC_HEADER inline void YCPUNotifyMemoryWrite(
     YCPUState* cpu, uint32_t address) {
   const uint32_t page =
       (address >> Y_CPU_CODE_PAGE_SHIFT) & (Y_CPU_NUM_CODE_PAGES - 1);
-  if (++cpu->code_page_generation[page] == 0) {
-    YCPUInvalidateDecodeCache(cpu);
+  const uint8_t generation = cpu->code_page_generation[page];
+  if (generation == 0) {
+    return;
   }
+  if (generation == 0xFF) {
+    YCPUInvalidateDecodeCachePage(cpu, page);
+    return;
+  }
+  cpu->code_page_generation[page] = (uint8_t)(generation + 1);
 }
 
 // ============================================================================
@@ -3014,6 +3163,23 @@ Y_MODULE_PRIVATE uint32_t YCPUFromOperand(const YCPUOperand* operand);
 Y_MODULE_PRIVATE int32_t
 YCPUFromSignedOperand(YCPUWidth width, const YCPUOperand* operand);
 
+// Where the frame a page table entry names starts in the paged data window's
+// frames. Frames are a page long and laid out back to back, so frame n starts
+// n pages in. The frame number is the entry with RESIDENT and DIRTY masked
+// off, widened before the shift so the arithmetic is unsigned. With 256-byte
+// pages, entry 0x4005 names frame 5, which starts at frames + 0x500.
+//
+// Only the entry's frame number is read: the caller checks the flags first.
+// YCPUGetPagedDataByte() and YCPUOpenPagedFetchWindow() share this, each
+// keeping its own checks inline: moving those here as well changed which way
+// the compiler laid out the branches, making a page in its frame the taken
+// branch, a cycle slower on a Cortex-M0+.
+Y_MODULE_PRIVATE_HEADER inline uint8_t* YCPUGetPagedFrame(
+    const YCPUPagedDataWindow* window, uint16_t entry) {
+  const uint32_t frame = entry & Y_CPU_PAGED_DATA_FRAME_MASK;
+  return window->frames + (frame << window->page_shift);
+}
+
 // Computes the raw address a segment register and an offset address.
 Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
     const YCPUState* cpu, uint8_t segment_register_index, uint16_t offset);
@@ -3347,6 +3513,79 @@ Y_MODULE_PRIVATE uint32_t YCPUToRawAddress(
          Y_CPU_PHYSICAL_ADDRESS_MASK;
 }
 
+// The byte in its frame that a guest address in the paged range refers to, or
+// NULL if the address is outside the range or its page's entry lacks any of
+// flags. A read passes Y_CPU_PAGED_DATA_RESIDENT, and a write that and
+// Y_CPU_PAGED_DATA_DIRTY. NULL sends the access to the host's callback.
+//
+// This is the translation described at YCPUPagedDataWindow. With 256-byte
+// pages starting at 0x10000, guest address 0x11234 whose page's entry is
+// 0x4005 is byte 0x34 of page 0x12, held in frame 5: frames + 0x534.
+Y_FILE_PRIVATE inline uint8_t* YCPUGetPagedDataByte(
+    const YCPUState* cpu, uint32_t raw_address, uint16_t flags) {
+  const YCPUPagedDataWindow* window = &cpu->paged_data_window;
+
+  // How far into the paged range the address is. An address below start
+  // wraps to a huge value, so this one unsigned compare rejects addresses on
+  // both sides of the range, and every address when size is 0.
+  const uint32_t offset = raw_address - window->start;
+  if (offset >= window->size) {
+    return NULL;
+  }
+
+  // The page the address is in, and the page's entry in the page table.
+  const uint32_t page = offset >> window->page_shift;
+  const uint16_t entry = window->pages[page];
+
+  // The access needs every bit in flags. Testing that any one is set would let
+  // a write through to a dirty page whose RESIDENT the host cleared to sample
+  // use, and the host would never hear of it.
+  if ((entry & flags) != flags) {
+    return NULL;
+  }
+
+  // How far into its page the address is: the offset's low page_shift bits.
+  const uint32_t page_mask = ((uint32_t)1 << window->page_shift) - 1;
+  const uint32_t offset_in_page = offset & page_mask;
+
+  // The byte is that far into the page's frame.
+  return YCPUGetPagedFrame(window, entry) + offset_in_page;
+}
+
+// Read a byte at an address the direct data window does not cover: from its
+// frame if the address is paged and its page is in one, and otherwise from the
+// host, which brings a paged-out page in.
+//
+// This is the slow half of YCPUReadRawMemoryByte(), split out so that the fast
+// half stays small. YCPUReadRawMemoryByte() is inlined into every place the
+// CPU reads memory, and its fast half is the direct window's compare and load.
+// Everything else, the paged lookup and the host's callback, is in this one
+// copy, and each inlined read carries only a call to it. Y_NOINLINE keeps it
+// that way: the compiler would otherwise inline a small static function back
+// into its callers.
+//
+// The split favours a host whose guest RAM is in the direct window, where the
+// fast half is all a read of RAM needs. Measured with pico/bench's dos-boot
+// workload on an RP2040 at 250MHz, -O3, with paging off: the paged lookup
+// inlined into every read cost 2.6%, and with the callback moved out of line
+// as well, the boot is 2.6% faster than with the callback inline. Y_HOT puts
+// it in SRAM; in flash it measured 0.26% slower.
+//
+// A host that pages all of conventional memory has an empty direct window, so
+// every data access fails the compare and makes this call. What that costs,
+// and the changes to try, are in core/AGENTS.md under paged memory.
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE uint8_t
+YCPUReadMemoryByteOutsideDirectWindow(YCPUState* cpu, uint32_t raw_address) {
+  const uint8_t* paged =
+      YCPUGetPagedDataByte(cpu, raw_address, Y_CPU_PAGED_DATA_RESIDENT);
+  if (paged) {
+    return *paged;
+  }
+  return cpu->config.read_memory_byte
+             ? cpu->config.read_memory_byte(cpu, raw_address)
+             : 0xFF;
+}
+
 // Read a byte from memory as a uint8_t.
 Y_MODULE_PRIVATE uint8_t
 YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
@@ -3356,9 +3595,7 @@ YCPUReadRawMemoryByte(YCPUState* cpu, uint32_t raw_address) {
   if (raw_address < cpu->direct_data_window.end) {
     return cpu->direct_data_window.data[raw_address];
   }
-  return cpu->config.read_memory_byte
-             ? cpu->config.read_memory_byte(cpu, raw_address)
-             : 0xFF;
+  return YCPUReadMemoryByteOutsideDirectWindow(cpu, raw_address);
 }
 
 // Read a word from memory as a uint16_t.
@@ -3434,6 +3671,25 @@ Y_FILE_PRIVATE YCPUOperandValue YCPUReadRegisterOperandValue(
   return Y_CPU_UNREACHABLE_OPERAND_VALUE;
 }
 
+// Write a byte at an address the direct data window does not cover: into its
+// frame if the address is paged and its page is in one and dirty, and
+// otherwise through the host, which brings the page in and marks it dirty.
+//
+// The slow half of YCPUWriteRawMemoryByte(), out of line for the same reason
+// as YCPUReadMemoryByteOutsideDirectWindow().
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE void YCPUWriteMemoryByteOutsideDirectWindow(
+    YCPUState* cpu, uint32_t address, uint8_t value) {
+  uint8_t* paged = YCPUGetPagedDataByte(
+      cpu, address, Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY);
+  if (paged) {
+    *paged = value;
+    return;
+  }
+  if (cpu->config.write_memory_byte) {
+    cpu->config.write_memory_byte(cpu, address, value);
+  }
+}
+
 // Write a byte as uint8_t to memory.
 Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     YCPUState* cpu, uint32_t address, uint8_t value) {
@@ -3445,10 +3701,7 @@ Y_MODULE_PRIVATE void YCPUWriteRawMemoryByte(
     cpu->direct_data_window.data[address] = value;
     return;
   }
-  if (!cpu->config.write_memory_byte) {
-    return;
-  }
-  cpu->config.write_memory_byte(cpu, address, value);
+  YCPUWriteMemoryByteOutsideDirectWindow(cpu, address, value);
 }
 
 // Write a byte to memory.
@@ -9168,6 +9421,49 @@ Y_FILE_PRIVATE inline Y_HOT uint8_t YCPUFetchNextInstructionByte(
       cpu, YCPUToRawAddress(cpu, Y_CPU_CS, fetch_state->next_byte_offset++));
 }
 
+// If an address is paged and its page is in a frame, points the fetch window
+// at that frame and returns true. The window covers only that one page,
+// because the next page's frame can be anywhere, so running or jumping onto
+// another page comes back here. Doing this without asking the host saves a
+// call and a memory map lookup each time.
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE bool YCPUOpenPagedFetchWindow(
+    YCPUState* cpu, uint32_t raw_address) {
+  const YCPUPagedDataWindow* paged = &cpu->paged_data_window;
+
+  // How far into the paged range the address is. An address below start
+  // wraps to a huge value, so this one unsigned compare rejects addresses on
+  // both sides of the range, and every address when size is 0.
+  const uint32_t offset = raw_address - paged->start;
+  if (offset >= paged->size) {
+    return false;
+  }
+
+  // The page the address is in, and the page's entry in the page table.
+  const uint32_t page = offset >> paged->page_shift;
+  const uint16_t entry = paged->pages[page];
+
+  // Fetching only reads, so RESIDENT is all it needs. Without it the host is
+  // asked instead, through the caller's get_instruction_fetch_window.
+  if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
+    return false;
+  }
+
+  // The window covers one page: its guest addresses start at the offset
+  // rounded down to a page boundary, and run for one page.
+  const uint32_t page_size = (uint32_t)1 << paged->page_shift;
+  const uint32_t page_offset = offset & ~(page_size - 1);
+  YCPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+
+  // Its bytes are the page's frame, and its guest addresses those of the page.
+  // With 256-byte pages starting at 0x10000, a fetch from 0x11234 in a page
+  // held in frame 5 opens frames + 0x500 as guest addresses 0x11200 to
+  // 0x112FF.
+  window->data = YCPUGetPagedFrame(paged, entry);
+  window->start = paged->start + page_offset;
+  window->end = window->start + page_size;
+  return true;
+}
+
 // Points a fetch at whatever can be read directly from CS:ip.
 Y_FILE_PRIVATE Y_HOT void YCPUInitInstructionFetchState(
     YCPUState* cpu, uint16_t ip, YCPUInstructionFetchState* fetch_state) {
@@ -9188,9 +9484,12 @@ Y_FILE_PRIVATE Y_HOT void YCPUInitInstructionFetchState(
       &cpu->instruction_fetch_window;
   if (window->data == NULL || raw_address < window->start ||
       raw_address >= window->end) {
-    // Nothing open covers this address, so ask for a window that does. The
-    // host fills one in, or sets its data to NULL to decline.
-    if (cpu->config.get_instruction_fetch_window != NULL) {
+    // Nothing open covers this address, so open a window that does: its page's
+    // frame if it is paged and in one, and otherwise whatever the host offers.
+    // The host fills one in, or sets its data to NULL to decline.
+    if (YCPUOpenPagedFetchWindow(cpu, raw_address)) {
+      // Opened.
+    } else if (cpu->config.get_instruction_fetch_window != NULL) {
       cpu->config.get_instruction_fetch_window(cpu, raw_address);
     } else {
       cpu->instruction_fetch_window.data = NULL;
@@ -9352,6 +9651,20 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu) {
   }
 }
 
+Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
+  page &= Y_CPU_NUM_CODE_PAGES - 1;
+  cpu->code_page_generation[page] = 0;
+  YCPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
+    return;
+  }
+  for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
+    if ((cache[i].address >> Y_CPU_CODE_PAGE_SHIFT) == page) {
+      cache[i].valid = false;
+    }
+  }
+}
+
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
 Y_FILE_PRIVATE Y_ALWAYS_INLINE bool YCPUIsDecodeCacheHit(
@@ -9424,6 +9737,12 @@ YCPUFetchNextInstructionCached(
   if (cache != NULL &&
       (address & Y_CPU_CODE_PAGE_OFFSET_MASK) + size <= Y_CPU_CODE_PAGE_SIZE &&
       (uint32_t)ip + size <= Y_CPU_SEGMENT_SIZE) {
+    // The first decode kept from a page is what starts its writes being
+    // counted.
+    if (generation == 0) {
+      generation = 1;
+      cpu->code_page_generation[address >> Y_CPU_CODE_PAGE_SHIFT] = 1;
+    }
     target->address = address;
     target->generation = generation;
     target->valid = true;
@@ -15056,27 +15375,27 @@ struct YPlatformState;
 typedef uint8_t YPlatformMemoryMapEntryType;
 
 enum {
-  // Conventional memory - first 640KB of physical memory, mapped to 0x00000 to
-  // 0x9FFFF (640KB).
+  // Conventional memory held in YPlatformConfig.direct_memory, from 0x00000 up
+  // to direct_memory_size. At most 640KB, so it ends by 0x9FFFF.
   Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL = 0,
   // BIOS ROM - mapped to 0xF0000 to 0xFFFFF (64KB).
   Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
   Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
+  // Paged conventional memory: the part above direct_memory_size, when
+  // YPlatformConfig.paged_memory is set.
+  Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY = 0x02,
   // Video RAM - mapped to 0xB0000 (MDA) or 0xB8000 (CGA).
   Y_PLATFORM_MEMORY_MAP_ENTRY_VRAM = 0x10,
 
   // Maximum number of memory map entries.
   Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES = 16,
 
-  // How many decoded instructions the CPU is given room to keep. 256 entries
-  // is 6KB, and skips the decode on roughly two thirds of the instructions the
-  // machine runs.
-  //
-  // Not the fastest size measured: 512 is 0.11% faster, 1024 is 0.04% slower
-  // and 128 is 0.83% slower. 0.11% does not buy another 6KB on a 256KB part
-  // where that memory is otherwise guest RAM.
-  Y_PLATFORM_DECODE_CACHE_ENTRIES = 256,
+  // How many decoded instructions the CPU keeps so that it can skip decoding
+  // them again: 512 entries, 12KB. More entries help programs whose hot code
+  // is large, such as compilers and interpreters, and make little difference
+  // to booting DOS. The measurements are in src/cpu/AGENTS.md.
+  Y_PLATFORM_DECODE_CACHE_ENTRIES = 512,
 
   // The memory map is indexed by page so that a lookup is a load rather than a
   // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
@@ -15096,11 +15415,69 @@ enum {
   // address space: no entry may reach one, so it is unmapped instead.
   Y_PLATFORM_MEMORY_PAGE_STRADDLED = 0xFE,
 
-  // Maximum size of physical memory in bytes.
-  Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE = 640 * 1024,
-  // Minimum size of physical memory in bytes.
-  Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE = 64 * 1024,
+  // Maximum size of conventional memory in bytes, direct and paged together.
+  Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE = 640 * 1024,
+  // Minimum size of conventional memory in bytes, direct and paged together.
+  Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE = 64 * 1024,
 };
+
+enum {
+  // The largest page_shift, 4KB pages: the memory map indexes regions in 4KB
+  // pages, and a larger paged page would span two of them.
+  Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT = Y_PLATFORM_MEMORY_PAGE_SHIFT,
+};
+
+// Paged memory as a host gives it to the platform. Pages, frames, the page
+// table and its bits (Y_CPU_PAGED_DATA_*) are described above
+// Y_CPU_PAGED_DATA_RESIDENT. The platform hands pages, frames and page_shift
+// to the CPU. What this adds is page_fault_fn, the host's handler for every
+// access the CPU cannot make in a frame.
+//
+// A frame may be handed to another page only inside page_fault_fn.
+// Instruction fetch holds a pointer into one frame, and the platform drops it
+// whenever page_fault_fn returns. Reassigning a frame anywhere else needs a
+// call to YPlatformUpdateAfterMemoryMapChange() afterwards. Clearing bits
+// outside page_fault_fn needs nothing, because the next access the entry
+// refuses comes to page_fault_fn.
+typedef struct YPlatformPagedMemory {
+  // The host's own data, for page_fault_fn to use.
+  void* context;
+  // The region's size in bytes, a whole number of pages.
+  uint32_t size;
+  // log2 of the page size: a page, and a frame, is 1 << page_shift bytes. At
+  // most Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT.
+  uint8_t page_shift;
+  // The page table: size >> page_shift entries, entry i for page i.
+  uint16_t* pages;
+  // The frames: frame n is the 1 << page_shift bytes starting
+  // n << page_shift bytes in.
+  uint8_t* frames;
+  // The host's page fault handler. Required.
+  //
+  // When it is called: on a read of a byte in a page whose entry lacks
+  // RESIDENT, or a write to a byte in a page whose entry lacks RESIDENT or
+  // DIRTY. The access can be the CPU's data access or instruction fetch, a DMA
+  // transfer, or a host call to YPlatformReadMemoryByte() or
+  // YPlatformWriteMemoryByte(). It is called once per such access, before the
+  // access is made, and emulation waits for it to return.
+  //
+  // Parameters:
+  //   - memory: this YPlatformPagedMemory, for context.
+  //   - page: the page's index in pages, counted from the start of the
+  //     region, not a guest address. Its first byte is at guest address
+  //     direct_memory_size + (page << page_shift).
+  //   - write: true for a write, false for a read or an instruction fetch.
+  //
+  // What it must do: set pages[page] so that it allows the access, that is
+  // RESIDENT, plus DIRTY if write is true. Typically that means choosing a
+  // frame, writing back the page already in it if that one is DIRTY, loading
+  // this page into it and setting this page's entry. A page that is still in
+  // its frame, with RESIDENT cleared to sample use, needs only RESIDENT set
+  // again. The access then proceeds in the frame. If the entry still refuses
+  // it, the read gives 0xFF and the write is dropped, as for unmapped memory.
+  void (*page_fault_fn)(
+      struct YPlatformPagedMemory* memory, uint32_t page, bool write);
+} YPlatformPagedMemory;
 
 // A memory map entry for a region in logical address space. Memory regions
 // should not overlap.
@@ -15153,6 +15530,10 @@ typedef struct YPlatformMemoryMapEntry {
   void (*write_byte_fn)(
       struct YPlatformMemoryMapEntry* entry, uint32_t relative_address,
       uint8_t value);
+
+  // Paged memory, as described at YPlatformPagedMemory, for a region with no
+  // direct pointers or callbacks. Its size must be exactly end - start + 1.
+  YPlatformPagedMemory* paged_memory;
 } YPlatformMemoryMapEntry;
 
 // Register a memory map entry in the platform state. Returns true if the entry
@@ -15311,8 +15692,10 @@ typedef struct YPlatformConfig {
   // which of them it wants.
   YLoggerConfig* logger_config;
 
-  // Physical memory size in bytes. Must be between 64K and 640K.
-  uint32_t physical_memory_size;
+  // The size in bytes of direct_memory. Conventional memory is this plus
+  // paged_memory's size, and must come to between 64K and 640K; with
+  // paged_memory this may be 0.
+  uint32_t direct_memory_size;
 
   // The video adapter installed in the machine. This also determines the
   // display type reported by the PPI's DIP switches, which is what the BIOS
@@ -15323,23 +15706,36 @@ typedef struct YPlatformConfig {
   // to the BIOS. 0, the default, is taken as 1.
   uint8_t floppy_drives;
 
-  // The machine's conventional memory, physical_memory_size bytes of it.
-  // Required - YPlatformInit() fails without it.
+  // Conventional memory that the CPU reads and writes directly, through its
+  // direct data window: direct_memory_size bytes from address 0. Required
+  // unless direct_memory_size is 0, and YPlatformInit() fails without it.
   //
   // The caller owns the buffer and it must outlive the platform. Conventional
   // memory is plain storage, so the platform reads and writes it directly
   // rather than through a callback; regions that need a callback register one
   // themselves via YPlatformMemoryMapEntry.
   //
-  // Addresses above physical_memory_size are not backed by this buffer and are
-  // not an error: on the 8086 an access outside installed memory yields
-  // garbage rather than faulting, and unmapped reads here return 0xFF.
-  uint8_t* physical_memory;
+  // Addresses above conventional memory are not an error: on the 8086 an
+  // access outside installed memory yields garbage rather than faulting, and
+  // unmapped reads here return 0xFF.
+  uint8_t* direct_memory;
+
+  // Paged conventional memory, as described at YPlatformPagedMemory, or NULL
+  // for none. It starts where direct_memory ends, at direct_memory_size, which
+  // must then be a multiple of 4KB.
+  //
+  // An access to it costs more than one to direct_memory even when its page
+  // is in a frame: a call and two more loads, against a compare and a load.
+  // But direct_memory takes host memory that could have been frames, so where
+  // to split the two is the host's to measure.
+  //
+  // The caller owns it and it must outlive the platform.
+  YPlatformPagedMemory* paged_memory;
 
   // The video adapter's memory, at least vram_size bytes for the adapter named
   // by video_adapter. Required - YPlatformInit() fails without it.
   //
-  // Separate from physical_memory because video memory sits above conventional
+  // Separate from direct_memory because video memory sits above conventional
   // memory in the address space, at 0xB0000 or 0xB8000. A host whose memory
   // buffer spans the whole megabyte can point this into it.
   //
@@ -15486,8 +15882,9 @@ typedef struct YPlatformState {
 
 // Initialize the platform state. Returns true if the platform state was
 // successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
-//   - No physical memory buffer was provided.
+//   - Conventional memory, direct and paged, is not between 64K and 640K.
+//   - direct_memory_size is not 0 but no direct_memory buffer was provided.
+//   - paged_memory is set but invalid, or does not start on a 4KB boundary.
 //   - No video memory buffer was provided.
 // The caller zero-initializes the YPlatformState and fills in the fields of its
 // config first. Nothing here zeroes anything: every module's state is a field
@@ -15636,6 +16033,8 @@ Y_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
 
 // Hand the CPU conventional memory to index directly, or take it away again.
 Y_FILE_PRIVATE void YPlatformUpdateDirectDataWindow(YPlatformState* platform);
+// Tell the CPU where paged memory is, or that there is none.
+Y_FILE_PRIVATE void YPlatformUpdatePagedDataWindow(YPlatformState* platform);
 
 enum {
   // Never let a deadline sit further out than this, so that a machine in which
@@ -15688,6 +16087,23 @@ Y_FILE_PRIVATE void YPlatformUpdateMemoryPageMapForEntry(
   }
 }
 
+// Whether a paged region is usable: a supported page size, a page table,
+// frames and a page_fault_fn, and a size that is exactly the region's and a
+// whole number of pages.
+Y_FILE_PRIVATE bool YPlatformIsPagedMemoryValid(
+    const YPlatformMemoryMapEntry* entry) {
+  const YPlatformPagedMemory* memory = entry->paged_memory;
+  if (memory->page_shift == 0 ||
+      memory->page_shift > Y_PLATFORM_MAX_PAGED_MEMORY_PAGE_SHIFT ||
+      memory->pages == NULL || memory->frames == NULL ||
+      memory->page_fault_fn == NULL) {
+    return false;
+  }
+  const uint32_t page_mask = ((uint32_t)1 << memory->page_shift) - 1;
+  return memory->size == entry->end - entry->start + 1 &&
+         (memory->size & page_mask) == 0;
+}
+
 // Register a memory map entry in the platform state. Returns true if the entry
 // was successfully registered, or false if:
 //   - The entry's memory region does not lie within the address space.
@@ -15706,6 +16122,9 @@ Y_PUBLIC bool YPlatformRegisterMemoryMapEntry(
   // here is what lets the lookup treat the index as the whole answer.
   if (entry->end >= Y_PLATFORM_MEMORY_ADDRESS_SPACE_SIZE ||
       entry->start > entry->end) {
+    return false;
+  }
+  if (entry->paged_memory && !YPlatformIsPagedMemoryValid(entry)) {
     return false;
   }
   if (YPlatformMemoryMapLength(&platform->memory_map) >=
@@ -15736,6 +16155,7 @@ Y_PUBLIC void YPlatformUpdateAfterMemoryMapChange(YPlatformState* platform) {
   // The data window is whichever entry covers address 0, which a registration
   // may have just become.
   YPlatformUpdateDirectDataWindow(platform);
+  YPlatformUpdatePagedDataWindow(platform);
   // A decode taken before a region was mapped came from open bus. No page
   // generation moved, because nothing was written - what the bytes at those
   // addresses mean has changed.
@@ -15797,6 +16217,62 @@ Y_PUBLIC Y_HOT YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryByType(
   return NULL;
 }
 
+// Calls the host's page_fault_fn for a page and returns the page's entry
+// afterwards. To make room the host may have moved another page out of the
+// frame instruction fetch is reading from, so the fetch window is dropped and
+// the next fetch opens a fresh one.
+Y_FILE_PRIVATE Y_NOINLINE uint16_t YPlatformFaultPagedMemory(
+    YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t page,
+    bool write) {
+  memory->page_fault_fn(memory, page, write);
+  YCPUInvalidateInstructionFetchWindow(&platform->cpu);
+  return memory->pages[page];
+}
+
+// The byte at offset into the region, given the entry of the page it is in,
+// which must have RESIDENT set.
+Y_FILE_PRIVATE inline uint8_t* YPlatformGetPagedMemoryByte(
+    const YPlatformPagedMemory* memory, uint16_t page_entry, uint32_t offset) {
+  const uint32_t page_mask = ((uint32_t)1 << memory->page_shift) - 1;
+  return memory->frames + (((uint32_t)(page_entry & Y_CPU_PAGED_DATA_FRAME_MASK)
+                            << memory->page_shift) |
+                           (offset & page_mask));
+}
+
+// Read the byte at offset into a paged region, calling page_fault_fn first if
+// its page is not in a frame.
+Y_FILE_PRIVATE Y_HOT uint8_t YPlatformReadPagedMemoryByte(
+    YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset) {
+  const uint32_t page = offset >> memory->page_shift;
+  uint16_t page_entry = memory->pages[page];
+  if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
+    page_entry = YPlatformFaultPagedMemory(platform, memory, page, false);
+    if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
+      return 0xFF;
+    }
+  }
+  return *YPlatformGetPagedMemoryByte(memory, page_entry, offset);
+}
+
+// Write the byte at offset into a paged region, calling page_fault_fn first if
+// its page is not in a frame or not writable.
+Y_FILE_PRIVATE Y_HOT void YPlatformWritePagedMemoryByte(
+    YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t offset,
+    uint8_t value) {
+  const uint32_t page = offset >> memory->page_shift;
+  // A write needs the page in its frame and already dirty; otherwise the host
+  // is told, so that it can mark the page dirty.
+  const uint16_t writable = Y_CPU_PAGED_DATA_RESIDENT | Y_CPU_PAGED_DATA_DIRTY;
+  uint16_t page_entry = memory->pages[page];
+  if ((page_entry & writable) != writable) {
+    page_entry = YPlatformFaultPagedMemory(platform, memory, page, true);
+    if ((page_entry & writable) != writable) {
+      return;
+    }
+  }
+  *YPlatformGetPagedMemoryByte(memory, page_entry, offset) = value;
+}
+
 // Read a byte from a logical memory address.
 Y_PUBLIC Y_HOT uint8_t
 YPlatformReadMemoryByte(YPlatformState* platform, uint32_t address) {
@@ -15811,6 +16287,11 @@ YPlatformReadMemoryByte(YPlatformState* platform, uint32_t address) {
     }
     if (entry->read_byte_fn) {
       return entry->read_byte_fn(entry, address - entry->start);
+    }
+    // Last, so that nothing above pays for it.
+    if (entry->paged_memory) {
+      return YPlatformReadPagedMemoryByte(
+          platform, entry->paged_memory, address - entry->start);
     }
   }
   // Logged at debug rather than warning level: scanning unmapped memory is
@@ -15844,6 +16325,11 @@ Y_PUBLIC Y_HOT void YPlatformWriteMemoryByte(
     }
     if (entry->write_byte_fn) {
       entry->write_byte_fn(entry, address - entry->start, value);
+      return;
+    }
+    if (entry->paged_memory) {
+      YPlatformWritePagedMemoryByte(
+          platform, entry->paged_memory, address - entry->start, value);
       return;
     }
   }
@@ -15940,10 +16426,33 @@ YPlatformCPUCallbackReadMemoryByte(YCPUState* cpu, uint32_t address) {
   return YPlatformReadMemoryByte((YPlatformState*)cpu->config.context, address);
 }
 
+// A CPU write to paged memory that the CPU could not make itself, because the
+// page is not in a frame or not writable.
+//
+// This skips YPlatformWriteMemoryByte() on purpose. The CPU has already told
+// its decode cache about the write, and YPlatformWriteMemoryByte() would tell
+// it again. Counting a write twice changes when the cache discards decodes,
+// which changes where runs of instructions end and so when the guest takes
+// its timer interrupts. The number of frames decides which writes fault, so
+// it would change what the guest does. Writes to every other region are
+// still counted twice, and the instruction and cycle counts pico/bench's
+// dos-boot workload is held to depend on that.
+Y_FILE_PRIVATE Y_NOINLINE void YPlatformCPUWritePagedMemoryByte(
+    YPlatformState* platform, uint32_t address, uint8_t value) {
+  YPlatformMemoryMapEntry* entry =
+      YPlatformGetMemoryMapEntryForAddress(platform, address);
+  YPlatformWritePagedMemoryByte(
+      platform, entry->paged_memory, address - entry->start, value);
+}
+
 Y_FILE_PRIVATE void YPlatformCPUCallbackWriteMemoryByte(
     YCPUState* cpu, uint32_t address, uint8_t value) {
-  YPlatformWriteMemoryByte(
-      (YPlatformState*)cpu->config.context, address, value);
+  YPlatformState* platform = (YPlatformState*)cpu->config.context;
+  if (address - cpu->paged_data_window.start < cpu->paged_data_window.size) {
+    YPlatformCPUWritePagedMemoryByte(platform, address, value);
+    return;
+  }
+  YPlatformWriteMemoryByte(platform, address, value);
 }
 
 Y_FILE_PRIVATE uint8_t
@@ -16245,6 +16754,30 @@ YPlatformCPUCallbackHandleInterrupt(YCPUState* cpu, uint8_t interrupt_number) {
   return Y_CPU_INTERRUPT_HANDLER_UNHANDLED;
 }
 
+// Points instruction fetch at the frame holding the page an address is in,
+// calling page_fault_fn first if the page is not in a frame.
+//
+// The window covers that one page, since the next page's frame can be
+// anywhere; fetching past its end comes back here.
+Y_FILE_PRIVATE void YPlatformGetPagedMemoryFetchWindow(
+    YPlatformState* platform, const YPlatformMemoryMapEntry* entry,
+    uint32_t address) {
+  YPlatformPagedMemory* memory = entry->paged_memory;
+  const uint32_t offset = address - entry->start;
+  const uint32_t page = offset >> memory->page_shift;
+  uint16_t page_entry = memory->pages[page];
+  if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
+    page_entry = YPlatformFaultPagedMemory(platform, memory, page, false);
+    if (!(page_entry & Y_CPU_PAGED_DATA_RESIDENT)) {
+      return;
+    }
+  }
+  YCPUInstructionFetchWindow* window = &platform->cpu.instruction_fetch_window;
+  window->data = YPlatformGetPagedMemoryByte(memory, page_entry, 0);
+  window->start = entry->start + (page << memory->page_shift);
+  window->end = window->start + ((uint32_t)1 << memory->page_shift);
+}
+
 // Hands the CPU a direct window for instruction fetch.
 //
 // Declines wherever a read has to be observed or computed rather than loaded:
@@ -16263,6 +16796,9 @@ Y_FILE_PRIVATE void YPlatformCPUCallbackGetInstructionFetchWindow(
   YPlatformMemoryMapEntry* entry =
       YPlatformMemoryMapGet(&platform->memory_map, index);
   if (entry->read_data == NULL) {
+    if (entry->paged_memory) {
+      YPlatformGetPagedMemoryFetchWindow(platform, entry, address);
+    }
     return;
   }
   // The whole region, not the tail of it from this address, so that a jump
@@ -16308,15 +16844,27 @@ Y_FILE_PRIVATE void YPlatformInitMemoryMap(YPlatformState* platform) {
   for (uint32_t page = 0; page < Y_PLATFORM_NUM_MEMORY_PAGES; ++page) {
     platform->memory_page_map[page] = Y_PLATFORM_MEMORY_PAGE_UNMAPPED;
   }
-  YPlatformMemoryMapEntry conventional_memory = {
-      .context = platform,
-      .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL,
-      .start = 0x0000,
-      .end = platform->config.physical_memory_size - 1,
-      // Conventional memory is the caller's buffer, accessed directly.
-      .read_data = platform->config.physical_memory,
-      .write_data = platform->config.physical_memory};
-  YPlatformRegisterMemoryMapEntry(platform, &conventional_memory);
+  const uint32_t direct_memory_size = platform->config.direct_memory_size;
+  if (direct_memory_size > 0) {
+    YPlatformMemoryMapEntry conventional_memory = {
+        .context = platform,
+        .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_CONVENTIONAL,
+        .start = 0x0000,
+        .end = direct_memory_size - 1,
+        // Conventional memory is the caller's buffer, accessed directly.
+        .read_data = platform->config.direct_memory,
+        .write_data = platform->config.direct_memory};
+    YPlatformRegisterMemoryMapEntry(platform, &conventional_memory);
+  }
+  if (platform->config.paged_memory) {
+    YPlatformMemoryMapEntry paged_memory = {
+        .context = platform,
+        .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY,
+        .start = direct_memory_size,
+        .end = direct_memory_size + platform->config.paged_memory->size - 1,
+        .paged_memory = platform->config.paged_memory};
+    YPlatformRegisterMemoryMapEntry(platform, &paged_memory);
+  }
 }
 
 Y_FILE_PRIVATE void YPlatformInitPIC(YPlatformState* platform) {
@@ -16522,29 +17070,49 @@ Y_FILE_PRIVATE bool YPlatformGetLogLocation(
 
 // Initialize the platform state with the provided configuration. Returns true
 // if the platform state was successfully initialized, or false if:
-//   - The physical memory size is not between 64K and 640K.
+//   - Conventional memory, direct and paged, is not between 64K and 640K.
 Y_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   // Initialized first, ahead of validation, so that a rejected config can
   // still be logged.
   YLoggerInit(&platform->logger, platform->config.logger_config);
 
-  if (platform->config.physical_memory_size <
-          Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE ||
-      platform->config.physical_memory_size >
-          Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE) {
+  const YPlatformPagedMemory* paged_memory = platform->config.paged_memory;
+  const uint32_t memory_size = platform->config.direct_memory_size +
+                               (paged_memory ? paged_memory->size : 0);
+  if (memory_size < Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE ||
+      memory_size > Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE) {
     Y_PLATFORM_ERROR(
-        "invalid_physical_memory_size",
-        Y_LOG_UINT("size", platform->config.physical_memory_size),
-        Y_LOG_UINT("min", Y_PLATFORM_MIN_PHYSICAL_MEMORY_SIZE),
-        Y_LOG_UINT("max", Y_PLATFORM_MAX_PHYSICAL_MEMORY_SIZE));
+        "invalid_conventional_memory_size", Y_LOG_UINT("size", memory_size),
+        Y_LOG_UINT("min", Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE),
+        Y_LOG_UINT("max", Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE));
     return false;
   }
   // A machine with no memory would run until its first instruction fetch came
   // back as open bus, so this is rejected here rather than left to fail
   // obscurely later.
-  if (platform->config.physical_memory == NULL) {
-    Y_PLATFORM_ERROR("missing_physical_memory");
+  if (platform->config.direct_memory_size > 0 &&
+      platform->config.direct_memory == NULL) {
+    Y_PLATFORM_ERROR("missing_direct_memory");
     return false;
+  }
+  // Paged memory starts where direct memory ends. That has to be on a 4KB
+  // boundary, the granularity the memory map indexes regions at, and the
+  // region has to be a usable size for its pages.
+  if (paged_memory) {
+    const YPlatformMemoryMapEntry entry = {
+        .start = platform->config.direct_memory_size,
+        .end = memory_size - 1,
+        .paged_memory = platform->config.paged_memory};
+    if ((platform->config.direct_memory_size &
+         (Y_PLATFORM_MEMORY_PAGE_SIZE - 1)) != 0 ||
+        !YPlatformIsPagedMemoryValid(&entry)) {
+      Y_PLATFORM_ERROR(
+          "invalid_paged_memory",
+          Y_LOG_UINT("direct_memory_size", platform->config.direct_memory_size),
+          Y_LOG_UINT("size", paged_memory->size),
+          Y_LOG_UINT("page_shift", paged_memory->page_shift));
+      return false;
+    }
   }
   // The video adapter reads and writes this directly, so an absent buffer
   // would leave the screen permanently blank with nothing to say why.
@@ -16842,6 +17410,26 @@ Y_FILE_PRIVATE void YPlatformUpdateDirectDataWindow(YPlatformState* platform) {
   // A map entry's end is the last address in the region; a window's is one
   // past it.
   YCPUSetDirectDataWindow(&platform->cpu, entry->write_data, entry->end + 1);
+}
+
+// Tell the CPU where paged memory is, or that there is none.
+Y_FILE_PRIVATE void YPlatformUpdatePagedDataWindow(YPlatformState* platform) {
+  const YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
+      platform, Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY);
+  if (entry == NULL) {
+    // size 0 puts every address outside the window.
+    const YCPUPagedDataWindow none = {0};
+    platform->cpu.paged_data_window = none;
+    return;
+  }
+  const YPlatformPagedMemory* memory = entry->paged_memory;
+  const YCPUPagedDataWindow window = {
+      .pages = memory->pages,
+      .frames = memory->frames,
+      .start = entry->start,
+      .size = memory->size,
+      .page_shift = memory->page_shift};
+  platform->cpu.paged_data_window = window;
 }
 
 
