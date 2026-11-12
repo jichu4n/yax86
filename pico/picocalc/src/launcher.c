@@ -230,16 +230,15 @@ static __noinline void StopSharing(void) {
   LauncherMenuOpen(&g_vms, highlighted);
 }
 
-// After Manage VMs has changed the card, read its VMs afresh, and the
-// settings, and show Manage VMs again with the VM named name chosen - and
-// with show_vm, its page.
+// After Manage VMs has changed the card, read its VMs afresh, and show Manage
+// VMs again with the VM named name chosen - and with show_vm, its page. The
+// settings are not read again: what changes them, a rename or delete of the
+// default VM, updates g_settings as it saves them.
 static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
   // name may be in the list read over.
   char chosen[kVMNameLength + 1];
   snprintf(chosen, sizeof(chosen), "%s", name);
   VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  ReadSettings(&g_settings, &highlighted);
   LauncherMenuShowManagedVMs(chosen, show_vm);
 }
 
