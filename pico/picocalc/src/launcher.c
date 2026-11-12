@@ -230,16 +230,15 @@ static __noinline void StopSharing(void) {
   LauncherMenuOpen(&g_vms, highlighted);
 }
 
-// After Manage VMs has changed the card, read its VMs afresh, and the
-// settings, and show Manage VMs again with the VM named name chosen - and
-// with show_vm, its page.
+// After Manage VMs has changed the card, read its VMs afresh, and show Manage
+// VMs again with the VM named name chosen - and with show_vm, its page. The
+// settings are not read again: what changes them, a rename or delete of the
+// default VM, updates g_settings as it saves them.
 static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
   // name may be in the list read over.
   char chosen[kVMNameLength + 1];
   snprintf(chosen, sizeof(chosen), "%s", name);
   VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  ReadSettings(&g_settings, &highlighted);
   LauncherMenuShowManagedVMs(chosen, show_vm);
 }
 
@@ -255,8 +254,8 @@ static __noinline void RenameVM(void) {
   const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   VMEntry renamed;
   char problem[kVMProblemLength + 1];
-  const VMListResult result =
-      VMListRename(&g_vms, &vm, LauncherMenuTypedName(), &renamed, problem);
+  const VMListResult result = VMListRename(
+      &g_vms, &g_settings, &vm, LauncherMenuTypedName(), &renamed, problem);
   if (result == kVMListRefused) {
     UIStatusSetProblem(problem);
     return;
@@ -374,7 +373,7 @@ static __noinline void EditVM(void) {
 static __noinline void DeleteVM(void) {
   const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   char problem[kVMProblemLength + 1];
-  const bool deleted = VMListDelete(&vm, problem);
+  const bool deleted = VMListDelete(&g_settings, &vm, problem);
   // Gone from the list, it leaves the first VM chosen.
   ShowManagedVMs(vm.name, false);
   if (deleted) {

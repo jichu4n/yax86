@@ -8,7 +8,6 @@
 #include "disk_image.h"
 #include "ff.h"
 #include "harddisk.h"
-#include "settings.h"
 
 static const char kConfigFile[] = "vm.cfg";
 
@@ -197,8 +196,8 @@ void VMListDescribe(
 }
 
 VMListResult VMListRename(
-    const VMList* list, const VMEntry* vm, const char* name, VMEntry* renamed,
-    char problem[kVMProblemLength + 1]) {
+    const VMList* list, Settings* settings, const VMEntry* vm, const char* name,
+    VMEntry* renamed, char problem[kVMProblemLength + 1]) {
   if (!TakeName(name, renamed, problem)) {
     return kVMListRefused;
   }
@@ -214,18 +213,15 @@ VMListResult VMListRename(
   // much of.
   static char from[kFSMaxPath + 1];
   static char to[kFSMaxPath + 1];
-  static Settings settings;
   FolderOf(vm, from);
   FolderOf(renamed, to);
-  char ignored[kVMProblemLength + 1];
-  SettingsRead(&settings, ignored);
   const FRESULT result = f_rename(from, to);
   if (result != FR_OK) {
     Describe("rename", vm, result, problem);
     return kVMListFailed;
   }
-  if (strcasecmp(settings.boot_default, vm->name) == 0 &&
-      !SettingsSaveBootDefault(&settings, renamed->name, problem)) {
+  if (strcasecmp(settings->boot_default, vm->name) == 0 &&
+      !SettingsSaveBootDefault(settings, renamed->name, problem)) {
     return kVMListFailed;
   }
   for (uint8_t i = 0; i < list->count; ++i) {
@@ -402,10 +398,8 @@ VMListResult VMListClone(
   return Retarget(copy, from, to, problem) ? kVMListDone : kVMListFailed;
 }
 
-bool VMListDelete(const VMEntry* vm, char problem[kVMProblemLength + 1]) {
-  static Settings settings;
-  char ignored[kVMProblemLength + 1];
-  SettingsRead(&settings, ignored);
+bool VMListDelete(
+    Settings* settings, const VMEntry* vm, char problem[kVMProblemLength + 1]) {
   char folder[kFSMaxPath + 1];
   FolderOf(vm, folder);
   const FRESULT result = FSDeleteFolder(folder, kConfigFile);
@@ -413,8 +407,8 @@ bool VMListDelete(const VMEntry* vm, char problem[kVMProblemLength + 1]) {
     Describe("delete", vm, result, problem);
     return false;
   }
-  if (strcasecmp(settings.boot_default, vm->name) == 0) {
-    return SettingsSaveBootDefault(&settings, "", problem);
+  if (strcasecmp(settings->boot_default, vm->name) == 0) {
+    return SettingsSaveBootDefault(settings, "", problem);
   }
   return true;
 }
