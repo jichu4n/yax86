@@ -337,7 +337,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot.
+  host measuring the boot, still boot. `src/launcher.c` runs the list and
+  carries out what is chosen from it; `src/menu.c` draws its pages.
 - **A VM's image that does not open leaves its drive empty**, and the
   message row says why after the start; so does one named for two drives,
   which goes in the first. There is no falling back to the built-in floppy

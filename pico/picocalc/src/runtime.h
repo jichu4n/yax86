@@ -7,6 +7,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "status_bar.h"
+
 // Whether the guest's screen is drawn. Building with it off gives an image
 // identical but for that, which is what measures what drawing costs. Set by
 // CMakeLists.txt.
@@ -74,6 +76,15 @@ typedef struct RunClock {
   uint64_t pause_start_us;
 } RunClock;
 
+enum {
+  // How often the status rows are composed again. Often enough that a drive's
+  // light comes on while it is in use; core 1 is only handed them, and draws
+  // only the rows that changed, when something has.
+  kStatusUpdateMs = 100,
+  // How long a menu-paused loop sleeps between looks at the keyboard.
+  kPausedPollMs = 10,
+};
+
 // Whether the boot is over, one way or the other: at the prompt, or given up.
 bool RuntimeBootIsOver(void);
 
@@ -88,5 +99,9 @@ uint64_t RuntimePausedUs(void);
 // Host time spent carrying out commands a host sent, which a boot that took
 // them is that much slower for.
 uint64_t RuntimeCommandUs(void);
+
+// Compose the status rows from state, and hand them to core 1 if they
+// changed, or are still waiting from the last time it was busy.
+void RuntimeOfferStatusRows(const StatusBarState* state);
 
 #endif  // YAX86_PICOCALC_RUNTIME_H
