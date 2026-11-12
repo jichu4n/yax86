@@ -337,12 +337,23 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot. `src/launcher_menu.c` holds the
-  list's pages and draws them, and says what was chosen on them;
-  `src/launcher.c` decides what the list does: which VM starts, the
-  countdown, and what each choice carries out. `main.c` runs its loop, which
-  also answers commands and draws the list. Calls go one way, from `main.c`
-  to the launcher and from the launcher to its pages.
+  host measuring the boot, still boot.
+- **The launcher is split by feature**, each file holding a feature's pages
+  and what they do:
+
+  | file | holds |
+  | --- | --- |
+  | `src/launcher.c` | the list itself, the countdown, the note a reset or power off leaves, starting a VM, and routing keys and drawing to what is open |
+  | `src/launcher_manage.c` | Manage VMs: a VM's page, renaming, cloning, the New VM form, editing drives, deleting, and copying |
+  | `src/launcher_usb.c` | USB disk mode: sharing the card or an image, and taking it back |
+  | `src/launcher_settings.c` | Settings and Font |
+
+  `main.c` runs the list's loop, which also answers commands, and calls only
+  `launcher.h`. The launcher opens a feature from the list and acts on what
+  its key handler returns: stays, left, or for USB disk mode, the card is
+  back. The calls the other way are few, all in `launcher.h`: setting and
+  clearing the problem on the keys row, re-reading the card after Manage VMs
+  changes it, and redrawing the status rows during a copy.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the

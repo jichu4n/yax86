@@ -6,7 +6,7 @@
 // image, the status page, and a question before a reset or a power off. Up
 // and Down move, Enter or Space chooses, and Esc or Backspace goes back a
 // page, or closes the menu from the main one. Both Shift keys again close it
-// too. The list of VMs at power on is launcher_menu.h's.
+// too. The list of VMs at power on is launcher.h's.
 //
 // This holds the menu's state and draws it; what its items do is the
 // caller's, through the actions in MenuConfig.

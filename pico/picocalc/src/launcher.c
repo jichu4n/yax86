@@ -12,12 +12,13 @@
 #include "fs.h"
 #include "hardware/watchdog.h"
 #include "launcher_manage.h"
-#include "launcher_menu.h"
 #include "launcher_settings.h"
 #include "launcher_usb.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
+#include "ui_box.h"
+#include "ui_page.h"
 #include "vm_folder.h"
 
 enum {
@@ -28,6 +29,208 @@ enum {
   kMicrosecondsPerSecond = 1000 * 1000,
   kMillisecondsPerSecond = 1000,
 };
+
+// ============================================================================
+// The list
+// ============================================================================
+
+// What a key did on the list.
+typedef enum ListAction {
+  // Nothing the caller need act on.
+  kListActionNone = 0,
+  // A VM was chosen from the list: see ListChosenVM().
+  kListActionVMChosen,
+  // A row under the VMs was chosen. Show the list again after what it opens
+  // with ListShowManageRow(), ListShowUSBRow() or
+  // ListShowSettingsRow().
+  kListActionOpenManage,
+  kListActionOpenUSB,
+  kListActionOpenSettings,
+} ListAction;
+
+static const UIBoxItem kManageRow = {"Manage VMs", true};
+static const UIBoxItem kUSBRow = {"USB disk mode", true};
+static const UIBoxItem kSettingsRow = {"Settings", true};
+
+// The VMs on the card, and the card's settings.
+static VMList g_vms;
+static VMSettings g_settings;
+
+// Whether the list shows: from ListOpen() until ListClose().
+static bool g_open;
+static uint8_t g_chosen;
+// Whether what is on the panel is out of date.
+static bool g_dirty;
+// The row at the top of the list.
+static uint8_t g_list_top;
+// The seconds before the highlighted VM starts by itself.
+static uint8_t g_countdown;
+
+static bool ListIsOpen(void) { return g_open; }
+
+static const char* ListPageName(void) { return "vms"; }
+
+static void ScrollToChosen(void);
+
+static void ListOpen(uint8_t highlighted) {
+  g_open = true;
+  g_list_top = 0;
+  g_chosen = highlighted;
+  g_dirty = true;
+  ScrollToChosen();
+}
+
+static uint8_t ListChosenVM(void) { return g_chosen; }
+
+static void ListClose(void) { g_open = false; }
+
+static void ListSetCountdown(uint8_t seconds) {
+  if (seconds != g_countdown) {
+    g_countdown = seconds;
+    g_dirty = true;
+  }
+}
+
+static const char* ListHint(void) { return "\x18\x19=Move  Enter=Select"; }
+
+// Keep the chosen item among the list's rows.
+static void ScrollToChosen(void) {
+  uint8_t row = g_chosen;
+  if (g_vms.count > 0 && g_chosen >= g_vms.count) {
+    ++row;
+  }
+  UIPageScrollTo(row, &g_list_top);
+}
+
+// The list at power on's items: a VM each, then Manage VMs, USB disk mode and
+// Settings, with a separator row between the VMs and the rest when there is at
+// least one VM.
+static uint8_t VMsItemCount(void) { return (uint8_t)(g_vms.count + 3); }
+
+static uint8_t VMsRowCount(void) {
+  return (uint8_t)(g_vms.count + (g_vms.count > 0 ? 4 : 3));
+}
+
+static uint8_t ManageItemIndex(void) { return g_vms.count; }
+
+static uint8_t USBItemIndex(void) { return (uint8_t)(g_vms.count + 1); }
+
+static uint8_t SettingsItemIndex(void) { return (uint8_t)(g_vms.count + 2); }
+
+// Show the list again with an item chosen, when what was opened from it is
+// left.
+static void ShowItem(uint8_t item) {
+  g_chosen = item;
+  g_dirty = true;
+  ScrollToChosen();
+}
+
+static void ListShowManageRow(void) { ShowItem(ManageItemIndex()); }
+
+static void ListShowUSBRow(void) { ShowItem(USBItemIndex()); }
+
+static void ListShowSettingsRow(void) { ShowItem(SettingsItemIndex()); }
+
+static ListAction Choose(void) {
+  if (g_chosen == SettingsItemIndex()) {
+    return kListActionOpenSettings;
+  }
+  if (g_chosen == USBItemIndex()) {
+    return kListActionOpenUSB;
+  }
+  if (g_chosen == ManageItemIndex()) {
+    return kListActionOpenManage;
+  }
+  return kListActionVMChosen;
+}
+
+static ListAction ListHandleKey(SouthbridgeKeyEvent event) {
+  // Nothing closes the list but starting something, and Esc goes back no
+  // further than it.
+  if (event.key == kKeyCodeEsc || event.key == kKeyCodeBackspace) {
+    return kListActionNone;
+  }
+  if (event.state != kSouthbridgeKeyReleased && LauncherClearProblem()) {
+    g_dirty = true;
+  }
+  // A key held down repeats, which moves through the items as a press does.
+  if (event.state == kSouthbridgeKeyReleased) {
+    return kListActionNone;
+  }
+  if (UIPageIsMoveKey(event.key)) {
+    if (UIPageMove(event.key, VMsItemCount(), &g_chosen)) {
+      g_dirty = true;
+    }
+    ScrollToChosen();
+    return kListActionNone;
+  }
+  if (event.key == kKeyCodeEnter || event.key == kKeyCodeSpace) {
+    return Choose();
+  }
+  return kListActionNone;
+}
+
+// ============================================================================
+// Drawing
+// ============================================================================
+
+// The VMs to start: a row each, with a line under them if there are any,
+// arrows on the border where there are more above or below, and the
+// countdown on the bottom edge.
+static void DrawVMsPage(DisplayMenu* menu) {
+  UIBoxPlace(menu, kUIPageNarrowColumns, kUIPageListRows + 2);
+  UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
+  for (uint8_t i = 0; i < kUIPageListRows; ++i) {
+    DisplayTextRow* row = &menu->text[1 + i];
+    const uint8_t index = (uint8_t)(g_list_top + i);
+    if (index >= VMsRowCount()) {
+      UIBoxBlankRow(row, menu->columns);
+    } else if (index < g_vms.count) {
+      UIBoxItemRow(
+          row, menu->columns, g_vms.vms[index].name, index == g_chosen);
+    } else if (g_vms.count > 0 && index == g_vms.count) {
+      UIBoxSeparatorRow(row, menu->columns);
+    } else {
+      const uint8_t item = g_vms.count > 0 ? (uint8_t)(index - 1) : index;
+      if (item == ManageItemIndex()) {
+        UIBoxMenuItemRow(row, menu->columns, &kManageRow, item == g_chosen);
+      } else if (item == USBItemIndex()) {
+        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, item == g_chosen);
+      } else {
+        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, item == g_chosen);
+      }
+    }
+  }
+  char countdown[kUIPageNarrowColumns];
+  if (g_countdown > 0) {
+    snprintf(
+        countdown, sizeof(countdown), "starting in %u s",
+        (unsigned)g_countdown);
+  }
+  UIBoxEdgeRow(
+      &menu->text[kUIPageListRows + 1], menu->columns, false,
+      g_countdown > 0 ? countdown : NULL);
+  UIPageDrawScrollArrows(menu, g_list_top, VMsRowCount());
+}
+
+static void ListDraw(void) {
+  if (!g_open || !g_dirty) {
+    return;
+  }
+  DisplayMenu* menu = DisplayBeginMenu();
+  if (menu == NULL) {
+    return;
+  }
+  DrawVMsPage(menu);
+  // The list is always the same size, so there is never part of another box
+  // left showing to draw over.
+  DisplayEndMenu();
+  g_dirty = false;
+}
+
+// ============================================================================
+// Choosing a VM
+// ============================================================================
 
 typedef struct StartNote {
   // kStartNoteMarker while the note is to be acted on.
@@ -41,21 +244,17 @@ typedef struct StartNote {
 // LeaveStartNote().
 static StartNote __uninitialized_ram(g_start_note);
 
-// The VMs on the card, and the card's settings.
-static VMList g_vms;
-static VMSettings g_settings;
 // When the default VM starts by itself, and whether it is still counting
 // down to it: a key stops it.
 static absolute_time_t g_start_at;
 static bool g_counting;
-// Whether the list shows, and what is open from it, if anything.
+// What is open from the list, if anything.
 typedef enum Feature {
   kFeatureNone = 0,
   kFeatureManage,
   kFeatureUsb,
   kFeatureSettings,
 } Feature;
-static bool g_open;
 static Feature g_feature;
 // Why something on the list could not be done, shown in place of the keys
 // until another key is pressed. It is kept in two buffers, used in turn, so
@@ -179,7 +378,7 @@ void LauncherUpdateRows(void) {
   state.hint = g_feature == kFeatureManage     ? LauncherManageHint()
                : g_feature == kFeatureUsb      ? LauncherUsbHint()
                : g_feature == kFeatureSettings ? LauncherSettingsHint()
-                                               : LauncherMenuHint();
+                                               : ListHint();
   state.problem = g_problem[0] != '\0' ? g_problem : NULL;
   StatusBarOffer(&state);
 }
@@ -224,8 +423,7 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
       TakeVM(highlighted, vm)) {
     return kLauncherTookVM;
   }
-  LauncherMenuOpen(&g_vms, highlighted);
-  g_open = true;
+  ListOpen(highlighted);
   g_start_at =
       make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
   g_counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
@@ -240,14 +438,14 @@ static void HandleUsbKey(SouthbridgeKeyEvent key) {
       break;
     case kLauncherUsbLeft:
       g_feature = kFeatureNone;
-      LauncherMenuShowUSBRow();
+      ListShowUSBRow();
       break;
     case kLauncherUsbReturned: {
       g_feature = kFeatureNone;
       VMListRead(&g_vms);
       uint8_t highlighted = 0;
       ReadSettings(&g_settings, &highlighted);
-      LauncherMenuOpen(&g_vms, highlighted);
+      ListOpen(highlighted);
       break;
     }
   }
@@ -261,7 +459,7 @@ static void HandleSettingsKey(SouthbridgeKeyEvent key) {
       break;
     case kLauncherSettingsLeft:
       g_feature = kFeatureNone;
-      LauncherMenuShowSettingsRow();
+      ListShowSettingsRow();
       break;
     case kLauncherSettingsFontChanged:
       g_settings.font = LauncherSettingsFont();
@@ -271,11 +469,11 @@ static void HandleSettingsKey(SouthbridgeKeyEvent key) {
 
 bool LauncherHandleKey(SouthbridgeKeyEvent key) {
   g_counting = false;
-  LauncherMenuSetCountdown(0);
+  ListSetCountdown(0);
   if (g_feature == kFeatureManage) {
     if (LauncherManageHandleKey(key) == kLauncherManageLeft) {
       g_feature = kFeatureNone;
-      LauncherMenuShowManageRow();
+      ListShowManageRow();
     }
     return false;
   }
@@ -288,19 +486,19 @@ bool LauncherHandleKey(SouthbridgeKeyEvent key) {
     return false;
   }
   bool chosen = false;
-  switch (LauncherMenuHandleKey(key)) {
-    case kLauncherMenuActionVMChosen:
+  switch (ListHandleKey(key)) {
+    case kListActionVMChosen:
       chosen = true;
       break;
-    case kLauncherMenuActionOpenUSB:
+    case kListActionOpenUSB:
       g_feature = kFeatureUsb;
       LauncherUsbOpen();
       break;
-    case kLauncherMenuActionOpenSettings:
+    case kListActionOpenSettings:
       g_feature = kFeatureSettings;
       LauncherSettingsOpen(g_settings.font);
       break;
-    case kLauncherMenuActionOpenManage:
+    case kListActionOpenManage:
       g_feature = kFeatureManage;
       LauncherManageOpen();
       break;
@@ -317,27 +515,25 @@ bool LauncherCountDown(void) {
         absolute_time_diff_us(get_absolute_time(), g_start_at);
     if (left_us <= 0) {
       g_counting = false;
-      LauncherMenuSetCountdown(0);
+      ListSetCountdown(0);
       chosen = true;
     } else {
-      LauncherMenuSetCountdown(
-          (uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
-                    kMicrosecondsPerSecond));
+      ListSetCountdown((uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
+                                 kMicrosecondsPerSecond));
     }
   }
   return chosen;
 }
 
 bool LauncherTakeChosen(VMConfig* vm) {
-  if (!TakeVM(LauncherMenuChosenVM(), vm)) {
+  if (!TakeVM(ListChosenVM(), vm)) {
     return false;
   }
-  g_open = false;
-  LauncherMenuClose();
+  ListClose();
   return true;
 }
 
-bool LauncherIsOpen(void) { return g_open; }
+bool LauncherIsOpen(void) { return ListIsOpen(); }
 
 void LauncherDraw(uint64_t now_us) {
   switch (g_feature) {
@@ -351,7 +547,7 @@ void LauncherDraw(uint64_t now_us) {
       LauncherSettingsDraw();
       break;
     case kFeatureNone:
-      LauncherMenuDraw();
+      ListDraw();
       break;
   }
 }
@@ -367,5 +563,5 @@ const char* LauncherPageName(void) {
     case kFeatureNone:
       break;
   }
-  return LauncherMenuPageName();
+  return ListPageName();
 }

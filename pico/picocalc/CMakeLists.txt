@@ -133,7 +133,6 @@ add_executable(yax86_picocalc
     src/keymap.c
     src/launcher.c
     src/launcher_manage.c
-    src/launcher_menu.c
     src/launcher_settings.c
     src/launcher_usb.c
     src/lcd.c
