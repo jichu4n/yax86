@@ -366,7 +366,7 @@ static uint64_t PausedUs(void) {
 
 // How much guest RAM the VM has.
 static uint32_t GuestRAMSize(void) {
-  return g_paging ? kPicoPagedGuestRAMSize : kGuestRAMSize;
+  return g_paging ? Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE : kGuestRAMSize;
 }
 
 // A byte of guest RAM, read through the memory map since it may be paged. 0
@@ -701,7 +701,7 @@ static __noinline void ReplyReportBoard(const Command* command) {
       command, "paging", Y_LOG_BOOL("on", g_paging),
       Y_LOG_BOOL("off_after_fault", g_after_fault),
       Y_LOG_UINT("frames", pager.frames),
-      Y_LOG_UINT("page_bytes", 1u << kPicoPageShift),
+      Y_LOG_UINT("page_bytes", kPagerPageSize),
       Y_LOG_UINT("page_ins", pager.page_ins),
       Y_LOG_UINT("zero_fills", pager.zero_fills),
       Y_LOG_UINT("write_backs", pager.write_backs),
@@ -824,8 +824,8 @@ static void ConfigureGuestRAM(YPlatformConfig* config) {
   }
   config->direct_memory_size = 0;
   config->direct_memory = NULL;
-  config->paged_memory =
-      PagerInit(g_guest_ram, kGuestRAMSize, kPicoPagedGuestRAMSize);
+  config->paged_memory = PagerInit(
+      g_guest_ram, kGuestRAMSize, Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE);
 }
 
 static bool InitVM(void) {

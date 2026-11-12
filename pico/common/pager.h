@@ -1,6 +1,5 @@
 // Guest RAM kept in PSRAM and paged through frames in SRAM: the host's half of
-// the core's YPlatformPagedMemory, with pages of 1 << kPicoPageShift bytes
-// (yax86_pico.h).
+// the core's YPlatformPagedMemory.
 //
 // A page is brought into a frame when the guest first touches it, from PSRAM,
 // or as zeros if it has never been written back. A frame is taken back by
@@ -18,6 +17,16 @@
 
 #include "core/platform.h"
 #include "yax86_pico.h"
+
+enum {
+  // A page, and a frame, is 1 << kPagerPageShift bytes: 256. Larger pages
+  // spend more of the time in page faults, since a fault moves a whole page
+  // and programs use little of a large one, measured in
+  // pico/picocalc/AGENTS.md, "Paging guest RAM". Smaller ones need a larger
+  // page table, 2 bytes a page: 5KB for 640KB at 256 bytes.
+  kPagerPageShift = 8,
+  kPagerPageSize = 1 << kPagerPageShift,
+};
 
 typedef struct PagerStats {
   uint32_t frames;

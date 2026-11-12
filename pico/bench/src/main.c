@@ -195,8 +195,8 @@ static bool ResetMachine(void) {
   config->logger_config = &g_machine_log_config;
   if (g_paging) {
     // Every page starts as zeros, as the SRAM does without paging.
-    config->paged_memory =
-        PagerInit(g_guest_ram, kGuestRAMSize, kPicoPagedGuestRAMSize);
+    config->paged_memory = PagerInit(
+        g_guest_ram, kGuestRAMSize, Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE);
   } else {
     config->direct_memory_size = kGuestRAMSize;
     config->direct_memory = g_guest_ram;
@@ -524,7 +524,7 @@ static Y_NOINLINE void LogPaging(void) {
   const PagerStats pager = PagerGetStats();
   BENCH_INFO(
       "paging", Y_LOG_UINT("frames", pager.frames),
-      Y_LOG_UINT("page_bytes", 1u << kPicoPageShift),
+      Y_LOG_UINT("page_bytes", kPagerPageSize),
       Y_LOG_UINT("page_ins", pager.page_ins),
       Y_LOG_UINT("zero_fills", pager.zero_fills),
       Y_LOG_UINT("write_backs", pager.write_backs),
@@ -680,7 +680,7 @@ static void StartPsram(void) {
     watchdog_disable();
   }
   if (g_paging) {
-    g_guest_ram_size = kPicoPagedGuestRAMSize;
+    g_guest_ram_size = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE;
   }
 }
 

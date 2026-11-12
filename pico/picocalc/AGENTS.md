@@ -565,14 +565,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames,
   and PSRAM behind them**, through the core's `YPlatformConfig.paged_memory`
-  (`core/AGENTS.md`). The sizes are in `pico/common/yax86_pico.h`, a header
-  per board so that a Pico 2 can have its own, and `pico/common/pager.c`
-  does the paging, both shared with `pico/bench` so that it measures what
-  runs here. The pager brings a page into a frame when the guest first
-  touches it, from PSRAM, or as zeros if it has never been written back, and
-  takes frames back by the clock algorithm, writing a page back only if it
-  was written. The report's `paging` group has the counts and `fault_us`,
-  the time in the fault handler.
+  (`core/AGENTS.md`). `pico/common/pager.c` does the paging, and the SRAM
+  given to the guest is in `pico/common/yax86_pico.h`, a header per board so
+  that a Pico 2 can have its own. Both are shared with `pico/bench`, so that
+  it measures what runs here. The pager brings a page into a frame when the
+  guest first touches it, from PSRAM, or as zeros if it has never been
+  written back, and takes frames back by the clock algorithm, writing a page
+  back only if it was written. The report's `paging` group has the counts
+  and `fault_us`, the time in the fault handler.
 - **Pages are 256 bytes**, measured on the device with `pico/bench`'s
   PicoCalc workloads, the share of processor time in faults:
 
