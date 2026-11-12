@@ -152,7 +152,11 @@ static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
 
 // The card's settings, and the index of the default VM in the list.
 // Returns false, with the problem shown on the list, if the settings had one.
-static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
+//
+// Kept out of line: inlined into ShowManagedVMs(), its problem's buffers
+// stay on core 0's stack under Manage VMs' page and the VM's config read it
+// shows, 224 bytes deeper than they need be.
+static __noinline bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   char problem[kVMProblemLength + 1];
   bool read = VMSettingsRead(settings, problem);
   DisplaySetFont(settings->font);
