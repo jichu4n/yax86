@@ -10,8 +10,6 @@
 #include "vm_config.h"
 
 enum {
-  // A floppy image's size: the browser lists only files this long.
-  kFloppyImageSize = 360 * 1024,
   // Where an entry's note starts on its row: a folder's <DIR>, and which
   // drive an image is in.
   kBrowseNoteColumn = 18,
@@ -20,7 +18,7 @@ enum {
 uint8_t UIBrowserOpen(UIBrowser* browser, const char* folder) {
   // A floppy drive takes a floppy, drive C a hard disk, and USB either.
   static const uint32_t kImageSizes[] = {
-      kFloppyImageSize, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE};
+      Y_FDC_FORMAT_360KB_IMAGE_SIZE, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE};
   const uint32_t* sizes = kImageSizes;
   uint8_t num_sizes = 1;
   if (browser->images == kUIBrowserEither) {
@@ -156,7 +154,8 @@ void UIBrowserDraw(
     if (browser->images == kUIBrowserEither) {
       UIBoxPutText(
           row, menu->columns, kBrowseNoteColumn,
-          entry->size == kFloppyImageSize ? "floppy" : "hard disk", attr);
+          entry->size == Y_FDC_FORMAT_360KB_IMAGE_SIZE ? "floppy" : "hard disk",
+          attr);
       continue;
     }
     if (!FileListEntryPath(list, entry, path)) {

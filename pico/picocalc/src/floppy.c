@@ -6,8 +6,6 @@
 #include "generated/dos_floppy_data.h"
 
 enum {
-  // The only format the floppy controller takes.
-  kImageSize = 360 * 1024,
   // What a read from beyond the built-in floppy returns: what an undriven
   // data bus reads.
   kOpenBusByte = 0xFF,
@@ -28,7 +26,8 @@ void FloppyOpen(
       image->status = kDiskImageEjected;
     } else {
       FSCopyPath(paths[drive], g_inserted_paths[drive]);
-      DiskImageOpen(image, g_inserted_paths[drive], kImageSize);
+      DiskImageOpen(
+          image, g_inserted_paths[drive], Y_FDC_FORMAT_360KB_IMAGE_SIZE);
     }
     opened[drive] = image->status;
   }
@@ -104,7 +103,7 @@ DiskImageStatus FloppyInsertImage(
   FSCopyPath(path, inserted_path);
   DiskImage* image = &g_images[drive];
   const DiskImageStatus status =
-      DiskImageOpen(image, inserted_path, kImageSize);
+      DiskImageOpen(image, inserted_path, Y_FDC_FORMAT_360KB_IMAGE_SIZE);
   if (status != kDiskImageOpen) {
     // Nothing to fall back to: the drive stays empty.
     image->status = kDiskImageEjected;

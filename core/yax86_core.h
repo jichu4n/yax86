@@ -10675,12 +10675,23 @@ typedef struct YFDCDiskFormat {
   uint16_t sector_size;
 } YFDCDiskFormat;
 
-// 5.25" 360KB double-sided double-density floppy disk format.
+// The 5.25" 360KB double-sided double-density floppy disk format.
+enum {
+  Y_FDC_FORMAT_360KB_NUM_HEADS = 2,
+  Y_FDC_FORMAT_360KB_NUM_TRACKS = 40,
+  Y_FDC_FORMAT_360KB_NUM_SECTORS_PER_TRACK = 9,
+  Y_FDC_FORMAT_360KB_SECTOR_SIZE = 512,
+  // Size in bytes of an image of such a disk, so that a host can size a buffer
+  // for one at compile time.
+  Y_FDC_FORMAT_360KB_IMAGE_SIZE = Y_FDC_FORMAT_360KB_NUM_HEADS *
+      Y_FDC_FORMAT_360KB_NUM_TRACKS * Y_FDC_FORMAT_360KB_NUM_SECTORS_PER_TRACK *
+      Y_FDC_FORMAT_360KB_SECTOR_SIZE,
+};
 Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
-    .num_heads = 2,
-    .num_tracks = 40,
-    .num_sectors_per_track = 9,
-    .sector_size = 512,
+    .num_heads = Y_FDC_FORMAT_360KB_NUM_HEADS,
+    .num_tracks = Y_FDC_FORMAT_360KB_NUM_TRACKS,
+    .num_sectors_per_track = Y_FDC_FORMAT_360KB_NUM_SECTORS_PER_TRACK,
+    .sector_size = Y_FDC_FORMAT_360KB_SECTOR_SIZE,
 };
 
 struct YFDCState;
