@@ -57,3 +57,31 @@ jobs:
       - working-directory: ${{github.workspace}}/build-emscripten/sdl
         run: ls -lh yax86_sdl.*
       - run: git diff --exit-code
+
+  # pico/bench and pico/picocalc, which nothing above builds: they share the
+  # core's bundle and generator, and an interface change can break them.
+  pico:
+    runs-on: ubuntu-latest
+    name: build pico/bench and pico/picocalc
+    env:
+      PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bash -c 'echo "set man-db/auto-update false" | sudo debconf-communicate' && \
+          sudo dpkg-reconfigure man-db && \
+          sudo apt-get update && \
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi \
+              libstdc++-arm-none-eabi-newlib
+      - run: arm-none-eabi-gcc --version
+      # The release the Pico builds are measured with, and only the submodule
+      # they use.
+      - uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: 2.3.1
+          path: pico-sdk
+      - run: git -C pico-sdk submodule update --init --depth 1 lib/tinyusb
+      - run: pico/bench/build.sh O3
+      - run: pico/picocalc/build.sh
+      - run: git diff --exit-code

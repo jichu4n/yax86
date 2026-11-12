@@ -27,8 +27,8 @@ class PCSpeakerTest : public ::testing::Test {
     g_last_speaker_frequency = 0;
 
     // Initialize platform config.
-    platform_.config.physical_memory_size = sizeof(ram_);
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory_size = sizeof(ram_);
+    platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
 
     // Initialize the platform.

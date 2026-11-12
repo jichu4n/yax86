@@ -199,6 +199,17 @@ round-trips through memory costs more than its instruction count suggests.**
   callback, so it is correctly excluded. Registration recomputes it.
 - A word straddling the top has its halves take different paths
   (`WordStraddlingTheTopOfTheWindow`).
+- **Outside the direct window, an access is a call to
+  `YCPUReadMemoryByteOutsideDirectWindow()` or
+  `YCPUWriteMemoryByteOutsideDirectWindow()`**, both `Y_HOT` and `Y_NOINLINE`,
+  which try the paged data window and then the host's callback. They are the
+  slow halves of `YCPUReadRawMemoryByte()` and `YCPUWriteRawMemoryByte()`,
+  which are inlined at every memory access, so each inlined copy carries only
+  the direct window's compare and load and a call. Measured with paging off,
+  with `dos-boot` (`pico/bench`, RP2040 at 250MHz, `-O3`): the paged test
+  inlined into every access cost 2.6%. With the callback moved out of line as
+  well, it is **2.6% faster** than with the callback inline: 4.6269 seconds
+  against 4.7458. The helpers in flash rather than SRAM measured 0.26% slower.
 - The 8088 suite supplies a window - a sabotaged read fails within one opcode
   - and `CPUTestHelper` and the mocks run without one.
 
@@ -402,8 +413,8 @@ round-trips through memory costs more than its instruction count suggests.**
   strands an interrupt silently -
   `HintReadingFalseSuppressesTheAcknowledgeCycle` states the contract.
 - `YPICUpdateUnmaskedRequest()` is the sole writer, called from all six sites
-  that change `irr` or `imr`: `YPICInit()`, `YPICRaiseIRQ()`, `YPICLowerIRQ()`,
-  ICW1, OCW1 and the acknowledge.
+  that change `irr` or `imr`: `YPICInit()`, `YPICRaiseIRQ()`,
+  `YPICLowerIRQ()`, ICW1, OCW1 and the acknowledge.
 - **A pointer into the PIC's state, not a value handed over**, so a change is
   seen at the next instruction with nothing to synchronize.
 - A dropped recompute leaves the flag conservatively true - a pure slowdown
