@@ -36,10 +36,10 @@ typedef struct Settings {
 } Settings;
 
 // Read the card's settings into settings, which without `yax86/yax86.cfg`
-// are the defaults. Returns false, with the problem described, if the file
-// has a line that is not understood, settings then holding what was
-// understood before it; or if boot_default names no VM, which is then left
-// empty.
+// are the defaults. A key it does not know is logged and ignored. Returns
+// false, with the problem described, if the file has a line or a value that
+// is not understood, settings then holding what was understood before it;
+// or if boot_default names no VM, which is then left empty.
 bool SettingsRead(
     Settings* settings, char problem[kConfigFileProblemLength + 1]);
 
