@@ -36,6 +36,7 @@
 #include "hardware/watchdog.h"
 #include "keymap.h"
 #include "launcher.h"
+#include "launcher_menu.h"
 #include "menu.h"
 #include "pager.h"
 #include "pico/stdio_usb.h"
@@ -321,9 +322,13 @@ static bool BootIsOver(void) {
 // rather than waiting for real time to catch up with it.
 static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
+// Whether a menu shows: the menu over the VM, or the list at power on before
+// one starts, which the report gives as the menu and pacing counts as paused.
+static bool MenuShowing(void) { return MenuIsOpen() || LauncherMenuIsOpen(); }
+
 static uint64_t PausedUs(void) {
   return g_clock.paused_us +
-         (MenuIsOpen() ? time_us_64() - g_clock.pause_start_us : 0);
+         (MenuShowing() ? time_us_64() - g_clock.pause_start_us : 0);
 }
 
 // How much guest RAM the VM has.
@@ -703,8 +708,10 @@ static __noinline void ReplyReportRunning(const Command* command) {
       Y_LOG_UINT("output_hz", speaker.output_hz),
       Y_LOG_UINT("changes", speaker.changes));
   REPLY_GROUP(
-      command, "menu", Y_LOG_BOOL("open", MenuIsOpen()),
-      Y_LOG_STRING("page", MenuPageName()));
+      command, "menu", Y_LOG_BOOL("open", MenuShowing()),
+      Y_LOG_STRING(
+          "page",
+          LauncherMenuIsOpen() ? LauncherMenuPageName() : MenuPageName()));
   REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
@@ -1353,14 +1360,14 @@ static __noinline void ChooseVM(void) {
     }
     if (chosen && LauncherTakeChosen(&g_vm)) {
       g_has_vm = true;
-      MenuClose();
+      LauncherMenuClose();
       return;
     }
     if (time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       LauncherUpdateRows();
     }
-    MenuDraw(time_us_64());
+    LauncherMenuDraw(time_us_64());
     sleep_ms(kPausedPollMs);
   }
 }

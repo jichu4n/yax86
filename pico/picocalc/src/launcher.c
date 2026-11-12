@@ -11,7 +11,7 @@
 #include "font_4x10.h"
 #include "fs.h"
 #include "hardware/watchdog.h"
-#include "menu.h"
+#include "launcher_menu.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
@@ -121,7 +121,7 @@ static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
-  MenuSetProblem(message);
+  LauncherMenuSetProblem(message);
   SYSTEM_WARN(
       "vm_config_problem", Y_LOG_STRING("path", vm->path),
       Y_LOG_STRING("problem", problem));
@@ -134,7 +134,7 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   char problem[kVMProblemLength + 1];
   bool read = VMSettingsRead(settings, problem);
   DisplaySetFont(settings->font);
-  MenuSetFont(settings->font);
+  LauncherMenuSetFont(settings->font);
   *highlighted = 0;
   if (read && settings->boot_default[0] != '\0') {
     // Past the list's end, the first is highlighted instead.
@@ -146,14 +146,14 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   if (!read) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
-    MenuSetProblem(message);
+    LauncherMenuSetProblem(message);
     SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
   }
   return read;
 }
 
 static __noinline void ChooseFont(void) {
-  const Font4x10 font = MenuChosenFont();
+  const Font4x10 font = LauncherMenuChosenFont();
   DisplaySetFont(font);
   if (font == g_settings.font) {
     return;
@@ -166,7 +166,7 @@ static __noinline void ChooseFont(void) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
-  MenuSetProblem(message);
+  LauncherMenuSetProblem(message);
   SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
 }
 
@@ -175,7 +175,7 @@ static __noinline void ChooseFont(void) {
 static void ShareCard(void) {
   DiskImageUnmountCard();
   UsbDiskShareCard();
-  MenuShowSharing();
+  LauncherMenuShowSharing();
   SYSTEM_INFO("usb_card_shared");
 }
 
@@ -187,7 +187,7 @@ static char g_usb_image_path[kFSMaxPath + 1];
 // to read it through; or say why it could not be, staying in the browser.
 static __noinline void ShareImage(void) {
   uint32_t size = 0;
-  FSCopyPath(MenuChosenImage(&size), g_usb_image_path);
+  FSCopyPath(LauncherMenuChosenImage(&size), g_usb_image_path);
   const DiskImageStatus status =
       DiskImageOpen(&g_usb_image, g_usb_image_path, size);
   if (status != kDiskImageOpen) {
@@ -197,14 +197,14 @@ static __noinline void ShareImage(void) {
     snprintf(
         message, sizeof(message), "Could not open %s: %s", name,
         DiskImageDescribeStatus(status));
-    MenuSetProblem(message);
+    LauncherMenuSetProblem(message);
     SYSTEM_WARN(
         "usb_image_not_shared", Y_LOG_STRING("path", g_usb_image_path),
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
     return;
   }
   UsbDiskShareImage(&g_usb_image);
-  MenuShowSharing();
+  LauncherMenuShowSharing();
   SYSTEM_INFO("usb_image_shared", Y_LOG_STRING("path", g_usb_image_path));
 }
 
@@ -228,7 +228,7 @@ static __noinline void StopSharing(void) {
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   ReadSettings(&g_settings, &highlighted);
-  MenuChooseVMs(&g_vms, highlighted);
+  LauncherMenuOpen(&g_vms, highlighted);
 }
 
 // After Manage VMs has changed the card, read its VMs afresh, and the
@@ -241,25 +241,25 @@ static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   ReadSettings(&g_settings, &highlighted);
-  MenuShowManagedVMs(chosen, show_vm);
+  LauncherMenuShowManagedVMs(chosen, show_vm);
 }
 
 // Show why Manage VMs could not do something, and log it.
 static void ShowManageProblem(
     const char* event, const VMEntry* vm, const char* problem) {
-  MenuSetProblem(problem);
+  LauncherMenuSetProblem(problem);
   SYSTEM_WARN(
       event, Y_LOG_STRING("path", vm->path), Y_LOG_STRING("problem", problem));
 }
 
 static __noinline void RenameVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   VMEntry renamed;
   char problem[kVMProblemLength + 1];
   const VMFolderResult result =
-      VMFolderRename(&g_vms, &vm, MenuTypedName(), &renamed, problem);
+      VMFolderRename(&g_vms, &vm, LauncherMenuTypedName(), &renamed, problem);
   if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
+    LauncherMenuSetProblem(problem);
     return;
   }
   ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name, false);
@@ -275,14 +275,14 @@ static __noinline void RenameVM(void) {
 // Show how far a clone has come, at once: the main loop, which would draw it,
 // is waiting for the clone.
 static void ShowCopyProgress(uint64_t done, uint64_t total) {
-  MenuSetCopyProgress(
+  LauncherMenuSetCopyProgress(
       (uint32_t)(done / kBytesPerKB), (uint32_t)(total / kBytesPerKB));
   LauncherUpdateRows();
-  MenuDraw(time_us_64());
+  LauncherMenuDraw(time_us_64());
 }
 
 static __noinline void CloneVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   VMEntry copy;
   char problem[kVMProblemLength + 1];
   const uint64_t start_us = time_us_64();
@@ -292,11 +292,11 @@ static __noinline void CloneVM(void) {
       .progress = ShowCopyProgress,
   };
   const VMFolderResult result =
-      VMFolderClone(&vm, MenuTypedName(), &transfer, &copy, problem);
+      VMFolderClone(&vm, LauncherMenuTypedName(), &transfer, &copy, problem);
   // Left as the guest would find RAM at power on, whatever it held.
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
+    LauncherMenuSetProblem(problem);
     return;
   }
   ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name, false);
@@ -313,7 +313,7 @@ static __noinline void CloneVM(void) {
 
 static __noinline void CreateVM(void) {
   VMFolderDrives drives;
-  MenuFormDrives(&drives);
+  LauncherMenuFormDrives(&drives);
   VMEntry created;
   char problem[kVMProblemLength + 1];
   const uint64_t start_us = time_us_64();
@@ -323,11 +323,11 @@ static __noinline void CreateVM(void) {
       .buffer_size = kCopyBufferSize,
       .progress = ShowCopyProgress,
   };
-  const VMFolderResult result =
-      VMFolderCreate(MenuTypedName(), &drives, &transfer, &created, problem);
+  const VMFolderResult result = VMFolderCreate(
+      LauncherMenuTypedName(), &drives, &transfer, &created, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
+    LauncherMenuSetProblem(problem);
     return;
   }
   ShowManagedVMs(created.name, false);
@@ -341,7 +341,7 @@ static __noinline void CreateVM(void) {
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
-    MenuSetProblem(problem);
+    LauncherMenuSetProblem(problem);
     SYSTEM_WARN(
         "vm_not_created", Y_LOG_STRING("name", created.name),
         Y_LOG_STRING("problem", problem));
@@ -349,9 +349,9 @@ static __noinline void CreateVM(void) {
 }
 
 static __noinline void EditVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   VMFolderDrives drives;
-  MenuFormDrives(&drives);
+  LauncherMenuFormDrives(&drives);
   char problem[kVMProblemLength + 1];
   FSTransfer transfer = {
       .buffer = g_copy_buffer,
@@ -361,7 +361,7 @@ static __noinline void EditVM(void) {
   const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    MenuSetProblem(problem);
+    LauncherMenuSetProblem(problem);
     return;
   }
   ShowManagedVMs(vm.name, true);
@@ -373,7 +373,7 @@ static __noinline void EditVM(void) {
 }
 
 static __noinline void DeleteVM(void) {
-  const VMEntry vm = g_vms.vms[MenuManagedVM()];
+  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   char problem[kVMProblemLength + 1];
   const bool deleted = VMFolderDelete(&vm, problem);
   // Gone from the list, it leaves the first VM chosen.
@@ -388,8 +388,8 @@ static __noinline void DeleteVM(void) {
 void LauncherUpdateRows(void) {
   StatusBarState state = {0};
   state.battery = SouthbridgeGetBattery();
-  state.hint = MenuHint();
-  state.problem = MenuProblem();
+  state.hint = LauncherMenuHint();
+  state.problem = LauncherMenuProblem();
   StatusBarOffer(&state);
 }
 
@@ -425,7 +425,7 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
       TakeVM(highlighted, vm)) {
     return kLauncherTookVM;
   }
-  MenuChooseVMs(&g_vms, highlighted);
+  LauncherMenuOpen(&g_vms, highlighted);
   g_start_at =
       make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
   g_counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
@@ -434,37 +434,37 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
 
 bool LauncherHandleKey(SouthbridgeKeyEvent key) {
   g_counting = false;
-  MenuSetCountdown(0);
+  LauncherMenuSetCountdown(0);
   bool chosen = false;
-  switch (MenuHandleKey(key)) {
-    case kMenuActionVMChosen:
+  switch (LauncherMenuHandleKey(key)) {
+    case kLauncherMenuActionVMChosen:
       chosen = true;
       break;
-    case kMenuActionShareCard:
+    case kLauncherMenuActionShareCard:
       ShareCard();
       break;
-    case kMenuActionShareImage:
+    case kLauncherMenuActionShareImage:
       ShareImage();
       break;
-    case kMenuActionStopSharing:
+    case kLauncherMenuActionStopSharing:
       StopSharing();
       break;
-    case kMenuActionFontChosen:
+    case kLauncherMenuActionFontChosen:
       ChooseFont();
       break;
-    case kMenuActionRenameVM:
+    case kLauncherMenuActionRenameVM:
       RenameVM();
       break;
-    case kMenuActionCloneVM:
+    case kLauncherMenuActionCloneVM:
       CloneVM();
       break;
-    case kMenuActionDeleteVM:
+    case kLauncherMenuActionDeleteVM:
       DeleteVM();
       break;
-    case kMenuActionCreateVM:
+    case kLauncherMenuActionCreateVM:
       CreateVM();
       break;
-    case kMenuActionEditVM:
+    case kLauncherMenuActionEditVM:
       EditVM();
       break;
     default:
@@ -480,14 +480,17 @@ bool LauncherCountDown(void) {
         absolute_time_diff_us(get_absolute_time(), g_start_at);
     if (left_us <= 0) {
       g_counting = false;
-      MenuSetCountdown(0);
+      LauncherMenuSetCountdown(0);
       chosen = true;
     } else {
-      MenuSetCountdown((uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
-                                 kMicrosecondsPerSecond));
+      LauncherMenuSetCountdown(
+          (uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
+                    kMicrosecondsPerSecond));
     }
   }
   return chosen;
 }
 
-bool LauncherTakeChosen(VMConfig* vm) { return TakeVM(MenuChosenVM(), vm); }
+bool LauncherTakeChosen(VMConfig* vm) {
+  return TakeVM(LauncherMenuChosenVM(), vm);
+}

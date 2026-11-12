@@ -337,10 +337,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot. `src/launcher.c` decides what the
-  list does: which VM starts, the countdown, and what each choice on it
-  carries out. `main.c` runs its loop, which also answers commands and draws
-  the menu.
+  host measuring the boot, still boot. `src/launcher_menu.c` holds the
+  list's pages and draws them, and says what was chosen on them;
+  `src/launcher.c` decides what the list does: which VM starts, the
+  countdown, and what each choice carries out. `main.c` runs its loop, which
+  also answers commands and draws the list. Calls go one way, from `main.c`
+  to the launcher and from the launcher to its pages.
+- **The report gives the list as the menu**, `open=true` with its page, and
+  pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the
   message row says why after the start; so does one named for two drives,
   which goes in the first. There is no falling back to the built-in floppy
@@ -686,10 +690,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Both Shift keys held together open it**, which nothing in DOS does and
   typing never does, and close it again. `src/menu.c` keeps its state and
   draws it, in boxes and rows from `src/ui_box.c`. What its pages have in
-  common is in `src/ui_page.c`: moving the chosen item, scrolling a list,
-  and a page of items. The file browser is `src/ui_browser.c`, which says
-  which image was chosen and leaves what to do with it to the menu. `main.c`
-  carries out what its items do, through the callbacks in `MenuConfig`.
+  common with the list at power on's is in `src/ui_page.c`: moving the
+  chosen item, scrolling a list, and a page of items. The file browser both
+  use is `src/ui_browser.c`, which says which image was chosen and leaves
+  what to do with it to its user. `main.c` carries out what the menu's items
+  do, through the callbacks in `MenuConfig`.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,

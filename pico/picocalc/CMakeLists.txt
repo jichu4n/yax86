@@ -132,6 +132,7 @@ add_executable(yax86_picocalc
     src/font_4x10.c
     src/keymap.c
     src/launcher.c
+    src/launcher_menu.c
     src/lcd.c
     ../common/pager.c
     ../common/psram.c
