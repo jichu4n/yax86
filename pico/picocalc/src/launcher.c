@@ -12,6 +12,7 @@
 #include "fs.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu.h"
+#include "launcher_settings.h"
 #include "launcher_usb.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
@@ -54,9 +55,14 @@ static uint8_t* g_copy_buffer;
 // down to it: a key stops it.
 static absolute_time_t g_start_at;
 static bool g_counting;
-// Whether the list shows, and whether USB disk mode is open from it.
+// Whether the list shows, and what is open from it, if anything.
+typedef enum Feature {
+  kFeatureNone = 0,
+  kFeatureUsb,
+  kFeatureSettings,
+} Feature;
 static bool g_open;
-static bool g_in_usb;
+static Feature g_feature;
 // Why something on the list could not be done, shown in place of the keys
 // until another key is pressed. It is kept in two buffers, used in turn, so
 // that a new one is a new pointer: the status rows tell a change of hint by
@@ -156,7 +162,6 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   char problem[kVMProblemLength + 1];
   bool read = VMSettingsRead(settings, problem);
   DisplaySetFont(settings->font);
-  LauncherMenuSetFont(settings->font);
   *highlighted = 0;
   if (read && settings->boot_default[0] != '\0') {
     // Past the list's end, the first is highlighted instead.
@@ -172,24 +177,6 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
     SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
   }
   return read;
-}
-
-static __noinline void ChooseFont(void) {
-  const Font4x10 font = LauncherMenuChosenFont();
-  DisplaySetFont(font);
-  if (font == g_settings.font) {
-    return;
-  }
-  g_settings.font = font;
-  char problem[kVMProblemLength + 1];
-  if (VMSettingsSaveFont(font, problem)) {
-    SYSTEM_INFO("font_saved", Y_LOG_STRING("font", Font4x10Name(font)));
-    return;
-  }
-  char message[kTextColumns + 1];
-  snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
-  LauncherSetProblem(message);
-  SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
 }
 
 // After Manage VMs has changed the card, read its VMs afresh, and the
@@ -349,7 +336,9 @@ static __noinline void DeleteVM(void) {
 void LauncherUpdateRows(void) {
   StatusBarState state = {0};
   state.battery = SouthbridgeGetBattery();
-  state.hint = g_in_usb ? LauncherUsbHint() : LauncherMenuHint();
+  state.hint = g_feature == kFeatureUsb        ? LauncherUsbHint()
+               : g_feature == kFeatureSettings ? LauncherSettingsHint()
+                                               : LauncherMenuHint();
   state.problem = g_problem[0] != '\0' ? g_problem : NULL;
   StatusBarOffer(&state);
 }
@@ -401,11 +390,11 @@ static void HandleUsbKey(SouthbridgeKeyEvent key) {
     case kLauncherUsbStays:
       break;
     case kLauncherUsbLeft:
-      g_in_usb = false;
+      g_feature = kFeatureNone;
       LauncherMenuShowUSBRow();
       break;
     case kLauncherUsbReturned: {
-      g_in_usb = false;
+      g_feature = kFeatureNone;
       VMListRead(&g_vms);
       uint8_t highlighted = 0;
       ReadSettings(&g_settings, &highlighted);
@@ -415,11 +404,31 @@ static void HandleUsbKey(SouthbridgeKeyEvent key) {
   }
 }
 
+// A key while Settings is open: back to the list when it is left, and the
+// settings kept as they are saved when another font is chosen.
+static void HandleSettingsKey(SouthbridgeKeyEvent key) {
+  switch (LauncherSettingsHandleKey(key)) {
+    case kLauncherSettingsStays:
+      break;
+    case kLauncherSettingsLeft:
+      g_feature = kFeatureNone;
+      LauncherMenuShowSettingsRow();
+      break;
+    case kLauncherSettingsFontChanged:
+      g_settings.font = LauncherSettingsFont();
+      break;
+  }
+}
+
 bool LauncherHandleKey(SouthbridgeKeyEvent key) {
   g_counting = false;
   LauncherMenuSetCountdown(0);
-  if (g_in_usb) {
+  if (g_feature == kFeatureUsb) {
     HandleUsbKey(key);
+    return false;
+  }
+  if (g_feature == kFeatureSettings) {
+    HandleSettingsKey(key);
     return false;
   }
   bool chosen = false;
@@ -428,11 +437,12 @@ bool LauncherHandleKey(SouthbridgeKeyEvent key) {
       chosen = true;
       break;
     case kLauncherMenuActionOpenUSB:
-      g_in_usb = true;
+      g_feature = kFeatureUsb;
       LauncherUsbOpen();
       break;
-    case kLauncherMenuActionFontChosen:
-      ChooseFont();
+    case kLauncherMenuActionOpenSettings:
+      g_feature = kFeatureSettings;
+      LauncherSettingsOpen(g_settings.font);
       break;
     case kLauncherMenuActionRenameVM:
       RenameVM();
@@ -485,13 +495,27 @@ bool LauncherTakeChosen(VMConfig* vm) {
 bool LauncherIsOpen(void) { return g_open; }
 
 void LauncherDraw(uint64_t now_us) {
-  if (g_in_usb) {
-    LauncherUsbDraw(now_us);
-  } else {
-    LauncherMenuDraw();
+  switch (g_feature) {
+    case kFeatureUsb:
+      LauncherUsbDraw(now_us);
+      break;
+    case kFeatureSettings:
+      LauncherSettingsDraw();
+      break;
+    case kFeatureNone:
+      LauncherMenuDraw();
+      break;
   }
 }
 
 const char* LauncherPageName(void) {
-  return g_in_usb ? LauncherUsbPageName() : LauncherMenuPageName();
+  switch (g_feature) {
+    case kFeatureUsb:
+      return LauncherUsbPageName();
+    case kFeatureSettings:
+      return LauncherSettingsPageName();
+    case kFeatureNone:
+      break;
+  }
+  return LauncherMenuPageName();
 }
