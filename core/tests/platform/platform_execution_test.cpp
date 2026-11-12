@@ -34,9 +34,9 @@ enum : uint8_t {
 class PlatformExecutionTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    platform_.config.physical_memory_size = sizeof(ram_);
+    platform_.config.direct_memory_size = sizeof(ram_);
     platform_.config.context = this;
-    platform_.config.physical_memory = ram_;
+    platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
 
     ASSERT_TRUE(YPlatformInit(&platform_));
@@ -211,8 +211,8 @@ struct Outcome {
 Outcome RunTimerProgram(bool batched) {
   auto machine = std::unique_ptr<Machine>(new Machine());
   YPlatformState* platform = &machine->platform;
-  platform->config.physical_memory_size = sizeof(machine->ram);
-  platform->config.physical_memory = machine->ram;
+  platform->config.direct_memory_size = sizeof(machine->ram);
+  platform->config.direct_memory = machine->ram;
   platform->config.vram = machine->vram;
   EXPECT_TRUE(YPlatformInit(platform));
 
@@ -337,8 +337,8 @@ TEST_F(PlatformExecutionTest, BatchedRunCountsTheSameInstructions) {
   YPlatformState batched = {};
   static uint8_t batched_ram[64 * 1024] = {0};
   static uint8_t batched_vram[Y_VIDEO_CGA_VRAM_SIZE] = {0};
-  batched.config.physical_memory_size = sizeof(batched_ram);
-  batched.config.physical_memory = batched_ram;
+  batched.config.direct_memory_size = sizeof(batched_ram);
+  batched.config.direct_memory = batched_ram;
   batched.config.vram = batched_vram;
   ASSERT_TRUE(YPlatformInit(&batched));
   batched.cpu.registers[Y_CPU_CS] = 0;

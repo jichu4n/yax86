@@ -13,8 +13,10 @@
 #include "harddisk.h"
 #include "hardware/clocks.h"
 #include "menu.h"
+#include "pager.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "psram.h"
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "southbridge.h"
@@ -131,9 +133,11 @@ static uint64_t PausedUs(void) {
 }
 
 static uint64_t GuestClockMs(void) {
-  const uint8_t* const count = &g_config.guest_ram[kBIOSTickCountAddress];
-  const uint64_t ticks = (uint64_t)count[0] | (uint64_t)count[1] << 8 |
-                         (uint64_t)count[2] << 16 | (uint64_t)count[3] << 24;
+  uint64_t ticks = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    ticks |= (uint64_t)g_config.read_guest_ram_fn(kBIOSTickCountAddress + i)
+             << (8 * i);
+  }
   return ticks * kPITCountsPerBIOSTick * kMillisecondsPerSecond / kPITInputHz;
 }
 
@@ -223,7 +227,7 @@ static void FormatSystemLine(char* buffer, size_t size) {
       (unsigned long)(g_config.status->lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
       (unsigned long)(g_config.status->lcd_spi_hz / (kHzPerKHz * 10) % 100),
       version, (unsigned long)SouthbridgeGetPollStats().keys,
-      (unsigned)(g_config.guest_ram_kb % 10000));
+      (unsigned)(g_config.guest_ram_size_fn() / 1024 % 10000));
 }
 
 static void FormatDisplayLine(char* buffer, size_t size) {
@@ -362,7 +366,28 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
       Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
       Y_LOG_STRING("keyboard_fw", version),
-      Y_LOG_UINT("guest_ram_kb", g_config.guest_ram_kb));
+      Y_LOG_UINT("guest_ram_kb", g_config.guest_ram_size_fn() / 1024));
+  const PsramStats psram = PsramGetStats();
+  REPLY_GROUP(
+      command, "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
+      Y_LOG_UINT("serial_hz", psram.serial_hz), Y_LOG_HEX8("kgd", psram.kgd),
+      Y_LOG_UINT("read_512_us", psram.read_512_us),
+      Y_LOG_UINT("write_512_us", psram.write_512_us),
+      Y_LOG_UINT("bytes_read", psram.bytes_read),
+      Y_LOG_UINT("bytes_written", psram.bytes_written),
+      Y_LOG_UINT("timeouts", psram.timeouts));
+  const PagerStats pager = PagerGetStats();
+  REPLY_GROUP(
+      command, "paging", Y_LOG_BOOL("on", *g_config.paging),
+      Y_LOG_BOOL("off_after_fault", *g_config.paging_off_after_fault),
+      Y_LOG_UINT("frames", pager.frames),
+      Y_LOG_UINT("page_bytes", kPagerPageSize),
+      Y_LOG_UINT("page_ins", pager.page_ins),
+      Y_LOG_UINT("zero_fills", pager.zero_fills),
+      Y_LOG_UINT("write_backs", pager.write_backs),
+      Y_LOG_UINT("soft_faults", pager.soft_faults),
+      Y_LOG_UINT("errors", pager.errors),
+      Y_LOG_UINT("fault_us", pager.fault_us));
   REPLY_GROUP(
       command, "stack",
       Y_LOG_UINT("size", (uintptr_t)&__StackTop - (uintptr_t)&__StackBottom),

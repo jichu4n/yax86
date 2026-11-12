@@ -11,7 +11,7 @@
 //   ./debug.js wait 'A>' [--timeout SECONDS]
 //   ./debug.js report
 //   ./debug.js ping
-//   ./debug.js run SCRIPT
+//   ./debug.js run SCRIPT [--timeout SECONDS]
 //
 // The board takes a key at a time, as the PicoCalc's keyboard sends them, so
 // text to type is sent as the keys that type it: a character's own key, with
@@ -410,7 +410,9 @@ async function main() {
       const space = line.indexOf(' ');
       const verb = space < 0 ? line : line.slice(0, space);
       const argument = space < 0 ? '' : line.slice(space + 1);
-      if (!(await runStep(board, verb, argument, {}))) {
+      // A script's waits take --timeout, which a long-running program needs;
+      // --state and --attrs would apply to every step, so they do not.
+      if (!(await runStep(board, verb, argument, {timeout: values.timeout}))) {
         return 1;
       }
     }
