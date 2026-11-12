@@ -684,8 +684,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   typing never does, and close it again. `src/menu.c` keeps its state and
   draws it, in boxes and rows from `src/ui_box.c`. What its pages have in
   common is in `src/ui_page.c`: moving the chosen item, scrolling a list,
-  and a page of items. `main.c` carries out what its items do, through the
-  callbacks in `MenuConfig`.
+  and a page of items. The file browser is `src/ui_browser.c`, which says
+  which image was chosen and leaves what to do with it to the menu. `main.c`
+  carries out what its items do, through the callbacks in `MenuConfig`.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,
