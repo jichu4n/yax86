@@ -162,7 +162,7 @@ round-trips through memory costs more than its instruction count suggests.**
   and with them where the bench's screen poll lands. The direct count
   happened not to move.
 - **`code_page_generation` is the whole invalidation mechanism**: one byte
-  per 4KB page, recorded by each entry and compared on use. Zero says the
+  per code page, recorded by each entry and compared on use. Zero says the
   cache holds no decode from the page; anything else is a wrapping count of
   the writes to it since one was cached. The CPU counts in
   `YCPUWriteRawMemoryByte()`, where operands, stack pushes and vector writes
@@ -188,6 +188,19 @@ round-trips through memory costs more than its instruction count suggests.**
   end again, not emulation: with `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1 both
   sides give 2,356,713 and 27,963,388 paged, and 2,328,015 and 27,701,507
   direct.
+- **Code pages are 512 bytes, sized on real programs.** Writes to a page
+  send its instructions back through the decoder, and DOS programs keep the
+  data they write close to the code they run: at 4KB, QBasic decoded 6.9% of
+  all its instructions again only because its page had been written, and
+  none at 1KB. Counted on a desktop build, the share of instructions decoded
+  went from 32.7% to 25.6% for QBasic and from 28.3% to 23.3% for Turbo C.
+  On the PicoCalc at 640KB the seven commands took 151.9 seconds against
+  156.5 at 4KB and 152.3 at 1KB; the 1KB more of counters bought the
+  compiled sieve 4.8%. Below 512 bytes more instructions cross into the next
+  page, which are never cached, and the share rises again: 26.5% for QBasic
+  at 256 bytes. `dos-boot` gained 0.76% paged and 0.79% direct, and moved
+  to 2,353,188 and 27,922,137 paged and 2,328,491 and 27,707,022 direct; with
+  `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1 both sides give the counts above.
 - **Not caching is as load-bearing as caching**: an instruction that spills
   onto the next page or off the end of the segment is not cached, since its
   page says nothing about its later bytes. A failing decode clears the entry's
@@ -420,7 +433,7 @@ round-trips through memory costs more than its instruction count suggests.**
   for 296 bytes of SRAM, and `Y_ALWAYS_INLINE` 0.73% slower, though it makes
   the core 216 bytes smaller. It runs once per
   repeat, not per element - hot by name, not by traffic.
-- **A run reports one write per 4KB page to the decode cache**, which is all
+- **A run reports one write per code page to the decode cache**, which is all
   a generation change needs, and wraps the counter after 256 runs rather
   than 256 bytes. That moved the invariant without changing emulation:
   fewer flushes change where runs end, so the Enter answering DOS's date

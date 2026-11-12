@@ -432,11 +432,13 @@ typedef struct YCPUPagedDataWindow {
 } YCPUPagedDataWindow;
 
 enum {
-  // Granularity at which a write to guest memory discards decoded
-  // instructions: 4KB pages over the 8086's 1MB, which is 256 counters. It is
-  // the coarsest page that still separates the code a program is running from
-  // the data it is writing, and a finer one would only cost more memory.
-  Y_CPU_CODE_PAGE_SHIFT = 12,
+  // The pages the decode cache counts writes to guest memory in: 512-byte
+  // pages over the 8086's 1MB, which is 2,048 counters. Writes to a page make the
+  // cache decode its instructions again, so a page has to be small enough
+  // that the data a program writes seldom shares one with the code it is
+  // running. Smaller pages split more instructions across two pages, and an
+  // instruction split that way is never cached. See src/cpu/AGENTS.md.
+  Y_CPU_CODE_PAGE_SHIFT = 9,
   Y_CPU_CODE_PAGE_SIZE = 1 << Y_CPU_CODE_PAGE_SHIFT,
   Y_CPU_CODE_PAGE_OFFSET_MASK = Y_CPU_CODE_PAGE_SIZE - 1,
   Y_CPU_NUM_CODE_PAGES = 0x100000 >> Y_CPU_CODE_PAGE_SHIFT,
@@ -521,7 +523,7 @@ typedef struct YCPUState {
   // Derived by YCPUInit().
   uint32_t decode_cache_index_mask;
 
-  // One byte per 4KB page: 0 while the decode cache holds nothing from the
+  // One byte per code page: 0 while the decode cache holds nothing from the
   // page, and otherwise a count of the writes to it that wraps. A cached
   // decode records what its page stood at and is discarded once the two
   // disagree, which is what makes caching safe against code that writes over
@@ -644,7 +646,7 @@ Y_PUBLIC_HEADER inline void YCPUInvalidateInstructionFetchWindow(
 // are covered by YCPUNotifyMemoryWrite() instead.
 Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu);
 
-// Discards every cached decode taken from one 4KB page, and marks the page as
+// Discards every cached decode taken from one code page, and marks the page as
 // holding none.
 Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page);
 

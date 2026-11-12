@@ -95,7 +95,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the PSRAM or after a crash. With the PSRAM it pages 640KB (see "Paging
   guest RAM"), and DOS330 boots in 2,439,664 instructions and 29,116,649
   cycles, the BIOS testing and DOS sizing more memory; the bench's 640KB
-  `dos-boot` takes 2,353,177 and 27,922,089. The runtime with no VMs has not
+  `dos-boot` takes 2,353,188 and 27,922,137. The runtime with no VMs has not
   been counted at 640KB.
 
 ## Running in real time
