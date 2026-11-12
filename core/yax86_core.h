@@ -2446,13 +2446,13 @@ typedef struct YCPUPagedDataWindow {
 } YCPUPagedDataWindow;
 
 enum {
-  // The pages the decode cache counts writes to guest memory in: 1KB pages
-  // over the 8086's 1MB, which is 1,024 counters. Writes to a page make the
+  // The pages the decode cache counts writes to guest memory in: 512-byte
+  // pages over the 8086's 1MB, which is 2,048 counters. Writes to a page make the
   // cache decode its instructions again, so a page has to be small enough
   // that the data a program writes seldom shares one with the code it is
   // running. Smaller pages split more instructions across two pages, and an
   // instruction split that way is never cached. See src/cpu/AGENTS.md.
-  Y_CPU_CODE_PAGE_SHIFT = 10,
+  Y_CPU_CODE_PAGE_SHIFT = 9,
   Y_CPU_CODE_PAGE_SIZE = 1 << Y_CPU_CODE_PAGE_SHIFT,
   Y_CPU_CODE_PAGE_OFFSET_MASK = Y_CPU_CODE_PAGE_SIZE - 1,
   Y_CPU_NUM_CODE_PAGES = 0x100000 >> Y_CPU_CODE_PAGE_SHIFT,

@@ -295,14 +295,14 @@ A results table measured on hardware with the `dos-boot` workload:
 The harness reports `elapsed_us`, `cycles` and `instructions` as integers and
 `run.js` derives the rest: for `C` cycles and `I` instructions over `t`
 seconds, emulated MHz = `C / t / 1e6`, MIPS = `I / t / 1e6`, vs a real 8088 =
-`(C / 4.77e6) / t` (a real 8088 takes **5.854 seconds** paged, 5.808
+`(C / 4.77e6) / t` (a real 8088 takes **5.854 seconds** paged, 5.809
 direct), and gain = `t_baseline / t - 1`.
 
 Alongside the table state:
 
-- **The invariant, and that it did not move**: `dos-boot` retires 2,353,177
-  instructions in 27,922,089 emulated cycles paged at 640KB, and 2,328,231
-  in 27,704,200 direct at 128KB, at every level, every run. If either
+- **The invariant, and that it did not move**: `dos-boot` retires 2,353,188
+  instructions in 27,922,137 emulated cycles paged at 640KB, and 2,328,491
+  in 27,707,022 direct at 128KB, at every level, every run. If either
   moved, behaviour changed and the times are not comparable - say so and
   explain why instead of presenting a speedup.
 - **How the baseline was obtained**: rebuilt from its own commit through
