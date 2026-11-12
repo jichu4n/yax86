@@ -1347,18 +1347,18 @@ static __noinline void ChooseVM(void) {
     if (CommandPoll(&command)) {
       RunCommand(&command);
     }
-    ScreenAction action = kScreenStays;
+    bool chose_vm = false;
     SouthbridgeKeyEvent key;
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      action = ScreenHandleKey(key).action;
+      chose_vm = ScreenIsChoseVM(ScreenHandleKey(key));
       // The keys for the page the key led to, at once rather than at the
       // next update.
       UIStatusOffer(ScreenHint());
     }
-    if (ScreenTick().action == kScreenChoseVM) {
-      action = kScreenChoseVM;
+    if (ScreenIsChoseVM(ScreenTick())) {
+      chose_vm = true;
     }
-    if (action == kScreenChoseVM && LauncherTakeChosen(&g_vm)) {
+    if (chose_vm && LauncherTakeChosen(&g_vm)) {
       g_has_vm = true;
       ScreenClose();
       return;

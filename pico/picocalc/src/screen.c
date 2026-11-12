@@ -26,26 +26,27 @@ void ScreenClose(void) { g_depth = 0; }
 
 bool ScreenIsOpen(void) { return g_depth > 0; }
 
+// Markers for the results that open nothing, never shown.
+const Screen kScreenChoseVMMarker;
+const Screen kScreenBackMarker;
+
 // Open or take off a screen, as result says.
 static ScreenResult Follow(ScreenResult result) {
-  switch (result.action) {
-    case kScreenOpen:
-      if (g_depth == kScreenStackMax) {
-        panic("screens nested past %d", kScreenStackMax);
-      }
-      g_stack[g_depth++] = result.screen;
-      break;
-    case kScreenBack:
-      // The list is never taken off: nothing closes it but starting a VM.
-      if (g_depth > 1) {
-        --g_depth;
-        Top()->resume();
-      }
-      break;
-    case kScreenStays:
-    case kScreenChoseVM:
-      break;
+  if (result.screen == NULL || result.screen == &kScreenChoseVMMarker) {
+    return result;
   }
+  if (result.screen == &kScreenBackMarker) {
+    // The list is never taken off: nothing closes it but starting a VM.
+    if (g_depth > 1) {
+      --g_depth;
+      Top()->resume();
+    }
+    return result;
+  }
+  if (g_depth == kScreenStackMax) {
+    panic("screens nested past %d", kScreenStackMax);
+  }
+  g_stack[g_depth++] = result.screen;
   return result;
 }
 

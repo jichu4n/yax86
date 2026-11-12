@@ -9,7 +9,7 @@
 // takes what the new screen works on as parameters: the parent keeps the
 // state, and passes pointers to it down. The open function returns a result
 // naming the new screen, which the router puts on top. A screen that is done
-// returns kScreenBack, and the router takes it off. The one under it then
+// returns ScreenBack(), and the router takes it off. The one under it then
 // shows again, told so by its resume function, and finds whatever the screen
 // above changed in the state it passed.
 #ifndef YAX86_PICOCALC_SCREEN_H
@@ -22,21 +22,13 @@
 
 typedef struct Screen Screen;
 
-// What a key, or time passing, led a screen to.
-typedef enum ScreenAction {
-  // Nothing for the router or the loop to do.
-  kScreenStays = 0,
-  // A VM was chosen to start, which the loop takes.
-  kScreenChoseVM,
-  // Show the screen the result names, on top.
-  kScreenOpen,
-  // Take the screen on top off, and show the one under it again.
-  kScreenBack,
-} ScreenAction;
-
+// What a key, or time passing, led a screen to: nothing, a VM chosen to
+// start, which the loop takes, the screen on top done, or another screen to
+// show on top of it. Make one with the functions below. It is one pointer,
+// the screen to open or one of the markers in screen.c for the rest, so that
+// it comes back in a register: a larger struct comes back through memory
+// that every caller on the way from the loop reserves on core 0's stack.
 typedef struct ScreenResult {
-  ScreenAction action;
-  // The screen to show, for kScreenOpen.
   const Screen* screen;
 } ScreenResult;
 
@@ -58,21 +50,30 @@ struct Screen {
   const char* (*page_name)(void);
 };
 
-static inline ScreenResult ScreenStays(void) {
-  return (ScreenResult){kScreenStays, 0};
-}
+extern const Screen kScreenChoseVMMarker;
+extern const Screen kScreenBackMarker;
 
+// Nothing for the router or the loop to do.
+static inline ScreenResult ScreenStays(void) { return (ScreenResult){0}; }
+
+// A VM was chosen to start, which the loop takes.
 static inline ScreenResult ScreenChoseVM(void) {
-  return (ScreenResult){kScreenChoseVM, 0};
+  return (ScreenResult){&kScreenChoseVMMarker};
 }
 
-// For a screen's open function to return, once it has taken its state.
+// Show screen on top. For a screen's open function to return, once it has
+// taken its state.
 static inline ScreenResult ScreenOpen(const Screen* screen) {
-  return (ScreenResult){kScreenOpen, screen};
+  return (ScreenResult){screen};
 }
 
+// Take the screen on top off, and show the one under it again.
 static inline ScreenResult ScreenBack(void) {
-  return (ScreenResult){kScreenBack, 0};
+  return (ScreenResult){&kScreenBackMarker};
+}
+
+static inline bool ScreenIsChoseVM(ScreenResult result) {
+  return result.screen == &kScreenChoseVMMarker;
 }
 
 // Show screen alone, until ScreenClose().
