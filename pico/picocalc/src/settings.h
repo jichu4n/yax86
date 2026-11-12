@@ -41,7 +41,8 @@ typedef struct Settings {
 // there is no card or no file. Each key and value is logged as it is read,
 // and a key this firmware does not know is skipped with a warning.
 //
-// Returns false, with the problem described, in two cases:
+// Returns false, with the problem described and logged as settings_problem,
+// in two cases:
 //   - The file cannot be read, a line cannot be parsed, or a known key has a
 //     bad value. Reading stops there, so settings has the values read before
 //     it and the defaults for the rest.

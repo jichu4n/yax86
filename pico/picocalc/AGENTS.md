@@ -332,7 +332,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `miniwi` or `creep`, `ymini` without it). Each key read is logged as
   `settings_key`, with its value. A key it does not know is logged as
   `settings_key_ignored` and skipped, so a file written by a later firmware
-  still reads.
+  still reads. A problem, such as a bad value, is logged as
+  `settings_problem`.
 - **At power on, with a card, the menu lists its VMs**, before the VM
   exists, then a separator line, Manage VMs - see below - USB disk mode -
   see "The USB device" - and Settings (which holds Font). The countdown runs on
