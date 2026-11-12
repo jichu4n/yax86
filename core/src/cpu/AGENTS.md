@@ -162,7 +162,7 @@ round-trips through memory costs more than its instruction count suggests.**
   and with them where the bench's screen poll lands. The direct count
   happened not to move.
 - **`code_page_generation` is the whole invalidation mechanism**: one byte
-  per 4KB page, recorded by each entry and compared on use. Zero says the
+  per code page, recorded by each entry and compared on use. Zero says the
   cache holds no decode from the page; anything else is a wrapping count of
   the writes to it since one was cached. The CPU counts in
   `YCPUWriteRawMemoryByte()`, where operands, stack pushes and vector writes
@@ -420,7 +420,7 @@ round-trips through memory costs more than its instruction count suggests.**
   for 296 bytes of SRAM, and `Y_ALWAYS_INLINE` 0.73% slower, though it makes
   the core 216 bytes smaller. It runs once per
   repeat, not per element - hot by name, not by traffic.
-- **A run reports one write per 4KB page to the decode cache**, which is all
+- **A run reports one write per code page to the decode cache**, which is all
   a generation change needs, and wraps the counter after 256 runs rather
   than 256 bytes. That moved the invariant without changing emulation:
   fewer flushes change where runs end, so the Enter answering DOS's date
