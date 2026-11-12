@@ -38,8 +38,8 @@ typedef struct Settings {
 // Read `yax86/yax86.cfg` into settings.
 //
 // Settings the file leaves out keep their defaults, as does every setting if
-// there is no card or no file. Keys this firmware does not know are logged
-// and skipped.
+// there is no card or no file. Each key and value is logged as it is read,
+// and a key this firmware does not know is skipped with a warning.
 //
 // Returns false, with the problem described, in two cases:
 //   - The file cannot be read, a line cannot be parsed, or a known key has a

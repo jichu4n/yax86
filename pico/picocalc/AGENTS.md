@@ -329,9 +329,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   of the VM to highlight and start - `boot_default=DOS330` - `boot_delay`,
   the seconds the list waits for a key, 5 without it, 0 to start the default
   without showing the list, and `font`, the 4x10 font (`ymini`, `atari800`,
-  `miniwi` or `creep`, `ymini` without it). A key it does not know is
-  logged as `settings_key_ignored` and skipped, so a file written by a later
-  firmware still reads.
+  `miniwi` or `creep`, `ymini` without it). Each key read is logged as
+  `settings_key`, with its value. A key it does not know is logged as
+  `settings_key_ignored` and skipped, so a file written by a later firmware
+  still reads.
 - **At power on, with a card, the menu lists its VMs**, before the VM
   exists, then a separator line, Manage VMs - see below - USB disk mode -
   see "The USB device" - and Settings (which holds Font). The countdown runs on
