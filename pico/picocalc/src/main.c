@@ -48,6 +48,7 @@
 #include "speaker.h"
 #include "status_bar.h"
 #include "typing.h"
+#include "ui_status.h"
 #include "usb_disk.h"
 #include "vm_config.h"
 #include "vm_list.h"
@@ -1352,7 +1353,7 @@ static __noinline void ChooseVM(void) {
       result = ScreenHandleKey(key);
       // The keys for the page the key led to, at once rather than at the
       // next update.
-      ScreenUpdateRows();
+      UIStatusOffer(ScreenHint());
     }
     if (ScreenTick() == kScreenChoseVM) {
       result = kScreenChoseVM;
@@ -1364,7 +1365,7 @@ static __noinline void ChooseVM(void) {
     }
     if (time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      ScreenUpdateRows();
+      UIStatusOffer(ScreenHint());
     }
     ScreenDraw(time_us_64());
     sleep_ms(kPausedPollMs);

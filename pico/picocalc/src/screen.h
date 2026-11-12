@@ -46,8 +46,10 @@ ScreenResult ScreenTick(void);
 // Draw the screen showing, if it has changed.
 void ScreenDraw(uint64_t now_us);
 
-// Compose the status rows from the keys of the screen showing.
-void ScreenUpdateRows(void);
+// The keys of the screen showing, for the loop to compose the status rows
+// from: the list's loop with ui_status.c, and the VM's with its drives and
+// locks.
+const char* ScreenHint(void);
 
 // The page showing, as the report gives it.
 const char* ScreenPageName(void);
