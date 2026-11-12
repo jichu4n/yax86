@@ -86,10 +86,6 @@ enum {
 
   // Enter, which answers DOS's date and time questions.
   kEnterScancode = 0x1C,
-  // The keyboard controller's codes for the Shift keys, which together open
-  // the menu.
-  kKeyLeftShift = 0xA2,
-  kKeyRightShift = 0xA3,
   // Emulated cycles between looks at the screen, 20 a second.
   kBootPollCycles = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 20,
   // How much emulated time a boot may take before it is taken to have gone
@@ -1277,8 +1273,10 @@ static void HandleKey(SouthbridgeKeyEvent key, bool running) {
     // The guest has seen both Shift keys go down, and while the menu has the
     // keyboard it would not see them come up, so it is told now.
     if (running) {
-      TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyLeftShift});
-      TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyRightShift});
+      TypeKey((SouthbridgeKeyEvent){
+          kSouthbridgeKeyReleased, kSouthbridgeKeyCodeLeftShift});
+      TypeKey((SouthbridgeKeyEvent){
+          kSouthbridgeKeyReleased, kSouthbridgeKeyCodeRightShift});
     }
     g_clock.pause_start_us = time_us_64();
     SYSTEM_INFO("menu_opened");

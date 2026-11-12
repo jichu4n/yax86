@@ -37,6 +37,20 @@ typedef struct SouthbridgeKeyEvent {
   uint8_t key;
 } SouthbridgeKeyEvent;
 
+// Some of the key codes: the ones the runtime and the menu listen for.
+enum {
+  kSouthbridgeKeyCodeEnter = 0x0A,
+  kSouthbridgeKeyCodeBackspace = 0x08,
+  kSouthbridgeKeyCodeSpace = ' ',
+  kSouthbridgeKeyCodeLeftShift = 0xA2,
+  kSouthbridgeKeyCodeRightShift = 0xA3,
+  kSouthbridgeKeyCodeEsc = 0xB1,
+  kSouthbridgeKeyCodeUp = 0xB5,
+  kSouthbridgeKeyCodeDown = 0xB6,
+  kSouthbridgeKeyCodePageUp = 0xD6,
+  kSouthbridgeKeyCodePageDown = 0xD7,
+};
+
 // How the key FIFO poll has gone, for the report.
 typedef struct SouthbridgePollStats {
   // Reads that completed, the battery's included, and how many held a key.
