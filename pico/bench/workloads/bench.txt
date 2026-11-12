@@ -1,0 +1,57 @@
+# Seven DOS commands, from the BENCH VM's A> prompt on the PicoCalc. See
+# pico/bench/AGENTS.md, "PicoCalc workloads". From the repository root:
+# pico/picocalc/debug.js run pico/bench/workloads/bench.txt --timeout 600
+type C:\r
+type A:CHKDSK C:\r
+wait bytes available on disk[\s\S]*^C> *$
+wait ^C> *$
+type CD \\TC\r
+sleep 1
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type TCC -ms -f- -IC:\\TC -LC:\\TC SIEVE.C\r
+wait Available memory[\s\S]*^C> *$
+report
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type SIEVE\r
+wait depth \d+[\s\S]*^C> *$
+report
+type CD \\TP\r
+sleep 1
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type TPC /B BREAKOUT\r
+wait lines, [\d.]+ seconds[\s\S]*^C> *$
+report
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type TPC QSORT\r
+wait lines, [\d.]+ seconds[\s\S]*^C> *$
+report
+type CD \\QB\r
+sleep 1
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type BC QCARDS.BAS/O;\r
+wait Severe  Error[\s\S]*^C> *$
+report
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type LINK QCARDS,,NUL,BCOM45;\r
+wait Microsoft Corp[\s\S]*^C> *$
+report
+type CD \\QBASIC\r
+sleep 1
+type CLS\r
+wait ^C> *\n(?![\s\S]*\S)
+report
+type QBASIC /RUN T.BAS\r
+wait DONE[\s\S]*^C> *$
+report

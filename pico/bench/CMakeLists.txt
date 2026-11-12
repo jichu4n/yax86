@@ -18,17 +18,6 @@ if(NOT YAX86_PICO_OPT MATCHES "^O(s|2|3)$")
         "YAX86_PICO_OPT must be one of Os, O2 or O3, not '${YAX86_PICO_OPT}'")
 endif()
 
-# Guest conventional memory. Period-accurate XT sizes only, bounded below by
-# what MS-DOS 3.30 needs to boot and above by what fits in the RP2040's 264KB
-# of SRAM alongside video memory, the SDK and the USB stack.
-set(YAX86_PICO_GUEST_RAM_KB "128" CACHE STRING "Guest RAM in KB: 128 or 192")
-set_property(CACHE YAX86_PICO_GUEST_RAM_KB PROPERTY STRINGS 128 192)
-if(NOT YAX86_PICO_GUEST_RAM_KB MATCHES "^(128|192)$")
-    message(FATAL_ERROR
-        "YAX86_PICO_GUEST_RAM_KB must be 128 or 192, not "
-        "'${YAX86_PICO_GUEST_RAM_KB}'.")
-endif()
-
 # Optional overclock, in kHz. Left unset the board runs at its stock 125MHz.
 set(YAX86_PICO_SYS_CLK_KHZ "" CACHE STRING "System clock in kHz, empty for stock")
 
@@ -120,6 +109,8 @@ add_custom_command(
 # =============================================================================
 add_executable(yax86_pico_bench
     src/main.c
+    ../common/pager.c
+    ../common/psram.c
     "${floppy_data_prefix}.c"
     "${YAX86_CORE_ROOT}/core/yax86_core.c"
 )
@@ -127,12 +118,12 @@ add_executable(yax86_pico_bench
 target_include_directories(yax86_pico_bench PRIVATE
     "${YAX86_CORE_ROOT}"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../common"
     # Where the generated boot floppy header lands.
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 target_compile_definitions(yax86_pico_bench PRIVATE
-    YAX86_PICO_GUEST_RAM_KB=${YAX86_PICO_GUEST_RAM_KB}
     YAX86_PICO_OPT="-${YAX86_PICO_OPT}"
     YAX86_PICO_PROFILE=${YAX86_PICO_PROFILE}
 )
@@ -151,7 +142,13 @@ target_compile_options(yax86_pico_bench PRIVATE
 
 target_compile_options(yax86_pico_bench PRIVATE -Wall -Wextra)
 
-target_link_libraries(yax86_pico_bench PRIVATE pico_stdlib hardware_vreg)
+target_link_libraries(yax86_pico_bench PRIVATE
+    pico_stdlib hardware_pio hardware_vreg)
+
+# The PicoCalc's PSRAM, which guest RAM is paged through where it is present.
+# See pico/common/yax86_pico.h.
+pico_generate_pio_header(yax86_pico_bench
+    "${CMAKE_CURRENT_SOURCE_DIR}/../common/psram.pio")
 
 # How much flash and SRAM the image needs, per region, at the end of the link.
 target_link_options(yax86_pico_bench PRIVATE -Wl,--print-memory-usage)

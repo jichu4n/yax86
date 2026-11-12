@@ -164,6 +164,49 @@ Y_FILE_PRIVATE inline Y_HOT uint8_t YCPUFetchNextInstructionByte(
       cpu, YCPUToRawAddress(cpu, Y_CPU_CS, fetch_state->next_byte_offset++));
 }
 
+// If an address is paged and its page is in a frame, points the fetch window
+// at that frame and returns true. The window covers only that one page,
+// because the next page's frame can be anywhere, so running or jumping onto
+// another page comes back here. Doing this without asking the host saves a
+// call and a memory map lookup each time.
+Y_FILE_PRIVATE Y_HOT Y_NOINLINE bool YCPUOpenPagedFetchWindow(
+    YCPUState* cpu, uint32_t raw_address) {
+  const YCPUPagedDataWindow* paged = &cpu->paged_data_window;
+
+  // How far into the paged range the address is. An address below start
+  // wraps to a huge value, so this one unsigned compare rejects addresses on
+  // both sides of the range, and every address when size is 0.
+  const uint32_t offset = raw_address - paged->start;
+  if (offset >= paged->size) {
+    return false;
+  }
+
+  // The page the address is in, and the page's entry in the page table.
+  const uint32_t page = offset >> paged->page_shift;
+  const uint16_t entry = paged->pages[page];
+
+  // Fetching only reads, so RESIDENT is all it needs. Without it the host is
+  // asked instead, through the caller's get_instruction_fetch_window.
+  if (!(entry & Y_CPU_PAGED_DATA_RESIDENT)) {
+    return false;
+  }
+
+  // The window covers one page: its guest addresses start at the offset
+  // rounded down to a page boundary, and run for one page.
+  const uint32_t page_size = (uint32_t)1 << paged->page_shift;
+  const uint32_t page_offset = offset & ~(page_size - 1);
+  YCPUInstructionFetchWindow* window = &cpu->instruction_fetch_window;
+
+  // Its bytes are the page's frame, and its guest addresses those of the page.
+  // With 256-byte pages starting at 0x10000, a fetch from 0x11234 in a page
+  // held in frame 5 opens frames + 0x500 as guest addresses 0x11200 to
+  // 0x112FF.
+  window->data = YCPUGetPagedFrame(paged, entry);
+  window->start = paged->start + page_offset;
+  window->end = window->start + page_size;
+  return true;
+}
+
 // Points a fetch at whatever can be read directly from CS:ip.
 Y_FILE_PRIVATE Y_HOT void YCPUInitInstructionFetchState(
     YCPUState* cpu, uint16_t ip, YCPUInstructionFetchState* fetch_state) {
@@ -184,9 +227,12 @@ Y_FILE_PRIVATE Y_HOT void YCPUInitInstructionFetchState(
       &cpu->instruction_fetch_window;
   if (window->data == NULL || raw_address < window->start ||
       raw_address >= window->end) {
-    // Nothing open covers this address, so ask for a window that does. The
-    // host fills one in, or sets its data to NULL to decline.
-    if (cpu->config.get_instruction_fetch_window != NULL) {
+    // Nothing open covers this address, so open a window that does: its page's
+    // frame if it is paged and in one, and otherwise whatever the host offers.
+    // The host fills one in, or sets its data to NULL to decline.
+    if (YCPUOpenPagedFetchWindow(cpu, raw_address)) {
+      // Opened.
+    } else if (cpu->config.get_instruction_fetch_window != NULL) {
       cpu->config.get_instruction_fetch_window(cpu, raw_address);
     } else {
       cpu->instruction_fetch_window.data = NULL;
@@ -348,6 +394,20 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu) {
   }
 }
 
+Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
+  page &= Y_CPU_NUM_CODE_PAGES - 1;
+  cpu->code_page_generation[page] = 0;
+  YCPUDecodeCacheEntry* const cache = cpu->config.decode_cache;
+  if (cache == NULL) {
+    return;
+  }
+  for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
+    if ((cache[i].address >> Y_CPU_CODE_PAGE_SHIFT) == page) {
+      cache[i].valid = false;
+    }
+  }
+}
+
 // Whether an entry holds a decode of the instruction at address that is still
 // current. The generation is passed in because both callers have it already.
 Y_FILE_PRIVATE Y_ALWAYS_INLINE bool YCPUIsDecodeCacheHit(
@@ -420,6 +480,12 @@ YCPUFetchNextInstructionCached(
   if (cache != NULL &&
       (address & Y_CPU_CODE_PAGE_OFFSET_MASK) + size <= Y_CPU_CODE_PAGE_SIZE &&
       (uint32_t)ip + size <= Y_CPU_SEGMENT_SIZE) {
+    // The first decode kept from a page is what starts its writes being
+    // counted.
+    if (generation == 0) {
+      generation = 1;
+      cpu->code_page_generation[address >> Y_CPU_CODE_PAGE_SHIFT] = 1;
+    }
     target->address = address;
     target->generation = generation;
     target->valid = true;

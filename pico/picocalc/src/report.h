@@ -76,8 +76,16 @@ typedef struct RunClock {
 
 typedef struct ReportConfig {
   const YPlatformState* platform;
-  const uint8_t* guest_ram;
-  uint16_t guest_ram_kb;
+  // Reads a byte of guest RAM. Guest RAM may be paged, so it is read through
+  // the memory map, and before the VM is up it reads as 0.
+  uint8_t (*read_guest_ram_fn)(uint32_t address);
+  // How much guest RAM the VM has, in bytes, which depends on whether it is
+  // paged.
+  uint32_t (*guest_ram_size_fn)(void);
+  // Whether guest RAM is paged, and whether paging is off because the last
+  // start ended in a hard fault.
+  const bool* paging;
+  const bool* paging_off_after_fault;
   const uint8_t* vram;
   const RuntimeStatus* status;
   const RunClock* clock;
