@@ -4,9 +4,9 @@
 // closes it but starting a VM.
 //
 // Under the VMs are three more rows: Manage VMs, from which VMs are made in
-// yax86/vm, and renamed, cloned and deleted; USB disk mode, a page from which
-// the SD card or an image is shared over USB; and Settings, which chooses the
-// 4x10 font.
+// yax86/vm, and renamed, cloned and deleted; USB disk mode, launcher_usb.h's,
+// from which the SD card or an image is shared over USB; and Settings, which
+// chooses the 4x10 font.
 //
 // This holds the pages' state and draws them; what is chosen on them is
 // launcher.c's to carry out, from the actions LauncherMenuHandleKey()
@@ -29,17 +29,13 @@ typedef enum LauncherMenuAction {
   kLauncherMenuActionNone = 0,
   // A VM was chosen from the list: see LauncherMenuChosenVM().
   kLauncherMenuActionVMChosen,
-  // From the list's USB disk page: put the SD card on USB, then show it with
-  // LauncherMenuShowSharing(); and take it back, then show the list again.
-  kLauncherMenuActionShareCard,
-  kLauncherMenuActionStopSharing,
-  // From the same page, through the browser: put a disk image on USB - see
-  // LauncherMenuChosenImage() - then show it with LauncherMenuShowSharing().
-  kLauncherMenuActionShareImage,
+  // USB disk mode was chosen from the list: see launcher_usb.h. Show the list
+  // again after it with LauncherMenuShowUSBRow().
+  kLauncherMenuActionOpenUSB,
   // From Manage VMs: rename the VM LauncherMenuManagedVM() says to
   // LauncherMenuTypedName(), clone it as that name, or delete it. Then show
   // Manage VMs again with LauncherMenuShowManagedVMs(), or for a name that
-  // will not do, LauncherMenuSetProblem() alone, which leaves the name to be
+  // will not do, LauncherSetProblem() alone, which leaves the name to be
   // typed again.
   kLauncherMenuActionRenameVM,
   kLauncherMenuActionCloneVM,
@@ -70,13 +66,9 @@ uint8_t LauncherMenuChosenVM(void);
 Font4x10 LauncherMenuChosenFont(void);
 void LauncherMenuSetFont(Font4x10 font);
 
-// Show the SD card's page, once the caller has put it on USB: who has it,
-// and Disconnect, which asks first if a computer is still using it.
-void LauncherMenuShowSharing(void);
-
-// The disk image chosen to put on USB, a path from the card's root, and its
-// size, which is a floppy's or the hard disk's.
-const char* LauncherMenuChosenImage(uint32_t* size);
+// Show the list again with USB disk mode's row chosen, when USB disk mode
+// is left.
+void LauncherMenuShowUSBRow(void);
 
 // The index in the list of the VM Manage VMs is acting on, and the name typed
 // for it.
@@ -101,23 +93,15 @@ void LauncherMenuSetCopyProgress(uint32_t copied_kb, uint32_t total_kb);
 // stop showing them with 0.
 void LauncherMenuSetCountdown(uint8_t seconds);
 
-// Set why the VM chosen could not start, for LauncherMenuProblem(), until
-// another key is pressed; NULL for nothing. The text is copied.
-void LauncherMenuSetProblem(const char* problem);
-
 // Hand the list a key event, while it shows.
 LauncherMenuAction LauncherMenuHandleKey(SouthbridgeKeyEvent event);
 
-// Draw the list if it has changed, and the sharing page again if a second
-// has passed. Call every pass of the loop while the list shows.
-void LauncherMenuDraw(uint64_t now_us);
+// Draw the list if it has changed. Call every pass of the loop while the
+// list shows.
+void LauncherMenuDraw(void);
 
 // The keys to show on the status bar's message row, as Key=Action pairs.
 const char* LauncherMenuHint(void);
-
-// Why the VM chosen could not start, to show in place of the keys, or
-// NULL.
-const char* LauncherMenuProblem(void);
 
 // The page showing, as the report gives it.
 const char* LauncherMenuPageName(void);

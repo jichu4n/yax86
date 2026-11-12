@@ -12,10 +12,10 @@
 #include "fs.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu.h"
+#include "launcher_usb.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
-#include "usb_disk.h"
 #include "vm_folder.h"
 
 enum {
@@ -54,6 +54,28 @@ static uint8_t* g_copy_buffer;
 // down to it: a key stops it.
 static absolute_time_t g_start_at;
 static bool g_counting;
+// Whether the list shows, and whether USB disk mode is open from it.
+static bool g_open;
+static bool g_in_usb;
+// Why something on the list could not be done, shown in place of the keys
+// until another key is pressed. It is kept in two buffers, used in turn, so
+// that a new one is a new pointer: the status rows tell a change of hint by
+// its pointer.
+static char g_problems[2][kTextColumns + 1];
+static char* g_problem = g_problems[0];
+
+void LauncherSetProblem(const char* problem) {
+  g_problem = g_problem == g_problems[0] ? g_problems[1] : g_problems[0];
+  snprintf(g_problem, kTextColumns + 1, "%s", problem != NULL ? problem : "");
+}
+
+bool LauncherClearProblem(void) {
+  if (g_problem[0] == '\0') {
+    return false;
+  }
+  g_problem[0] = '\0';
+  return true;
+}
 
 // Restart the board, leaving a note for the start after it, which takes it
 // - see TakeStartNote(). Every start, whether from power on, a reset or a power
@@ -121,7 +143,7 @@ static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
-  LauncherMenuSetProblem(message);
+  LauncherSetProblem(message);
   SYSTEM_WARN(
       "vm_config_problem", Y_LOG_STRING("path", vm->path),
       Y_LOG_STRING("problem", problem));
@@ -146,7 +168,7 @@ static bool ReadSettings(VMSettings* settings, uint8_t* highlighted) {
   if (!read) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
-    LauncherMenuSetProblem(message);
+    LauncherSetProblem(message);
     SYSTEM_WARN("settings_problem", Y_LOG_STRING("problem", problem));
   }
   return read;
@@ -166,69 +188,8 @@ static __noinline void ChooseFont(void) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
-  LauncherMenuSetProblem(message);
+  LauncherSetProblem(message);
   SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
-}
-
-// Share the SD card over USB: the card is unmounted first, as
-// nothing here may touch it while the computer has it.
-static void ShareCard(void) {
-  DiskImageUnmountCard();
-  UsbDiskShareCard();
-  LauncherMenuShowSharing();
-  SYSTEM_INFO("usb_card_shared");
-}
-
-// The disk image on USB, while one is, and its path.
-static DiskImage g_usb_image;
-static char g_usb_image_path[kFSMaxPath + 1];
-
-// Put the disk image chosen in the browser on USB, the card staying mounted
-// to read it through; or say why it could not be, staying in the browser.
-static __noinline void ShareImage(void) {
-  uint32_t size = 0;
-  FSCopyPath(LauncherMenuChosenImage(&size), g_usb_image_path);
-  const DiskImageStatus status =
-      DiskImageOpen(&g_usb_image, g_usb_image_path, size);
-  if (status != kDiskImageOpen) {
-    char name[kDiskImageNameLength + 1];
-    DiskImageName(g_usb_image_path, name);
-    char message[kTextColumns + 1];
-    snprintf(
-        message, sizeof(message), "Could not open %s: %s", name,
-        DiskImageDescribeStatus(status));
-    LauncherMenuSetProblem(message);
-    SYSTEM_WARN(
-        "usb_image_not_shared", Y_LOG_STRING("path", g_usb_image_path),
-        Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
-    return;
-  }
-  UsbDiskShareImage(&g_usb_image);
-  LauncherMenuShowSharing();
-  SYSTEM_INFO("usb_image_shared", Y_LOG_STRING("path", g_usb_image_path));
-}
-
-// Take the card or image back from USB and read the card afresh - the
-// computer may have added VMs, removed them, or changed the settings -
-// showing the list again without counting down. An image is closed, writing
-// back the sector it holds.
-static __noinline void StopSharing(void) {
-  const UsbDiskStats stats = UsbDiskGetStats();
-  UsbDiskStopSharing();
-  if (stats.image_path != NULL) {
-    DiskImageClose(&g_usb_image);
-  }
-  SYSTEM_INFO(
-      "usb_returned",
-      Y_LOG_STRING("image", stats.image_path != NULL ? stats.image_path : ""),
-      Y_LOG_BOOL("ejected", stats.ejected),
-      Y_LOG_UINT("blocks_read", stats.blocks_read),
-      Y_LOG_UINT("blocks_written", stats.blocks_written),
-      Y_LOG_UINT("errors", stats.errors));
-  VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  ReadSettings(&g_settings, &highlighted);
-  LauncherMenuOpen(&g_vms, highlighted);
 }
 
 // After Manage VMs has changed the card, read its VMs afresh, and the
@@ -247,7 +208,7 @@ static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
 // Show why Manage VMs could not do something, and log it.
 static void ShowManageProblem(
     const char* event, const VMEntry* vm, const char* problem) {
-  LauncherMenuSetProblem(problem);
+  LauncherSetProblem(problem);
   SYSTEM_WARN(
       event, Y_LOG_STRING("path", vm->path), Y_LOG_STRING("problem", problem));
 }
@@ -259,7 +220,7 @@ static __noinline void RenameVM(void) {
   const VMFolderResult result =
       VMFolderRename(&g_vms, &vm, LauncherMenuTypedName(), &renamed, problem);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    LauncherSetProblem(problem);
     return;
   }
   ShowManagedVMs(result == kVMFolderDone ? renamed.name : vm.name, false);
@@ -278,7 +239,7 @@ static void ShowCopyProgress(uint64_t done, uint64_t total) {
   LauncherMenuSetCopyProgress(
       (uint32_t)(done / kBytesPerKB), (uint32_t)(total / kBytesPerKB));
   LauncherUpdateRows();
-  LauncherMenuDraw(time_us_64());
+  LauncherDraw(time_us_64());
 }
 
 static __noinline void CloneVM(void) {
@@ -296,7 +257,7 @@ static __noinline void CloneVM(void) {
   // Left as the guest would find RAM at power on, whatever it held.
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    LauncherSetProblem(problem);
     return;
   }
   ShowManagedVMs(result == kVMFolderDone ? copy.name : vm.name, false);
@@ -327,7 +288,7 @@ static __noinline void CreateVM(void) {
       LauncherMenuTypedName(), &drives, &transfer, &created, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    LauncherSetProblem(problem);
     return;
   }
   ShowManagedVMs(created.name, false);
@@ -341,7 +302,7 @@ static __noinline void CreateVM(void) {
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
-    LauncherMenuSetProblem(problem);
+    LauncherSetProblem(problem);
     SYSTEM_WARN(
         "vm_not_created", Y_LOG_STRING("name", created.name),
         Y_LOG_STRING("problem", problem));
@@ -361,7 +322,7 @@ static __noinline void EditVM(void) {
   const VMFolderResult result = VMFolderEdit(&vm, &drives, &transfer, problem);
   memset(g_copy_buffer, 0, kCopyBufferSize);
   if (result == kVMFolderRefused) {
-    LauncherMenuSetProblem(problem);
+    LauncherSetProblem(problem);
     return;
   }
   ShowManagedVMs(vm.name, true);
@@ -388,8 +349,8 @@ static __noinline void DeleteVM(void) {
 void LauncherUpdateRows(void) {
   StatusBarState state = {0};
   state.battery = SouthbridgeGetBattery();
-  state.hint = LauncherMenuHint();
-  state.problem = LauncherMenuProblem();
+  state.hint = g_in_usb ? LauncherUsbHint() : LauncherMenuHint();
+  state.problem = g_problem[0] != '\0' ? g_problem : NULL;
   StatusBarOffer(&state);
 }
 
@@ -426,28 +387,49 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
     return kLauncherTookVM;
   }
   LauncherMenuOpen(&g_vms, highlighted);
+  g_open = true;
   g_start_at =
       make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
   g_counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
   return kLauncherShowsList;
 }
 
+// A key while USB disk mode is open: back to the list when it is left, and
+// the card read afresh when it is back from USB.
+static void HandleUsbKey(SouthbridgeKeyEvent key) {
+  switch (LauncherUsbHandleKey(key)) {
+    case kLauncherUsbStays:
+      break;
+    case kLauncherUsbLeft:
+      g_in_usb = false;
+      LauncherMenuShowUSBRow();
+      break;
+    case kLauncherUsbReturned: {
+      g_in_usb = false;
+      VMListRead(&g_vms);
+      uint8_t highlighted = 0;
+      ReadSettings(&g_settings, &highlighted);
+      LauncherMenuOpen(&g_vms, highlighted);
+      break;
+    }
+  }
+}
+
 bool LauncherHandleKey(SouthbridgeKeyEvent key) {
   g_counting = false;
   LauncherMenuSetCountdown(0);
+  if (g_in_usb) {
+    HandleUsbKey(key);
+    return false;
+  }
   bool chosen = false;
   switch (LauncherMenuHandleKey(key)) {
     case kLauncherMenuActionVMChosen:
       chosen = true;
       break;
-    case kLauncherMenuActionShareCard:
-      ShareCard();
-      break;
-    case kLauncherMenuActionShareImage:
-      ShareImage();
-      break;
-    case kLauncherMenuActionStopSharing:
-      StopSharing();
+    case kLauncherMenuActionOpenUSB:
+      g_in_usb = true;
+      LauncherUsbOpen();
       break;
     case kLauncherMenuActionFontChosen:
       ChooseFont();
@@ -492,5 +474,24 @@ bool LauncherCountDown(void) {
 }
 
 bool LauncherTakeChosen(VMConfig* vm) {
-  return TakeVM(LauncherMenuChosenVM(), vm);
+  if (!TakeVM(LauncherMenuChosenVM(), vm)) {
+    return false;
+  }
+  g_open = false;
+  LauncherMenuClose();
+  return true;
+}
+
+bool LauncherIsOpen(void) { return g_open; }
+
+void LauncherDraw(uint64_t now_us) {
+  if (g_in_usb) {
+    LauncherUsbDraw(now_us);
+  } else {
+    LauncherMenuDraw();
+  }
+}
+
+const char* LauncherPageName(void) {
+  return g_in_usb ? LauncherUsbPageName() : LauncherMenuPageName();
 }

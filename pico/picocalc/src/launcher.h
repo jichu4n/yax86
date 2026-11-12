@@ -56,9 +56,27 @@ bool LauncherHandleKey(SouthbridgeKeyEvent key);
 // the countdown has run out, which chooses it.
 bool LauncherCountDown(void);
 
-// Take the VM chosen into *vm, if its configuration reads. Returns false,
-// with its problem shown on the list, if it does not.
+// Take the VM chosen into *vm, if its configuration reads, and stop showing
+// the list. Returns false, with its problem shown on the list, if it does
+// not.
 bool LauncherTakeChosen(VMConfig* vm);
+
+// Whether the list, or a page reached from it, shows.
+bool LauncherIsOpen(void);
+
+// Draw what shows if it has changed. Call every pass of the loop while the
+// list shows.
+void LauncherDraw(uint64_t now_us);
+
+// The page showing, as the report gives it.
+const char* LauncherPageName(void);
+
+// For the list's pages and what is opened from them: show why something
+// could not be done, in place of the keys, until another key is pressed;
+// and clear it, as a key does, returning whether there was one. The text is
+// copied.
+void LauncherSetProblem(const char* problem);
+bool LauncherClearProblem(void);
 
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the list with it highlighted.

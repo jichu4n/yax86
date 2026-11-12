@@ -36,7 +36,6 @@
 #include "hardware/watchdog.h"
 #include "keymap.h"
 #include "launcher.h"
-#include "launcher_menu.h"
 #include "menu.h"
 #include "pager.h"
 #include "pico/stdio_usb.h"
@@ -324,7 +323,7 @@ static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
 // Whether a menu shows: the menu over the VM, or the list at power on before
 // one starts, which the report gives as the menu and pacing counts as paused.
-static bool MenuShowing(void) { return MenuIsOpen() || LauncherMenuIsOpen(); }
+static bool MenuShowing(void) { return MenuIsOpen() || LauncherIsOpen(); }
 
 static uint64_t PausedUs(void) {
   return g_clock.paused_us +
@@ -710,8 +709,7 @@ static __noinline void ReplyReportRunning(const Command* command) {
   REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", MenuShowing()),
       Y_LOG_STRING(
-          "page",
-          LauncherMenuIsOpen() ? LauncherMenuPageName() : MenuPageName()));
+          "page", LauncherIsOpen() ? LauncherPageName() : MenuPageName()));
   REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
@@ -1360,14 +1358,13 @@ static __noinline void ChooseVM(void) {
     }
     if (chosen && LauncherTakeChosen(&g_vm)) {
       g_has_vm = true;
-      LauncherMenuClose();
       return;
     }
     if (time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       LauncherUpdateRows();
     }
-    LauncherMenuDraw(time_us_64());
+    LauncherDraw(time_us_64());
     sleep_ms(kPausedPollMs);
   }
 }
