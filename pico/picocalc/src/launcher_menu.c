@@ -11,7 +11,6 @@
 #include "ui_page.h"
 #include "ui_status.h"
 #include "usb_disk.h"
-#include "vm_store.h"
 
 enum {
   kStatusRefreshUs = 1000 * 1000,
@@ -177,7 +176,7 @@ static uint64_t g_status_drawn_us;
 // The row at the top of the list at power on, and of Manage VMs.
 static uint8_t g_list_top;
 // The VMs to choose from at power on, the seconds before the
-// highlighted one starts by itself, and the font chosen on the Font page.
+// highlighted one starts by itself, and why the last chosen did not.
 static const VMList* g_vms;
 static uint8_t g_countdown;
 static Font4x10 g_font = kFont4x10Default;
@@ -204,7 +203,7 @@ static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
 static bool g_cloning;
 // What deleting the VM would take.
-static VMFolderContents g_contents;
+static VMListContents g_contents;
 // How far a clone has been copied, or a new VM's hard disk written, in KB,
 // and which it is.
 static uint32_t g_copied_kb;
@@ -235,8 +234,8 @@ static const NewDriveItem* DriveChoices(uint8_t* count);
 static uint8_t DriveChoiceRow(NewDriveItem choice);
 static void ScrollToChosen(void);
 
-void LauncherMenuOpen(uint8_t highlighted) {
-  g_vms = VMStoreList();
+void LauncherMenuOpen(const VMList* list, uint8_t highlighted) {
+  g_vms = list;
   g_open = true;
   g_list_top = 0;
   ShowPage(kListPageVMs, highlighted);
@@ -246,6 +245,13 @@ void LauncherMenuOpen(uint8_t highlighted) {
 uint8_t LauncherMenuChosenVM(void) { return g_chosen; }
 
 Font4x10 LauncherMenuChosenFont(void) { return g_font; }
+
+void LauncherMenuSetFont(Font4x10 font) {
+  if (font != g_font) {
+    g_font = font;
+    g_dirty = true;
+  }
+}
 
 void LauncherMenuClose(void) { g_open = false; }
 
@@ -616,7 +622,7 @@ static bool TypeNewName(uint8_t key) {
   return true;
 }
 
-void LauncherMenuFormDrives(VMFolderDrives* drives) {
+void LauncherMenuFormDrives(VMListDrives* drives) {
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     drives->paths[drive] = g_new_present[drive] ? g_new_drives[drive] : NULL;
     drives->blank[drive] = g_new_blank[drive];
@@ -743,7 +749,7 @@ static LauncherMenuAction Choose(void) {
       }
       return kLauncherMenuActionVMChosen;
     case kListPageSettings:
-      ShowPage(kListPageFont, VMStoreSettings()->font);
+      ShowPage(kListPageFont, g_font);
       return kLauncherMenuActionNone;
     case kListPageFont:
       g_font = (Font4x10)g_chosen;
@@ -774,7 +780,7 @@ static LauncherMenuAction Choose(void) {
       if (g_chosen == kVMEdit) {
         StartEditVM();
       } else if (g_chosen == kVMDelete) {
-        VMFolderDescribe(g_vms, &g_vms->vms[g_vm], &g_contents);
+        VMListDescribe(g_vms, &g_vms->vms[g_vm], &g_contents);
         ShowPage(kListPageDelete, kDeleteCancel);
       } else {
         StartNaming(g_chosen == kVMClone);
@@ -1032,9 +1038,9 @@ static void JoinNames(
 // The question before deleting a VM, saying what goes with it, and which VMs
 // lose a disk.
 static void DrawDeletePage(DisplayMenu* menu) {
-  const uint8_t named = g_contents.file_count < kVMFolderNamed
+  const uint8_t named = g_contents.file_count < kVMListNamed
                             ? g_contents.file_count
-                            : kVMFolderNamed;
+                            : kVMListNamed;
   char question[kUIPageNarrowColumns];
   snprintf(question, sizeof(question), "Delete %s?", g_vms->vms[g_vm].name);
   char files[kUIPageNarrowColumns - 4];
