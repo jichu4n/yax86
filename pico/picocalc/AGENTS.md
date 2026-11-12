@@ -356,9 +356,23 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   draw. It composes the status rows itself, with `src/ui_status.c`, from
   the keys `ScreenHint()` gives: the router leaves the rows to each loop,
   as the VM's have its drives and locks too. A `Screen` is those
-  functions, with its page's name for the report. For now the launcher is
-  the one screen: the list and every page reached from it. Calls go one
-  way, from `main.c` to the screen and from the screen down.
+  functions, with its page's name for the report and a `resume` for
+  showing again. The router keeps the screens as a stack, the list at the
+  bottom, and only the one on top is called, so the stack's depth adds
+  nothing to core 0's. Calls go one way, from `main.c` to the screen and
+  from the screen down.
+- **Every page is a screen of its own**, and is opened through its own
+  open function, which takes what the page works on as parameters:
+  `SettingsScreenOpen(&g_settings)`. The parent holds the state and passes
+  pointers down; a child writes what it chose through them, and when it
+  returns `kScreenBack` the parent's `resume` finds it there. The open
+  function is typed, so a page cannot be opened without its state, and
+  there is no `void*` context. Each screen is on the stack at most once, so
+  it keeps those pointers and its own state, such as the item chosen, in
+  statics. The launcher holds `g_vms` and `g_settings`; Settings and Font
+  are screens, in `src/settings_screen.c` and `src/font_screen.c`, and the
+  list and the rest of its pages are still the one launcher screen until
+  they are split the same way.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the
