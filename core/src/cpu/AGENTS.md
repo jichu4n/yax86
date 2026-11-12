@@ -145,9 +145,22 @@ round-trips through memory costs more than its instruction count suggests.**
   the obvious early return for the no-cache path - makes `-O2` stop inlining
   it into flash behind a veneer, **2.54% slower at `-O2`**. That is why the
   no-cache path joins the cached one instead of returning early.
-- **256 entries, 6KB.** 512 is 0.11% faster for another 6KB, 1024 0.04%
-  slower, 128 0.83% slower. At 256 the image leaves room for 192KB of guest
-  RAM.
+- **512 entries, 12KB, sized on real programs rather than `dos-boot`.** On
+  the PicoCalc at 640KB, seven commands compiling and running programs under
+  DOS (`pico/bench`'s PicoCalc workloads) took 174.1 seconds of processor
+  time with 512 entries against 179.7 with 256, and QBasic interpreting a
+  program 77.7 against 81.5: an interpreter's loop is larger than a boot's.
+  `dos-boot` hardly cares: with 512, 0.27% faster direct and 0.13% slower
+  paged, and 128 was 0.83% slower than 256. 1024 entries saved another 0.4%
+  on the seven commands, not worth 12KB more, which would leave the PicoCalc
+  3KB of SRAM.
+- **The cache's size moves `dos-boot`'s paged count**, from 2,356,813
+  instructions and 27,964,698 cycles at 256 entries to 2,356,942 and
+  27,966,123 at 512, and none of it is emulation: with
+  `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1, both give 2,356,713 and 27,963,388.
+  A run continues only into cached code, so the size changes where runs end,
+  and with them where the bench's screen poll lands. The direct count
+  happened not to move.
 - **`code_page_generation` is the whole invalidation mechanism**: one
   wrapping byte per 4KB page, recorded by each entry and compared on use. The
   CPU bumps it in `YCPUWriteRawMemoryByte()`, where operands, stack pushes

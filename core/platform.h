@@ -78,14 +78,11 @@ enum {
   // Maximum number of memory map entries.
   Y_PLATFORM_MAX_MEMORY_MAP_ENTRIES = 16,
 
-  // How many decoded instructions the CPU is given room to keep. 256 entries
-  // is 6KB, and skips the decode on roughly two thirds of the instructions the
-  // machine runs.
-  //
-  // Not the fastest size measured: 512 is 0.11% faster, 1024 is 0.04% slower
-  // and 128 is 0.83% slower. 0.11% does not buy another 6KB on a 256KB part
-  // where that memory is otherwise guest RAM.
-  Y_PLATFORM_DECODE_CACHE_ENTRIES = 256,
+  // How many decoded instructions the CPU keeps so that it can skip decoding
+  // them again: 512 entries, 12KB. More entries help programs whose hot code
+  // is large, such as compilers and interpreters, and make little difference
+  // to booting DOS. The measurements are in src/cpu/AGENTS.md.
+  Y_PLATFORM_DECODE_CACHE_ENTRIES = 512,
 
   // The memory map is indexed by page so that a lookup is a load rather than a
   // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
