@@ -5,6 +5,7 @@
 
 #include "core/platform.h"
 #include "fs.h"
+#include "runtime_log.h"
 
 static const char kSettingsPath[] = "yax86/yax86.cfg";
 static const char kBootDefaultKey[] = "boot_default";
@@ -45,8 +46,10 @@ static bool TakeSettingsPair(
     }
     return true;
   }
-  snprintf(problem, kConfigFileProblemLength + 1, "no setting %s", key);
-  return false;
+  // A key this firmware does not know, perhaps one a later firmware wrote,
+  // is left for whatever reads it, rather than stopping the reading.
+  SYSTEM_WARN("settings_key_ignored", Y_LOG_STRING("key", key));
+  return true;
 }
 
 bool SettingsRead(
