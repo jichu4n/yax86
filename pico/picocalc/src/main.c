@@ -1523,6 +1523,8 @@ int main(void) {
       .insert_drive = InsertDrive,
   };
   MenuInit(&menu_config);
+  // Before the list, whose copies go through guest RAM.
+  LauncherInit(g_guest_ram);
 
   ChooseVM();
   OpenDrives();
