@@ -179,7 +179,15 @@ round-trips through memory costs more than its instruction count suggests.**
   what this replaced: the stack alone wrapped a counter every 256 pushes,
   and QBasic interpreting a program decoded 50.6% of the instructions it ran
   where it now decodes 32.7%; two compilers and a linker went from 44-45% to
-  28-30%.
+  28-30%. On the PicoCalc at 640KB the seven commands took 156.6 seconds of
+  processor time against 174.2, and QBasic 69.5 against 77.7. `dos-boot`
+  gained 2.86% paged and 2.52% direct.
+- **Discarding less moves both `dos-boot` counts**: paged from 2,356,942
+  instructions and 27,966,123 cycles to 2,353,177 and 27,922,089, and direct
+  from 2,328,128 and 27,702,858 to 2,328,231 and 27,704,200. It is where runs
+  end again, not emulation: with `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1 both
+  sides give 2,356,713 and 27,963,388 paged, and 2,328,015 and 27,701,507
+  direct.
 - **Not caching is as load-bearing as caching**: an instruction that spills
   onto the next page or off the end of the segment is not cached, since its
   page says nothing about its later bytes. A failing decode clears the entry's
