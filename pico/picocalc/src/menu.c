@@ -34,9 +34,6 @@ enum {
   // drive an image is in.
   kBrowseNoteColumn = 18,
 
-  // Box dimensions.
-  kNarrowColumns = kUIBoxNarrowColumns,
-  kWideColumns = kUIBoxWideColumns,
   // A label's column on the status page.
   kStatusLabelColumns = 9,
 
@@ -95,7 +92,6 @@ static const char* const kPageNames[] = {
     [kMenuPageSettings] = "settings",
     [kMenuPageFont] = "font",
 };
-
 
 typedef enum MainItem {
   // The drives' items, in the order of FloppyDrive.
@@ -1235,7 +1231,7 @@ static void DrawItems(
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  UIBoxPlace(menu, kWideColumns, kMenuStatusLines + 4);
+  UIBoxPlace(menu, kUIBoxWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
   UIBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
   UIBoxBlankRow(&menu->text[row++], menu->columns);
@@ -1253,7 +1249,7 @@ static void DrawStatusPage(DisplayMenu* menu) {
 
 static void DrawDrivePage(DisplayMenu* menu) {
   const DiskImage* image = g_config.drive(g_drive);
-  char line[kNarrowColumns];
+  char line[kUIBoxNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
   const bool empty = DriveEmpty();
@@ -1293,9 +1289,9 @@ static const char* BrowseEmpty(void) {
 // The browser: the folder as the title, and a row for each entry that
 // shows, with arrows on the border where there is more above or below.
 static void DrawBrowsePage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kUIBoxNarrowColumns, kBrowseRows + 2);
   // The folder, from the card's root, keeping its end if it is too long.
-  char title[kNarrowColumns - 6 + 1];
+  char title[kUIBoxNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
   char full[kFSMaxPath + 2];
   snprintf(full, sizeof(full), "/%s", g_list.path);
@@ -1315,7 +1311,8 @@ static void DrawBrowsePage(DisplayMenu* menu) {
     if (index >= g_list.count) {
       UIBoxBlankRow(row, menu->columns);
       if (i == 0 && !g_list.readable) {
-        UIBoxPutText(row, menu->columns, 3, "The card cannot be read", kUIBoxAttrText);
+        UIBoxPutText(
+            row, menu->columns, 3, "The card cannot be read", kUIBoxAttrText);
       } else if (i == 1 && g_list.count <= 1) {
         UIBoxPutText(row, menu->columns, 3, BrowseEmpty(), kUIBoxAttrText);
       }
@@ -1361,7 +1358,7 @@ static void DrawBrowsePage(DisplayMenu* menu) {
 // arrows on the border where there are more above or below, and the
 // countdown on the bottom edge.
 static void DrawVMsPage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kUIBoxNarrowColumns, kBrowseRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
@@ -1369,7 +1366,8 @@ static void DrawVMsPage(DisplayMenu* menu) {
     if (index >= VMsRowCount()) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
-      UIBoxItemRow(row, menu->columns, g_vms->vms[index].name, index == g_chosen);
+      UIBoxItemRow(
+          row, menu->columns, g_vms->vms[index].name, index == g_chosen);
     } else if (g_vms->count > 0 && index == g_vms->count) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
@@ -1383,7 +1381,7 @@ static void DrawVMsPage(DisplayMenu* menu) {
       }
     }
   }
-  char countdown[kNarrowColumns];
+  char countdown[kUIBoxNarrowColumns];
   if (g_countdown > 0) {
     snprintf(
         countdown, sizeof(countdown), "starting in %u s",
@@ -1399,7 +1397,7 @@ static void DrawVMsPage(DisplayMenu* menu) {
 // there are any, with arrows on the border where there are more above or
 // below.
 static void DrawManagePage(DisplayMenu* menu) {
-  UIBoxPlace(menu, kNarrowColumns, kBrowseRows + 2);
+  UIBoxPlace(menu, kUIBoxNarrowColumns, kBrowseRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kBrowseRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
@@ -1412,7 +1410,8 @@ static void DrawManagePage(DisplayMenu* menu) {
     } else if (g_vms->count > 0 && index == g_vms->count) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
-      UIBoxMenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
+      UIBoxMenuItemRow(
+          row, menu->columns, &kNewVMRow, g_chosen == g_vms->count);
     }
   }
   UIBoxEdgeRow(&menu->text[kBrowseRows + 1], menu->columns, false, NULL);
@@ -1468,7 +1467,7 @@ static void DrawVMPage(DisplayMenu* menu) {
 // The name being typed, in a field marked as the item chosen is, with a
 // cursor after it while there is room.
 static void DrawNamePage(DisplayMenu* menu) {
-  char title[kNarrowColumns];
+  char title[kUIBoxNarrowColumns];
   snprintf(
       title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
       g_vms->vms[g_vm].name);
@@ -1523,9 +1522,9 @@ static void DrawDeletePage(DisplayMenu* menu) {
   const uint8_t named = g_contents.file_count < kVMFolderNamed
                             ? g_contents.file_count
                             : kVMFolderNamed;
-  char question[kNarrowColumns];
+  char question[kUIBoxNarrowColumns];
   snprintf(question, sizeof(question), "Delete %s?", g_vms->vms[g_vm].name);
-  char files[kNarrowColumns - 4];
+  char files[kUIBoxNarrowColumns - 4];
   JoinNames(
       files, sizeof(files), g_contents.files, named, g_contents.file_count);
   char users[64];
@@ -1552,7 +1551,7 @@ static void DrawDeletePage(DisplayMenu* menu) {
 
 // A clone being copied, or a new VM's blank disks being written.
 static void DrawCopyingPage(DisplayMenu* menu) {
-  char copying[kNarrowColumns];
+  char copying[kUIBoxNarrowColumns];
   if (g_creating) {
     snprintf(
         copying, sizeof(copying), "Writing %s's blank disks...",
@@ -1562,7 +1561,7 @@ static void DrawCopyingPage(DisplayMenu* menu) {
         copying, sizeof(copying), "Copying %s to %s...", g_vms->vms[g_vm].name,
         g_name);
   }
-  char progress[kNarrowColumns];
+  char progress[kUIBoxNarrowColumns];
   snprintf(
       progress, sizeof(progress), "%lu of %lu KB", (unsigned long)g_copied_kb,
       (unsigned long)g_copy_kb);
@@ -1576,7 +1575,7 @@ static void DrawCopyingPage(DisplayMenu* menu) {
 // chosen, and the drives, with what each holds - or editing a VM's drives,
 // the drives alone, under its name.
 static void DrawNewPage(DisplayMenu* menu) {
-  char rows[kNewItemCount][kNarrowColumns];
+  char rows[kNewItemCount][kUIBoxNarrowColumns];
   MenuItem items[kNewItemCount];
   const char* cursor =
       FormItem() == kNewName && g_name_length < kFSMaxFolderName ? "_" : "";
@@ -1655,7 +1654,7 @@ static void DrawSharingPage(DisplayMenu* menu) {
       moved, sizeof(moved), "Read %lu KB, written %lu KB",
       (unsigned long)(stats.blocks_read / 2),
       (unsigned long)(stats.blocks_written / 2));
-  char what[kNarrowColumns];
+  char what[kUIBoxNarrowColumns];
   if (stats.image_path != NULL) {
     char name[kDiskImageNameLength + 1];
     DiskImageName(stats.image_path, name);
