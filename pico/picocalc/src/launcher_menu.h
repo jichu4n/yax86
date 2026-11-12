@@ -54,9 +54,9 @@ typedef enum LauncherMenuAction {
   kLauncherMenuActionFontChosen,
 } LauncherMenuAction;
 
-// Show the list of VMs, to choose one to start, with the one at index
-// highlighted. list must outlive the choosing.
-void LauncherMenuOpen(const VMList* list, uint8_t highlighted);
+// Show the list of the card's VMs, as VMStoreList() has them, to choose one to
+// start, with the one at index highlighted.
+void LauncherMenuOpen(uint8_t highlighted);
 
 // Stop showing the list, once a VM chosen has started.
 void LauncherMenuClose(void);
@@ -66,9 +66,8 @@ bool LauncherMenuIsOpen(void);
 // The index in the list of the VM chosen, or highlighted.
 uint8_t LauncherMenuChosenVM(void);
 
-// The font chosen on the Font page, and set the one it shows as chosen.
+// The font chosen on the Font page. The page opens on the settings' font.
 Font4x10 LauncherMenuChosenFont(void);
-void LauncherMenuSetFont(Font4x10 font);
 
 // Show the SD card's page, once the caller has put it on USB: who has it,
 // and Disconnect, which asks first if a computer is still using it.

@@ -10,6 +10,7 @@
 #include "ui_browser.h"
 #include "ui_page.h"
 #include "usb_disk.h"
+#include "vm_store.h"
 
 enum {
   kStatusRefreshUs = 1000 * 1000,
@@ -175,7 +176,7 @@ static uint64_t g_status_drawn_us;
 // The row at the top of the list at power on, and of Manage VMs.
 static uint8_t g_list_top;
 // The VMs to choose from at power on, the seconds before the
-// highlighted one starts by itself, and why the last chosen did not.
+// highlighted one starts by itself, and the font chosen on the Font page.
 static const VMList* g_vms;
 static uint8_t g_countdown;
 static Font4x10 g_font = kFont4x10Default;
@@ -238,8 +239,8 @@ static const NewDriveItem* DriveChoices(uint8_t* count);
 static uint8_t DriveChoiceRow(NewDriveItem choice);
 static void ScrollToChosen(void);
 
-void LauncherMenuOpen(const VMList* list, uint8_t highlighted) {
-  g_vms = list;
+void LauncherMenuOpen(uint8_t highlighted) {
+  g_vms = VMStoreList();
   g_open = true;
   g_list_top = 0;
   ShowPage(kListPageVMs, highlighted);
@@ -249,13 +250,6 @@ void LauncherMenuOpen(const VMList* list, uint8_t highlighted) {
 uint8_t LauncherMenuChosenVM(void) { return g_chosen; }
 
 Font4x10 LauncherMenuChosenFont(void) { return g_font; }
-
-void LauncherMenuSetFont(Font4x10 font) {
-  if (font != g_font) {
-    g_font = font;
-    g_dirty = true;
-  }
-}
 
 void LauncherMenuClose(void) { g_open = false; }
 
@@ -762,7 +756,7 @@ static LauncherMenuAction Choose(void) {
       }
       return kLauncherMenuActionVMChosen;
     case kListPageSettings:
-      ShowPage(kListPageFont, g_font);
+      ShowPage(kListPageFont, VMStoreSettings()->font);
       return kLauncherMenuActionNone;
     case kListPageFont:
       g_font = (Font4x10)g_chosen;

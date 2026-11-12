@@ -342,7 +342,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `src/launcher.c` decides what the list does: which VM starts, the
   countdown, and what each choice carries out. `main.c` runs its loop, which
   also answers commands and draws the list. Calls go one way, from `main.c`
-  to the launcher and from the launcher to its pages.
+  to the launcher and from the launcher to its pages. The card's VMs and
+  settings, as last read, are in `src/vm_store.c`, which `main.c`, the
+  launcher and its pages all read them from. It reads and saves them and
+  logs what failed, and leaves showing a problem to its caller.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the

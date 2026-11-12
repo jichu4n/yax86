@@ -40,10 +40,6 @@ void LauncherUpdateRows(void);
 // copying a VM's files borrows before the VM starts.
 void LauncherInit(uint8_t* copy_buffer);
 
-// The VMs on the card, and the card's settings, as last read.
-const VMList* LauncherVMs(void);
-const VMSettings* LauncherSettings(void);
-
 // Read the card's VMs and settings, and the note a reset or power off left,
 // and either take a VM at once into *vm or show the list.
 LauncherStartResult LauncherStart(VMConfig* vm);
