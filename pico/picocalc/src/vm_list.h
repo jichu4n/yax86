@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include "fs.h"
+#include "settings.h"
 #include "vm_config.h"
 
 enum {
@@ -73,15 +74,16 @@ void VMListDescribe(
     const VMList* list, const VMEntry* vm, VMListContents* contents);
 
 // Rename vm to name - its folder - and write what names it or a file in it
-// again to follow: boot_default and the drives of the VMs in list. renamed is
+// again to follow: boot_default, in settings and on the card, and the drives
+// of the VMs in list. renamed is
 // the VM under its new name. A name is up to kFSMaxFolderName letters,
 // digits, - and _, and no DOS device's. Anything but kVMListDone comes with
 // the problem described: a name that will not do, or one taken; or a folder
 // that could not be renamed, or something naming it that could not be
 // written again after.
 VMListResult VMListRename(
-    const VMList* list, const VMEntry* vm, const char* name, VMEntry* renamed,
-    char problem[kVMProblemLength + 1]);
+    const VMList* list, Settings* settings, const VMEntry* vm, const char* name,
+    VMEntry* renamed, char problem[kVMProblemLength + 1]);
 
 // Make a new VM, name: its folder, with a vm.cfg naming its drives, and its
 // blank disks, written through transfer's buffer, calling its progress as it
@@ -117,8 +119,10 @@ VMListResult VMListClone(
 
 // Delete vm's folder and everything in it, its vm.cfg last, so that a delete
 // cut short leaves a VM to delete again. boot_default, if it named the VM, is
-// cleared, and the first VM listed is the default. Other VMs' drives naming a
+// cleared in settings and on the card, and the first VM listed is the
+// default. Other VMs' drives naming a
 // file in it are left as they are, and find it gone when they start.
-bool VMListDelete(const VMEntry* vm, char problem[kVMProblemLength + 1]);
+bool VMListDelete(
+    Settings* settings, const VMEntry* vm, char problem[kVMProblemLength + 1]);
 
 #endif  // YAX86_PICOCALC_VM_LIST_H

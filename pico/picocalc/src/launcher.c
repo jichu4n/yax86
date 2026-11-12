@@ -255,8 +255,8 @@ static __noinline void RenameVM(void) {
   const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   VMEntry renamed;
   char problem[kVMProblemLength + 1];
-  const VMListResult result =
-      VMListRename(&g_vms, &vm, LauncherMenuTypedName(), &renamed, problem);
+  const VMListResult result = VMListRename(
+      &g_vms, &g_settings, &vm, LauncherMenuTypedName(), &renamed, problem);
   if (result == kVMListRefused) {
     UIStatusSetProblem(problem);
     return;
@@ -374,7 +374,7 @@ static __noinline void EditVM(void) {
 static __noinline void DeleteVM(void) {
   const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
   char problem[kVMProblemLength + 1];
-  const bool deleted = VMListDelete(&vm, problem);
+  const bool deleted = VMListDelete(&g_settings, &vm, problem);
   // Gone from the list, it leaves the first VM chosen.
   ShowManagedVMs(vm.name, false);
   if (deleted) {
