@@ -29,21 +29,21 @@
 typedef enum StartIntent {
   // Start the VM again at once, without the launcher menu.
   kStartIntentRestart = 0,
-  // Show the launcher menu, with the VM highlighted, and wait for a key.
+  // Show the launcher menu with the VM chosen, and wait for a key.
   kStartIntentMenu,
 } StartIntent;
 
-// Run launcher mode, and return whether a VM was loaded into *chosen to
-// start. main.c holds what it works on: vms and settings, which the launcher
-// reads from the card and its screens change; and copy_buffer, guest RAM that
-// copying a VM's files borrows until the VM starts. commands answers the
-// commands that are not the launcher's.
+// Run launcher mode, and return whether a VM was loaded into *vm to start.
+// main.c holds what it works on: vms and settings, which the launcher reads
+// from the card and its screens change; and copy_buffer, guest RAM that copying
+// a VM's files borrows until the VM starts. commands answers the commands that
+// are not the launcher's.
 //
 // Without a card it returns false at once, and the emulator boots the floppy
 // built into flash. Otherwise:
 //   - After a Reset, the VM reset starts again at once.
 //   - After a Power off, the launcher menu waits for a key, with the VM
-//     powered off highlighted.
+//     powered off chosen.
 //   - At power on, the default starts at once if the settings ask for no
 //     countdown and have no problem to show; otherwise the launcher menu
 //     counts down to it, until a key is pressed.
@@ -52,11 +52,11 @@ typedef enum StartIntent {
 // leaves the launcher menu showing its problem.
 bool LauncherRun(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
-    const CommandsHandlers* commands, VMConfig* chosen);
+    const CommandsHandlers* commands, VMConfig* vm);
 
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the launcher menu with it
-// highlighted.
+// chosen.
 void LauncherLeaveStartNote(StartIntent intent, const char* name);
 
 #endif  // YAX86_PICOCALC_LAUNCHER_H

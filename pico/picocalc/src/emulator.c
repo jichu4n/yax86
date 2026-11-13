@@ -935,7 +935,7 @@ static void ResetVM(void) {
   LauncherLeaveStartNote(kStartIntentRestart, g_vm->entry.name);
 }
 
-// Back to the list, which waits for a key with the VM left highlighted.
+// Back to the launcher menu, which waits for a key with the VM chosen.
 static void PowerOffVM(void) {
   SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm->entry.path));
   LauncherLeaveStartNote(kStartIntentMenu, g_vm->entry.name);
