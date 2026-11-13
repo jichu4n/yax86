@@ -1,5 +1,5 @@
 // A VM's page, from Manage VMs: the images in its drives, over what can be
-// done to it: Edit drives, Rename, Clone and Delete.
+// done to it: Configure, Rename, Clone and Delete.
 #ifndef YAX86_PICOCALC_VM_SCREEN_H
 #define YAX86_PICOCALC_VM_SCREEN_H
 
