@@ -34,9 +34,9 @@ extern const Screen kVMConfigScreen;
 static VMManager* g_vm_manager;
 // The item chosen, and whether the page is out of date.
 static UIPage g_page;
-// Whether the form is editing the drives of the VM at g_vm, an index in the
-// list, rather than making a new one; it then has no name, and saves rather
-// than creates.
+// Whether the form configures the existing VM at g_vm, an index in the list,
+// rather than making a new one; it then has no name, and saves rather than
+// creates.
 static bool g_existing;
 static uint8_t g_vm;
 // A new VM's name, and what each drive is to hold.
@@ -44,7 +44,7 @@ static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
 static VMDriveChoice g_drives[kVMDrives];
 
-// The form's first item: its name for a new VM; editing one, it starts at
+// The form's first item: its name for a new VM; for an existing one, at
 // the drives. g_page.chosen counts from it.
 static uint8_t FirstItem(void) { return g_existing ? kFormDriveA : kFormName; }
 
