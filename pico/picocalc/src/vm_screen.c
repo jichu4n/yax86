@@ -6,7 +6,6 @@
 
 #include "disk_image.h"
 #include "display.h"
-#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
 #include "vm_delete_screen.h"
@@ -31,9 +30,8 @@ static const UIBoxItem kVMItems[kVMItemCount] = {
 extern const Screen kVMScreen;
 
 static ManageState* g_manage;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 // The VM, an index in the list; the names of the images in its drives,
 // empty for none; whether each drive is there; and whether its vm.cfg read.
 static uint8_t g_vm;
@@ -56,40 +54,27 @@ ScreenResult VMScreenOpen(ManageState* manage, uint8_t index) {
                        (drive == kVMDriveFD2 ? config.present[drive]
                                              : config.drives[drive][0] != '\0');
   }
-  g_chosen = kVMEdit;
-  g_dirty = true;
+  g_page.chosen = kVMEdit;
+  g_page.dirty = true;
   return ScreenOpen(&kVMScreen);
 }
 
 static ScreenResult Choose(void) {
-  switch (g_chosen) {
+  switch (g_page.chosen) {
     case kVMEdit:
       return VMFormScreenOpenEdit(g_manage, g_vm);
     case kVMDelete:
       return VMDeleteScreenOpen(g_manage, g_vm);
     default:
-      return VMNameScreenOpen(g_manage, g_vm, g_chosen == kVMClone);
+      return VMNameScreenOpen(g_manage, g_vm, g_page.chosen == kVMClone);
   }
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, kVMItemCount, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  switch (UIPageTakeEvent(&g_page, event, kVMItemCount)) {
+    case kUIPageKeyChoose:
       return Choose();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -102,7 +87,7 @@ static ScreenResult Resume(void) {
   if (g_manage->changed) {
     return ScreenBack();
   }
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
@@ -117,10 +102,7 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 
 // The images in the VM's drives, over what can be done to it.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -156,14 +138,11 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   }
   UIPageDrawItems(
       menu, g_manage->vms->vms[g_vm].name, line_pointers, line_count, kVMItems,
-      kVMItemCount, g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+      kVMItemCount, g_page.chosen, true);
+  UIPageEndDraw(&g_page);
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kUIPageHint; }
 
 static const char* PageName(void) { return "vm"; }
 

@@ -1,6 +1,9 @@
 #include "ui_page.h"
 
+#include <stddef.h>
+
 #include "southbridge.h"
+#include "status_bar.h"
 
 bool UIPageIsMoveKey(uint8_t key) {
   return key == kKeyCodeUp || key == kKeyCodeDown || key == kKeyCodePageUp ||
@@ -102,4 +105,54 @@ void UIPageBoxDrawn(UIPageBox* box, const DisplayMenu* menu) {
   box->columns = menu->columns;
   box->rows = menu->rows;
   box->drawn = true;
+}
+
+const char kUIPageHint[] = "\x18\x19=Move  Enter=Select  Esc=Back";
+
+bool UIPageKeyPressed(SouthbridgeKeyEvent event) {
+  // A key held down repeats, which moves through the items as a press does.
+  if (event.state == kSouthbridgeKeyReleased) {
+    return false;
+  }
+  StatusBarClearProblem();
+  return true;
+}
+
+UIPageKey UIPageTakeKey(UIPage* page, uint8_t key, uint8_t count) {
+  if (UIPageIsMoveKey(key)) {
+    if (UIPageMove(key, count, &page->chosen)) {
+      page->dirty = true;
+    }
+    return kUIPageKeyMoved;
+  }
+  switch (key) {
+    case kKeyCodeEnter:
+    case kKeyCodeSpace:
+      return kUIPageKeyChoose;
+    case kKeyCodeBackspace:
+    case kKeyCodeEsc:
+      return kUIPageKeyBack;
+    default:
+      return kUIPageKeyNone;
+  }
+}
+
+UIPageKey UIPageTakeEvent(
+    UIPage* page, SouthbridgeKeyEvent event, uint8_t count) {
+  if (!UIPageKeyPressed(event)) {
+    return kUIPageKeyNone;
+  }
+  return UIPageTakeKey(page, event.key, count);
+}
+
+DisplayMenu* UIPageBeginDraw(UIPage* page) {
+  if (!page->dirty) {
+    return NULL;
+  }
+  return DisplayBeginMenu();
+}
+
+void UIPageEndDraw(UIPage* page) {
+  DisplayEndMenu();
+  page->dirty = false;
 }

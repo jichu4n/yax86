@@ -4,7 +4,6 @@
 
 #include "browser_screen.h"
 #include "display.h"
-#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_browser.h"
 #include "ui_page.h"
@@ -46,9 +45,8 @@ static const DriveItem kHardDiskChoices[] = {
 
 extern const Screen kVMDriveScreen;
 
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 // The drive, and the form's choice for it.
 static uint8_t g_drive;
 static VMFormDrive* g_choice;
@@ -93,8 +91,8 @@ ScreenResult VMDriveScreenOpen(uint8_t drive, VMFormDrive* chosen) {
   } else if (chosen->path[0] != '\0') {
     item = kDriveImage;
   }
-  g_chosen = ChoiceRow(item);
-  g_dirty = true;
+  g_page.chosen = ChoiceRow(item);
+  g_page.dirty = true;
   return ScreenOpen(&kVMDriveScreen);
 }
 
@@ -102,7 +100,7 @@ ScreenResult VMDriveScreenOpen(uint8_t drive, VMFormDrive* chosen) {
 // browser, starting where the one chosen is, if one is.
 static ScreenResult Choose(void) {
   uint8_t count = 0;
-  const DriveItem choice = Choices(&count)[g_chosen];
+  const DriveItem choice = Choices(&count)[g_page.chosen];
   if (choice == kDriveImage) {
     char folder[kFSMaxPath + 1];
     if (g_choice->path[0] != '\0') {
@@ -121,23 +119,10 @@ static ScreenResult Choose(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, ChoiceRow(kDriveItemCount), &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  switch (UIPageTakeEvent(&g_page, event, ChoiceRow(kDriveItemCount))) {
+    case kUIPageKeyChoose:
       return Choose();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -153,15 +138,12 @@ static ScreenResult Resume(void) {
     g_choice->present = true;
     return ScreenBack();
   }
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -174,14 +156,11 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     items[row] = labels[choices[row]];
   }
   UIPageDrawItems(
-      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_page.chosen, true);
+  UIPageEndDraw(&g_page);
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kUIPageHint; }
 
 static const char* PageName(void) { return "new_vm_drive"; }
 

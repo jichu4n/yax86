@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 #include "display.h"
-#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
 
@@ -21,39 +20,25 @@ static const UIBoxItem kStopItems[kStopItemCount] = {
 
 extern const Screen kUSBStopScreen;
 
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 static bool* g_confirmed;
 
 ScreenResult USBStopScreenOpen(bool* confirmed) {
   g_confirmed = confirmed;
-  g_chosen = kStopCancel;
-  g_dirty = true;
+  g_page.chosen = kStopCancel;
+  g_page.dirty = true;
   return ScreenOpen(&kUSBStopScreen);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, kStopItemCount, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
-      if (g_chosen == kStopConfirm) {
+  switch (UIPageTakeEvent(&g_page, event, kStopItemCount)) {
+    case kUIPageKeyChoose:
+      if (g_page.chosen == kStopConfirm) {
         *g_confirmed = true;
       }
       return ScreenBack();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -61,10 +46,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -75,20 +57,17 @@ static void Draw(Y_UNUSED uint64_t now_us) {
           "disk, and may not have finished",
           "writing to it.",
       },
-      3, kStopItems, kStopItemCount, g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+      3, kStopItems, kStopItemCount, g_page.chosen, true);
+  UIPageEndDraw(&g_page);
 }
 
 // Nothing opens over the question.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kUIPageHint; }
 
 static const char* PageName(void) { return "usb_stop"; }
 

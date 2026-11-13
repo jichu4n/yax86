@@ -5,15 +5,13 @@
 
 #include "display.h"
 #include "floppy.h"
-#include "status_bar.h"
 #include "ui_page.h"
 
 extern const Screen kBrowserScreen;
 
 static UIBrowser g_browser;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The entry chosen, and whether the page is out of date.
+static UIPage g_page;
 // Where the image chosen goes, the parent's.
 static char* g_path;
 static uint32_t* g_size;
@@ -29,29 +27,29 @@ ScreenResult BrowserScreenOpen(
   g_path = path;
   g_size = size;
   g_path[0] = '\0';
-  g_chosen = UIBrowserOpen(&g_browser, folder);
-  g_dirty = true;
+  g_page.chosen = UIBrowserOpen(&g_browser, folder);
+  g_page.dirty = true;
   return ScreenOpen(&kBrowserScreen);
 }
 
 ScreenResult BrowserScreenReopen(void) {
   g_path[0] = '\0';
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenOpen(&kBrowserScreen);
 }
 
 // Open the chosen entry: a folder to look in, or an image, which is the
 // parent's.
 static ScreenResult OpenEntry(void) {
-  uint8_t chosen = g_chosen;
+  uint8_t chosen = g_page.chosen;
   char path[kFSMaxPath + 1];
   uint32_t size = 0;
   switch (UIBrowserChoose(&g_browser, &chosen, path, &size)) {
     case kUIBrowserNothing:
       return ScreenStays();
     case kUIBrowserOpened:
-      g_chosen = chosen;
-      g_dirty = true;
+      g_page.chosen = chosen;
+      g_page.dirty = true;
       return ScreenStays();
     case kUIBrowserChoseImage:
       break;
@@ -62,32 +60,19 @@ static ScreenResult OpenEntry(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the entries as a press
-  // does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, UIBrowserCount(&g_browser), &g_chosen)) {
-      g_dirty = true;
-    }
-    UIBrowserScrollTo(&g_browser, g_chosen);
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  switch (UIPageTakeEvent(&g_page, event, UIBrowserCount(&g_browser))) {
+    case kUIPageKeyMoved:
+      UIBrowserScrollTo(&g_browser, g_page.chosen);
+      return ScreenStays();
+    case kUIPageKeyChoose:
       return OpenEntry();
-    case kKeyCodeBackspace:
-      // Up a folder, until the card's root.
-      if (!UIBrowserAtRoot(&g_browser)) {
-        g_chosen = UIBrowserUp(&g_browser);
-        g_dirty = true;
+    case kUIPageKeyBack:
+      // Backspace goes up a folder, until the card's root.
+      if (event.key == kKeyCodeBackspace && !UIBrowserAtRoot(&g_browser)) {
+        g_page.chosen = UIBrowserUp(&g_browser);
+        g_page.dirty = true;
         return ScreenStays();
       }
-      return ScreenBack();
-    case kKeyCodeEsc:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -95,21 +80,17 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
-  UIBrowserDraw(&g_browser, menu, g_chosen);
-  DisplayEndMenu();
-  g_dirty = false;
+  UIBrowserDraw(&g_browser, menu, g_page.chosen);
+  UIPageEndDraw(&g_page);
 }
 
 // Nothing opens over the browser.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 

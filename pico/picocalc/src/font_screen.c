@@ -17,21 +17,20 @@
 extern const Screen kFontScreen;
 
 static Settings* g_settings;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 
 ScreenResult FontScreenOpen(Settings* settings) {
   g_settings = settings;
-  g_chosen = settings->font;
-  g_dirty = true;
+  g_page.chosen = settings->font;
+  g_page.dirty = true;
   return ScreenOpen(&kFontScreen);
 }
 
 // Use the font chosen, and save it if it changed. Kept out of line, so that
 // its message is on core 0's stack only while it runs.
 static __noinline void ChooseFont(void) {
-  const Font4x10 font = (Font4x10)g_chosen;
+  const Font4x10 font = (Font4x10)g_page.chosen;
   DisplaySetFont(font);
   if (font == g_settings->font) {
     return;
@@ -48,24 +47,11 @@ static __noinline void ChooseFont(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, kFont4x10Count, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  switch (UIPageTakeEvent(&g_page, event, kFont4x10Count)) {
+    case kUIPageKeyChoose:
       ChooseFont();
       return ScreenBack();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -73,10 +59,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -84,20 +67,18 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   for (uint8_t i = 0; i < kFont4x10Count; ++i) {
     items[i] = (UIBoxItem){Font4x10Label((Font4x10)i), false};
   }
-  UIPageDrawItems(menu, "Font", NULL, 0, items, kFont4x10Count, g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+  UIPageDrawItems(
+      menu, "Font", NULL, 0, items, kFont4x10Count, g_page.chosen, true);
+  UIPageEndDraw(&g_page);
 }
 
 // Nothing opens over Font.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kUIPageHint; }
 
 static const char* PageName(void) { return "font"; }
 

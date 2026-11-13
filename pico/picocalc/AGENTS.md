@@ -771,7 +771,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   typing never does, and close it again. `src/menu.c` keeps its state and
   draws it, in boxes and rows from `src/ui_box.c`. What its pages have in
   common with the list at power on's is in `src/ui_page.c`: moving the
-  chosen item, scrolling a list, and a page of items. The file browser both
+  chosen item, scrolling a list, and a page of items. A screen keeps a
+  `UIPage`, its item chosen and whether it is out of date, and hands it
+  keys with `UIPageTakeEvent()`, which ignores releases, clears the
+  problem, moves among the items and says whether the key chose or went
+  back; and draws between `UIPageBeginDraw()` and `UIPageEndDraw()`. A
+  screen with keys of its own takes them first, after `UIPageKeyPressed()`,
+  and the rest with `UIPageTakeKey()`: the name being typed, Backspace up
+  a folder in the browser, Esc ignored on the list. The file browser both
   use is `src/ui_browser.c`, which says which image was chosen and leaves
   what to do with it to its user. `src/emulator.c` carries out what the
   menu's items do, through the callbacks in `MenuConfig`.

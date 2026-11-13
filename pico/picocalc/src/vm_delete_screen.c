@@ -6,7 +6,6 @@
 
 #include "display.h"
 #include "runtime_log.h"
-#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
 
@@ -24,9 +23,8 @@ static const UIBoxItem kDeleteItems[kDeleteItemCount] = {
 extern const Screen kVMDeleteScreen;
 
 static ManageState* g_manage;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 // The VM, an index in the list, and what deleting it would take.
 static uint8_t g_vm;
 static VMListContents g_contents;
@@ -35,8 +33,8 @@ ScreenResult VMDeleteScreenOpen(ManageState* manage, uint8_t index) {
   g_manage = manage;
   g_vm = index;
   VMListDescribe(manage->vms, &manage->vms->vms[index], &g_contents);
-  g_chosen = kDeleteCancel;
-  g_dirty = true;
+  g_page.chosen = kDeleteCancel;
+  g_page.dirty = true;
   return ScreenOpen(&kVMDeleteScreen);
 }
 
@@ -55,26 +53,13 @@ static __noinline ScreenResult Delete(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, kDeleteItemCount, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
-      if (g_chosen == kDeleteConfirm) {
+  switch (UIPageTakeEvent(&g_page, event, kDeleteItemCount)) {
+    case kUIPageKeyChoose:
+      if (g_page.chosen == kDeleteConfirm) {
         return Delete();
       }
       return ScreenBack();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -83,7 +68,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Nothing opens over the question.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
@@ -112,10 +97,7 @@ static void JoinNames(
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -149,14 +131,11 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   }
   UIPageDrawItems(
       menu, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
-      g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+      g_page.chosen, true);
+  UIPageEndDraw(&g_page);
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kUIPageHint; }
 
 static const char* PageName(void) { return "vm_delete"; }
 

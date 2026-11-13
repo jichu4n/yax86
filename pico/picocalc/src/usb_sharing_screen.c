@@ -6,7 +6,6 @@
 
 #include "display.h"
 #include "runtime_log.h"
-#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
 #include "usb_disk.h"
@@ -20,9 +19,9 @@ static const UIBoxItem kSharingItems[] = {{"Disconnect", false}};
 
 extern const Screen kSharingScreen;
 
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date, and when it was last drawn.
-static bool g_dirty;
+// The item chosen, whether the page is out of date, and when it was last
+// drawn.
+static UIPage g_page;
 static uint64_t g_drawn_us;
 // The parent's: the image on USB, NULL for the card, and where to say
 // sharing has ended.
@@ -34,8 +33,8 @@ static bool g_confirmed;
 ScreenResult SharingScreenOpen(DiskImage* image, bool* stopped) {
   g_image = image;
   g_stopped = stopped;
-  g_chosen = 0;
-  g_dirty = true;
+  g_page.chosen = 0;
+  g_page.dirty = true;
   return ScreenOpen(&kSharingScreen);
 }
 
@@ -75,22 +74,9 @@ static ScreenResult Disconnect(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, 1, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+  switch (UIPageTakeEvent(&g_page, event, 1)) {
+    case kUIPageKeyChoose:
+    case kUIPageKeyBack:
       return Disconnect();
     default:
       return ScreenStays();
@@ -103,19 +89,16 @@ static ScreenResult Resume(void) {
     g_confirmed = false;
     return StopSharing();
   }
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
 // Who has the card, and how much has moved.
 static void Draw(uint64_t now_us) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
-    g_dirty = true;
+    g_page.dirty = true;
   }
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -150,10 +133,9 @@ static void Draw(uint64_t now_us) {
   };
   UIPageDrawItems(
       menu, "USB disk mode", lines, sizeof(lines) / sizeof(lines[0]),
-      kSharingItems, 1, g_chosen, true);
-  DisplayEndMenu();
+      kSharingItems, 1, g_page.chosen, true);
   g_drawn_us = now_us;
-  g_dirty = false;
+  UIPageEndDraw(&g_page);
 }
 
 static const char* Hint(void) { return "Enter=Disconnect"; }

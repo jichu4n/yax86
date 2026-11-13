@@ -5,7 +5,6 @@
 
 #include "display.h"
 #include "manage.h"
-#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
 #include "vm_form_screen.h"
@@ -17,11 +16,10 @@ extern const Screen kManageScreen;
 
 // What the screens under Manage VMs share.
 static ManageState g_manage;
-static uint8_t g_chosen;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 // The row at the top of the list.
 static uint8_t g_top;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
 
 // The rows: a VM each, then New VM, after a line if there are any VMs.
 static uint8_t RowCount(void) {
@@ -30,8 +28,8 @@ static uint8_t RowCount(void) {
 
 // Keep the chosen item among the rows.
 static void ScrollToChosen(void) {
-  uint8_t row = g_chosen;
-  if (g_manage.vms->count > 0 && g_chosen >= g_manage.vms->count) {
+  uint8_t row = g_page.chosen;
+  if (g_manage.vms->count > 0 && g_page.chosen >= g_manage.vms->count) {
     ++row;
   }
   UIPageScrollTo(row, &g_top);
@@ -40,8 +38,8 @@ static void ScrollToChosen(void) {
 // Show the list from its top, with the item at index chosen.
 static void ShowChosen(uint8_t index) {
   g_top = 0;
-  g_chosen = index;
-  g_dirty = true;
+  g_page.chosen = index;
+  g_page.dirty = true;
   ScrollToChosen();
 }
 
@@ -59,27 +57,17 @@ ScreenResult ManageScreenOpen(
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, (uint8_t)(g_manage.vms->count + 1), &g_chosen)) {
-      g_dirty = true;
-    }
-    ScrollToChosen();
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
-      if (g_chosen == g_manage.vms->count) {
+  const uint8_t count = (uint8_t)(g_manage.vms->count + 1);
+  switch (UIPageTakeEvent(&g_page, event, count)) {
+    case kUIPageKeyMoved:
+      ScrollToChosen();
+      return ScreenStays();
+    case kUIPageKeyChoose:
+      if (g_page.chosen == g_manage.vms->count) {
         return VMFormScreenOpenNew(&g_manage);
       }
-      return VMScreenOpen(&g_manage, g_chosen);
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+      return VMScreenOpen(&g_manage, g_page.chosen);
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -94,7 +82,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 // updates them as it saves them.
 static __noinline ScreenResult Resume(void) {
   if (!g_manage.changed) {
-    ShowChosen(g_chosen);
+    ShowChosen(g_page.chosen);
     return ScreenStays();
   }
   g_manage.changed = false;
@@ -111,10 +99,7 @@ static __noinline ScreenResult Resume(void) {
 // The VMs in yax86/vm, a row each, then New VM after a line if there are
 // any, with arrows on the border where there are more above or below.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -128,22 +113,20 @@ static void Draw(Y_UNUSED uint64_t now_us) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < vms->count) {
       const UIBoxItem item = {vms->vms[index].name, true};
-      UIBoxMenuItemRow(row, menu->columns, &item, index == g_chosen);
+      UIBoxMenuItemRow(row, menu->columns, &item, index == g_page.chosen);
     } else if (vms->count > 0 && index == vms->count) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
-      UIBoxMenuItemRow(row, menu->columns, &kNewVMRow, g_chosen == vms->count);
+      UIBoxMenuItemRow(
+          row, menu->columns, &kNewVMRow, g_page.chosen == vms->count);
     }
   }
   UIBoxEdgeRow(&menu->text[kUIPageListRows + 1], menu->columns, false, NULL);
   UIPageDrawScrollArrows(menu, g_top, RowCount());
-  DisplayEndMenu();
-  g_dirty = false;
+  UIPageEndDraw(&g_page);
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kUIPageHint; }
 
 static const char* PageName(void) { return "manage"; }
 

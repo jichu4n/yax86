@@ -18,8 +18,8 @@ enum {
 extern const Screen kVMNameScreen;
 
 static ManageState* g_manage;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// Whether the page is out of date; it has no items to choose.
+static UIPage g_page;
 // The VM, an index in the list; the name being typed; and whether it is for
 // a clone rather than a rename.
 static uint8_t g_vm;
@@ -47,7 +47,7 @@ ScreenResult VMNameScreenOpen(
     g_name[g_name_length++] = '2';
   }
   g_name[g_name_length] = '\0';
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenOpen(&kVMNameScreen);
 }
 
@@ -103,11 +103,9 @@ static __noinline ScreenResult Clone(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
+  if (!UIPageKeyPressed(event)) {
     return ScreenStays();
   }
-  StatusBarClearProblem();
   const uint8_t key = event.key;
   switch (key) {
     case kKeyCodeEnter:
@@ -117,7 +115,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
     case kKeyCodeBackspace:
       if (g_name_length > 0) {
         g_name[--g_name_length] = '\0';
-        g_dirty = true;
+        g_page.dirty = true;
       }
       return ScreenStays();
     default:
@@ -127,24 +125,21 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
       g_name_length < kFSMaxFolderName) {
     g_name[g_name_length++] = (char)toupper(key);
     g_name[g_name_length] = '\0';
-    g_dirty = true;
+    g_page.dirty = true;
   }
   return ScreenStays();
 }
 
 // Nothing opens over the name.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
 // The name being typed, in a field marked as the item chosen is, with a
 // cursor after it while there is room.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -172,8 +167,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   }
   field[kFSMaxFolderName] = '\0';
   UIBoxPutText(row, menu->columns, 3, field, kUIBoxAttrChosen);
-  DisplayEndMenu();
-  g_dirty = false;
+  UIPageEndDraw(&g_page);
 }
 
 static const char* Hint(void) {

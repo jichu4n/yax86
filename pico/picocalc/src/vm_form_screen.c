@@ -32,9 +32,8 @@ typedef enum FormItem {
 extern const Screen kVMFormScreen;
 
 static ManageState* g_manage;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 // Whether the form is editing the drives of the VM at g_vm, an index in the
 // list, rather than making a new one; it then has no name, and saves rather
 // than creates.
@@ -46,14 +45,16 @@ static uint8_t g_name_length;
 static VMFormDrive g_drives[kVMDrives];
 
 // The form's first item: its name for a new VM; editing one, it starts at
-// the drives. g_chosen counts from it.
+// the drives. g_page.chosen counts from it.
 static uint8_t FirstItem(void) { return g_editing ? kFormDriveA : kFormName; }
 
-static uint8_t ChosenItem(void) { return (uint8_t)(g_chosen + FirstItem()); }
+static uint8_t ChosenItem(void) {
+  return (uint8_t)(g_page.chosen + FirstItem());
+}
 
 static void ChooseItem(uint8_t item) {
-  g_chosen = (uint8_t)(item - FirstItem());
-  g_dirty = true;
+  g_page.chosen = (uint8_t)(item - FirstItem());
+  g_page.dirty = true;
 }
 
 ScreenResult VMFormScreenOpenNew(ManageState* manage) {
@@ -163,7 +164,7 @@ static bool TypeName(uint8_t key) {
   if (key == kKeyCodeBackspace) {
     if (g_name_length > 0) {
       g_name[--g_name_length] = '\0';
-      g_dirty = true;
+      g_page.dirty = true;
     }
     return true;
   }
@@ -173,7 +174,7 @@ static bool TypeName(uint8_t key) {
   if (g_name_length < kFSMaxFolderName) {
     g_name[g_name_length++] = (char)toupper(key);
     g_name[g_name_length] = '\0';
-    g_dirty = true;
+    g_page.dirty = true;
   }
   return true;
 }
@@ -192,29 +193,20 @@ static ScreenResult Choose(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
+  if (!UIPageKeyPressed(event)) {
     return ScreenStays();
   }
-  StatusBarClearProblem();
   // Backspace erases the name rather than leaving the form, wherever it is:
   // Esc leaves it.
   if ((ChosenItem() == kFormName && TypeName(event.key)) ||
       event.key == kKeyCodeBackspace) {
     return ScreenStays();
   }
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(
-            event.key, (uint8_t)(kFormItemCount - FirstItem()), &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  const uint8_t count = (uint8_t)(kFormItemCount - FirstItem());
+  switch (UIPageTakeKey(&g_page, event.key, count)) {
+    case kUIPageKeyChoose:
       return Choose();
-    case kKeyCodeEsc:
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -223,7 +215,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Back from a drive's choices, with the drive chosen still.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_page.dirty = true;
   return ScreenStays();
 }
 
@@ -231,10 +223,7 @@ static ScreenResult Resume(void) {
 // drives, with what each holds - or editing a VM's drives, the drives alone,
 // under its name.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
@@ -265,10 +254,9 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   items[kFormCreate] = (UIBoxItem){g_editing ? "Save" : "Create", false};
   UIPageDrawItems(
       menu, g_editing ? g_manage->vms->vms[g_vm].name : "New VM", NULL, 0,
-      &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()), g_chosen,
-      true);
-  DisplayEndMenu();
-  g_dirty = false;
+      &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
+      g_page.chosen, true);
+  UIPageEndDraw(&g_page);
 }
 
 static const char* Hint(void) {

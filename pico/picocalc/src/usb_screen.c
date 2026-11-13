@@ -29,9 +29,8 @@ static const UIBoxItem kUSBItems[kUSBItemCount] = {
 
 extern const Screen kUSBScreen;
 
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The item chosen, and whether the page is out of date.
+static UIPage g_page;
 // The parent's, set once sharing has ended.
 static bool* g_shared;
 // Whether sharing has ended, which the sharing screen sets.
@@ -45,8 +44,8 @@ static char g_image_path[kFSMaxPath + 1];
 
 ScreenResult USBScreenOpen(bool* shared) {
   g_shared = shared;
-  g_chosen = kUSBCard;
-  g_dirty = true;
+  g_page.chosen = kUSBCard;
+  g_page.dirty = true;
   return ScreenOpen(&kUSBScreen);
 }
 
@@ -88,27 +87,14 @@ static __noinline ScreenResult ShareImage(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, kUSBItemCount, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
-      if (g_chosen == kUSBImage) {
+  switch (UIPageTakeEvent(&g_page, event, kUSBItemCount)) {
+    case kUIPageKeyChoose:
+      if (g_page.chosen == kUSBImage) {
         return BrowserScreenOpen(
             kUIBrowserEither, "yax86", NULL, g_found_path, &g_found_size);
       }
       return ShareCard();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kUIPageKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -123,7 +109,7 @@ static ScreenResult Resume(void) {
     *g_shared = true;
     return ScreenBack();
   }
-  g_dirty = true;
+  g_page.dirty = true;
   if (g_found_path[0] != '\0') {
     return ShareImage();
   }
@@ -131,22 +117,17 @@ static ScreenResult Resume(void) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
     return;
   }
   UIPageDrawItems(
-      menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount, g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+      menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount, g_page.chosen,
+      true);
+  UIPageEndDraw(&g_page);
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kUIPageHint; }
 
 static const char* PageName(void) { return "usb"; }
 

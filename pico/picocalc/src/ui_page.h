@@ -1,9 +1,10 @@
 // What the menu's pages have in common, apart from the box they are drawn
-// in: moving the chosen item with the keys, keeping a list's chosen entry in
-// view, drawing a page of items, and drawing a box of a new size.
+// in: taking a key, moving the chosen item with the keys, keeping a list's
+// chosen entry in view, drawing a page of items, and drawing a box of a new
+// size.
 //
-// A page's state is its user's: these take the chosen item, the top of a
-// list and the box last drawn as parameters, and keep nothing of their own.
+// A page's state is its user's: these take it, the top of a list and the
+// box last drawn as parameters, and keep nothing of their own.
 #ifndef YAX86_PICOCALC_UI_PAGE_H
 #define YAX86_PICOCALC_UI_PAGE_H
 
@@ -11,6 +12,7 @@
 #include <stdint.h>
 
 #include "display.h"
+#include "southbridge.h"
 #include "ui_box.h"
 
 enum {
@@ -32,6 +34,48 @@ typedef struct UIPageBox {
   // it.
   bool drawn;
 } UIPageBox;
+
+// A page: the item chosen, and whether what is on the panel is out of date.
+typedef struct UIPage {
+  uint8_t chosen;
+  bool dirty;
+} UIPage;
+
+// What a key did on a page.
+typedef enum UIPageKey {
+  // Nothing for the page to do: a key released, or one a page of items does
+  // not take.
+  kUIPageKeyNone = 0,
+  // A move key, which moved the chosen item if there were items to move
+  // among; a list keeps it in view.
+  kUIPageKeyMoved,
+  // Enter or Space: choose the item chosen.
+  kUIPageKeyChoose,
+  // Esc or Backspace: go back.
+  kUIPageKeyBack,
+} UIPageKey;
+
+// The keys of most pages, for the status rows.
+extern const char kUIPageHint[];
+
+// Whether event is a press, a held key's repeats included, which a page
+// acts on. A press also clears the problem the status rows show, as any key
+// does.
+bool UIPageKeyPressed(SouthbridgeKeyEvent event);
+
+// Take a key pressed on a page of count items: a move key moves the chosen
+// item, and Enter, Space, Esc and Backspace say what the page is to do.
+UIPageKey UIPageTakeKey(UIPage* page, uint8_t key, uint8_t count);
+
+// The same for a key event: a release does nothing.
+UIPageKey UIPageTakeEvent(
+    UIPage* page, SouthbridgeKeyEvent event, uint8_t count);
+
+// Start drawing a page that is out of date: the box to draw it in, or NULL
+// if it is not out of date, or core 1 is still drawing the last. Hand the
+// box over with UIPageEndDraw().
+DisplayMenu* UIPageBeginDraw(UIPage* page);
+void UIPageEndDraw(UIPage* page);
 
 // Whether key moves the chosen item: Up, Down, Page Up or Page Down.
 bool UIPageIsMoveKey(uint8_t key);
