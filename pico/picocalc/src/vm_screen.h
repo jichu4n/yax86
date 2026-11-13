@@ -5,12 +5,12 @@
 
 #include <stdint.h>
 
-#include "manage.h"
 #include "screen.h"
+#include "vm_manager.h"
 
-// Show the page of the VM at index in manage's list, reading its vm.cfg for
-// its drives. manage must outlive the screen; once a screen under it has
+// Show the page of the VM at index in vm_manager's list, reading its vm.cfg for
+// its drives. vm_manager must outlive the screen; once a screen under it has
 // changed the card, the page goes back to Manage VMs.
-ScreenResult VMScreenOpen(ManageState* manage, uint8_t index);
+ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index);
 
 #endif  // YAX86_PICOCALC_VM_SCREEN_H

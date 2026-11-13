@@ -1,22 +1,23 @@
-#include "manage_screen.h"
+#include "vm_manager_screen.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 
 #include "display.h"
-#include "manage.h"
+#include "vm_manager.h"
 #include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
 #include "vm_form_screen.h"
+#include "vm_manager.h"
 #include "vm_screen.h"
 
 static const UIBoxItem kNewVMRow = {"New VM", true};
 
-extern const Screen kManageScreen;
+extern const Screen kVMManagerScreen;
 
 // What the screens under Manage VMs share.
-static ManageState g_manage;
+static VMManager g_vm_manager;
 static uint8_t g_chosen;
 // The row at the top of the list.
 static uint8_t g_top;
@@ -25,13 +26,14 @@ static bool g_dirty;
 
 // The rows: a VM each, then New VM, after a line if there are any VMs.
 static uint8_t RowCount(void) {
-  return (uint8_t)(g_manage.vms->count + (g_manage.vms->count > 0 ? 2 : 1));
+  return (uint8_t)(g_vm_manager.vms->count +
+                   (g_vm_manager.vms->count > 0 ? 2 : 1));
 }
 
 // Keep the chosen item among the rows.
 static void ScrollToChosen(void) {
   uint8_t row = g_chosen;
-  if (g_manage.vms->count > 0 && g_chosen >= g_manage.vms->count) {
+  if (g_vm_manager.vms->count > 0 && g_chosen >= g_vm_manager.vms->count) {
     ++row;
   }
   UIPageScrollTo(row, &g_top);
@@ -45,17 +47,17 @@ static void ShowChosen(uint8_t index) {
   ScrollToChosen();
 }
 
-ScreenResult ManageScreenOpen(
+ScreenResult VMManagerScreenOpen(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
     uint32_t copy_buffer_size) {
-  g_manage = (ManageState){
+  g_vm_manager = (VMManager){
       .vms = vms,
       .settings = settings,
       .copy_buffer = copy_buffer,
       .copy_buffer_size = copy_buffer_size,
   };
   ShowChosen(0);
-  return ScreenOpen(&kManageScreen);
+  return ScreenOpen(&kVMManagerScreen);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
@@ -65,7 +67,8 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
   StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, (uint8_t)(g_manage.vms->count + 1), &g_chosen)) {
+    if (UIPageMove(
+            event.key, (uint8_t)(g_vm_manager.vms->count + 1), &g_chosen)) {
       g_dirty = true;
     }
     ScrollToChosen();
@@ -74,10 +77,10 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   switch (event.key) {
     case kKeyCodeEnter:
     case kKeyCodeSpace:
-      if (g_chosen == g_manage.vms->count) {
-        return VMFormScreenOpenNew(&g_manage);
+      if (g_chosen == g_vm_manager.vms->count) {
+        return VMFormScreenOpenNew(&g_vm_manager);
       }
-      return VMScreenOpen(&g_manage, g_chosen);
+      return VMScreenOpen(&g_vm_manager, g_chosen);
     case kKeyCodeBackspace:
     case kKeyCodeEsc:
       return ScreenBack();
@@ -93,17 +96,17 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 // read again: what changes them, a rename or delete of the default VM,
 // updates them as it saves them.
 static __noinline ScreenResult Resume(void) {
-  if (!g_manage.changed) {
+  if (!g_vm_manager.changed) {
     ShowChosen(g_chosen);
     return ScreenStays();
   }
-  g_manage.changed = false;
-  VMListRead(g_manage.vms);
-  const uint8_t index = VMListFind(g_manage.vms, g_manage.chosen);
-  const bool found = index < g_manage.vms->count;
+  g_vm_manager.changed = false;
+  VMListRead(g_vm_manager.vms);
+  const uint8_t index = VMListFind(g_vm_manager.vms, g_vm_manager.chosen);
+  const bool found = index < g_vm_manager.vms->count;
   ShowChosen(found ? index : 0);
-  if (g_manage.show_vm && found) {
-    return VMScreenOpen(&g_manage, index);
+  if (g_vm_manager.show_vm && found) {
+    return VMScreenOpen(&g_vm_manager, index);
   }
   return ScreenStays();
 }
@@ -118,7 +121,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   if (menu == NULL) {
     return;
   }
-  const VMList* vms = g_manage.vms;
+  const VMList* vms = g_vm_manager.vms;
   UIBoxPlace(menu, kUIPageNarrowColumns, kUIPageListRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kUIPageListRows; ++i) {
@@ -145,9 +148,9 @@ static const char* Hint(void) {
   return "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
-static const char* PageName(void) { return "manage"; }
+static const char* PageName(void) { return "vm_manager"; }
 
-const Screen kManageScreen = {
+const Screen kVMManagerScreen = {
     .handle_key = HandleKey,
     .draw = Draw,
     .resume = Resume,

@@ -183,7 +183,7 @@ static const char* Hint(void) {
   return "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
-static const char* PageName(void) { return "new_vm_drive"; }
+static const char* PageName(void) { return "vm_drive"; }
 
 const Screen kVMDriveScreen = {
     .handle_key = HandleKey,
