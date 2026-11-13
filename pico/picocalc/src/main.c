@@ -24,7 +24,6 @@
 #include <string.h>
 #include <strings.h>
 
-#include "board.h"
 #include "core/platform.h"
 #include "core/video.h"
 #include "debug_command.h"
@@ -33,8 +32,8 @@
 #include "floppy.h"
 #include "harddisk.h"
 #include "hardware/clocks.h"
-#include "hardware/vreg.h"
 #include "hardware/watchdog.h"
+#include "init.h"
 #include "keymap.h"
 #include "launcher.h"
 #include "menu.h"
@@ -47,7 +46,7 @@
 #include "sdcard.h"
 #include "southbridge.h"
 #include "speaker.h"
-#include "stacks.h"
+#include "stack_usage.h"
 #include "status_bar.h"
 #include "typing.h"
 #include "ui_status.h"
@@ -60,11 +59,6 @@
 // identical but for that, which is what measures what drawing costs.
 #ifndef YAX86_PICOCALC_DRAW_SCREEN
 #define YAX86_PICOCALC_DRAW_SCREEN 1
-#endif
-
-// The system clock in kHz, or 0 for the stock 125MHz. Set by CMakeLists.txt.
-#ifndef YAX86_PICOCALC_SYS_CLK_KHZ
-#define YAX86_PICOCALC_SYS_CLK_KHZ 0
 #endif
 
 enum {
@@ -115,22 +109,6 @@ enum {
   // running flat out. Past this the lag is dropped instead, so that a long
   // stall is not followed by a burst of emulation at full speed.
   kMaxLagMs = 100,
-
-  // How long the watchdog waits, across the clock change, before deciding the
-  // chip has hung and rebooting it.
-  kWatchdogTimeoutMs = 4000,
-  // Written to g_overclock_marker across the clock change, and cleared once it
-  // is survived. Any value does, as long as uninitialized RAM is unlikely to
-  // hold it.
-  kOverclockAttemptMarker = 0x0C10C4ED,
-  // Written to g_psram_marker across bringing the PSRAM up, and cleared once
-  // it is survived - see StartPsram().
-  kPsramAttemptMarker = 0x95A3B007,
-  // Written to g_fault_marker by the hard fault handler, for the start after
-  // the reboot it makes - see isr_hardfault().
-  kFaultMarker = 0xFA017ED0,
-  // How long the core voltage is given to settle before the clock is raised.
-  kVoltageSettleUs = 10 * 1000,
 
   // The BIOS's keyboard flags, in the BIOS data area: its lock and insert
   // states.
@@ -204,8 +182,8 @@ static YPlatformState g_platform;
 static VMConfig g_vm;
 static bool g_has_vm;
 static RuntimeStatus g_status;
-// What bringing the board up found.
-static BoardStatus g_board;
+// What initializing the system found.
+static InitStatus g_init_status;
 static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
 // them is that much slower for.
@@ -237,14 +215,6 @@ typedef struct RunClock {
 
 static RunClock g_clock;
 
-#if YAX86_PICOCALC_SYS_CLK_KHZ
-// Deliberately not zeroed at startup - see Overclock().
-static uint32_t __uninitialized_ram(g_overclock_marker);
-#endif
-// The same for the PSRAM - see StartPsram().
-static uint32_t __uninitialized_ram(g_psram_marker);
-// The same for a hard fault - see isr_hardfault().
-static uint32_t __uninitialized_ram(g_fault_marker);
 // Whether guest RAM is paged, and whether the VM is up, before which there is
 // no guest RAM to read.
 static bool g_paging;
@@ -367,13 +337,13 @@ static void FormatClockLine(char* buffer, size_t size) {
 
 static void FormatSystemLine(char* buffer, size_t size) {
   char version[16];
-  BoardFormatSouthbridgeVersion(&g_board, version, sizeof(version));
+  InitFormatKeyboardVersion(&g_init_status, version, sizeof(version));
   snprintf(
       buffer, size, "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %lu keys, %uK",
       (unsigned long)(clock_get_hz(clk_sys) / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_board.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_board.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
-      (unsigned long)SouthbridgeGetPollStats().keys,
+      (unsigned long)(g_init_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
+      (unsigned long)(g_init_status.lcd_spi_hz / (kHzPerKHz * 10) % 100),
+      version, (unsigned long)SouthbridgeGetPollStats().keys,
       (unsigned)(GuestRAMSize() / 1024));
 }
 
@@ -541,7 +511,8 @@ static void ReplyDiskImage(
 // modes for now: the VM's paging and boot, the display, the VM's drives and
 // name, the menu, and the pacing. In parts, none inlined into another: each
 // group's fields take stack until the function they are in returns, and the
-// report whole would be the deepest call on core 0's stack. See StacksPaint().
+// report whole would be the deepest call on core 0's stack. See
+// StackUsagePaint().
 //
 // The VM's memory and boot, and the display.
 static __noinline void ReportRunning(const DebugCommand* command) {
@@ -549,7 +520,7 @@ static __noinline void ReportRunning(const DebugCommand* command) {
   DEBUG_COMMAND_REPLY_GROUP(
       command, "paging", Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024),
       Y_LOG_BOOL("on", g_paging),
-      Y_LOG_BOOL("off_after_fault", g_board.after_fault),
+      Y_LOG_BOOL("off_after_fault", g_init_status.after_fault),
       Y_LOG_UINT("frames", pager.frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
       Y_LOG_UINT("page_ins", pager.page_ins),
@@ -596,7 +567,7 @@ static __noinline void ReportDrives(const DebugCommand* command) {
 }
 
 static void Report(const DebugCommand* command) {
-  DebugCommandReportBoard(command);
+  DebugCommandReportSystem(command);
   ReportRunning(command);
   ReportDrives(command);
   DebugCommandReplyOk(command);
@@ -634,7 +605,7 @@ static uint8_t FloppyDrives(void) {
 // did not end in a hard fault: paging is the newest thing a fault could come
 // from, and without it the VM has the SRAM alone - see yax86_pico.h.
 static void ConfigureGuestRAM(YPlatformConfig* config) {
-  g_paging = PsramGetStats().state == kPsramOk && !g_board.after_fault;
+  g_paging = PsramGetStats().state == kPsramOk && !g_init_status.after_fault;
   if (!g_paging) {
     config->direct_memory_size = kGuestRAMSize;
     config->direct_memory = g_guest_ram;
@@ -665,7 +636,7 @@ static bool InitVM(void) {
   FloppyAttach(&g_platform.fdc);
   HardDiskAttach(&g_platform.hdc);
   g_vm_up = true;
-  if (g_board.after_fault) {
+  if (g_init_status.after_fault) {
     StatusBarPostMessage("Paging off: the last start crashed");
   }
   return true;
@@ -1175,7 +1146,7 @@ static void RunVM(bool vm_ready) {
 // the menu opens again.
 //
 // Kept out of line with __noinline, so that its locals are on core 0's stack
-// only while it runs. See StacksPaint().
+// only while it runs. See StackUsagePaint().
 static __noinline void RunLauncher(void) {
   switch (LauncherStart(&g_vm)) {
     case kLauncherLoadedVM:
@@ -1274,97 +1245,12 @@ static __noinline void OpenDrives(void) {
 // Startup
 // ============================================================================
 
-#if YAX86_PICOCALC_SYS_CLK_KHZ
-// Raise the system clock, after USB is up and with the watchdog armed, as
-// pico/bench does. A clock the chip cannot take hangs it, and the watchdog
-// turns that into a reboot rather than a board with no way in but the BOOTSEL
-// button, which on a PicoCalc is inside the case. The reboot lands here again,
-// where the marker says not to try the same clock twice.
-//
-// watchdog_caused_reboot() alone is not evidence of a hang: picotool reboots
-// the chip through the watchdog too. The marker lives in RAM that startup does
-// not clear, so it survives a reset but not a power cycle, and it is only ever
-// left set across the window where a hang is possible.
-//
-// The watchdog is disarmed again once the change is survived, and must not be
-// left running and fed. The SDK carries out picotool's reboot request with
-// watchdog_reboot(), which only shortens the watchdog's countdown, so feeding
-// it would put the reboot off indefinitely. A hang after this is a power
-// button press away from recovery, since the keyboard controller cuts power.
-static OverclockResult Overclock(void) {
-  if (g_overclock_marker == kOverclockAttemptMarker) {
-    g_overclock_marker = 0;
-    return kOverclockSkippedAfterHang;
-  }
-  g_overclock_marker = kOverclockAttemptMarker;
-  watchdog_enable(kWatchdogTimeoutMs, true);
-  if (YAX86_PICOCALC_SYS_CLK_KHZ > 250000) {
-    vreg_set_voltage(VREG_VOLTAGE_1_30);
-  } else if (YAX86_PICOCALC_SYS_CLK_KHZ > 125000) {
-    vreg_set_voltage(VREG_VOLTAGE_1_20);
-  }
-  busy_wait_us(kVoltageSettleUs);
-  const bool applied = set_sys_clock_khz(YAX86_PICOCALC_SYS_CLK_KHZ, false);
-  watchdog_disable();
-  g_overclock_marker = 0;
-  return applied ? kOverclockApplied : kOverclockPLLCannot;
-}
-#endif
-
-// Bring the PSRAM up with the watchdog armed, as the overclock is raised: the
-// driver bounds every wait, so a hang here would be something it did not
-// foresee, and the reboot it turns into starts without the PSRAM. The marker
-// is the overclock's kind, and the watchdog disarmed after for the same
-// reason - see Overclock().
-static void StartPsram(void) {
-  if (g_psram_marker == kPsramAttemptMarker) {
-    g_psram_marker = 0;
-    PsramInit(true);
-    return;
-  }
-  g_psram_marker = kPsramAttemptMarker;
-  watchdog_enable(kWatchdogTimeoutMs, true);
-  PsramInit(false);
-  watchdog_disable();
-  g_psram_marker = 0;
-}
-
-// A hard fault, on either core, reboots the board rather than leaving it hung
-// with nothing on USB, and the start after it runs without paging - see
-// ConfigureGuestRAM(). Replaces the SDK's handler, a breakpoint, which halts.
-void isr_hardfault(void) {
-  g_fault_marker = kFaultMarker;
-  watchdog_reboot(0, 0, 0);
-  for (;;) {
-  }
-}
-
 int main(void) {
-  // Before anything can fault again.
-  g_board.after_fault = g_fault_marker == kFaultMarker;
-  g_fault_marker = 0;
   // First, before anything has used more of the stack than main's frame, or
   // core 1 has started.
-  StacksPaint();
-  stdio_init_all();
-#if YAX86_PICOCALC_SYS_CLK_KHZ
-  // Before anything else is brought up, since each works out its clock
-  // divider when it is: the LCD's, on core 1, from the system clock, and the
-  // keyboard controller's I2C from the peripheral clock, which the overclock
-  // moves to the 48MHz USB PLL.
-  g_board.overclock = Overclock();
-#endif
-  // After the clock, which it divides for its own.
-  StartPsram();
-
-  RuntimeLogInit();
-
-  g_board.lcd_spi_hz = DisplayStart();
-  SouthbridgeInit();
-  SpeakerInit();
-  g_board.southbridge_answered =
-      SouthbridgeReadVersion(&g_board.southbridge_version);
-  DebugCommandInit(&g_board);
+  StackUsagePaint();
+  InitSystem(&g_init_status);
+  DebugCommandInit(&g_init_status);
   const MenuConfig menu_config = {
       .describe_status = DescribeStatus,
       .reset = ResetVM,

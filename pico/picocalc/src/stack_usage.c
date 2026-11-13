@@ -1,4 +1,4 @@
-#include "stacks.h"
+#include "stack_usage.h"
 
 #include "pico/stdlib.h"
 
@@ -15,7 +15,7 @@ enum {
   kStackPaintMargin = 64,
 };
 
-__noinline void StacksPaint(void) {
+__noinline void StackUsagePaint(void) {
   volatile uint32_t here = 0;
   uint32_t* const end = (uint32_t*)((uintptr_t)&here - kStackPaintMargin) - 1;
   for (uint32_t* word = &__StackBottom; word < end; ++word) {
@@ -36,14 +36,14 @@ static uint32_t StackUsed(const uint32_t* bottom, const uint32_t* top) {
   return (uint32_t)((uintptr_t)top - (uintptr_t)word);
 }
 
-uint32_t StacksSize(void) {
+uint32_t StackUsageSize(void) {
   return (uint32_t)((uintptr_t)&__StackTop - (uintptr_t)&__StackBottom);
 }
 
-uint32_t StacksCore0Used(void) {
+uint32_t StackUsageCore0(void) {
   return StackUsed(&__StackBottom, &__StackTop);
 }
 
-uint32_t StacksCore1Used(void) {
+uint32_t StackUsageCore1(void) {
   return StackUsed(&__StackOneBottom, &__StackOneTop);
 }
