@@ -21,7 +21,7 @@ static const char* g_copy_what;
 void VMManagerNoteChange(
     VMManager* vm_manager, const char* name, bool show_vm) {
   vm_manager->changed = true;
-  snprintf(vm_manager->chosen, sizeof(vm_manager->chosen), "%s", name);
+  snprintf(vm_manager->to_select, sizeof(vm_manager->to_select), "%s", name);
   vm_manager->show_vm = show_vm;
 }
 

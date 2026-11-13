@@ -6,8 +6,8 @@
 
 #include "display.h"
 #include "list_box.h"
+#include "menu_box.h"
 #include "runtime_log.h"
-#include "ui_box.h"
 
 typedef enum DeleteItem {
   kDeleteCancel = 0,
@@ -15,7 +15,7 @@ typedef enum DeleteItem {
   kDeleteItemCount,
 } DeleteItem;
 
-static const UIBoxItem kDeleteItems[kDeleteItemCount] = {
+static const MenuBoxItem kDeleteItems[kDeleteItemCount] = {
     [kDeleteCancel] = {"Cancel", false},
     [kDeleteConfirm] = {"Delete", false},
 };
@@ -52,7 +52,7 @@ static __noinline ScreenResult Delete(void) {
   return ScreenBack();
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxTakeEvent(&g_list_box, event, kDeleteItemCount)) {
     case kListBoxKeySelect:
       if (g_list_box.selected == kDeleteConfirm) {
@@ -67,7 +67,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 // Nothing opens over the question.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   g_list_box.dirty = true;
   return ScreenStays();
 }
@@ -96,7 +96,7 @@ static void JoinNames(
   }
 }
 
-static void Draw(Y_UNUSED uint64_t now_us) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
   DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
@@ -141,9 +141,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "vm_delete"; }
 
 const Screen kVMDeleteScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

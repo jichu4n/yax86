@@ -856,13 +856,13 @@ static __noinline void PollCommand(uint64_t* run_us) {
 // The menu
 // ============================================================================
 
-// Mark the guest's screen to be drawn in full, and offer it to core 1 now
-// rather than at the next frame, which while the VM is paused never
-// comes. Returns whether core 1 took it. If it did not, the mark stays in the
-// live state, and the next frame offered draws it all.
+// Mark the guest's screen to be drawn in full, and send it to core 1 now
+// rather than at the next frame, which never comes while the VM is paused.
+// Returns whether core 1 took it. If it did not, the mark stays in the live
+// state, and the next frame sent draws it all.
 static bool RedrawGuest(void) {
   g_platform.video.dirty_state.status = Y_VIDEO_FULL_REDRAW;
-  return !YAX86_PICOCALC_DRAW_SCREEN || DisplayOfferFrame(&g_platform.video);
+  return !YAX86_PICOCALC_DRAW_SCREEN || DisplaySendFrame(&g_platform.video);
 }
 
 // The VM again from power on, with the disks it has now, without the list.
@@ -1062,7 +1062,7 @@ static void RunVM(bool vm_ready) {
         next_render_cycles += kCyclesPerRender;
       } while (next_render_cycles <= g_clock.cycles);
       if (YAX86_PICOCALC_DRAW_SCREEN) {
-        DisplayOfferFrame(&g_platform.video);
+        DisplaySendFrame(&g_platform.video);
       }
     }
 

@@ -5,9 +5,9 @@
 #include <string.h>
 
 #include "display.h"
+#include "file_browser.h"
 #include "list_box.h"
-#include "ui_box.h"
-#include "ui_browser.h"
+#include "menu_box.h"
 #include "vm_config.h"
 
 enum {
@@ -44,7 +44,7 @@ typedef enum MainItem {
   kMainItemCount,
 } MainItem;
 
-static const UIBoxItem kMainItems[kMainItemCount] = {
+static const MenuBoxItem kMainItems[kMainItemCount] = {
     [kMainDriveA] = {"Floppy disk 1", true},
     [kMainDriveB] = {"Floppy disk 2", true},
     [kMainStatus] = {"Status", true},
@@ -65,7 +65,7 @@ typedef enum ResetItem {
   kResetItemCount,
 } ResetItem;
 
-static const UIBoxItem kResetItems[kResetItemCount] = {
+static const MenuBoxItem kResetItems[kResetItemCount] = {
     [kResetCancel] = {"Cancel", false},
     [kResetConfirm] = {"Reset", false},
 };
@@ -76,7 +76,7 @@ typedef enum PowerOffItem {
   kPowerOffItemCount,
 } PowerOffItem;
 
-static const UIBoxItem kPowerOffItems[kPowerOffItemCount] = {
+static const MenuBoxItem kPowerOffItems[kPowerOffItemCount] = {
     [kPowerOffCancel] = {"Cancel", false},
     [kPowerOffConfirm] = {"Power off", false},
 };
@@ -86,7 +86,7 @@ static bool g_open;
 static MenuPage g_page;
 // The drive whose page or browser shows.
 static FloppyDrive g_drive;
-static uint8_t g_chosen;
+static uint8_t g_selected;
 // Whether what is on the panel is out of date, and when the status page was
 // last drawn.
 static bool g_dirty;
@@ -95,7 +95,7 @@ static uint64_t g_status_drawn_us;
 // be left showing.
 static ListBoxFrame g_box;
 // The browser, finding an image for the drive in g_drive.
-static UIBrowser g_browser;
+static FileBrowser g_browser;
 // Which Shift keys are held, from the controller's events.
 static bool g_left_shift_held;
 static bool g_right_shift_held;
@@ -111,8 +111,8 @@ const char* MenuPageName(void) {
   return kPageNames[g_page];
 }
 
-static void ShowPage(MenuPage page, uint8_t chosen);
-static MenuAction Choose(void);
+static void ShowPage(MenuPage page, uint8_t selected);
+static MenuAction OnSelect(void);
 static MenuAction Back(void);
 
 const char* MenuHint(void) {
@@ -125,18 +125,18 @@ const char* MenuHint(void) {
   return "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
-// Show the browser on a folder, with the image in the drive chosen if it is
+// Show the browser on a folder, with the image in the drive selected if it is
 // there.
 static void Browse(const char* folder) {
-  ShowPage(kMenuPageBrowse, UIBrowserOpen(&g_browser, folder));
+  ShowPage(kMenuPageBrowse, FileBrowserOpen(&g_browser, folder));
 }
 
 // The folder the browser starts in: that of the image in the drive, or else
 // of the one in the other drive - the next disk of a set is likely beside
 // it - or else yax86. The images in the drives are marked, and the one in
-// this drive chosen.
+// this drive selected.
 static void StartBrowsing(void) {
-  g_browser.images = kUIBrowserFloppies;
+  g_browser.images = kFileBrowserFloppies;
   for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
     const DiskImage* image = g_config.drive((FloppyDrive)drive);
     g_browser.in_drives[drive] =
@@ -157,21 +157,21 @@ static void StartBrowsing(void) {
   Browse(folder);
 }
 
-// Keep the chosen entry among the browser's rows.
-static void ScrollToChosen(void) {
+// Keep the selected entry among the browser's rows.
+static void ScrollToSelected(void) {
   if (g_page == kMenuPageBrowse) {
-    UIBrowserScrollTo(&g_browser, g_chosen);
+    FileBrowserScrollTo(&g_browser, g_selected);
   }
 }
 
-// Show the browser on the folder above, with the folder just left chosen.
+// Show the browser on the folder above, with the folder just left selected.
 static void BrowseUp(void) {
-  ShowPage(kMenuPageBrowse, UIBrowserUp(&g_browser));
+  ShowPage(kMenuPageBrowse, FileBrowserUp(&g_browser));
 }
 
-static void ShowPage(MenuPage page, uint8_t chosen) {
+static void ShowPage(MenuPage page, uint8_t selected) {
   g_page = page;
-  g_chosen = chosen;
+  g_selected = selected;
   g_dirty = true;
 }
 
@@ -199,14 +199,14 @@ static uint8_t MainItemCount(void) {
   return MainItems(items);
 }
 
-// The main page's item on the row chosen.
-static MainItem ChosenMainItem(void) {
+// The main page's item on the row selected.
+static MainItem SelectedMainItem(void) {
   MainItem items[kMainItemCount];
   const uint8_t count = MainItems(items);
-  return g_chosen < count ? items[g_chosen] : kMainItemCount;
+  return g_selected < count ? items[g_selected] : kMainItemCount;
 }
 
-// Show the main page with an item chosen, or the first if it is not shown.
+// Show the main page with an item selected, or the first if it is not shown.
 static void ShowMainItem(MainItem item) {
   MainItem items[kMainItemCount];
   const uint8_t count = MainItems(items);
@@ -234,7 +234,7 @@ static uint8_t PageItemCount(void) {
     case kMenuPageDrive:
       return DriveItemCount();
     case kMenuPageBrowse:
-      return UIBrowserCount(&g_browser);
+      return FileBrowserCount(&g_browser);
     case kMenuPageStatus:
       return 0;
   }
@@ -268,19 +268,19 @@ static MenuAction Back(void) {
   return kMenuActionNone;
 }
 
-// Open the chosen entry of the browser: a folder to look in, or an image to
+// Open the selected entry of the browser: a folder to look in, or an image to
 // put in the drive, which closes the menu.
 static MenuAction OpenEntry(void) {
-  uint8_t chosen = g_chosen;
+  uint8_t selected = g_selected;
   char path[kFSMaxPath + 1];
   uint32_t size = 0;
-  switch (UIBrowserChoose(&g_browser, &chosen, path, &size)) {
-    case kUIBrowserNothing:
+  switch (FileBrowserSelect(&g_browser, &selected, path, &size)) {
+    case kFileBrowserNothing:
       return kMenuActionNone;
-    case kUIBrowserOpened:
-      ShowPage(kMenuPageBrowse, chosen);
+    case kFileBrowserOpenedFolder:
+      ShowPage(kMenuPageBrowse, selected);
       return kMenuActionNone;
-    case kUIBrowserChoseImage:
+    case kFileBrowserSelectedImage:
       break;
   }
   g_config.insert_drive(g_drive, path);
@@ -288,13 +288,14 @@ static MenuAction OpenEntry(void) {
   return kMenuActionClosed;
 }
 
-static MenuAction Choose(void) {
+// Carry out the item selected on the page showing.
+static MenuAction OnSelect(void) {
   switch (g_page) {
     case kMenuPageMain:
-      switch (ChosenMainItem()) {
+      switch (SelectedMainItem()) {
         case kMainDriveA:
         case kMainDriveB:
-          g_drive = (FloppyDrive)(ChosenMainItem() - kMainDriveA);
+          g_drive = (FloppyDrive)(SelectedMainItem() - kMainDriveA);
           ShowPage(kMenuPageDrive, kDriveInsert);
           return kMenuActionNone;
         case kMainStatus:
@@ -311,17 +312,17 @@ static MenuAction Choose(void) {
       }
       break;
     case kMenuPageReset:
-      if (g_chosen == kResetConfirm) {
+      if (g_selected == kResetConfirm) {
         g_config.reset();
       }
       return Back();
     case kMenuPagePowerOff:
-      if (g_chosen == kPowerOffConfirm) {
+      if (g_selected == kPowerOffConfirm) {
         g_config.power_off();
       }
       return Back();
     case kMenuPageDrive:
-      if (g_chosen == kDriveInsert) {
+      if (g_selected == kDriveInsert) {
         StartBrowsing();
       } else {
         g_config.eject_drive(g_drive);
@@ -368,19 +369,19 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
     return kMenuActionNone;
   }
   if (ListBoxIsMoveKey(event.key)) {
-    if (ListBoxMove(event.key, PageItemCount(), &g_chosen)) {
+    if (ListBoxMove(event.key, PageItemCount(), &g_selected)) {
       g_dirty = true;
     }
-    ScrollToChosen();
+    ScrollToSelected();
     return kMenuActionNone;
   }
   switch (event.key) {
     case kKeyCodeEnter:
     case kKeyCodeSpace:
-      return Choose();
+      return OnSelect();
     case kKeyCodeBackspace:
       // Up a folder in the browser, until the card's root.
-      if (g_page == kMenuPageBrowse && !UIBrowserAtRoot(&g_browser)) {
+      if (g_page == kMenuPageBrowse && !FileBrowserAtRoot(&g_browser)) {
         BrowseUp();
         return kMenuActionNone;
       }
@@ -399,20 +400,20 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  UIBoxPlace(menu, kListBoxWideColumns, kMenuStatusLines + 4);
+  MenuBoxPlace(menu, kListBoxWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
-  UIBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
-  UIBoxBlankRow(&menu->text[row++], menu->columns);
+  MenuBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
+  MenuBoxBlankRow(&menu->text[row++], menu->columns);
   for (uint8_t i = 0; i < kMenuStatusLines; ++i) {
     DisplayTextRow* text = &menu->text[row++];
-    UIBoxBlankRow(text, menu->columns);
-    UIBoxPutText(text, menu->columns, 2, lines[i].label, kUIBoxAttrTitle);
-    UIBoxPutText(
+    MenuBoxBlankRow(text, menu->columns);
+    MenuBoxPutText(text, menu->columns, 2, lines[i].label, kMenuBoxAttrTitle);
+    MenuBoxPutText(
         text, menu->columns, 2 + kStatusLabelColumns, lines[i].value,
-        kUIBoxAttrText);
+        kMenuBoxAttrText);
   }
-  UIBoxBlankRow(&menu->text[row++], menu->columns);
-  UIBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
+  MenuBoxBlankRow(&menu->text[row++], menu->columns);
+  MenuBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
 static void DrawDrivePage(DisplayMenu* menu) {
@@ -427,7 +428,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
   } else if (empty) {
     in_drive = "empty";
   }
-  const UIBoxItem items[kDriveItemCount] = {
+  const MenuBoxItem items[kDriveItemCount] = {
       [kDriveInsert] = {empty ? "Choose disk image" : "Swap disk image", true},
       [kDriveEject] = {"Eject", false},
   };
@@ -440,18 +441,18 @@ static void DrawDrivePage(DisplayMenu* menu) {
   const char* title = kVMDriveNames[kVMDriveFD1 + g_drive];
   ListBoxDrawItems(
       menu, title, lines, sizeof(lines) / sizeof(lines[0]), items,
-      DriveItemCount(), g_chosen, false);
+      DriveItemCount(), g_selected, false);
 }
 
 // The main page: its items as they show.
 static void DrawMainPage(DisplayMenu* menu) {
   MainItem shown[kMainItemCount];
   const uint8_t count = MainItems(shown);
-  UIBoxItem items[kMainItemCount];
+  MenuBoxItem items[kMainItemCount];
   for (uint8_t i = 0; i < count; ++i) {
     items[i] = kMainItems[shown[i]];
   }
-  ListBoxDrawItems(menu, "yax86", NULL, 0, items, count, g_chosen, false);
+  ListBoxDrawItems(menu, "yax86", NULL, 0, items, count, g_selected, false);
 }
 
 void MenuDraw(uint64_t now_us) {
@@ -476,18 +477,18 @@ void MenuDraw(uint64_t now_us) {
     case kMenuPageReset:
       ListBoxDrawItems(
           menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
-          kResetItemCount, g_chosen, false);
+          kResetItemCount, g_selected, false);
       break;
     case kMenuPagePowerOff:
       ListBoxDrawItems(
           menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
-          kPowerOffItems, kPowerOffItemCount, g_chosen, false);
+          kPowerOffItems, kPowerOffItemCount, g_selected, false);
       break;
     case kMenuPageDrive:
       DrawDrivePage(menu);
       break;
     case kMenuPageBrowse:
-      UIBrowserDraw(&g_browser, menu, g_chosen);
+      FileBrowserDraw(&g_browser, menu, g_selected);
       break;
     case kMenuPageStatus:
       DrawStatusPage(menu);

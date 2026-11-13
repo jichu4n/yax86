@@ -5,7 +5,7 @@
 
 #include "display.h"
 #include "list_box.h"
-#include "ui_box.h"
+#include "menu_box.h"
 
 typedef enum StopItem {
   kStopCancel = 0,
@@ -13,7 +13,7 @@ typedef enum StopItem {
   kStopItemCount,
 } StopItem;
 
-static const UIBoxItem kStopItems[kStopItemCount] = {
+static const MenuBoxItem kStopItems[kStopItemCount] = {
     [kStopCancel] = {"Cancel", false},
     [kStopConfirm] = {"Disconnect anyway", false},
 };
@@ -31,7 +31,7 @@ ScreenResult USBStorageDisconnectScreenOpen(bool* confirmed) {
   return ScreenOpen(&kUSBStorageDisconnectScreen);
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxTakeEvent(&g_list_box, event, kStopItemCount)) {
     case kListBoxKeySelect:
       if (g_list_box.selected == kStopConfirm) {
@@ -45,7 +45,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static void Draw(Y_UNUSED uint64_t now_us) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
   DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
@@ -61,7 +61,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
 }
 
 // Nothing opens over the question.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   g_list_box.dirty = true;
   return ScreenStays();
 }
@@ -71,9 +71,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "usb_storage_disconnect"; }
 
 const Screen kUSBStorageDisconnectScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

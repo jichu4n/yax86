@@ -6,10 +6,10 @@
 
 #include "display.h"
 #include "list_box.h"
+#include "menu_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
-#include "ui_box.h"
 
 enum {
   kMicrosecondsPerMillisecond = 1000,
@@ -103,7 +103,7 @@ static __noinline ScreenResult Clone(void) {
   return ScreenBack();
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   if (!ListBoxKeyPressed(event)) {
     return ScreenStays();
   }
@@ -132,14 +132,14 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 // Nothing opens over the name.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   g_list_box.dirty = true;
   return ScreenStays();
 }
 
-// The name being typed, in a field marked as the item chosen is, with a
+// The name being typed, in a field marked as the item selected is, with a
 // cursor after it while there is room.
-static void Draw(Y_UNUSED uint64_t now_us) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
   DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
@@ -167,7 +167,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     field[g_name_length] = '_';
   }
   field[kFSMaxFolderName] = '\0';
-  UIBoxPutText(row, menu->columns, 3, field, kUIBoxAttrChosen);
+  MenuBoxPutText(row, menu->columns, 3, field, kMenuBoxAttrSelected);
   ListBoxEndDraw(&g_list_box);
 }
 
@@ -179,9 +179,9 @@ static const char* Hint(void) {
 static const char* PageName(void) { return "vm_name"; }
 
 const Screen kVMNameScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

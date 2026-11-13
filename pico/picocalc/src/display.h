@@ -67,13 +67,14 @@ typedef struct DisplayStats {
 // from then on. Returns the LCD's serial clock in Hz, once it is up.
 uint32_t DisplayStart(void);
 
-// Hand core 1 a copy of the guest's screen, if it has changed since the last
-// one. If core 1 is still drawing the last one, nothing is copied, and what
-// changed is left recorded in video for the next.
+// Send core 1 a copy of the guest's screen, if it has changed since the last
+// one sent. This never waits. If core 1 is still drawing the last copy,
+// nothing is copied, and what changed stays recorded in video for the next
+// call.
 //
 // Returns whether core 1 has what changed: true if it took the copy, or if
 // nothing had changed.
-bool DisplayOfferFrame(YVideoState* video);
+bool DisplaySendFrame(YVideoState* video);
 
 // The status rows to fill in, or NULL while core 1 is still drawing the last
 // ones. Filling them in and calling DisplayEndStatus() hands them over. Only

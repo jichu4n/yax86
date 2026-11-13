@@ -375,7 +375,7 @@ uint32_t DisplayStart(void) {
   return multicore_fifo_pop_blocking();
 }
 
-bool DisplayOfferFrame(YVideoState* video) {
+bool DisplaySendFrame(YVideoState* video) {
   if (video->dirty_state.status == Y_VIDEO_CLEAN) {
     return true;
   }

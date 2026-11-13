@@ -1,4 +1,4 @@
-#include "ui_browser.h"
+#include "file_browser.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -6,7 +6,7 @@
 
 #include "core/hdc.h"
 #include "list_box.h"
-#include "ui_box.h"
+#include "menu_box.h"
 #include "vm_config.h"
 
 enum {
@@ -15,25 +15,25 @@ enum {
   kBrowseNoteColumn = 18,
 };
 
-uint8_t UIBrowserOpen(UIBrowser* browser, const char* folder) {
+uint8_t FileBrowserOpen(FileBrowser* browser, const char* folder) {
   // A floppy drive takes a floppy, drive C a hard disk, and USB either.
   static const uint32_t kImageSizes[] = {
       Y_FDC_FORMAT_360KB_IMAGE_SIZE, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE};
   const uint32_t* sizes = kImageSizes;
   uint8_t num_sizes = 1;
-  if (browser->images == kUIBrowserEither) {
+  if (browser->images == kFileBrowserEither) {
     num_sizes = 2;
-  } else if (browser->images == kUIBrowserHardDisks) {
+  } else if (browser->images == kFileBrowserHardDisks) {
     sizes = &kImageSizes[1];
   }
   FileListRead(&browser->list, folder, sizes, num_sizes);
   browser->top = 0;
-  uint8_t chosen = 0;
-  // The image to choose: the one in the drive, or chosen for the new VM's.
+  uint8_t selected = 0;
+  // The image to select: the one in the drive, or selected for the new VM's.
   // The drives have no images yet at power on.
   const char* current = browser->current;
   if (current == NULL || current[0] == '\0') {
-    return chosen;
+    return selected;
   }
   char path_of_entry[kFSMaxPath + 1];
   for (uint8_t i = 0; i < browser->list.count; ++i) {
@@ -41,79 +41,81 @@ uint8_t UIBrowserOpen(UIBrowser* browser, const char* folder) {
         FileListEntryPath(
             &browser->list, &browser->list.entries[i], path_of_entry) &&
         FSSamePath(path_of_entry, current)) {
-      chosen = i;
-      UIBrowserScrollTo(browser, chosen);
+      selected = i;
+      FileBrowserScrollTo(browser, selected);
     }
   }
-  return chosen;
+  return selected;
 }
 
-bool UIBrowserAtRoot(const UIBrowser* browser) {
+bool FileBrowserAtRoot(const FileBrowser* browser) {
   return browser->list.path[0] == '\0';
 }
 
-uint8_t UIBrowserUp(UIBrowser* browser) {
+uint8_t FileBrowserUp(FileBrowser* browser) {
   char left[kFSMaxPath + 1];
   char parent[kFSMaxPath + 1];
   FSCopyPath(browser->list.path, left);
   FSFolderOf(left, parent);
-  uint8_t chosen = UIBrowserOpen(browser, parent);
+  uint8_t selected = FileBrowserOpen(browser, parent);
   char path_of_entry[kFSMaxPath + 1];
   for (uint8_t i = 0; i < browser->list.count; ++i) {
     if (browser->list.entries[i].kind == kFileListFolder &&
         FileListEntryPath(
             &browser->list, &browser->list.entries[i], path_of_entry) &&
         FSSamePath(path_of_entry, left)) {
-      chosen = i;
-      UIBrowserScrollTo(browser, chosen);
+      selected = i;
+      FileBrowserScrollTo(browser, selected);
     }
   }
-  return chosen;
+  return selected;
 }
 
-uint8_t UIBrowserCount(const UIBrowser* browser) { return browser->list.count; }
+uint8_t FileBrowserCount(const FileBrowser* browser) {
+  return browser->list.count;
+}
 
-UIBrowserChoice UIBrowserChoose(
-    UIBrowser* browser, uint8_t* chosen, char path[kFSMaxPath + 1],
+FileBrowserSelection FileBrowserSelect(
+    FileBrowser* browser, uint8_t* selected, char path[kFSMaxPath + 1],
     uint32_t* size) {
-  if (*chosen >= browser->list.count) {
-    return kUIBrowserNothing;
+  if (*selected >= browser->list.count) {
+    return kFileBrowserNothing;
   }
-  const FileListEntry* entry = &browser->list.entries[*chosen];
+  const FileListEntry* entry = &browser->list.entries[*selected];
   if (!FileListEntryPath(&browser->list, entry, path)) {
-    return kUIBrowserNothing;
+    return kFileBrowserNothing;
   }
   if (entry->kind == kFileListParent) {
-    *chosen = UIBrowserUp(browser);
-    return kUIBrowserOpened;
+    *selected = FileBrowserUp(browser);
+    return kFileBrowserOpenedFolder;
   }
   if (entry->kind == kFileListFolder) {
-    *chosen = UIBrowserOpen(browser, path);
-    return kUIBrowserOpened;
+    *selected = FileBrowserOpen(browser, path);
+    return kFileBrowserOpenedFolder;
   }
   *size = entry->size;
-  return kUIBrowserChoseImage;
+  return kFileBrowserSelectedImage;
 }
 
-void UIBrowserScrollTo(UIBrowser* browser, uint8_t chosen) {
-  ListBoxScrollTo(chosen, &browser->top);
+void FileBrowserScrollTo(FileBrowser* browser, uint8_t selected) {
+  ListBoxScrollTo(selected, &browser->top);
 }
 
-// What the browser says of a folder with nothing to choose in it.
-static const char* BrowseEmpty(const UIBrowser* browser) {
-  if (browser->images == kUIBrowserEither) {
+// What the browser says of a folder with nothing to select in it.
+static const char* BrowseEmpty(const FileBrowser* browser) {
+  if (browser->images == kFileBrowserEither) {
     return "No folders or disk images";
   }
-  if (browser->images == kUIBrowserHardDisks) {
+  if (browser->images == kFileBrowserHardDisks) {
     return "No folders or hard disk images";
   }
   return "No folders or floppy images";
 }
 
-void UIBrowserDraw(
-    const UIBrowser* browser, DisplayMenu* menu, uint8_t chosen) {
+void FileBrowserDraw(
+    const FileBrowser* browser, DisplayMenu* menu, uint8_t selected) {
   const FileList* list = &browser->list;
-  UIBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
+  MenuBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
   // The folder, from the card's root, keeping its end if it is too long.
   char title[kListBoxNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
@@ -128,31 +130,32 @@ void UIBrowserDraw(
   } else {
     snprintf(title, sizeof(title), "%s", full);
   }
-  UIBoxEdgeRow(&menu->text[0], menu->columns, true, title);
+  MenuBoxEdgeRow(&menu->text[0], menu->columns, true, title);
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(browser->top + i);
     if (index >= list->count) {
-      UIBoxBlankRow(row, menu->columns);
+      MenuBoxBlankRow(row, menu->columns);
       if (i == 0 && !list->readable) {
-        UIBoxPutText(
-            row, menu->columns, 3, "The card cannot be read", kUIBoxAttrText);
+        MenuBoxPutText(
+            row, menu->columns, 3, "The card cannot be read", kMenuBoxAttrText);
       } else if (i == 1 && list->count <= 1) {
-        UIBoxPutText(
-            row, menu->columns, 3, BrowseEmpty(browser), kUIBoxAttrText);
+        MenuBoxPutText(
+            row, menu->columns, 3, BrowseEmpty(browser), kMenuBoxAttrText);
       }
       continue;
     }
     const FileListEntry* entry = &list->entries[index];
-    UIBoxItemRow(row, menu->columns, entry->name, index == chosen);
-    const uint8_t attr = index == chosen ? kUIBoxAttrChosen : kUIBoxAttrText;
+    MenuBoxItemTextRow(row, menu->columns, entry->name, index == selected);
+    const uint8_t attr =
+        index == selected ? kMenuBoxAttrSelected : kMenuBoxAttrText;
     char path[kFSMaxPath + 1];
     if (entry->kind != kFileListImage) {
-      UIBoxPutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
+      MenuBoxPutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
       continue;
     }
-    if (browser->images == kUIBrowserEither) {
-      UIBoxPutText(
+    if (browser->images == kFileBrowserEither) {
+      MenuBoxPutText(
           row, menu->columns, kBrowseNoteColumn,
           entry->size == Y_FDC_FORMAT_360KB_IMAGE_SIZE ? "floppy" : "hard disk",
           attr);
@@ -166,12 +169,12 @@ void UIBrowserDraw(
       if (in_drive != NULL && FSSamePath(path, in_drive)) {
         char note[16];
         snprintf(note, sizeof(note), "in %s", kVMDriveLabels[drive]);
-        UIBoxPutText(row, menu->columns, kBrowseNoteColumn, note, attr);
+        MenuBoxPutText(row, menu->columns, kBrowseNoteColumn, note, attr);
       }
     }
   }
   // A folder with more entries than a list holds says so on the bottom edge.
-  UIBoxEdgeRow(
+  MenuBoxEdgeRow(
       &menu->text[kListBoxRows + 1], menu->columns, false,
       list->truncated ? "the first 64 entries" : NULL);
   ListBoxDrawScrollArrows(menu, browser->top, list->count);

@@ -3,7 +3,7 @@
 // modes are one, and the in-VM menu draws its pages with it too.
 //
 // This has what they have in common, apart from drawing the box itself,
-// which is ui_box.h's:
+// which is menu_box.h's:
 //
 // - taking a key: moving the selection with the move keys, and telling the
 //   screen whether Enter or Space selected the item, or Esc or Backspace
@@ -23,8 +23,8 @@
 #include <stdint.h>
 
 #include "display.h"
+#include "menu_box.h"
 #include "southbridge.h"
-#include "ui_box.h"
 
 enum {
   // The width of a box, in columns. Most boxes are narrow, centered on the
@@ -117,8 +117,8 @@ void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total);
 // the list's.
 void ListBoxDrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const UIBoxItem* items, uint8_t count, uint8_t selected,
-    bool list_sized);
+    uint8_t line_count, const MenuBoxItem* items, uint8_t count,
+    uint8_t selected, bool list_sized);
 
 // Whether menu is a box of another size than the one last drawn, so that the
 // guest's screen has to be drawn under it first.

@@ -6,9 +6,9 @@
 #include "display.h"
 #include "font_screen.h"
 #include "list_box.h"
-#include "ui_box.h"
+#include "menu_box.h"
 
-static const UIBoxItem kSettingsItems[] = {{"Font", true}};
+static const MenuBoxItem kSettingsItems[] = {{"Font", true}};
 enum {
   kSettingsItemCount = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
 };
@@ -26,7 +26,7 @@ ScreenResult SettingsScreenOpen(Settings* settings) {
   return ScreenOpen(&kSettingsScreen);
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxTakeEvent(&g_list_box, event, kSettingsItemCount)) {
     case kListBoxKeySelect:
       return FontScreenOpen(g_settings);
@@ -37,7 +37,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static void Draw(Y_UNUSED uint64_t now_us) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
   DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
@@ -48,7 +48,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   ListBoxEndDraw(&g_list_box);
 }
 
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   g_list_box.dirty = true;
   return ScreenStays();
 }
@@ -58,9 +58,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "settings"; }
 
 const Screen kSettingsScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

@@ -7,9 +7,9 @@
 
 #include <stdint.h>
 
+#include "file_browser.h"
 #include "fs.h"
 #include "screen.h"
-#include "ui_browser.h"
 
 // Show the browser on folder, listing images, with the image at current
 // chosen if it is there; NULL or empty for none. current must stay as it is
@@ -17,7 +17,7 @@
 // to path, a path from the card's root, and its length to *size, before the
 // browser goes back. Both must outlive the screen.
 ScreenResult BrowserScreenOpen(
-    UIBrowserImages images, const char* folder, const char* current,
+    FileBrowserImages images, const char* folder, const char* current,
     char path[kFSMaxPath + 1], uint32_t* size);
 
 // Show the browser again as it was left, with its folder and entry chosen:

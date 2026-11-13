@@ -189,9 +189,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   clears**: set once filled, cleared once drawn, and left alone by core 0
   while set, so neither core waits. Drawing figures both write are under a
   lock.
-- A frame is offered once per emulated frame, 60 a second, between batches.
-  One offered while core 1 is still drawing is not copied and counts as late;
-  what changed goes with the next. Four are late during `dos-boot`.
+- A frame is sent once per emulated frame, 60 a second, between batches,
+  with `DisplaySendFrame()`, which never waits. One sent while core 1 is
+  still drawing is not copied and counts as late; what changed goes with
+  the next. Four are late during `dos-boot`.
 - **Drawing costs core 0 1.5% of `dos-boot`** at 250MHz: 4.7975 seconds
   against 4.7267 without, the same instructions, a spread under 0.01%. On
   core 0 it cost 5.3%. Of the 0.071 seconds, 0.010 is copying 16KB of video
@@ -362,9 +363,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   what happens with time, and the chance to draw. It composes the status
   rows itself, with `src/launcher_status_bar.c`, from the keys `ScreenHint()`
   gives: the router leaves the rows to each loop, as the VM's have its
-  drives and locks too. A `Screen` is those
-  functions, with its page's name for the report and a `resume` for
-  showing again. The router keeps the screens as a stack, the list at the
+  drives and locks too. A `Screen` is those functions, `on_key`, `on_tick`
+  and `on_draw`, with `on_resume` for showing again and its page's name for
+  the report. The router keeps the screens as a stack, the list at the
   bottom, and only the one on top is called, so the stack's depth adds
   nothing to core 0's. Calls go one way, from the loop to the screen and
   from the screen down.
@@ -372,7 +373,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   open function, which takes what the page works on as parameters:
   `SettingsScreenOpen(&g_settings)`. The parent holds the state and passes
   pointers down; a child writes what it chose through them, and when it
-  returns `ScreenBack()` the parent's `resume` finds it there. A result
+  returns `ScreenBack()` the parent's `on_resume` finds it there. A result
   carries no value, only what the router does: stay, open a screen, back,
   or close every screen, so `screen.c` knows nothing of VMs and serves any
   menu. The list writes the VM chosen through the pointer
@@ -389,7 +390,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
   under it, in `src/vm_manager_screen.c` and `src/vm_*screen.c`; and the list
   itself, in `src/launcher_menu_screen.c`.
-- **A `resume` returns a result, as a key does**, so a parent can act on
+- **An `on_resume` returns a result, as a key does**, so a parent can act on
   what its child left: the USB page, finding exporting ended, goes back too,
   and the list, told through `g_exported`, reads the card again.
 - **The browser is a screen any parent opens**: `BrowserScreenOpen()` takes
@@ -780,7 +781,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Both Shift keys held together open it**, which nothing in DOS does and
   typing never does, and close it again. `src/menu.c` keeps its state and
-  draws it, in boxes and rows from `src/ui_box.c`. `src/emulator.c` carries
+  draws it, in boxes and rows from `src/menu_box.c`. `src/emulator.c` carries
   out what the menu's items do, through the callbacks in `MenuConfig`.
 - **A list box is a box that lists items, one of them selected**: most
   screens, and the menu's pages. `src/list_box.c` has what they share:
@@ -793,7 +794,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   after `ListBoxKeyPressed()`, and passes the rest to `ListBoxTakeKey()`:
   the name being typed, Backspace up a folder in the browser, Esc ignored
   on the list.
-- **The file browser both modes use is `src/ui_browser.c`**, which says
+- **The file browser both modes use is `src/file_browser.c`**, which says
   which image was chosen and leaves what to do with it to its user.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather

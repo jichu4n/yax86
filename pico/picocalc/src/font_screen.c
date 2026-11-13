@@ -7,11 +7,11 @@
 #include "display.h"
 #include "font_4x10.h"
 #include "list_box.h"
+#include "menu_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "text.h"
-#include "ui_box.h"
 #include "vm_config.h"
 
 extern const Screen kFontScreen;
@@ -46,7 +46,7 @@ static __noinline void ChooseFont(void) {
   SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxTakeEvent(&g_list_box, event, kFont4x10Count)) {
     case kListBoxKeySelect:
       ChooseFont();
@@ -58,14 +58,14 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static void Draw(Y_UNUSED uint64_t now_us) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
   DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  UIBoxItem items[kFont4x10Count];
+  MenuBoxItem items[kFont4x10Count];
   for (uint8_t i = 0; i < kFont4x10Count; ++i) {
-    items[i] = (UIBoxItem){Font4x10Label((Font4x10)i), false};
+    items[i] = (MenuBoxItem){Font4x10Label((Font4x10)i), false};
   }
   ListBoxDrawItems(
       menu, "Font", NULL, 0, items, kFont4x10Count, g_list_box.selected, true);
@@ -73,7 +73,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
 }
 
 // Nothing opens over Font.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   g_list_box.dirty = true;
   return ScreenStays();
 }
@@ -83,9 +83,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "font"; }
 
 const Screen kFontScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };
