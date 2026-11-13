@@ -48,8 +48,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Each core has a 4KB stack, core 1's directly below core 0's**, so core 0
   running past the bottom of its own writes over the frames core 1 is in,
   which hangs core 1 - drawing and screenshots - with nothing said. Both are
-  painted at startup, and the report's `stack` group gives the most of each
-  ever used. Core 0 peaks at about 3.2KB, renaming a VM other VMs name.
+  painted at startup by `src/stacks.c`, and the report's `stack` group
+  gives the most of each ever used. Core 0 peaks at about 3.2KB, renaming a VM other VMs name.
   Inlined into the list's loop, the handlers of its actions had all their
   locals on the stack at once, and a report at the list overflowed it; they
   are kept out of line with `__noinline`. The report is answered in three
@@ -392,6 +392,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   write the one chosen. A parent that cannot use the image, such as one
   that does not open for USB, shows why and returns
   `BrowserScreenReopen()`, which puts the browser back as it was left.
+- **The firmware runs in two modes, one after the other**: `main.c` brings
+  the board up, then runs `LauncherRun()`, which returns once a VM is
+  chosen, and `EmulatorRun()`, which runs it for as long as the board has
+  power. Nothing goes back from the emulator to the launcher but a reboot,
+  with the start note. `main.c` holds what both share and passes it down:
+  guest RAM, which the launcher borrows for copies until the VM starts,
+  the card's VMs and settings, the VM chosen, and `BoardStatus`, what
+  bringing the board up found, for the emulator's report and status page.
+  Bringing it up is out of line, in `BringUp()`, so that its locals are off
+  core 0's stack while the modes run.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the
@@ -755,8 +765,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   common with the list at power on's is in `src/ui_page.c`: moving the
   chosen item, scrolling a list, and a page of items. The file browser both
   use is `src/ui_browser.c`, which says which image was chosen and leaves
-  what to do with it to its user. `main.c` carries out what the menu's items
-  do, through the callbacks in `MenuConfig`.
+  what to do with it to its user. `src/emulator.c` carries out what the
+  menu's items do, through the callbacks in `MenuConfig`.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,
@@ -903,7 +913,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `src/command.c` reads them and `src/commands.c` carries them out, in
   either mode: `ping`, `key` and `screenshot` itself, and the report's
   groups and `screen` through the `CommandsHandlers` the mode's loop hands
-  it, which are `main.c`'s for now:
+  it, which are the emulator's, `kEmulatorCommands`, in both modes: before
+  the VM starts they report it as it stands, with nothing run:
 
   | command | does |
   | --- | --- |

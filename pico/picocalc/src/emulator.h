@@ -1,0 +1,43 @@
+// Emulator mode, once the launcher has chosen a VM, or without a card none:
+// the VM brought up with its drives' images, or with none the floppy built
+// into flash, and run paced to real time for as long as the board has power,
+// with the PicoCalc's keyboard as its own. The guest's text screen is on the
+// LCD, and the menu opens over it: the VM is paused while it is open. DOS's
+// date and time questions are answered by watching the screen, the way
+// pico/bench does it, which keeps the boot the dos-boot workload.
+//
+// It runs on core 0 and never touches the LCD: core 1 draws everything on
+// it, from copies core 0 hands over - see display.h. The guest's screen
+// takes the top 250 rows of the panel - 80 by 25 cells of the 4x10 font -
+// and the status rows the rest. Everything on them is also reported over
+// USB serial for pico/bench/run.js to capture. A report is printed whenever
+// a host attaches, since USB CDC drops whatever is written before then.
+#ifndef YAX86_PICOCALC_EMULATOR_H
+#define YAX86_PICOCALC_EMULATOR_H
+
+#include <stdint.h>
+
+#include "board.h"
+#include "commands.h"
+#include "settings.h"
+#include "vm_config.h"
+#include "vm_list.h"
+
+// The report's groups and the guest's text screen, for the commands, in
+// either mode: before the VM starts they give the emulator as it stands,
+// with nothing run.
+extern const CommandsHandlers kEmulatorCommands;
+
+// Set the emulator up, before launcher mode: with what bringing the board
+// up found, the card's VMs and settings as the launcher reads them, and
+// guest_ram, kPicoGuestSRAMSize bytes, which the launcher borrows until the
+// VM starts. Each must outlive the emulator.
+void EmulatorInit(
+    const BoardStatus* board, const VMList* vms, const Settings* settings,
+    uint8_t* guest_ram);
+
+// Run vm, main.c's, whose floppy drives' images are saved to it as they
+// change; or with NULL, the built-in floppy. Never returns.
+void EmulatorRun(VMConfig* vm);
+
+#endif  // YAX86_PICOCALC_EMULATOR_H
