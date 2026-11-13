@@ -4,15 +4,15 @@
 // which the in-VM menu's Reset and Power off leave across the reboot to say
 // what to do next. Then it does one of two things. It loads a VM to start at
 // once: the one reset, or the default when the settings ask for no
-// countdown. Or it sets up the launcher menu, the list of VMs to choose
-// from, which counts down to the default.
+// countdown. Or it sets up the launcher menu, which lists the VMs for starting
+// one, and counts down to the default.
 //
-// The launcher menu (launcher_menu_screen.c) only chooses. Everything done
-// with the card is here: loading the VM chosen, which makes it the default,
-// and reading the card again after USB mass storage has given it to the
-// host. For now the launcher holds the VM list and the settings, and main.c
-// runs the launcher menu's loop, answering commands and updating the status
-// rows.
+// The launcher menu (launcher_menu_screen.c) only decides what to do.
+// Everything done with the card is here: loading the VM selected, which
+// makes it the default, and reading the card again after USB mass storage
+// has given it to the host. For now the launcher holds the VM list and the
+// settings, and main.c runs the launcher menu's loop, answering commands and
+// updating the status rows.
 #ifndef YAX86_PICOCALC_LAUNCHER_H
 #define YAX86_PICOCALC_LAUNCHER_H
 
@@ -30,7 +30,7 @@
 typedef enum StartIntent {
   // Start the VM again at once, without the launcher menu.
   kStartIntentRestart = 0,
-  // Show the launcher menu with the VM chosen, and wait for a key.
+  // Show the launcher menu with the VM selected, and wait for a key.
   kStartIntentMenu,
 } StartIntent;
 
@@ -58,22 +58,22 @@ const Settings* LauncherSettings(void);
 LauncherStartResult LauncherStart(VMConfig* vm);
 
 // Show the launcher menu as the launcher has set it up, with its VMs and
-// settings. The launcher menu closes once it has chosen.
+// settings. The launcher menu closes once it has decided what to do.
 ScreenResult LauncherOpenMenu(void);
 
 // Act on why the launcher menu closed.
 //
-// Returns true when a VM is to start: the one chosen, loaded into *vm.
+// Returns true when a VM is to start: the one selected, loaded into *vm.
 //
 // Returns false for LauncherOpenMenu() to show the menu again, without
 // counting down, in two cases. USB mass storage gave the card to the host:
-// the card has been read again. Or the chosen VM's vm.cfg does not read: its
-// problem shows, and it stays chosen.
+// the card has been read again. Or the selected VM's vm.cfg does not read:
+// its problem shows, and it stays selected.
 bool LauncherHandleMenuExit(VMConfig* vm);
 
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the launcher menu with it
-// chosen.
+// selected.
 void LauncherLeaveStartNote(StartIntent intent, const char* name);
 
 #endif  // YAX86_PICOCALC_LAUNCHER_H

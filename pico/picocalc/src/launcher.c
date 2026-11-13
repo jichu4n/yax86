@@ -46,10 +46,10 @@ static VMList g_vms;
 static Settings g_settings;
 // Guest RAM, lent before the VM starts - see LauncherInit().
 static uint8_t* g_copy_buffer;
-// How the launcher menu is to open: the VM chosen in it, and how long it
+// How the launcher menu is to open: the VM selected in it, and how long it
 // counts down to starting that VM by itself, 0 for no countdown. And why it
 // last closed.
-static uint8_t g_chosen;
+static uint8_t g_selected;
 static uint32_t g_countdown_ms;
 static LauncherMenuExit g_exit;
 
@@ -141,12 +141,12 @@ static void SaveBootDefault(const char* name) {
 
 // Load the VM at index in g_vms to start it: read its vm.cfg into *config,
 // and make it the default. Returns false, with its problem shown on the
-// list, if it does not read.
-static __noinline bool LoadChosenVM(uint8_t index, VMConfig* config) {
+// launcher menu, if it does not read.
+static __noinline bool LoadSelectedVM(uint8_t index, VMConfig* config) {
   const VMEntry* vm = &g_vms.vms[index];
   char problem[kVMProblemLength + 1];
   if (VMConfigRead(vm, config, problem)) {
-    SYSTEM_INFO("vm_chosen", Y_LOG_STRING("path", vm->path));
+    SYSTEM_INFO("vm_loaded", Y_LOG_STRING("path", vm->path));
     SaveBootDefault(vm->name);
     return true;
   }
@@ -163,9 +163,9 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
   StartNote note = {0};
   const bool noted = TakeStartNote(&note);
   VMListRead(&g_vms);
-  uint8_t chosen = 0;
-  const bool settings_read = ReadSettings(&chosen);
-  // Without a card there is nothing to choose, or to put on USB.
+  uint8_t selected = 0;
+  const bool settings_read = ReadSettings(&selected);
+  // Without a card there is no VM to start, or card to put on USB.
   if (DiskImageMountCard() != kDiskImageOpen) {
     return kLauncherNoCard;
   }
@@ -175,17 +175,17 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
         Y_LOG_STRING("name", note.name));
     const uint8_t index = VMListFind(&g_vms, note.name);
     if (index < kVMListMax) {
-      chosen = index;
-      if (note.intent == kStartIntentRestart && LoadChosenVM(index, vm)) {
+      selected = index;
+      if (note.intent == kStartIntentRestart && LoadSelectedVM(index, vm)) {
         return kLauncherLoadedVM;
       }
     }
   } else if (
       settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
-      LoadChosenVM(chosen, vm)) {
+      LoadSelectedVM(selected, vm)) {
     return kLauncherLoadedVM;
   }
-  g_chosen = chosen;
+  g_selected = selected;
   const bool counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
   g_countdown_ms =
       counting ? (uint32_t)g_settings.boot_delay * kMillisecondsPerSecond : 0;
@@ -194,7 +194,7 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
 
 ScreenResult LauncherOpenMenu(void) {
   return LauncherMenuScreenOpen(
-      &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize, g_chosen,
+      &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize, g_selected,
       g_countdown_ms, &g_exit);
 }
 
@@ -204,9 +204,9 @@ bool LauncherHandleMenuExit(VMConfig* vm) {
   if (g_exit.reason == kLauncherMenuExitReadCard) {
     // The host may have added VMs, removed them, or changed the settings.
     VMListRead(&g_vms);
-    ReadSettings(&g_chosen);
+    ReadSettings(&g_selected);
     return false;
   }
-  g_chosen = g_exit.vm;
-  return LoadChosenVM(g_exit.vm, vm);
+  g_selected = g_exit.vm;
+  return LoadSelectedVM(g_exit.vm, vm);
 }

@@ -1036,7 +1036,7 @@ static void ResetVM(void) {
   LauncherLeaveStartNote(kStartIntentRestart, g_vm.entry.name);
 }
 
-// Back to the launcher menu, which waits for a key with the VM chosen.
+// Back to the launcher menu, which waits for a key with the VM selected.
 static void PowerOffVM(void) {
   SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm.entry.path));
   LauncherLeaveStartNote(kStartIntentMenu, g_vm.entry.name);
@@ -1270,22 +1270,22 @@ static void RunVM(bool vm_ready) {
 }
 
 // ============================================================================
-// Choosing a VM
+// The launcher
 // ============================================================================
 
-// Choose the VM to start, with the launcher. Without a card there is none,
-// and the floppy built into flash boots.
+// Run the launcher until it has loaded a VM to start. Without a card it
+// loads none, and the floppy built into flash boots.
 //
 // LauncherStart() reads the card, and either loads a VM to start at once or
 // sets up the launcher menu; launcher.h says when. Then this runs the
 // launcher menu: it answers commands, hands each key and the time passing to
 // the screen showing, composes the status rows from its keys, and draws it.
-// When the menu closes, LauncherHandleMenuExit() loads the VM chosen, or the
-// menu opens again.
+// When the menu closes, LauncherHandleMenuExit() loads the VM selected, or
+// the menu opens again.
 //
 // Kept out of line with __noinline, so that its locals are on core 0's stack
 // only while it runs. See PaintStacks().
-static __noinline void ChooseVM(void) {
+static __noinline void RunLauncher(void) {
   switch (LauncherStart(&g_vm)) {
     case kLauncherLoadedVM:
       g_has_vm = true;
@@ -1307,7 +1307,7 @@ static __noinline void ChooseVM(void) {
     if (ScreenIsOpen()) {
       ScreenTick();
     }
-    // The launcher menu closes once it has chosen: a VM to start, which may
+    // The launcher menu closes once it has decided: a VM to start, which may
     // not load, or after USB mass storage, the card to be read again.
     if (!ScreenIsOpen()) {
       if (LauncherHandleMenuExit(&g_vm)) {
@@ -1488,7 +1488,7 @@ int main(void) {
   // Before the list, whose copies go through guest RAM.
   LauncherInit(g_guest_ram);
 
-  ChooseVM();
+  RunLauncher();
   OpenDrives();
   RunVM(InitVM());
   return 0;
