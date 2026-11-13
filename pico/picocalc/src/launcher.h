@@ -1,9 +1,18 @@
-// The list of VMs at power on, and what can be done from it: starting a VM,
-// managing VMs, exporting the card or an image over USB, and opening Settings
-// with the card's settings, which the launcher holds.
-// main.c runs the list's loop, answering commands, updating the status rows
-// and drawing the menu, and the launcher decides what the list does: which
-// VM starts, when the countdown ends, and what a key leads to.
+// The launcher: what happens from power on until a VM starts.
+//
+// At power on it reads the card: the VMs, the settings, and the start note,
+// which the in-VM menu's Reset and Power off leave across the reboot to say
+// what to do next. Then it does one of two things. It loads a VM to start at
+// once: the one reset, or the default when the settings ask for no
+// countdown. Or it sets up the launcher menu, which lists the VMs for starting
+// one, and counts down to the default.
+//
+// The launcher menu (launcher_menu_screen.c) only decides what to do.
+// Everything done with the card is here: loading the VM selected, which
+// makes it the default, and reading the card again after USB mass storage
+// has given it to the host. For now the launcher holds the VM list and the
+// settings, and main.c runs the launcher menu's loop, answering commands and
+// updating the status rows.
 #ifndef YAX86_PICOCALC_LAUNCHER_H
 #define YAX86_PICOCALC_LAUNCHER_H
 
@@ -19,21 +28,21 @@
 // What the start after a reboot is to do, left by the menu's Reset and Power
 // off.
 typedef enum StartIntent {
-  // Start the VM again at once, without the list.
+  // Start the VM again at once, without the launcher menu.
   kStartIntentRestart = 0,
-  // Show the list, with the VM highlighted, and wait for a key.
-  kStartIntentList,
+  // Show the launcher menu with the VM selected, and wait for a key.
+  kStartIntentMenu,
 } StartIntent;
 
 // What LauncherStart() found to do.
 typedef enum LauncherStartResult {
-  // A VM was taken without the list: the one restarted, or the default with
-  // no wait.
-  kLauncherTookVM = 0,
+  // A VM was loaded without the launcher menu: the one restarted, or the
+  // default with no wait.
+  kLauncherLoadedVM = 0,
   // There is no card, so the built-in floppy boots.
   kLauncherNoCard,
-  // The list shows, and waits for a key or the countdown.
-  kLauncherShowsList,
+  // The launcher menu shows, and waits for a key or the countdown.
+  kLauncherShowsMenu,
 } LauncherStartResult;
 
 // Lend the launcher copy_buffer, kCopyBufferSize bytes of guest RAM, which
@@ -45,18 +54,26 @@ const VMList* LauncherVMs(void);
 const Settings* LauncherSettings(void);
 
 // Read the card's VMs and settings, and the note a reset or power off left,
-// and either take a VM at once into *vm or show the list.
+// and either load a VM to start at once into *vm or set the launcher menu up.
 LauncherStartResult LauncherStart(VMConfig* vm);
 
-// Show the list LauncherStart() set up, and the pages reached from it other
-// than Settings, as one screen, whose keys stop the countdown and whose time
-// runs it. A VM chosen, or reached by the countdown, is read into *chosen,
-// and closes the screens; one whose configuration does not read leaves the
-// list showing its problem.
-ScreenResult LauncherScreenOpen(VMConfig* chosen);
+// Show the launcher menu as the launcher has set it up, with its VMs and
+// settings. The launcher menu closes once it has decided what to do.
+ScreenResult LauncherOpenMenu(void);
+
+// Act on why the launcher menu closed.
+//
+// Returns true when a VM is to start: the one selected, loaded into *vm.
+//
+// Returns false for LauncherOpenMenu() to show the menu again, without
+// counting down, in two cases. USB mass storage gave the card to the host:
+// the card has been read again. Or the selected VM's vm.cfg does not read:
+// its problem shows, and it stays selected.
+bool LauncherHandleMenuExit(VMConfig* vm);
 
 // Restart the board, leaving a note for the start after it, with name the
-// VM's: to start it again at once, or to show the list with it highlighted.
+// VM's: to start it again at once, or to show the launcher menu with it
+// selected.
 void LauncherLeaveStartNote(StartIntent intent, const char* name);
 
 #endif  // YAX86_PICOCALC_LAUNCHER_H

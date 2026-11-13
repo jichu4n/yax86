@@ -1074,10 +1074,10 @@ static void ResetVM(void) {
   LauncherLeaveStartNote(kStartIntentRestart, g_vm.entry.name);
 }
 
-// Back to the list, which waits for a key with the VM left highlighted.
+// Back to the launcher menu, which waits for a key with the VM selected.
 static void PowerOffVM(void) {
   SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm.entry.path));
-  LauncherLeaveStartNote(kStartIntentList, g_vm.entry.name);
+  LauncherLeaveStartNote(kStartIntentMenu, g_vm.entry.name);
 }
 
 // Whether there is a list to power off to: there is one only with a card, and
@@ -1313,34 +1313,32 @@ static void RunVM(bool vm_ready) {
 }
 
 // ============================================================================
-// Choosing a VM
+// The launcher
 // ============================================================================
 
-// With a card, show the list of its VMs until one is chosen whose
-// configuration reads, or until the default starts by itself, the countdown
-// running until a key is pressed. Settings that ask for no wait start the
-// default at once, without the list, unless there is a problem to show. With
-// no VMs the list offers only USB disk mode, and nothing starts by itself.
-// Without a card, the built-in floppy boots in drive A.
+// Run the launcher until it has loaded a VM to start. Without a card it
+// loads none, and the floppy built into flash boots.
 //
-// After a reset the VM reset starts again at once; after a power off the list
-// waits for a key, with the VM turned off highlighted. Either way, a VM that
-// no longer reads leaves the list waiting with its problem.
+// LauncherStart() reads the card, and either loads a VM to start at once or
+// sets up the launcher menu; launcher.h says when. Then this runs the
+// launcher menu: it answers commands, hands each key and the time passing to
+// the screen showing, composes the status rows from its keys, and draws it.
+// When the menu closes, LauncherHandleMenuExit() loads the VM selected, or
+// the menu opens again.
 //
-// It and the handlers of what can be done from the list are kept out of line
-// with __noinline, so that only the one running has its locals on core 0's
-// stack - see PaintStacks().
-static __noinline void ChooseVM(void) {
+// Kept out of line with __noinline, so that its locals are on core 0's stack
+// only while it runs. See PaintStacks().
+static __noinline void RunLauncher(void) {
   switch (LauncherStart(&g_vm)) {
-    case kLauncherTookVM:
+    case kLauncherLoadedVM:
       g_has_vm = true;
       return;
     case kLauncherNoCard:
       return;
-    case kLauncherShowsList:
+    case kLauncherShowsMenu:
       break;
   }
-  ScreenShow(LauncherScreenOpen(&g_vm));
+  ScreenShow(LauncherOpenMenu());
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
@@ -1355,10 +1353,14 @@ static __noinline void ChooseVM(void) {
     if (ScreenIsOpen()) {
       ScreenTick();
     }
-    // The list closes once a VM is chosen.
+    // The launcher menu closes once it has decided: a VM to start, which may
+    // not load, or after USB mass storage, the card to be read again.
     if (!ScreenIsOpen()) {
-      g_has_vm = true;
-      return;
+      if (LauncherHandleMenuExit(&g_vm)) {
+        g_has_vm = true;
+        return;
+      }
+      ScreenShow(LauncherOpenMenu());
     }
     // The keys for the page a key led to are offered at once rather than at
     // the next update.
@@ -1532,7 +1534,7 @@ int main(void) {
   // Before the list, whose copies go through guest RAM.
   LauncherInit(g_guest_ram);
 
-  ChooseVM();
+  RunLauncher();
   OpenDrives();
   RunVM(InitVM());
   return 0;

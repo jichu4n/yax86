@@ -8,17 +8,14 @@
 
 #include "disk_image.h"
 #include "display.h"
-#include "fs.h"
 #include "hardware/watchdog.h"
-#include "launcher_menu.h"
+#include "launcher_menu_screen.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
-#include "settings_screen.h"
 #include "status_bar.h"
+#include "text.h"
 #include "ui_status.h"
-#include "usb_storage_screen.h"
 #include "vm_list.h"
-#include "vm_manager_screen.h"
 
 enum {
   // The part of the guest's RAM a clone's files are copied through, before a
@@ -29,7 +26,6 @@ enum {
   // start after the reboot - see LeaveStartNote().
   kStartNoteMarker = 0x5747A27E,
 
-  kMicrosecondsPerSecond = 1000 * 1000,
   kMillisecondsPerSecond = 1000,
 };
 
@@ -50,14 +46,12 @@ static VMList g_vms;
 static Settings g_settings;
 // Guest RAM, lent before the VM starts - see LauncherInit().
 static uint8_t* g_copy_buffer;
-// When the default VM starts by itself, and whether it is still counting
-// down to it: a key stops it.
-// Where the VM chosen from the list goes.
-static VMConfig* g_chosen;
-// Whether the card or an image has been on USB, so the card is read again.
-static bool g_exported;
-static absolute_time_t g_start_at;
-static bool g_counting;
+// How the launcher menu is to open: the VM selected in it, and how long it
+// counts down to starting that VM by itself, 0 for no countdown. And why it
+// last closed.
+static uint8_t g_selected;
+static uint32_t g_countdown_ms;
+static LauncherMenuExit g_exit;
 
 // Restart the board, leaving a note for the start after it, which takes it
 // - see TakeStartNote(). Every start, whether from power on, a reset or a power
@@ -94,6 +88,38 @@ static bool TakeStartNote(StartNote* note) {
   return true;
 }
 
+void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
+
+const VMList* LauncherVMs(void) { return &g_vms; }
+
+const Settings* LauncherSettings(void) { return &g_settings; }
+
+// Read the card's settings, use their font, and set *default_vm to the
+// index of the default VM in g_vms, or 0 without one. Returns false, with the
+// problem shown on the launcher menu, if the settings had one. Kept out of
+// line, so that its message is on core 0's stack only while it runs rather than
+// in the frames of the callers it would be inlined into.
+static __noinline bool ReadSettings(uint8_t* default_vm) {
+  Settings* settings = &g_settings;
+  char problem[kVMProblemLength + 1];
+  bool read = SettingsRead(settings, problem);
+  DisplaySetFont(settings->font);
+  *default_vm = 0;
+  if (read && settings->boot_default[0] != '\0') {
+    // Past the list's end, the first is the default instead.
+    const uint8_t index = VMListFind(&g_vms, settings->boot_default);
+    if (index < kVMListMax) {
+      *default_vm = index;
+    }
+  }
+  if (!read) {
+    char message[kTextColumns + 1];
+    snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
+    UIStatusSetProblem(message);
+  }
+  return read;
+}
+
 // Make the VM named name the one to start at the next power on, if it is not
 // already. Writing the card only when it changes keeps a board that starts
 // its default every time from writing at all.
@@ -113,11 +139,14 @@ static void SaveBootDefault(const char* name) {
   SYSTEM_WARN("boot_default_not_saved", Y_LOG_STRING("problem", problem));
 }
 
-static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
+// Load the VM at index in g_vms to start it: read its vm.cfg into *config,
+// and make it the default. Returns false, with its problem shown on the
+// launcher menu, if it does not read.
+static __noinline bool LoadSelectedVM(uint8_t index, VMConfig* config) {
   const VMEntry* vm = &g_vms.vms[index];
   char problem[kVMProblemLength + 1];
-  if (VMConfigRead(vm, chosen, problem)) {
-    SYSTEM_INFO("vm_chosen", Y_LOG_STRING("path", vm->path));
+  if (VMConfigRead(vm, config, problem)) {
+    SYSTEM_INFO("vm_loaded", Y_LOG_STRING("path", vm->path));
     SaveBootDefault(vm->name);
     return true;
   }
@@ -130,53 +159,13 @@ static __noinline bool TakeVM(uint8_t index, VMConfig* chosen) {
   return false;
 }
 
-// The card's settings, and the index of the default VM in the list.
-// Returns false, with the problem shown on the list, if the settings had one.
-// Kept out of line, so that its message is on core 0's stack only while it
-// runs rather than in the frames of the callers it would be inlined into.
-static __noinline bool ReadSettings(Settings* settings, uint8_t* highlighted) {
-  char problem[kVMProblemLength + 1];
-  bool read = SettingsRead(settings, problem);
-  DisplaySetFont(settings->font);
-  *highlighted = 0;
-  if (read && settings->boot_default[0] != '\0') {
-    // Past the list's end, the first is highlighted instead.
-    const uint8_t index = VMListFind(&g_vms, settings->boot_default);
-    if (index < kVMListMax) {
-      *highlighted = index;
-    }
-  }
-  if (!read) {
-    char message[kTextColumns + 1];
-    snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
-    UIStatusSetProblem(message);
-  }
-  return read;
-}
-
-// Read the card afresh once it is back from USB, and show the list again
-// without counting down: the computer may have added VMs, removed them, or
-// changed the settings.
-static __noinline void ReadCardAgain(void) {
-  VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  ReadSettings(&g_settings, &highlighted);
-  LauncherMenuOpen(&g_vms, highlighted);
-}
-
-void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
-
-const VMList* LauncherVMs(void) { return &g_vms; }
-
-const Settings* LauncherSettings(void) { return &g_settings; }
-
 LauncherStartResult LauncherStart(VMConfig* vm) {
   StartNote note = {0};
   const bool noted = TakeStartNote(&note);
   VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  const bool settings_read = ReadSettings(&g_settings, &highlighted);
-  // Without a card there is nothing to choose, or to put on USB.
+  uint8_t selected = 0;
+  const bool settings_read = ReadSettings(&selected);
+  // Without a card there is no VM to start, or card to put on USB.
   if (DiskImageMountCard() != kDiskImageOpen) {
     return kLauncherNoCard;
   }
@@ -186,101 +175,38 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
         Y_LOG_STRING("name", note.name));
     const uint8_t index = VMListFind(&g_vms, note.name);
     if (index < kVMListMax) {
-      highlighted = index;
-      if (note.intent == kStartIntentRestart && TakeVM(index, vm)) {
-        return kLauncherTookVM;
+      selected = index;
+      if (note.intent == kStartIntentRestart && LoadSelectedVM(index, vm)) {
+        return kLauncherLoadedVM;
       }
     }
   } else if (
       settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
-      TakeVM(highlighted, vm)) {
-    return kLauncherTookVM;
+      LoadSelectedVM(selected, vm)) {
+    return kLauncherLoadedVM;
   }
-  LauncherMenuOpen(&g_vms, highlighted);
-  g_start_at =
-      make_timeout_time_ms(g_settings.boot_delay * kMillisecondsPerSecond);
-  g_counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
-  return kLauncherShowsList;
+  g_selected = selected;
+  const bool counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
+  g_countdown_ms =
+      counting ? (uint32_t)g_settings.boot_delay * kMillisecondsPerSecond : 0;
+  return kLauncherShowsMenu;
 }
 
-// Take the VM chosen, or highlighted, into *g_chosen, which closes the
-// screens. If its configuration does not read, the list stays, with its
-// problem shown.
-static ScreenResult Choose(void) {
-  if (TakeVM(LauncherMenuChosenVM(), g_chosen)) {
-    return ScreenClose();
-  }
-  return ScreenStays();
+ScreenResult LauncherOpenMenu(void) {
+  return LauncherMenuScreenOpen(
+      &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize, g_selected,
+      g_countdown_ms, &g_exit);
 }
 
-// A key pressed while the list shows: stops the countdown, and carries out
-// what the menu makes of it.
-static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
-  g_counting = false;
-  LauncherMenuSetCountdown(0);
-  ScreenResult result = ScreenStays();
-  switch (LauncherMenuHandleKey(key)) {
-    case kLauncherMenuActionVMChosen:
-      result = Choose();
-      break;
-    case kLauncherMenuActionOpenSettings:
-      result = SettingsScreenOpen(&g_settings);
-      break;
-    case kLauncherMenuActionOpenManage:
-      result = VMManagerScreenOpen(
-          &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize);
-      break;
-    case kLauncherMenuActionOpenUSB:
-      result = USBStorageScreenOpen(&g_exported);
-      break;
-    default:
-      break;
+bool LauncherHandleMenuExit(VMConfig* vm) {
+  // The launcher menu opens again without counting down.
+  g_countdown_ms = 0;
+  if (g_exit.reason == kLauncherMenuExitReadCard) {
+    // The host may have added VMs, removed them, or changed the settings.
+    VMListRead(&g_vms);
+    ReadSettings(&g_selected);
+    return false;
   }
-  return result;
-}
-
-// Count down to the default VM, showing the seconds left, which chooses it
-// once they run out.
-static ScreenResult CountDown(void) {
-  ScreenResult result = ScreenStays();
-  if (g_counting) {
-    const int64_t left_us =
-        absolute_time_diff_us(get_absolute_time(), g_start_at);
-    if (left_us <= 0) {
-      g_counting = false;
-      LauncherMenuSetCountdown(0);
-      result = Choose();
-    } else {
-      LauncherMenuSetCountdown(
-          (uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
-                    kMicrosecondsPerSecond));
-    }
-  }
-  return result;
-}
-
-// Back from a screen opened over the list: after USB mass storage has exported
-// the card or an image, read the card again.
-static ScreenResult Resume(void) {
-  if (g_exported) {
-    g_exported = false;
-    ReadCardAgain();
-  } else {
-    LauncherMenuResume();
-  }
-  return ScreenStays();
-}
-
-static const Screen kLauncherScreen = {
-    .handle_key = HandleKey,
-    .tick = CountDown,
-    .draw = LauncherMenuDraw,
-    .resume = Resume,
-    .hint = LauncherMenuHint,
-    .page_name = LauncherMenuPageName,
-};
-
-ScreenResult LauncherScreenOpen(VMConfig* chosen) {
-  g_chosen = chosen;
-  return ScreenOpen(&kLauncherScreen);
+  g_selected = g_exit.vm;
+  return LoadSelectedVM(g_exit.vm, vm);
 }

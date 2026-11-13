@@ -347,10 +347,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot. `src/launcher_menu.c` holds the
-  list and draws it, and says what was chosen on it; `src/launcher.c`
-  decides what the list does: which VM starts, the countdown, and which
-  screen each row opens. `main.c` runs the loop,
+  host measuring the boot, still boot. `src/launcher_menu_screen.c` is
+  the launcher menu, a screen like any other, and only chooses: it counts
+  down, and opens the screen of each row itself, but a VM chosen, or the
+  card given to the host by USB mass storage, closes it with why, in a
+  `LauncherMenuExit`. `src/launcher.c` does everything with the card: it
+  reads the VMs, the settings and the start note, loads a VM to start at
+  once or sets the launcher menu up, and once it closes,
+  `LauncherHandleMenuExit()` loads the VM chosen, or reads the card again,
+  and shows the launcher menu again if a VM does not load. `main.c` runs
+  the loop,
   which answers commands and, through `src/screen.c`, hands the screen
   showing its keys, a tick for what happens with time, and the chance to
   draw. It composes the status rows itself, with `src/ui_status.c`, from
@@ -378,8 +384,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
   are USB mass storage, the page while it exports, and the question before
   an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
-  under it, in `src/vm_manager_screen.c` and `src/vm_*screen.c`. The list is
-  the launcher's own screen.
+  under it, in `src/vm_manager_screen.c` and `src/vm_*screen.c`; and the list
+  itself, in `src/launcher_menu_screen.c`.
 - **A `resume` returns a result, as a key does**, so a parent can act on
   what its child left: the USB page, finding exporting ended, goes back too,
   and the list, told through `g_exported`, reads the card again.
