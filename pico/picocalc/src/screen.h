@@ -1,8 +1,9 @@
 // Screens: the pages of a menu, each a screen of its own, kept as a stack
 // with the page first shown at the bottom and above it each page opened from
-// the one below. A loop shows them until they close, handing each key to the
-// screen on top, letting it count time, composing the status rows from its
-// keys and drawing it, through the functions here. A screen does the rest
+// the one below. A mode's loop shows them until they close. Through the
+// functions here, it hands each key to the screen on top, lets it count
+// time, and has it draw into a box, which the loop sends to core 1. The loop
+// composes the status rows from the screen's keys. A screen does the rest
 // itself, and calls only down, into the modules it shares with the others.
 //
 // A screen is opened through its own open function, which takes what the
