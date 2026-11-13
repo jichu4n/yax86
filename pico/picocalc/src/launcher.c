@@ -18,6 +18,7 @@
 #include "ui_status.h"
 #include "usb_storage_screen.h"
 #include "vm_list.h"
+#include "vm_manager_screen.h"
 
 enum {
   // The part of the guest's RAM a clone's files are copied through, before a
@@ -28,8 +29,6 @@ enum {
   // start after the reboot - see LeaveStartNote().
   kStartNoteMarker = 0x5747A27E,
 
-  kBytesPerKB = 1024,
-  kMicrosecondsPerMillisecond = 1000,
   kMicrosecondsPerSecond = 1000 * 1000,
   kMillisecondsPerSecond = 1000,
 };
@@ -165,159 +164,6 @@ static __noinline void ReadCardAgain(void) {
   LauncherMenuOpen(&g_vms, highlighted);
 }
 
-// After Manage VMs has changed the card, read its VMs afresh, and show Manage
-// VMs again with the VM named name chosen - and with show_vm, its page. The
-// settings are not read again: what changes them, a rename or delete of the
-// default VM, updates g_settings as it saves them.
-static __noinline void ShowManagedVMs(const char* name, bool show_vm) {
-  // name may be in the list read over.
-  char chosen[kVMNameLength + 1];
-  snprintf(chosen, sizeof(chosen), "%s", name);
-  VMListRead(&g_vms);
-  LauncherMenuShowManagedVMs(chosen, show_vm);
-}
-
-// Show why Manage VMs could not do something, and log it.
-static void ShowManageProblem(
-    const char* event, const VMEntry* vm, const char* problem) {
-  UIStatusSetProblem(problem);
-  SYSTEM_WARN(
-      event, Y_LOG_STRING("path", vm->path), Y_LOG_STRING("problem", problem));
-}
-
-static __noinline void RenameVM(void) {
-  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
-  VMEntry renamed;
-  char problem[kVMProblemLength + 1];
-  const VMListResult result = VMListRename(
-      &g_vms, &g_settings, &vm, LauncherMenuTypedName(), &renamed, problem);
-  if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(result == kVMListDone ? renamed.name : vm.name, false);
-  if (result == kVMListDone) {
-    SYSTEM_INFO(
-        "vm_renamed", Y_LOG_STRING("from", vm.name),
-        Y_LOG_STRING("to", renamed.name));
-  } else {
-    ShowManageProblem("vm_not_renamed", &vm, problem);
-  }
-}
-
-// Show how far a clone has come, at once: the main loop, which would draw it,
-// is waiting for the clone.
-static void ShowCopyProgress(uint64_t done, uint64_t total) {
-  LauncherMenuSetCopyProgress(
-      (uint32_t)(done / kBytesPerKB), (uint32_t)(total / kBytesPerKB));
-  UIStatusOffer(LauncherMenuHint());
-  LauncherMenuDraw(time_us_64());
-}
-
-static __noinline void CloneVM(void) {
-  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
-  VMEntry copy;
-  char problem[kVMProblemLength + 1];
-  const uint64_t start_us = time_us_64();
-  FSTransfer transfer = {
-      .buffer = g_copy_buffer,
-      .buffer_size = kCopyBufferSize,
-      .progress = ShowCopyProgress,
-  };
-  const VMListResult result =
-      VMListClone(&vm, LauncherMenuTypedName(), &transfer, &copy, problem);
-  // Left as the guest would find RAM at power on, whatever it held.
-  memset(g_copy_buffer, 0, kCopyBufferSize);
-  if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(result == kVMListDone ? copy.name : vm.name, false);
-  if (result == kVMListDone) {
-    SYSTEM_INFO(
-        "vm_cloned", Y_LOG_STRING("from", vm.name),
-        Y_LOG_STRING("to", copy.name),
-        Y_LOG_UINT(
-            "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
-  } else {
-    ShowManageProblem("vm_not_cloned", &vm, problem);
-  }
-}
-
-static __noinline void CreateVM(void) {
-  VMListDrives drives;
-  LauncherMenuFormDrives(&drives);
-  VMEntry created;
-  char problem[kVMProblemLength + 1];
-  const uint64_t start_us = time_us_64();
-  // Blank disks are written through the guest's RAM, which is zeroed after.
-  FSTransfer transfer = {
-      .buffer = g_copy_buffer,
-      .buffer_size = kCopyBufferSize,
-      .progress = ShowCopyProgress,
-  };
-  const VMListResult result = VMListCreate(
-      LauncherMenuTypedName(), &drives, &transfer, &created, problem);
-  memset(g_copy_buffer, 0, kCopyBufferSize);
-  if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(created.name, false);
-  if (result == kVMListDone) {
-    SYSTEM_INFO(
-        "vm_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_BOOL("blank_fd1", drives.blank[kVMDriveFD1]),
-        Y_LOG_BOOL("blank_fd2", drives.blank[kVMDriveFD2]),
-        Y_LOG_BOOL("blank_hd1", drives.blank[kVMDriveHD1]),
-        Y_LOG_BOOL("blank_hd2", drives.blank[kVMDriveHD2]),
-        Y_LOG_UINT(
-            "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
-  } else {
-    UIStatusSetProblem(problem);
-    SYSTEM_WARN(
-        "vm_not_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_STRING("problem", problem));
-  }
-}
-
-static __noinline void EditVM(void) {
-  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
-  VMListDrives drives;
-  LauncherMenuFormDrives(&drives);
-  char problem[kVMProblemLength + 1];
-  FSTransfer transfer = {
-      .buffer = g_copy_buffer,
-      .buffer_size = kCopyBufferSize,
-      .progress = ShowCopyProgress,
-  };
-  const VMListResult result = VMListEdit(&vm, &drives, &transfer, problem);
-  memset(g_copy_buffer, 0, kCopyBufferSize);
-  if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
-    return;
-  }
-  ShowManagedVMs(vm.name, true);
-  if (result == kVMListDone) {
-    SYSTEM_INFO("vm_edited", Y_LOG_STRING("name", vm.name));
-  } else {
-    ShowManageProblem("vm_not_edited", &vm, problem);
-  }
-}
-
-static __noinline void DeleteVM(void) {
-  const VMEntry vm = g_vms.vms[LauncherMenuManagedVM()];
-  char problem[kVMProblemLength + 1];
-  const bool deleted = VMListDelete(&g_settings, &vm, problem);
-  // Gone from the list, it leaves the first VM chosen.
-  ShowManagedVMs(vm.name, false);
-  if (deleted) {
-    SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
-  } else {
-    ShowManageProblem("vm_not_deleted", &vm, problem);
-  }
-}
-
 void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
 
 const VMList* LauncherVMs(void) { return &g_vms; }
@@ -380,23 +226,12 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
     case kLauncherMenuActionOpenSettings:
       result = SettingsScreenOpen(&g_settings);
       break;
+    case kLauncherMenuActionOpenManage:
+      result = VMManagerScreenOpen(
+          &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize);
+      break;
     case kLauncherMenuActionOpenUSB:
       result = USBStorageScreenOpen(&g_exported);
-      break;
-    case kLauncherMenuActionRenameVM:
-      RenameVM();
-      break;
-    case kLauncherMenuActionCloneVM:
-      CloneVM();
-      break;
-    case kLauncherMenuActionDeleteVM:
-      DeleteVM();
-      break;
-    case kLauncherMenuActionCreateVM:
-      CreateVM();
-      break;
-    case kLauncherMenuActionEditVM:
-      EditVM();
       break;
     default:
       break;

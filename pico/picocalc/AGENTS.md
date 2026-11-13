@@ -348,9 +348,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
   host measuring the boot, still boot. `src/launcher_menu.c` holds the
-  list's pages and draws them, and says what was chosen on them;
-  `src/launcher.c` decides what the list does: which VM starts, the
-  countdown, and what each choice carries out. `main.c` runs the loop,
+  list and draws it, and says what was chosen on it; `src/launcher.c`
+  decides what the list does: which VM starts, the countdown, and which
+  screen each row opens. `main.c` runs the loop,
   which answers commands and, through `src/screen.c`, hands the screen
   showing its keys, a tick for what happens with time, and the chance to
   draw. It composes the status rows itself, with `src/ui_status.c`, from
@@ -377,8 +377,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   statics. The launcher holds `g_vms` and `g_settings`. Settings and Font
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
   are USB mass storage, the page while it exports, and the question before
-  an unsafe disconnect, in `src/usb_storage*_screen.c`. The list and Manage VMs' pages
-  are still the one launcher screen until they are split the same way.
+  an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
+  under it, in `src/vm_manager_screen.c` and `src/vm_*screen.c`. The list is
+  the launcher's own screen.
 - **A `resume` returns a result, as a key does**, so a parent can act on
   what its child left: the USB page, finding exporting ended, goes back too,
   and the list, told through `g_exported`, reads the card again.
@@ -428,11 +429,23 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
   (after a separator line if there are any VMs), a
   page for each VM with the images in its drives - two drives a line, A and
-  B then HD1 and HD2 - over Edit drives, Rename, Clone and Delete, a name typed
+  B then HD1 and HD2 - over Configure, Rename, Clone and Delete, a name typed
   for Rename and Clone, and a question before Delete. Afterwards it shows
   the list of VMs to manage again with the VM renamed or made chosen - after
-  Edit drives, the VM's page - and the list at power on waits for a key, as
+  Configure, the VM's page - and the list at power on waits for a key, as
   after USB mass storage.
+- **The VM manager's screen holds a `VMManager`, in `src/vm_manager.c`, and
+  passes it down**: the launcher's VM list and settings, the copy buffer, and what a
+  screen changed. Each change is carried out by the screen that confirms
+  it: the name screen renames and clones, the question deletes, the form
+  creates and saves. A name or drives that will not do leave that screen
+  up with the problem, to try again; a change made, or failed part way,
+  is noted in the state and the screen goes back. The pages between pass
+  the Back on, and Manage VMs reads the list again and chooses the VM the
+  note names, opening its page again after an edit.
+- **A copy's page is drawn from the copy's progress callback** by
+  `VMManagerBeginCopy()`, not as a screen: the loop that would draw a screen
+  waits for the copy, and nothing can be pressed until it is done.
 - **A menu box holds at most `kDisplayMenuMaxRows`, 12**, and `DrawItems()`
   leaves out text lines past what fits rather than drawing past the box's
   rows. A VM's page with a line per drive over four items needed 13.
@@ -472,8 +485,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   Create writes `vm.cfg` with the drives there, as paths relative to it, in
   one `ConfigFileUpdate()` - `VMConfigSaveDrives()` - which removes the line
   of a drive left out, and a line left with nothing else on it.
-- **Edit drives is the same form on a VM's drives**, as its `vm.cfg` has
-  them, with no name and Save for Create; Save writes the four drives the
+- **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
+  for both, starting from its drives as its `vm.cfg` has them, with no name
+  and Save for Create. It is named for the VM's configuration as a whole,
+  which is drives today and guest RAM and the like later; Save writes the four drives the
   same way, which keeps the file's comments and other lines. An image of the
   VM's own a drive stops holding stays in its folder - nothing is deleted
   behind the user's back - and goes with the VM.
@@ -527,7 +542,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hd1.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
-  the boot floppy; New VM and Edit drives make the blank one on the device.
+  the boot floppy; New VM and Configure make the blank one on the device.
   Its partition starts
   at sector 17, so mtools reach it as `hd1.img@@8704`.
 - `src/sdcard.c` runs the card in SPI mode on SPI0, from the SD simplified
@@ -698,7 +713,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   a drive. Drives follow each other a space apart, so a light does not run
   into the drive before it, and a drive the machine does not have -
   floppy disk 2 disabled, a hard disk with no image - is left out. The
-  images' names are on the status page and in Edit drives: they are mostly
+  images' names are on the status page and in a VM's configuration: they are mostly
   `fd1.img` and `hd1.img`, and not worth the row.
 - **The battery is five cells, a fifth of a charge each**, a cell for each
   fifth begun - 78% is four - in green, yellow below half and red below a
