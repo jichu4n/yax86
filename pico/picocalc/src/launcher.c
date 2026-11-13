@@ -11,6 +11,7 @@
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "vm_list.h"
+#include "vm_manager_screen.h"
 
 enum {
   // The part of the guest's RAM a clone's files are copied through, before a
