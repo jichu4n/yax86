@@ -32,7 +32,7 @@
 typedef struct UsbStorageStats {
   // Whether anything is exported, and the image's path if that is what it is
   // - NULL for the entire card.
-  bool sharing;
+  bool exporting;
   const char* image_path;
   // Whether a host has the PicoCalc's USB device configured.
   bool connected;

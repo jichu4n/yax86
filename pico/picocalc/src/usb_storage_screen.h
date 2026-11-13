@@ -9,9 +9,9 @@
 #include "screen.h"
 
 // Show USB mass storage. Once the card or an image has been exported and is
-// taken back, *shared is set and the screen goes back: the host may have
-// changed the card, so its parent reads it again. shared must outlive the
-// screen.
-ScreenResult USBStorageScreenOpen(bool* shared);
+// taken back, *exported is set and the screen goes back: the host may have
+// changed the card, so its parent reads it again. exported must outlive
+// the screen.
+ScreenResult USBStorageScreenOpen(bool* exported);
 
 #endif  // YAX86_PICOCALC_USB_STORAGE_SCREEN_H

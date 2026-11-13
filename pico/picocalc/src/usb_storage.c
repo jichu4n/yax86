@@ -37,8 +37,8 @@ static const char kRevision[] = "1.0 ";
 // Set from the main loop and read from the callbacks, which can interrupt it
 // but not the other way around - so a change the main loop makes is whole by
 // the time a callback sees it.
-static volatile bool g_sharing;
-// The image shared, or NULL for the whole card.
+static volatile bool g_exporting;
+// The image exported, or NULL for the entire card.
 static DiskImage* volatile g_image;
 // Whether the host is yet to be told the medium changed.
 static volatile bool g_changed;
@@ -54,19 +54,19 @@ static void Share(DiskImage* image) {
   g_stats.write_us = 0;
   g_stats.errors = 0;
   g_changed = true;
-  g_sharing = true;
+  g_exporting = true;
 }
 
 void UsbStorageExportCard(void) { Share(NULL); }
 
 void UsbStorageExportImage(DiskImage* image) { Share(image); }
 
-void UsbStorageStopExporting(void) { g_sharing = false; }
+void UsbStorageStopExporting(void) { g_exporting = false; }
 
 UsbStorageStats UsbStorageGetStats(void) {
   UsbStorageStats stats = {
-      .sharing = g_sharing,
-      .image_path = g_sharing && g_image != NULL ? g_image->path : NULL,
+      .exporting = g_exporting,
+      .image_path = g_exporting && g_image != NULL ? g_image->path : NULL,
       .connected = tud_mounted(),
       .seen = g_stats.seen,
       .ejected = g_stats.ejected,
@@ -79,17 +79,17 @@ UsbStorageStats UsbStorageGetStats(void) {
   return stats;
 }
 
-// Whether the card is in the reader as the host sees it: shared, and not
+// Whether the card is in the reader as the host sees it: exported, and not
 // ejected by it.
-static bool Present(void) { return g_sharing && !g_stats.ejected; }
+static bool Present(void) { return g_exporting && !g_stats.ejected; }
 
-// The blocks of what is shared.
+// The blocks of what is exported.
 static uint32_t BlockCount(void) {
   return g_image != NULL ? g_image->size / kSdcardBlockSize
                          : SdcardGetBlockCount();
 }
 
-// Move count blocks from lba between what is shared and data: the card's
+// Move count blocks from lba between what is exported and data: the card's
 // own, or an image's sectors, which are its blocks.
 static bool ReadBlocks(uint32_t lba, uint8_t* data, uint32_t count) {
   if (g_image == NULL) {
@@ -139,7 +139,7 @@ bool tud_msc_start_stop_cb(
     uint8_t lun, uint8_t power_condition, bool start, bool load_eject) {
   (void)lun;
   (void)power_condition;
-  if (load_eject && !start && g_sharing) {
+  if (load_eject && !start && g_exporting) {
     g_stats.ejected = true;
   }
   return true;

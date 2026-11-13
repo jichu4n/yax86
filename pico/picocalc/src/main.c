@@ -684,7 +684,7 @@ static __noinline void ReplyReportDevices(const Command* command) {
       Y_LOG_UINT("vms", LauncherVMs()->count));
   const UsbStorageStats usb = UsbStorageGetStats();
   REPLY_GROUP(
-      command, "usb", Y_LOG_BOOL("sharing", usb.sharing),
+      command, "usb", Y_LOG_BOOL("exporting", usb.exporting),
       Y_LOG_STRING("image", usb.image_path != NULL ? usb.image_path : ""),
       Y_LOG_BOOL("connected", usb.connected), Y_LOG_BOOL("seen", usb.seen),
       Y_LOG_BOOL("ejected", usb.ejected),
