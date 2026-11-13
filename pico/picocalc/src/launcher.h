@@ -1,10 +1,17 @@
-// The start: reading the card's VMs and settings, which the launcher holds,
-// and the note a reset or power off left, then either loading a VM to start
-// at once or showing the launcher menu to choose one, counting down to the
-// default. The launcher menu is launcher_menu_screen.c's, and only chooses:
-// loading the VM chosen, and reading the card again after USB mass storage, is
-// the launcher's. main.c runs the launcher menu's loop, answering commands and
-// updating the status rows.
+// The launcher: what happens from power on until a VM starts.
+//
+// At power on it reads the card: the VMs, the settings, and the start note,
+// which the in-VM menu's Reset and Power off leave across the reboot to say
+// what to do next. Then it either loads a VM to start at once - the one
+// reset, or the default with no countdown - or sets up the launcher menu,
+// the list of VMs to choose from, counting down to the default.
+//
+// The launcher menu (launcher_menu_screen.c) only chooses. Everything done
+// with the card is here: loading the VM chosen, which makes it the default,
+// and reading the card again after USB mass storage has given it to the
+// host. For now the launcher holds the VM list and the settings, and main.c
+// runs the launcher menu's loop, answering commands and updating the status
+// rows.
 #ifndef YAX86_PICOCALC_LAUNCHER_H
 #define YAX86_PICOCALC_LAUNCHER_H
 
