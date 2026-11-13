@@ -509,9 +509,9 @@ static void ReplyDiskImage(
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// main.c's groups of a report, after the system's, which it gives for both
-// modes for now: the VM's paging and boot, the display, the VM's drives and
-// name, the menu, and the pacing. In parts, none inlined into another: each
+// Emulator mode's groups of a report, which main.c answers, after the
+// system's: the VM's paging and boot, the display, the VM's drives and name,
+// the menu, and the pacing. In parts, none inlined into another: each
 // group's fields take stack until the function they are in returns, and the
 // report whole would be the deepest call on core 0's stack. See
 // StackUsagePaint().
