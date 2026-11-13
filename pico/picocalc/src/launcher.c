@@ -8,12 +8,13 @@
 #include "hardware/watchdog.h"
 #include "launcher_card.h"
 #include "launcher_menu_screen.h"
+#include "launcher_status.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "screen.h"
 #include "southbridge.h"
+#include "status_bar.h"
 #include "typing.h"
-#include "ui_status.h"
 #include "vm_list.h"
 
 enum {
@@ -137,6 +138,8 @@ bool LauncherRun(
     const CommandsHandlers* commands, VMConfig* chosen) {
   switch (Start(vms, settings, copy_buffer, chosen)) {
     case kStartTookVM:
+      // A problem shown at the start is the launcher's, and goes with it.
+      StatusBarClearProblem();
       return true;
     case kStartNoCard:
       return false;
@@ -154,15 +157,17 @@ bool LauncherRun(
     if (ScreenIsOpen()) {
       ScreenTick();
     }
-    // The list closes once a VM is chosen.
+    // The list closes once a VM is chosen, and a problem it showed goes
+    // with it: the emulator's rows have nothing to clear it.
     if (!ScreenIsOpen()) {
+      StatusBarClearProblem();
       return true;
     }
     // The keys for the page a key led to are offered at once rather than at
     // the next update.
     if (pressed || time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      UIStatusOffer(ScreenHint());
+      LauncherStatusOffer(ScreenHint());
     }
     ScreenDraw(time_us_64());
     sleep_ms(kPollMs);

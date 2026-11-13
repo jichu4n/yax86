@@ -355,9 +355,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   taking a VM, is `src/launcher_card.c`'s. The loop answers commands
   through `CommandsPoll()` and, through `src/screen.c`, hands the screen
   showing its keys, a tick for what happens with time, and the chance to
-  draw. It composes the status rows itself, with `src/ui_status.c`, from
-  the keys `ScreenHint()` gives: the router leaves the rows to each loop,
-  as the VM's have its drives and locks too. A `Screen` is those
+  draw. It composes the status rows itself, with `src/launcher_status.c`,
+  from the keys `ScreenHint()` gives: the router leaves the rows to each
+  loop, as the VM's have its drives and locks too. A `Screen` is those
   functions, with its page's name for the report and a `resume` for
   showing again. The router keeps the screens as a stack, the list at the
   bottom, and only the one on top is called, so the stack's depth adds
@@ -739,8 +739,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **The messages row** shows a message four seconds at a time; the menu's
   keys while it is open, or a problem in their place until the next key; and
   otherwise, while a VM runs, the menu's own key, `Shift+Shift=Menu`, dim.
-  While the list at power on shows, `src/ui_status.c` keeps the problem and
-  composes the rows from the keys of the page showing. Shift is spelled out:
+  Each mode composes its own rows: `src/launcher_status.c` the problem or
+  the keys of the screen showing, and the battery; `src/emulator_status.c`
+  the messages, the drives and locks, and the battery. What both have in
+  common, knowing neither mode, is `src/status_bar.c`: putting text, keys
+  and the battery on a row, the problem any screen can show, and handing
+  the rows to core 1. A problem the launcher shows is cleared as it hands
+  over to the emulator, whose rows have nothing to clear it with. A
+  `boot_default` that cannot be saved as a VM starts shows on the
+  launcher's rows as a problem, for as long as a message would, before
+  the VM starts. Shift is spelled out:
   the arrows that stood for it read as the up arrow key.
 - **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
   pairs two spaces apart - `↑↓=Move  Enter=Select  Esc=Back` - the action

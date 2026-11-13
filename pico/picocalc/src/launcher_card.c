@@ -4,11 +4,18 @@
 #include <strings.h>
 
 #include "display.h"
+#include "launcher_status.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "text.h"
-#include "ui_status.h"
+
+enum {
+  // How long a boot_default that could not be saved shows, as long as a
+  // message would, and how often the rows are offered meanwhile.
+  kProblemShownMs = 4000,
+  kProblemPollMs = 100,
+};
 
 // Kept out of line, so that its message is on core 0's stack only while it
 // runs rather than in the frames of the callers it would be inlined into.
@@ -28,7 +35,7 @@ __noinline bool LauncherCardReadSettings(
   if (!read) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
-    UIStatusSetProblem(message);
+    StatusBarSetProblem(message);
   }
   return read;
 }
@@ -48,8 +55,16 @@ static void SaveBootDefault(Settings* settings, const char* name) {
   char message[kTextColumns + 1];
   snprintf(
       message, sizeof(message), "Could not save boot_default: %.50s", problem);
-  StatusBarPostMessage(message);
   SYSTEM_WARN("boot_default_not_saved", Y_LOG_STRING("problem", problem));
+  // Shown on the launcher's rows, for as long as a message is, before the
+  // VM starts.
+  StatusBarSetProblem(message);
+  const absolute_time_t until = make_timeout_time_ms(kProblemShownMs);
+  while (!time_reached(until)) {
+    LauncherStatusOffer(NULL);
+    sleep_ms(kProblemPollMs);
+  }
+  StatusBarClearProblem();
 }
 
 __noinline bool LauncherCardTakeVM(
@@ -63,7 +78,7 @@ __noinline bool LauncherCardTakeVM(
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
-  UIStatusSetProblem(message);
+  StatusBarSetProblem(message);
   SYSTEM_WARN(
       "vm_config_problem", Y_LOG_STRING("path", vm->path),
       Y_LOG_STRING("problem", problem));

@@ -5,8 +5,8 @@
 
 #include "display.h"
 #include "floppy.h"
+#include "status_bar.h"
 #include "ui_page.h"
-#include "ui_status.h"
 
 extern const Screen kBrowserScreen;
 
@@ -67,7 +67,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, UIBrowserCount(&g_browser), &g_chosen)) {
       g_dirty = true;

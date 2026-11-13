@@ -6,9 +6,9 @@
 
 #include "display.h"
 #include "runtime_log.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 
 typedef enum DeleteItem {
   kDeleteCancel = 0,
@@ -59,7 +59,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, kDeleteItemCount, &g_chosen)) {
       g_dirty = true;

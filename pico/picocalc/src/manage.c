@@ -5,9 +5,10 @@
 #include <string.h>
 
 #include "display.h"
+#include "launcher_status.h"
 #include "runtime_log.h"
+#include "status_bar.h"
 #include "ui_page.h"
-#include "ui_status.h"
 
 enum {
   kBytesPerKB = 1024,
@@ -25,7 +26,7 @@ void ManageNoteChange(ManageState* manage, const char* name, bool show_vm) {
 
 void ManageShowProblem(
     const char* event, const VMEntry* vm, const char* problem) {
-  UIStatusSetProblem(problem);
+  StatusBarSetProblem(problem);
   SYSTEM_WARN(
       event, Y_LOG_STRING("path", vm->path), Y_LOG_STRING("problem", problem));
 }
@@ -33,7 +34,7 @@ void ManageShowProblem(
 // Show how far a copy has come, at once: the main loop, which would draw it,
 // is waiting for the copy.
 static void ShowCopyProgress(uint64_t done, uint64_t total) {
-  UIStatusOffer("");
+  LauncherStatusOffer("");
   DisplayMenu* menu = DisplayBeginMenu();
   if (menu == NULL) {
     return;

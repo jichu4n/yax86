@@ -9,10 +9,10 @@
 #include "display.h"
 #include "fs.h"
 #include "runtime_log.h"
+#include "status_bar.h"
 #include "text.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 #include "usb_disk.h"
 #include "usb_sharing_screen.h"
 
@@ -75,7 +75,7 @@ static __noinline ScreenResult ShareImage(void) {
     snprintf(
         message, sizeof(message), "Could not open %s: %s", name,
         DiskImageDescribeStatus(status));
-    UIStatusSetProblem(message);
+    StatusBarSetProblem(message);
     SYSTEM_WARN(
         "usb_image_not_shared", Y_LOG_STRING("path", g_image_path),
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
@@ -92,7 +92,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, kUSBItemCount, &g_chosen)) {
       g_dirty = true;

@@ -9,9 +9,9 @@
 #include "manage_screen.h"
 #include "pico/stdlib.h"
 #include "settings_screen.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 #include "usb_screen.h"
 
 enum {
@@ -150,7 +150,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.key == kKeyCodeEsc || event.key == kKeyCodeBackspace) {
     return ScreenStays();
   }
-  if (event.state != kSouthbridgeKeyReleased && UIStatusClearProblem()) {
+  if (event.state != kSouthbridgeKeyReleased && StatusBarClearProblem()) {
     g_dirty = true;
   }
   // A key held down repeats, which moves through the items as a press does.

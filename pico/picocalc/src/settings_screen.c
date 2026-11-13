@@ -5,9 +5,9 @@
 
 #include "display.h"
 #include "font_screen.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 
 static const UIBoxItem kSettingsItems[] = {{"Font", true}};
 enum {
@@ -33,7 +33,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, kSettingsItemCount, &g_chosen)) {
       g_dirty = true;

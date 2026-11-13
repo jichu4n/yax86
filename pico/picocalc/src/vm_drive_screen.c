@@ -4,10 +4,10 @@
 
 #include "browser_screen.h"
 #include "display.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_browser.h"
 #include "ui_page.h"
-#include "ui_status.h"
 #include "vm_config.h"
 
 // A drive's choices.
@@ -125,7 +125,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, ChoiceRow(kDriveItemCount), &g_chosen)) {
       g_dirty = true;

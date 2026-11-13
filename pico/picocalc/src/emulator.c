@@ -11,6 +11,7 @@
 #include "core/platform.h"
 #include "core/video.h"
 #include "display.h"
+#include "emulator_status.h"
 #include "file_list.h"
 #include "floppy.h"
 #include "harddisk.h"
@@ -456,7 +457,7 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
     return;
   }
   if (!warned && !battery.charging && battery.percent < kBatteryLowPercent) {
-    StatusBarPostMessage("Battery low");
+    EmulatorStatusPostMessage("Battery low");
     warned = true;
   } else if (battery.percent >= kBatteryRecoveredPercent) {
     warned = false;
@@ -467,19 +468,18 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
 static uint8_t FloppyDrives(void);
 
 static void UpdateStatusRows(void) {
-  StatusBarState state = {0};
+  EmulatorStatusState state = {0};
   state.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
   state.drives[kFloppyDriveB] =
       FloppyDrives() > 1 ? FloppyGetImage(kFloppyDriveB) : NULL;
-  state.drives[kStatusBarDriveHD1] = HardDiskGetImage(kHardDisk1);
-  state.drives[kStatusBarDriveHD2] = HardDiskGetImage(kHardDisk2);
+  state.drives[kEmulatorStatusDriveHD1] = HardDiskGetImage(kHardDisk1);
+  state.drives[kEmulatorStatusDriveHD2] = HardDiskGetImage(kHardDisk2);
   state.vm = g_has_vm ? g_vm->entry.name : NULL;
-  state.running = true;
   state.keyboard_flags = GuestRAMByte(kBIOSKeyboardFlagsAddress);
   state.battery = SouthbridgeGetBattery();
   state.hint = MenuIsOpen() ? MenuHint() : NULL;
   WarnOfLowBattery(state.battery);
-  StatusBarOffer(&state);
+  EmulatorStatusOffer(&state);
 }
 
 // How far the boot has got, and what it took: the fields of a boot_stage
@@ -694,7 +694,7 @@ static bool InitVM(void) {
   HardDiskAttach(&g_platform.hdc);
   g_vm_up = true;
   if (g_board->after_fault) {
-    StatusBarPostMessage("Paging off: the last start crashed");
+    EmulatorStatusPostMessage("Paging off: the last start crashed");
   }
   return true;
 }
@@ -965,7 +965,7 @@ static void SaveDrive(FloppyDrive drive) {
     snprintf(
         message, sizeof(message), "Could not save %s: %.50s",
         kVMDriveLabels[drive], problem);
-    StatusBarPostMessage(message);
+    EmulatorStatusPostMessage(message);
     SYSTEM_WARN(
         "drive_not_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
         Y_LOG_STRING("problem", problem));
@@ -983,7 +983,7 @@ static void EjectDrive(FloppyDrive drive) {
   snprintf(
       message, sizeof(message), "Ejected the disk from %s",
       kVMDriveLabels[drive]);
-  StatusBarPostMessage(message);
+  EmulatorStatusPostMessage(message);
   DISK_INFO("ejected", Y_LOG_STRING("drive", kDriveNames[drive]));
   SaveDrive(drive);
 }
@@ -1000,7 +1000,7 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
     snprintf(
         message, sizeof(message), "%s is already in %s", name,
         kVMDriveLabels[holding]);
-    StatusBarPostMessage(message);
+    EmulatorStatusPostMessage(message);
     DISK_WARN(
         "insert_failed", Y_LOG_STRING("drive", kDriveNames[drive]),
         Y_LOG_STRING("path", path), Y_LOG_STRING("error", "in_other_drive"));
@@ -1024,7 +1024,7 @@ static void InsertDrive(FloppyDrive drive, const char* path) {
         Y_LOG_STRING("path", path),
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
   }
-  StatusBarPostMessage(message);
+  EmulatorStatusPostMessage(message);
   // The drive is empty after an insert that failed.
   SaveDrive(drive);
 }
@@ -1182,7 +1182,7 @@ static __noinline void OpenDrives(void) {
   char message[kTextColumns + 1];
   if (g_has_vm) {
     snprintf(message, sizeof(message), "Started %s", g_vm->entry.name);
-    StatusBarPostMessage(message);
+    EmulatorStatusPostMessage(message);
     for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
       paths[drive] = g_vm->drives[drive];
       for (uint8_t earlier = 0; earlier < drive; ++earlier) {
@@ -1193,7 +1193,7 @@ static __noinline void OpenDrives(void) {
           snprintf(
               message, sizeof(message), "%s: %s is already in %s",
               kVMDriveLabels[drive], name, kVMDriveLabels[earlier]);
-          StatusBarPostMessage(message);
+          EmulatorStatusPostMessage(message);
           paths[drive] = "";
         }
       }
@@ -1216,7 +1216,7 @@ static __noinline void OpenDrives(void) {
     snprintf(
         message, sizeof(message), "%s: could not open %s: %s",
         kVMDriveLabels[drive], name, DiskImageDescribeStatus(opened[drive]));
-    StatusBarPostMessage(message);
+    EmulatorStatusPostMessage(message);
     DISK_WARN(
         "open_failed", Y_LOG_UINT("drive", drive),
         Y_LOG_STRING("path", paths[drive]),

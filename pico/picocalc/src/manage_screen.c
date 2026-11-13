@@ -5,9 +5,9 @@
 
 #include "display.h"
 #include "manage.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 #include "vm_form_screen.h"
 #include "vm_screen.h"
 
@@ -63,7 +63,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, (uint8_t)(g_manage.vms->count + 1), &g_chosen)) {
       g_dirty = true;

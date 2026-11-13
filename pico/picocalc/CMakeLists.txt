@@ -152,6 +152,7 @@ add_executable(yax86_picocalc
     src/southbridge.c
     src/speaker.c
     src/status_bar.c
+    src/emulator_status.c
     src/text.c
     src/typing.c
     src/ui_box.c
@@ -165,7 +166,7 @@ add_executable(yax86_picocalc
     src/vm_form_screen.c
     src/vm_name_screen.c
     src/vm_screen.c
-    src/ui_status.c
+    src/launcher_status.c
     src/usb_descriptors.c
     src/usb_disk.c
     "${fatfs_dir}/ff.c"

@@ -7,9 +7,9 @@
 #include "display.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 
 enum {
   kMicrosecondsPerMillisecond = 1000,
@@ -58,7 +58,7 @@ static __noinline ScreenResult Rename(void) {
   const VMListResult result = VMListRename(
       g_manage->vms, g_manage->settings, &vm, g_name, &renamed, problem);
   if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
+    StatusBarSetProblem(problem);
     return ScreenStays();
   }
   ManageNoteChange(
@@ -85,7 +85,7 @@ static __noinline ScreenResult Clone(void) {
       VMListClone(&vm, g_name, &transfer, &copy, problem);
   ManageEndCopy(g_manage);
   if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
+    StatusBarSetProblem(problem);
     return ScreenStays();
   }
   ManageNoteChange(
@@ -107,7 +107,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   const uint8_t key = event.key;
   switch (key) {
     case kKeyCodeEnter:
