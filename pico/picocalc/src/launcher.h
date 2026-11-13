@@ -1,9 +1,8 @@
-// The list of VMs at power on, and what can be done from it: starting a VM,
-// managing VMs, sharing the card or an image over USB, and opening Settings
-// with the card's settings, which the launcher holds.
-// main.c runs the list's loop, answering commands, updating the status rows
-// and drawing the menu, and the launcher decides what the list does: which
-// VM starts, when the countdown ends, and what a key leads to.
+// The start: reading the card's VMs and settings, which the launcher holds,
+// and the note a reset or power off left, then either taking a VM at once
+// or showing the list of VMs to choose one, counting down to the default.
+// main.c runs the list's loop, answering commands and updating the status
+// rows; the list is launcher_menu_screen.c's.
 #ifndef YAX86_PICOCALC_LAUNCHER_H
 #define YAX86_PICOCALC_LAUNCHER_H
 
@@ -48,11 +47,10 @@ const Settings* LauncherSettings(void);
 // and either take a VM at once into *vm or show the list.
 LauncherStartResult LauncherStart(VMConfig* vm);
 
-// Show the list LauncherStart() set up, and the pages reached from it other
-// than Settings, as one screen, whose keys stop the countdown and whose time
-// runs it. A VM chosen, or reached by the countdown, is read into *chosen,
-// and closes the screens; one whose configuration does not read leaves the
-// list showing its problem.
+// Show the list LauncherStart() set up, with the launcher's VMs and settings.
+// A VM chosen, or reached by the countdown, is read into *chosen, and closes
+// the screens; one whose configuration does not read leaves the list showing
+// its problem.
 ScreenResult LauncherScreenOpen(VMConfig* chosen);
 
 // Restart the board, leaving a note for the start after it, with name the

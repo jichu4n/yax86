@@ -347,10 +347,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot. `src/launcher_menu.c` holds the
-  list and draws it, and says what was chosen on it; `src/launcher.c`
-  decides what the list does: which VM starts, the countdown, and which
-  screen each row opens. `main.c` runs the loop,
+  host measuring the boot, still boot. `src/launcher.c` is the start:
+  it reads the card and the start note, and takes a VM at once or sets
+  the list up. `src/launcher_menu_screen.c` is the list, a screen like
+  any other: it counts down, takes the VM chosen, and opens the screen of
+  each row itself. What both do with the card, reading the settings and
+  taking a VM, is `src/launcher_card.c`'s. `main.c` runs the loop,
   which answers commands and, through `src/screen.c`, hands the screen
   showing its keys, a tick for what happens with time, and the chance to
   draw. It composes the status rows itself, with `src/ui_status.c`, from
@@ -378,8 +380,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
   are USB disk mode, its sharing page and the question before
   disconnecting, in `src/usb_*screen.c`; and Manage VMs and every page
-  under it, in `src/manage_screen.c` and `src/vm_*screen.c`. The list is
-  the launcher's own screen.
+  under it, in `src/manage_screen.c` and `src/vm_*screen.c`; and the list
+  itself, in `src/launcher_menu_screen.c`.
 - **A `resume` returns a result, as a key does**, so a parent can act on
   what its child left: the USB page, finding sharing ended, goes back too,
   and the list, told through `g_shared`, reads the card again.
