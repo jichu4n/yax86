@@ -3,7 +3,7 @@
 // VM, so Esc and Backspace do nothing.
 //
 // Under the VMs are three more rows: Manage VMs, from which VMs are made in
-// yax86/vm, and renamed, cloned and deleted; USB disk mode; and Settings.
+// yax86/vm, and renamed, cloned and deleted; USB mass storage; and Settings.
 // Each is a screen of its own, which the caller opens over the list.
 //
 // This holds the list's state and draws it; what is chosen on it is
@@ -24,7 +24,7 @@ typedef enum LauncherMenuAction {
   kLauncherMenuActionNone = 0,
   // A VM was chosen from the list: see LauncherMenuChosenVM().
   kLauncherMenuActionVMChosen,
-  // Manage VMs, USB disk mode or Settings was chosen, for the caller to
+  // Manage VMs, USB mass storage or Settings was chosen, for the caller to
   // open over the list.
   kLauncherMenuActionOpenManage,
   kLauncherMenuActionOpenUSB,

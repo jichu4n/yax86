@@ -9,7 +9,7 @@
 #include "ui_status.h"
 
 static const UIBoxItem kManageRow = {"Manage VMs", true};
-static const UIBoxItem kUSBRow = {"USB disk mode", true};
+static const UIBoxItem kUSBRow = {"USB mass storage", true};
 static const UIBoxItem kSettingsRow = {"Settings", true};
 
 // The rows under the VMs that open a screen of their own.
@@ -34,7 +34,7 @@ static ListRow g_opened;
 
 const char* LauncherMenuPageName(void) { return "vms"; }
 
-// The list's items: a VM each, then Manage VMs, USB disk mode and Settings,
+// The list's items: a VM each, then Manage VMs, USB mass storage and Settings,
 // with a separator row between the VMs and the rest when there is at least
 // one VM.
 static uint8_t ItemCount(void) {

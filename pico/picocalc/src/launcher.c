@@ -17,7 +17,7 @@
 #include "settings_screen.h"
 #include "status_bar.h"
 #include "ui_status.h"
-#include "usb_screen.h"
+#include "usb_storage_screen.h"
 #include "vm_list.h"
 
 enum {
@@ -231,7 +231,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
           ManageScreenOpen(&g_vms, &g_settings, g_copy_buffer, kCopyBufferSize);
       break;
     case kLauncherMenuActionOpenUSB:
-      result = USBScreenOpen(&g_shared);
+      result = USBStorageScreenOpen(&g_shared);
       break;
     default:
       break;
@@ -259,7 +259,7 @@ static ScreenResult CountDown(void) {
   return result;
 }
 
-// Back from a screen opened over the list: after USB disk mode has shared
+// Back from a screen opened over the list: after USB mass storage has shared
 // the card or an image, read the card again.
 static ScreenResult Resume(void) {
   if (g_shared) {
