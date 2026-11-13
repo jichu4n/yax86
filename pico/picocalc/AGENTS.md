@@ -49,13 +49,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   running past the bottom of its own writes over the frames core 1 is in,
   which hangs core 1, and with it drawing and screenshots, with nothing said.
   `src/stack_usage.c` paints both at startup, and the report's `stack` group
-  gives the most of each ever used. Core 0 peaks at about 2.9KB, renaming a
-  VM other VMs name. Two things keep it there. What a screen carries out,
-  such as renaming, cloning or reading the card, is kept out of line with
-  `__noinline`, so that only the one running has its locals on the stack.
-  And a report is answered in parts, none inlined into another, since a
-  group's fields take stack until the function they are in returns: 1.5KB
-  for all of them. `-fstack-usage` gives each function's frame.
+  gives the most of each ever used. Core 0 peaks at about 2.8KB while a VM
+  runs, and about 2.1KB in launcher mode, renaming a VM other VMs name. Two
+  things keep it there. What a screen carries out, such as renaming,
+  cloning or reading the card, is kept out of line with `__noinline`, so
+  that only the one running has its locals on the stack. And a report is
+  answered in parts, none inlined into another, since a group's fields take
+  stack until the function they are in returns: 1.5KB for all of them.
+  `-fstack-usage` gives each function's frame.
 - **Flashing replaces ClockworkPi's factory firmware** - a boot loader at
   offset 0, PicoMite at 200KB, and PicoMite's storage at 968KB. Back it up
   before the first flash:
@@ -395,6 +396,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   write the one chosen. A parent that cannot use the image, such as one
   that does not open for USB, shows why and returns
   `BrowserScreenReopen()`, which puts the browser back as it was left.
+- **The firmware runs in two modes, one after the other**: `main()` has
+  `src/init.c` initialize the system, then runs `LauncherRun()`, which
+  returns once a VM is chosen, and `EmulatorRun()`, which runs it for as
+  long as the board has power. Nothing goes back from the emulator to the
+  launcher but a reboot, with the start note. `main.c` holds what both
+  share and passes it down: the `InitStatus` initializing the system
+  found, for the report and the status page; guest RAM, which the launcher
+  borrows for copies until the VM starts; the card's VMs and settings; and
+  the VM chosen. `InitSystem()` is out of line, so that its locals are off
+  core 0's stack while the modes run.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the
@@ -760,8 +771,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   common with the list at power on's is in `src/ui_page.c`: moving the
   chosen item, scrolling a list, and a page of items. The file browser both
   use is `src/ui_browser.c`, which says which image was chosen and leaves
-  what to do with it to its user. `main.c` carries out what the menu's items
-  do, through the callbacks in `MenuConfig`.
+  what to do with it to its user. `src/emulator.c` carries out what the
+  menu's items do, through the callbacks in `MenuConfig`.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,
@@ -926,12 +937,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   any other to `DebugCommandRunCommon()`. A mode's report gives the
   system's groups first, with `DebugCommandReportSystem()`: `system`,
   `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
-  mode. Then it gives its own. The emulator's, which `main.c` answers, are
-  the VM's `paging`, `boot`, `display`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`,
-  `menu` and `pacing`. The launcher's are `display` with the font, `vm`
-  with the number of VMs, and `menu` with the page showing; and as no guest
-  runs yet, its `screen` answers `no_guest`, which `debug.js`'s `wait` takes
-  as no match yet.
+  mode. Then it gives its own. The emulator's, which `src/emulator.c`
+  answers, are the VM's `paging`, `boot`, `display`, `fd1`, `fd2`, `hd1`,
+  `hd2`, `vm`, `menu` and `pacing`. The launcher's are `display` with the
+  font, `vm` with the number of VMs, and `menu` with the page showing; and
+  as no guest runs yet, its `screen` answers `no_guest`, which `debug.js`'s
+  `wait` takes as no match yet.
 - **`src/init.c` initializes the system at startup**, after `main()` has
   painted the stacks: USB serial, the clock, the PSRAM, the logs, the LCD,
   the keyboard controller and the speaker. What it found is an

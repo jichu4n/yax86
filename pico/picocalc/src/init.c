@@ -125,8 +125,8 @@ static void StartPsram(void) {
 
 // A hard fault, on either core, reboots the board rather than leaving it hung
 // with nothing on USB, and the start after it runs without paging: InitStatus
-// says so, and main.c's ConfigureGuestRAM() leaves paging off. Replaces the
-// SDK's handler, a breakpoint, which halts.
+// says so, and emulator.c's ConfigureGuestRAM() leaves paging off. Replaces
+// the SDK's handler, a breakpoint, which halts.
 void isr_hardfault(void) {
   g_fault_marker = kFaultMarker;
   watchdog_reboot(0, 0, 0);

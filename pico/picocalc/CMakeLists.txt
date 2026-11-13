@@ -117,6 +117,7 @@ configure_file(src/ffconf.h "${fatfs_dir}/ffconf.h" COPYONLY)
 # =============================================================================
 add_executable(yax86_picocalc
     src/main.c
+    src/emulator.c
     src/stack_usage.c
     src/menu.c
     src/browser_screen.c
