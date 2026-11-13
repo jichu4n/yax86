@@ -11,9 +11,9 @@
 // produces for the one that opened it, or for the loop, it writes through
 // those pointers: there is no value in a result. A screen that is done
 // returns ScreenBack(), and the one under it shows again, told so by its
-// resume function, and finds there whatever the screen above changed. A
+// on_resume function, and finds there whatever the screen above changed. A
 // screen that ends the whole menu returns ScreenClose(), and the loop, seeing
-// no screen open, finds what was chosen through the pointer it passed.
+// no screen open, finds what was selected through the pointer it passed.
 #ifndef YAX86_PICOCALC_SCREEN_H
 #define YAX86_PICOCALC_SCREEN_H
 
