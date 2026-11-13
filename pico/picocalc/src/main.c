@@ -1040,7 +1040,7 @@ static void ResetVM(void) {
 // Back to the list, which waits for a key with the VM left highlighted.
 static void PowerOffVM(void) {
   SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm.entry.path));
-  LauncherLeaveStartNote(kStartIntentList, g_vm.entry.name);
+  LauncherLeaveStartNote(kStartIntentMenu, g_vm.entry.name);
 }
 
 // Whether there is a list to power off to: there is one only with a card, and

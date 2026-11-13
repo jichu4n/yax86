@@ -347,12 +347,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot. `src/launcher.c` is launcher
-  mode, `LauncherRun()`: it reads the card and the start note, takes a VM
-  at once or shows the list, and runs the loop until one is chosen. `src/launcher_menu_screen.c` is the list, a screen like
-  any other: it counts down, takes the VM chosen, and opens the screen of
-  each row itself. What both do with the card, reading the settings and
-  taking a VM, is `src/launcher_card.c`'s. The loop answers commands
+  host measuring the boot, still boot. `src/launcher_menu_screen.c` is
+  the launcher menu, a screen like any other, and only chooses: it counts
+  down, and opens the screen of each row itself, but a VM chosen, or the
+  card given to the host by USB mass storage, closes it with why, in a
+  `LauncherMenuExit`. `src/launcher.c` is launcher mode, `LauncherRun()`,
+  and does everything with the card: it reads the VMs, the settings and
+  the start note, loads a VM to start at once or shows the launcher menu,
+  and runs the loop until a VM is loaded. Once the menu closes it loads the
+  VM chosen, or reads the card again, and shows the menu again if no VM
+  loaded. The loop answers commands
   through `CommandsPoll()` and, through `src/screen.c`, hands the screen
   showing its keys, a tick for what happens with time, and the chance to
   draw. It composes the status rows itself, with `src/ui_status.c`, from
