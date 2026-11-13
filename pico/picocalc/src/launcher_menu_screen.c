@@ -19,7 +19,7 @@ enum {
 
 // The menu's rows, from the top: a row for each VM; a separator line, if
 // there are VMs; then a row for each MenuRow, each opening a screen of its
-// own. The rows that can be highlighted are its items: the VMs, then the
+// own. The rows that can be selected are its items: the VMs, then the
 // MenuRows. An item's index leaves out the separator: with n VMs, item i is
 // VM i for i below n, and MenuRow r is item n + r.
 typedef enum MenuRow {
@@ -43,13 +43,13 @@ static Settings* g_settings;
 static uint8_t* g_copy_buffer;
 static uint32_t g_copy_buffer_size;
 static LauncherMenuExit* g_exit;
-// The highlighted item, and whether the menu has changed since it was last
+// The selected item, and whether the menu has changed since it was last
 // drawn.
-static uint8_t g_highlighted;
+static uint8_t g_selected;
 static bool g_dirty;
 // The row shown at the top of the box, past which the menu has scrolled.
 static uint8_t g_top_row;
-// The countdown: when the highlighted VM starts by itself, whether it is
+// The countdown: when the selected VM starts by itself, whether it is
 // still counting, and the seconds left that the bottom edge shows. A key
 // stops it.
 static absolute_time_t g_start_at;
@@ -73,25 +73,25 @@ static uint8_t RowCount(void) {
 // The item index of one of the rows below the VMs.
 static uint8_t RowItem(MenuRow row) { return (uint8_t)(g_vms->count + row); }
 
-// Scroll the menu, if it has to, so the highlighted item's row shows.
-static void ScrollToHighlighted(void) {
-  uint8_t row = g_highlighted;
-  if (g_vms->count > 0 && g_highlighted >= g_vms->count) {
+// Scroll the menu, if it has to, so the selected item's row shows.
+static void ScrollToSelected(void) {
+  uint8_t row = g_selected;
+  if (g_vms->count > 0 && g_selected >= g_vms->count) {
     ++row;
   }
   UIPageScrollTo(row, &g_top_row);
 }
 
-// Highlight item, scrolling the menu to it if it must.
-static void Highlight(uint8_t item) {
-  g_highlighted = item;
+// Select item, scrolling the menu to it if it must.
+static void SetSelected(uint8_t item) {
+  g_selected = item;
   g_dirty = true;
-  ScrollToHighlighted();
+  ScrollToSelected();
 }
 
 ScreenResult LauncherMenuScreenOpen(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
-    uint32_t copy_buffer_size, uint8_t highlighted, uint32_t countdown_ms,
+    uint32_t copy_buffer_size, uint8_t selected, uint32_t countdown_ms,
     LauncherMenuExit* exit) {
   g_vms = vms;
   g_settings = settings;
@@ -99,13 +99,13 @@ ScreenResult LauncherMenuScreenOpen(
   g_copy_buffer_size = copy_buffer_size;
   g_exit = exit;
   g_top_row = 0;
-  Highlight(highlighted);
+  SetSelected(selected);
   g_start_at = make_timeout_time_ms(countdown_ms);
   g_counting = countdown_ms > 0;
   return ScreenOpen(&kLauncherMenuScreen);
 }
 
-// Show the seconds left before the highlighted VM starts by itself on the
+// Show the seconds left before the selected VM starts by itself on the
 // bottom edge, or with 0, nothing there.
 static void SetCountdown(uint8_t seconds) {
   if (seconds != g_countdown) {
@@ -114,19 +114,19 @@ static void SetCountdown(uint8_t seconds) {
   }
 }
 
-// Close the menu to start the highlighted VM.
-static ScreenResult StartHighlighted(void) {
-  *g_exit = (LauncherMenuExit){kLauncherMenuExitStartVM, g_highlighted};
+// Close the menu to start the selected VM.
+static ScreenResult StartSelected(void) {
+  *g_exit = (LauncherMenuExit){kLauncherMenuExitStartVM, g_selected};
   return ScreenClose();
 }
 
-// Act on the highlighted item: start its VM, or open its row's screen over
-// the menu.
-static ScreenResult Choose(void) {
-  if (g_highlighted < g_vms->count) {
-    return StartHighlighted();
+// Enter or Space: start the selected VM, or open the selected row's screen
+// over the menu.
+static ScreenResult OnSelect(void) {
+  if (g_selected < g_vms->count) {
+    return StartSelected();
   }
-  g_opened = (MenuRow)(g_highlighted - g_vms->count);
+  g_opened = (MenuRow)(g_selected - g_vms->count);
   switch (g_opened) {
     case kMenuRowVMManager:
       return VMManagerScreenOpen(
@@ -138,8 +138,8 @@ static ScreenResult Choose(void) {
   }
 }
 
-// Any key stops the countdown. Up and Down move the highlight, and Enter or
-// Space chooses.
+// Any key stops the countdown. Up and Down move the selection, and Enter or
+// Space acts on it.
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   g_counting = false;
   SetCountdown(0);
@@ -156,22 +156,22 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
     return ScreenStays();
   }
   if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, ItemCount(), &g_highlighted)) {
+    if (UIPageMove(event.key, ItemCount(), &g_selected)) {
       g_dirty = true;
     }
-    ScrollToHighlighted();
+    ScrollToSelected();
     return ScreenStays();
   }
   switch (event.key) {
     case kKeyCodeEnter:
     case kKeyCodeSpace:
-      return Choose();
+      return OnSelect();
     default:
       return ScreenStays();
   }
 }
 
-// Run the countdown, showing the seconds left, and start the highlighted VM
+// Run the countdown, showing the seconds left, and start the selected VM
 // once they run out.
 static ScreenResult CountDown(void) {
   if (!g_counting) {
@@ -182,7 +182,7 @@ static ScreenResult CountDown(void) {
   if (left_us <= 0) {
     g_counting = false;
     SetCountdown(0);
-    return StartHighlighted();
+    return StartSelected();
   }
   SetCountdown((uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
                          kMicrosecondsPerSecond));
@@ -191,15 +191,15 @@ static ScreenResult CountDown(void) {
 
 // A screen opened over the menu has closed. After USB mass storage gave the
 // card to the host, close the menu, for the launcher to read the card again.
-// Otherwise highlight the row that opened the screen again: the VM manager
-// may have changed how many VMs there are, which moves it.
+// Otherwise select the row that opened the screen again: the VM manager may
+// have changed how many VMs there are, which moves it.
 static ScreenResult Resume(void) {
   if (g_exported) {
     g_exported = false;
     *g_exit = (LauncherMenuExit){kLauncherMenuExitReadCard, 0};
     return ScreenClose();
   }
-  Highlight(RowItem(g_opened));
+  SetSelected(RowItem(g_opened));
   return ScreenStays();
 }
 
@@ -223,18 +223,18 @@ static void Draw(Y_UNUSED uint64_t now_us) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
       UIBoxItemRow(
-          row, menu->columns, g_vms->vms[index].name, index == g_highlighted);
+          row, menu->columns, g_vms->vms[index].name, index == g_selected);
     } else if (g_vms->count > 0 && index == g_vms->count) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
-      const bool highlighted = item == g_highlighted;
+      const bool selected = item == g_selected;
       if (item == RowItem(kMenuRowVMManager)) {
-        UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, highlighted);
+        UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, selected);
       } else if (item == RowItem(kMenuRowUSB)) {
-        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, highlighted);
+        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, selected);
       } else {
-        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, highlighted);
+        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, selected);
       }
     }
   }
