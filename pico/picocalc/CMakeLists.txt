@@ -152,6 +152,7 @@ add_executable(yax86_picocalc
     src/speaker.c
     src/status_bar.c
     src/emulator_status_bar.c
+    src/running_vm.c
     src/text.c
     src/typing.c
     src/menu_box.c

@@ -789,6 +789,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   typing never does, and close it again. `src/menu.c` keeps its state and
   draws it, in boxes and rows from `src/menu_box.c`. `src/emulator.c` carries
   out what the menu's items do, through the callbacks in `MenuConfig`.
+  The running VM, `src/running_vm.c`, changes the VM's floppy disks for
+  them: it says so on the status rows and saves the drive to `vm.cfg`.
 - **A list box is a box that lists items, one of them selected**: most
   screens, and the menu's pages. `src/list_box.c` has what they share:
   moving the selection, scrolling a long list, and drawing the items. A
