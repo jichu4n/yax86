@@ -333,12 +333,16 @@ async function runStep(board, verb, argument, options) {
       const end = Date.now() + seconds * 1000;
       while (Date.now() < end) {
         // A graphics mode has no text to match, which is no match yet: the
-        // keys that leave it may still be on their way.
+        // keys that leave it may still be on their way. Nor has the launcher,
+        // before a VM starts, which is no match yet either.
         let text = null;
         try {
           ({text} = await board.screen());
         } catch (e) {
-          if (!e.message.endsWith('not_text_mode')) {
+          if (
+            !e.message.endsWith('not_text_mode') &&
+            !e.message.endsWith('no_guest')
+          ) {
             throw e;
           }
         }

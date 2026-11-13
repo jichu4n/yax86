@@ -6,10 +6,9 @@
 #include <string.h>
 #include <strings.h>
 
-#include "command.h"
-#include "commands.h"
 #include "core/platform.h"
 #include "core/video.h"
+#include "debug_command.h"
 #include "display.h"
 #include "file_list.h"
 #include "floppy.h"
@@ -112,14 +111,6 @@ enum {
   kMicrosecondsPerSecond = 1000 * 1000,
   kMaxLagUs = kMaxLagMs * kMicrosecondsPerMillisecond,
   kHzPerKHz = 1000,
-};
-
-// What came of the overclock, as the report gives it.
-static const char* const kOverclockNames[] = {
-    [kOverclockNotRequested] = "not_requested",
-    [kOverclockApplied] = "applied",
-    [kOverclockPLLCannot] = "pll_cannot_produce_clock",
-    [kOverclockSkippedAfterHang] = "skipped_after_hang",
 };
 
 // How far the boot has got. DOS asks for the date and then the time before it
@@ -271,18 +262,6 @@ static uint32_t BootSpeedPermille(void) {
                     Y_PLATFORM_CPU_CYCLES_PER_SECOND / g_status.boot_busy_us);
 }
 
-static void FormatSouthbridgeVersion(char* buffer, size_t size) {
-  if (!g_board->southbridge_answered) {
-    snprintf(buffer, size, "not answering");
-  } else if (g_board->southbridge_version == 0) {
-    snprintf(buffer, size, "older than v1.6");
-  } else {
-    snprintf(
-        buffer, size, "v%X.%X", g_board->southbridge_version >> 4,
-        g_board->southbridge_version & 0xF);
-  }
-}
-
 static void FormatBootLine(char* buffer, size_t size) {
   const uint64_t emulated_ms = g_status.boot_cycles * kMillisecondsPerSecond /
                                Y_PLATFORM_CPU_CYCLES_PER_SECOND;
@@ -341,7 +320,7 @@ static void FormatClockLine(char* buffer, size_t size) {
 
 static void FormatSystemLine(char* buffer, size_t size) {
   char version[16];
-  FormatSouthbridgeVersion(version, sizeof(version));
+  BoardFormatSouthbridgeVersion(g_board, version, sizeof(version));
   snprintf(
       buffer, size, "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %lu keys, %uK",
       (unsigned long)(clock_get_hz(clk_sys) / (kHzPerKHz * kHzPerKHz)),
@@ -495,17 +474,11 @@ static void UpdateStatusRows(void) {
       Y_LOG_UINT("busy_us", g_status.boot_busy_us),                     \
       Y_LOG_UINT("speed_pm", BootSpeedPermille())
 
-// A line of a reply to a report command: one group of its facts.
-#define REPLY_GROUP(command, group, ...)                 \
-  Y_LOG_REPLY(                                           \
-      &g_runtime_logger, (command)->id, (command)->name, \
-      Y_LOG_STRING("group", (group)), __VA_ARGS__)
-
 // A drive's group of a report.
 static void ReplyDiskImage(
-    const Command* command, const char* group, const DiskImage* image) {
+    const DebugCommand* command, const char* group, const DiskImage* image) {
   const DiskImageStats* stats = &image->stats;
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, group,
       Y_LOG_STRING("image", DiskImageDescribeStatus(image->status)),
       Y_LOG_STRING("path", image->path != NULL ? image->path : ""),
@@ -517,38 +490,18 @@ static void ReplyDiskImage(
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// The same facts as the status screen, as a group for each part of the
-// runtime, in answer to a report command.
-// The report is answered in parts, none inlined into another: each group's
-// fields take stack of their own until the function they are in returns, and
-// the report whole would be the deepest call on core 0's stack - see
-// StacksPaint().
+// Emulator mode's groups of a report, after the board's: the VM's paging and
+// boot, the display, the VM's drives and name, the menu, and the pacing. In
+// parts, none inlined into another: each group's fields take stack until the
+// function they are in returns, and the report whole would be the deepest call
+// on core 0's stack. See StacksPaint().
 //
-// The board: what it is and how it started.
-static __noinline void ReplyReportBoard(const Command* command) {
-  char version[16];
-  FormatSouthbridgeVersion(version, sizeof(version));
-  REPLY_GROUP(
-      command, "system", Y_LOG_STRING("runtime", "yax86 picocalc"),
-      Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / kHzPerKHz),
-      Y_LOG_STRING("overclock", kOverclockNames[g_board->overclock]),
-      Y_LOG_UINT("lcd_spi_hz", g_board->lcd_spi_hz),
-      Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
-      Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
-      Y_LOG_STRING("keyboard_fw", version),
-      Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024));
-  const PsramStats psram = PsramGetStats();
-  REPLY_GROUP(
-      command, "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
-      Y_LOG_UINT("serial_hz", psram.serial_hz), Y_LOG_HEX8("kgd", psram.kgd),
-      Y_LOG_UINT("read_512_us", psram.read_512_us),
-      Y_LOG_UINT("write_512_us", psram.write_512_us),
-      Y_LOG_UINT("bytes_read", psram.bytes_read),
-      Y_LOG_UINT("bytes_written", psram.bytes_written),
-      Y_LOG_UINT("timeouts", psram.timeouts));
+// The VM's memory and boot, and the display.
+static __noinline void ReportRunning(const DebugCommand* command) {
   const PagerStats pager = PagerGetStats();
-  REPLY_GROUP(
-      command, "paging", Y_LOG_BOOL("on", g_paging),
+  DEBUG_COMMAND_REPLY_GROUP(
+      command, "paging", Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024),
+      Y_LOG_BOOL("on", g_paging),
       Y_LOG_BOOL("off_after_fault", g_board->after_fault),
       Y_LOG_UINT("frames", pager.frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
@@ -558,13 +511,9 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("soft_faults", pager.soft_faults),
       Y_LOG_UINT("errors", pager.errors),
       Y_LOG_UINT("fault_us", pager.fault_us));
-  REPLY_GROUP(
-      command, "stack", Y_LOG_UINT("size", StacksSize()),
-      Y_LOG_UINT("core0_used", StacksCore0Used()),
-      Y_LOG_UINT("core1_used", StacksCore1Used()));
-  REPLY_GROUP(command, "boot", BOOT_FIELDS());
+  DEBUG_COMMAND_REPLY_GROUP(command, "boot", BOOT_FIELDS());
   const DisplayStats display = DisplayGetStats();
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
       Y_LOG_STRING("font", Font4x10Name(g_settings->font)),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
@@ -574,45 +523,19 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("copy_us", display.copy_us));
 }
 
-// The VM's drives, and what has been done with the card and the keyboard.
-static __noinline void ReplyReportDevices(const Command* command) {
+// The VM's drives, the VM, the menu and the pacing.
+static __noinline void ReportDrives(const DebugCommand* command) {
   ReplyDiskImage(command, "fd1", FloppyGetImage(kFloppyDriveA));
   ReplyDiskImage(command, "fd2", FloppyGetImage(kFloppyDriveB));
   ReplyDiskImage(command, "hd1", HardDiskGetImage(kHardDisk1));
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm->entry.name : ""),
       Y_LOG_UINT("vms", g_vms->count));
-  const UsbStorageStats usb = UsbStorageGetStats();
-  REPLY_GROUP(
-      command, "usb", Y_LOG_BOOL("exporting", usb.exporting),
-      Y_LOG_STRING("image", usb.image_path != NULL ? usb.image_path : ""),
-      Y_LOG_BOOL("connected", usb.connected), Y_LOG_BOOL("seen", usb.seen),
-      Y_LOG_BOOL("ejected", usb.ejected),
-      Y_LOG_UINT("blocks_read", usb.blocks_read),
-      Y_LOG_UINT("blocks_written", usb.blocks_written),
-      Y_LOG_UINT("read_us", usb.read_us), Y_LOG_UINT("write_us", usb.write_us),
-      Y_LOG_UINT("errors", usb.errors));
-  const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
-  REPLY_GROUP(
-      command, "keyboard", Y_LOG_UINT("reads", keyboard.reads),
-      Y_LOG_UINT("keys", keyboard.keys),
-      Y_LOG_UINT("stale_keys", keyboard.stale_keys),
-      Y_LOG_UINT("aborts", keyboard.aborts),
-      Y_LOG_UINT("timeouts", keyboard.timeouts));
-}
-
-// The speaker, the menu and the pacing.
-static __noinline void ReplyReportRunning(const Command* command) {
-  const SpeakerStats speaker = SpeakerGetStats();
-  REPLY_GROUP(
-      command, "speaker", Y_LOG_UINT("frequency_hz", speaker.frequency_hz),
-      Y_LOG_UINT("output_hz", speaker.output_hz),
-      Y_LOG_UINT("changes", speaker.changes));
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", MenuShowing()),
       Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : MenuPageName()));
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
           "emulated_us", g_clock.cycles * kMicrosecondsPerSecond /
@@ -625,10 +548,11 @@ static __noinline void ReplyReportRunning(const Command* command) {
       Y_LOG_BOOL("idle_skip", g_platform.is_dos_idle_skip_enabled));
 }
 
-static void ReplyReport(const Command* command) {
-  ReplyReportBoard(command);
-  ReplyReportDevices(command);
-  ReplyReportRunning(command);
+static void Report(const DebugCommand* command) {
+  DebugCommandReportBoard(command);
+  ReportRunning(command);
+  ReportDrives(command);
+  DebugCommandReplyOk(command);
 }
 
 // Say the boot is over to a host that has attached since the last look, if
@@ -839,14 +763,14 @@ enum {
 // the screen with its characters as hex, as the guest's code page has them,
 // and with attrs=true another with their attributes. Hex, because a row of
 // box drawing characters escaped as text would not fit on a line.
-static void RunScreen(const Command* command) {
+static void RunScreen(const DebugCommand* command) {
   const YVideoState* video = &g_platform.video;
   const YVideoModeMetadata* mode = YVideoGetModeMetadata(video);
   if (mode->type != Y_VIDEO_MODE_TEXT || mode->columns > kMaxTextColumns) {
-    CommandReplyError(command, "not_text_mode");
+    DebugCommandReplyError(command, "not_text_mode");
     return;
   }
-  const char* attrs = CommandArgument(command, "attrs");
+  const char* attrs = DebugCommandArgument(command, "attrs");
   const bool with_attributes = attrs != NULL && attrs[0] == 't';
   const uint8_t* registers = video->registers;
   const uint32_t start = ((uint32_t)registers[kCRTCStartAddressHigh] << 8) |
@@ -898,15 +822,35 @@ static void RunScreen(const Command* command) {
           Y_LOG_STRING("attrs", hex));
     }
   }
-  CommandReplyOk(command);
+  DebugCommandReplyOk(command);
 }
 
-// What the commands ask of the runtime: the report's groups, and the guest's
-// text screen.
-const CommandsHandlers kEmulatorCommands = {
-    .report = ReplyReport,
-    .screen = RunScreen,
-};
+// Answer a command: report and screen here, as they depend on the mode, and
+// any other with DebugCommandRunCommon().
+static void RunCommand(const DebugCommand* command) {
+  if (DebugCommandIs(command, "report")) {
+    Report(command);
+  } else if (DebugCommandIs(command, "screen")) {
+    RunScreen(command);
+  } else {
+    DebugCommandRunCommon(command);
+  }
+}
+
+// Answer the command the host has sent, if a whole one is in, adding the
+// time it took to *run_us if given. Kept out of line, so that the command is
+// off core 0's stack while the loops run.
+static __noinline void PollCommand(uint64_t* run_us) {
+  DebugCommand command;
+  if (!DebugCommandPoll(&command)) {
+    return;
+  }
+  const uint64_t start_us = time_us_64();
+  RunCommand(&command);
+  if (run_us != NULL) {
+    *run_us += time_us_64() - start_us;
+  }
+}
 
 // ============================================================================
 // The menu
@@ -1095,7 +1039,7 @@ static void RunVM(bool vm_ready) {
       running = false;
     }
 
-    CommandsPoll(&kEmulatorCommands, &g_command_us);
+    PollCommand(&g_command_us);
     // Between batches, so the keyboard is never written while the VM
     // runs, and a key a host typed only in a batch the keyboard had none, so
     // that the two never land in one. A key also keeps the screen on, and
