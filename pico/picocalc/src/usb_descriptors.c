@@ -3,7 +3,7 @@
 //
 //   interfaces 0 and 1  the serial port, CDC, which pico_stdio_usb drives
 //   interface 2         picotool's reset interface, from pico_usb_reset
-//   interface 3         a card reader, mass storage - see usb_disk.c
+//   interface 3         a card reader, mass storage - see usb_storage.c
 //
 // pico_stdio_usb describes the first two itself, but not once an application
 // links TinyUSB, as a third function needs, so all three are described here.
