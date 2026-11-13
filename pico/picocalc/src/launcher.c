@@ -12,6 +12,7 @@
 #include "font_4x10.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu_screen.h"
+#include "launcher_status_bar.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "screen.h"
@@ -19,7 +20,6 @@
 #include "status_bar.h"
 #include "text.h"
 #include "typing.h"
-#include "ui_status.h"
 #include "vm_list.h"
 
 enum {
@@ -35,6 +35,11 @@ enum {
   // sleeps between passes, as the VM's loop does while its menu is open.
   kStatusUpdateMs = 100,
   kPollMs = 10,
+
+  // How long a boot_default that could not be saved shows, as long as a
+  // message would, and how often the rows are updated meanwhile.
+  kProblemShownMs = 4000,
+  kProblemPollMs = 100,
 
   kMillisecondsPerSecond = 1000,
 };
@@ -112,7 +117,7 @@ static __noinline bool ReadSettings(uint8_t* default_vm) {
   if (!read) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
-    UIStatusSetProblem(message);
+    StatusBarSetProblem(message);
   }
   return read;
 }
@@ -132,8 +137,16 @@ static void SaveBootDefault(const char* name) {
   char message[kTextColumns + 1];
   snprintf(
       message, sizeof(message), "Could not save boot_default: %.50s", problem);
-  StatusBarPostMessage(message);
   SYSTEM_WARN("boot_default_not_saved", Y_LOG_STRING("problem", problem));
+  // Shown on the launcher's rows, for as long as a message is, before the
+  // VM starts.
+  StatusBarSetProblem(message);
+  const absolute_time_t until = make_timeout_time_ms(kProblemShownMs);
+  while (!time_reached(until)) {
+    LauncherStatusBarUpdate(NULL);
+    sleep_ms(kProblemPollMs);
+  }
+  StatusBarClearProblem();
 }
 
 // Load the VM at index in g_vms to start it: read its vm.cfg into *config,
@@ -149,7 +162,7 @@ static __noinline bool LoadSelectedVM(uint8_t index, VMConfig* config) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
-  UIStatusSetProblem(message);
+  StatusBarSetProblem(message);
   SYSTEM_WARN(
       "vm_config_problem", Y_LOG_STRING("path", vm->path),
       Y_LOG_STRING("problem", problem));
@@ -278,6 +291,8 @@ bool LauncherRun(
   g_settings = settings;
   switch (Start(copy_buffer, vm)) {
     case kStartLoadedVM:
+      // A problem shown at the start is the launcher's, and goes with it.
+      StatusBarClearProblem();
       return true;
     case kStartNoCard:
       return false;
@@ -296,15 +311,18 @@ bool LauncherRun(
       ScreenTick();
     }
     // The launcher menu closes once it has decided: a VM to start, which may
-    // not load, or after USB mass storage, the card to be read again.
+    // not load, or after USB mass storage, the card to be read again. A
+    // problem it showed goes with it, as the emulator's rows have nothing to
+    // clear it.
     if (!ScreenIsOpen() && HandleMenuExit(copy_buffer, vm)) {
+      StatusBarClearProblem();
       return true;
     }
     // The keys for the page a key led to are offered at once rather than at
     // the next update.
     if (pressed || time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      UIStatusOffer(ScreenHint());
+      LauncherStatusBarUpdate(ScreenHint());
     }
     ScreenDraw(time_us_64());
     sleep_ms(kPollMs);

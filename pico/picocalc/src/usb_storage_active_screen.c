@@ -7,9 +7,9 @@
 #include "display.h"
 #include "runtime_log.h"
 #include "sdcard.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 #include "usb_storage.h"
 #include "usb_storage_disconnect_screen.h"
 
@@ -85,7 +85,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, 1, &g_chosen)) {
       g_dirty = true;

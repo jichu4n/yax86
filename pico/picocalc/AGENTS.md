@@ -359,9 +359,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   VM selected, or reads the card again, and shows the menu again if no VM
   loaded. The loop answers debug commands, its own and the common ones.
   Through `src/screen.c`, it hands the screen showing its keys, a tick for
-  what happens with time, and the chance to draw. It composes the status rows itself, with `src/ui_status.c`, from
-  the keys `ScreenHint()` gives: the router leaves the rows to each loop,
-  as the VM's have its drives and locks too. A `Screen` is those
+  what happens with time, and the chance to draw. It composes the status
+  rows itself, with `src/launcher_status_bar.c`, from the keys `ScreenHint()`
+  gives: the router leaves the rows to each loop, as the VM's have its
+  drives and locks too. A `Screen` is those
   functions, with its page's name for the report and a `resume` for
   showing again. The router keeps the screens as a stack, the list at the
   bottom, and only the one on top is called, so the stack's depth adds
@@ -745,9 +746,21 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **The messages row** shows a message four seconds at a time; the menu's
   keys while it is open, or a problem in their place until the next key; and
   otherwise, while a VM runs, the menu's own key, `Shift+Shift=Menu`, dim.
-  While the list at power on shows, `src/ui_status.c` keeps the problem and
-  composes the rows from the keys of the page showing. Shift is spelled out:
-  the arrows that stood for it read as the up arrow key.
+  Shift is spelled out: the arrows that stood for it read as the up arrow
+  key.
+- **Each mode composes its own status rows**, and `src/status_bar.c` has
+  what both have in common, knowing neither mode: putting text, keys and the
+  battery on a row, the problem any screen can show, and sending the rows to
+  core 1. `src/launcher_status_bar.c` shows the problem or the keys of the
+  screen showing, and the battery. `src/emulator_status_bar.c` shows the
+  messages, the drives, the locks and the battery. Each mode's update
+  composes the rows again only when what they show has changed, and keeps
+  its own copy of that to compare.
+- **A problem the launcher shows is cleared as it hands over to the
+  emulator**, since the emulator's rows have nothing to clear it with. A
+  `boot_default` that cannot be saved as a VM starts shows on the
+  launcher's rows as a problem, for as long as a message would, before the
+  VM starts.
 - **Keys are labeled as MS-DOS's own programs label them**, `Key=Action`
   pairs two spaces apart - `↑↓=Move  Enter=Select  Esc=Back` - the action
   brighter than the key, so the two read apart in the 4x10 font.

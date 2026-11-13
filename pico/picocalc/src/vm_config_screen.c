@@ -9,9 +9,9 @@
 #include "display.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
+#include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 #include "vm_drive_config_screen.h"
 
 enum {
@@ -112,7 +112,7 @@ static __noinline ScreenResult Create(void) {
       VMListCreate(g_name, &drives, &transfer, &created, problem);
   VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
+    StatusBarSetProblem(problem);
     return ScreenStays();
   }
   VMManagerNoteChange(g_vm_manager, created.name, false);
@@ -126,7 +126,7 @@ static __noinline ScreenResult Create(void) {
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
-    UIStatusSetProblem(problem);
+    StatusBarSetProblem(problem);
     SYSTEM_WARN(
         "vm_not_created", Y_LOG_STRING("name", created.name),
         Y_LOG_STRING("problem", problem));
@@ -145,7 +145,7 @@ static __noinline ScreenResult Save(void) {
   const VMListResult result = VMListEdit(&vm, &drives, &transfer, problem);
   VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
-    UIStatusSetProblem(problem);
+    StatusBarSetProblem(problem);
     return ScreenStays();
   }
   VMManagerNoteChange(g_vm_manager, vm.name, true);
@@ -196,7 +196,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   // Backspace erases the name rather than leaving the form, wherever it is:
   // Esc leaves it.
   if ((ChosenItem() == kFormName && TypeName(event.key)) ||

@@ -8,10 +8,10 @@
 #include "font_4x10.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
+#include "status_bar.h"
 #include "text.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "ui_status.h"
 #include "vm_config.h"
 
 extern const Screen kFontScreen;
@@ -43,7 +43,7 @@ static __noinline void ChooseFont(void) {
   }
   char message[kTextColumns + 1];
   snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
-  UIStatusSetProblem(message);
+  StatusBarSetProblem(message);
   SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
 }
 
@@ -52,7 +52,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  UIStatusClearProblem();
+  StatusBarClearProblem();
   if (UIPageIsMoveKey(event.key)) {
     if (UIPageMove(event.key, kFont4x10Count, &g_chosen)) {
       g_dirty = true;
