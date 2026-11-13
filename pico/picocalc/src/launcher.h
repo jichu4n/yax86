@@ -34,10 +34,10 @@ typedef enum StartIntent {
 } StartIntent;
 
 // Run launcher mode, and return whether a VM was loaded into *chosen to
-// start. main.c holds what it works on: vms and settings, which it reads from
-// the card and the screens change; and copy_buffer, guest RAM that copying a
-// VM's files borrows until the VM starts. commands answers the commands that
-// are not the launcher's.
+// start. main.c holds what it works on: vms and settings, which the launcher
+// reads from the card and its screens change; and copy_buffer, guest RAM that
+// copying a VM's files borrows until the VM starts. commands answers the
+// commands that are not the launcher's.
 //
 // Without a card it returns false at once, and the emulator boots the floppy
 // built into flash. Otherwise:
