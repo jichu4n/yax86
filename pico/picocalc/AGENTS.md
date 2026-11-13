@@ -335,10 +335,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   still reads. A problem, such as a bad value, is logged as
   `settings_problem`.
 - **At power on, with a card, the menu lists its VMs**, before the VM
-  exists, then a separator line, Manage VMs - see below - USB disk mode -
+  exists, then a separator line, Manage VMs - see below - USB mass storage -
   see "The USB device" - and Settings (which holds Font). The countdown runs on
   the list's bottom edge until a key is pressed, then the default starts.
-  With no VMs the list has Manage VMs, USB disk mode and Settings, with no
+  With no VMs the list has Manage VMs, USB mass storage and Settings, with no
   separator, and nothing counts down or starts by itself; the built-in floppy boots only without a
   card. Every page reached from the list is drawn the list's
   size, as there is no guest's screen yet to draw under a smaller box. A file that does not read keeps
@@ -380,13 +380,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   and passes them to `LauncherRun()`, which passes them down; nothing
   asks the launcher for them back. Settings and Font
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
-  are USB disk mode, its sharing page and the question before
-  disconnecting, in `src/usb_*screen.c`; and Manage VMs and every page
+  are USB mass storage, the page while it exports, and the question before
+  an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
   under it, in `src/manage_screen.c` and `src/vm_*screen.c`; and the list
   itself, in `src/launcher_menu_screen.c`.
 - **A `resume` returns a result, as a key does**, so a parent can act on
-  what its child left: the USB page, finding sharing ended, goes back too,
-  and the list, told through `g_shared`, reads the card again.
+  what its child left: the USB page, finding exporting ended, goes back too,
+  and the list, told through `g_exported`, reads the card again.
 - **The browser is a screen any parent opens**: `BrowserScreenOpen()` takes
   the images to list, the folder, the image already chosen, and where to
   write the one chosen. A parent that cannot use the image, such as one
@@ -447,7 +447,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   for Rename and Clone, and a question before Delete. Afterwards it shows
   the list of VMs to manage again with the VM renamed or made chosen - after
   Edit drives, the VM's page - and the list at power on waits for a key, as
-  after USB disk mode.
+  after USB mass storage.
 - **Manage VMs holds a `ManageState`, in `src/manage.c`, and passes it
   down**: the launcher's VM list and settings, the copy buffer, and what a
   screen changed. Each change is carried out by the screen that confirms
@@ -563,7 +563,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   command starts from a fresh select that waits for ready. A block alone is
   CMD17 or CMD24, and a run of them one CMD18 or CMD25, ended by CMD12 or the
   stop token. The drives only ever move a block alone, so the boot's card
-  accesses are the same either way; FatFs and USB disk mode move runs.
+  accesses are the same either way; FatFs and USB mass storage move runs.
 - **The filesystem is FatFs R0.16.** `resources/FatFs/ff16.zip` is the
   release exactly as elm-chan.org serves it, unpacked by `FetchContent` and
   checked against its SHA-256, which says it is unchanged and keeps the tree
@@ -592,7 +592,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the boot 0.85% slower with no image on the card, though the floppy's reads
   got faster. A third of it is guest RAM moving - the images are 8-byte
   aligned, and `.bss` sorts by alignment before name, so they land ahead of
-  it - and the rest most likely flash layout. USB disk mode did it again:
+  it - and the rest most likely flash layout. USB mass storage did it again:
   0.69% slower, 5.1043 seconds against 5.0691, with guest RAM where it was
   and none of its code running in the boot, while everything linked after
   `main.c` and `menu.c` moved 3.5KB along in flash.
@@ -816,10 +816,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   - The walk covers the menu and each of its pages: a drive's page, the
     browser, Status, and the questions before Reset and Power off. Then,
     powered off to the list: the list itself, Manage VMs, a VM's page, the
-    New VM form and a drive's choices on it, USB disk mode, Settings and
+    New VM form and a drive's choices on it, USB mass storage, Settings and
     Font.
   - It only looks and backs out, with Esc or Cancel, so the card is as it
-    was. Pages reached only by acting, such as copying or sharing, need a
+    was. Pages reached only by acting, such as copying or exporting, need a
     VM or an image made for the test, and deleted after.
   - Leave the board on master's image afterwards, at `A>`.
 
@@ -829,7 +829,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `src/usb_descriptors.c`: the serial port (CDC, interfaces 0 and 1), which
   `pico_stdio_usb` drives; picotool's reset interface (2), from
   `pico_usb_reset`; and a card reader (3), mass storage, in
-  `src/usb_disk.c`. The serial port and the reset interface are described
+  `src/usb_storage.c`. The serial port and the reset interface are described
   as `pico_stdio_usb` describes them, with the SDK's vendor and product
   IDs, so a host finds `/dev/ttyACM*` and `picotool reboot -f` works as
   before.
@@ -851,13 +851,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   there from power on is what lets it take a card later without the device
   going away, which would take the serial port and the reset interface with
   it. Linux asks every two seconds, and sees a card shared within that.
-- **USB disk mode is reached only from the list at power on**, never while a
-  VM runs: nothing has the card open there, and no guest holds a copy of a
-  disk's FAT that a computer could change under it. Its row, USB disk mode,
-  opens a page with Whole SD card, which unmounts the card's volume -
-  `DiskImageUnmountCard()` - and shares it, and Disk image, which opens the
-  browser on `yax86` listing floppy and hard disk images alike, each marked
-  which, and shares the one chosen.
+- **USB mass storage is reached only from the list at power on**, never
+  while a VM runs: nothing has the card open there, and no guest holds a
+  copy of a disk's FAT that the host could change under it. Its row, USB
+  mass storage, opens a page with Entire SD card, which unmounts the card's
+  volume - `DiskImageUnmountCard()` - and exports it, and Disk image, which
+  opens the browser on `yax86` listing floppy and hard disk images alike,
+  each marked which, and exports the one chosen.
+- **The words are the technical ones**, for a project whose users are at
+  home with them: the PicoCalc is a USB mass storage device, it exports the
+  card or an image to the host, which mounts and ejects the volume, and
+  taking it back before then is an unsafe disconnect.
 - **An image on USB is its own disk**: a floppy is a FAT12 volume with no
   partition table, which a computer mounts whole, and a hard disk has its
   table, with the partition at sector 17. The card stays mounted, and the
@@ -867,8 +871,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   map - and closed on disconnecting. Through the drives' byte at a time
   instead, each sector written was read first, and writing ran at 137KB/s.
   The browser shows no "in FD1": at power on the drives have no images.
-  The card's page shows whether a computer has it and what has moved;
-  Disconnect asks first if the computer has the card and has not ejected it,
+  The page while it exports shows what is exported and its size, the
+  host's state and what has moved; Disconnect asks first if the host has
+  the volume mounted and has not ejected it,
   then mounts the card again and reads the VMs and settings afresh, showing
   the list without counting down. The report's `usb` group has the same.
 - **The computer reads and writes the card's own blocks**, its partition
