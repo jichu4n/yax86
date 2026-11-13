@@ -7,7 +7,7 @@
 #include "ui_box.h"
 #include "ui_page.h"
 #include "ui_status.h"
-#include "vm_form_screen.h"
+#include "vm_config_screen.h"
 #include "vm_manager.h"
 #include "vm_screen.h"
 
@@ -77,7 +77,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
     case kKeyCodeEnter:
     case kKeyCodeSpace:
       if (g_chosen == g_vm_manager.vms->count) {
-        return VMFormScreenOpenNew(&g_vm_manager);
+        return VMConfigScreenOpenNew(&g_vm_manager);
       }
       return VMScreenOpen(&g_vm_manager, g_chosen);
     case kKeyCodeBackspace:
