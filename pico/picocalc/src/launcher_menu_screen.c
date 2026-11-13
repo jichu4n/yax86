@@ -6,7 +6,7 @@
 
 #include "display.h"
 #include "launcher_card.h"
-#include "manage_screen.h"
+#include "vm_manager_screen.h"
 #include "pico/stdlib.h"
 #include "settings_screen.h"
 #include "ui_box.h"
@@ -18,7 +18,7 @@ enum {
   kMicrosecondsPerSecond = 1000 * 1000,
 };
 
-static const UIBoxItem kManageRow = {"Manage VMs", true};
+static const UIBoxItem kVMManagerRow = {"Manage VMs", true};
 static const UIBoxItem kUSBRow = {"USB mass storage", true};
 static const UIBoxItem kSettingsRow = {"Settings", true};
 
@@ -131,7 +131,7 @@ static ScreenResult Choose(void) {
   g_opened = (ListRow)(g_chosen_item - g_vms->count);
   switch (g_opened) {
     case kListRowManage:
-      return ManageScreenOpen(
+      return VMManagerScreenOpen(
           g_vms, g_settings, g_copy_buffer, g_copy_buffer_size);
     case kListRowUSB:
       return USBStorageScreenOpen(&g_exported);
@@ -241,7 +241,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
       const bool chosen = item == g_chosen_item;
       if (item == RowItem(kListRowManage)) {
-        UIBoxMenuItemRow(row, menu->columns, &kManageRow, chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, chosen);
       } else if (item == RowItem(kListRowUSB)) {
         UIBoxMenuItemRow(row, menu->columns, &kUSBRow, chosen);
       } else {

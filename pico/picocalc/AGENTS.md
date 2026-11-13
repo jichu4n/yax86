@@ -382,7 +382,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
   are USB mass storage, the page while it exports, and the question before
   an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
-  under it, in `src/manage_screen.c` and `src/vm_*screen.c`; and the list
+  under it, in `src/vm_manager_screen.c` and `src/vm_*screen.c`; and the list
   itself, in `src/launcher_menu_screen.c`.
 - **A `resume` returns a result, as a key does**, so a parent can act on
   what its child left: the USB page, finding exporting ended, goes back too,
@@ -438,8 +438,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the list of VMs to manage again with the VM renamed or made chosen - after
   Edit drives, the VM's page - and the list at power on waits for a key, as
   after USB mass storage.
-- **Manage VMs holds a `ManageState`, in `src/manage.c`, and passes it
-  down**: the launcher's VM list and settings, the copy buffer, and what a
+- **The VM manager's screen holds a `VMManager`, in `src/vm_manager.c`, and
+  passes it down**: the launcher's VM list and settings, the copy buffer, and what a
   screen changed. Each change is carried out by the screen that confirms
   it: the name screen renames and clones, the question deletes, the form
   creates and saves. A name or drives that will not do leave that screen
@@ -448,7 +448,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the Back on, and Manage VMs reads the list again and chooses the VM the
   note names, opening its page again after an edit.
 - **A copy's page is drawn from the copy's progress callback** by
-  `ManageBeginCopy()`, not as a screen: the loop that would draw a screen
+  `VMManagerBeginCopy()`, not as a screen: the loop that would draw a screen
   waits for the copy, and nothing can be pressed until it is done.
 - **A menu box holds at most `kDisplayMenuMaxRows`, 12**, and `DrawItems()`
   leaves out text lines past what fits rather than drawing past the box's
