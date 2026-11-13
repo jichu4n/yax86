@@ -56,7 +56,7 @@ static uint8_t* g_copy_buffer;
 // Where the VM chosen from the list goes.
 static VMConfig* g_chosen;
 // Whether the card or an image has been on USB, so the card is read again.
-static bool g_shared;
+static bool g_exported;
 static absolute_time_t g_start_at;
 static bool g_counting;
 
@@ -381,7 +381,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
       result = SettingsScreenOpen(&g_settings);
       break;
     case kLauncherMenuActionOpenUSB:
-      result = USBStorageScreenOpen(&g_shared);
+      result = USBStorageScreenOpen(&g_exported);
       break;
     case kLauncherMenuActionRenameVM:
       RenameVM();
@@ -424,11 +424,11 @@ static ScreenResult CountDown(void) {
   return result;
 }
 
-// Back from a screen opened over the list: after USB mass storage has shared
+// Back from a screen opened over the list: after USB mass storage has exported
 // the card or an image, read the card again.
 static ScreenResult Resume(void) {
-  if (g_shared) {
-    g_shared = false;
+  if (g_exported) {
+    g_exported = false;
     ReadCardAgain();
   } else {
     LauncherMenuResume();

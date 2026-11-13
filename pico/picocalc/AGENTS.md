@@ -380,8 +380,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   an unsafe disconnect, in `src/usb_storage*_screen.c`. The list and Manage VMs' pages
   are still the one launcher screen until they are split the same way.
 - **A `resume` returns a result, as a key does**, so a parent can act on
-  what its child left: the USB page, finding sharing ended, goes back too,
-  and the list, told through `g_shared`, reads the card again.
+  what its child left: the USB page, finding exporting ended, goes back too,
+  and the list, told through `g_exported`, reads the card again.
 - **The browser is a screen any parent opens**: `BrowserScreenOpen()` takes
   the images to list, the folder, the image already chosen, and where to
   write the one chosen. A parent that cannot use the image, such as one
@@ -792,7 +792,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
     New VM form and a drive's choices on it, USB mass storage, Settings and
     Font.
   - It only looks and backs out, with Esc or Cancel, so the card is as it
-    was. Pages reached only by acting, such as copying or sharing, need a
+    was. Pages reached only by acting, such as copying or exporting, need a
     VM or an image made for the test, and deleted after.
   - Leave the board on master's image afterwards, at `A>`.
 

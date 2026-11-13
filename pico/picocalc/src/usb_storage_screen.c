@@ -32,9 +32,9 @@ extern const Screen kUSBStorageScreen;
 static uint8_t g_chosen;
 // Whether what is on the panel is out of date.
 static bool g_dirty;
-// The parent's, set once sharing has ended.
-static bool* g_shared;
-// Whether sharing has ended, which the sharing screen sets.
+// The parent's, set once exporting has ended.
+static bool* g_exported;
+// Whether exporting has ended, which the active screen sets.
 static bool g_stopped;
 // The image found in the browser, empty for none, and its size.
 static char g_found_path[kFSMaxPath + 1];
@@ -43,8 +43,8 @@ static uint32_t g_found_size;
 static DiskImage g_image;
 static char g_image_path[kFSMaxPath + 1];
 
-ScreenResult USBStorageScreenOpen(bool* shared) {
-  g_shared = shared;
+ScreenResult USBStorageScreenOpen(bool* exported) {
+  g_exported = exported;
   g_chosen = kUSBCard;
   g_dirty = true;
   return ScreenOpen(&kUSBStorageScreen);
@@ -56,7 +56,7 @@ static ScreenResult ShareCard(void) {
   DiskImageUnmountCard();
   UsbStorageExportCard();
   g_stopped = false;
-  SYSTEM_INFO("usb_card_shared");
+  SYSTEM_INFO("usb_card_exported");
   return USBStorageActiveScreenOpen(NULL, &g_stopped);
 }
 
@@ -77,13 +77,13 @@ static __noinline ScreenResult ShareImage(void) {
         DiskImageDescribeStatus(status));
     UIStatusSetProblem(message);
     SYSTEM_WARN(
-        "usb_image_not_shared", Y_LOG_STRING("path", g_image_path),
+        "usb_image_not_exported", Y_LOG_STRING("path", g_image_path),
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
     return BrowserScreenReopen();
   }
   UsbStorageExportImage(&g_image);
   g_stopped = false;
-  SYSTEM_INFO("usb_image_shared", Y_LOG_STRING("path", g_image_path));
+  SYSTEM_INFO("usb_image_exported", Y_LOG_STRING("path", g_image_path));
   return USBStorageActiveScreenOpen(&g_image, &g_stopped);
 }
 
@@ -120,7 +120,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 static ScreenResult Resume(void) {
   if (g_stopped) {
     g_stopped = false;
-    *g_shared = true;
+    *g_exported = true;
     return ScreenBack();
   }
   g_dirty = true;

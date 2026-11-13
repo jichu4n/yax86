@@ -1,5 +1,5 @@
 // The list of VMs at power on, and what can be done from it: starting a VM,
-// managing VMs, sharing the card or an image over USB, and opening Settings
+// managing VMs, exporting the card or an image over USB, and opening Settings
 // with the card's settings, which the launcher holds.
 // main.c runs the list's loop, answering commands, updating the status rows
 // and drawing the menu, and the launcher decides what the list does: which
