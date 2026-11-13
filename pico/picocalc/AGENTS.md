@@ -47,15 +47,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   write, so lines come out whole.
 - **Each core has a 4KB stack, core 1's directly below core 0's**, so core 0
   running past the bottom of its own writes over the frames core 1 is in,
-  which hangs core 1 - drawing and screenshots - with nothing said. Both are
-  painted at startup, and the report's `stack` group gives the most of each
-  ever used. Core 0 peaks at about 3.2KB, renaming a VM other VMs name.
-  Inlined into the list's loop, the handlers of its actions had all their
-  locals on the stack at once, and a report at the list overflowed it; they
-  are kept out of line with `__noinline`. The report is answered in three
-  parts for the same reason: its fields take stack until the function they
-  are in returns, 1.5KB for all of them. `-fstack-usage` gives each
-  function's frame.
+  which hangs core 1, and with it drawing and screenshots, with nothing said.
+  `src/stack_usage.c` paints both at startup, and the report's `stack` group
+  gives the most of each ever used. Core 0 peaks at about 2.9KB, renaming a
+  VM other VMs name. Two things keep it there. What a screen carries out,
+  such as renaming, cloning or reading the card, is kept out of line with
+  `__noinline`, so that only the one running has its locals on the stack.
+  And a report is answered in parts, none inlined into another, since a
+  group's fields take stack until the function they are in returns: 1.5KB
+  for all of them. `-fstack-usage` gives each function's frame.
 - **Flashing replaces ClockworkPi's factory firmware** - a boot loader at
   offset 0, PicoMite at 200KB, and PicoMite's storage at 968KB. Back it up
   before the first flash:
@@ -906,22 +906,36 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## Commands over USB
 
-- **A host drives the runtime with commands on the same serial port**, a
-  logfmt line each - `id=7 cmd=screen` - answered by `kind=reply` lines with
-  that id, the last with `status=ok`, or `status=error` and an `error`.
-  `src/command.c` reads them and `main.c` carries them out:
+- **A host drives the runtime with debug commands on the same serial port.**
+  Each is a logfmt line, such as `id=7 cmd=screen`. The answer is
+  `kind=reply` lines with that id, the last with `status=ok`, or
+  `status=error` and an `error`.
 
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `usb`, `keyboard`, `speaker`, `menu`, `pacing` |
+  | `report` | a line for each group of facts: the system's, then the mode's |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
 
+- **`src/debug_command.c` reads the commands and answers the common
+  ones**, the commands that mean the same in every mode: `ping`, `key` and
+  `screenshot`. Each mode answers its own, `report` and `screen`, and passes
+  any other to `DebugCommandRunCommon()`. A mode's report gives the
+  system's groups first, with `DebugCommandReportSystem()`: `system`,
+  `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
+  mode. Then it gives its own: the VM's `paging`, `boot`, `display`, `fd1`,
+  `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`. For now `main.c` answers
+  for both modes.
+- **`src/init.c` initializes the system at startup**, after `main()` has
+  painted the stacks: USB serial, the clock, the PSRAM, the logs, the LCD,
+  the keyboard controller and the speaker. What it found is an
+  `InitStatus`, which `main.c` holds, and the report's `system` group and
+  the status page give.
 - **Commands are read once a batch without waiting**, up to 64 bytes, and run
   between batches. With nothing sent, the poll costs about 6us a batch. Time
-  spent on commands is `command_us` in the report.
+  spent on commands while the VM runs is `command_us` in the report.
 - **A screen row is hex**: a row of box drawing characters escaped as logfmt
   is 320 characters, past the logger's 256-byte line.
 - **`key` is the only way in, so a host can do exactly what a hand on the

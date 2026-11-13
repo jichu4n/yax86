@@ -24,16 +24,16 @@
 #include <string.h>
 #include <strings.h>
 
-#include "command.h"
 #include "core/platform.h"
 #include "core/video.h"
+#include "debug_command.h"
 #include "display.h"
 #include "file_list.h"
 #include "floppy.h"
 #include "harddisk.h"
 #include "hardware/clocks.h"
-#include "hardware/vreg.h"
 #include "hardware/watchdog.h"
+#include "init.h"
 #include "keymap.h"
 #include "launcher.h"
 #include "menu.h"
@@ -46,6 +46,7 @@
 #include "sdcard.h"
 #include "southbridge.h"
 #include "speaker.h"
+#include "stack_usage.h"
 #include "status_bar.h"
 #include "typing.h"
 #include "ui_status.h"
@@ -58,11 +59,6 @@
 // identical but for that, which is what measures what drawing costs.
 #ifndef YAX86_PICOCALC_DRAW_SCREEN
 #define YAX86_PICOCALC_DRAW_SCREEN 1
-#endif
-
-// The system clock in kHz, or 0 for the stock 125MHz. Set by CMakeLists.txt.
-#ifndef YAX86_PICOCALC_SYS_CLK_KHZ
-#define YAX86_PICOCALC_SYS_CLK_KHZ 0
 #endif
 
 enum {
@@ -114,22 +110,6 @@ enum {
   // stall is not followed by a burst of emulation at full speed.
   kMaxLagMs = 100,
 
-  // How long the watchdog waits, across the clock change, before deciding the
-  // chip has hung and rebooting it.
-  kWatchdogTimeoutMs = 4000,
-  // Written to g_overclock_marker across the clock change, and cleared once it
-  // is survived. Any value does, as long as uninitialized RAM is unlikely to
-  // hold it.
-  kOverclockAttemptMarker = 0x0C10C4ED,
-  // Written to g_psram_marker across bringing the PSRAM up, and cleared once
-  // it is survived - see StartPsram().
-  kPsramAttemptMarker = 0x95A3B007,
-  // Written to g_fault_marker by the hard fault handler, for the start after
-  // the reboot it makes - see isr_hardfault().
-  kFaultMarker = 0xFA017ED0,
-  // How long the core voltage is given to settle before the clock is raised.
-  kVoltageSettleUs = 10 * 1000,
-
   // The BIOS's keyboard flags, in the BIOS data area: its lock and insert
   // states.
   kBIOSKeyboardFlagsAddress = 0x417,
@@ -151,22 +131,6 @@ enum {
   kMicrosecondsPerSecond = 1000 * 1000,
   kMaxLagUs = kMaxLagMs * kMicrosecondsPerMillisecond,
   kHzPerKHz = 1000,
-};
-
-// What became of the request to raise the system clock.
-typedef enum OverclockResult {
-  kOverclockNotRequested = 0,
-  kOverclockApplied,
-  kOverclockPLLCannot,
-  kOverclockSkippedAfterHang,
-} OverclockResult;
-
-// What came of the overclock, as the report gives it.
-static const char* const kOverclockNames[] = {
-    [kOverclockNotRequested] = "not_requested",
-    [kOverclockApplied] = "applied",
-    [kOverclockPLLCannot] = "pll_cannot_produce_clock",
-    [kOverclockSkippedAfterHang] = "skipped_after_hang",
 };
 
 // How far the boot has got. DOS asks for the date and then the time before it
@@ -199,10 +163,6 @@ static const char* const kBootStageEvents[] = {
 // What the runtime found and how far it has got, for the LCD and for the
 // report a host is sent.
 typedef struct RuntimeStatus {
-  OverclockResult overclock;
-  uint32_t lcd_spi_hz;
-  bool southbridge_answered;
-  uint8_t southbridge_version;
   BootStage boot_stage;
   // Emulated and host time at the point boot_stage was last changed.
   uint64_t boot_cycles;
@@ -222,6 +182,8 @@ static YPlatformState g_platform;
 static VMConfig g_vm;
 static bool g_has_vm;
 static RuntimeStatus g_status;
+// What initializing the system found.
+static InitStatus g_init_status;
 static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
 // them is that much slower for.
@@ -253,17 +215,6 @@ typedef struct RunClock {
 
 static RunClock g_clock;
 
-#if YAX86_PICOCALC_SYS_CLK_KHZ
-// Deliberately not zeroed at startup - see Overclock().
-static uint32_t __uninitialized_ram(g_overclock_marker);
-#endif
-// The same for the PSRAM - see StartPsram().
-static uint32_t __uninitialized_ram(g_psram_marker);
-// The same for a hard fault - see isr_hardfault().
-static uint32_t __uninitialized_ram(g_fault_marker);
-// Whether the last start ended in a hard fault, which leaves paging off for
-// this one.
-static bool g_after_fault;
 // Whether guest RAM is paged, and whether the VM is up, before which there is
 // no guest RAM to read.
 static bool g_paging;
@@ -272,47 +223,6 @@ static bool g_vm_up;
 // ============================================================================
 // Reporting
 // ============================================================================
-
-// The two cores' stacks, 4KB each, from the linker script: core 1's directly
-// below core 0's, so that core 0 running past the bottom of its own writes
-// over the frames core 1 is in, which hangs core 1 with nothing said. Each is
-// painted at startup, and the report gives how much of it has ever been
-// written over.
-extern uint32_t __StackBottom;
-extern uint32_t __StackTop;
-extern uint32_t __StackOneBottom;
-extern uint32_t __StackOneTop;
-
-enum {
-  // What the stacks are painted with. Any value does, as long as a stack is
-  // unlikely to hold it.
-  kStackPaint = 0x5AC4DEAD,
-  // What painting core 0's stack leaves of it below the painter's own frame.
-  kStackPaintMargin = 64,
-};
-
-// Paint core 0's stack from its bottom to a little below this function's
-// frame, and core 1's, before core 1 starts on it, whole.
-static __noinline void PaintStacks(void) {
-  volatile uint32_t here = 0;
-  uint32_t* const end = (uint32_t*)((uintptr_t)&here - kStackPaintMargin) - 1;
-  for (uint32_t* word = &__StackBottom; word < end; ++word) {
-    *word = kStackPaint;
-  }
-  for (uint32_t* word = &__StackOneBottom; word < &__StackOneTop; ++word) {
-    *word = kStackPaint;
-  }
-}
-
-// The most of a stack that has been used: from its top down to the lowest
-// word no longer as painted.
-static uint32_t StackUsed(const uint32_t* bottom, const uint32_t* top) {
-  const uint32_t* word = bottom;
-  while (word < top && *word == kStackPaint) {
-    ++word;
-  }
-  return (uint32_t)((uintptr_t)top - (uintptr_t)word);
-}
 
 static bool BootIsOver(void) {
   return g_status.boot_stage == kBootStagePrompt ||
@@ -367,18 +277,6 @@ static uint32_t BootSpeedPermille(void) {
   }
   return (uint32_t)(g_status.boot_cycles * 1000 * kMicrosecondsPerSecond /
                     Y_PLATFORM_CPU_CYCLES_PER_SECOND / g_status.boot_busy_us);
-}
-
-static void FormatSouthbridgeVersion(char* buffer, size_t size) {
-  if (!g_status.southbridge_answered) {
-    snprintf(buffer, size, "not answering");
-  } else if (g_status.southbridge_version == 0) {
-    snprintf(buffer, size, "older than v1.6");
-  } else {
-    snprintf(
-        buffer, size, "v%X.%X", g_status.southbridge_version >> 4,
-        g_status.southbridge_version & 0xF);
-  }
 }
 
 static void FormatBootLine(char* buffer, size_t size) {
@@ -439,13 +337,13 @@ static void FormatClockLine(char* buffer, size_t size) {
 
 static void FormatSystemLine(char* buffer, size_t size) {
   char version[16];
-  FormatSouthbridgeVersion(version, sizeof(version));
+  InitFormatKeyboardVersion(&g_init_status, version, sizeof(version));
   snprintf(
       buffer, size, "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %lu keys, %uK",
       (unsigned long)(clock_get_hz(clk_sys) / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_status.lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
-      (unsigned long)SouthbridgeGetPollStats().keys,
+      (unsigned long)(g_init_status.lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
+      (unsigned long)(g_init_status.lcd_spi_hz / (kHzPerKHz * 10) % 100),
+      version, (unsigned long)SouthbridgeGetPollStats().keys,
       (unsigned)(GuestRAMSize() / 1024));
 }
 
@@ -593,17 +491,11 @@ static void UpdateStatusRows(void) {
       Y_LOG_UINT("busy_us", g_status.boot_busy_us),                     \
       Y_LOG_UINT("speed_pm", BootSpeedPermille())
 
-// A line of a reply to a report command: one group of its facts.
-#define REPLY_GROUP(command, group, ...)                 \
-  Y_LOG_REPLY(                                           \
-      &g_runtime_logger, (command)->id, (command)->name, \
-      Y_LOG_STRING("group", (group)), __VA_ARGS__)
-
 // A drive's group of a report.
 static void ReplyDiskImage(
-    const Command* command, const char* group, const DiskImage* image) {
+    const DebugCommand* command, const char* group, const DiskImage* image) {
   const DiskImageStats* stats = &image->stats;
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, group,
       Y_LOG_STRING("image", DiskImageDescribeStatus(image->status)),
       Y_LOG_STRING("path", image->path != NULL ? image->path : ""),
@@ -615,39 +507,20 @@ static void ReplyDiskImage(
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// The same facts as the status screen, as a group for each part of the
-// runtime, in answer to a report command.
-// The report is answered in parts, none inlined into another: each group's
-// fields take stack of their own until the function they are in returns, and
-// the report whole would be the deepest call on core 0's stack - see
-// PaintStacks().
+// main.c's groups of a report, after the board's, which it gives for both
+// modes for now: the VM's paging and boot, the display, the VM's drives and
+// name, the menu, and the pacing. In parts, none inlined into another: each
+// group's fields take stack until the function they are in returns, and the
+// report whole would be the deepest call on core 0's stack. See
+// StackUsagePaint().
 //
-// The board: what it is and how it started.
-static __noinline void ReplyReportBoard(const Command* command) {
-  char version[16];
-  FormatSouthbridgeVersion(version, sizeof(version));
-  REPLY_GROUP(
-      command, "system", Y_LOG_STRING("runtime", "yax86 picocalc"),
-      Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / kHzPerKHz),
-      Y_LOG_STRING("overclock", kOverclockNames[g_status.overclock]),
-      Y_LOG_UINT("lcd_spi_hz", g_status.lcd_spi_hz),
-      Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
-      Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
-      Y_LOG_STRING("keyboard_fw", version),
-      Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024));
-  const PsramStats psram = PsramGetStats();
-  REPLY_GROUP(
-      command, "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
-      Y_LOG_UINT("serial_hz", psram.serial_hz), Y_LOG_HEX8("kgd", psram.kgd),
-      Y_LOG_UINT("read_512_us", psram.read_512_us),
-      Y_LOG_UINT("write_512_us", psram.write_512_us),
-      Y_LOG_UINT("bytes_read", psram.bytes_read),
-      Y_LOG_UINT("bytes_written", psram.bytes_written),
-      Y_LOG_UINT("timeouts", psram.timeouts));
+// The VM's memory and boot, and the display.
+static __noinline void ReportRunning(const DebugCommand* command) {
   const PagerStats pager = PagerGetStats();
-  REPLY_GROUP(
-      command, "paging", Y_LOG_BOOL("on", g_paging),
-      Y_LOG_BOOL("off_after_fault", g_after_fault),
+  DEBUG_COMMAND_REPLY_GROUP(
+      command, "paging", Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024),
+      Y_LOG_BOOL("on", g_paging),
+      Y_LOG_BOOL("off_after_fault", g_init_status.after_fault),
       Y_LOG_UINT("frames", pager.frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
       Y_LOG_UINT("page_ins", pager.page_ins),
@@ -656,14 +529,9 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("soft_faults", pager.soft_faults),
       Y_LOG_UINT("errors", pager.errors),
       Y_LOG_UINT("fault_us", pager.fault_us));
-  REPLY_GROUP(
-      command, "stack",
-      Y_LOG_UINT("size", (uintptr_t)&__StackTop - (uintptr_t)&__StackBottom),
-      Y_LOG_UINT("core0_used", StackUsed(&__StackBottom, &__StackTop)),
-      Y_LOG_UINT("core1_used", StackUsed(&__StackOneBottom, &__StackOneTop)));
-  REPLY_GROUP(command, "boot", BOOT_FIELDS());
+  DEBUG_COMMAND_REPLY_GROUP(command, "boot", BOOT_FIELDS());
   const DisplayStats display = DisplayGetStats();
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
       Y_LOG_STRING("font", Font4x10Name(LauncherSettings()->font)),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
@@ -673,45 +541,19 @@ static __noinline void ReplyReportBoard(const Command* command) {
       Y_LOG_UINT("copy_us", display.copy_us));
 }
 
-// The VM's drives, and what has been done with the card and the keyboard.
-static __noinline void ReplyReportDevices(const Command* command) {
+// The VM's drives, the VM, the menu and the pacing.
+static __noinline void ReportDrives(const DebugCommand* command) {
   ReplyDiskImage(command, "fd1", FloppyGetImage(kFloppyDriveA));
   ReplyDiskImage(command, "fd2", FloppyGetImage(kFloppyDriveB));
   ReplyDiskImage(command, "hd1", HardDiskGetImage(kHardDisk1));
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
       Y_LOG_UINT("vms", LauncherVMs()->count));
-  const UsbStorageStats usb = UsbStorageGetStats();
-  REPLY_GROUP(
-      command, "usb", Y_LOG_BOOL("exporting", usb.exporting),
-      Y_LOG_STRING("image", usb.image_path != NULL ? usb.image_path : ""),
-      Y_LOG_BOOL("connected", usb.connected), Y_LOG_BOOL("seen", usb.seen),
-      Y_LOG_BOOL("ejected", usb.ejected),
-      Y_LOG_UINT("blocks_read", usb.blocks_read),
-      Y_LOG_UINT("blocks_written", usb.blocks_written),
-      Y_LOG_UINT("read_us", usb.read_us), Y_LOG_UINT("write_us", usb.write_us),
-      Y_LOG_UINT("errors", usb.errors));
-  const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
-  REPLY_GROUP(
-      command, "keyboard", Y_LOG_UINT("reads", keyboard.reads),
-      Y_LOG_UINT("keys", keyboard.keys),
-      Y_LOG_UINT("stale_keys", keyboard.stale_keys),
-      Y_LOG_UINT("aborts", keyboard.aborts),
-      Y_LOG_UINT("timeouts", keyboard.timeouts));
-}
-
-// The speaker, the menu and the pacing.
-static __noinline void ReplyReportRunning(const Command* command) {
-  const SpeakerStats speaker = SpeakerGetStats();
-  REPLY_GROUP(
-      command, "speaker", Y_LOG_UINT("frequency_hz", speaker.frequency_hz),
-      Y_LOG_UINT("output_hz", speaker.output_hz),
-      Y_LOG_UINT("changes", speaker.changes));
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", MenuShowing()),
       Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : MenuPageName()));
-  REPLY_GROUP(
+  DEBUG_COMMAND_REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
           "emulated_us", g_clock.cycles * kMicrosecondsPerSecond /
@@ -724,11 +566,11 @@ static __noinline void ReplyReportRunning(const Command* command) {
       Y_LOG_BOOL("idle_skip", g_platform.is_dos_idle_skip_enabled));
 }
 
-static void ReplyReport(const Command* command) {
-  ReplyReportBoard(command);
-  ReplyReportDevices(command);
-  ReplyReportRunning(command);
-  CommandReplyOk(command);
+static void Report(const DebugCommand* command) {
+  DebugCommandReportSystem(command);
+  ReportRunning(command);
+  ReportDrives(command);
+  DebugCommandReplyOk(command);
 }
 
 // Say the boot is over to a host that has attached since the last look, if
@@ -763,7 +605,7 @@ static uint8_t FloppyDrives(void) {
 // did not end in a hard fault: paging is the newest thing a fault could come
 // from, and without it the VM has the SRAM alone - see yax86_pico.h.
 static void ConfigureGuestRAM(YPlatformConfig* config) {
-  g_paging = PsramGetStats().state == kPsramOk && !g_after_fault;
+  g_paging = PsramGetStats().state == kPsramOk && !g_init_status.after_fault;
   if (!g_paging) {
     config->direct_memory_size = kGuestRAMSize;
     config->direct_memory = g_guest_ram;
@@ -794,7 +636,7 @@ static bool InitVM(void) {
   FloppyAttach(&g_platform.fdc);
   HardDiskAttach(&g_platform.hdc);
   g_vm_up = true;
-  if (g_after_fault) {
+  if (g_init_status.after_fault) {
     StatusBarPostMessage("Paging off: the last start crashed");
   }
   return true;
@@ -940,14 +782,14 @@ enum {
 // the screen with its characters as hex, as the guest's code page has them,
 // and with attrs=true another with their attributes. Hex, because a row of
 // box drawing characters escaped as text would not fit on a line.
-static void RunScreen(const Command* command) {
+static void RunScreen(const DebugCommand* command) {
   const YVideoState* video = &g_platform.video;
   const YVideoModeMetadata* mode = YVideoGetModeMetadata(video);
   if (mode->type != Y_VIDEO_MODE_TEXT || mode->columns > kMaxTextColumns) {
-    CommandReplyError(command, "not_text_mode");
+    DebugCommandReplyError(command, "not_text_mode");
     return;
   }
-  const char* attrs = CommandArgument(command, "attrs");
+  const char* attrs = DebugCommandArgument(command, "attrs");
   const bool with_attributes = attrs != NULL && attrs[0] == 't';
   const uint8_t* registers = video->registers;
   const uint32_t start = ((uint32_t)registers[kCRTCStartAddressHigh] << 8) |
@@ -999,51 +841,33 @@ static void RunScreen(const Command* command) {
           Y_LOG_STRING("attrs", hex));
     }
   }
-  CommandReplyOk(command);
+  DebugCommandReplyOk(command);
 }
 
-// Press, release or, by default, tap a key, by name. The key goes through the
-// keymap as a key pressed on the PicoCalc does, a key event a batch, and the
-// reply comes once it is queued. A host sending keys faster than they go is
-// told the queue is full, and nothing is queued, so the key can be sent
-// again.
-static void RunKey(const Command* command) {
-  const char* name = CommandArgument(command, "name");
-  const char* state = CommandArgument(command, "state");
-  TypingAction action = kTypingTap;
-  if (state != NULL && state[0] == 'p') {
-    action = kTypingPress;
-  } else if (state != NULL && state[0] == 'r') {
-    action = kTypingRelease;
-  }
-  uint8_t code = 0;
-  if (name == NULL) {
-    CommandReplyError(command, "missing_name");
-  } else if (!TypingFindKey(name, &code)) {
-    CommandReplyError(command, "unknown_key");
-  } else if (!TypingQueueKey(code, action)) {
-    CommandReplyError(command, "queue_full");
-  } else {
-    CommandReplyOk(command);
-  }
-}
-
-static __noinline void RunCommand(const Command* command) {
-  if (CommandIs(command, "ping")) {
-    CommandReplyOk(command);
-  } else if (CommandIs(command, "report")) {
-    ReplyReport(command);
-  } else if (CommandIs(command, "screen")) {
+// Answer a command: report and screen here, as they depend on the mode, and
+// any other with DebugCommandRunCommon().
+static void RunCommand(const DebugCommand* command) {
+  if (DebugCommandIs(command, "report")) {
+    Report(command);
+  } else if (DebugCommandIs(command, "screen")) {
     RunScreen(command);
-  } else if (CommandIs(command, "screenshot")) {
-    // Core 1 owns the panel, so it reads it back and sends the reply.
-    if (!DisplaySendScreenshot(command->id)) {
-      CommandReplyError(command, "busy");
-    }
-  } else if (CommandIs(command, "key")) {
-    RunKey(command);
   } else {
-    CommandReplyError(command, "unknown_command");
+    DebugCommandRunCommon(command);
+  }
+}
+
+// Answer the command the host has sent, if a whole one is in, adding the
+// time it took to *run_us if given. Kept out of line, so that the command is
+// off core 0's stack while the loops run.
+static __noinline void PollCommand(uint64_t* run_us) {
+  DebugCommand command;
+  if (!DebugCommandPoll(&command)) {
+    return;
+  }
+  const uint64_t start_us = time_us_64();
+  RunCommand(&command);
+  if (run_us != NULL) {
+    *run_us += time_us_64() - start_us;
   }
 }
 
@@ -1234,12 +1058,7 @@ static void RunVM(bool vm_ready) {
       running = false;
     }
 
-    Command command;
-    if (CommandPoll(&command)) {
-      const uint64_t start_us = time_us_64();
-      RunCommand(&command);
-      g_command_us += time_us_64() - start_us;
-    }
+    PollCommand(&g_command_us);
     // Between batches, so the keyboard is never written while the VM
     // runs, and a key a host typed only in a batch the keyboard had none, so
     // that the two never land in one. A key also keeps the screen on, and
@@ -1327,7 +1146,7 @@ static void RunVM(bool vm_ready) {
 // the menu opens again.
 //
 // Kept out of line with __noinline, so that its locals are on core 0's stack
-// only while it runs. See PaintStacks().
+// only while it runs. See StackUsagePaint().
 static __noinline void RunLauncher(void) {
   switch (LauncherStart(&g_vm)) {
     case kLauncherLoadedVM:
@@ -1341,10 +1160,7 @@ static __noinline void RunLauncher(void) {
   ScreenShow(LauncherOpenMenu());
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
-    Command command;
-    if (CommandPoll(&command)) {
-      RunCommand(&command);
-    }
+    PollCommand(NULL);
     SouthbridgeKeyEvent key;
     const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
     if (pressed) {
@@ -1429,96 +1245,12 @@ static __noinline void OpenDrives(void) {
 // Startup
 // ============================================================================
 
-#if YAX86_PICOCALC_SYS_CLK_KHZ
-// Raise the system clock, after USB is up and with the watchdog armed, as
-// pico/bench does. A clock the chip cannot take hangs it, and the watchdog
-// turns that into a reboot rather than a board with no way in but the BOOTSEL
-// button, which on a PicoCalc is inside the case. The reboot lands here again,
-// where the marker says not to try the same clock twice.
-//
-// watchdog_caused_reboot() alone is not evidence of a hang: picotool reboots
-// the chip through the watchdog too. The marker lives in RAM that startup does
-// not clear, so it survives a reset but not a power cycle, and it is only ever
-// left set across the window where a hang is possible.
-//
-// The watchdog is disarmed again once the change is survived, and must not be
-// left running and fed. The SDK carries out picotool's reboot request with
-// watchdog_reboot(), which only shortens the watchdog's countdown, so feeding
-// it would put the reboot off indefinitely. A hang after this is a power
-// button press away from recovery, since the keyboard controller cuts power.
-static OverclockResult Overclock(void) {
-  if (g_overclock_marker == kOverclockAttemptMarker) {
-    g_overclock_marker = 0;
-    return kOverclockSkippedAfterHang;
-  }
-  g_overclock_marker = kOverclockAttemptMarker;
-  watchdog_enable(kWatchdogTimeoutMs, true);
-  if (YAX86_PICOCALC_SYS_CLK_KHZ > 250000) {
-    vreg_set_voltage(VREG_VOLTAGE_1_30);
-  } else if (YAX86_PICOCALC_SYS_CLK_KHZ > 125000) {
-    vreg_set_voltage(VREG_VOLTAGE_1_20);
-  }
-  busy_wait_us(kVoltageSettleUs);
-  const bool applied = set_sys_clock_khz(YAX86_PICOCALC_SYS_CLK_KHZ, false);
-  watchdog_disable();
-  g_overclock_marker = 0;
-  return applied ? kOverclockApplied : kOverclockPLLCannot;
-}
-#endif
-
-// Bring the PSRAM up with the watchdog armed, as the overclock is raised: the
-// driver bounds every wait, so a hang here would be something it did not
-// foresee, and the reboot it turns into starts without the PSRAM. The marker
-// is the overclock's kind, and the watchdog disarmed after for the same
-// reason - see Overclock().
-static void StartPsram(void) {
-  if (g_psram_marker == kPsramAttemptMarker) {
-    g_psram_marker = 0;
-    PsramInit(true);
-    return;
-  }
-  g_psram_marker = kPsramAttemptMarker;
-  watchdog_enable(kWatchdogTimeoutMs, true);
-  PsramInit(false);
-  watchdog_disable();
-  g_psram_marker = 0;
-}
-
-// A hard fault, on either core, reboots the board rather than leaving it hung
-// with nothing on USB, and the start after it runs without paging - see
-// ConfigureGuestRAM(). Replaces the SDK's handler, a breakpoint, which halts.
-void isr_hardfault(void) {
-  g_fault_marker = kFaultMarker;
-  watchdog_reboot(0, 0, 0);
-  for (;;) {
-  }
-}
-
 int main(void) {
-  // Before anything can fault again.
-  g_after_fault = g_fault_marker == kFaultMarker;
-  g_fault_marker = 0;
   // First, before anything has used more of the stack than main's frame, or
   // core 1 has started.
-  PaintStacks();
-  stdio_init_all();
-#if YAX86_PICOCALC_SYS_CLK_KHZ
-  // Before anything else is brought up, since each works out its clock
-  // divider when it is: the LCD's, on core 1, from the system clock, and the
-  // keyboard controller's I2C from the peripheral clock, which the overclock
-  // moves to the 48MHz USB PLL.
-  g_status.overclock = Overclock();
-#endif
-  // After the clock, which it divides for its own.
-  StartPsram();
-
-  RuntimeLogInit();
-
-  g_status.lcd_spi_hz = DisplayStart();
-  SouthbridgeInit();
-  SpeakerInit();
-  g_status.southbridge_answered =
-      SouthbridgeReadVersion(&g_status.southbridge_version);
+  StackUsagePaint();
+  InitSystem(&g_init_status);
+  DebugCommandInit(&g_init_status);
   const MenuConfig menu_config = {
       .describe_status = DescribeStatus,
       .reset = ResetVM,
