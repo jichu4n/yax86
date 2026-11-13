@@ -16,7 +16,7 @@
 #include "settings_screen.h"
 #include "status_bar.h"
 #include "ui_status.h"
-#include "usb_disk.h"
+#include "usb_storage_screen.h"
 #include "vm_list.h"
 
 enum {
@@ -55,6 +55,8 @@ static uint8_t* g_copy_buffer;
 // down to it: a key stops it.
 // Where the VM chosen from the list goes.
 static VMConfig* g_chosen;
+// Whether the card or an image has been on USB, so the card is read again.
+static bool g_exported;
 static absolute_time_t g_start_at;
 static bool g_counting;
 
@@ -153,61 +155,10 @@ static __noinline bool ReadSettings(Settings* settings, uint8_t* highlighted) {
   return read;
 }
 
-// Share the SD card over USB: the card is unmounted first, as
-// nothing here may touch it while the computer has it.
-static void ShareCard(void) {
-  DiskImageUnmountCard();
-  UsbDiskShareCard();
-  LauncherMenuShowSharing();
-  SYSTEM_INFO("usb_card_shared");
-}
-
-// The disk image on USB, while one is, and its path.
-static DiskImage g_usb_image;
-static char g_usb_image_path[kFSMaxPath + 1];
-
-// Put the disk image chosen in the browser on USB, the card staying mounted
-// to read it through; or say why it could not be, staying in the browser.
-static __noinline void ShareImage(void) {
-  uint32_t size = 0;
-  FSCopyPath(LauncherMenuChosenImage(&size), g_usb_image_path);
-  const DiskImageStatus status =
-      DiskImageOpen(&g_usb_image, g_usb_image_path, size);
-  if (status != kDiskImageOpen) {
-    char name[kDiskImageNameLength + 1];
-    DiskImageName(g_usb_image_path, name);
-    char message[kTextColumns + 1];
-    snprintf(
-        message, sizeof(message), "Could not open %s: %s", name,
-        DiskImageDescribeStatus(status));
-    UIStatusSetProblem(message);
-    SYSTEM_WARN(
-        "usb_image_not_shared", Y_LOG_STRING("path", g_usb_image_path),
-        Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
-    return;
-  }
-  UsbDiskShareImage(&g_usb_image);
-  LauncherMenuShowSharing();
-  SYSTEM_INFO("usb_image_shared", Y_LOG_STRING("path", g_usb_image_path));
-}
-
-// Take the card or image back from USB and read the card afresh - the
-// computer may have added VMs, removed them, or changed the settings -
-// showing the list again without counting down. An image is closed, writing
-// back the sector it holds.
-static __noinline void StopSharing(void) {
-  const UsbDiskStats stats = UsbDiskGetStats();
-  UsbDiskStopSharing();
-  if (stats.image_path != NULL) {
-    DiskImageClose(&g_usb_image);
-  }
-  SYSTEM_INFO(
-      "usb_returned",
-      Y_LOG_STRING("image", stats.image_path != NULL ? stats.image_path : ""),
-      Y_LOG_BOOL("ejected", stats.ejected),
-      Y_LOG_UINT("blocks_read", stats.blocks_read),
-      Y_LOG_UINT("blocks_written", stats.blocks_written),
-      Y_LOG_UINT("errors", stats.errors));
+// Read the card afresh once it is back from USB, and show the list again
+// without counting down: the computer may have added VMs, removed them, or
+// changed the settings.
+static __noinline void ReadCardAgain(void) {
   VMListRead(&g_vms);
   uint8_t highlighted = 0;
   ReadSettings(&g_settings, &highlighted);
@@ -429,14 +380,8 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
     case kLauncherMenuActionOpenSettings:
       result = SettingsScreenOpen(&g_settings);
       break;
-    case kLauncherMenuActionShareCard:
-      ShareCard();
-      break;
-    case kLauncherMenuActionShareImage:
-      ShareImage();
-      break;
-    case kLauncherMenuActionStopSharing:
-      StopSharing();
+    case kLauncherMenuActionOpenUSB:
+      result = USBStorageScreenOpen(&g_exported);
       break;
     case kLauncherMenuActionRenameVM:
       RenameVM();
@@ -479,11 +424,23 @@ static ScreenResult CountDown(void) {
   return result;
 }
 
+// Back from a screen opened over the list: after USB mass storage has exported
+// the card or an image, read the card again.
+static ScreenResult Resume(void) {
+  if (g_exported) {
+    g_exported = false;
+    ReadCardAgain();
+  } else {
+    LauncherMenuResume();
+  }
+  return ScreenStays();
+}
+
 static const Screen kLauncherScreen = {
     .handle_key = HandleKey,
     .tick = CountDown,
     .draw = LauncherMenuDraw,
-    .resume = LauncherMenuResume,
+    .resume = Resume,
     .hint = LauncherMenuHint,
     .page_name = LauncherMenuPageName,
 };

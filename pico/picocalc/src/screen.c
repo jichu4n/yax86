@@ -36,19 +36,20 @@ void ScreenShow(ScreenResult opened) {
 
 bool ScreenIsOpen(void) { return g_depth > 0; }
 
-// Open or take off screens, as result says.
+// Open or take off screens, as result says, and as the screens under one
+// taken off say on resuming.
 static void Follow(ScreenResult result) {
+  while (result.screen == &kScreenBackMarker) {
+    if (--g_depth == 0) {
+      return;
+    }
+    result = Top()->resume();
+  }
   if (result.screen == NULL) {
     return;
   }
   if (result.screen == &kScreenCloseMarker) {
     g_depth = 0;
-    return;
-  }
-  if (result.screen == &kScreenBackMarker) {
-    if (--g_depth > 0) {
-      Top()->resume();
-    }
     return;
   }
   if (g_depth == kScreenStackMax) {

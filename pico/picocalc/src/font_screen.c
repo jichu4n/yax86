@@ -90,7 +90,10 @@ static void Draw(Y_UNUSED uint64_t now_us) {
 }
 
 // Nothing opens over Font.
-static void Resume(void) { g_dirty = true; }
+static ScreenResult Resume(void) {
+  g_dirty = true;
+  return ScreenStays();
+}
 
 static const char* Hint(void) {
   return "\x18\x19=Move  Enter=Select  Esc=Back";

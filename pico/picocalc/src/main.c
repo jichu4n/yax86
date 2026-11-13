@@ -49,7 +49,7 @@
 #include "status_bar.h"
 #include "typing.h"
 #include "ui_status.h"
-#include "usb_disk.h"
+#include "usb_storage.h"
 #include "vm_config.h"
 #include "vm_list.h"
 #include "yax86_pico.h"
@@ -682,9 +682,9 @@ static __noinline void ReplyReportDevices(const Command* command) {
   REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
       Y_LOG_UINT("vms", LauncherVMs()->count));
-  const UsbDiskStats usb = UsbDiskGetStats();
+  const UsbStorageStats usb = UsbStorageGetStats();
   REPLY_GROUP(
-      command, "usb", Y_LOG_BOOL("sharing", usb.sharing),
+      command, "usb", Y_LOG_BOOL("exporting", usb.exporting),
       Y_LOG_STRING("image", usb.image_path != NULL ? usb.image_path : ""),
       Y_LOG_BOOL("connected", usb.connected), Y_LOG_BOOL("seen", usb.seen),
       Y_LOG_BOOL("ejected", usb.ejected),
