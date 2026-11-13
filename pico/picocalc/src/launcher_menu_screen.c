@@ -203,7 +203,7 @@ static __noinline void ReadCardAgain(void) {
 
 // Back from a screen opened over the list, with the row that opened it
 // chosen, as the VMs may have changed under it; or after USB mass storage has
-// shared the card or an image, the card read again.
+// exported the card or an image, the card read again.
 static ScreenResult Resume(void) {
   if (g_exported) {
     g_exported = false;
