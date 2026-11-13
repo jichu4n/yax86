@@ -1077,7 +1077,7 @@ static void ResetVM(void) {
 // Back to the list, which waits for a key with the VM left highlighted.
 static void PowerOffVM(void) {
   SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm.entry.path));
-  LauncherLeaveStartNote(kStartIntentList, g_vm.entry.name);
+  LauncherLeaveStartNote(kStartIntentMenu, g_vm.entry.name);
 }
 
 // Whether there is a list to power off to: there is one only with a card, and
@@ -1332,15 +1332,15 @@ static void RunVM(bool vm_ready) {
 // stack - see PaintStacks().
 static __noinline void ChooseVM(void) {
   switch (LauncherStart(&g_vm)) {
-    case kLauncherTookVM:
+    case kLauncherLoadedVM:
       g_has_vm = true;
       return;
     case kLauncherNoCard:
       return;
-    case kLauncherShowsList:
+    case kLauncherShowsMenu:
       break;
   }
-  ScreenShow(LauncherScreenOpen(&g_vm));
+  ScreenShow(LauncherOpenMenu());
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
@@ -1355,10 +1355,14 @@ static __noinline void ChooseVM(void) {
     if (ScreenIsOpen()) {
       ScreenTick();
     }
-    // The list closes once a VM is chosen.
+    // The launcher menu closes once it has chosen: a VM to start, which may
+    // not load, or after USB mass storage, the card to be read again.
     if (!ScreenIsOpen()) {
-      g_has_vm = true;
-      return;
+      if (LauncherHandleMenuExit(&g_vm)) {
+        g_has_vm = true;
+        return;
+      }
+      ScreenShow(LauncherOpenMenu());
     }
     // The keys for the page a key led to are offered at once rather than at
     // the next update.

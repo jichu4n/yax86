@@ -1,8 +1,10 @@
 // The start: reading the card's VMs and settings, which the launcher holds,
-// and the note a reset or power off left, then either taking a VM at once
-// or showing the list of VMs to choose one, counting down to the default.
-// main.c runs the list's loop, answering commands and updating the status
-// rows; the list is launcher_menu_screen.c's.
+// and the note a reset or power off left, then either loading a VM to start
+// at once or showing the launcher menu to choose one, counting down to the
+// default. The launcher menu is launcher_menu_screen.c's, and only chooses:
+// loading the VM chosen, and reading the card again after USB mass storage, is
+// the launcher's. main.c runs the launcher menu's loop, answering commands and
+// updating the status rows.
 #ifndef YAX86_PICOCALC_LAUNCHER_H
 #define YAX86_PICOCALC_LAUNCHER_H
 
@@ -18,21 +20,21 @@
 // What the start after a reboot is to do, left by the menu's Reset and Power
 // off.
 typedef enum StartIntent {
-  // Start the VM again at once, without the list.
+  // Start the VM again at once, without the launcher menu.
   kStartIntentRestart = 0,
-  // Show the list, with the VM highlighted, and wait for a key.
-  kStartIntentList,
+  // Show the launcher menu, with the VM highlighted, and wait for a key.
+  kStartIntentMenu,
 } StartIntent;
 
 // What LauncherStart() found to do.
 typedef enum LauncherStartResult {
-  // A VM was taken without the list: the one restarted, or the default with
-  // no wait.
-  kLauncherTookVM = 0,
+  // A VM was loaded without the launcher menu: the one restarted, or the
+  // default with no wait.
+  kLauncherLoadedVM = 0,
   // There is no card, so the built-in floppy boots.
   kLauncherNoCard,
-  // The list shows, and waits for a key or the countdown.
-  kLauncherShowsList,
+  // The launcher menu shows, and waits for a key or the countdown.
+  kLauncherShowsMenu,
 } LauncherStartResult;
 
 // Lend the launcher copy_buffer, kCopyBufferSize bytes of guest RAM, which
@@ -44,17 +46,24 @@ const VMList* LauncherVMs(void);
 const Settings* LauncherSettings(void);
 
 // Read the card's VMs and settings, and the note a reset or power off left,
-// and either take a VM at once into *vm or show the list.
+// and either load a VM to start at once into *vm or set the launcher menu up.
 LauncherStartResult LauncherStart(VMConfig* vm);
 
-// Show the list LauncherStart() set up, with the launcher's VMs and settings.
-// A VM chosen, or reached by the countdown, is read into *chosen, and closes
-// the screens; one whose configuration does not read leaves the list showing
-// its problem.
-ScreenResult LauncherScreenOpen(VMConfig* chosen);
+// Show the launcher menu as the launcher has set it up, with its VMs and
+// settings. The launcher menu closes once it has chosen.
+ScreenResult LauncherOpenMenu(void);
+
+// Act on what the launcher menu chose, once it has closed. Returns true with
+// the VM chosen, or reached by the countdown, loaded into *vm to start. Returns
+// false for the launcher menu to be shown again with LauncherOpenMenu(),
+// without counting down: after USB mass storage, with the card read again, or
+// with the problem of a VM whose configuration does not read shown, and it
+// highlighted.
+bool LauncherHandleMenuExit(VMConfig* vm);
 
 // Restart the board, leaving a note for the start after it, with name the
-// VM's: to start it again at once, or to show the list with it highlighted.
+// VM's: to start it again at once, or to show the launcher menu with it
+// highlighted.
 void LauncherLeaveStartNote(StartIntent intent, const char* name);
 
 #endif  // YAX86_PICOCALC_LAUNCHER_H
