@@ -44,8 +44,9 @@ struct Screen {
   // Draw the screen if it has changed. Called every pass of the loop.
   void (*draw)(uint64_t now_us);
   // The screen above was taken off, so this one shows again and has to be
-  // drawn.
-  void (*resume)(void);
+  // drawn. What it finds the screen above left can lead it on, as a key
+  // does: back, say, once what it was opened for is done.
+  ScreenResult (*resume)(void);
   // The keys to show on the status rows' message row, as Key=Action pairs.
   const char* (*hint)(void);
   // The page showing, as the report gives it.

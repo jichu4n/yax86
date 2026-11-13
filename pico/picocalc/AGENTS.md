@@ -374,10 +374,19 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   function is typed, so a page cannot be opened without its state, and
   there is no `void*` context. Each screen is on the stack at most once, so
   it keeps those pointers and its own state, such as the item chosen, in
-  statics. The launcher holds `g_vms` and `g_settings`; Settings and Font
-  are screens, in `src/settings_screen.c` and `src/font_screen.c`, and the
-  list and the rest of its pages are still the one launcher screen until
-  they are split the same way.
+  statics. The launcher holds `g_vms` and `g_settings`. Settings and Font
+  are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
+  are USB disk mode, its sharing page and the question before
+  disconnecting, in `src/usb_*screen.c`. The list and Manage VMs' pages
+  are still the one launcher screen until they are split the same way.
+- **A `resume` returns a result, as a key does**, so a parent can act on
+  what its child left: the USB page, finding sharing ended, goes back too,
+  and the list, told through `g_shared`, reads the card again.
+- **The browser is a screen any parent opens**: `BrowserScreenOpen()` takes
+  the images to list, the folder, the image already chosen, and where to
+  write the one chosen. A parent that cannot use the image, such as one
+  that does not open for USB, shows why and returns
+  `BrowserScreenReopen()`, which puts the browser back as it was left.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the

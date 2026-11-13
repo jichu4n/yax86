@@ -118,6 +118,7 @@ configure_file(src/ffconf.h "${fatfs_dir}/ffconf.h" COPYONLY)
 add_executable(yax86_picocalc
     src/main.c
     src/menu.c
+    src/browser_screen.c
     src/command.c
     src/disk_image.c
     src/diskio.c
@@ -150,6 +151,9 @@ add_executable(yax86_picocalc
     src/ui_box.c
     src/ui_browser.c
     src/ui_page.c
+    src/usb_screen.c
+    src/usb_sharing_screen.c
+    src/usb_stop_screen.c
     src/ui_status.c
     src/usb_descriptors.c
     src/usb_disk.c

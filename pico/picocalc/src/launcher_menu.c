@@ -10,19 +10,10 @@
 #include "ui_browser.h"
 #include "ui_page.h"
 #include "ui_status.h"
-#include "usb_disk.h"
-
-enum {
-  kStatusRefreshUs = 1000 * 1000,
-};
 
 typedef enum ListPage {
-  // The VMs to start, and from there what can go on USB, the card while it
-  // is there, and the question before taking it back.
+  // The VMs to start.
   kListPageVMs = 0,
-  kListPageUSB,
-  kListPageSharing,
-  kListPageStopSharing,
   // Manage VMs, from the list: the VMs in yax86/vm, the page of the one in
   // g_vm, the name typed to rename or clone it as, the question before
   // deleting it, and a clone being copied.
@@ -35,15 +26,12 @@ typedef enum ListPage {
   // g_new_drive.
   kListPageNew,
   kListPageNewDrive,
-  // The browser, finding an image to put on USB or for a new VM's drive.
+  // The browser, finding an image for a new VM's drive.
   kListPageBrowse,
 } ListPage;
 
 static const char* const kPageNames[] = {
     [kListPageVMs] = "vms",
-    [kListPageUSB] = "usb",
-    [kListPageSharing] = "usb_sharing",
-    [kListPageStopSharing] = "usb_stop",
     [kListPageManage] = "manage",
     [kListPageVM] = "vm",
     [kListPageName] = "vm_name",
@@ -52,30 +40,6 @@ static const char* const kPageNames[] = {
     [kListPageNew] = "new_vm",
     [kListPageNewDrive] = "new_vm_drive",
     [kListPageBrowse] = "browse",
-};
-
-typedef enum USBItem {
-  kUSBCard = 0,
-  kUSBImage,
-  kUSBItemCount,
-} USBItem;
-
-static const UIBoxItem kUSBItems[kUSBItemCount] = {
-    [kUSBCard] = {"Whole SD card", false},
-    [kUSBImage] = {"Disk image", true},
-};
-
-static const UIBoxItem kSharingItems[] = {{"Disconnect", false}};
-
-typedef enum StopSharingItem {
-  kStopSharingCancel = 0,
-  kStopSharingConfirm,
-  kStopSharingItemCount,
-} StopSharingItem;
-
-static const UIBoxItem kStopSharingItems[kStopSharingItemCount] = {
-    [kStopSharingCancel] = {"Cancel", false},
-    [kStopSharingConfirm] = {"Disconnect anyway", false},
 };
 
 typedef enum VMItem {
@@ -158,27 +122,16 @@ static const UIBoxItem kSettingsRow = {"Settings", true};
 
 static ListPage g_page;
 static uint8_t g_chosen;
-// Whether what is on the panel is out of date, and when the sharing page was
-// last drawn.
+// Whether what is on the panel is out of date.
 static bool g_dirty;
-static uint64_t g_status_drawn_us;
 // The row at the top of the list at power on, and of Manage VMs.
 static uint8_t g_list_top;
 // The VMs to choose from at power on, the seconds before the
 // highlighted one starts by itself, and why the last chosen did not.
 static const VMList* g_vms;
 static uint8_t g_countdown;
-// What the browser is finding an image for: an image of either kind to put
-// on USB, or an image for a new VM's drive.
-typedef enum BrowsePurpose {
-  kBrowseForUSB = 0,
-  kBrowseForNewVM,
-} BrowsePurpose;
-static BrowsePurpose g_browsing_for;
+// The browser, finding an image for a new VM's drive.
 static UIBrowser g_browser;
-// The image found to put on USB.
-static char g_usb_image_path[kFSMaxPath + 1];
-static uint32_t g_usb_image_size;
 //
 // The VM whose page shows, an index in g_vms; the names of the images in its
 // drives, empty for none; and whether its vm.cfg read.
@@ -231,8 +184,6 @@ uint8_t LauncherMenuChosenVM(void) { return g_chosen; }
 
 void LauncherMenuResume(void) { g_dirty = true; }
 
-void LauncherMenuShowSharing(void) { ShowPage(kListPageSharing, 0); }
-
 void LauncherMenuSetCountdown(uint8_t seconds) {
   if (seconds != g_countdown) {
     g_countdown = seconds;
@@ -243,9 +194,6 @@ void LauncherMenuSetCountdown(uint8_t seconds) {
 const char* LauncherMenuHint(void) {
   if (g_page == kListPageVMs) {
     return "\x18\x19=Move  Enter=Select";
-  }
-  if (g_page == kListPageSharing) {
-    return "Enter=Disconnect";
   }
   if (g_page == kListPageName) {
     return g_cloning ? "Enter=Clone  Backspace=Erase  Esc=Cancel"
@@ -271,23 +219,17 @@ static void Browse(const char* folder) {
   ShowPage(kListPageBrowse, UIBrowserOpen(&g_browser, folder));
 }
 
-// Set the browser up to find an image for purpose: the images it lists, and
-// the one already chosen for the drive.
-static void StartBrowser(BrowsePurpose purpose) {
-  g_browsing_for = purpose;
+// Set the browser up to find an image for the new VM's drive: the images it
+// lists, and the one already chosen for the drive.
+static void StartBrowser(void) {
   g_browser.images = kUIBrowserFloppies;
-  g_browser.current = NULL;
   for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
     g_browser.in_drives[drive] = NULL;
   }
-  if (purpose == kBrowseForUSB) {
-    g_browser.images = kUIBrowserEither;
-  } else {
-    if (g_new_drive >= kVMDriveHD1) {
-      g_browser.images = kUIBrowserHardDisks;
-    }
-    g_browser.current = g_new_drives[g_new_drive];
+  if (g_new_drive >= kVMDriveHD1) {
+    g_browser.images = kUIBrowserHardDisks;
   }
+  g_browser.current = g_new_drives[g_new_drive];
 }
 
 // Keep the chosen entry among the browser's rows.
@@ -334,24 +276,12 @@ static uint8_t ManageRowCount(void) {
   return (uint8_t)(g_vms->count + (g_vms->count > 0 ? 2 : 1));
 }
 
-// Whether disconnecting would take the card from a computer still using it.
-static bool ComputerHasCard(void) {
-  const UsbDiskStats stats = UsbDiskGetStats();
-  return stats.connected && stats.seen && !stats.ejected;
-}
-
 static uint8_t PageItemCount(void) {
   switch (g_page) {
     case kListPageBrowse:
       return UIBrowserCount(&g_browser);
     case kListPageVMs:
       return VMsItemCount();
-    case kListPageUSB:
-      return kUSBItemCount;
-    case kListPageSharing:
-      return 1;
-    case kListPageStopSharing:
-      return kStopSharingItemCount;
     case kListPageManage:
       return (uint8_t)(g_vms->count + 1);
     case kListPageNew:
@@ -556,7 +486,7 @@ static void ChooseNewDrive(void) {
   const NewDriveItem choice = DriveChoices(&count)[g_chosen];
   char* path = g_new_drives[g_new_drive];
   if (choice == kNewDriveImage) {
-    StartBrowser(kBrowseForNewVM);
+    StartBrowser();
     char folder[kFSMaxPath + 1];
     if (path[0] != '\0') {
       FSFolderOf(path, folder);
@@ -601,37 +531,14 @@ void LauncherMenuFormDrives(VMListDrives* drives) {
   }
 }
 
-// Disconnect the card: at once if no computer is using it, and after asking if
-// one is.
-static LauncherMenuAction Disconnect(void) {
-  if (ComputerHasCard()) {
-    ShowPage(kListPageStopSharing, kStopSharingCancel);
-    return kLauncherMenuActionNone;
-  }
-  return kLauncherMenuActionStopSharing;
-}
-
 // Go back a page.
 static LauncherMenuAction Back(void) {
   switch (g_page) {
     case kListPageBrowse:
-      if (g_browsing_for == kBrowseForUSB) {
-        ShowPage(kListPageUSB, kUSBImage);
-      } else {
-        ShowPage(kListPageNewDrive, DriveChoiceRow(kNewDriveImage));
-      }
+      ShowPage(kListPageNewDrive, DriveChoiceRow(kNewDriveImage));
       break;
     case kListPageVMs:
       // There is no VM to go back to yet.
-      break;
-    case kListPageUSB:
-      ShowPage(kListPageVMs, USBItemIndex());
-      ScrollToChosen();
-      break;
-    case kListPageSharing:
-      return Disconnect();
-    case kListPageStopSharing:
-      ShowPage(kListPageSharing, 0);
       break;
     case kListPageManage:
       ShowPage(kListPageVMs, ManageItemIndex());
@@ -664,7 +571,7 @@ static LauncherMenuAction Back(void) {
 }
 
 // Open the chosen entry of the browser: a folder to look in, or an image for
-// a new VM's drive or to put on USB.
+// a new VM's drive.
 static LauncherMenuAction OpenEntry(void) {
   uint8_t chosen = g_chosen;
   char path[kFSMaxPath + 1];
@@ -678,21 +585,11 @@ static LauncherMenuAction OpenEntry(void) {
     case kUIBrowserChoseImage:
       break;
   }
-  if (g_browsing_for == kBrowseForNewVM) {
-    FSCopyPath(path, g_new_drives[g_new_drive]);
-    g_new_blank[g_new_drive] = false;
-    g_new_present[g_new_drive] = true;
-    ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
-    return kLauncherMenuActionNone;
-  }
-  FSCopyPath(path, g_usb_image_path);
-  g_usb_image_size = size;
-  return kLauncherMenuActionShareImage;
-}
-
-const char* LauncherMenuChosenImage(uint32_t* size) {
-  *size = g_usb_image_size;
-  return g_usb_image_path;
+  FSCopyPath(path, g_new_drives[g_new_drive]);
+  g_new_blank[g_new_drive] = false;
+  g_new_present[g_new_drive] = true;
+  ShowFormItem((uint8_t)(kNewDriveA + g_new_drive));
+  return kLauncherMenuActionNone;
 }
 
 static LauncherMenuAction Choose(void) {
@@ -704,8 +601,7 @@ static LauncherMenuAction Choose(void) {
         return kLauncherMenuActionOpenSettings;
       }
       if (g_chosen == USBItemIndex()) {
-        ShowPage(kListPageUSB, kUSBCard);
-        return kLauncherMenuActionNone;
+        return kLauncherMenuActionOpenUSB;
       }
       if (g_chosen == ManageItemIndex()) {
         ShowManaged(0);
@@ -753,20 +649,6 @@ static LauncherMenuAction Choose(void) {
       return Back();
     case kListPageCopying:
       return kLauncherMenuActionNone;
-    case kListPageUSB:
-      if (g_chosen == kUSBImage) {
-        StartBrowser(kBrowseForUSB);
-        Browse("yax86");
-        return kLauncherMenuActionNone;
-      }
-      return kLauncherMenuActionShareCard;
-    case kListPageSharing:
-      return Disconnect();
-    case kListPageStopSharing:
-      if (g_chosen == kStopSharingConfirm) {
-        return kLauncherMenuActionStopSharing;
-      }
-      return Back();
   }
   return kLauncherMenuActionNone;
 }
@@ -1098,47 +980,7 @@ static void DrawNewDrivePage(DisplayMenu* menu) {
       menu, kVMDriveNames[g_new_drive], NULL, 0, items, count, g_chosen, true);
 }
 
-// The card while it is on USB: who has it, and how much has moved.
-static void DrawSharingPage(DisplayMenu* menu) {
-  const UsbDiskStats stats = UsbDiskGetStats();
-  const char* state = "Waiting for the computer...";
-  if (!stats.connected) {
-    state = "Connect a computer by USB.";
-  } else if (stats.ejected) {
-    state = "Ejected by the computer.";
-  } else if (stats.seen) {
-    state = "In use by the computer.";
-  }
-  // Room for two of the largest counts, which a box cuts to its width.
-  char moved[64];
-  snprintf(
-      moved, sizeof(moved), "Read %lu KB, written %lu KB",
-      (unsigned long)(stats.blocks_read / 2),
-      (unsigned long)(stats.blocks_written / 2));
-  char what[kUIPageNarrowColumns];
-  if (stats.image_path != NULL) {
-    char name[kDiskImageNameLength + 1];
-    DiskImageName(stats.image_path, name);
-    snprintf(what, sizeof(what), "Sharing %s over USB.", name);
-  } else {
-    snprintf(what, sizeof(what), "Sharing the SD card over USB.");
-  }
-  const char* const lines[] = {
-      what,
-      state,
-      moved,
-      ComputerHasCard() ? "Eject it on the computer first." : "",
-  };
-  UIPageDrawItems(
-      menu, "USB disk mode", lines, sizeof(lines) / sizeof(lines[0]),
-      kSharingItems, 1, g_chosen, true);
-}
-
-void LauncherMenuDraw(uint64_t now_us) {
-  if (g_page == kListPageSharing &&
-      now_us - g_status_drawn_us >= kStatusRefreshUs) {
-    g_dirty = true;
-  }
+void LauncherMenuDraw(Y_UNUSED uint64_t now_us) {
   if (!g_dirty) {
     return;
   }
@@ -1152,25 +994,6 @@ void LauncherMenuDraw(uint64_t now_us) {
       break;
     case kListPageVMs:
       DrawVMsPage(menu);
-      break;
-    case kListPageUSB:
-      UIPageDrawItems(
-          menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount, g_chosen,
-          true);
-      break;
-    case kListPageSharing:
-      DrawSharingPage(menu);
-      g_status_drawn_us = now_us;
-      break;
-    case kListPageStopSharing:
-      UIPageDrawItems(
-          menu, "USB disk mode",
-          (const char* const[]){
-              "The computer has not ejected the",
-              "disk, and may not have finished",
-              "writing to it.",
-          },
-          3, kStopSharingItems, kStopSharingItemCount, g_chosen, true);
       break;
     case kListPageManage:
       DrawManagePage(menu);
