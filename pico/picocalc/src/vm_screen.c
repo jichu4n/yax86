@@ -8,12 +8,12 @@
 #include "display.h"
 #include "ui_box.h"
 #include "ui_page.h"
+#include "vm_config_screen.h"
 #include "vm_delete_screen.h"
-#include "vm_form_screen.h"
 #include "vm_name_screen.h"
 
 typedef enum VMItem {
-  kVMEdit = 0,
+  kVMConfigure = 0,
   kVMRename,
   kVMClone,
   kVMDelete,
@@ -21,7 +21,7 @@ typedef enum VMItem {
 } VMItem;
 
 static const UIBoxItem kVMItems[kVMItemCount] = {
-    [kVMEdit] = {"Edit drives", true},
+    [kVMConfigure] = {"Configure", true},
     [kVMRename] = {"Rename", true},
     [kVMClone] = {"Clone", true},
     [kVMDelete] = {"Delete", false},
@@ -54,15 +54,15 @@ ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
                        (drive == kVMDriveFD2 ? config.present[drive]
                                              : config.drives[drive][0] != '\0');
   }
-  g_page.chosen = kVMEdit;
+  g_page.chosen = kVMConfigure;
   g_page.dirty = true;
   return ScreenOpen(&kVMScreen);
 }
 
 static ScreenResult Choose(void) {
   switch (g_page.chosen) {
-    case kVMEdit:
-      return VMFormScreenOpenEdit(g_vm_manager, g_vm);
+    case kVMConfigure:
+      return VMConfigScreenOpenExisting(g_vm_manager, g_vm);
     case kVMDelete:
       return VMDeleteScreenOpen(g_vm_manager, g_vm);
     default:
