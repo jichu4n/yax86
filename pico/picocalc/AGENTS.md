@@ -47,15 +47,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   write, so lines come out whole.
 - **Each core has a 4KB stack, core 1's directly below core 0's**, so core 0
   running past the bottom of its own writes over the frames core 1 is in,
-  which hangs core 1 - drawing and screenshots - with nothing said. Both are
-  painted at startup by `src/stacks.c`, and the report's `stack` group gives the most of each
-  ever used. Core 0 peaks at about 3.2KB, renaming a VM other VMs name.
-  Inlined into the list's loop, the handlers of its actions had all their
-  locals on the stack at once, and a report at the list overflowed it; they
-  are kept out of line with `__noinline`. The report is answered in three
-  parts for the same reason: its fields take stack until the function they
-  are in returns, 1.5KB for all of them. `-fstack-usage` gives each
-  function's frame.
+  which hangs core 1, and with it drawing and screenshots, with nothing said.
+  `src/stack_usage.c` paints both at startup, and the report's `stack` group
+  gives the most of each ever used. Core 0 peaks at about 2.9KB, renaming a
+  VM other VMs name. Two things keep it there. What a screen carries out,
+  such as renaming, cloning or reading the card, is kept out of line with
+  `__noinline`, so that only the one running has its locals on the stack.
+  And a report is answered in parts, none inlined into another, since a
+  group's fields take stack until the function they are in returns: 1.5KB
+  for all of them. `-fstack-usage` gives each function's frame.
 - **Flashing replaces ClockworkPi's factory firmware** - a boot loader at
   offset 0, PicoMite at 200KB, and PicoMite's storage at 968KB. Back it up
   before the first flash:
@@ -915,7 +915,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of facts: the board's, then the mode's |
+  | `report` | a line for each group of facts: the system's, then the mode's |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
@@ -923,16 +923,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **`src/debug_command.c` reads the commands and answers the common
   ones**, the commands that mean the same in every mode: `ping`, `key` and
   `screenshot`. Each mode answers its own, `report` and `screen`, and passes
-  any other to `DebugCommandRunCommon()`. A mode's report gives the board's
-  groups first, with `DebugCommandReportBoard()`: `system`, `psram`,
-  `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any mode.
-  Then it gives its own: the VM's `paging`, `boot`, `display`, `fd1`,
-  `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`, which `main.c` answers for
-  the emulator. The launcher's are `display` with the font, `vm` with the
-  number of VMs, and `menu` with the page showing; and as no guest runs
-  yet, its `screen` answers `no_guest`, which `debug.js`'s `wait` takes as
-  no match yet. What bringing the board up found is a `BoardStatus`, in
-  `src/board.h`, which `main.c` fills in and the board's groups report.
+  any other to `DebugCommandRunCommon()`. A mode's report gives the
+  system's groups first, with `DebugCommandReportSystem()`: `system`,
+  `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
+  mode. Then it gives its own. The emulator's, which `main.c` answers, are
+  the VM's `paging`, `boot`, `display`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`,
+  `menu` and `pacing`. The launcher's are `display` with the font, `vm`
+  with the number of VMs, and `menu` with the page showing; and as no guest
+  runs yet, its `screen` answers `no_guest`, which `debug.js`'s `wait` takes
+  as no match yet.
+- **`src/init.c` initializes the system at startup**, after `main()` has
+  painted the stacks: USB serial, the clock, the PSRAM, the logs, the LCD,
+  the keyboard controller and the speaker. What it found is an
+  `InitStatus`, which `main.c` holds, and the report's `system` group and
+  the status page give.
 - **Commands are read once a batch without waiting**, up to 64 bytes, and run
   between batches. With nothing sent, the poll costs about 6us a batch. Time
   spent on commands while the VM runs is `command_us` in the report.

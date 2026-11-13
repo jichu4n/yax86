@@ -8,7 +8,7 @@
 // one and counts down to the default. It runs the launcher menu until a VM
 // is loaded, answering debug commands and updating the status rows.
 //
-// It answers two debug commands itself: report, with the board's groups and
+// It answers two debug commands itself: report, with the system's groups and
 // then the launcher's, and screen, with no_guest, as no guest runs yet. The
 // others are common to every mode.
 //
