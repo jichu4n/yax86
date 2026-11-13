@@ -5,60 +5,66 @@
 #include "pico/stdlib.h"
 
 enum {
-  // The deepest the pages go is six: the list, Manage VMs, a VM, Edit
-  // drives, a drive's choices and the browser.
+  // The deepest the launcher's pages go is six: the list, Manage VMs, a VM,
+  // Edit drives, a drive's choices and the browser.
   kScreenStackMax = 8,
 };
 
-// The screens showing, the list first and the one on top last. Empty before
-// the list shows and once a VM starts.
+// Markers for the results that open nothing, never shown.
+const Screen kScreenBackMarker;
+const Screen kScreenCloseMarker;
+
+// The screens showing, the one first shown first and the one on top last.
+// Empty while no menu shows.
 static const Screen* g_stack[kScreenStackMax];
 static uint8_t g_depth;
 
 static const Screen* Top(void) { return g_stack[g_depth - 1]; }
 
-void ScreenShow(const Screen* screen) {
-  g_stack[0] = screen;
+static bool IsScreen(const Screen* screen) {
+  return screen != NULL && screen != &kScreenBackMarker &&
+         screen != &kScreenCloseMarker;
+}
+
+void ScreenShow(ScreenResult opened) {
+  if (!IsScreen(opened.screen)) {
+    panic("no screen to show");
+  }
+  g_stack[0] = opened.screen;
   g_depth = 1;
 }
 
-void ScreenClose(void) { g_depth = 0; }
-
 bool ScreenIsOpen(void) { return g_depth > 0; }
 
-// Markers for the results that open nothing, never shown.
-const Screen kScreenChoseVMMarker;
-const Screen kScreenBackMarker;
-
-// Open or take off a screen, as result says.
-static ScreenResult Follow(ScreenResult result) {
-  if (result.screen == NULL || result.screen == &kScreenChoseVMMarker) {
-    return result;
+// Open or take off screens, as result says.
+static void Follow(ScreenResult result) {
+  if (result.screen == NULL) {
+    return;
+  }
+  if (result.screen == &kScreenCloseMarker) {
+    g_depth = 0;
+    return;
   }
   if (result.screen == &kScreenBackMarker) {
-    // The list is never taken off: nothing closes it but starting a VM.
-    if (g_depth > 1) {
-      --g_depth;
+    if (--g_depth > 0) {
       Top()->resume();
     }
-    return result;
+    return;
   }
   if (g_depth == kScreenStackMax) {
     panic("screens nested past %d", kScreenStackMax);
   }
   g_stack[g_depth++] = result.screen;
-  return result;
 }
 
-ScreenResult ScreenHandleKey(SouthbridgeKeyEvent key) {
-  return Follow(Top()->handle_key(key));
+void ScreenHandleKey(SouthbridgeKeyEvent key) {
+  Follow(Top()->handle_key(key));
 }
 
-ScreenResult ScreenTick(void) {
-  if (Top()->tick == NULL) {
-    return ScreenStays();
+void ScreenTick(void) {
+  if (Top()->tick != NULL) {
+    Follow(Top()->tick());
   }
-  return Follow(Top()->tick());
 }
 
 void ScreenDraw(uint64_t now_us) { Top()->draw(now_us); }

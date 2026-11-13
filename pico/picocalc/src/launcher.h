@@ -48,13 +48,12 @@ const Settings* LauncherSettings(void);
 // and either take a VM at once into *vm or show the list.
 LauncherStartResult LauncherStart(VMConfig* vm);
 
-// The list and the pages reached from it other than Settings, as one screen.
-// Its keys stop the countdown, and its time runs it.
-extern const Screen kLauncherScreen;
-
-// Take the VM chosen into *vm, if its configuration reads. Returns false,
-// with its problem shown on the list, if it does not.
-bool LauncherTakeChosen(VMConfig* vm);
+// Show the list LauncherStart() set up, and the pages reached from it other
+// than Settings, as one screen, whose keys stop the countdown and whose time
+// runs it. A VM chosen, or reached by the countdown, is read into *chosen,
+// and closes the screens; one whose configuration does not read leaves the
+// list showing its problem.
+ScreenResult LauncherScreenOpen(VMConfig* chosen);
 
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the list with it highlighted.

@@ -365,7 +365,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   open function, which takes what the page works on as parameters:
   `SettingsScreenOpen(&g_settings)`. The parent holds the state and passes
   pointers down; a child writes what it chose through them, and when it
-  returns `kScreenBack` the parent's `resume` finds it there. The open
+  returns `ScreenBack()` the parent's `resume` finds it there. A result
+  carries no value, only what the router does: stay, open a screen, back,
+  or close every screen, so `screen.c` knows nothing of VMs and serves any
+  menu. The list writes the VM chosen through the pointer
+  `LauncherScreenOpen(&g_vm)` took, and closes; the loop ends when no
+  screen is open. Back from the bottom screen closes too. The open
   function is typed, so a page cannot be opened without its state, and
   there is no `void*` context. Each screen is on the stack at most once, so
   it keeps those pointers and its own state, such as the item chosen, in
