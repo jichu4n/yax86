@@ -46,9 +46,10 @@ static VMList g_vms;
 static Settings g_settings;
 // Guest RAM, lent before the VM starts - see LauncherInit().
 static uint8_t* g_copy_buffer;
-// The VM the launcher menu shows chosen, how long it counts down to starting it by
-// itself, 0 for no countdown, and why it closed.
-static uint8_t g_highlighted;
+// How the launcher menu is to open: the VM chosen in it, and how long it
+// counts down to starting that VM by itself, 0 for no countdown. And why it
+// last closed.
+static uint8_t g_chosen;
 static uint32_t g_countdown_ms;
 static LauncherMenuExit g_exit;
 
@@ -93,22 +94,22 @@ const VMList* LauncherVMs(void) { return &g_vms; }
 
 const Settings* LauncherSettings(void) { return &g_settings; }
 
-// Read the card's settings, use their font, and set *highlighted to the index
-// of the default VM in g_vms, or 0 without one. Returns false, with the
-// problem shown on the launcher menu, if the settings had one. Kept out of line, so
-// that its message is on core 0's stack only while it runs rather than in
-// the frames of the callers it would be inlined into.
-static __noinline bool ReadSettings(uint8_t* highlighted) {
+// Read the card's settings, use their font, and set *default_vm to the
+// index of the default VM in g_vms, or 0 without one. Returns false, with the
+// problem shown on the launcher menu, if the settings had one. Kept out of
+// line, so that its message is on core 0's stack only while it runs rather than
+// in the frames of the callers it would be inlined into.
+static __noinline bool ReadSettings(uint8_t* default_vm) {
   Settings* settings = &g_settings;
   char problem[kVMProblemLength + 1];
   bool read = SettingsRead(settings, problem);
   DisplaySetFont(settings->font);
-  *highlighted = 0;
+  *default_vm = 0;
   if (read && settings->boot_default[0] != '\0') {
-    // Past the list's end, the first is highlighted instead.
+    // Past the list's end, the first is the default instead.
     const uint8_t index = VMListFind(&g_vms, settings->boot_default);
     if (index < kVMListMax) {
-      *highlighted = index;
+      *default_vm = index;
     }
   }
   if (!read) {
@@ -162,8 +163,8 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
   StartNote note = {0};
   const bool noted = TakeStartNote(&note);
   VMListRead(&g_vms);
-  uint8_t highlighted = 0;
-  const bool settings_read = ReadSettings(&highlighted);
+  uint8_t chosen = 0;
+  const bool settings_read = ReadSettings(&chosen);
   // Without a card there is nothing to choose, or to put on USB.
   if (DiskImageMountCard() != kDiskImageOpen) {
     return kLauncherNoCard;
@@ -174,17 +175,17 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
         Y_LOG_STRING("name", note.name));
     const uint8_t index = VMListFind(&g_vms, note.name);
     if (index < kVMListMax) {
-      highlighted = index;
+      chosen = index;
       if (note.intent == kStartIntentRestart && LoadChosenVM(index, vm)) {
         return kLauncherLoadedVM;
       }
     }
   } else if (
       settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
-      LoadChosenVM(highlighted, vm)) {
+      LoadChosenVM(chosen, vm)) {
     return kLauncherLoadedVM;
   }
-  g_highlighted = highlighted;
+  g_chosen = chosen;
   const bool counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
   g_countdown_ms =
       counting ? (uint32_t)g_settings.boot_delay * kMillisecondsPerSecond : 0;
@@ -193,7 +194,7 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
 
 ScreenResult LauncherOpenMenu(void) {
   return LauncherMenuScreenOpen(
-      &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize, g_highlighted,
+      &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize, g_chosen,
       g_countdown_ms, &g_exit);
 }
 
@@ -203,9 +204,9 @@ bool LauncherHandleMenuExit(VMConfig* vm) {
   if (g_exit.reason == kLauncherMenuExitReadCard) {
     // The host may have added VMs, removed them, or changed the settings.
     VMListRead(&g_vms);
-    ReadSettings(&g_highlighted);
+    ReadSettings(&g_chosen);
     return false;
   }
-  g_highlighted = g_exit.vm;
+  g_chosen = g_exit.vm;
   return LoadChosenVM(g_exit.vm, vm);
 }
