@@ -81,9 +81,13 @@ void ScreenShow(ScreenResult opened);
 // Whether a screen shows: false once they have all closed.
 bool ScreenIsOpen(void);
 
-// Hand a key event, or time passing, to the screen on top, and open or take
-// off screens as it says.
+// Hand a key event to the screen on top, and open or take off screens as it
+// says.
 void ScreenHandleKey(SouthbridgeKeyEvent key);
+
+// Let the screen on top act on time passing, if it does anything with time,
+// and open or take off screens as it says. Call every pass of the loop while
+// a screen shows.
 void ScreenTick(void);
 
 // Draw the screen on top, if it has changed.
