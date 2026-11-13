@@ -1,4 +1,4 @@
-#include "emulator_status.h"
+#include "emulator_status_bar.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -13,7 +13,7 @@ enum {
   // single sector shows.
   kDriveLightUs = 200 * 1000,
 
-  // Where things start on the machine's row: the drives after the longest
+  // Where things start on the devices row: the drives after the longest
   // VM name, and the locks.
   kDrivesColumn = 14,
   kLocksColumn = 40,
@@ -46,27 +46,37 @@ static uint8_t g_message_count;
 // not been yet.
 static uint64_t g_message_shown_us;
 
-static DriveLight g_lights[kEmulatorStatusDrives];
+static DriveLight g_lights[kVMDrives];
 
-// What the rows were last composed from. Composing takes a few snprintf()
-// calls and the rows' writes, which ten times a second cost a boot about
-// 0.4%, so it is skipped while none of this changes - which between a disk's
-// bursts of reads is nearly always.
-typedef struct ComposedFrom {
-  bool lit[kEmulatorStatusDrives];
-  DiskImageStatus status[kEmulatorStatusDrives];
+// What the rows show, worked out from the inputs. The rows are composed
+// again only when this changes. Composing takes a few snprintf() calls and
+// the rows' writes, which ten times a second cost a boot about 0.4%. Between
+// a disk's bursts of reads, nothing here changes.
+typedef struct RowContents {
+  // Whether each drive's light is on, and whether its image is open.
+  bool lit[kVMDrives];
+  DiskImageStatus status[kVMDrives];
+  // The VM's name, or NULL without a VM.
   const char* vm;
+  // The guest BIOS's keyboard flags, which hold its lock states.
   uint8_t keyboard_flags;
+  // The battery's charge.
   SouthbridgeBattery battery;
+  // The keys shown in place of messages, or NULL.
   const char* hint;
+  // The problem showing, or NULL. A new problem is a new pointer.
   const char* problem;
+  // The message showing, or NULL. It points into the queue, so a new message
+  // is a new pointer.
   const char* message;
-} ComposedFrom;
+} RowContents;
 
-static ComposedFrom g_composed_from;
-static bool g_composed;
+// What the rows showed when they were last composed, and whether they have
+// been.
+static RowContents g_last_contents;
+static bool g_has_last_contents;
 
-void EmulatorStatusPostMessage(const char* text) {
+void EmulatorStatusBarPostMessage(const char* text) {
   if (g_message_count == kMessageQueueSize) {
     return;
   }
@@ -124,14 +134,14 @@ static uint8_t PutDrive(
 
 // The messages row: a problem, the menu's keys, a message, or with nothing
 // else the menu's own key, dim, it being always there.
-static void ComposeMessages(const ComposedFrom* from, DisplayTextRow* row) {
-  if (from->problem != NULL) {
-    StatusBarPut(row, 0, from->problem, kStatusBarAttrBright);
-  } else if (from->hint != NULL) {
+static void ComposeMessages(const RowContents* contents, DisplayTextRow* row) {
+  if (contents->problem != NULL) {
+    StatusBarPut(row, 0, contents->problem, kStatusBarAttrBright);
+  } else if (contents->hint != NULL) {
     StatusBarPutKeys(
-        row, 0, from->hint, kStatusBarAttrNormal, kStatusBarAttrBright);
-  } else if (from->message != NULL) {
-    StatusBarPut(row, 0, from->message, kStatusBarAttrBright);
+        row, 0, contents->hint, kStatusBarAttrNormal, kStatusBarAttrBright);
+  } else if (contents->message != NULL) {
+    StatusBarPut(row, 0, contents->message, kStatusBarAttrBright);
   } else {
     StatusBarPutKeys(
         row, 0, "Shift+Shift=Menu", kStatusBarAttrDim, kStatusBarAttrNormal);
@@ -141,23 +151,23 @@ static void ComposeMessages(const ComposedFrom* from, DisplayTextRow* row) {
 // The drives the machine has, one after another: a floppy drive always, and
 // a hard disk while it has an image.
 static void ComposeDrives(
-    const EmulatorStatusState* state, const bool lit[kEmulatorStatusDrives],
+    const EmulatorStatusBarInputs* inputs, const bool lit[kVMDrives],
     DisplayTextRow* row) {
   uint8_t column = kDrivesColumn;
-  for (uint8_t drive = 0; drive < kEmulatorStatusDrives; ++drive) {
-    const DiskImage* image = state->drives[drive];
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    const DiskImage* image = inputs->drives[drive];
     if (image == NULL ||
-        (drive >= kEmulatorStatusDriveHD1 && image->status != kDiskImageOpen)) {
+        (drive >= kVMDriveHD1 && image->status != kDiskImageOpen)) {
       continue;
     }
     column = PutDrive(row, column, kVMDriveLabels[drive], lit[drive]);
   }
 }
 
-// The machine's row: the VM's name, its drives, the guest's locks that are
+// The devices row: the VM's name, its drives, the guest's locks that are
 // on, and the battery.
-static void ComposeMachine(
-    const EmulatorStatusState* state, const bool lit[kEmulatorStatusDrives],
+static void ComposeDevices(
+    const EmulatorStatusBarInputs* inputs, const bool lit[kVMDrives],
     DisplayTextRow* row) {
   static const struct {
     const char* name;
@@ -168,22 +178,22 @@ static void ComposeMachine(
       {"SCRL", kFlagScrollLock},
       {"INS", kFlagInsert},
   };
-  if (state->vm != NULL) {
-    StatusBarPut(row, 0, state->vm, kStatusBarAttrNormal);
+  if (inputs->vm != NULL) {
+    StatusBarPut(row, 0, inputs->vm, kStatusBarAttrNormal);
   }
-  ComposeDrives(state, lit, row);
+  ComposeDrives(inputs, lit, row);
   uint8_t column = kLocksColumn;
   for (uint8_t i = 0; i < sizeof(kLocks) / sizeof(kLocks[0]); ++i) {
-    if (state->keyboard_flags & kLocks[i].flag) {
+    if (inputs->keyboard_flags & kLocks[i].flag) {
       column = StatusBarPut(row, column, kLocks[i].name, kStatusBarAttrBright);
       ++column;
     }
   }
-  StatusBarPutBattery(&state->battery, row);
+  StatusBarPutBattery(&inputs->battery, row);
 }
 
-static bool ComposedFromEqual(const ComposedFrom* a, const ComposedFrom* b) {
-  for (uint8_t drive = 0; drive < kEmulatorStatusDrives; ++drive) {
+static bool RowContentsEqual(const RowContents* a, const RowContents* b) {
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     if (a->lit[drive] != b->lit[drive] ||
         a->status[drive] != b->status[drive]) {
       return false;
@@ -196,32 +206,32 @@ static bool ComposedFromEqual(const ComposedFrom* a, const ComposedFrom* b) {
          a->problem == b->problem && a->message == b->message;
 }
 
-void EmulatorStatusOffer(const EmulatorStatusState* state) {
+void EmulatorStatusBarUpdate(const EmulatorStatusBarInputs* inputs) {
   const uint64_t now_us = time_us_64();
-  ComposedFrom from;
-  for (uint8_t drive = 0; drive < kEmulatorStatusDrives; ++drive) {
-    const DiskImage* image = state->drives[drive];
-    from.lit[drive] =
+  RowContents contents;
+  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    const DiskImage* image = inputs->drives[drive];
+    contents.lit[drive] =
         image != NULL && DriveLit(&g_lights[drive], image, now_us);
-    from.status[drive] = image != NULL ? image->status : kDiskImageEjected;
+    contents.status[drive] = image != NULL ? image->status : kDiskImageEjected;
   }
-  from.vm = state->vm;
-  from.keyboard_flags = state->keyboard_flags;
-  from.battery = state->battery;
-  from.hint = state->hint;
-  from.problem = StatusBarProblem();
-  from.message = CurrentMessage(now_us);
-  const bool composed =
-      !g_composed || !ComposedFromEqual(&from, &g_composed_from);
-  if (composed) {
-    g_composed_from = from;
-    g_composed = true;
+  contents.vm = inputs->vm;
+  contents.keyboard_flags = inputs->keyboard_flags;
+  contents.battery = inputs->battery;
+  contents.hint = inputs->hint;
+  contents.problem = StatusBarProblem();
+  contents.message = CurrentMessage(now_us);
+  const bool changed =
+      !g_has_last_contents || !RowContentsEqual(&contents, &g_last_contents);
+  if (changed) {
+    g_last_contents = contents;
+    g_has_last_contents = true;
     DisplayStatus* rows = StatusBarRows();
     for (uint8_t row = 0; row < kDisplayStatusRows; ++row) {
       StatusBarClearRow(&rows->rows[row]);
     }
-    ComposeMessages(&from, &rows->rows[kStatusBarRowMessages]);
-    ComposeMachine(state, from.lit, &rows->rows[kStatusBarRowMachine]);
+    ComposeMessages(&contents, &rows->rows[kStatusBarRowMessages]);
+    ComposeDevices(inputs, contents.lit, &rows->rows[kStatusBarRowDevices]);
   }
-  StatusBarHandOver(composed);
+  StatusBarSend(changed);
 }

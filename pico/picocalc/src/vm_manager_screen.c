@@ -4,7 +4,6 @@
 #include <stddef.h>
 
 #include "display.h"
-#include "vm_manager.h"
 #include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"

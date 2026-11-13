@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "display.h"
-#include "launcher_status.h"
+#include "launcher_status_bar.h"
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "ui_page.h"
@@ -35,7 +35,7 @@ void VMManagerShowProblem(
 // Show how far a copy has come, at once: the main loop, which would draw it,
 // is waiting for the copy.
 static void ShowCopyProgress(uint64_t done, uint64_t total) {
-  LauncherStatusOffer("");
+  LauncherStatusBarUpdate("");
   DisplayMenu* menu = DisplayBeginMenu();
   if (menu == NULL) {
     return;

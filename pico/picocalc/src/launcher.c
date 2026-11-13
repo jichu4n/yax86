@@ -12,7 +12,7 @@
 #include "font_4x10.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu_screen.h"
-#include "launcher_status.h"
+#include "launcher_status_bar.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "screen.h"
@@ -37,7 +37,7 @@ enum {
   kPollMs = 10,
 
   // How long a boot_default that could not be saved shows, as long as a
-  // message would, and how often the rows are offered meanwhile.
+  // message would, and how often the rows are updated meanwhile.
   kProblemShownMs = 4000,
   kProblemPollMs = 100,
 
@@ -143,7 +143,7 @@ static void SaveBootDefault(const char* name) {
   StatusBarSetProblem(message);
   const absolute_time_t until = make_timeout_time_ms(kProblemShownMs);
   while (!time_reached(until)) {
-    LauncherStatusOffer(NULL);
+    LauncherStatusBarUpdate(NULL);
     sleep_ms(kProblemPollMs);
   }
   StatusBarClearProblem();
@@ -322,7 +322,7 @@ bool LauncherRun(
     // the next update.
     if (pressed || time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      LauncherStatusOffer(ScreenHint());
+      LauncherStatusBarUpdate(ScreenHint());
     }
     ScreenDraw(time_us_64());
     sleep_ms(kPollMs);

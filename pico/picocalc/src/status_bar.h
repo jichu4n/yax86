@@ -8,8 +8,8 @@
 //
 // What every mode's rows have in common is here, knowing neither mode: the
 // rows' layout, the battery, the problem a screen shows until the next key,
-// and handing the rows to core 1. What each mode puts on them is
-// launcher_status.c's and emulator_status.c's.
+// and sending the rows to core 1. What each mode puts on them is
+// launcher_status_bar.c's and emulator_status_bar.c's.
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H
 
@@ -22,7 +22,7 @@
 enum {
   // The rows.
   kStatusBarRowMessages = 0,
-  kStatusBarRowMachine,
+  kStatusBarRowDevices,
 
   // CGA attributes: the foreground in the low nibble, on black.
   kStatusBarAttrNormal = 0x07,
@@ -64,9 +64,12 @@ uint8_t StatusBarPutKeys(
 void StatusBarPutBattery(
     const SouthbridgeBattery* battery, DisplayTextRow* row);
 
-// The rows to compose into, and hand them to core 1 if composed says they
-// changed, or they are still waiting from the last time it was busy.
+// The rows, for a mode to compose its own on.
 DisplayStatus* StatusBarRows(void);
-void StatusBarHandOver(bool composed);
+
+// Send the rows to core 1 if changed says they were composed again, or if
+// they are still waiting because core 1 was busy the last time. Returns at
+// once while core 1 is still drawing the last ones, leaving them waiting.
+void StatusBarSend(bool changed);
 
 #endif  // YAX86_PICOCALC_STATUS_BAR_H
