@@ -5,14 +5,13 @@
 #include <stdio.h>
 
 #include "display.h"
-#include "launcher_card.h"
-#include "vm_manager_screen.h"
 #include "pico/stdlib.h"
 #include "settings_screen.h"
 #include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
 #include "usb_storage_screen.h"
+#include "vm_manager_screen.h"
 
 enum {
   kMicrosecondsPerSecond = 1000 * 1000,
@@ -38,7 +37,7 @@ static VMList* g_vms;
 static Settings* g_settings;
 static uint8_t* g_copy_buffer;
 static uint32_t g_copy_buffer_size;
-static VMConfig* g_chosen;
+static LauncherMenuExit* g_exit;
 // The item chosen, and whether the page is out of date.
 static UIPage g_page;
 // The row at the top of the list.
@@ -91,12 +90,12 @@ static void ShowFromTop(uint8_t highlighted) {
 ScreenResult LauncherMenuScreenOpen(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
     uint32_t copy_buffer_size, uint8_t highlighted, uint32_t countdown_ms,
-    VMConfig* chosen) {
+    LauncherMenuExit* exit) {
   g_vms = vms;
   g_settings = settings;
   g_copy_buffer = copy_buffer;
   g_copy_buffer_size = copy_buffer_size;
-  g_chosen = chosen;
+  g_exit = exit;
   ShowFromTop(highlighted);
   g_start_at = make_timeout_time_ms(countdown_ms);
   g_counting = countdown_ms > 0;
@@ -112,20 +111,16 @@ static void SetCountdown(uint8_t seconds) {
   }
 }
 
-// Take the VM chosen, or highlighted, into *g_chosen, which closes the
-// screens. If its configuration does not read, the list stays, with its
-// problem shown.
-static ScreenResult TakeChosen(void) {
-  if (LauncherCardTakeVM(g_vms, g_settings, g_page.chosen, g_chosen)) {
-    return ScreenClose();
-  }
-  return ScreenStays();
+// Close the list to start the VM chosen, or highlighted.
+static ScreenResult StartChosen(void) {
+  *g_exit = (LauncherMenuExit){kLauncherMenuExitStartVM, g_page.chosen};
+  return ScreenClose();
 }
 
 // Start the VM chosen, or open the screen of the row chosen over the list.
 static ScreenResult Choose(void) {
   if (g_page.chosen < g_vms->count) {
-    return TakeChosen();
+    return StartChosen();
   }
   g_opened = (ListRow)(g_page.chosen - g_vms->count);
   switch (g_opened) {
@@ -178,33 +173,23 @@ static ScreenResult CountDown(void) {
   if (left_us <= 0) {
     g_counting = false;
     SetCountdown(0);
-    return TakeChosen();
+    return StartChosen();
   }
   SetCountdown((uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
                          kMicrosecondsPerSecond));
   return ScreenStays();
 }
 
-// Read the card afresh once it is back from USB, and show the list again
-// without counting down: the computer may have added VMs, removed them, or
-// changed the settings.
-static __noinline void ReadCardAgain(void) {
-  VMListRead(g_vms);
-  uint8_t highlighted = 0;
-  LauncherCardReadSettings(g_vms, g_settings, &highlighted);
-  ShowFromTop(highlighted);
-}
-
 // Back from a screen opened over the list, with the row that opened it
 // chosen, as the VMs may have changed under it; or after USB mass storage has
-// exported the card or an image, the card read again.
+// exported the card or an image, closed for the card to be read again.
 static ScreenResult Resume(void) {
   if (g_exported) {
     g_exported = false;
-    ReadCardAgain();
-  } else {
-    Show(RowItem(g_opened));
+    *g_exit = (LauncherMenuExit){kLauncherMenuExitReadCard, 0};
+    return ScreenClose();
   }
+  Show(RowItem(g_opened));
   return ScreenStays();
 }
 
