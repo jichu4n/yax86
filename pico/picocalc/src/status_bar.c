@@ -28,8 +28,8 @@ enum {
 static char g_problems[2][kTextColumns + 1];
 static char* g_problem = g_problems[0];
 
-// Status rows composed that core 1 has not been handed yet, because it was
-// still drawing the last ones.
+// The rows each mode composes on, and whether they are waiting to be sent
+// to core 1, which was still drawing the last ones.
 static DisplayStatus g_status_rows;
 static bool g_status_rows_pending;
 
@@ -112,8 +112,8 @@ void StatusBarPutBattery(
 
 DisplayStatus* StatusBarRows(void) { return &g_status_rows; }
 
-void StatusBarHandOver(bool composed) {
-  if (composed) {
+void StatusBarSend(bool changed) {
+  if (changed) {
     g_status_rows_pending = true;
   }
   if (!g_status_rows_pending) {
