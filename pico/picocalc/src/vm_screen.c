@@ -6,8 +6,8 @@
 
 #include "disk_image.h"
 #include "display.h"
+#include "list_box.h"
 #include "ui_box.h"
-#include "ui_page.h"
 #include "vm_config_screen.h"
 #include "vm_delete_screen.h"
 #include "vm_name_screen.h"
@@ -30,8 +30,8 @@ static const UIBoxItem kVMItems[kVMItemCount] = {
 extern const Screen kVMScreen;
 
 static VMManager* g_vm_manager;
-// The item chosen, and whether the page is out of date.
-static UIPage g_page;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 // The VM, an index in the list; the names of the images in its drives,
 // empty for none; whether each drive is there; and whether its vm.cfg read.
 static uint8_t g_vm;
@@ -54,27 +54,28 @@ ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
                        (drive == kVMDriveFD2 ? config.present[drive]
                                              : config.drives[drive][0] != '\0');
   }
-  g_page.chosen = kVMConfigure;
-  g_page.dirty = true;
+  g_list_box.selected = kVMConfigure;
+  g_list_box.dirty = true;
   return ScreenOpen(&kVMScreen);
 }
 
 static ScreenResult Choose(void) {
-  switch (g_page.chosen) {
+  switch (g_list_box.selected) {
     case kVMConfigure:
       return VMConfigScreenOpenExisting(g_vm_manager, g_vm);
     case kVMDelete:
       return VMDeleteScreenOpen(g_vm_manager, g_vm);
     default:
-      return VMNameScreenOpen(g_vm_manager, g_vm, g_page.chosen == kVMClone);
+      return VMNameScreenOpen(
+          g_vm_manager, g_vm, g_list_box.selected == kVMClone);
   }
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (UIPageTakeEvent(&g_page, event, kVMItemCount)) {
-    case kUIPageKeyChoose:
+  switch (ListBoxTakeEvent(&g_list_box, event, kVMItemCount)) {
+    case kListBoxKeySelect:
       return Choose();
-    case kUIPageKeyBack:
+    case kListBoxKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -87,7 +88,7 @@ static ScreenResult Resume(void) {
   if (g_vm_manager->changed) {
     return ScreenBack();
   }
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
@@ -102,7 +103,7 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 
 // The images in the VM's drives, over what can be done to it.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
@@ -136,13 +137,13 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     line_pointers[0] = "No disks.";
     line_count = 1;
   }
-  UIPageDrawItems(
-      menu, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count, kVMItems,
-      kVMItemCount, g_page.chosen, true);
-  UIPageEndDraw(&g_page);
+  ListBoxDrawItems(
+      menu, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
+      kVMItems, kVMItemCount, g_list_box.selected, true);
+  ListBoxEndDraw(&g_list_box);
 }
 
-static const char* Hint(void) { return kUIPageHint; }
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "vm"; }
 

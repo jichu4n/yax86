@@ -5,8 +5,8 @@
 #include <string.h>
 
 #include "core/hdc.h"
+#include "list_box.h"
 #include "ui_box.h"
-#include "ui_page.h"
 #include "vm_config.h"
 
 enum {
@@ -96,7 +96,7 @@ UIBrowserChoice UIBrowserChoose(
 }
 
 void UIBrowserScrollTo(UIBrowser* browser, uint8_t chosen) {
-  UIPageScrollTo(chosen, &browser->top);
+  ListBoxScrollTo(chosen, &browser->top);
 }
 
 // What the browser says of a folder with nothing to choose in it.
@@ -113,9 +113,9 @@ static const char* BrowseEmpty(const UIBrowser* browser) {
 void UIBrowserDraw(
     const UIBrowser* browser, DisplayMenu* menu, uint8_t chosen) {
   const FileList* list = &browser->list;
-  UIBoxPlace(menu, kUIPageNarrowColumns, kUIPageListRows + 2);
+  UIBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
   // The folder, from the card's root, keeping its end if it is too long.
-  char title[kUIPageNarrowColumns - 6 + 1];
+  char title[kListBoxNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
   char full[kFSMaxPath + 2];
   snprintf(full, sizeof(full), "/%s", list->path);
@@ -129,7 +129,7 @@ void UIBrowserDraw(
     snprintf(title, sizeof(title), "%s", full);
   }
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, title);
-  for (uint8_t i = 0; i < kUIPageListRows; ++i) {
+  for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(browser->top + i);
     if (index >= list->count) {
@@ -172,7 +172,7 @@ void UIBrowserDraw(
   }
   // A folder with more entries than a list holds says so on the bottom edge.
   UIBoxEdgeRow(
-      &menu->text[kUIPageListRows + 1], menu->columns, false,
+      &menu->text[kListBoxRows + 1], menu->columns, false,
       list->truncated ? "the first 64 entries" : NULL);
-  UIPageDrawScrollArrows(menu, browser->top, list->count);
+  ListBoxDrawScrollArrows(menu, browser->top, list->count);
 }

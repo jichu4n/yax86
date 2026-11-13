@@ -5,8 +5,8 @@
 
 #include "display.h"
 #include "font_screen.h"
+#include "list_box.h"
 #include "ui_box.h"
-#include "ui_page.h"
 
 static const UIBoxItem kSettingsItems[] = {{"Font", true}};
 enum {
@@ -16,21 +16,21 @@ enum {
 extern const Screen kSettingsScreen;
 
 static Settings* g_settings;
-// The item chosen, and whether the page is out of date.
-static UIPage g_page;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 
 ScreenResult SettingsScreenOpen(Settings* settings) {
   g_settings = settings;
-  g_page.chosen = 0;
-  g_page.dirty = true;
+  g_list_box.selected = 0;
+  g_list_box.dirty = true;
   return ScreenOpen(&kSettingsScreen);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (UIPageTakeEvent(&g_page, event, kSettingsItemCount)) {
-    case kUIPageKeyChoose:
+  switch (ListBoxTakeEvent(&g_list_box, event, kSettingsItemCount)) {
+    case kListBoxKeySelect:
       return FontScreenOpen(g_settings);
-    case kUIPageKeyBack:
+    case kListBoxKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -38,22 +38,22 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
-      g_page.chosen, true);
-  UIPageEndDraw(&g_page);
+      g_list_box.selected, true);
+  ListBoxEndDraw(&g_list_box);
 }
 
 static ScreenResult Resume(void) {
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
-static const char* Hint(void) { return kUIPageHint; }
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "settings"; }
 

@@ -156,7 +156,7 @@ add_executable(yax86_picocalc
     src/typing.c
     src/ui_box.c
     src/ui_browser.c
-    src/ui_page.c
+    src/list_box.c
     src/usb_storage_screen.c
     src/usb_storage_active_screen.c
     src/usb_storage_disconnect_screen.c

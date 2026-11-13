@@ -6,9 +6,9 @@
 
 #include "display.h"
 #include "launcher_status_bar.h"
+#include "list_box.h"
 #include "runtime_log.h"
 #include "status_bar.h"
-#include "ui_page.h"
 
 enum {
   kBytesPerKB = 1024,
@@ -40,13 +40,13 @@ static void ShowCopyProgress(uint64_t done, uint64_t total) {
   if (menu == NULL) {
     return;
   }
-  char progress[kUIPageNarrowColumns];
+  char progress[kListBoxNarrowColumns];
   snprintf(
       progress, sizeof(progress), "%lu of %lu KB",
       (unsigned long)(done / kBytesPerKB),
       (unsigned long)(total / kBytesPerKB));
   const char* const lines[] = {g_copy_what, progress};
-  UIPageDrawItems(menu, g_copy_title, lines, 2, NULL, 0, 0, true);
+  ListBoxDrawItems(menu, g_copy_title, lines, 2, NULL, 0, 0, true);
   DisplayEndMenu();
 }
 

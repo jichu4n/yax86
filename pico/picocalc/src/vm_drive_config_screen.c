@@ -4,9 +4,9 @@
 
 #include "browser_screen.h"
 #include "display.h"
+#include "list_box.h"
 #include "ui_box.h"
 #include "ui_browser.h"
-#include "ui_page.h"
 #include "vm_config.h"
 
 // A drive's choices.
@@ -45,8 +45,8 @@ static const DriveItem kHardDiskChoices[] = {
 
 extern const Screen kVMDriveConfigScreen;
 
-// The item chosen, and whether the page is out of date.
-static UIPage g_page;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 // The drive, and the form's choice for it.
 static uint8_t g_drive;
 static VMDriveChoice* g_choice;
@@ -91,8 +91,8 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* chosen) {
   } else if (chosen->path[0] != '\0') {
     item = kDriveImage;
   }
-  g_page.chosen = ChoiceRow(item);
-  g_page.dirty = true;
+  g_list_box.selected = ChoiceRow(item);
+  g_list_box.dirty = true;
   return ScreenOpen(&kVMDriveConfigScreen);
 }
 
@@ -100,7 +100,7 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* chosen) {
 // browser, starting where the one chosen is, if one is.
 static ScreenResult Choose(void) {
   uint8_t count = 0;
-  const DriveItem choice = Choices(&count)[g_page.chosen];
+  const DriveItem choice = Choices(&count)[g_list_box.selected];
   if (choice == kDriveImage) {
     char folder[kFSMaxPath + 1];
     if (g_choice->path[0] != '\0') {
@@ -119,10 +119,10 @@ static ScreenResult Choose(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (UIPageTakeEvent(&g_page, event, ChoiceRow(kDriveItemCount))) {
-    case kUIPageKeyChoose:
+  switch (ListBoxTakeEvent(&g_list_box, event, ChoiceRow(kDriveItemCount))) {
+    case kListBoxKeySelect:
       return Choose();
-    case kUIPageKeyBack:
+    case kListBoxKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -138,12 +138,12 @@ static ScreenResult Resume(void) {
     g_choice->present = true;
     return ScreenBack();
   }
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
@@ -155,12 +155,13 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   for (uint8_t row = 0; row < count; ++row) {
     items[row] = labels[choices[row]];
   }
-  UIPageDrawItems(
-      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_page.chosen, true);
-  UIPageEndDraw(&g_page);
+  ListBoxDrawItems(
+      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
+      true);
+  ListBoxEndDraw(&g_list_box);
 }
 
-static const char* Hint(void) { return kUIPageHint; }
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "vm_drive_config"; }
 

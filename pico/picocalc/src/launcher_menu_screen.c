@@ -5,11 +5,11 @@
 #include <stdio.h>
 
 #include "display.h"
+#include "list_box.h"
 #include "pico/stdlib.h"
 #include "settings_screen.h"
 #include "status_bar.h"
 #include "ui_box.h"
-#include "ui_page.h"
 #include "usb_storage_screen.h"
 #include "vm_manager_screen.h"
 
@@ -43,9 +43,9 @@ static Settings* g_settings;
 static uint8_t* g_copy_buffer;
 static uint32_t g_copy_buffer_size;
 static LauncherMenuExit* g_exit;
-// The selected item, which UIPage calls chosen, and whether the menu has
-// changed since it was last drawn.
-static UIPage g_page;
+// The list box: the item selected, and whether the menu has changed since it
+// was last drawn.
+static ListBox g_list_box;
 // The row shown at the top of the box, past which the menu has scrolled.
 static uint8_t g_top_row;
 // The countdown: when the selected VM starts by itself, whether it is
@@ -74,17 +74,17 @@ static uint8_t RowItem(MenuRow row) { return (uint8_t)(g_vms->count + row); }
 
 // Scroll the menu, if it has to, so the selected item's row shows.
 static void ScrollToSelected(void) {
-  uint8_t row = g_page.chosen;
-  if (g_vms->count > 0 && g_page.chosen >= g_vms->count) {
+  uint8_t row = g_list_box.selected;
+  if (g_vms->count > 0 && g_list_box.selected >= g_vms->count) {
     ++row;
   }
-  UIPageScrollTo(row, &g_top_row);
+  ListBoxScrollTo(row, &g_top_row);
 }
 
 // Select item, scrolling the menu to it if it must.
 static void SetSelected(uint8_t item) {
-  g_page.chosen = item;
-  g_page.dirty = true;
+  g_list_box.selected = item;
+  g_list_box.dirty = true;
   ScrollToSelected();
 }
 
@@ -109,23 +109,23 @@ ScreenResult LauncherMenuScreenOpen(
 static void SetCountdown(uint8_t seconds) {
   if (seconds != g_countdown) {
     g_countdown = seconds;
-    g_page.dirty = true;
+    g_list_box.dirty = true;
   }
 }
 
 // Close the menu to start the selected VM.
 static ScreenResult StartSelected(void) {
-  *g_exit = (LauncherMenuExit){kLauncherMenuExitStartVM, g_page.chosen};
+  *g_exit = (LauncherMenuExit){kLauncherMenuExitStartVM, g_list_box.selected};
   return ScreenClose();
 }
 
 // Enter or Space: start the selected VM, or open the selected row's screen
 // over the menu.
 static ScreenResult OnSelect(void) {
-  if (g_page.chosen < g_vms->count) {
+  if (g_list_box.selected < g_vms->count) {
     return StartSelected();
   }
-  g_opened = (MenuRow)(g_page.chosen - g_vms->count);
+  g_opened = (MenuRow)(g_list_box.selected - g_vms->count);
   switch (g_opened) {
     case kMenuRowVMManager:
       return VMManagerScreenOpen(
@@ -148,17 +148,17 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
     return ScreenStays();
   }
   if (event.state != kSouthbridgeKeyReleased && StatusBarClearProblem()) {
-    g_page.dirty = true;
+    g_list_box.dirty = true;
   }
   // A key held down repeats, which moves through the items as a press does.
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  switch (UIPageTakeKey(&g_page, event.key, ItemCount())) {
-    case kUIPageKeyMoved:
+  switch (ListBoxTakeKey(&g_list_box, event.key, ItemCount())) {
+    case kListBoxKeyMoved:
       ScrollToSelected();
       return ScreenStays();
-    case kUIPageKeyChoose:
+    case kListBoxKeySelect:
       return OnSelect();
     default:
       return ScreenStays();
@@ -201,25 +201,26 @@ static ScreenResult Resume(void) {
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  UIBoxPlace(menu, kUIPageNarrowColumns, kUIPageListRows + 2);
+  UIBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
-  for (uint8_t i = 0; i < kUIPageListRows; ++i) {
+  for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_top_row + i);
     if (index >= RowCount()) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
       UIBoxItemRow(
-          row, menu->columns, g_vms->vms[index].name, index == g_page.chosen);
+          row, menu->columns, g_vms->vms[index].name,
+          index == g_list_box.selected);
     } else if (g_vms->count > 0 && index == g_vms->count) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
-      const bool selected = item == g_page.chosen;
+      const bool selected = item == g_list_box.selected;
       if (item == RowItem(kMenuRowVMManager)) {
         UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, selected);
       } else if (item == RowItem(kMenuRowUSB)) {
@@ -229,17 +230,17 @@ static void Draw(Y_UNUSED uint64_t now_us) {
       }
     }
   }
-  char countdown[kUIPageNarrowColumns];
+  char countdown[kListBoxNarrowColumns];
   if (g_countdown > 0) {
     snprintf(
         countdown, sizeof(countdown), "starting in %u s",
         (unsigned)g_countdown);
   }
   UIBoxEdgeRow(
-      &menu->text[kUIPageListRows + 1], menu->columns, false,
+      &menu->text[kListBoxRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
-  UIPageDrawScrollArrows(menu, g_top_row, RowCount());
-  UIPageEndDraw(&g_page);
+  ListBoxDrawScrollArrows(menu, g_top_row, RowCount());
+  ListBoxEndDraw(&g_list_box);
 }
 
 static const char* Hint(void) { return "\x18\x19=Move  Enter=Select"; }

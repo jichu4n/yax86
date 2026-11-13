@@ -5,10 +5,10 @@
 #include <stdio.h>
 
 #include "display.h"
+#include "list_box.h"
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "ui_box.h"
-#include "ui_page.h"
 #include "usb_storage.h"
 #include "usb_storage_disconnect_screen.h"
 
@@ -24,9 +24,9 @@ static const UIBoxItem kSharingItems[] = {{"Disconnect", false}};
 
 extern const Screen kUSBStorageActiveScreen;
 
-// The item chosen, whether the page is out of date, and when it was last
-// drawn.
-static UIPage g_page;
+// The list box: the item selected, and whether it is out of date. And when
+// it was last drawn.
+static ListBox g_list_box;
 static uint64_t g_drawn_us;
 // The parent's: the image exported, NULL for the card, and where to say
 // exporting has ended.
@@ -38,8 +38,8 @@ static bool g_confirmed;
 ScreenResult USBStorageActiveScreenOpen(DiskImage* image, bool* stopped) {
   g_image = image;
   g_stopped = stopped;
-  g_page.chosen = 0;
-  g_page.dirty = true;
+  g_list_box.selected = 0;
+  g_list_box.dirty = true;
   return ScreenOpen(&kUSBStorageActiveScreen);
 }
 
@@ -80,9 +80,9 @@ static ScreenResult Disconnect(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (UIPageTakeEvent(&g_page, event, 1)) {
-    case kUIPageKeyChoose:
-    case kUIPageKeyBack:
+  switch (ListBoxTakeEvent(&g_list_box, event, 1)) {
+    case kListBoxKeySelect:
+    case kListBoxKeyBack:
       return Disconnect();
     default:
       return ScreenStays();
@@ -95,7 +95,7 @@ static ScreenResult Resume(void) {
     g_confirmed = false;
     return StopSharing();
   }
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
@@ -116,9 +116,9 @@ static void FormatSize(uint64_t size, char* text, size_t length) {
 // What is exported and its size, the host's state, and how much has moved.
 static void Draw(uint64_t now_us) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
-    g_page.dirty = true;
+    g_list_box.dirty = true;
   }
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
@@ -156,11 +156,11 @@ static void Draw(uint64_t now_us) {
       moved,
       HostHasVolume() ? "Eject it on the host first." : "",
   };
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
-      kSharingItems, 1, g_page.chosen, true);
+      kSharingItems, 1, g_list_box.selected, true);
   g_drawn_us = now_us;
-  UIPageEndDraw(&g_page);
+  ListBoxEndDraw(&g_list_box);
 }
 
 static const char* Hint(void) { return "Enter=Disconnect"; }

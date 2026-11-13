@@ -5,11 +5,11 @@
 #include <stdio.h>
 
 #include "display.h"
+#include "list_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "ui_box.h"
-#include "ui_page.h"
 
 enum {
   kMicrosecondsPerMillisecond = 1000,
@@ -18,8 +18,8 @@ enum {
 extern const Screen kVMNameScreen;
 
 static VMManager* g_vm_manager;
-// Whether the page is out of date; it has no items to choose.
-static UIPage g_page;
+// The list box, for whether it is out of date. It has no items to select.
+static ListBox g_list_box;
 // The VM, an index in the list; the name being typed; and whether it is for
 // a clone rather than a rename.
 static uint8_t g_vm;
@@ -47,7 +47,7 @@ ScreenResult VMNameScreenOpen(
     g_name[g_name_length++] = '2';
   }
   g_name[g_name_length] = '\0';
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenOpen(&kVMNameScreen);
 }
 
@@ -78,7 +78,7 @@ static __noinline ScreenResult Clone(void) {
   const VMEntry vm = g_vm_manager->vms->vms[g_vm];
   VMEntry copy;
   char problem[kVMProblemLength + 1];
-  char what[kUIPageNarrowColumns];
+  char what[kListBoxNarrowColumns];
   snprintf(what, sizeof(what), "Copying %s to %s...", vm.name, g_name);
   const uint64_t start_us = time_us_64();
   FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Clone", what);
@@ -104,7 +104,7 @@ static __noinline ScreenResult Clone(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  if (!UIPageKeyPressed(event)) {
+  if (!ListBoxKeyPressed(event)) {
     return ScreenStays();
   }
   const uint8_t key = event.key;
@@ -116,7 +116,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
     case kKeyCodeBackspace:
       if (g_name_length > 0) {
         g_name[--g_name_length] = '\0';
-        g_page.dirty = true;
+        g_list_box.dirty = true;
       }
       return ScreenStays();
     default:
@@ -126,25 +126,25 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
       g_name_length < kFSMaxFolderName) {
     g_name[g_name_length++] = (char)toupper(key);
     g_name[g_name_length] = '\0';
-    g_page.dirty = true;
+    g_list_box.dirty = true;
   }
   return ScreenStays();
 }
 
 // Nothing opens over the name.
 static ScreenResult Resume(void) {
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
 // The name being typed, in a field marked as the item chosen is, with a
 // cursor after it while there is room.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  char title[kUIPageNarrowColumns];
+  char title[kListBoxNarrowColumns];
   snprintf(
       title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
       g_vm_manager->vms->vms[g_vm].name);
@@ -154,7 +154,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
       "",
       "Up to 8 letters, digits, - and _.",
   };
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, title, lines, sizeof(lines) / sizeof(lines[0]), NULL, 0, 0, true);
   // The field, on the blank line: the box's edge, a blank row, then the
   // first line.
@@ -168,7 +168,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   }
   field[kFSMaxFolderName] = '\0';
   UIBoxPutText(row, menu->columns, 3, field, kUIBoxAttrChosen);
-  UIPageEndDraw(&g_page);
+  ListBoxEndDraw(&g_list_box);
 }
 
 static const char* Hint(void) {

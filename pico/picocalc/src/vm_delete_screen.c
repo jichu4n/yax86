@@ -5,9 +5,9 @@
 #include <stdio.h>
 
 #include "display.h"
+#include "list_box.h"
 #include "runtime_log.h"
 #include "ui_box.h"
-#include "ui_page.h"
 
 typedef enum DeleteItem {
   kDeleteCancel = 0,
@@ -23,8 +23,8 @@ static const UIBoxItem kDeleteItems[kDeleteItemCount] = {
 extern const Screen kVMDeleteScreen;
 
 static VMManager* g_vm_manager;
-// The item chosen, and whether the page is out of date.
-static UIPage g_page;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 // The VM, an index in the list, and what deleting it would take.
 static uint8_t g_vm;
 static VMListContents g_contents;
@@ -33,8 +33,8 @@ ScreenResult VMDeleteScreenOpen(VMManager* vm_manager, uint8_t index) {
   g_vm_manager = vm_manager;
   g_vm = index;
   VMListDescribe(vm_manager->vms, &vm_manager->vms->vms[index], &g_contents);
-  g_page.chosen = kDeleteCancel;
-  g_page.dirty = true;
+  g_list_box.selected = kDeleteCancel;
+  g_list_box.dirty = true;
   return ScreenOpen(&kVMDeleteScreen);
 }
 
@@ -42,7 +42,7 @@ static __noinline ScreenResult Delete(void) {
   const VMEntry vm = g_vm_manager->vms->vms[g_vm];
   char problem[kVMProblemLength + 1];
   const bool deleted = VMListDelete(g_vm_manager->settings, &vm, problem);
-  // Gone from the list, it leaves the first VM chosen.
+  // Gone from the list, it leaves the first VM selected.
   VMManagerNoteChange(g_vm_manager, vm.name, false);
   if (deleted) {
     SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
@@ -53,13 +53,13 @@ static __noinline ScreenResult Delete(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (UIPageTakeEvent(&g_page, event, kDeleteItemCount)) {
-    case kUIPageKeyChoose:
-      if (g_page.chosen == kDeleteConfirm) {
+  switch (ListBoxTakeEvent(&g_list_box, event, kDeleteItemCount)) {
+    case kListBoxKeySelect:
+      if (g_list_box.selected == kDeleteConfirm) {
         return Delete();
       }
       return ScreenBack();
-    case kUIPageKeyBack:
+    case kListBoxKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -68,7 +68,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Nothing opens over the question.
 static ScreenResult Resume(void) {
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
@@ -97,18 +97,18 @@ static void JoinNames(
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
   const uint8_t named = g_contents.file_count < kVMListNamed
                             ? g_contents.file_count
                             : kVMListNamed;
-  char question[kUIPageNarrowColumns];
+  char question[kListBoxNarrowColumns];
   snprintf(
       question, sizeof(question), "Delete %s?",
       g_vm_manager->vms->vms[g_vm].name);
-  char files[kUIPageNarrowColumns - 4];
+  char files[kListBoxNarrowColumns - 4];
   JoinNames(
       files, sizeof(files), g_contents.files, named, g_contents.file_count);
   char users[64];
@@ -130,13 +130,13 @@ static void Draw(Y_UNUSED uint64_t now_us) {
         g_contents.users[0], (unsigned)(g_contents.user_count - 1));
     lines[line_count++] = users;
   }
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
-      g_page.chosen, true);
-  UIPageEndDraw(&g_page);
+      g_list_box.selected, true);
+  ListBoxEndDraw(&g_list_box);
 }
 
-static const char* Hint(void) { return kUIPageHint; }
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "vm_delete"; }
 

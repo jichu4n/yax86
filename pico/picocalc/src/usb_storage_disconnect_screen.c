@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 #include "display.h"
+#include "list_box.h"
 #include "ui_box.h"
-#include "ui_page.h"
 
 typedef enum StopItem {
   kStopCancel = 0,
@@ -20,25 +20,25 @@ static const UIBoxItem kStopItems[kStopItemCount] = {
 
 extern const Screen kUSBStorageDisconnectScreen;
 
-// The item chosen, and whether the page is out of date.
-static UIPage g_page;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 static bool* g_confirmed;
 
 ScreenResult USBStorageDisconnectScreenOpen(bool* confirmed) {
   g_confirmed = confirmed;
-  g_page.chosen = kStopCancel;
-  g_page.dirty = true;
+  g_list_box.selected = kStopCancel;
+  g_list_box.dirty = true;
   return ScreenOpen(&kUSBStorageDisconnectScreen);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (UIPageTakeEvent(&g_page, event, kStopItemCount)) {
-    case kUIPageKeyChoose:
-      if (g_page.chosen == kStopConfirm) {
+  switch (ListBoxTakeEvent(&g_list_box, event, kStopItemCount)) {
+    case kListBoxKeySelect:
+      if (g_list_box.selected == kStopConfirm) {
         *g_confirmed = true;
       }
       return ScreenBack();
-    case kUIPageKeyBack:
+    case kListBoxKeyBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -46,27 +46,27 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = UIPageBeginDraw(&g_page);
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, "Unsafe disconnect",
       (const char* const[]){
           "Not ejected by the host.",
           "Writes may still be pending.",
       },
-      2, kStopItems, kStopItemCount, g_page.chosen, true);
-  UIPageEndDraw(&g_page);
+      2, kStopItems, kStopItemCount, g_list_box.selected, true);
+  ListBoxEndDraw(&g_list_box);
 }
 
 // Nothing opens over the question.
 static ScreenResult Resume(void) {
-  g_page.dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
-static const char* Hint(void) { return kUIPageHint; }
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "usb_storage_disconnect"; }
 
