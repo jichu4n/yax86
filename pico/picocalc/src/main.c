@@ -1,12 +1,14 @@
 // yax86 on the ClockworkPi PicoCalc.
 //
-// main.c brings the board up - the system clock, the PSRAM, the LCD on core
-// 1, the keyboard controller and the speaker - and wires the two modes
-// together: the launcher, which chooses a VM from those on the SD card, and
-// the emulator, which runs it, or without a card the floppy built into
-// flash. It holds what both share: guest RAM, which the launcher borrows
-// for copies until the VM starts, the card's VMs and settings, and the VM
-// chosen.
+// main.c brings the board up: the system clock, the PSRAM, the LCD on core
+// 1, the keyboard controller and the speaker. Then it runs the two modes,
+// one after the other. The launcher loads a VM from those on the SD card, and
+// the emulator runs it; without a card there is no VM, and the emulator runs
+// the floppy built into flash.
+//
+// main.c holds what both modes use: guest RAM, which the launcher borrows to
+// copy files until the VM starts; the card's VMs and settings; and the VM
+// to start.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -57,8 +59,8 @@ enum {
 static uint8_t g_guest_ram[kPicoGuestSRAMSize];
 // What bringing the board up found.
 static BoardStatus g_board;
-// The card's VMs and settings, read by the launcher, whose screens change
-// them; and the VM chosen, if one was.
+// The card's VMs and settings, which the launcher reads and its screens
+// change; and the VM the launcher loaded to start, if it loaded one.
 static VMList g_vms;
 static Settings g_settings;
 static VMConfig g_vm;
