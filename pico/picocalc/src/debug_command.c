@@ -10,7 +10,7 @@
 #include "sdcard.h"
 #include "southbridge.h"
 #include "speaker.h"
-#include "stacks.h"
+#include "stack_usage.h"
 #include "typing.h"
 #include "usb_storage.h"
 
@@ -24,8 +24,8 @@ enum {
   kMaxBytesPerPoll = 64,
 };
 
-// What bringing the board up found, main.c's.
-static const BoardStatus* g_board;
+// What initializing the system found, main.c's.
+static const InitStatus* g_init_status;
 // The line being read, and whether it has outgrown the buffer.
 static char g_line[kMaxLineLength];
 static uint16_t g_length;
@@ -128,22 +128,24 @@ void DebugCommandReplyError(const DebugCommand* command, const char* error) {
       Y_LOG_STRING("status", "error"), Y_LOG_STRING("error", error));
 }
 
-void DebugCommandInit(const BoardStatus* board) { g_board = board; }
+void DebugCommandInit(const InitStatus* init_status) {
+  g_init_status = init_status;
+}
 
-// The board's groups, in two parts, neither inlined into the other: each
+// The system's groups, in two parts, neither inlined into the other: each
 // group's fields take stack until the function they are in returns, and a
 // report whole is among the deepest calls on core 0's stack. See
-// StacksPaint().
+// StackUsagePaint().
 //
-// What the board is, how it started, and its stacks.
+// What the system is, how initializing it went, and its stacks.
 static __noinline void ReportSystem(const DebugCommand* command) {
   char version[16];
-  BoardFormatSouthbridgeVersion(g_board, version, sizeof(version));
+  InitFormatKeyboardVersion(g_init_status, version, sizeof(version));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "system", Y_LOG_STRING("runtime", "yax86 picocalc"),
       Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / kHzPerKHz),
-      Y_LOG_STRING("overclock", BoardOverclockName(g_board->overclock)),
-      Y_LOG_UINT("lcd_spi_hz", g_board->lcd_spi_hz),
+      Y_LOG_STRING("overclock", InitOverclockName(g_init_status->overclock)),
+      Y_LOG_UINT("lcd_spi_hz", g_init_status->lcd_spi_hz),
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
       Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
       Y_LOG_STRING("keyboard_fw", version));
@@ -157,9 +159,9 @@ static __noinline void ReportSystem(const DebugCommand* command) {
       Y_LOG_UINT("bytes_written", psram.bytes_written),
       Y_LOG_UINT("timeouts", psram.timeouts));
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "stack", Y_LOG_UINT("size", StacksSize()),
-      Y_LOG_UINT("core0_used", StacksCore0Used()),
-      Y_LOG_UINT("core1_used", StacksCore1Used()));
+      command, "stack", Y_LOG_UINT("size", StackUsageSize()),
+      Y_LOG_UINT("core0_used", StackUsageCore0()),
+      Y_LOG_UINT("core1_used", StackUsageCore1()));
 }
 
 // What has been done with USB storage, the keyboard and the speaker.
@@ -188,7 +190,7 @@ static __noinline void ReportDevices(const DebugCommand* command) {
       Y_LOG_UINT("changes", speaker.changes));
 }
 
-void DebugCommandReportBoard(const DebugCommand* command) {
+void DebugCommandReportSystem(const DebugCommand* command) {
   ReportSystem(command);
   ReportDevices(command);
 }

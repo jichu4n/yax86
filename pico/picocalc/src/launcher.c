@@ -250,10 +250,10 @@ static __noinline bool HandleMenuExit(uint8_t* copy_buffer, VMConfig* vm) {
   return false;
 }
 
-// Launcher mode's groups of a report, after the board's: the font, the VMs
+// Launcher mode's groups of a report, after the system's: the font, the VMs
 // on the card, and the screen showing.
 static void Report(const DebugCommand* command) {
-  DebugCommandReportBoard(command);
+  DebugCommandReportSystem(command);
   DEBUG_COMMAND_REPLY_GROUP(
       command, "display", Y_LOG_STRING("font", Font4x10Name(g_settings->font)));
   DEBUG_COMMAND_REPLY_GROUP(
