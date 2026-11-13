@@ -1340,30 +1340,29 @@ static __noinline void ChooseVM(void) {
     case kLauncherShowsList:
       break;
   }
-  ScreenShow(&kLauncherScreen);
+  ScreenShow(LauncherScreen(&g_vm));
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
     if (CommandPoll(&command)) {
       RunCommand(&command);
     }
-    ScreenResult result = kScreenStays;
     SouthbridgeKeyEvent key;
-    if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      result = ScreenHandleKey(key);
-      // The keys for the page the key led to, at once rather than at the
-      // next update.
-      UIStatusOffer(ScreenHint());
+    const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
+    if (pressed) {
+      ScreenHandleKey(key);
     }
-    if (ScreenTick() == kScreenChoseVM) {
-      result = kScreenChoseVM;
+    if (ScreenIsOpen()) {
+      ScreenTick();
     }
-    if (result == kScreenChoseVM && LauncherTakeChosen(&g_vm)) {
+    // The list closes once a VM is chosen.
+    if (!ScreenIsOpen()) {
       g_has_vm = true;
-      ScreenClose();
       return;
     }
-    if (time_reached(next_status_at)) {
+    // The keys for the page a key led to are offered at once rather than at
+    // the next update.
+    if (pressed || time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       UIStatusOffer(ScreenHint());
     }

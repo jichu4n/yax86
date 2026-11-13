@@ -53,6 +53,8 @@ static Settings g_settings;
 static uint8_t* g_copy_buffer;
 // When the default VM starts by itself, and whether it is still counting
 // down to it: a key stops it.
+// Where the VM chosen from the list goes.
+static VMConfig* g_chosen;
 static absolute_time_t g_start_at;
 static bool g_counting;
 
@@ -422,6 +424,16 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
   return kLauncherShowsList;
 }
 
+// Take the VM chosen, or highlighted, into *g_chosen, which closes the
+// list. If its configuration does not read, the list stays, with its
+// problem shown.
+static ScreenResult Choose(void) {
+  if (TakeVM(LauncherMenuChosenVM(), g_chosen)) {
+    return kScreenClose;
+  }
+  return kScreenStays;
+}
+
 // A key pressed while the list shows: stops the countdown, and carries out
 // what the menu makes of it.
 static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
@@ -430,7 +442,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
   ScreenResult result = kScreenStays;
   switch (LauncherMenuHandleKey(key)) {
     case kLauncherMenuActionVMChosen:
-      result = kScreenChoseVM;
+      result = Choose();
       break;
     case kLauncherMenuActionShareCard:
       ShareCard();
@@ -475,7 +487,7 @@ static ScreenResult CountDown(void) {
     if (left_us <= 0) {
       g_counting = false;
       LauncherMenuSetCountdown(0);
-      result = kScreenChoseVM;
+      result = Choose();
     } else {
       LauncherMenuSetCountdown(
           (uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
@@ -485,7 +497,7 @@ static ScreenResult CountDown(void) {
   return result;
 }
 
-const Screen kLauncherScreen = {
+static const Screen kLauncherScreen = {
     .handle_key = HandleKey,
     .tick = CountDown,
     .draw = LauncherMenuDraw,
@@ -493,6 +505,7 @@ const Screen kLauncherScreen = {
     .page_name = LauncherMenuPageName,
 };
 
-bool LauncherTakeChosen(VMConfig* vm) {
-  return TakeVM(LauncherMenuChosenVM(), vm);
+const Screen* LauncherScreen(VMConfig* chosen) {
+  g_chosen = chosen;
+  return &kLauncherScreen;
 }

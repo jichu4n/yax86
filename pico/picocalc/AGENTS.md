@@ -356,9 +356,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   draw. It composes the status rows itself, with `src/ui_status.c`, from
   the keys `ScreenHint()` gives: the router leaves the rows to each loop,
   as the VM's have its drives and locks too. A `Screen` is those
-  functions, with its page's name for the report. For now the launcher is
-  the one screen: the list and every page reached from it. Calls go one
-  way, from `main.c` to the screen and from the screen down.
+  functions, with its page's name for the report. A result carries no
+  value, only what the router does, stay or close, so `screen.c` knows
+  nothing of VMs and serves any menu: what a screen chooses it writes
+  through a pointer it was given. The list reads the VM chosen into the
+  `VMConfig` that `LauncherScreen(&g_vm)` took, and closes, and the loop
+  ends when no screen is open. For now the launcher is the one screen: the
+  list and every page reached from it. Calls go one way, from `main.c` to
+  the screen and from the screen down.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the
