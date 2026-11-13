@@ -839,7 +839,7 @@ static void RunCommand(const DebugCommand* command) {
 
 // Answer the command the host has sent, if a whole one is in, adding the
 // time it took to *run_us if given. Kept out of line, so that the command is
-// off core 0's stack while the loops run.
+// off core 0's stack while the loop runs.
 static __noinline void PollCommand(uint64_t* run_us) {
   DebugCommand command;
   if (!DebugCommandPoll(&command)) {
