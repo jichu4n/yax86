@@ -5,8 +5,8 @@
 //
 // Under the VMs are three more rows: Manage VMs, from which VMs are made in
 // yax86/vm, and renamed, cloned and deleted; USB disk mode, a page from which
-// the SD card or an image is shared over USB; and Settings, which chooses the
-// 4x10 font.
+// the SD card or an image is shared over USB; and Settings, a screen of its
+// own that the caller opens.
 //
 // This holds the pages' state and draws them; what is chosen on them is
 // launcher.c's to carry out, from the actions LauncherMenuHandleKey()
@@ -18,7 +18,6 @@
 #include <stdint.h>
 
 #include "disk_image.h"
-#include "font_4x10.h"
 #include "southbridge.h"
 #include "vm_config.h"
 #include "vm_list.h"
@@ -50,8 +49,8 @@ typedef enum LauncherMenuAction {
   // for an edit, showing the VM's page with LauncherMenuShowManagedVMs().
   kLauncherMenuActionCreateVM,
   kLauncherMenuActionEditVM,
-  // From Settings' Font page: use and save LauncherMenuChosenFont().
-  kLauncherMenuActionFontChosen,
+  // Settings was chosen from the list, for the caller to open over it.
+  kLauncherMenuActionOpenSettings,
 } LauncherMenuAction;
 
 // Show the list of VMs, to choose one to start, with the one at index
@@ -61,9 +60,8 @@ void LauncherMenuOpen(const VMList* list, uint8_t highlighted);
 // The index in the list of the VM chosen, or highlighted.
 uint8_t LauncherMenuChosenVM(void);
 
-// The font chosen on the Font page, and set the one it shows as chosen.
-Font4x10 LauncherMenuChosenFont(void);
-void LauncherMenuSetFont(Font4x10 font);
+// Draw the list again, as it was, once a screen opened over it is closed.
+void LauncherMenuResume(void);
 
 // Show the SD card's page, once the caller has put it on USB: who has it,
 // and Disconnect, which asks first if a computer is still using it.

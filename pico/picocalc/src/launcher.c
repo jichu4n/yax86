@@ -8,12 +8,12 @@
 
 #include "disk_image.h"
 #include "display.h"
-#include "font_4x10.h"
 #include "fs.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
+#include "settings_screen.h"
 #include "status_bar.h"
 #include "ui_status.h"
 #include "usb_disk.h"
@@ -137,7 +137,6 @@ static __noinline bool ReadSettings(Settings* settings, uint8_t* highlighted) {
   char problem[kVMProblemLength + 1];
   bool read = SettingsRead(settings, problem);
   DisplaySetFont(settings->font);
-  LauncherMenuSetFont(settings->font);
   *highlighted = 0;
   if (read && settings->boot_default[0] != '\0') {
     // Past the list's end, the first is highlighted instead.
@@ -152,23 +151,6 @@ static __noinline bool ReadSettings(Settings* settings, uint8_t* highlighted) {
     UIStatusSetProblem(message);
   }
   return read;
-}
-
-static __noinline void ChooseFont(void) {
-  const Font4x10 font = LauncherMenuChosenFont();
-  DisplaySetFont(font);
-  if (font == g_settings.font) {
-    return;
-  }
-  char problem[kVMProblemLength + 1];
-  if (SettingsSaveFont(&g_settings, font, problem)) {
-    SYSTEM_INFO("font_saved", Y_LOG_STRING("font", Font4x10Name(font)));
-    return;
-  }
-  char message[kTextColumns + 1];
-  snprintf(message, sizeof(message), "Could not save font: %.50s", problem);
-  UIStatusSetProblem(message);
-  SYSTEM_WARN("font_not_saved", Y_LOG_STRING("problem", problem));
 }
 
 // Share the SD card over USB: the card is unmounted first, as
@@ -425,13 +407,13 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
 }
 
 // Take the VM chosen, or highlighted, into *g_chosen, which closes the
-// list. If its configuration does not read, the list stays, with its
+// screens. If its configuration does not read, the list stays, with its
 // problem shown.
 static ScreenResult Choose(void) {
   if (TakeVM(LauncherMenuChosenVM(), g_chosen)) {
-    return kScreenClose;
+    return ScreenClose();
   }
-  return kScreenStays;
+  return ScreenStays();
 }
 
 // A key pressed while the list shows: stops the countdown, and carries out
@@ -439,10 +421,13 @@ static ScreenResult Choose(void) {
 static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
   g_counting = false;
   LauncherMenuSetCountdown(0);
-  ScreenResult result = kScreenStays;
+  ScreenResult result = ScreenStays();
   switch (LauncherMenuHandleKey(key)) {
     case kLauncherMenuActionVMChosen:
       result = Choose();
+      break;
+    case kLauncherMenuActionOpenSettings:
+      result = SettingsScreenOpen(&g_settings);
       break;
     case kLauncherMenuActionShareCard:
       ShareCard();
@@ -452,9 +437,6 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
       break;
     case kLauncherMenuActionStopSharing:
       StopSharing();
-      break;
-    case kLauncherMenuActionFontChosen:
-      ChooseFont();
       break;
     case kLauncherMenuActionRenameVM:
       RenameVM();
@@ -480,7 +462,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
 // Count down to the default VM, showing the seconds left, which chooses it
 // once they run out.
 static ScreenResult CountDown(void) {
-  ScreenResult result = kScreenStays;
+  ScreenResult result = ScreenStays();
   if (g_counting) {
     const int64_t left_us =
         absolute_time_diff_us(get_absolute_time(), g_start_at);
@@ -501,11 +483,12 @@ static const Screen kLauncherScreen = {
     .handle_key = HandleKey,
     .tick = CountDown,
     .draw = LauncherMenuDraw,
+    .resume = LauncherMenuResume,
     .hint = LauncherMenuHint,
     .page_name = LauncherMenuPageName,
 };
 
-const Screen* LauncherScreen(VMConfig* chosen) {
+ScreenResult LauncherScreenOpen(VMConfig* chosen) {
   g_chosen = chosen;
-  return &kLauncherScreen;
+  return ScreenOpen(&kLauncherScreen);
 }

@@ -1340,7 +1340,7 @@ static __noinline void ChooseVM(void) {
     case kLauncherShowsList:
       break;
   }
-  ScreenShow(LauncherScreen(&g_vm));
+  ScreenShow(LauncherScreenOpen(&g_vm));
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
