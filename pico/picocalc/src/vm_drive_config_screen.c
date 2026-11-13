@@ -1,4 +1,4 @@
-#include "vm_drive_screen.h"
+#include "vm_drive_config_screen.h"
 
 #include <stddef.h>
 
@@ -44,14 +44,14 @@ static const DriveItem kFloppy2Choices[] = {
 static const DriveItem kHardDiskChoices[] = {
     kDriveDisabled, kDriveBlank, kDriveImage};
 
-extern const Screen kVMDriveScreen;
+extern const Screen kVMDriveConfigScreen;
 
 static uint8_t g_chosen;
 // Whether what is on the panel is out of date.
 static bool g_dirty;
 // The drive, and the form's choice for it.
 static uint8_t g_drive;
-static VMFormDrive* g_choice;
+static VMDriveChoice* g_choice;
 // The image found in the browser, empty for none, and its size.
 static char g_found_path[kFSMaxPath + 1];
 static uint32_t g_found_size;
@@ -82,7 +82,7 @@ static uint8_t ChoiceRow(DriveItem choice) {
   return choice == kDriveItemCount ? count : 0;
 }
 
-ScreenResult VMDriveScreenOpen(uint8_t drive, VMFormDrive* chosen) {
+ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* chosen) {
   g_drive = drive;
   g_choice = chosen;
   DriveItem item = kDriveNone;
@@ -95,7 +95,7 @@ ScreenResult VMDriveScreenOpen(uint8_t drive, VMFormDrive* chosen) {
   }
   g_chosen = ChoiceRow(item);
   g_dirty = true;
-  return ScreenOpen(&kVMDriveScreen);
+  return ScreenOpen(&kVMDriveConfigScreen);
 }
 
 // Take the choice, back to the form; or for an image, find it in the
@@ -183,9 +183,9 @@ static const char* Hint(void) {
   return "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
-static const char* PageName(void) { return "vm_drive"; }
+static const char* PageName(void) { return "vm_drive_config"; }
 
-const Screen kVMDriveScreen = {
+const Screen kVMDriveConfigScreen = {
     .handle_key = HandleKey,
     .draw = Draw,
     .resume = Resume,

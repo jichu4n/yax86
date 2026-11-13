@@ -6,7 +6,7 @@
 
 enum {
   // The deepest the launcher's pages go is six: the list, Manage VMs, a VM,
-  // Edit drives, a drive's choices and the browser.
+  // Configure, a drive's configuration and the browser.
   kScreenStackMax = 8,
 };
 
