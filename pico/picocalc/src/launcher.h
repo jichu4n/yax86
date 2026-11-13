@@ -2,9 +2,10 @@
 //
 // At power on it reads the card: the VMs, the settings, and the start note,
 // which the in-VM menu's Reset and Power off leave across the reboot to say
-// what to do next. Then it either loads a VM to start at once - the one
-// reset, or the default with no countdown - or sets up the launcher menu,
-// the list of VMs to choose from, counting down to the default.
+// what to do next. Then it does one of two things. It loads a VM to start at
+// once: the one reset, or the default when the settings ask for no
+// countdown. Or it sets up the launcher menu, the list of VMs to choose
+// from, which counts down to the default.
 //
 // The launcher menu (launcher_menu_screen.c) only chooses. Everything done
 // with the card is here: loading the VM chosen, which makes it the default,
