@@ -1,4 +1,4 @@
-#include "vm_form_screen.h"
+#include "vm_config_screen.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -12,7 +12,7 @@
 #include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "vm_drive_screen.h"
+#include "vm_drive_config_screen.h"
 
 enum {
   kMicrosecondsPerMillisecond = 1000,
@@ -29,25 +29,25 @@ typedef enum FormItem {
   kFormItemCount,
 } FormItem;
 
-extern const Screen kVMFormScreen;
+extern const Screen kVMConfigScreen;
 
 static VMManager* g_vm_manager;
 static uint8_t g_chosen;
 // Whether what is on the panel is out of date.
 static bool g_dirty;
-// Whether the form is editing the drives of the VM at g_vm, an index in the
-// list, rather than making a new one; it then has no name, and saves rather
-// than creates.
-static bool g_editing;
+// Whether the form configures the existing VM at g_vm, an index in the list,
+// rather than making a new one; it then has no name, and saves rather than
+// creates.
+static bool g_existing;
 static uint8_t g_vm;
 // A new VM's name, and what each drive is to hold.
 static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
-static VMFormDrive g_drives[kVMDrives];
+static VMDriveChoice g_drives[kVMDrives];
 
-// The form's first item: its name for a new VM; editing one, it starts at
+// The form's first item: its name for a new VM; for an existing one, at
 // the drives. g_chosen counts from it.
-static uint8_t FirstItem(void) { return g_editing ? kFormDriveA : kFormName; }
+static uint8_t FirstItem(void) { return g_existing ? kFormDriveA : kFormName; }
 
 static uint8_t ChosenItem(void) { return (uint8_t)(g_chosen + FirstItem()); }
 
@@ -56,9 +56,9 @@ static void ChooseItem(uint8_t item) {
   g_dirty = true;
 }
 
-ScreenResult VMFormScreenOpenNew(VMManager* vm_manager) {
+ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
   g_vm_manager = vm_manager;
-  g_editing = false;
+  g_existing = false;
   g_name[0] = '\0';
   g_name_length = 0;
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
@@ -67,12 +67,12 @@ ScreenResult VMFormScreenOpenNew(VMManager* vm_manager) {
     g_drives[drive].present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
   ChooseItem(kFormName);
-  return ScreenOpen(&kVMFormScreen);
+  return ScreenOpen(&kVMConfigScreen);
 }
 
-ScreenResult VMFormScreenOpenEdit(VMManager* vm_manager, uint8_t index) {
+ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
   g_vm_manager = vm_manager;
-  g_editing = true;
+  g_existing = true;
   g_vm = index;
   static VMConfig config;
   char problem[kVMProblemLength + 1];
@@ -86,7 +86,7 @@ ScreenResult VMFormScreenOpenEdit(VMManager* vm_manager, uint8_t index) {
                               : config.drives[drive][0] != '\0');
   }
   ChooseItem(kFormDriveA);
-  return ScreenOpen(&kVMFormScreen);
+  return ScreenOpen(&kVMConfigScreen);
 }
 
 // The drives as the form has them, its strings the form's.
@@ -141,7 +141,7 @@ static __noinline ScreenResult Save(void) {
   char problem[kVMProblemLength + 1];
   char what[kUIPageNarrowColumns];
   snprintf(what, sizeof(what), "Writing %s's blank disks...", vm.name);
-  FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Edit drives", what);
+  FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Configure", what);
   const VMListResult result = VMListEdit(&vm, &drives, &transfer, problem);
   VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
@@ -181,14 +181,14 @@ static bool TypeName(uint8_t key) {
 static ScreenResult Choose(void) {
   const uint8_t item = ChosenItem();
   if (item == kFormCreate) {
-    return g_editing ? Save() : Create();
+    return g_existing ? Save() : Create();
   }
   if (item == kFormName) {
     ChooseItem(kFormDriveA);
     return ScreenStays();
   }
   const uint8_t drive = (uint8_t)(item - kFormDriveA);
-  return VMDriveScreenOpen(drive, &g_drives[drive]);
+  return VMDriveConfigScreenOpen(drive, &g_drives[drive]);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
@@ -228,7 +228,7 @@ static ScreenResult Resume(void) {
 }
 
 // A new VM's name, typed in place with a cursor while it is chosen, and the
-// drives, with what each holds - or editing a VM's drives, the drives alone,
+// drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
 static void Draw(Y_UNUSED uint64_t now_us) {
   if (!g_dirty) {
@@ -262,9 +262,9 @@ static void Draw(Y_UNUSED uint64_t now_us) {
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (UIBoxItem){rows[item], true};
   }
-  items[kFormCreate] = (UIBoxItem){g_editing ? "Save" : "Create", false};
+  items[kFormCreate] = (UIBoxItem){g_existing ? "Save" : "Create", false};
   UIPageDrawItems(
-      menu, g_editing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
+      menu, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()), g_chosen,
       true);
   DisplayEndMenu();
@@ -277,9 +277,11 @@ static const char* Hint(void) {
              : "\x18\x19=Move  Enter=Select  Esc=Cancel";
 }
 
-static const char* PageName(void) { return "vm_form"; }
+static const char* PageName(void) {
+  return g_existing ? "vm_configure" : "vm_create";
+}
 
-const Screen kVMFormScreen = {
+const Screen kVMConfigScreen = {
     .handle_key = HandleKey,
     .draw = Draw,
     .resume = Resume,

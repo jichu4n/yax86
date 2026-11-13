@@ -10,8 +10,8 @@
 #include "settings.h"
 #include "vm_list.h"
 
-// Show the VM manager for vms and settings, which must outlive it, and which the
-// screens under it change as they change the card. A copy goes through
+// Show the VM manager for vms and settings, which must outlive it, and which
+// the screens under it change as they change the card. A copy goes through
 // copy_buffer, copy_buffer_size bytes of guest RAM.
 ScreenResult VMManagerScreenOpen(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
