@@ -34,7 +34,7 @@ typedef enum StartIntent {
 // configuration reads, or until the default starts by itself, the countdown
 // running until a key is pressed. Settings that ask for no wait start the
 // default at once, without the list, unless there is a problem to show. With
-// no VMs the list offers Manage VMs, USB disk mode and Settings, and nothing
+// no VMs the list offers Manage VMs, USB mass storage and Settings, and nothing
 // starts by itself. Without a card it returns false at once, and the
 // built-in floppy boots in drive A.
 //
