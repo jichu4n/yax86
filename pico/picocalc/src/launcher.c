@@ -6,8 +6,10 @@
 #include <string.h>
 #include <strings.h>
 
+#include "debug_command.h"
 #include "disk_image.h"
 #include "display.h"
+#include "font_4x10.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu_screen.h"
 #include "launcher_status.h"
@@ -248,9 +250,43 @@ static __noinline bool HandleMenuExit(uint8_t* copy_buffer, VMConfig* vm) {
   return false;
 }
 
+// Launcher mode's groups of a report, after the board's: the font, the VMs
+// on the card, and the screen showing.
+static void Report(const DebugCommand* command) {
+  DebugCommandReportBoard(command);
+  DEBUG_COMMAND_REPLY_GROUP(
+      command, "display", Y_LOG_STRING("font", Font4x10Name(g_settings->font)));
+  DEBUG_COMMAND_REPLY_GROUP(
+      command, "vm", Y_LOG_STRING("name", ""), Y_LOG_UINT("vms", g_vms->count));
+  DEBUG_COMMAND_REPLY_GROUP(
+      command, "menu", Y_LOG_BOOL("open", true),
+      Y_LOG_STRING("page", ScreenPageName()));
+  DebugCommandReplyOk(command);
+}
+
+// Answer a command: report here, and screen with no_guest, as no guest runs
+// yet; any other with DebugCommandRunCommon().
+static void RunCommand(const DebugCommand* command) {
+  if (DebugCommandIs(command, "report")) {
+    Report(command);
+  } else if (DebugCommandIs(command, "screen")) {
+    DebugCommandReplyError(command, "no_guest");
+  } else {
+    DebugCommandRunCommon(command);
+  }
+}
+
+// Answer the command the host has sent, if a whole one is in. Kept out of
+// line, so that the command is off core 0's stack while the loop runs.
+static __noinline void PollCommand(void) {
+  DebugCommand command;
+  if (DebugCommandPoll(&command)) {
+    RunCommand(&command);
+  }
+}
+
 bool LauncherRun(
-    VMList* vms, Settings* settings, uint8_t* copy_buffer,
-    const CommandsHandlers* commands, VMConfig* vm) {
+    VMList* vms, Settings* settings, uint8_t* copy_buffer, VMConfig* vm) {
   g_vms = vms;
   g_settings = settings;
   switch (Start(copy_buffer, vm)) {
@@ -265,7 +301,7 @@ bool LauncherRun(
   }
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
-    CommandsPoll(commands, NULL);
+    PollCommand();
     SouthbridgeKeyEvent key;
     const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
     if (pressed) {

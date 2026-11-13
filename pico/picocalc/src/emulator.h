@@ -12,21 +12,19 @@
 // and the status rows the rest. Everything on them is also reported over
 // USB serial for pico/bench/run.js to capture. A report is printed whenever
 // a host attaches, since USB CDC drops whatever is written before then.
+//
+// Its loop answers two debug commands itself: report, with the board's
+// groups and then the VM's, and screen, with the guest's text screen. The
+// others are common to every mode.
 #ifndef YAX86_PICOCALC_EMULATOR_H
 #define YAX86_PICOCALC_EMULATOR_H
 
 #include <stdint.h>
 
 #include "board.h"
-#include "commands.h"
 #include "settings.h"
 #include "vm_config.h"
 #include "vm_list.h"
-
-// The report's groups and the guest's text screen, for the commands, in
-// either mode: before the VM starts they give the emulator as it stands,
-// with nothing run.
-extern const CommandsHandlers kEmulatorCommands;
 
 // Set the emulator up, before launcher mode: with what bringing the board
 // up found, the card's VMs and settings as the launcher reads them, and

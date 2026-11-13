@@ -6,7 +6,11 @@
 // once: the one reset, or the default when the settings ask for no
 // countdown. Or it shows the launcher menu, which lists the VMs for starting
 // one and counts down to the default. It runs the launcher menu until a VM
-// is loaded, answering commands and updating the status rows.
+// is loaded, answering debug commands and updating the status rows.
+//
+// It answers two debug commands itself: report, with the board's groups and
+// then the launcher's, and screen, with no_guest, as no guest runs yet. The
+// others are common to every mode.
 //
 // The launcher menu (launcher_menu_screen.c) only decides what to do.
 // Everything done with the card is here: loading the VM selected, which
@@ -18,7 +22,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "commands.h"
 #include "settings.h"
 #include "southbridge.h"
 #include "vm_config.h"
@@ -36,8 +39,7 @@ typedef enum StartIntent {
 // Run launcher mode, and return whether a VM was loaded into *vm to start.
 // main.c holds what it works on: vms and settings, which the launcher reads
 // from the card and its screens change; and copy_buffer, guest RAM that copying
-// a VM's files borrows until the VM starts. commands answers the commands that
-// are not the launcher's.
+// a VM's files borrows until the VM starts.
 //
 // Without a card it returns false at once, and the emulator boots the floppy
 // built into flash. Otherwise:
@@ -51,8 +53,7 @@ typedef enum StartIntent {
 // Settings, and nothing starts by itself. A VM whose vm.cfg does not read
 // leaves the launcher menu showing its problem.
 bool LauncherRun(
-    VMList* vms, Settings* settings, uint8_t* copy_buffer,
-    const CommandsHandlers* commands, VMConfig* vm);
+    VMList* vms, Settings* settings, uint8_t* copy_buffer, VMConfig* vm);
 
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the launcher menu with it

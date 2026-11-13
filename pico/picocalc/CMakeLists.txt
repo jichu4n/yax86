@@ -121,8 +121,8 @@ add_executable(yax86_picocalc
     src/stacks.c
     src/menu.c
     src/browser_screen.c
-    src/command.c
-    src/commands.c
+    src/board.c
+    src/debug_command.c
     src/disk_image.c
     src/diskio.c
     src/display.c
