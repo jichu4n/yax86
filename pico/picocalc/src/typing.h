@@ -1,6 +1,6 @@
-// Keys a host presses, through the key command in command.h: a queue of key
-// events the main loop takes one at a time, through the same path as the
-// keyboard's.
+// Keys a host presses with the key debug command, in debug_command.c: a
+// queue of key events that each mode's loop takes one at a time, through the
+// same path as the keyboard's.
 //
 // An event is the keyboard controller's, so the keymap turns it into
 // scancodes exactly as it does a key pressed on the PicoCalc, and a host can

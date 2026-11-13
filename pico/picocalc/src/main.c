@@ -1175,7 +1175,7 @@ static void RunVM(bool vm_ready) {
 // the menu opens again.
 //
 // Kept out of line with __noinline, so that its locals are on core 0's stack
-// only while it runs. See PaintStacks().
+// only while it runs. See StacksPaint().
 static __noinline void RunLauncher(void) {
   switch (LauncherStart(&g_vm)) {
     case kLauncherLoadedVM:
