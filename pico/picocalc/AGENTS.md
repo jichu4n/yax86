@@ -898,7 +898,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A host drives the runtime with commands on the same serial port**, a
   logfmt line each - `id=7 cmd=screen` - answered by `kind=reply` lines with
   that id, the last with `status=ok`, or `status=error` and an `error`.
-  `src/command.c` reads them and `main.c` carries them out:
+  `src/command.c` reads them and `src/commands.c` carries them out, in
+  either mode: `ping`, `key` and `screenshot` itself, and the report's
+  groups and `screen` through the `CommandsHandlers` the mode's loop hands
+  it, which are `main.c`'s for now:
 
   | command | does |
   | --- | --- |
@@ -910,7 +913,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Commands are read once a batch without waiting**, up to 64 bytes, and run
   between batches. With nothing sent, the poll costs about 6us a batch. Time
-  spent on commands is `command_us` in the report.
+  spent on commands while the VM runs is `command_us` in the report.
 - **A screen row is hex**: a row of box drawing characters escaped as logfmt
   is 320 characters, past the logger's 256-byte line.
 - **`key` is the only way in, so a host can do exactly what a hand on the

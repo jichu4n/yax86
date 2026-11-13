@@ -25,6 +25,7 @@
 #include <strings.h>
 
 #include "command.h"
+#include "commands.h"
 #include "core/platform.h"
 #include "core/video.h"
 #include "display.h"
@@ -728,7 +729,6 @@ static void ReplyReport(const Command* command) {
   ReplyReportBoard(command);
   ReplyReportDevices(command);
   ReplyReportRunning(command);
-  CommandReplyOk(command);
 }
 
 // Say the boot is over to a host that has attached since the last look, if
@@ -1002,50 +1002,12 @@ static void RunScreen(const Command* command) {
   CommandReplyOk(command);
 }
 
-// Press, release or, by default, tap a key, by name. The key goes through the
-// keymap as a key pressed on the PicoCalc does, a key event a batch, and the
-// reply comes once it is queued. A host sending keys faster than they go is
-// told the queue is full, and nothing is queued, so the key can be sent
-// again.
-static void RunKey(const Command* command) {
-  const char* name = CommandArgument(command, "name");
-  const char* state = CommandArgument(command, "state");
-  TypingAction action = kTypingTap;
-  if (state != NULL && state[0] == 'p') {
-    action = kTypingPress;
-  } else if (state != NULL && state[0] == 'r') {
-    action = kTypingRelease;
-  }
-  uint8_t code = 0;
-  if (name == NULL) {
-    CommandReplyError(command, "missing_name");
-  } else if (!TypingFindKey(name, &code)) {
-    CommandReplyError(command, "unknown_key");
-  } else if (!TypingQueueKey(code, action)) {
-    CommandReplyError(command, "queue_full");
-  } else {
-    CommandReplyOk(command);
-  }
-}
-
-static __noinline void RunCommand(const Command* command) {
-  if (CommandIs(command, "ping")) {
-    CommandReplyOk(command);
-  } else if (CommandIs(command, "report")) {
-    ReplyReport(command);
-  } else if (CommandIs(command, "screen")) {
-    RunScreen(command);
-  } else if (CommandIs(command, "screenshot")) {
-    // Core 1 owns the panel, so it reads it back and sends the reply.
-    if (!DisplaySendScreenshot(command->id)) {
-      CommandReplyError(command, "busy");
-    }
-  } else if (CommandIs(command, "key")) {
-    RunKey(command);
-  } else {
-    CommandReplyError(command, "unknown_command");
-  }
-}
+// What the commands ask of the runtime: the report's groups, and the guest's
+// text screen.
+static const CommandsHandlers kCommandsHandlers = {
+    .report = ReplyReport,
+    .screen = RunScreen,
+};
 
 // ============================================================================
 // The menu
@@ -1234,12 +1196,7 @@ static void RunVM(bool vm_ready) {
       running = false;
     }
 
-    Command command;
-    if (CommandPoll(&command)) {
-      const uint64_t start_us = time_us_64();
-      RunCommand(&command);
-      g_command_us += time_us_64() - start_us;
-    }
+    CommandsPoll(&kCommandsHandlers, &g_command_us);
     // Between batches, so the keyboard is never written while the VM
     // runs, and a key a host typed only in a batch the keyboard had none, so
     // that the two never land in one. A key also keeps the screen on, and
@@ -1343,10 +1300,7 @@ static __noinline void ChooseVM(void) {
   ScreenShow(LauncherScreenOpen(&g_vm));
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
-    Command command;
-    if (CommandPoll(&command)) {
-      RunCommand(&command);
-    }
+    CommandsPoll(&kCommandsHandlers, NULL);
     SouthbridgeKeyEvent key;
     const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
     if (pressed) {
