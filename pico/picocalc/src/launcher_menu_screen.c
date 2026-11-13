@@ -17,74 +17,75 @@ enum {
   kMicrosecondsPerSecond = 1000 * 1000,
 };
 
+// The menu's rows, from the top: a row for each VM; a separator line, if
+// there are VMs; then a row for each MenuRow, each opening a screen of its
+// own. The rows that can be highlighted are its items: the VMs, then the
+// MenuRows. An item's index leaves out the separator: with n VMs, item i is
+// VM i for i below n, and MenuRow r is item n + r.
+typedef enum MenuRow {
+  kMenuRowVMManager = 0,
+  kMenuRowUSB,
+  kMenuRowSettings,
+  kMenuRowCount,
+} MenuRow;
+
 static const UIBoxItem kVMManagerRow = {"Manage VMs", true};
 static const UIBoxItem kUSBRow = {"USB mass storage", true};
 static const UIBoxItem kSettingsRow = {"Settings", true};
 
-// The rows under the VMs that open a screen of their own.
-typedef enum ListRow {
-  kListRowManage = 0,
-  kListRowUSB,
-  kListRowSettings,
-  kListRowCount,
-} ListRow;
-
 extern const Screen kLauncherMenuScreen;
 
-// The launcher's: the VMs and settings on the card, the RAM a copy goes
-// through, and where the VM chosen goes.
+// The launcher's, given to LauncherMenuScreenOpen(): the card's VMs and
+// settings, the guest RAM copies go through, and where to write why the
+// menu closed.
 static VMList* g_vms;
 static Settings* g_settings;
 static uint8_t* g_copy_buffer;
 static uint32_t g_copy_buffer_size;
 static LauncherMenuExit* g_exit;
-// The item chosen, and whether the page is out of date.
+// The highlighted item, which UIPage calls chosen, and whether the menu has
+// changed since it was last drawn.
 static UIPage g_page;
-// The row at the top of the list.
-static uint8_t g_list_top;
-// When the default VM starts by itself, whether it is still counting down
-// to it - a key stops it - and the seconds left that show.
+// The row shown at the top of the box, past which the menu has scrolled.
+static uint8_t g_top_row;
+// The countdown: when the highlighted VM starts by itself, whether it is
+// still counting, and the seconds left that the bottom edge shows. A key
+// stops it.
 static absolute_time_t g_start_at;
 static bool g_counting;
 static uint8_t g_countdown;
-// The row that opened the screen showing over the list.
-static ListRow g_opened;
-// Whether the card or an image has been on USB, so the card is read again.
+// The row below the VMs whose screen is open over the menu.
+static MenuRow g_opened;
+// Set by USB mass storage once it has given the card or an image to the
+// host, after which the card is read again.
 static bool g_exported;
 
-// The list's items: a VM each, then Manage VMs, USB mass storage and Settings,
-// with a separator row between the VMs and the rest when there is at least
-// one VM.
+// How many items the menu has, and how many rows, the separator included.
 static uint8_t ItemCount(void) {
-  return (uint8_t)(g_vms->count + kListRowCount);
+  return (uint8_t)(g_vms->count + kMenuRowCount);
 }
 
 static uint8_t RowCount(void) {
   return (uint8_t)(ItemCount() + (g_vms->count > 0 ? 1 : 0));
 }
 
-// The item of a row under the VMs.
-static uint8_t RowItem(ListRow row) { return (uint8_t)(g_vms->count + row); }
+// The item index of one of the rows below the VMs.
+static uint8_t RowItem(MenuRow row) { return (uint8_t)(g_vms->count + row); }
 
-// Keep the chosen item among the list's rows.
-static void ScrollToChosen(void) {
+// Scroll the menu, if it has to, so the highlighted item's row shows.
+static void ScrollToHighlighted(void) {
   uint8_t row = g_page.chosen;
   if (g_vms->count > 0 && g_page.chosen >= g_vms->count) {
     ++row;
   }
-  UIPageScrollTo(row, &g_list_top);
+  UIPageScrollTo(row, &g_top_row);
 }
 
-static void Show(uint8_t chosen) {
-  g_page.chosen = chosen;
+// Highlight item, scrolling the menu to it if it must.
+static void Highlight(uint8_t item) {
+  g_page.chosen = item;
   g_page.dirty = true;
-  ScrollToChosen();
-}
-
-// Show the list from its top with the item at highlighted chosen.
-static void ShowFromTop(uint8_t highlighted) {
-  g_list_top = 0;
-  Show(highlighted);
+  ScrollToHighlighted();
 }
 
 ScreenResult LauncherMenuScreenOpen(
@@ -96,14 +97,15 @@ ScreenResult LauncherMenuScreenOpen(
   g_copy_buffer = copy_buffer;
   g_copy_buffer_size = copy_buffer_size;
   g_exit = exit;
-  ShowFromTop(highlighted);
+  g_top_row = 0;
+  Highlight(highlighted);
   g_start_at = make_timeout_time_ms(countdown_ms);
   g_counting = countdown_ms > 0;
   return ScreenOpen(&kLauncherMenuScreen);
 }
 
-// Show the seconds left before the highlighted VM starts by itself, or
-// stop showing them with 0.
+// Show the seconds left before the highlighted VM starts by itself on the
+// bottom edge, or with 0, nothing there.
 static void SetCountdown(uint8_t seconds) {
   if (seconds != g_countdown) {
     g_countdown = seconds;
@@ -111,36 +113,37 @@ static void SetCountdown(uint8_t seconds) {
   }
 }
 
-// Close the list to start the VM chosen, or highlighted.
-static ScreenResult StartChosen(void) {
+// Close the menu to start the highlighted VM.
+static ScreenResult StartHighlighted(void) {
   *g_exit = (LauncherMenuExit){kLauncherMenuExitStartVM, g_page.chosen};
   return ScreenClose();
 }
 
-// Start the VM chosen, or open the screen of the row chosen over the list.
+// Act on the highlighted item: start its VM, or open its row's screen over
+// the menu.
 static ScreenResult Choose(void) {
   if (g_page.chosen < g_vms->count) {
-    return StartChosen();
+    return StartHighlighted();
   }
-  g_opened = (ListRow)(g_page.chosen - g_vms->count);
+  g_opened = (MenuRow)(g_page.chosen - g_vms->count);
   switch (g_opened) {
-    case kListRowManage:
+    case kMenuRowVMManager:
       return VMManagerScreenOpen(
           g_vms, g_settings, g_copy_buffer, g_copy_buffer_size);
-    case kListRowUSB:
+    case kMenuRowUSB:
       return USBStorageScreenOpen(&g_exported);
     default:
       return SettingsScreenOpen(g_settings);
   }
 }
 
-// A key pressed while the list shows: stops the countdown, and moves or
-// chooses.
+// Any key stops the countdown. Up and Down move the highlight, and Enter or
+// Space chooses.
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   g_counting = false;
   SetCountdown(0);
-  // Nothing closes the list but starting something, and Esc goes back no
-  // further than it.
+  // Esc and Backspace do nothing: the menu is the first screen, with nothing
+  // under it to go back to.
   if (event.key == kKeyCodeEsc || event.key == kKeyCodeBackspace) {
     return ScreenStays();
   }
@@ -153,7 +156,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
   switch (UIPageTakeKey(&g_page, event.key, ItemCount())) {
     case kUIPageKeyMoved:
-      ScrollToChosen();
+      ScrollToHighlighted();
       return ScreenStays();
     case kUIPageKeyChoose:
       return Choose();
@@ -162,7 +165,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-// Count down to the default VM, showing the seconds left, which chooses it
+// Run the countdown, showing the seconds left, and start the highlighted VM
 // once they run out.
 static ScreenResult CountDown(void) {
   if (!g_counting) {
@@ -173,29 +176,30 @@ static ScreenResult CountDown(void) {
   if (left_us <= 0) {
     g_counting = false;
     SetCountdown(0);
-    return StartChosen();
+    return StartHighlighted();
   }
   SetCountdown((uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
                          kMicrosecondsPerSecond));
   return ScreenStays();
 }
 
-// Back from a screen opened over the list, with the row that opened it
-// chosen, as the VMs may have changed under it; or after USB mass storage has
-// exported the card or an image, closed for the card to be read again.
+// A screen opened over the menu has closed. After USB mass storage gave the
+// card to the host, close the menu, for the launcher to read the card again.
+// Otherwise highlight the row that opened the screen again: the VM manager
+// may have changed how many VMs there are, which moves it.
 static ScreenResult Resume(void) {
   if (g_exported) {
     g_exported = false;
     *g_exit = (LauncherMenuExit){kLauncherMenuExitReadCard, 0};
     return ScreenClose();
   }
-  Show(RowItem(g_opened));
+  Highlight(RowItem(g_opened));
   return ScreenStays();
 }
 
-// The VMs to start: a row each, with a line under them if there are any,
-// arrows on the border where there are more above or below, and the
-// countdown on the bottom edge.
+// Draw the rows that fit in the box from g_top_row, with arrows on its border
+// where there are more rows above or below, and the countdown on its bottom
+// edge.
 static void Draw(Y_UNUSED uint64_t now_us) {
   DisplayMenu* menu = UIPageBeginDraw(&g_page);
   if (menu == NULL) {
@@ -205,7 +209,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kUIPageListRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
-    const uint8_t index = (uint8_t)(g_list_top + i);
+    const uint8_t index = (uint8_t)(g_top_row + i);
     if (index >= RowCount()) {
       UIBoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
@@ -215,13 +219,13 @@ static void Draw(Y_UNUSED uint64_t now_us) {
       UIBoxSeparatorRow(row, menu->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
-      const bool chosen = item == g_page.chosen;
-      if (item == RowItem(kListRowManage)) {
-        UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, chosen);
-      } else if (item == RowItem(kListRowUSB)) {
-        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, chosen);
+      const bool highlighted = item == g_page.chosen;
+      if (item == RowItem(kMenuRowVMManager)) {
+        UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, highlighted);
+      } else if (item == RowItem(kMenuRowUSB)) {
+        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, highlighted);
       } else {
-        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, highlighted);
       }
     }
   }
@@ -234,7 +238,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   UIBoxEdgeRow(
       &menu->text[kUIPageListRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
-  UIPageDrawScrollArrows(menu, g_list_top, RowCount());
+  UIPageDrawScrollArrows(menu, g_top_row, RowCount());
   UIPageEndDraw(&g_page);
 }
 
