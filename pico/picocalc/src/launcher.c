@@ -11,7 +11,6 @@
 #include "fs.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu.h"
-#include "manage_screen.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "settings_screen.h"
@@ -19,6 +18,7 @@
 #include "ui_status.h"
 #include "usb_storage_screen.h"
 #include "vm_list.h"
+#include "vm_manager_screen.h"
 
 enum {
   // The part of the guest's RAM a clone's files are copied through, before a
@@ -227,8 +227,8 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
       result = SettingsScreenOpen(&g_settings);
       break;
     case kLauncherMenuActionOpenManage:
-      result =
-          ManageScreenOpen(&g_vms, &g_settings, g_copy_buffer, kCopyBufferSize);
+      result = VMManagerScreenOpen(
+          &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize);
       break;
     case kLauncherMenuActionOpenUSB:
       result = USBStorageScreenOpen(&g_exported);

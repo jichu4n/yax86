@@ -137,8 +137,8 @@ add_executable(yax86_picocalc
     src/keymap.c
     src/launcher.c
     src/launcher_menu.c
-    src/manage.c
-    src/manage_screen.c
+    src/vm_manager.c
+    src/vm_manager_screen.c
     src/lcd.c
     ../common/pager.c
     ../common/psram.c

@@ -8,7 +8,7 @@
 #include "ui_page.h"
 #include "ui_status.h"
 
-static const UIBoxItem kManageRow = {"Manage VMs", true};
+static const UIBoxItem kVMManagerRow = {"Manage VMs", true};
 static const UIBoxItem kUSBRow = {"USB mass storage", true};
 static const UIBoxItem kSettingsRow = {"Settings", true};
 
@@ -152,7 +152,7 @@ void LauncherMenuDraw(Y_UNUSED uint64_t now_us) {
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
       if (item == RowItem(kListRowManage)) {
-        UIBoxMenuItemRow(row, menu->columns, &kManageRow, item == g_chosen);
+        UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, item == g_chosen);
       } else if (item == RowItem(kListRowUSB)) {
         UIBoxMenuItemRow(row, menu->columns, &kUSBRow, item == g_chosen);
       } else {
