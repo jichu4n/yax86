@@ -4,7 +4,7 @@
 // closes it but starting a VM.
 //
 // Under the VMs are three more rows: Manage VMs, from which VMs are made in
-// yax86/vm, and renamed, cloned and deleted; and USB disk mode and Settings,
+// yax86/vm, and renamed, cloned and deleted; and USB mass storage and Settings,
 // screens of their own that the caller opens.
 //
 // This holds the pages' state and draws them; what is chosen on them is
@@ -27,7 +27,7 @@ typedef enum LauncherMenuAction {
   kLauncherMenuActionNone = 0,
   // A VM was chosen from the list: see LauncherMenuChosenVM().
   kLauncherMenuActionVMChosen,
-  // USB disk mode was chosen from the list, for the caller to open over it.
+  // USB mass storage was chosen from the list, for the caller to open over it.
   kLauncherMenuActionOpenUSB,
   // From Manage VMs: rename the VM LauncherMenuManagedVM() says to
   // LauncherMenuTypedName(), clone it as that name, or delete it. Then show

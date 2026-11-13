@@ -117,7 +117,7 @@ static const NewDriveItem kHardDiskChoices[] = {
 
 static const UIBoxItem kNewVMRow = {"New VM", true};
 static const UIBoxItem kManageRow = {"Manage VMs", true};
-static const UIBoxItem kUSBRow = {"USB disk mode", true};
+static const UIBoxItem kUSBRow = {"USB mass storage", true};
 static const UIBoxItem kSettingsRow = {"Settings", true};
 
 static ListPage g_page;
@@ -257,9 +257,9 @@ static void ShowPage(ListPage page, uint8_t chosen) {
   g_dirty = true;
 }
 
-// The list at power on's items: a VM each, then Manage VMs, USB disk mode and
-// Settings, with a separator row between the VMs and the rest when there is at
-// least one VM.
+// The list at power on's items: a VM each, then Manage VMs, USB mass storage
+// and Settings, with a separator row between the VMs and the rest when there is
+// at least one VM.
 static uint8_t VMsItemCount(void) { return (uint8_t)(g_vms->count + 3); }
 
 static uint8_t VMsRowCount(void) {

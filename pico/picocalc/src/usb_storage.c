@@ -1,4 +1,4 @@
-#include "usb_disk.h"
+#include "usb_storage.h"
 
 #include <string.h>
 
@@ -42,7 +42,7 @@ static volatile bool g_sharing;
 static DiskImage* volatile g_image;
 // Whether the host is yet to be told the medium changed.
 static volatile bool g_changed;
-static volatile UsbDiskStats g_stats;
+static volatile UsbStorageStats g_stats;
 
 static void Share(DiskImage* image) {
   g_image = image;
@@ -57,14 +57,14 @@ static void Share(DiskImage* image) {
   g_sharing = true;
 }
 
-void UsbDiskShareCard(void) { Share(NULL); }
+void UsbStorageExportCard(void) { Share(NULL); }
 
-void UsbDiskShareImage(DiskImage* image) { Share(image); }
+void UsbStorageExportImage(DiskImage* image) { Share(image); }
 
-void UsbDiskStopSharing(void) { g_sharing = false; }
+void UsbStorageStopExporting(void) { g_sharing = false; }
 
-UsbDiskStats UsbDiskGetStats(void) {
-  UsbDiskStats stats = {
+UsbStorageStats UsbStorageGetStats(void) {
+  UsbStorageStats stats = {
       .sharing = g_sharing,
       .image_path = g_sharing && g_image != NULL ? g_image->path : NULL,
       .connected = tud_mounted(),
