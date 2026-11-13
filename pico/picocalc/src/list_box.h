@@ -10,12 +10,10 @@
 //   went back;
 // - keeping the selected row of a long list in view, with arrows on the
 //   border where there is more;
-// - drawing the items, under lines of text if there are any;
-// - noticing a box of another size than the one last drawn.
+// - drawing the items, under lines of text if there are any.
 //
-// A list box's state is its screen's. These functions take it, the top row
-// of a list and the box last drawn as parameters, and keep nothing of their
-// own.
+// A list box's state is its screen's. These functions take it and the top row
+// of a list as parameters, and keep nothing of their own.
 #ifndef YAX86_PICOCALC_LIST_BOX_H
 #define YAX86_PICOCALC_LIST_BOX_H
 
@@ -36,17 +34,6 @@ enum {
   // have. Page Up and Page Down move this far.
   kListBoxRows = kDisplayMenuMaxRows - 2,
 };
-
-// The box last drawn. A new box of another size would leave part of the old
-// one showing, so the guest's screen is drawn under it first.
-typedef struct ListBoxFrame {
-  // The box's size, in columns and rows.
-  uint8_t columns;
-  uint8_t rows;
-  // Whether a box is showing: false once the guest's screen has been drawn
-  // over it.
-  bool drawn;
-} ListBoxFrame;
 
 // A list box's state.
 typedef struct ListBox {
@@ -117,12 +104,5 @@ void ListBoxDrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
     uint8_t line_count, const MenuBoxItem* items, uint8_t count,
     uint8_t selected, bool list_sized);
-
-// Whether menu is a box of another size than the one last drawn, so that the
-// guest's screen has to be drawn under it first.
-bool ListBoxFrameResized(const ListBoxFrame* frame, const DisplayMenu* menu);
-
-// Record menu as the box last drawn.
-void ListBoxFrameDrawn(ListBoxFrame* frame, const DisplayMenu* menu);
 
 #endif  // YAX86_PICOCALC_LIST_BOX_H

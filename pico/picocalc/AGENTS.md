@@ -786,11 +786,23 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 ## The menu
 
 - **Both Shift keys held together open it**, which nothing in DOS does and
-  typing never does, and close it again. `src/menu.c` keeps its state and
-  draws it, in boxes and rows from `src/menu_box.c`. `src/emulator.c` carries
-  out what the menu's items do, through the callbacks in `MenuConfig`.
-  The running VM, `src/running_vm.c`, changes the VM's floppy disks for
-  them: it says so on the status rows and saves the drive to `vm.cfg`.
+  typing never does, and close it again. `src/emulator.c` watches for them,
+  whether the menu shows or not.
+- **The menu is screens**, as launcher mode's pages are, through
+  `src/screen.c`. `src/emulator_menu_screen.c` is the main page, and opens
+  the others: `src/floppy_drive_screen.c` for each drive,
+  `src/status_screen.c`, and `src/question_screen.c` for Reset and Power
+  off. A drive's page opens the browser, `src/browser_screen.c`, which
+  launcher mode uses too.
+- **The menu changes the VM's floppy disks through the running VM**,
+  `src/running_vm.c`, which says so on the status rows and saves the drive
+  to `vm.cfg`. Inserting a disk closes the menu.
+- **Reset and Power off only decide**: a question answered yes closes the
+  menu with an `EmulatorMenuExit`, and `src/emulator.c` carries it out.
+- **The status page's lines are the emulator's**: it fills them in on
+  every pass while the menu shows, and the status screen draws them every
+  second. Filling them in costs nothing that matters while the VM is
+  paused.
 - **A list box is a box that lists items, one of them selected**: most
   screens, and the menu's pages. `src/list_box.c` has what they share:
   moving the selection, scrolling a long list, and drawing the items. A
@@ -812,22 +824,30 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   not see them come up while the menu has the keyboard, so they are released
   to it then.
 - **It is a box drawn over the guest's screen**, white on blue in code page
-  437's double lined box, a page at a time: Floppy disk 1, Floppy disk 2 -
-  with a second floppy drive - Status, Reset
-  and Power off - Esc resumes; a drive's page, with what is in it, Swap disk
-  image and Eject, or Choose disk image alone while it is empty; the
-  browser; the status page; and a question before a reset or a power off.
-  An item that opens another
-  menu ends in a `>`. Up and Down move, Enter or Space chooses, Esc or
-  Backspace goes back.
+  437's double lined box, a page at a time:
+  - the main page: Floppy disk 1; Floppy disk 2, with a second floppy
+    drive; Status; Reset; and Power off, with a list of VMs to go back to.
+    Esc closes the menu.
+  - a drive's page: what is in the drive, and Swap disk image and Eject, or
+    Choose disk image alone while it is empty;
+  - the browser;
+  - the status page;
+  - a question before a reset or a power off.
+
+  An item that opens another page ends in a `>`. Up and Down move, Enter or
+  Space selects, and Esc or Backspace goes back.
 - **The browser starts in the folder of the image in the drive**, with it
-  chosen, or else of the image in the other drive - the next disk of a set
-  is likely beside it - or else in `yax86`. Each image in a drive is marked
-  with its drive. Enter opens a folder or inserts an image and closes the
-  menu; Backspace goes up a folder, with the one left chosen, and from the
-  root back to the drive's page; Page Up and Down move a page.
+  selected. Otherwise it starts in the folder of the image in the other
+  drive, since the next disk of a set is likely beside it, or else in
+  `yax86`. Each image in a drive is marked with its drive. Enter opens a
+  folder, or inserts an image and closes the menu. Backspace goes up a
+  folder, with the one left selected, and from the root back to the drive's
+  page. Page Up and Down move a page.
 - **A box of a new size has the guest's screen drawn in full under it
   first**, and closing draws it in full, so nothing of a box is left behind.
+  The menu's screens draw into the box the loop hands them, and
+  `DrawMenu()` in `src/emulator.c` sends it. If core 1 is still drawing a
+  frame, the box waits for a later pass.
 - **Reset and Power off restart the board** with `watchdog_reboot()`, so
   every start begins from the same state, and leave a note for the start
   after it: Reset starts the same VM again at once, without the list, and

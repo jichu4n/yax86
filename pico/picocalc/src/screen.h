@@ -84,6 +84,11 @@ static inline ScreenResult ScreenClose(void) {
 // Show the screen an open function opened, alone, until it closes.
 void ScreenShow(ScreenResult opened);
 
+// Take every screen off now, as a screen returning ScreenClose() does, for a
+// loop that closes the screens itself, such as on a key that closes a menu
+// whatever shows.
+void ScreenHide(void);
+
 // Whether a screen shows: false once they have all closed.
 bool ScreenIsOpen(void);
 

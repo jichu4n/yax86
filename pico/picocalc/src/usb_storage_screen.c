@@ -91,7 +91,8 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
     case kListBoxKeySelect:
       if (g_list_box.selected == kUSBImage) {
         return BrowserScreenOpen(
-            kFileBrowserEither, "yax86", NULL, g_found_path, &g_found_size);
+            kFileBrowserEither, "yax86", NULL, NULL, g_found_path,
+            &g_found_size);
       }
       return ShareCard();
     case kListBoxKeyBack:

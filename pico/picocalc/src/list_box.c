@@ -95,17 +95,6 @@ void ListBoxDrawItems(
   MenuBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
-bool ListBoxFrameResized(const ListBoxFrame* frame, const DisplayMenu* menu) {
-  return frame->drawn &&
-         (menu->columns != frame->columns || menu->rows != frame->rows);
-}
-
-void ListBoxFrameDrawn(ListBoxFrame* frame, const DisplayMenu* menu) {
-  frame->columns = menu->columns;
-  frame->rows = menu->rows;
-  frame->drawn = true;
-}
-
 const char kListBoxHint[] = "\x18\x19=Move  Enter=Select  Esc=Back";
 
 bool ListBoxKeyPressed(SouthbridgeKeyEvent event) {

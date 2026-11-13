@@ -8,17 +8,25 @@
 #include <stdint.h>
 
 #include "file_browser.h"
+#include "floppy.h"
 #include "fs.h"
 #include "screen.h"
 
 // Show the browser on folder, listing images, with the image at current
-// selected if it is there. current is NULL or empty for none, and must stay
-// as it is while the browser shows. path is emptied. When an image is
-// selected, its path from the card's root is written to path and its length
-// to *size, and the browser goes back. Both must outlive the screen.
+// selected if it is there. current is NULL or empty for none.
+//
+// in_drives is the images in the floppy drives, which their rows mark, or
+// NULL when the browser is not finding a floppy for a drive. An entry is
+// NULL for an empty drive. current and in_drives must stay as they are
+// while the browser shows.
+//
+// path is emptied. When an image is selected, its path from the card's root
+// is written to path and its length to *size, and the browser goes back.
+// Both must outlive the screen.
 ScreenResult BrowserScreenOpen(
     FileBrowserImages images, const char* folder, const char* current,
-    char path[kFSMaxPath + 1], uint32_t* size);
+    const char* const in_drives[kFloppyDrives], char path[kFSMaxPath + 1],
+    uint32_t* size);
 
 // Show the browser again as it was left, with its folder and entry
 // selected: for a parent that could not use the image selected, so that
