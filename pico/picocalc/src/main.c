@@ -537,11 +537,11 @@ static void ReplyDiskImage(
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// This mode's groups of a report, after the board's: the VM's paging, its
-// boot, the display, its drives, the menu, and the pacing. In parts, none
-// inlined into another: each group's fields take stack until the function
-// they are in returns, and the report whole would be the deepest call on
-// core 0's stack. See StacksPaint().
+// main.c's groups of a report, after the board's, which it gives for both
+// modes for now: the VM's paging and boot, the display, the VM's drives and
+// name, the menu, and the pacing. In parts, none inlined into another: each
+// group's fields take stack until the function they are in returns, and the
+// report whole would be the deepest call on core 0's stack. See StacksPaint().
 //
 // The VM's memory and boot, and the display.
 static __noinline void ReportRunning(const DebugCommand* command) {
@@ -873,8 +873,8 @@ static void RunScreen(const DebugCommand* command) {
   DebugCommandReplyOk(command);
 }
 
-// Answer a command: report and screen here, and any other as every mode
-// does.
+// Answer a command: report and screen here, as they depend on the mode, and
+// any other with DebugCommandRunCommon().
 static void RunCommand(const DebugCommand* command) {
   if (DebugCommandIs(command, "report")) {
     Report(command);

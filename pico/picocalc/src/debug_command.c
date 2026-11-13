@@ -194,10 +194,10 @@ void DebugCommandReportBoard(const DebugCommand* command) {
 }
 
 // Press, release or, by default, tap a key, by name. The key goes through the
-// keymap as a key pressed on the PicoCalc does, a key event a batch, and the
-// reply comes once it is queued. A host sending keys faster than they go is
-// told the queue is full, and nothing is queued, so the key can be sent
-// again.
+// keymap as a key pressed on the PicoCalc does, one key event each pass of
+// the loop, and the reply comes once it is queued. A host sending keys faster
+// than they go is told the queue is full, and nothing is queued, so the key can
+// be sent again.
 static void RunKey(const DebugCommand* command) {
   const char* name = DebugCommandArgument(command, "name");
   const char* state = DebugCommandArgument(command, "state");

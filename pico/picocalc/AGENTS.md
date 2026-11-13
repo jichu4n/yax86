@@ -48,7 +48,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Each core has a 4KB stack, core 1's directly below core 0's**, so core 0
   running past the bottom of its own writes over the frames core 1 is in,
   which hangs core 1 - drawing and screenshots - with nothing said. Both are
-  painted at startup, and the report's `stack` group gives the most of each
+  painted at startup by `src/stacks.c`, and the report's `stack` group gives the most of each
   ever used. Core 0 peaks at about 3.2KB, renaming a VM other VMs name.
   Inlined into the list's loop, the handlers of its actions had all their
   locals on the stack at once, and a report at the list overflowed it; they
@@ -906,22 +906,29 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 ## Commands over USB
 
-- **A host drives the runtime with commands on the same serial port**, a
-  logfmt line each - `id=7 cmd=screen` - answered by `kind=reply` lines with
-  that id, the last with `status=ok`, or `status=error` and an `error`.
-  `src/command.c` reads them and `src/commands.c` carries them out, in
-  either mode: `ping`, `key` and `screenshot` itself, and the report's
-  groups and `screen` through the `CommandsHandlers` the mode's loop hands
-  it, which are `main.c`'s for now:
+- **A host drives the runtime with debug commands on the same serial port.**
+  Each is a logfmt line, such as `id=7 cmd=screen`. The answer is
+  `kind=reply` lines with that id, the last with `status=ok`, or
+  `status=error` and an `error`.
 
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of the status - `system`, `boot`, `display`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `usb`, `keyboard`, `speaker`, `menu`, `pacing` |
+  | `report` | a line for each group of facts: the board's, then the mode's |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
 
+- **`src/debug_command.c` reads the commands and answers the common
+  ones**, the commands that mean the same in every mode: `ping`, `key` and
+  `screenshot`. Each mode answers its own, `report` and `screen`, and passes
+  any other to `DebugCommandRunCommon()`. A mode's report gives the board's
+  groups first, with `DebugCommandReportBoard()`: `system`, `psram`,
+  `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any mode.
+  Then it gives its own: the VM's `paging`, `boot`, `display`, `fd1`,
+  `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`. For now `main.c` answers
+  for both modes. What bringing the board up found is a `BoardStatus`, in
+  `src/board.h`, which `main.c` fills in and the board's groups report.
 - **Commands are read once a batch without waiting**, up to 64 bytes, and run
   between batches. With nothing sent, the poll costs about 6us a batch. Time
   spent on commands while the VM runs is `command_us` in the report.
