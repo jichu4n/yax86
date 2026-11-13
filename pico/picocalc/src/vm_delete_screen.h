@@ -5,12 +5,12 @@
 
 #include <stdint.h>
 
-#include "manage.h"
 #include "screen.h"
+#include "vm_manager.h"
 
-// Ask whether to delete the VM at index in manage's list. Delete deletes it,
-// noting the change in manage, before the screen goes back; Cancel goes back
-// alone. manage must outlive the screen.
-ScreenResult VMDeleteScreenOpen(ManageState* manage, uint8_t index);
+// Ask whether to delete the VM at index in vm_manager's list. Delete deletes
+// it, noting the change in vm_manager, before the screen goes back; Cancel goes
+// back alone. vm_manager must outlive the screen.
+ScreenResult VMDeleteScreenOpen(VMManager* vm_manager, uint8_t index);
 
 #endif  // YAX86_PICOCALC_VM_DELETE_SCREEN_H

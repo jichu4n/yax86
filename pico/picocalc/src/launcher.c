@@ -15,6 +15,7 @@
 #include "typing.h"
 #include "ui_status.h"
 #include "vm_list.h"
+#include "vm_manager_screen.h"
 
 enum {
   // The part of the guest's RAM a clone's files are copied through, before a
