@@ -9,6 +9,7 @@
 #include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
+#include "vm_config_screen.h"
 #include "vm_delete_screen.h"
 #include "vm_name_screen.h"
 
