@@ -88,11 +88,9 @@ ListBoxKey ListBoxTakeKey(ListBox* list_box, uint8_t key, uint8_t count);
 ListBoxKey ListBoxTakeEvent(
     ListBox* list_box, SouthbridgeKeyEvent event, uint8_t count);
 
-// Start drawing a list box that is out of date. Returns the box to draw it
-// in, or NULL if it is not out of date or core 1 is still drawing the last
-// one. ListBoxEndDraw() hands the box to core 1.
-DisplayMenu* ListBoxBeginDraw(ListBox* list_box);
-void ListBoxEndDraw(ListBox* list_box);
+// Whether a list box is out of date, which a screen's on_draw asks before it
+// draws it. Marks it drawn: the screen is to draw it now.
+bool ListBoxTakeDirty(ListBox* list_box);
 
 // Whether key moves the selection: Up, Down, Page Up or Page Down.
 bool ListBoxIsMoveKey(uint8_t key);

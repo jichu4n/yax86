@@ -139,10 +139,9 @@ static ScreenResult OnResume(void) {
 
 // The name being typed, in a field marked as the item selected is, with a
 // cursor after it while there is room.
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
-    return;
+static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+  if (!ListBoxTakeDirty(&g_list_box)) {
+    return false;
   }
   char title[kListBoxNarrowColumns];
   snprintf(
@@ -168,7 +167,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
   }
   field[kFSMaxFolderName] = '\0';
   MenuBoxPutText(row, menu->columns, 3, field, kMenuBoxAttrSelected);
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 static const char* Hint(void) {

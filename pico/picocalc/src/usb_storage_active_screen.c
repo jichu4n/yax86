@@ -114,13 +114,12 @@ static void FormatSize(uint64_t size, char* text, size_t length) {
 }
 
 // What is exported and its size, the host's state, and how much has moved.
-static void OnDraw(uint64_t now_us) {
+static bool OnDraw(DisplayMenu* menu, uint64_t now_us) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
     g_list_box.dirty = true;
   }
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
-    return;
+  if (!ListBoxTakeDirty(&g_list_box)) {
+    return false;
   }
   const UsbStorageStats stats = UsbStorageGetStats();
   const char* state = "Waiting for the host...";
@@ -160,7 +159,7 @@ static void OnDraw(uint64_t now_us) {
       menu, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
       kSharingItems, 1, g_list_box.selected, true);
   g_drawn_us = now_us;
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 static const char* Hint(void) { return "Enter=Disconnect"; }

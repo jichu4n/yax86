@@ -79,13 +79,12 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
-    return;
+static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+  if (!ListBoxTakeDirty(&g_list_box)) {
+    return false;
   }
   FileBrowserDraw(&g_browser, menu, g_list_box.selected);
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 // Nothing opens over the browser.

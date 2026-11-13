@@ -224,10 +224,9 @@ static ScreenResult OnResume(void) {
 // A new VM's name, typed in place with a cursor while it is selected, and the
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
-    return;
+static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+  if (!ListBoxTakeDirty(&g_list_box)) {
+    return false;
   }
   char rows[kFormItemCount][kListBoxNarrowColumns];
   MenuBoxItem items[kFormItemCount];
@@ -259,7 +258,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
       menu, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
       g_list_box.selected, true);
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 static const char* Hint(void) {

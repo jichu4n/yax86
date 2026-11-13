@@ -200,10 +200,9 @@ static ScreenResult OnResume(void) {
 // Draw the rows that fit in the box from g_top_row, with arrows on its border
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
-    return;
+static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+  if (!ListBoxTakeDirty(&g_list_box)) {
+    return false;
   }
   MenuBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
   MenuBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
@@ -240,7 +239,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
       &menu->text[kListBoxRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
   ListBoxDrawScrollArrows(menu, g_top_row, RowCount());
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 static const char* Hint(void) { return "\x18\x19=Move  Enter=Select"; }

@@ -58,10 +58,9 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
-    return;
+static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+  if (!ListBoxTakeDirty(&g_list_box)) {
+    return false;
   }
   MenuBoxItem items[kFont4x10Count];
   for (uint8_t i = 0; i < kFont4x10Count; ++i) {
@@ -69,7 +68,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
   }
   ListBoxDrawItems(
       menu, "Font", NULL, 0, items, kFont4x10Count, g_list_box.selected, true);
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 // Nothing opens over Font.
