@@ -58,11 +58,6 @@ typedef enum LauncherMenuAction {
 // highlighted. list must outlive the choosing.
 void LauncherMenuOpen(const VMList* list, uint8_t highlighted);
 
-// Stop showing the list, once a VM chosen has started.
-void LauncherMenuClose(void);
-
-bool LauncherMenuIsOpen(void);
-
 // The index in the list of the VM chosen, or highlighted.
 uint8_t LauncherMenuChosenVM(void);
 

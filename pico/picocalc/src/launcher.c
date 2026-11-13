@@ -53,6 +53,8 @@ static Settings g_settings;
 static uint8_t* g_copy_buffer;
 // When the default VM starts by itself, and whether it is still counting
 // down to it: a key stops it.
+// Where the VM chosen from the list goes.
+static VMConfig* g_chosen;
 static absolute_time_t g_start_at;
 static bool g_counting;
 
@@ -275,7 +277,7 @@ static __noinline void RenameVM(void) {
 static void ShowCopyProgress(uint64_t done, uint64_t total) {
   LauncherMenuSetCopyProgress(
       (uint32_t)(done / kBytesPerKB), (uint32_t)(total / kBytesPerKB));
-  LauncherUpdateRows();
+  UIStatusOffer(LauncherMenuHint());
   LauncherMenuDraw(time_us_64());
 }
 
@@ -383,8 +385,6 @@ static __noinline void DeleteVM(void) {
   }
 }
 
-void LauncherUpdateRows(void) { UIStatusOffer(LauncherMenuHint()); }
-
 void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
 
 const VMList* LauncherVMs(void) { return &g_vms; }
@@ -424,13 +424,25 @@ LauncherStartResult LauncherStart(VMConfig* vm) {
   return kLauncherShowsList;
 }
 
-bool LauncherHandleKey(SouthbridgeKeyEvent key) {
+// Take the VM chosen, or highlighted, into *g_chosen, which closes the
+// list. If its configuration does not read, the list stays, with its
+// problem shown.
+static ScreenResult Choose(void) {
+  if (TakeVM(LauncherMenuChosenVM(), g_chosen)) {
+    return kScreenClose;
+  }
+  return kScreenStays;
+}
+
+// A key pressed while the list shows: stops the countdown, and carries out
+// what the menu makes of it.
+static ScreenResult HandleKey(SouthbridgeKeyEvent key) {
   g_counting = false;
   LauncherMenuSetCountdown(0);
-  bool chosen = false;
+  ScreenResult result = kScreenStays;
   switch (LauncherMenuHandleKey(key)) {
     case kLauncherMenuActionVMChosen:
-      chosen = true;
+      result = Choose();
       break;
     case kLauncherMenuActionShareCard:
       ShareCard();
@@ -462,27 +474,38 @@ bool LauncherHandleKey(SouthbridgeKeyEvent key) {
     default:
       break;
   }
-  return chosen;
+  return result;
 }
 
-bool LauncherCountDown(void) {
-  bool chosen = false;
+// Count down to the default VM, showing the seconds left, which chooses it
+// once they run out.
+static ScreenResult CountDown(void) {
+  ScreenResult result = kScreenStays;
   if (g_counting) {
     const int64_t left_us =
         absolute_time_diff_us(get_absolute_time(), g_start_at);
     if (left_us <= 0) {
       g_counting = false;
       LauncherMenuSetCountdown(0);
-      chosen = true;
+      result = Choose();
     } else {
       LauncherMenuSetCountdown(
           (uint8_t)((left_us + kMicrosecondsPerSecond - 1) /
                     kMicrosecondsPerSecond));
     }
   }
-  return chosen;
+  return result;
 }
 
-bool LauncherTakeChosen(VMConfig* vm) {
-  return TakeVM(LauncherMenuChosenVM(), vm);
+static const Screen kLauncherScreen = {
+    .handle_key = HandleKey,
+    .tick = CountDown,
+    .draw = LauncherMenuDraw,
+    .hint = LauncherMenuHint,
+    .page_name = LauncherMenuPageName,
+};
+
+const Screen* LauncherScreen(VMConfig* chosen) {
+  g_chosen = chosen;
+  return &kLauncherScreen;
 }

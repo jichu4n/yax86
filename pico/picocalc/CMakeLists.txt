@@ -138,6 +138,7 @@ add_executable(yax86_picocalc
     ../common/pager.c
     ../common/psram.c
     src/runtime_log.c
+    src/screen.c
     src/sdcard.c
     src/southbridge.c
     src/speaker.c

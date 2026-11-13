@@ -36,18 +36,19 @@
 #include "hardware/watchdog.h"
 #include "keymap.h"
 #include "launcher.h"
-#include "launcher_menu.h"
 #include "menu.h"
 #include "pager.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "psram.h"
 #include "runtime_log.h"
+#include "screen.h"
 #include "sdcard.h"
 #include "southbridge.h"
 #include "speaker.h"
 #include "status_bar.h"
 #include "typing.h"
+#include "ui_status.h"
 #include "usb_disk.h"
 #include "vm_config.h"
 #include "vm_list.h"
@@ -324,7 +325,7 @@ static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
 // Whether a menu shows: the menu over the VM, or the list at power on before
 // one starts, which the report gives as the menu and pacing counts as paused.
-static bool MenuShowing(void) { return MenuIsOpen() || LauncherMenuIsOpen(); }
+static bool MenuShowing(void) { return MenuIsOpen() || ScreenIsOpen(); }
 
 static uint64_t PausedUs(void) {
   return g_clock.paused_us +
@@ -709,9 +710,7 @@ static __noinline void ReplyReportRunning(const Command* command) {
       Y_LOG_UINT("changes", speaker.changes));
   REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", MenuShowing()),
-      Y_LOG_STRING(
-          "page",
-          LauncherMenuIsOpen() ? LauncherMenuPageName() : MenuPageName()));
+      Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : MenuPageName()));
   REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
@@ -1341,33 +1340,33 @@ static __noinline void ChooseVM(void) {
     case kLauncherShowsList:
       break;
   }
+  ScreenShow(LauncherScreen(&g_vm));
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     Command command;
     if (CommandPoll(&command)) {
       RunCommand(&command);
     }
-    bool chosen = false;
     SouthbridgeKeyEvent key;
-    if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      chosen = LauncherHandleKey(key);
-      // The keys for the page the key led to, at once rather than at the
-      // next update.
-      LauncherUpdateRows();
+    const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
+    if (pressed) {
+      ScreenHandleKey(key);
     }
-    if (LauncherCountDown()) {
-      chosen = true;
+    if (ScreenIsOpen()) {
+      ScreenTick();
     }
-    if (chosen && LauncherTakeChosen(&g_vm)) {
+    // The list closes once a VM is chosen.
+    if (!ScreenIsOpen()) {
       g_has_vm = true;
-      LauncherMenuClose();
       return;
     }
-    if (time_reached(next_status_at)) {
+    // The keys for the page a key led to are offered at once rather than at
+    // the next update.
+    if (pressed || time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      LauncherUpdateRows();
+      UIStatusOffer(ScreenHint());
     }
-    LauncherMenuDraw(time_us_64());
+    ScreenDraw(time_us_64());
     sleep_ms(kPausedPollMs);
   }
 }
