@@ -12,7 +12,7 @@
 // A drive is its label alone, grey, with a green block before it and the
 // label bright white while it is in use, as a PC's front panel lights a
 // drive. A drive the machine does not have is left out. The images' names
-// are on the status page and Edit drives.
+// are on the status page and in a VM's configuration.
 #ifndef YAX86_PICOCALC_STATUS_BAR_H
 #define YAX86_PICOCALC_STATUS_BAR_H
 
