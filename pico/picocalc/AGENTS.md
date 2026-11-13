@@ -48,7 +48,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **Each core has a 4KB stack, core 1's directly below core 0's**, so core 0
   running past the bottom of its own writes over the frames core 1 is in,
   which hangs core 1, and with it drawing and screenshots, with nothing said.
-  `src/stacks.c` paints both at startup, and the report's `stack` group
+  `src/stack_usage.c` paints both at startup, and the report's `stack` group
   gives the most of each ever used. Core 0 peaks at about 2.8KB while a VM
   runs, and about 2.1KB in launcher mode, renaming a VM other VMs name. Two
   things keep it there. What a screen carries out, such as renaming,
@@ -397,15 +397,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   write the one chosen. A parent that cannot use the image, such as one
   that does not open for USB, shows why and returns
   `BrowserScreenReopen()`, which puts the browser back as it was left.
-- **The firmware runs in two modes, one after the other**: `main.c` brings
-  the board up, then runs `LauncherRun()`, which returns once a VM is
-  chosen, and `EmulatorRun()`, which runs it for as long as the board has
-  power. Nothing goes back from the emulator to the launcher but a reboot,
-  with the start note. `main.c` holds what both share and passes it down:
-  guest RAM, which the launcher borrows for copies until the VM starts,
-  the card's VMs and settings, the VM chosen, and `BoardStatus`, what
-  bringing the board up found, for the emulator's report and status page.
-  Bringing it up is out of line, in `BringUp()`, so that its locals are off
+- **The firmware runs in two modes, one after the other**: `main()` has
+  `src/init.c` initialize the system, then runs `LauncherRun()`, which
+  returns once a VM is chosen, and `EmulatorRun()`, which runs it for as
+  long as the board has power. Nothing goes back from the emulator to the
+  launcher but a reboot, with the start note. `main.c` holds what both
+  share and passes it down: the `InitStatus` initializing the system
+  found, for the report and the status page; guest RAM, which the launcher
+  borrows for copies until the VM starts; the card's VMs and settings; and
+  the VM chosen. `InitSystem()` is out of line, so that its locals are off
   core 0's stack while the modes run.
 - **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
@@ -942,7 +942,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   | command | does |
   | --- | --- |
   | `ping` | answers, and nothing else |
-  | `report` | a line for each group of facts: the board's, then the mode's |
+  | `report` | a line for each group of facts: the system's, then the mode's |
   | `screen` | the mode and the cursor, then each row's characters as hex - and with `attrs=true`, their attributes |
   | `screenshot` | the panel read back, 320x320 in RGB565, as runs of one color in hex |
   | `key name=... [state=press\|release]` | presses, releases or, by default, taps a key by name |
@@ -950,16 +950,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **`src/debug_command.c` reads the commands and answers the common
   ones**, the commands that mean the same in every mode: `ping`, `key` and
   `screenshot`. Each mode answers its own, `report` and `screen`, and passes
-  any other to `DebugCommandRunCommon()`. A mode's report gives the board's
-  groups first, with `DebugCommandReportBoard()`: `system`, `psram`,
-  `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any mode.
-  Then it gives its own: the VM's `paging`, `boot`, `display`, `fd1`,
-  `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`, which `src/emulator.c`
-  answers. The launcher's are `display` with the font, `vm` with the
-  number of VMs, and `menu` with the page showing; and as no guest runs
-  yet, its `screen` answers `no_guest`, which `debug.js`'s `wait` takes as
-  no match yet. What bringing the board up found is a `BoardStatus`, in
-  `src/board.h`, which `main.c` fills in and the board's groups report.
+  any other to `DebugCommandRunCommon()`. A mode's report gives the
+  system's groups first, with `DebugCommandReportSystem()`: `system`,
+  `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
+  mode. Then it gives its own. The emulator's, which `src/emulator.c`
+  answers, are the VM's `paging`, `boot`, `display`, `fd1`, `fd2`, `hd1`,
+  `hd2`, `vm`, `menu` and `pacing`. The launcher's are `display` with the
+  font, `vm` with the number of VMs, and `menu` with the page showing; and
+  as no guest runs yet, its `screen` answers `no_guest`, which `debug.js`'s
+  `wait` takes as no match yet.
+- **`src/init.c` initializes the system at startup**, after `main()` has
+  painted the stacks: USB serial, the clock, the PSRAM, the logs, the LCD,
+  the keyboard controller and the speaker. What it found is an
+  `InitStatus`, which `main.c` holds, and the report's `system` group and
+  the status page give.
 - **Commands are read once a batch without waiting**, up to 64 bytes, and run
   between batches. With nothing sent, the poll costs about 6us a batch. Time
   spent on commands while the VM runs is `command_us` in the report.

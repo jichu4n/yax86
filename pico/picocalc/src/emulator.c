@@ -28,7 +28,7 @@
 #include "sdcard.h"
 #include "southbridge.h"
 #include "speaker.h"
-#include "stacks.h"
+#include "stack_usage.h"
 #include "status_bar.h"
 #include "typing.h"
 #include "usb_storage.h"
@@ -155,9 +155,9 @@ typedef struct RuntimeStatus {
   uint64_t instructions;
 } RuntimeStatus;
 
-// main.c's: what bringing the board up found; guest RAM, lent to the
+// main.c's: what initializing the system found; guest RAM, lent to the
 // launcher until the VM starts; and the card's VMs and settings.
-static const BoardStatus* g_board;
+static const InitStatus* g_init_status;
 static uint8_t* g_guest_ram;
 static const VMList* g_vms;
 static const Settings* g_settings;
@@ -321,13 +321,13 @@ static void FormatClockLine(char* buffer, size_t size) {
 
 static void FormatSystemLine(char* buffer, size_t size) {
   char version[16];
-  BoardFormatSouthbridgeVersion(g_board, version, sizeof(version));
+  InitFormatKeyboardVersion(g_init_status, version, sizeof(version));
   snprintf(
       buffer, size, "%lu MHz, LCD at %lu.%02lu MHz, keyboard %s, %lu keys, %uK",
       (unsigned long)(clock_get_hz(clk_sys) / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_board->lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
-      (unsigned long)(g_board->lcd_spi_hz / (kHzPerKHz * 10) % 100), version,
-      (unsigned long)SouthbridgeGetPollStats().keys,
+      (unsigned long)(g_init_status->lcd_spi_hz / (kHzPerKHz * kHzPerKHz)),
+      (unsigned long)(g_init_status->lcd_spi_hz / (kHzPerKHz * 10) % 100),
+      version, (unsigned long)SouthbridgeGetPollStats().keys,
       (unsigned)(GuestRAMSize() / 1024));
 }
 
@@ -490,11 +490,11 @@ static void ReplyDiskImage(
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// Emulator mode's groups of a report, after the board's: the VM's paging and
+// Emulator mode's groups of a report, after the system's: the VM's paging and
 // boot, the display, the VM's drives and name, the menu, and the pacing. In
 // parts, none inlined into another: each group's fields take stack until the
 // function they are in returns, and the report whole would be the deepest call
-// on core 0's stack. See StacksPaint().
+// on core 0's stack. See StackUsagePaint().
 //
 // The VM's memory and boot, and the display.
 static __noinline void ReportRunning(const DebugCommand* command) {
@@ -502,7 +502,7 @@ static __noinline void ReportRunning(const DebugCommand* command) {
   DEBUG_COMMAND_REPLY_GROUP(
       command, "paging", Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024),
       Y_LOG_BOOL("on", g_paging),
-      Y_LOG_BOOL("off_after_fault", g_board->after_fault),
+      Y_LOG_BOOL("off_after_fault", g_init_status->after_fault),
       Y_LOG_UINT("frames", pager.frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
       Y_LOG_UINT("page_ins", pager.page_ins),
@@ -549,7 +549,7 @@ static __noinline void ReportDrives(const DebugCommand* command) {
 }
 
 static void Report(const DebugCommand* command) {
-  DebugCommandReportBoard(command);
+  DebugCommandReportSystem(command);
   ReportRunning(command);
   ReportDrives(command);
   DebugCommandReplyOk(command);
@@ -587,7 +587,7 @@ static uint8_t FloppyDrives(void) {
 // did not end in a hard fault: paging is the newest thing a fault could come
 // from, and without it the VM has the SRAM alone - see yax86_pico.h.
 static void ConfigureGuestRAM(YPlatformConfig* config) {
-  g_paging = PsramGetStats().state == kPsramOk && !g_board->after_fault;
+  g_paging = PsramGetStats().state == kPsramOk && !g_init_status->after_fault;
   if (!g_paging) {
     config->direct_memory_size = kGuestRAMSize;
     config->direct_memory = g_guest_ram;
@@ -617,7 +617,7 @@ static bool InitVM(void) {
   FloppyAttach(&g_platform.fdc);
   HardDiskAttach(&g_platform.hdc);
   g_vm_up = true;
-  if (g_board->after_fault) {
+  if (g_init_status->after_fault) {
     EmulatorStatusPostMessage("Paging off: the last start crashed");
   }
   return true;
@@ -1173,9 +1173,9 @@ static __noinline void OpenDrives(void) {
 // ============================================================================
 
 void EmulatorInit(
-    const BoardStatus* board, const VMList* vms, const Settings* settings,
+    const InitStatus* init_status, const VMList* vms, const Settings* settings,
     uint8_t* guest_ram) {
-  g_board = board;
+  g_init_status = init_status;
   g_vms = vms;
   g_settings = settings;
   g_guest_ram = guest_ram;

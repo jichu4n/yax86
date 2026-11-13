@@ -13,7 +13,7 @@
 // USB serial for pico/bench/run.js to capture. A report is printed whenever
 // a host attaches, since USB CDC drops whatever is written before then.
 //
-// Its loop answers two debug commands itself: report, with the board's
+// Its loop answers two debug commands itself: report, with the system's
 // groups and then the VM's, and screen, with the guest's text screen. The
 // others are common to every mode.
 #ifndef YAX86_PICOCALC_EMULATOR_H
@@ -21,17 +21,17 @@
 
 #include <stdint.h>
 
-#include "board.h"
+#include "init.h"
 #include "settings.h"
 #include "vm_config.h"
 #include "vm_list.h"
 
-// Set the emulator up, before launcher mode: with what bringing the board
-// up found, the card's VMs and settings as the launcher reads them, and
+// Set the emulator up, before launcher mode: with what initializing the
+// system found, the card's VMs and settings as the launcher reads them, and
 // guest_ram, kPicoGuestSRAMSize bytes, which the launcher borrows until the
 // VM starts. Each must outlive the emulator.
 void EmulatorInit(
-    const BoardStatus* board, const VMList* vms, const Settings* settings,
+    const InitStatus* init_status, const VMList* vms, const Settings* settings,
     uint8_t* guest_ram);
 
 // Run vm, main.c's, whose floppy drives' images are saved to it as they
