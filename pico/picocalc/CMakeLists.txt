@@ -137,6 +137,8 @@ add_executable(yax86_picocalc
     src/keymap.c
     src/launcher.c
     src/launcher_menu.c
+    src/manage.c
+    src/manage_screen.c
     src/lcd.c
     ../common/pager.c
     ../common/psram.c
@@ -154,6 +156,11 @@ add_executable(yax86_picocalc
     src/usb_screen.c
     src/usb_sharing_screen.c
     src/usb_stop_screen.c
+    src/vm_delete_screen.c
+    src/vm_drive_screen.c
+    src/vm_form_screen.c
+    src/vm_name_screen.c
+    src/vm_screen.c
     src/ui_status.c
     src/usb_descriptors.c
     src/usb_disk.c

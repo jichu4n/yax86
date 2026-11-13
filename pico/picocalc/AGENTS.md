@@ -348,9 +348,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
   host measuring the boot, still boot. `src/launcher_menu.c` holds the
-  list's pages and draws them, and says what was chosen on them;
-  `src/launcher.c` decides what the list does: which VM starts, the
-  countdown, and what each choice carries out. `main.c` runs the loop,
+  list and draws it, and says what was chosen on it; `src/launcher.c`
+  decides what the list does: which VM starts, the countdown, and which
+  screen each row opens. `main.c` runs the loop,
   which answers commands and, through `src/screen.c`, hands the screen
   showing its keys, a tick for what happens with time, and the chance to
   draw. It composes the status rows itself, with `src/ui_status.c`, from
@@ -377,8 +377,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   statics. The launcher holds `g_vms` and `g_settings`. Settings and Font
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
   are USB disk mode, its sharing page and the question before
-  disconnecting, in `src/usb_*screen.c`. The list and Manage VMs' pages
-  are still the one launcher screen until they are split the same way.
+  disconnecting, in `src/usb_*screen.c`; and Manage VMs and every page
+  under it, in `src/manage_screen.c` and `src/vm_*screen.c`. The list is
+  the launcher's own screen.
 - **A `resume` returns a result, as a key does**, so a parent can act on
   what its child left: the USB page, finding sharing ended, goes back too,
   and the list, told through `g_shared`, reads the card again.
@@ -433,6 +434,18 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the list of VMs to manage again with the VM renamed or made chosen - after
   Edit drives, the VM's page - and the list at power on waits for a key, as
   after USB disk mode.
+- **Manage VMs holds a `ManageState`, in `src/manage.c`, and passes it
+  down**: the launcher's VM list and settings, the copy buffer, and what a
+  screen changed. Each change is carried out by the screen that confirms
+  it: the name screen renames and clones, the question deletes, the form
+  creates and saves. A name or drives that will not do leave that screen
+  up with the problem, to try again; a change made, or failed part way,
+  is noted in the state and the screen goes back. The pages between pass
+  the Back on, and Manage VMs reads the list again and chooses the VM the
+  note names, opening its page again after an edit.
+- **A copy's page is drawn from the copy's progress callback** by
+  `ManageBeginCopy()`, not as a screen: the loop that would draw a screen
+  waits for the copy, and nothing can be pressed until it is done.
 - **A menu box holds at most `kDisplayMenuMaxRows`, 12**, and `DrawItems()`
   leaves out text lines past what fits rather than drawing past the box's
   rows. A VM's page with a line per drive over four items needed 13.
