@@ -12,14 +12,14 @@
 #include "status_bar.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "usb_screen.h"
+#include "usb_storage_screen.h"
 
 enum {
   kMicrosecondsPerSecond = 1000 * 1000,
 };
 
 static const UIBoxItem kManageRow = {"Manage VMs", true};
-static const UIBoxItem kUSBRow = {"USB disk mode", true};
+static const UIBoxItem kUSBRow = {"USB mass storage", true};
 static const UIBoxItem kSettingsRow = {"Settings", true};
 
 // The rows under the VMs that open a screen of their own.
@@ -51,9 +51,9 @@ static uint8_t g_countdown;
 // The row that opened the screen showing over the list.
 static ListRow g_opened;
 // Whether the card or an image has been on USB, so the card is read again.
-static bool g_shared;
+static bool g_exported;
 
-// The list's items: a VM each, then Manage VMs, USB disk mode and Settings,
+// The list's items: a VM each, then Manage VMs, USB mass storage and Settings,
 // with a separator row between the VMs and the rest when there is at least
 // one VM.
 static uint8_t ItemCount(void) {
@@ -133,7 +133,7 @@ static ScreenResult Choose(void) {
       return ManageScreenOpen(
           g_vms, g_settings, g_copy_buffer, g_copy_buffer_size);
     case kListRowUSB:
-      return USBScreenOpen(&g_shared);
+      return USBStorageScreenOpen(&g_exported);
     default:
       return SettingsScreenOpen(g_settings);
   }
@@ -196,11 +196,11 @@ static __noinline void ReadCardAgain(void) {
 }
 
 // Back from a screen opened over the list, with the row that opened it
-// chosen, as the VMs may have changed under it; or after USB disk mode has
-// shared the card or an image, the card read again.
+// chosen, as the VMs may have changed under it; or after USB mass storage has
+// exported the card or an image, the card read again.
 static ScreenResult Resume(void) {
-  if (g_shared) {
-    g_shared = false;
+  if (g_exported) {
+    g_exported = false;
     ReadCardAgain();
   } else {
     Show(RowItem(g_opened));

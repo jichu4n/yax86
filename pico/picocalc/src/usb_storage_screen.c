@@ -1,4 +1,4 @@
-#include "usb_screen.h"
+#include "usb_storage_screen.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -13,8 +13,8 @@
 #include "text.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "usb_disk.h"
-#include "usb_sharing_screen.h"
+#include "usb_storage.h"
+#include "usb_storage_active_screen.h"
 
 typedef enum USBItem {
   kUSBCard = 0,
@@ -23,17 +23,17 @@ typedef enum USBItem {
 } USBItem;
 
 static const UIBoxItem kUSBItems[kUSBItemCount] = {
-    [kUSBCard] = {"Whole SD card", false},
+    [kUSBCard] = {"Entire SD card", false},
     [kUSBImage] = {"Disk image", true},
 };
 
-extern const Screen kUSBScreen;
+extern const Screen kUSBStorageScreen;
 
 // The item chosen, and whether the page is out of date.
 static UIPage g_page;
-// The parent's, set once sharing has ended.
-static bool* g_shared;
-// Whether sharing has ended, which the sharing screen sets.
+// The parent's, set once exporting has ended.
+static bool* g_exported;
+// Whether exporting has ended, which the active screen sets.
 static bool g_stopped;
 // The image found in the browser, empty for none, and its size.
 static char g_found_path[kFSMaxPath + 1];
@@ -42,25 +42,25 @@ static uint32_t g_found_size;
 static DiskImage g_image;
 static char g_image_path[kFSMaxPath + 1];
 
-ScreenResult USBScreenOpen(bool* shared) {
-  g_shared = shared;
+ScreenResult USBStorageScreenOpen(bool* exported) {
+  g_exported = exported;
   g_page.chosen = kUSBCard;
   g_page.dirty = true;
-  return ScreenOpen(&kUSBScreen);
+  return ScreenOpen(&kUSBStorageScreen);
 }
 
-// Share the SD card over USB: the card is unmounted first, as nothing here
-// may touch it while the computer has it.
+// Export the entire SD card: the card is unmounted first, as nothing here
+// may touch it while the host has it.
 static ScreenResult ShareCard(void) {
   DiskImageUnmountCard();
-  UsbDiskShareCard();
+  UsbStorageExportCard();
   g_stopped = false;
-  SYSTEM_INFO("usb_card_shared");
-  return SharingScreenOpen(NULL, &g_stopped);
+  SYSTEM_INFO("usb_card_exported");
+  return USBStorageActiveScreenOpen(NULL, &g_stopped);
 }
 
-// Put the disk image found in the browser on USB, the card staying mounted
-// to read it through; or say why it could not be, back in the browser.
+// Export the disk image found in the browser, the card staying mounted to
+// read it through; or say why it could not be, back in the browser.
 // Kept out of line, so that its message is on core 0's stack only while it
 // runs.
 static __noinline ScreenResult ShareImage(void) {
@@ -76,14 +76,14 @@ static __noinline ScreenResult ShareImage(void) {
         DiskImageDescribeStatus(status));
     StatusBarSetProblem(message);
     SYSTEM_WARN(
-        "usb_image_not_shared", Y_LOG_STRING("path", g_image_path),
+        "usb_image_not_exported", Y_LOG_STRING("path", g_image_path),
         Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
     return BrowserScreenReopen();
   }
-  UsbDiskShareImage(&g_image);
+  UsbStorageExportImage(&g_image);
   g_stopped = false;
-  SYSTEM_INFO("usb_image_shared", Y_LOG_STRING("path", g_image_path));
-  return SharingScreenOpen(&g_image, &g_stopped);
+  SYSTEM_INFO("usb_image_exported", Y_LOG_STRING("path", g_image_path));
+  return USBStorageActiveScreenOpen(&g_image, &g_stopped);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
@@ -101,12 +101,12 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-// Back from sharing, which has ended, or from the browser, with an image
+// Back from exporting, which has ended, or from the browser, with an image
 // found or none.
 static ScreenResult Resume(void) {
   if (g_stopped) {
     g_stopped = false;
-    *g_shared = true;
+    *g_exported = true;
     return ScreenBack();
   }
   g_page.dirty = true;
@@ -122,16 +122,16 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     return;
   }
   UIPageDrawItems(
-      menu, "USB disk mode", NULL, 0, kUSBItems, kUSBItemCount, g_page.chosen,
-      true);
+      menu, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
+      kUSBItems, kUSBItemCount, g_page.chosen, true);
   UIPageEndDraw(&g_page);
 }
 
 static const char* Hint(void) { return kUIPageHint; }
 
-static const char* PageName(void) { return "usb"; }
+static const char* PageName(void) { return "usb_storage"; }
 
-const Screen kUSBScreen = {
+const Screen kUSBStorageScreen = {
     .handle_key = HandleKey,
     .draw = Draw,
     .resume = Resume,

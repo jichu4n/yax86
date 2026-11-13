@@ -1,4 +1,4 @@
-#include "usb_sharing_screen.h"
+#include "usb_storage_active_screen.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -6,49 +6,55 @@
 
 #include "display.h"
 #include "runtime_log.h"
+#include "sdcard.h"
 #include "ui_box.h"
 #include "ui_page.h"
-#include "usb_disk.h"
-#include "usb_stop_screen.h"
+#include "usb_storage.h"
+#include "usb_storage_disconnect_screen.h"
 
 enum {
   kStatusRefreshUs = 1000 * 1000,
+  kBytesPerBlock = 512,
+  kBytesPerKB = 1024,
+  kBytesPerMB = 1024 * 1024,
+  kBytesPerGB = 1024 * 1024 * 1024,
 };
 
 static const UIBoxItem kSharingItems[] = {{"Disconnect", false}};
 
-extern const Screen kSharingScreen;
+extern const Screen kUSBStorageActiveScreen;
 
 // The item chosen, whether the page is out of date, and when it was last
 // drawn.
 static UIPage g_page;
 static uint64_t g_drawn_us;
-// The parent's: the image on USB, NULL for the card, and where to say
-// sharing has ended.
+// The parent's: the image exported, NULL for the card, and where to say
+// exporting has ended.
 static DiskImage* g_image;
 static bool* g_stopped;
 // Whether Disconnect anyway was chosen, which the question sets.
 static bool g_confirmed;
 
-ScreenResult SharingScreenOpen(DiskImage* image, bool* stopped) {
+ScreenResult USBStorageActiveScreenOpen(DiskImage* image, bool* stopped) {
   g_image = image;
   g_stopped = stopped;
   g_page.chosen = 0;
   g_page.dirty = true;
-  return ScreenOpen(&kSharingScreen);
+  return ScreenOpen(&kUSBStorageActiveScreen);
 }
 
-// Whether disconnecting would take the card from a computer still using it.
-static bool ComputerHasCard(void) {
-  const UsbDiskStats stats = UsbDiskGetStats();
+// Whether disconnecting would take the volume from a host that has it
+// mounted.
+static bool HostHasVolume(void) {
+  const UsbStorageStats stats = UsbStorageGetStats();
   return stats.connected && stats.seen && !stats.ejected;
 }
 
-// Take the card or image back from USB. An image is closed, writing back
-// the sector it holds.
+// Take the card or image back from the host. An image is closed, writing
+// back the sector it holds.
 static ScreenResult StopSharing(void) {
-  const UsbDiskStats stats = UsbDiskGetStats();
-  UsbDiskStopSharing();
+  const UsbStorageStats stats = UsbStorageGetStats();
+  UsbStorageStopExporting();
   if (stats.image_path != NULL) {
     DiskImageClose(g_image);
   }
@@ -63,12 +69,12 @@ static ScreenResult StopSharing(void) {
   return ScreenBack();
 }
 
-// Disconnect: at once if no computer is using the card, and after asking if
-// one is.
+// Disconnect: at once if no host has the volume mounted, and after asking if
+// one has.
 static ScreenResult Disconnect(void) {
-  if (ComputerHasCard()) {
+  if (HostHasVolume()) {
     g_confirmed = false;
-    return USBStopScreenOpen(&g_confirmed);
+    return USBStorageDisconnectScreenOpen(&g_confirmed);
   }
   return StopSharing();
 }
@@ -83,7 +89,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-// Back from the question: disconnect anyway, or keep sharing.
+// Back from the question: disconnect anyway, or keep exporting.
 static ScreenResult Resume(void) {
   if (g_confirmed) {
     g_confirmed = false;
@@ -93,7 +99,21 @@ static ScreenResult Resume(void) {
   return ScreenStays();
 }
 
-// Who has the card, and how much has moved.
+// size bytes in the largest unit it is at least one of, binary as the
+// counts are: KB, MB, or GB to a tenth.
+static void FormatSize(uint64_t size, char* text, size_t length) {
+  if (size >= kBytesPerGB) {
+    snprintf(
+        text, length, "%lu.%lu GB", (unsigned long)(size / kBytesPerGB),
+        (unsigned long)(size % kBytesPerGB * 10 / kBytesPerGB));
+  } else if (size >= kBytesPerMB) {
+    snprintf(text, length, "%lu MB", (unsigned long)(size / kBytesPerMB));
+  } else {
+    snprintf(text, length, "%lu KB", (unsigned long)(size / kBytesPerKB));
+  }
+}
+
+// What is exported and its size, the host's state, and how much has moved.
 static void Draw(uint64_t now_us) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
     g_page.dirty = true;
@@ -102,14 +122,14 @@ static void Draw(uint64_t now_us) {
   if (menu == NULL) {
     return;
   }
-  const UsbDiskStats stats = UsbDiskGetStats();
-  const char* state = "Waiting for the computer...";
+  const UsbStorageStats stats = UsbStorageGetStats();
+  const char* state = "Waiting for the host...";
   if (!stats.connected) {
-    state = "Connect a computer by USB.";
+    state = "No host connected.";
   } else if (stats.ejected) {
-    state = "Ejected by the computer.";
+    state = "Ejected by the host.";
   } else if (stats.seen) {
-    state = "In use by the computer.";
+    state = "Mounted by the host.";
   }
   // Room for two of the largest counts, which a box cuts to its width.
   char moved[64];
@@ -117,22 +137,27 @@ static void Draw(uint64_t now_us) {
       moved, sizeof(moved), "Read %lu KB, written %lu KB",
       (unsigned long)(stats.blocks_read / 2),
       (unsigned long)(stats.blocks_written / 2));
-  char what[kUIPageNarrowColumns];
+  // Room for the longest name and size, which a box cuts to its width.
+  char what[64];
+  char size[16];
   if (stats.image_path != NULL) {
     char name[kDiskImageNameLength + 1];
     DiskImageName(stats.image_path, name);
-    snprintf(what, sizeof(what), "Sharing %s over USB.", name);
+    FormatSize(g_image->size, size, sizeof(size));
+    snprintf(what, sizeof(what), "Exporting %s (%s).", name, size);
   } else {
-    snprintf(what, sizeof(what), "Sharing the SD card over USB.");
+    FormatSize(
+        (uint64_t)SdcardGetBlockCount() * kBytesPerBlock, size, sizeof(size));
+    snprintf(what, sizeof(what), "Exporting the SD card (%s).", size);
   }
   const char* const lines[] = {
       what,
       state,
       moved,
-      ComputerHasCard() ? "Eject it on the computer first." : "",
+      HostHasVolume() ? "Eject it on the host first." : "",
   };
   UIPageDrawItems(
-      menu, "USB disk mode", lines, sizeof(lines) / sizeof(lines[0]),
+      menu, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
       kSharingItems, 1, g_page.chosen, true);
   g_drawn_us = now_us;
   UIPageEndDraw(&g_page);
@@ -140,9 +165,9 @@ static void Draw(uint64_t now_us) {
 
 static const char* Hint(void) { return "Enter=Disconnect"; }
 
-static const char* PageName(void) { return "usb_sharing"; }
+static const char* PageName(void) { return "usb_storage_active"; }
 
-const Screen kSharingScreen = {
+const Screen kUSBStorageActiveScreen = {
     .handle_key = HandleKey,
     .draw = Draw,
     .resume = Resume,
