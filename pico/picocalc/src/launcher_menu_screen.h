@@ -1,14 +1,20 @@
-// The list of VMs at power on, drawn as a box the size of the list. Up and
-// Down move, and Enter or Space chooses; nothing closes it but starting a
-// VM, so Esc and Backspace do nothing. The default VM can start by itself
-// after a countdown, which any key stops.
+// The launcher menu: the first screen at power on, which lists the VMs on
+// the card to choose one to start.
 //
-// Under the VMs are three more rows: Manage VMs, from which VMs are made in
-// yax86/vm, and renamed, cloned and deleted; USB mass storage; and Settings.
-// Each opens a screen of its own over the list.
+// It has a row for each VM, then three rows that each open a screen of their
+// own over it: Manage VMs, USB mass storage and Settings. A separator line
+// comes between the VMs and those three when there are VMs. Up and Down
+// move the highlight, and Enter or Space chooses the highlighted row. Esc
+// and Backspace do nothing, as there is no screen under it to go back to.
 //
-// The list only chooses: what is done with the card, starting a VM and
-// reading the card again, is its caller's, once the list has closed.
+// It can count down to starting the highlighted VM by itself, showing the
+// seconds left on its bottom edge. Any key stops the countdown.
+//
+// The launcher menu only chooses. It closes when a VM is chosen or the
+// countdown runs out, and when USB mass storage has given the card to the
+// host, which may have changed it; why is written to a LauncherMenuExit.
+// Starting the VM, and reading the card again, are the launcher's, in
+// launcher.c.
 #ifndef YAX86_PICOCALC_LAUNCHER_MENU_SCREEN_H
 #define YAX86_PICOCALC_LAUNCHER_MENU_SCREEN_H
 
@@ -18,27 +24,35 @@
 #include "settings.h"
 #include "vm_list.h"
 
-// Why the list closed.
+// Why the launcher menu closed.
 typedef enum LauncherMenuExitReason {
-  // A VM was chosen to start, or reached by the countdown.
+  // Start the VM chosen with a key, or reached by the countdown.
   kLauncherMenuExitStartVM = 0,
-  // USB mass storage gave the card to the host, which may have changed its
-  // VMs and settings, so the card is to be read again.
+  // Read the card again: USB mass storage gave it to the host, which may
+  // have changed its VMs and settings.
   kLauncherMenuExitReadCard,
 } LauncherMenuExitReason;
 
+// Why the launcher menu closed, and for kLauncherMenuExitStartVM, which VM
+// to start.
 typedef struct LauncherMenuExit {
   LauncherMenuExitReason reason;
-  // The VM to start, an index in the list, for kLauncherMenuExitStartVM.
+  // The VM to start, as an index in the VM list.
   uint8_t vm;
 } LauncherMenuExit;
 
-// Show the list of vms, read from the card with settings, with the VM at
-// highlighted chosen. With countdown_ms, the chosen VM starts by itself once
-// that long has passed without a key. Manage VMs and USB mass storage change
-// vms and settings, which must outlive the screen, and Manage VMs copies
-// through copy_buffer, copy_buffer_size bytes of guest RAM. Why the list
-// closes, which ends the screens, is written to *exit.
+// Open the launcher menu on vms, highlighting the VM whose index in vms is
+// highlighted.
+//
+// countdown_ms is how long to wait for a key before starting the
+// highlighted VM by itself, or 0 for no countdown.
+//
+// The screens opened from the menu change vms and settings: the VM manager
+// as it makes, renames and deletes VMs, and Settings as it saves the font.
+// The VM manager also copies files through copy_buffer, copy_buffer_size
+// bytes of guest RAM. All of these must outlive the menu.
+//
+// When the menu closes, why is written to *exit.
 ScreenResult LauncherMenuScreenOpen(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
     uint32_t copy_buffer_size, uint8_t highlighted, uint32_t countdown_ms,
