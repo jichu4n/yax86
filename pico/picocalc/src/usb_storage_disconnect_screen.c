@@ -1,4 +1,4 @@
-#include "usb_stop_screen.h"
+#include "usb_storage_disconnect_screen.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -19,18 +19,18 @@ static const UIBoxItem kStopItems[kStopItemCount] = {
     [kStopConfirm] = {"Disconnect anyway", false},
 };
 
-extern const Screen kUSBStopScreen;
+extern const Screen kUSBStorageDisconnectScreen;
 
 static uint8_t g_chosen;
 // Whether what is on the panel is out of date.
 static bool g_dirty;
 static bool* g_confirmed;
 
-ScreenResult USBStopScreenOpen(bool* confirmed) {
+ScreenResult USBStorageDisconnectScreenOpen(bool* confirmed) {
   g_confirmed = confirmed;
   g_chosen = kStopCancel;
   g_dirty = true;
-  return ScreenOpen(&kUSBStopScreen);
+  return ScreenOpen(&kUSBStorageDisconnectScreen);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
@@ -69,13 +69,12 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     return;
   }
   UIPageDrawItems(
-      menu, "USB disk mode",
+      menu, "Unsafe disconnect",
       (const char* const[]){
-          "The computer has not ejected the",
-          "disk, and may not have finished",
-          "writing to it.",
+          "Not ejected by the host.",
+          "Writes may still be pending.",
       },
-      3, kStopItems, kStopItemCount, g_chosen, true);
+      2, kStopItems, kStopItemCount, g_chosen, true);
   DisplayEndMenu();
   g_dirty = false;
 }
@@ -90,9 +89,9 @@ static const char* Hint(void) {
   return "\x18\x19=Move  Enter=Select  Esc=Back";
 }
 
-static const char* PageName(void) { return "usb_stop"; }
+static const char* PageName(void) { return "usb_storage_disconnect"; }
 
-const Screen kUSBStopScreen = {
+const Screen kUSBStorageDisconnectScreen = {
     .handle_key = HandleKey,
     .draw = Draw,
     .resume = Resume,
