@@ -329,7 +329,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   of the VM to highlight and start - `boot_default=DOS330` - `boot_delay`,
   the seconds the list waits for a key, 5 without it, 0 to start the default
   without showing the list, and `font`, the 4x10 font (`ymini`, `atari800`,
-  `miniwi` or `creep`, `ymini` without it). Each key read is logged as
+  `miniwi`, `terminal` or `dca`, `ymini` without it). Each key read is logged as
   `settings_key`, with its value. A key it does not know is logged as
   `settings_key_ignored` and skipped, so a file written by a later firmware
   still reads. A problem, such as a bad value, is logged as
@@ -981,7 +981,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - 80 columns in 320 pixels is four pixels a character, and a 640-pixel text
   screen shrunk to fit is unreadable. What works is a font drawn for the
   cell - C64 80-column software used 4x8.
-- `src/font_4x10.c` holds four complete code page 437 fonts of that size,
+- `src/font_4x10.c` holds five complete code page 437 fonts of that size,
   chosen by `font` in `yax86/yax86.cfg` or from the list at power on (`Font`),
   for both the guest's text modes and the menu and status rows:
   - `ymini` (Ymini, the default): 3+1 glyphs (three columns of ink and a
@@ -989,8 +989,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   - `atari800` (Atari800): 3+1 glyphs with 6-row capitals, from Atari800's
     4x8 font.
   - `miniwi` (Miniwi-8): 3+1 glyphs with 5-row capitals, from miniwi-8.
-  - `creep` (Creep): 4-column glyphs, rugosi's ASCII range from
-    picocalc_runCPM and Serg Podtynnyi's rest of code page 437.
+  - `terminal` (Terminal 4x6): 3+1 glyphs with 5-row capitals, from the
+    Microsoft Terminal 4x6 CP437 font.
+  - `dca` (DCA 4x7): 3+1 glyphs with 4-row capitals and 2 rows above for
+    uppercase accents, from the DCA 4x7 IBM PC CP437 font.
 
   Where each font's glyphs come from, and under which license, is at the top
   of `src/font_4x10.c`.
