@@ -1,7 +1,7 @@
 // The file browser: the folders and disk images on the card, a page of the
 // menu for finding an image. It shows a folder, goes into folders and up out
 // of them, and says which image was chosen; what to do with it is its
-// user's. Floppy drives, a new VM's drives and USB disk mode use it.
+// user's. Floppy drives, a new VM's drives and USB mass storage use it.
 #ifndef YAX86_PICOCALC_UI_BROWSER_H
 #define YAX86_PICOCALC_UI_BROWSER_H
 
