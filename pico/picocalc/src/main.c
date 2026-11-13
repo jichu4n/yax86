@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include "board.h"
+#include "debug_command.h"
 #include "display.h"
 #include "emulator.h"
 #include "hardware/clocks.h"
@@ -166,15 +167,14 @@ static __noinline void BringUp(void) {
   SpeakerInit();
   g_board.southbridge_answered =
       SouthbridgeReadVersion(&g_board.southbridge_version);
+  DebugCommandInit(&g_board);
 }
 
 int main(void) {
   BringUp();
-  // Before the launcher, whose commands the emulator answers too.
   EmulatorInit(&g_board, &g_vms, &g_settings, g_guest_ram);
   // Guest RAM is lent to the launcher until a VM starts, for copies.
-  const bool has_vm =
-      LauncherRun(&g_vms, &g_settings, g_guest_ram, &kEmulatorCommands, &g_vm);
+  const bool has_vm = LauncherRun(&g_vms, &g_settings, g_guest_ram, &g_vm);
   EmulatorRun(has_vm ? &g_vm : NULL);
   return 0;
 }
