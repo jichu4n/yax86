@@ -31,7 +31,7 @@ typedef enum FormItem {
 
 extern const Screen kVMFormScreen;
 
-static ManageState* g_manage;
+static VMManager* g_vm_manager;
 // The item chosen, and whether the page is out of date.
 static UIPage g_page;
 // Whether the form is editing the drives of the VM at g_vm, an index in the
@@ -57,8 +57,8 @@ static void ChooseItem(uint8_t item) {
   g_page.dirty = true;
 }
 
-ScreenResult VMFormScreenOpenNew(ManageState* manage) {
-  g_manage = manage;
+ScreenResult VMFormScreenOpenNew(VMManager* vm_manager) {
+  g_vm_manager = vm_manager;
   g_editing = false;
   g_name[0] = '\0';
   g_name_length = 0;
@@ -71,13 +71,13 @@ ScreenResult VMFormScreenOpenNew(ManageState* manage) {
   return ScreenOpen(&kVMFormScreen);
 }
 
-ScreenResult VMFormScreenOpenEdit(ManageState* manage, uint8_t index) {
-  g_manage = manage;
+ScreenResult VMFormScreenOpenEdit(VMManager* vm_manager, uint8_t index) {
+  g_vm_manager = vm_manager;
   g_editing = true;
   g_vm = index;
   static VMConfig config;
   char problem[kVMProblemLength + 1];
-  VMConfigRead(&manage->vms->vms[index], &config, problem);
+  VMConfigRead(&vm_manager->vms->vms[index], &config, problem);
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     FSCopyPath(config.drives[drive], g_drives[drive].path);
     g_drives[drive].blank = false;
@@ -108,15 +108,15 @@ static __noinline ScreenResult Create(void) {
   snprintf(what, sizeof(what), "Writing %s's blank disks...", g_name);
   const uint64_t start_us = time_us_64();
   // Blank disks are written through the guest's RAM, which is zeroed after.
-  FSTransfer transfer = ManageBeginCopy(g_manage, "New VM", what);
+  FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "New VM", what);
   const VMListResult result =
       VMListCreate(g_name, &drives, &transfer, &created, problem);
-  ManageEndCopy(g_manage);
+  VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
     return ScreenStays();
   }
-  ManageNoteChange(g_manage, created.name, false);
+  VMManagerNoteChange(g_vm_manager, created.name, false);
   if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
@@ -136,24 +136,24 @@ static __noinline ScreenResult Create(void) {
 }
 
 static __noinline ScreenResult Save(void) {
-  const VMEntry vm = g_manage->vms->vms[g_vm];
+  const VMEntry vm = g_vm_manager->vms->vms[g_vm];
   VMListDrives drives;
   FormDrives(&drives);
   char problem[kVMProblemLength + 1];
   char what[kUIPageNarrowColumns];
   snprintf(what, sizeof(what), "Writing %s's blank disks...", vm.name);
-  FSTransfer transfer = ManageBeginCopy(g_manage, "Edit drives", what);
+  FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Edit drives", what);
   const VMListResult result = VMListEdit(&vm, &drives, &transfer, problem);
-  ManageEndCopy(g_manage);
+  VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
     return ScreenStays();
   }
-  ManageNoteChange(g_manage, vm.name, true);
+  VMManagerNoteChange(g_vm_manager, vm.name, true);
   if (result == kVMListDone) {
     SYSTEM_INFO("vm_edited", Y_LOG_STRING("name", vm.name));
   } else {
-    ManageShowProblem("vm_not_edited", &vm, problem);
+    VMManagerShowProblem("vm_not_edited", &vm, problem);
   }
   return ScreenBack();
 }
@@ -253,7 +253,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   }
   items[kFormCreate] = (UIBoxItem){g_editing ? "Save" : "Create", false};
   UIPageDrawItems(
-      menu, g_editing ? g_manage->vms->vms[g_vm].name : "New VM", NULL, 0,
+      menu, g_editing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
       g_page.chosen, true);
   UIPageEndDraw(&g_page);
@@ -265,7 +265,7 @@ static const char* Hint(void) {
              : "\x18\x19=Move  Enter=Select  Esc=Cancel";
 }
 
-static const char* PageName(void) { return "new_vm"; }
+static const char* PageName(void) { return "vm_form"; }
 
 const Screen kVMFormScreen = {
     .handle_key = HandleKey,

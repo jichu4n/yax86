@@ -17,7 +17,7 @@ enum {
 
 extern const Screen kVMNameScreen;
 
-static ManageState* g_manage;
+static VMManager* g_vm_manager;
 // Whether the page is out of date; it has no items to choose.
 static UIPage g_page;
 // The VM, an index in the list; the name being typed; and whether it is for
@@ -28,11 +28,11 @@ static uint8_t g_name_length;
 static bool g_cloning;
 
 ScreenResult VMNameScreenOpen(
-    ManageState* manage, uint8_t index, bool cloning) {
-  g_manage = manage;
+    VMManager* vm_manager, uint8_t index, bool cloning) {
+  g_vm_manager = vm_manager;
   g_vm = index;
   g_cloning = cloning;
-  const char* name = manage->vms->vms[index].name;
+  const char* name = vm_manager->vms->vms[index].name;
   g_name_length = 0;
   while (name[g_name_length] != '\0' && g_name_length < kFSMaxFolderName) {
     g_name[g_name_length] = name[g_name_length];
@@ -52,44 +52,45 @@ ScreenResult VMNameScreenOpen(
 }
 
 static __noinline ScreenResult Rename(void) {
-  const VMEntry vm = g_manage->vms->vms[g_vm];
+  const VMEntry vm = g_vm_manager->vms->vms[g_vm];
   VMEntry renamed;
   char problem[kVMProblemLength + 1];
   const VMListResult result = VMListRename(
-      g_manage->vms, g_manage->settings, &vm, g_name, &renamed, problem);
+      g_vm_manager->vms, g_vm_manager->settings, &vm, g_name, &renamed,
+      problem);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
     return ScreenStays();
   }
-  ManageNoteChange(
-      g_manage, result == kVMListDone ? renamed.name : vm.name, false);
+  VMManagerNoteChange(
+      g_vm_manager, result == kVMListDone ? renamed.name : vm.name, false);
   if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_renamed", Y_LOG_STRING("from", vm.name),
         Y_LOG_STRING("to", renamed.name));
   } else {
-    ManageShowProblem("vm_not_renamed", &vm, problem);
+    VMManagerShowProblem("vm_not_renamed", &vm, problem);
   }
   return ScreenBack();
 }
 
 static __noinline ScreenResult Clone(void) {
-  const VMEntry vm = g_manage->vms->vms[g_vm];
+  const VMEntry vm = g_vm_manager->vms->vms[g_vm];
   VMEntry copy;
   char problem[kVMProblemLength + 1];
   char what[kUIPageNarrowColumns];
   snprintf(what, sizeof(what), "Copying %s to %s...", vm.name, g_name);
   const uint64_t start_us = time_us_64();
-  FSTransfer transfer = ManageBeginCopy(g_manage, "Clone", what);
+  FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Clone", what);
   const VMListResult result =
       VMListClone(&vm, g_name, &transfer, &copy, problem);
-  ManageEndCopy(g_manage);
+  VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
     return ScreenStays();
   }
-  ManageNoteChange(
-      g_manage, result == kVMListDone ? copy.name : vm.name, false);
+  VMManagerNoteChange(
+      g_vm_manager, result == kVMListDone ? copy.name : vm.name, false);
   if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_cloned", Y_LOG_STRING("from", vm.name),
@@ -97,7 +98,7 @@ static __noinline ScreenResult Clone(void) {
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
-    ManageShowProblem("vm_not_cloned", &vm, problem);
+    VMManagerShowProblem("vm_not_cloned", &vm, problem);
   }
   return ScreenBack();
 }
@@ -146,7 +147,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   char title[kUIPageNarrowColumns];
   snprintf(
       title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
-      g_manage->vms->vms[g_vm].name);
+      g_vm_manager->vms->vms[g_vm].name);
   const char* const lines[] = {
       g_cloning ? "Name of the copy:" : "New name:",
       "",

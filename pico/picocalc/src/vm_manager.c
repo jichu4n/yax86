@@ -1,4 +1,4 @@
-#include "manage.h"
+#include "vm_manager.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -18,13 +18,14 @@ enum {
 static const char* g_copy_title;
 static const char* g_copy_what;
 
-void ManageNoteChange(ManageState* manage, const char* name, bool show_vm) {
-  manage->changed = true;
-  snprintf(manage->chosen, sizeof(manage->chosen), "%s", name);
-  manage->show_vm = show_vm;
+void VMManagerNoteChange(
+    VMManager* vm_manager, const char* name, bool show_vm) {
+  vm_manager->changed = true;
+  snprintf(vm_manager->chosen, sizeof(vm_manager->chosen), "%s", name);
+  vm_manager->show_vm = show_vm;
 }
 
-void ManageShowProblem(
+void VMManagerShowProblem(
     const char* event, const VMEntry* vm, const char* problem) {
   StatusBarSetProblem(problem);
   SYSTEM_WARN(
@@ -49,17 +50,17 @@ static void ShowCopyProgress(uint64_t done, uint64_t total) {
   DisplayEndMenu();
 }
 
-FSTransfer ManageBeginCopy(
-    const ManageState* manage, const char* title, const char* what) {
+FSTransfer VMManagerBeginCopy(
+    const VMManager* vm_manager, const char* title, const char* what) {
   g_copy_title = title;
   g_copy_what = what;
   return (FSTransfer){
-      .buffer = manage->copy_buffer,
-      .buffer_size = manage->copy_buffer_size,
+      .buffer = vm_manager->copy_buffer,
+      .buffer_size = vm_manager->copy_buffer_size,
       .progress = ShowCopyProgress,
   };
 }
 
-void ManageEndCopy(const ManageState* manage) {
-  memset(manage->copy_buffer, 0, manage->copy_buffer_size);
+void VMManagerEndCopy(const VMManager* vm_manager) {
+  memset(vm_manager->copy_buffer, 0, vm_manager->copy_buffer_size);
 }

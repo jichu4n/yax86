@@ -29,7 +29,7 @@ static const UIBoxItem kVMItems[kVMItemCount] = {
 
 extern const Screen kVMScreen;
 
-static ManageState* g_manage;
+static VMManager* g_vm_manager;
 // The item chosen, and whether the page is out of date.
 static UIPage g_page;
 // The VM, an index in the list; the names of the images in its drives,
@@ -39,12 +39,12 @@ static char g_drives[kVMDrives][kDiskImageNameLength + 1];
 static bool g_present[kVMDrives];
 static bool g_readable;
 
-ScreenResult VMScreenOpen(ManageState* manage, uint8_t index) {
-  g_manage = manage;
+ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
+  g_vm_manager = vm_manager;
   g_vm = index;
   VMConfig config;
   char problem[kVMProblemLength + 1];
-  g_readable = VMConfigRead(&manage->vms->vms[index], &config, problem);
+  g_readable = VMConfigRead(&vm_manager->vms->vms[index], &config, problem);
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     g_drives[drive][0] = '\0';
     if (config.drives[drive][0] != '\0') {
@@ -62,11 +62,11 @@ ScreenResult VMScreenOpen(ManageState* manage, uint8_t index) {
 static ScreenResult Choose(void) {
   switch (g_page.chosen) {
     case kVMEdit:
-      return VMFormScreenOpenEdit(g_manage, g_vm);
+      return VMFormScreenOpenEdit(g_vm_manager, g_vm);
     case kVMDelete:
-      return VMDeleteScreenOpen(g_manage, g_vm);
+      return VMDeleteScreenOpen(g_vm_manager, g_vm);
     default:
-      return VMNameScreenOpen(g_manage, g_vm, g_page.chosen == kVMClone);
+      return VMNameScreenOpen(g_vm_manager, g_vm, g_page.chosen == kVMClone);
   }
 }
 
@@ -84,7 +84,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 // Back from a screen opened from the page: to Manage VMs too, if it changed
 // the card.
 static ScreenResult Resume(void) {
-  if (g_manage->changed) {
+  if (g_vm_manager->changed) {
     return ScreenBack();
   }
   g_page.dirty = true;
@@ -137,7 +137,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     line_count = 1;
   }
   UIPageDrawItems(
-      menu, g_manage->vms->vms[g_vm].name, line_pointers, line_count, kVMItems,
+      menu, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count, kVMItems,
       kVMItemCount, g_page.chosen, true);
   UIPageEndDraw(&g_page);
 }

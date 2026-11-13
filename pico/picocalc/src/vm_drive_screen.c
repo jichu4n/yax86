@@ -162,7 +162,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
 
 static const char* Hint(void) { return kUIPageHint; }
 
-static const char* PageName(void) { return "new_vm_drive"; }
+static const char* PageName(void) { return "vm_drive"; }
 
 const Screen kVMDriveScreen = {
     .handle_key = HandleKey,

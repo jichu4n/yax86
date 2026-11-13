@@ -22,32 +22,32 @@ static const UIBoxItem kDeleteItems[kDeleteItemCount] = {
 
 extern const Screen kVMDeleteScreen;
 
-static ManageState* g_manage;
+static VMManager* g_vm_manager;
 // The item chosen, and whether the page is out of date.
 static UIPage g_page;
 // The VM, an index in the list, and what deleting it would take.
 static uint8_t g_vm;
 static VMListContents g_contents;
 
-ScreenResult VMDeleteScreenOpen(ManageState* manage, uint8_t index) {
-  g_manage = manage;
+ScreenResult VMDeleteScreenOpen(VMManager* vm_manager, uint8_t index) {
+  g_vm_manager = vm_manager;
   g_vm = index;
-  VMListDescribe(manage->vms, &manage->vms->vms[index], &g_contents);
+  VMListDescribe(vm_manager->vms, &vm_manager->vms->vms[index], &g_contents);
   g_page.chosen = kDeleteCancel;
   g_page.dirty = true;
   return ScreenOpen(&kVMDeleteScreen);
 }
 
 static __noinline ScreenResult Delete(void) {
-  const VMEntry vm = g_manage->vms->vms[g_vm];
+  const VMEntry vm = g_vm_manager->vms->vms[g_vm];
   char problem[kVMProblemLength + 1];
-  const bool deleted = VMListDelete(g_manage->settings, &vm, problem);
+  const bool deleted = VMListDelete(g_vm_manager->settings, &vm, problem);
   // Gone from the list, it leaves the first VM chosen.
-  ManageNoteChange(g_manage, vm.name, false);
+  VMManagerNoteChange(g_vm_manager, vm.name, false);
   if (deleted) {
     SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
   } else {
-    ManageShowProblem("vm_not_deleted", &vm, problem);
+    VMManagerShowProblem("vm_not_deleted", &vm, problem);
   }
   return ScreenBack();
 }
@@ -106,7 +106,8 @@ static void Draw(Y_UNUSED uint64_t now_us) {
                             : kVMListNamed;
   char question[kUIPageNarrowColumns];
   snprintf(
-      question, sizeof(question), "Delete %s?", g_manage->vms->vms[g_vm].name);
+      question, sizeof(question), "Delete %s?",
+      g_vm_manager->vms->vms[g_vm].name);
   char files[kUIPageNarrowColumns - 4];
   JoinNames(
       files, sizeof(files), g_contents.files, named, g_contents.file_count);
