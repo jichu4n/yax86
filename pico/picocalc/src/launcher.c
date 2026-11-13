@@ -10,6 +10,10 @@
 #include "launcher_menu_screen.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
+#include "screen.h"
+#include "southbridge.h"
+#include "typing.h"
+#include "ui_status.h"
 #include "vm_list.h"
 
 enum {
@@ -20,6 +24,11 @@ enum {
   // Written to g_start_note's marker by a reset or a power off, for the
   // start after the reboot - see LeaveStartNote().
   kStartNoteMarker = 0x5747A27E,
+
+  // How often the status rows are composed again, and how long the loop
+  // sleeps between passes, as the VM's loop does while its menu is open.
+  kStatusUpdateMs = 100,
+  kPollMs = 10,
 
   kMillisecondsPerSecond = 1000,
 };
@@ -35,16 +44,6 @@ typedef struct StartNote {
 // Deliberately not zeroed at startup, so that it survives the reboot - see
 // LeaveStartNote().
 static StartNote __uninitialized_ram(g_start_note);
-
-// The VMs on the card, and the card's settings.
-static VMList g_vms;
-static Settings g_settings;
-// Guest RAM, lent before the VM starts - see LauncherInit().
-static uint8_t* g_copy_buffer;
-// The VM the list shows chosen, and how long it counts down to starting it
-// by itself, 0 for no countdown.
-static uint8_t g_highlighted;
-static uint32_t g_countdown_ms;
 
 // Restart the board, leaving a note for the start after it, which takes it
 // - see TakeStartNote(). Every start, whether from power on, a reset or a power
@@ -81,49 +80,91 @@ static bool TakeStartNote(StartNote* note) {
   return true;
 }
 
-void LauncherInit(uint8_t* copy_buffer) { g_copy_buffer = copy_buffer; }
+// What the start found to do.
+typedef enum StartResult {
+  // A VM was taken without the list: the one restarted, or the default with
+  // no wait.
+  kStartTookVM = 0,
+  // There is no card, so the built-in floppy boots.
+  kStartNoCard,
+  // The list shows, and waits for a key or the countdown.
+  kStartShowsList,
+} StartResult;
 
-const VMList* LauncherVMs(void) { return &g_vms; }
-
-const Settings* LauncherSettings(void) { return &g_settings; }
-
-LauncherStartResult LauncherStart(VMConfig* vm) {
+// Read the card's VMs and settings, and the note a reset or power off left,
+// and either take a VM at once into *chosen or show the list. Kept out of
+// line, so that what only the start needs is off core 0's stack while the
+// list shows.
+static __noinline StartResult
+Start(VMList* vms, Settings* settings, uint8_t* copy_buffer, VMConfig* chosen) {
   StartNote note = {0};
   const bool noted = TakeStartNote(&note);
-  VMListRead(&g_vms);
+  VMListRead(vms);
   uint8_t highlighted = 0;
   const bool settings_read =
-      LauncherCardReadSettings(&g_vms, &g_settings, &highlighted);
+      LauncherCardReadSettings(vms, settings, &highlighted);
   // Without a card there is nothing to choose, or to put on USB.
   if (DiskImageMountCard() != kDiskImageOpen) {
-    return kLauncherNoCard;
+    return kStartNoCard;
   }
   if (noted) {
     SYSTEM_INFO(
         note.intent == kStartIntentRestart ? "restarting" : "powered_off",
         Y_LOG_STRING("name", note.name));
-    const uint8_t index = VMListFind(&g_vms, note.name);
+    const uint8_t index = VMListFind(vms, note.name);
     if (index < kVMListMax) {
       highlighted = index;
       if (note.intent == kStartIntentRestart &&
-          LauncherCardTakeVM(&g_vms, &g_settings, index, vm)) {
-        return kLauncherTookVM;
+          LauncherCardTakeVM(vms, settings, index, chosen)) {
+        return kStartTookVM;
       }
     }
   } else if (
-      settings_read && g_settings.boot_delay == 0 && g_vms.count > 0 &&
-      LauncherCardTakeVM(&g_vms, &g_settings, highlighted, vm)) {
-    return kLauncherTookVM;
+      settings_read && settings->boot_delay == 0 && vms->count > 0 &&
+      LauncherCardTakeVM(vms, settings, highlighted, chosen)) {
+    return kStartTookVM;
   }
-  g_highlighted = highlighted;
-  const bool counting = !noted && g_settings.boot_delay > 0 && g_vms.count > 0;
-  g_countdown_ms =
-      counting ? (uint32_t)g_settings.boot_delay * kMillisecondsPerSecond : 0;
-  return kLauncherShowsList;
+  const bool counting = !noted && settings->boot_delay > 0 && vms->count > 0;
+  ScreenShow(LauncherMenuScreenOpen(
+      vms, settings, copy_buffer, kCopyBufferSize, highlighted,
+      counting ? (uint32_t)settings->boot_delay * kMillisecondsPerSecond : 0,
+      chosen));
+  return kStartShowsList;
 }
 
-ScreenResult LauncherScreenOpen(VMConfig* chosen) {
-  return LauncherMenuScreenOpen(
-      &g_vms, &g_settings, g_copy_buffer, kCopyBufferSize, g_highlighted,
-      g_countdown_ms, chosen);
+bool LauncherRun(
+    VMList* vms, Settings* settings, uint8_t* copy_buffer,
+    const CommandsHandlers* commands, VMConfig* chosen) {
+  switch (Start(vms, settings, copy_buffer, chosen)) {
+    case kStartTookVM:
+      return true;
+    case kStartNoCard:
+      return false;
+    case kStartShowsList:
+      break;
+  }
+  absolute_time_t next_status_at = get_absolute_time();
+  for (;;) {
+    CommandsPoll(commands, NULL);
+    SouthbridgeKeyEvent key;
+    const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
+    if (pressed) {
+      ScreenHandleKey(key);
+    }
+    if (ScreenIsOpen()) {
+      ScreenTick();
+    }
+    // The list closes once a VM is chosen.
+    if (!ScreenIsOpen()) {
+      return true;
+    }
+    // The keys for the page a key led to are offered at once rather than at
+    // the next update.
+    if (pressed || time_reached(next_status_at)) {
+      next_status_at = make_timeout_time_ms(kStatusUpdateMs);
+      UIStatusOffer(ScreenHint());
+    }
+    ScreenDraw(time_us_64());
+    sleep_ms(kPollMs);
+  }
 }

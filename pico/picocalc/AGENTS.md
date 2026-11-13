@@ -347,13 +347,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
   boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot. `src/launcher.c` is the start:
-  it reads the card and the start note, and takes a VM at once or sets
-  the list up. `src/launcher_menu_screen.c` is the list, a screen like
+  host measuring the boot, still boot. `src/launcher.c` is launcher
+  mode, `LauncherRun()`: it reads the card and the start note, takes a VM
+  at once or shows the list, and runs the loop until one is chosen. `src/launcher_menu_screen.c` is the list, a screen like
   any other: it counts down, takes the VM chosen, and opens the screen of
   each row itself. What both do with the card, reading the settings and
-  taking a VM, is `src/launcher_card.c`'s. `main.c` runs the loop,
-  which answers commands and, through `src/screen.c`, hands the screen
+  taking a VM, is `src/launcher_card.c`'s. The loop answers commands
+  through `CommandsPoll()` and, through `src/screen.c`, hands the screen
   showing its keys, a tick for what happens with time, and the chance to
   draw. It composes the status rows itself, with `src/ui_status.c`, from
   the keys `ScreenHint()` gives: the router leaves the rows to each loop,
@@ -361,7 +361,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   functions, with its page's name for the report and a `resume` for
   showing again. The router keeps the screens as a stack, the list at the
   bottom, and only the one on top is called, so the stack's depth adds
-  nothing to core 0's. Calls go one way, from `main.c` to the screen and
+  nothing to core 0's. Calls go one way, from the loop to the screen and
   from the screen down.
 - **Every page is a screen of its own**, and is opened through its own
   open function, which takes what the page works on as parameters:
@@ -371,12 +371,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   carries no value, only what the router does: stay, open a screen, back,
   or close every screen, so `screen.c` knows nothing of VMs and serves any
   menu. The list writes the VM chosen through the pointer
-  `LauncherScreenOpen(&g_vm)` took, and closes; the loop ends when no
+  `LauncherMenuScreenOpen()` took, `main.c`'s `g_vm`, and closes; the loop ends when no
   screen is open. Back from the bottom screen closes too. The open
   function is typed, so a page cannot be opened without its state, and
   there is no `void*` context. Each screen is on the stack at most once, so
   it keeps those pointers and its own state, such as the item chosen, in
-  statics. The launcher holds `g_vms` and `g_settings`. Settings and Font
+  statics. `main.c` holds the models, `g_vms`, `g_settings` and `g_vm`,
+  and passes them to `LauncherRun()`, which passes them down; nothing
+  asks the launcher for them back. Settings and Font
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
   are USB disk mode, its sharing page and the question before
   disconnecting, in `src/usb_*screen.c`; and Manage VMs and every page

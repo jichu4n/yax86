@@ -1,15 +1,15 @@
-// The start: reading the card's VMs and settings, which the launcher holds,
-// and the note a reset or power off left, then either taking a VM at once
-// or showing the list of VMs to choose one, counting down to the default.
-// main.c runs the list's loop, answering commands and updating the status
-// rows; the list is launcher_menu_screen.c's.
+// Launcher mode, from power on until a VM is chosen: reading the card's VMs
+// and settings and the note a reset or power off left, then either taking a
+// VM at once or showing the list of VMs to choose one, and the screens
+// reached from it. Its loop answers commands, and composes the status rows
+// from the keys of the screen showing.
 #ifndef YAX86_PICOCALC_LAUNCHER_H
 #define YAX86_PICOCALC_LAUNCHER_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "screen.h"
+#include "commands.h"
 #include "settings.h"
 #include "southbridge.h"
 #include "vm_config.h"
@@ -24,34 +24,26 @@ typedef enum StartIntent {
   kStartIntentList,
 } StartIntent;
 
-// What LauncherStart() found to do.
-typedef enum LauncherStartResult {
-  // A VM was taken without the list: the one restarted, or the default with
-  // no wait.
-  kLauncherTookVM = 0,
-  // There is no card, so the built-in floppy boots.
-  kLauncherNoCard,
-  // The list shows, and waits for a key or the countdown.
-  kLauncherShowsList,
-} LauncherStartResult;
-
-// Lend the launcher copy_buffer, kCopyBufferSize bytes of guest RAM, which
-// copying a VM's files borrows before the VM starts.
-void LauncherInit(uint8_t* copy_buffer);
-
-// The VMs on the card, and the card's settings, as last read.
-const VMList* LauncherVMs(void);
-const Settings* LauncherSettings(void);
-
-// Read the card's VMs and settings, and the note a reset or power off left,
-// and either take a VM at once into *vm or show the list.
-LauncherStartResult LauncherStart(VMConfig* vm);
-
-// Show the list LauncherStart() set up, with the launcher's VMs and settings.
-// A VM chosen, or reached by the countdown, is read into *chosen, and closes
-// the screens; one whose configuration does not read leaves the list showing
-// its problem.
-ScreenResult LauncherScreenOpen(VMConfig* chosen);
+// Run launcher mode until a VM is chosen, and return whether one was, read
+// into *chosen. vms and settings are read from the card into, and kept by
+// the screens as they change it; settings stays as read for the VM. A VM's
+// files are copied through copy_buffer, guest RAM that is lent until the VM
+// starts. commands answers what the host asks that is not the launcher's.
+//
+// With a card, the list of its VMs shows until one is chosen whose
+// configuration reads, or until the default starts by itself, the countdown
+// running until a key is pressed. Settings that ask for no wait start the
+// default at once, without the list, unless there is a problem to show. With
+// no VMs the list offers Manage VMs, USB disk mode and Settings, and nothing
+// starts by itself. Without a card it returns false at once, and the
+// built-in floppy boots in drive A.
+//
+// After a reset the VM reset starts again at once; after a power off the list
+// waits for a key, with the VM turned off highlighted. Either way, a VM that
+// no longer reads leaves the list waiting with its problem.
+bool LauncherRun(
+    VMList* vms, Settings* settings, uint8_t* copy_buffer,
+    const CommandsHandlers* commands, VMConfig* chosen);
 
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the list with it highlighted.

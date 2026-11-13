@@ -49,7 +49,6 @@
 #include "speaker.h"
 #include "status_bar.h"
 #include "typing.h"
-#include "ui_status.h"
 #include "usb_disk.h"
 #include "vm_config.h"
 #include "vm_list.h"
@@ -218,8 +217,11 @@ typedef struct RuntimeStatus {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
-// The VM started, if one was: without one drive A holds the built-in floppy
-// and no other drive has a disk.
+// The card's VMs and settings, read by the launcher, whose screens change
+// them; and the VM started, if one was: without one drive A holds the
+// built-in floppy and no other drive has a disk.
+static VMList g_vms;
+static Settings g_settings;
 static VMConfig g_vm;
 static bool g_has_vm;
 static RuntimeStatus g_status;
@@ -666,7 +668,7 @@ static __noinline void ReplyReportBoard(const Command* command) {
   const DisplayStats display = DisplayGetStats();
   REPLY_GROUP(
       command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
-      Y_LOG_STRING("font", Font4x10Name(LauncherSettings()->font)),
+      Y_LOG_STRING("font", Font4x10Name(g_settings.font)),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
       Y_LOG_UINT("pixels_drawn", display.pixels_drawn),
       Y_LOG_UINT("render_us", display.render_us),
@@ -682,7 +684,7 @@ static __noinline void ReplyReportDevices(const Command* command) {
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
-      Y_LOG_UINT("vms", LauncherVMs()->count));
+      Y_LOG_UINT("vms", g_vms.count));
   const UsbDiskStats usb = UsbDiskGetStats();
   REPLY_GROUP(
       command, "usb", Y_LOG_BOOL("sharing", usb.sharing),
@@ -783,8 +785,7 @@ static bool InitVM(void) {
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->floppy_drives = FloppyDrives();
-  config->video_text_font.glyphs =
-      &(*Font4x10Glyphs(LauncherSettings()->font))[0][0];
+  config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings.font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
   config->set_pc_speaker_frequency = SetPCSpeakerFrequency;
@@ -1270,60 +1271,8 @@ static void RunVM(bool vm_ready) {
 }
 
 // ============================================================================
-// Choosing a VM
+// Starting the VM
 // ============================================================================
-
-// With a card, show the list of its VMs until one is chosen whose
-// configuration reads, or until the default starts by itself, the countdown
-// running until a key is pressed. Settings that ask for no wait start the
-// default at once, without the list, unless there is a problem to show. With
-// no VMs the list offers only USB disk mode, and nothing starts by itself.
-// Without a card, the built-in floppy boots in drive A.
-//
-// After a reset the VM reset starts again at once; after a power off the list
-// waits for a key, with the VM turned off highlighted. Either way, a VM that
-// no longer reads leaves the list waiting with its problem.
-//
-// It and the handlers of what can be done from the list are kept out of line
-// with __noinline, so that only the one running has its locals on core 0's
-// stack - see PaintStacks().
-static __noinline void ChooseVM(void) {
-  switch (LauncherStart(&g_vm)) {
-    case kLauncherTookVM:
-      g_has_vm = true;
-      return;
-    case kLauncherNoCard:
-      return;
-    case kLauncherShowsList:
-      break;
-  }
-  ScreenShow(LauncherScreenOpen(&g_vm));
-  absolute_time_t next_status_at = get_absolute_time();
-  for (;;) {
-    CommandsPoll(&kCommandsHandlers, NULL);
-    SouthbridgeKeyEvent key;
-    const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
-    if (pressed) {
-      ScreenHandleKey(key);
-    }
-    if (ScreenIsOpen()) {
-      ScreenTick();
-    }
-    // The list closes once a VM is chosen.
-    if (!ScreenIsOpen()) {
-      g_has_vm = true;
-      return;
-    }
-    // The keys for the page a key led to are offered at once rather than at
-    // the next update.
-    if (pressed || time_reached(next_status_at)) {
-      next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      UIStatusOffer(ScreenHint());
-    }
-    ScreenDraw(time_us_64());
-    sleep_ms(kPausedPollMs);
-  }
-}
 
 // Open the drives' images: the VM's, or without one, none - drive A then
 // has the built-in floppy. An image a VM names that does not open leaves its
@@ -1483,10 +1432,11 @@ int main(void) {
       .insert_drive = InsertDrive,
   };
   MenuInit(&menu_config);
-  // Before the list, whose copies go through guest RAM.
-  LauncherInit(g_guest_ram);
 
-  ChooseVM();
+  // The VM's guest RAM is lent to the launcher until a VM starts, for
+  // copies.
+  g_has_vm =
+      LauncherRun(&g_vms, &g_settings, g_guest_ram, &kCommandsHandlers, &g_vm);
   OpenDrives();
   RunVM(InitVM());
   return 0;
