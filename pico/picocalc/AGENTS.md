@@ -433,10 +433,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
   (after a separator line if there are any VMs), a
   page for each VM with the images in its drives - two drives a line, A and
-  B then HD1 and HD2 - over Edit drives, Rename, Clone and Delete, a name typed
+  B then HD1 and HD2 - over Configure, Rename, Clone and Delete, a name typed
   for Rename and Clone, and a question before Delete. Afterwards it shows
   the list of VMs to manage again with the VM renamed or made chosen - after
-  Edit drives, the VM's page - and the list at power on waits for a key, as
+  Configure, the VM's page - and the list at power on waits for a key, as
   after USB mass storage.
 - **The VM manager's screen holds a `VMManager`, in `src/vm_manager.c`, and
   passes it down**: the launcher's VM list and settings, the copy buffer, and what a
@@ -489,8 +489,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   Create writes `vm.cfg` with the drives there, as paths relative to it, in
   one `ConfigFileUpdate()` - `VMConfigSaveDrives()` - which removes the line
   of a drive left out, and a line left with nothing else on it.
-- **Edit drives is the same form on a VM's drives**, as its `vm.cfg` has
-  them, with no name and Save for Create; Save writes the four drives the
+- **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
+  for both, starting from its drives as its `vm.cfg` has them, with no name
+  and Save for Create. It is named for the VM's configuration as a whole,
+  which is drives today and guest RAM and the like later; Save writes the four drives the
   same way, which keeps the file's comments and other lines. An image of the
   VM's own a drive stops holding stays in its folder - nothing is deleted
   behind the user's back - and goes with the VM.
@@ -544,7 +546,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hd1.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
-  the boot floppy; New VM and Edit drives make the blank one on the device.
+  the boot floppy; New VM and Configure make the blank one on the device.
   Its partition starts
   at sector 17, so mtools reach it as `hd1.img@@8704`.
 - `src/sdcard.c` runs the card in SPI mode on SPI0, from the SD simplified
@@ -715,7 +717,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   a drive. Drives follow each other a space apart, so a light does not run
   into the drive before it, and a drive the machine does not have -
   floppy disk 2 disabled, a hard disk with no image - is left out. The
-  images' names are on the status page and in Edit drives: they are mostly
+  images' names are on the status page and in a VM's configuration: they are mostly
   `fd1.img` and `hd1.img`, and not worth the row.
 - **The battery is five cells, a fifth of a charge each**, a cell for each
   fifth begun - 78% is four - in green, yellow below half and red below a
