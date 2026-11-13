@@ -1,25 +1,27 @@
-// The launcher: what happens from power on until a VM starts.
+// Launcher mode: what happens from power on until a VM starts.
 //
 // At power on it reads the card: the VMs, the settings, and the start note,
 // which the in-VM menu's Reset and Power off leave across the reboot to say
 // what to do next. Then it does one of two things. It loads a VM to start at
 // once: the one reset, or the default when the settings ask for no
-// countdown. Or it sets up the launcher menu, which lists the VMs for starting
-// one, and counts down to the default.
+// countdown. Or it shows the launcher menu, which lists the VMs for starting
+// one and counts down to the default. It runs the launcher menu until a VM
+// is loaded, answering debug commands and updating the status rows.
+//
+// It answers two debug commands itself: report, with the system's groups and
+// then the launcher's, and screen, with no_guest, as no guest runs yet. The
+// others are common to every mode.
 //
 // The launcher menu (launcher_menu_screen.c) only decides what to do.
 // Everything done with the card is here: loading the VM selected, which
 // makes it the default, and reading the card again after USB mass storage
-// has given it to the host. For now the launcher holds the VM list and the
-// settings, and main.c runs the launcher menu's loop, answering commands and
-// updating the status rows.
+// has given it to the host.
 #ifndef YAX86_PICOCALC_LAUNCHER_H
 #define YAX86_PICOCALC_LAUNCHER_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "screen.h"
 #include "settings.h"
 #include "southbridge.h"
 #include "vm_config.h"
@@ -34,42 +36,24 @@ typedef enum StartIntent {
   kStartIntentMenu,
 } StartIntent;
 
-// What LauncherStart() found to do.
-typedef enum LauncherStartResult {
-  // A VM was loaded without the launcher menu: the one restarted, or the
-  // default with no wait.
-  kLauncherLoadedVM = 0,
-  // There is no card, so the built-in floppy boots.
-  kLauncherNoCard,
-  // The launcher menu shows, and waits for a key or the countdown.
-  kLauncherShowsMenu,
-} LauncherStartResult;
-
-// Lend the launcher copy_buffer, kCopyBufferSize bytes of guest RAM, which
-// copying a VM's files borrows before the VM starts.
-void LauncherInit(uint8_t* copy_buffer);
-
-// The VMs on the card, and the card's settings, as last read.
-const VMList* LauncherVMs(void);
-const Settings* LauncherSettings(void);
-
-// Read the card's VMs and settings, and the note a reset or power off left,
-// and either load a VM to start at once into *vm or set the launcher menu up.
-LauncherStartResult LauncherStart(VMConfig* vm);
-
-// Show the launcher menu as the launcher has set it up, with its VMs and
-// settings. The launcher menu closes once it has decided what to do.
-ScreenResult LauncherOpenMenu(void);
-
-// Act on why the launcher menu closed.
+// Run launcher mode, and return whether a VM was loaded into *vm to start.
+// main.c holds what it works on: vms and settings, which the launcher reads
+// from the card and its screens change; and copy_buffer, guest RAM that copying
+// a VM's files borrows until the VM starts.
 //
-// Returns true when a VM is to start: the one selected, loaded into *vm.
-//
-// Returns false for LauncherOpenMenu() to show the menu again, without
-// counting down, in two cases. USB mass storage gave the card to the host:
-// the card has been read again. Or the selected VM's vm.cfg does not read:
-// its problem shows, and it stays selected.
-bool LauncherHandleMenuExit(VMConfig* vm);
+// Without a card it returns false at once, and the emulator boots the floppy
+// built into flash. Otherwise:
+//   - After a Reset, the VM reset starts again at once.
+//   - After a Power off, the launcher menu waits for a key, with the VM
+//     powered off selected.
+//   - At power on, the default starts at once if the settings ask for no
+//     countdown and have no problem to show; otherwise the launcher menu
+//     counts down to it, until a key is pressed.
+// With no VMs the launcher menu offers Manage VMs, USB mass storage and
+// Settings, and nothing starts by itself. A VM whose vm.cfg does not read
+// leaves the launcher menu showing its problem.
+bool LauncherRun(
+    VMList* vms, Settings* settings, uint8_t* copy_buffer, VMConfig* vm);
 
 // Restart the board, leaving a note for the start after it, with name the
 // VM's: to start it again at once, or to show the launcher menu with it

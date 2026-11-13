@@ -351,21 +351,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   the launcher menu, a screen like any other, and only chooses: it counts
   down, and opens the screen of each row itself, but a VM chosen, or the
   card given to the host by USB mass storage, closes it with why, in a
-  `LauncherMenuExit`. `src/launcher.c` does everything with the card: it
-  reads the VMs, the settings and the start note, loads a VM to start at
-  once or sets the launcher menu up, and once it closes,
-  `LauncherHandleMenuExit()` loads the VM chosen, or reads the card again,
-  and shows the launcher menu again if a VM does not load. `main.c` runs
-  the loop,
-  which answers commands and, through `src/screen.c`, hands the screen
-  showing its keys, a tick for what happens with time, and the chance to
-  draw. It composes the status rows itself, with `src/ui_status.c`, from
+  `LauncherMenuExit`. `src/launcher.c` is launcher mode, `LauncherRun()`,
+  and does everything with the card: it reads the VMs, the settings and
+  the start note, loads a VM to start at once or shows the launcher menu,
+  and runs the loop until a VM is loaded. Once the menu closes it loads the
+  VM selected, or reads the card again, and shows the menu again if no VM
+  loaded. The loop answers debug commands, its own and the common ones.
+  Through `src/screen.c`, it hands the screen showing its keys, a tick for
+  what happens with time, and the chance to draw. It composes the status rows itself, with `src/ui_status.c`, from
   the keys `ScreenHint()` gives: the router leaves the rows to each loop,
   as the VM's have its drives and locks too. A `Screen` is those
   functions, with its page's name for the report and a `resume` for
   showing again. The router keeps the screens as a stack, the list at the
   bottom, and only the one on top is called, so the stack's depth adds
-  nothing to core 0's. Calls go one way, from `main.c` to the screen and
+  nothing to core 0's. Calls go one way, from the loop to the screen and
   from the screen down.
 - **Every page is a screen of its own**, and is opened through its own
   open function, which takes what the page works on as parameters:
@@ -375,12 +374,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   carries no value, only what the router does: stay, open a screen, back,
   or close every screen, so `screen.c` knows nothing of VMs and serves any
   menu. The list writes the VM chosen through the pointer
-  `LauncherScreenOpen(&g_vm)` took, and closes; the loop ends when no
+  `LauncherMenuScreenOpen()` took, `main.c`'s `g_vm`, and closes; the loop ends when no
   screen is open. Back from the bottom screen closes too. The open
   function is typed, so a page cannot be opened without its state, and
   there is no `void*` context. Each screen is on the stack at most once, so
   it keeps those pointers and its own state, such as the item chosen, in
-  statics. The launcher holds `g_vms` and `g_settings`. Settings and Font
+  statics. `main.c` holds the models, `g_vms`, `g_settings` and `g_vm`,
+  and passes them to `LauncherRun()`, which passes them down; nothing
+  asks the launcher for them back. Settings and Font
   are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
   are USB mass storage, the page while it exports, and the question before
   an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
@@ -925,9 +926,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   any other to `DebugCommandRunCommon()`. A mode's report gives the
   system's groups first, with `DebugCommandReportSystem()`: `system`,
   `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
-  mode. Then it gives its own: the VM's `paging`, `boot`, `display`, `fd1`,
-  `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`. For now `main.c` answers
-  for both modes.
+  mode. Then it gives its own. The emulator's, which `main.c` answers, are
+  the VM's `paging`, `boot`, `display`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`,
+  `menu` and `pacing`. The launcher's are `display` with the font, `vm`
+  with the number of VMs, and `menu` with the page showing; and as no guest
+  runs yet, its `screen` answers `no_guest`, which `debug.js`'s `wait` takes
+  as no match yet.
 - **`src/init.c` initializes the system at startup**, after `main()` has
   painted the stacks: USB serial, the clock, the PSRAM, the logs, the LCD,
   the keyboard controller and the speaker. What it found is an

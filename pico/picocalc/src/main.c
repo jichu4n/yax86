@@ -49,7 +49,6 @@
 #include "stack_usage.h"
 #include "status_bar.h"
 #include "typing.h"
-#include "ui_status.h"
 #include "usb_storage.h"
 #include "vm_config.h"
 #include "vm_list.h"
@@ -177,8 +176,11 @@ typedef struct RuntimeStatus {
 static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
-// The VM started, if one was: without one drive A holds the built-in floppy
-// and no other drive has a disk.
+// The card's VMs and settings, which the launcher reads and its screens
+// change; and the VM the launcher loaded to start, if it loaded one: without
+// one drive A holds the built-in floppy and no other drive has a disk.
+static VMList g_vms;
+static Settings g_settings;
 static VMConfig g_vm;
 static bool g_has_vm;
 static RuntimeStatus g_status;
@@ -507,9 +509,9 @@ static void ReplyDiskImage(
       Y_LOG_UINT("write_us", stats->write_us));
 }
 
-// main.c's groups of a report, after the board's, which it gives for both
-// modes for now: the VM's paging and boot, the display, the VM's drives and
-// name, the menu, and the pacing. In parts, none inlined into another: each
+// Emulator mode's groups of a report, which main.c answers, after the
+// system's: the VM's paging and boot, the display, the VM's drives and name,
+// the menu, and the pacing. In parts, none inlined into another: each
 // group's fields take stack until the function they are in returns, and the
 // report whole would be the deepest call on core 0's stack. See
 // StackUsagePaint().
@@ -533,7 +535,7 @@ static __noinline void ReportRunning(const DebugCommand* command) {
   const DisplayStats display = DisplayGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
-      Y_LOG_STRING("font", Font4x10Name(LauncherSettings()->font)),
+      Y_LOG_STRING("font", Font4x10Name(g_settings.font)),
       Y_LOG_UINT("frames_drawn", display.frames_drawn),
       Y_LOG_UINT("pixels_drawn", display.pixels_drawn),
       Y_LOG_UINT("render_us", display.render_us),
@@ -549,7 +551,7 @@ static __noinline void ReportDrives(const DebugCommand* command) {
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm.entry.name : ""),
-      Y_LOG_UINT("vms", LauncherVMs()->count));
+      Y_LOG_UINT("vms", g_vms.count));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", MenuShowing()),
       Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : MenuPageName()));
@@ -625,8 +627,7 @@ static bool InitVM(void) {
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->floppy_drives = FloppyDrives();
-  config->video_text_font.glyphs =
-      &(*Font4x10Glyphs(LauncherSettings()->font))[0][0];
+  config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings.font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
   config->set_pc_speaker_frequency = SetPCSpeakerFrequency;
@@ -1132,62 +1133,8 @@ static void RunVM(bool vm_ready) {
 }
 
 // ============================================================================
-// The launcher
+// Starting the VM
 // ============================================================================
-
-// Run the launcher until it has loaded a VM to start. Without a card it
-// loads none, and the floppy built into flash boots.
-//
-// LauncherStart() reads the card, and either loads a VM to start at once or
-// sets up the launcher menu; launcher.h says when. Then this runs the
-// launcher menu: it answers commands, hands each key and the time passing to
-// the screen showing, composes the status rows from its keys, and draws it.
-// When the menu closes, LauncherHandleMenuExit() loads the VM selected, or
-// the menu opens again.
-//
-// Kept out of line with __noinline, so that its locals are on core 0's stack
-// only while it runs. See StackUsagePaint().
-static __noinline void RunLauncher(void) {
-  switch (LauncherStart(&g_vm)) {
-    case kLauncherLoadedVM:
-      g_has_vm = true;
-      return;
-    case kLauncherNoCard:
-      return;
-    case kLauncherShowsMenu:
-      break;
-  }
-  ScreenShow(LauncherOpenMenu());
-  absolute_time_t next_status_at = get_absolute_time();
-  for (;;) {
-    PollCommand(NULL);
-    SouthbridgeKeyEvent key;
-    const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
-    if (pressed) {
-      ScreenHandleKey(key);
-    }
-    if (ScreenIsOpen()) {
-      ScreenTick();
-    }
-    // The launcher menu closes once it has decided: a VM to start, which may
-    // not load, or after USB mass storage, the card to be read again.
-    if (!ScreenIsOpen()) {
-      if (LauncherHandleMenuExit(&g_vm)) {
-        g_has_vm = true;
-        return;
-      }
-      ScreenShow(LauncherOpenMenu());
-    }
-    // The keys for the page a key led to are offered at once rather than at
-    // the next update.
-    if (pressed || time_reached(next_status_at)) {
-      next_status_at = make_timeout_time_ms(kStatusUpdateMs);
-      UIStatusOffer(ScreenHint());
-    }
-    ScreenDraw(time_us_64());
-    sleep_ms(kPausedPollMs);
-  }
-}
 
 // Open the drives' images: the VM's, or without one, none - drive A then
 // has the built-in floppy. An image a VM names that does not open leaves its
@@ -1263,10 +1210,8 @@ int main(void) {
       .insert_drive = InsertDrive,
   };
   MenuInit(&menu_config);
-  // Before the list, whose copies go through guest RAM.
-  LauncherInit(g_guest_ram);
-
-  RunLauncher();
+  // Guest RAM is lent to the launcher until a VM starts, for copies.
+  g_has_vm = LauncherRun(&g_vms, &g_settings, g_guest_ram, &g_vm);
   OpenDrives();
   RunVM(InitVM());
   return 0;
