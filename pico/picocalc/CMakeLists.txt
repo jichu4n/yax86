@@ -139,7 +139,6 @@ add_executable(yax86_picocalc
     src/font_screen.c
     src/keymap.c
     src/launcher.c
-    src/launcher_card.c
     src/launcher_menu_screen.c
     src/vm_manager.c
     src/vm_manager_screen.c

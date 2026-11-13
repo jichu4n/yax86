@@ -2,20 +2,23 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 #include "disk_image.h"
+#include "display.h"
 #include "hardware/watchdog.h"
-#include "launcher_card.h"
 #include "launcher_menu_screen.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "screen.h"
 #include "southbridge.h"
+#include "status_bar.h"
+#include "text.h"
 #include "typing.h"
 #include "ui_status.h"
 #include "vm_list.h"
-#include "vm_manager_screen.h"
 
 enum {
   // The part of the guest's RAM a clone's files are copied through, before a
@@ -81,29 +84,107 @@ static bool TakeStartNote(StartNote* note) {
   return true;
 }
 
+// main.c's, which LauncherRun() is given: the card's VMs and settings.
+static VMList* g_vms;
+static Settings* g_settings;
+// Why the launcher menu closed.
+static LauncherMenuExit g_exit;
+
+// Read the card's settings, use their font, and set *highlighted to the index
+// of the default VM in g_vms, or 0 without one. Returns false, with the
+// problem shown on the launcher menu, if the settings had one. Kept out of
+// line, so that its message is on core 0's stack only while it runs rather
+// than in the frames of the callers it would be inlined into.
+static __noinline bool ReadSettings(uint8_t* highlighted) {
+  char problem[kVMProblemLength + 1];
+  bool read = SettingsRead(g_settings, problem);
+  DisplaySetFont(g_settings->font);
+  *highlighted = 0;
+  if (read && g_settings->boot_default[0] != '\0') {
+    // Past the list's end, the first is highlighted instead.
+    const uint8_t index = VMListFind(g_vms, g_settings->boot_default);
+    if (index < kVMListMax) {
+      *highlighted = index;
+    }
+  }
+  if (!read) {
+    char message[kTextColumns + 1];
+    snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
+    UIStatusSetProblem(message);
+  }
+  return read;
+}
+
+// Make the VM named name the one to start at the next power on, if it is not
+// already. Writing the card only when it changes keeps a board that starts
+// its default every time from writing at all.
+static void SaveBootDefault(const char* name) {
+  if (strcasecmp(g_settings->boot_default, name) == 0) {
+    return;
+  }
+  char problem[kVMProblemLength + 1];
+  if (SettingsSaveBootDefault(g_settings, name, problem)) {
+    SYSTEM_INFO("boot_default_saved", Y_LOG_STRING("name", name));
+    return;
+  }
+  char message[kTextColumns + 1];
+  snprintf(
+      message, sizeof(message), "Could not save boot_default: %.50s", problem);
+  StatusBarPostMessage(message);
+  SYSTEM_WARN("boot_default_not_saved", Y_LOG_STRING("problem", problem));
+}
+
+// Load the VM at index in g_vms to start it: read its vm.cfg into *config,
+// and make it the default. Returns false, with its problem shown on the
+// launcher menu, if it does not read.
+static __noinline bool LoadChosenVM(uint8_t index, VMConfig* config) {
+  const VMEntry* vm = &g_vms->vms[index];
+  char problem[kVMProblemLength + 1];
+  if (VMConfigRead(vm, config, problem)) {
+    SYSTEM_INFO("vm_chosen", Y_LOG_STRING("path", vm->path));
+    SaveBootDefault(vm->name);
+    return true;
+  }
+  char message[kTextColumns + 1];
+  snprintf(message, sizeof(message), "%s: %s", vm->name, problem);
+  UIStatusSetProblem(message);
+  SYSTEM_WARN(
+      "vm_config_problem", Y_LOG_STRING("path", vm->path),
+      Y_LOG_STRING("problem", problem));
+  return false;
+}
+
+// Show the launcher menu, with the VM at highlighted chosen, counting down
+// countdown_ms to starting it by itself, or not with 0. Kept out of line, so
+// that its arguments are off core 0's stack while the menu shows.
+static __noinline void OpenMenu(
+    uint8_t* copy_buffer, uint8_t highlighted, uint32_t countdown_ms) {
+  ScreenShow(LauncherMenuScreenOpen(
+      g_vms, g_settings, copy_buffer, kCopyBufferSize, highlighted,
+      countdown_ms, &g_exit));
+}
+
 // What the start found to do.
 typedef enum StartResult {
-  // A VM was taken without the list: the one restarted, or the default with
-  // no wait.
-  kStartTookVM = 0,
+  // A VM was loaded without the launcher menu: the one restarted, or the
+  // default with no wait.
+  kStartLoadedVM = 0,
   // There is no card, so the built-in floppy boots.
   kStartNoCard,
-  // The list shows, and waits for a key or the countdown.
-  kStartShowsList,
+  // The launcher menu shows, and waits for a key or the countdown.
+  kStartShowsMenu,
 } StartResult;
 
 // Read the card's VMs and settings, and the note a reset or power off left,
-// and either take a VM at once into *chosen or show the list. Kept out of
-// line, so that what only the start needs is off core 0's stack while the
-// list shows.
-static __noinline StartResult
-Start(VMList* vms, Settings* settings, uint8_t* copy_buffer, VMConfig* chosen) {
+// and either load a VM to start at once into *chosen or show the launcher
+// menu. Kept out of line, so that what only the start needs is off core 0's
+// stack while the launcher menu shows.
+static __noinline StartResult Start(uint8_t* copy_buffer, VMConfig* chosen) {
   StartNote note = {0};
   const bool noted = TakeStartNote(&note);
-  VMListRead(vms);
+  VMListRead(g_vms);
   uint8_t highlighted = 0;
-  const bool settings_read =
-      LauncherCardReadSettings(vms, settings, &highlighted);
+  const bool settings_read = ReadSettings(&highlighted);
   // Without a card there is nothing to choose, or to put on USB.
   if (DiskImageMountCard() != kDiskImageOpen) {
     return kStartNoCard;
@@ -112,36 +193,54 @@ Start(VMList* vms, Settings* settings, uint8_t* copy_buffer, VMConfig* chosen) {
     SYSTEM_INFO(
         note.intent == kStartIntentRestart ? "restarting" : "powered_off",
         Y_LOG_STRING("name", note.name));
-    const uint8_t index = VMListFind(vms, note.name);
+    const uint8_t index = VMListFind(g_vms, note.name);
     if (index < kVMListMax) {
       highlighted = index;
-      if (note.intent == kStartIntentRestart &&
-          LauncherCardTakeVM(vms, settings, index, chosen)) {
-        return kStartTookVM;
+      if (note.intent == kStartIntentRestart && LoadChosenVM(index, chosen)) {
+        return kStartLoadedVM;
       }
     }
   } else if (
-      settings_read && settings->boot_delay == 0 && vms->count > 0 &&
-      LauncherCardTakeVM(vms, settings, highlighted, chosen)) {
-    return kStartTookVM;
+      settings_read && g_settings->boot_delay == 0 && g_vms->count > 0 &&
+      LoadChosenVM(highlighted, chosen)) {
+    return kStartLoadedVM;
   }
-  const bool counting = !noted && settings->boot_delay > 0 && vms->count > 0;
-  ScreenShow(LauncherMenuScreenOpen(
-      vms, settings, copy_buffer, kCopyBufferSize, highlighted,
-      counting ? (uint32_t)settings->boot_delay * kMillisecondsPerSecond : 0,
-      chosen));
-  return kStartShowsList;
+  const bool counting =
+      !noted && g_settings->boot_delay > 0 && g_vms->count > 0;
+  OpenMenu(
+      copy_buffer, highlighted,
+      counting ? (uint32_t)g_settings->boot_delay * kMillisecondsPerSecond : 0);
+  return kStartShowsMenu;
+}
+
+// Act on why the launcher menu closed: load the VM chosen, or reached by the
+// countdown, into *chosen, returning true; or show the launcher menu again,
+// without counting down, after USB mass storage with the card read again, or
+// with the problem of a VM that did not load shown, and it highlighted.
+static __noinline bool HandleMenuExit(uint8_t* copy_buffer, VMConfig* chosen) {
+  uint8_t highlighted = g_exit.vm;
+  if (g_exit.reason == kLauncherMenuExitReadCard) {
+    // The host may have added VMs, removed them, or changed the settings.
+    VMListRead(g_vms);
+    ReadSettings(&highlighted);
+  } else if (LoadChosenVM(g_exit.vm, chosen)) {
+    return true;
+  }
+  OpenMenu(copy_buffer, highlighted, 0);
+  return false;
 }
 
 bool LauncherRun(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
     const CommandsHandlers* commands, VMConfig* chosen) {
-  switch (Start(vms, settings, copy_buffer, chosen)) {
-    case kStartTookVM:
+  g_vms = vms;
+  g_settings = settings;
+  switch (Start(copy_buffer, chosen)) {
+    case kStartLoadedVM:
       return true;
     case kStartNoCard:
       return false;
-    case kStartShowsList:
+    case kStartShowsMenu:
       break;
   }
   absolute_time_t next_status_at = get_absolute_time();
@@ -155,8 +254,9 @@ bool LauncherRun(
     if (ScreenIsOpen()) {
       ScreenTick();
     }
-    // The list closes once a VM is chosen.
-    if (!ScreenIsOpen()) {
+    // The launcher menu closes once it has chosen: a VM to start, which may
+    // not load, or after USB mass storage, the card to be read again.
+    if (!ScreenIsOpen() && HandleMenuExit(copy_buffer, chosen)) {
       return true;
     }
     // The keys for the page a key led to are offered at once rather than at
