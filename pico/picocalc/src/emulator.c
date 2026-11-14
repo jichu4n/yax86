@@ -733,7 +733,7 @@ static void PaceToRealTime(void) {
 
 // Pass a key on to the guest, as the scancodes a PC/XT keyboard would send.
 static void TypeKey(SouthbridgeKeyEvent event) {
-  uint8_t scancodes[kKeymapMaxNumScancodes];
+  uint8_t scancodes[kKeymapMaxScancodes];
   const uint8_t num_scancodes = KeymapTranslate(event, scancodes);
   for (uint8_t i = 0; i < num_scancodes; ++i) {
     YKeyboardHandleKeyPress(&g_platform.keyboard, scancodes[i]);

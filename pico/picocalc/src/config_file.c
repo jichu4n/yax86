@@ -10,7 +10,7 @@
 
 enum {
   // The most pairs a line may have.
-  kMaxNumPairs = 8,
+  kMaxPairs = 8,
 };
 
 static const char kNewExtension[] = "new";
@@ -71,9 +71,9 @@ static bool ReadLine(
   if (line[0] == '#') {
     return true;
   }
-  YLogfmtPair pairs[kMaxNumPairs];
+  YLogfmtPair pairs[kMaxPairs];
   uint8_t num_pairs = 0;
-  if (!YLogfmtParse(line, pairs, kMaxNumPairs, &num_pairs)) {
+  if (!YLogfmtParse(line, pairs, kMaxPairs, &num_pairs)) {
     snprintf(
         problem, kConfigFileProblemLength + 1, "line %u is not key=value pairs",
         line_number);
@@ -276,7 +276,7 @@ bool ConfigFileUpdate(
   static Writer writer;
   writer.length = 0;
   writer.does_fit = true;
-  if (num_settings > kConfigFileMaxNumSettings) {
+  if (num_settings > kConfigFileMaxSettings) {
     Describe(problem, "too many settings at once");
     return false;
   }

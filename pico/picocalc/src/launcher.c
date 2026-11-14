@@ -110,7 +110,7 @@ static __noinline bool ReadSettings(uint8_t* default_vm) {
   if (was_read && g_settings->boot_default[0] != '\0') {
     // Past the list's end, the first is the default instead.
     const uint8_t index = VMListFind(g_vms, g_settings->boot_default);
-    if (index < kVMListMaxNumVMs) {
+    if (index < kVMListMaxVMs) {
       *default_vm = index;
     }
   }
@@ -211,7 +211,7 @@ static __noinline StartResult Start(uint8_t* copy_buffer, VMConfig* vm) {
         note.intent == kStartIntentRestart ? "restarting" : "powered_off",
         Y_LOG_STRING("name", note.name));
     const uint8_t index = VMListFind(g_vms, note.name);
-    if (index < kVMListMaxNumVMs) {
+    if (index < kVMListMaxVMs) {
       selected = index;
       if (note.intent == kStartIntentRestart && LoadSelectedVM(index, vm)) {
         return kStartLoadedVM;

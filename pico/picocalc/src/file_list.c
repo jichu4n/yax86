@@ -17,7 +17,7 @@ static bool AreEntriesInOrder(const FileListEntry* a, const FileListEntry* b) {
 // Add an entry where it belongs, keeping the list sorted. An insertion sort:
 // a folder's worth of entries is few enough that nothing cleverer pays.
 static void Insert(FileList* list, const FileListEntry* entry) {
-  if (list->num_entries == kFileListMaxNumEntries) {
+  if (list->num_entries == kFileListMaxEntries) {
     list->is_truncated = true;
     return;
   }

@@ -19,13 +19,13 @@
 
 enum {
   // The most VMs listed: the first found past this are left out.
-  kVMListMaxNumVMs = 16,
+  kVMListMaxVMs = 16,
   // The most files and VMs VMListDescribe() names.
   kVMListNumNamed = 3,
 };
 
 typedef struct VMList {
-  VMEntry vms[kVMListMaxNumVMs];
+  VMEntry vms[kVMListMaxVMs];
   uint8_t num_vms;
   // Whether there were more VMs than the list holds.
   bool is_truncated;
@@ -36,7 +36,7 @@ typedef struct VMList {
 void VMListRead(VMList* list);
 
 // The index in the list of the VM named name, in any capitals, or
-// kVMListMaxNumVMs if there is none.
+// kVMListMaxVMs if there is none.
 uint8_t VMListFind(const VMList* list, const char* name);
 
 // What deleting a VM would take with it.

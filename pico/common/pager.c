@@ -7,10 +7,9 @@
 
 enum {
   // The most guest RAM there can be to page, and so the largest page table.
-  kPagerMaxNumPages = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE >>
-      kPagerPageShift,
+  kPagerMaxPages = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE >> kPagerPageShift,
   // The most frames: all of the SRAM guest memory has.
-  kPagerMaxNumFrames = kPicoGuestSRAMSize >> kPagerPageShift,
+  kPagerMaxFrames = kPicoGuestSRAMSize >> kPagerPageShift,
   // A frame holding no page.
   kPagerNoPage = 0xFFFF,
 };
@@ -22,14 +21,14 @@ enum {
 // What PagerInit() returns, for the platform.
 static YPlatformPagedMemory g_memory;
 // The page table, entry i for page i. A page in no frame has entry 0.
-static uint16_t g_pages[kPagerMaxNumPages];
+static uint16_t g_pages[kPagerMaxPages];
 // The reverse of the page table: the page in each frame, or kPagerNoPage.
 // An entry's frame number alone cannot say whether the page is in a frame,
 // since a page in no frame has entry 0, which names frame 0; this can.
-static uint16_t g_frame_pages[kPagerMaxNumFrames];
+static uint16_t g_frame_pages[kPagerMaxFrames];
 // A bit per page: whether it has ever been written back, and so whether PSRAM
 // holds its bytes. One that has not is all zeros, as guest RAM starts.
-static uint8_t g_backed[kPagerMaxNumPages / 8];
+static uint8_t g_backed[kPagerMaxPages / 8];
 // How many frames there are, and the clock hand: the next frame
 // PagerTakeFrame() looks at.
 static uint32_t g_num_frames;
@@ -42,8 +41,8 @@ static void PagerPageFault(
 YPlatformPagedMemory* PagerInit(
     uint8_t* frames, uint32_t frames_size, uint32_t size) {
   g_num_frames = frames_size >> kPagerPageShift;
-  if (g_num_frames > kPagerMaxNumFrames) {
-    g_num_frames = kPagerMaxNumFrames;
+  if (g_num_frames > kPagerMaxFrames) {
+    g_num_frames = kPagerMaxFrames;
   }
   for (uint32_t i = 0; i < g_num_frames; ++i) {
     g_frame_pages[i] = kPagerNoPage;

@@ -25,7 +25,7 @@
 
 enum {
   // The most pairs a command's line may have, its id and name included.
-  kDebugCommandMaxNumPairs = 8,
+  kDebugCommandMaxPairs = 8,
 };
 
 // A command read from a line, its pairs pointing into the line. Valid until
@@ -36,7 +36,7 @@ typedef struct DebugCommand {
   // The command's name, cmd's value: ping, report, screen and so on.
   const char* name;
   // Every pair on the line, the id and name included, for its arguments.
-  YLogfmtPair pairs[kDebugCommandMaxNumPairs];
+  YLogfmtPair pairs[kDebugCommandMaxPairs];
   uint8_t num_pairs;
 } DebugCommand;
 

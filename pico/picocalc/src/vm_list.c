@@ -23,7 +23,7 @@ static const char* const kBlankFiles[kNumVMDrives] = {
 // entry from it.
 // Add a VM where it belongs, keeping the list sorted by name.
 static void Insert(VMList* list, const VMEntry* entry) {
-  if (list->num_vms == kVMListMaxNumVMs) {
+  if (list->num_vms == kVMListMaxVMs) {
     list->is_truncated = true;
     return;
   }
@@ -42,7 +42,7 @@ uint8_t VMListFind(const VMList* list, const char* name) {
       return i;
     }
   }
-  return kVMListMaxNumVMs;
+  return kVMListMaxVMs;
 }
 
 // Add a folder of the VMs folder to the list, if it is a VM: a folder,
