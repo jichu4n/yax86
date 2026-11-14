@@ -471,7 +471,7 @@ typedef struct YCPUState {
 
   // Instructions retired since YCPUInit(), as the two halves of a 64-bit count.
   // A halted tick retires none. Read them as one number with
-  // YCPUInstructionsRetired().
+  // YCPUNumInstructionsRetired().
   //
   // Counted here rather than left to the caller because YCPUTick() already
   // knows whether it ran an instruction, while a caller can only find out by
@@ -485,8 +485,8 @@ typedef struct YCPUState {
   // branch not taken until 2^32 instructions have run. Worth 1.19% at -O3.
   // The count still has to reach 64 bits: a machine left running retires 2^32
   // in a couple of hours.
-  uint32_t instructions_retired_low;
-  uint32_t instructions_retired_high;
+  uint32_t num_instructions_retired_low;
+  uint32_t num_instructions_retired_high;
 
   // Cycles charged by the instruction currently executing on top of its base
   // cost: its time on the data bus, and whatever it adds for itself when its
@@ -559,9 +559,10 @@ typedef struct YCPUState {
 Y_PUBLIC void YCPUInit(YCPUState* cpu);
 
 // Instructions retired since YCPUInit(), as one number.
-Y_PUBLIC_HEADER inline uint64_t YCPUInstructionsRetired(const YCPUState* cpu) {
-  return ((uint64_t)cpu->instructions_retired_high << 32) |
-         cpu->instructions_retired_low;
+Y_PUBLIC_HEADER inline uint64_t YCPUNumInstructionsRetired(
+    const YCPUState* cpu) {
+  return ((uint64_t)cpu->num_instructions_retired_high << 32) |
+         cpu->num_instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
@@ -4435,7 +4436,7 @@ typedef struct YCPUBulkStringRun {
   uint32_t destination;
   // Distance from one element to the next, negative while DF is set.
   int32_t step;
-  uint16_t count;
+  uint16_t num_elements;
   uint8_t element_size;
 } YCPUBulkStringRun;
 
@@ -4449,11 +4450,11 @@ typedef struct YCPUBulkStringRun {
 // offset every iteration. And a run that leaves the window has to go through
 // the memory map for the part outside it.
 Y_FILE_PRIVATE bool YCPUIsBulkRunAddressable(
-    uint32_t window_end, uint16_t offset, uint32_t linear, uint16_t count,
-    uint8_t element_size, bool backwards) {
+    uint32_t window_end, uint16_t offset, uint32_t linear,
+    uint16_t num_elements, uint8_t element_size, bool backwards) {
   // Distance from the first element to the last, which is one element short of
   // the whole run.
-  const uint32_t reach = (uint32_t)(count - 1) * element_size;
+  const uint32_t reach = (uint32_t)(num_elements - 1) * element_size;
   if (backwards) {
     // Elements run downwards, so the last one is the lowest and the first one
     // reaches highest.
@@ -4474,11 +4475,11 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
     return false;
   }
   YCPUState* const cpu = ctx->cpu;
-  const uint16_t count = cpu->registers[Y_CPU_CX];
+  const uint16_t num_elements = cpu->registers[Y_CPU_CX];
   // end is 0 exactly when the window is closed, so this is the whole test for
   // whether there is a window to index.
   const uint32_t window_end = cpu->direct_data_window.end;
-  if (count == 0 || window_end == 0) {
+  if (num_elements == 0 || window_end == 0) {
     return false;
   }
   const uint8_t element_size = YCPUNumBytes[ctx->metadata->width];
@@ -4488,8 +4489,8 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
   const uint32_t destination =
       YCPUToRawAddress(cpu, Y_CPU_ES, destination_offset);
   if (!YCPUIsBulkRunAddressable(
-          window_end, destination_offset, destination, count, element_size,
-          backwards)) {
+          window_end, destination_offset, destination, num_elements,
+          element_size, backwards)) {
     return false;
   }
 
@@ -4500,7 +4501,7 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
     const uint32_t source =
         YCPUToRawAddress(cpu, source_segment, source_offset);
     if (!YCPUIsBulkRunAddressable(
-            window_end, source_offset, source, count, element_size,
+            window_end, source_offset, source, num_elements, element_size,
             backwards)) {
       return false;
     }
@@ -4509,7 +4510,7 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
 
   run->destination = destination;
   run->step = backwards ? -(int32_t)element_size : (int32_t)element_size;
-  run->count = count;
+  run->num_elements = num_elements;
   run->element_size = element_size;
   return true;
 }
@@ -4525,7 +4526,7 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
 // missed.
 Y_FILE_PRIVATE void YCPUNotifyBulkStringWrite(
     YCPUState* cpu, const YCPUBulkStringRun* run) {
-  const uint32_t reach = (uint32_t)(run->count - 1) * run->element_size;
+  const uint32_t reach = (uint32_t)(run->num_elements - 1) * run->element_size;
   const uint32_t low =
       run->step < 0 ? run->destination - reach : run->destination;
   const uint32_t high = low + reach + run->element_size - 1;
@@ -4540,7 +4541,7 @@ Y_FILE_PRIVATE void YCPUNotifyBulkStringWrite(
 Y_FILE_PRIVATE void YCPUFinishBulkStringRun(
     YCPUState* cpu, const YCPUBulkStringRun* run, uint8_t bus_bytes_per_element,
     bool has_source) {
-  const int32_t total = run->step * (int32_t)run->count;
+  const int32_t total = run->step * (int32_t)run->num_elements;
   if (has_source) {
     cpu->registers[Y_CPU_SI] =
         (uint16_t)((int32_t)cpu->registers[Y_CPU_SI] + total);
@@ -4553,7 +4554,7 @@ Y_FILE_PRIVATE void YCPUFinishBulkStringRun(
   // Summing first and adding once wraps exactly where adding one at a time
   // wraps, which is what keeps the two costing the same.
   cpu->pending_cycles +=
-      (uint16_t)((uint32_t)run->count * bus_bytes_per_element *
+      (uint16_t)((uint32_t)run->num_elements * bus_bytes_per_element *
                  Y_CPU_BUS_CYCLES_PER_BYTE);
 }
 
@@ -4604,7 +4605,7 @@ Y_FILE_PRIVATE bool YCPUExecuteMovsBulkRun(const YCPUInstructionContext* ctx) {
   const uint8_t* source = memory + run.source;
   uint8_t* destination = memory + run.destination;
   if (run.element_size == YCPUNumBytes[Y_CPU_WORD]) {
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       // Both bytes are read before either is written, which is the order the
       // element path reads and writes a word in - and is what a copy whose
       // ends overlap by exactly one byte comes out of differently otherwise.
@@ -4616,7 +4617,7 @@ Y_FILE_PRIVATE bool YCPUExecuteMovsBulkRun(const YCPUInstructionContext* ctx) {
       destination += run.step;
     }
   } else {
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       *destination = *source;
       source += run.step;
       destination += run.step;
@@ -4662,14 +4663,14 @@ Y_FILE_PRIVATE bool YCPUExecuteStosBulkRun(const YCPUInstructionContext* ctx) {
   const uint16_t value = cpu->registers[Y_CPU_AX];
   uint8_t* destination = memory + run.destination;
   if (run.element_size == YCPUNumBytes[Y_CPU_WORD]) {
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       destination[0] = (uint8_t)value;
       destination[1] = (uint8_t)(value >> 8);
       destination += run.step;
     }
   } else {
     // A byte-wide STOS stores AL, which is the low byte of the same register.
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       *destination = (uint8_t)value;
       destination += run.step;
     }
@@ -8003,9 +8004,9 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
         return Y_CPU_TICK_INVALID;
       }
       // The carry is a branch not taken until 2^32 instructions have run;
-      // see instructions_retired_low for why the count is split.
-      if (++cpu->instructions_retired_low == 0) {
-        ++cpu->instructions_retired_high;
+      // see num_instructions_retired_low for why the count is split.
+      if (++cpu->num_instructions_retired_low == 0) {
+        ++cpu->num_instructions_retired_high;
       }
 
       // Step 3: Carry on into the next instruction where nothing needs the

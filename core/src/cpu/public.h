@@ -451,7 +451,7 @@ typedef struct YCPUState {
 
   // Instructions retired since YCPUInit(), as the two halves of a 64-bit count.
   // A halted tick retires none. Read them as one number with
-  // YCPUInstructionsRetired().
+  // YCPUNumInstructionsRetired().
   //
   // Counted here rather than left to the caller because YCPUTick() already
   // knows whether it ran an instruction, while a caller can only find out by
@@ -465,8 +465,8 @@ typedef struct YCPUState {
   // branch not taken until 2^32 instructions have run. Worth 1.19% at -O3.
   // The count still has to reach 64 bits: a machine left running retires 2^32
   // in a couple of hours.
-  uint32_t instructions_retired_low;
-  uint32_t instructions_retired_high;
+  uint32_t num_instructions_retired_low;
+  uint32_t num_instructions_retired_high;
 
   // Cycles charged by the instruction currently executing on top of its base
   // cost: its time on the data bus, and whatever it adds for itself when its
@@ -539,9 +539,10 @@ typedef struct YCPUState {
 Y_PUBLIC void YCPUInit(YCPUState* cpu);
 
 // Instructions retired since YCPUInit(), as one number.
-Y_PUBLIC_HEADER inline uint64_t YCPUInstructionsRetired(const YCPUState* cpu) {
-  return ((uint64_t)cpu->instructions_retired_high << 32) |
-         cpu->instructions_retired_low;
+Y_PUBLIC_HEADER inline uint64_t YCPUNumInstructionsRetired(
+    const YCPUState* cpu) {
+  return ((uint64_t)cpu->num_instructions_retired_high << 32) |
+         cpu->num_instructions_retired_low;
 }
 
 // Get the value of a CPU flag.

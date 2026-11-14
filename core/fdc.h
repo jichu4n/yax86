@@ -670,7 +670,7 @@ enum {
   // the sector size code, the sectors to format, the gap length, and the
   // byte to fill each sector with.
   Y_FDC_FORMAT_PARAM_HEAD_AND_DRIVE = 1,
-  Y_FDC_FORMAT_PARAM_SECTORS = 3,
+  Y_FDC_FORMAT_PARAM_NUM_SECTORS = 3,
   Y_FDC_FORMAT_PARAM_FILL_BYTE = 5,
   // The ID the guest gives each sector, by DMA: cylinder, head, sector
   // number and sector size code.
@@ -723,10 +723,10 @@ Y_FILE_PRIVATE bool YFDCTakeFormatIDByte(YFDCState* fdc, uint8_t value) {
     }
   }
   ++fdc->transfer.sector_byte_index;
-  const uint8_t sectors = *YFDCCommandBufferGet(
-      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_SECTORS);
+  const uint8_t num_sectors = *YFDCCommandBufferGet(
+      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_NUM_SECTORS);
   return fdc->transfer.sector_byte_index >=
-         (uint16_t)sectors * Y_FDC_FORMAT_ID_BYTES;
+         (uint16_t)num_sectors * Y_FDC_FORMAT_ID_BYTES;
 }
 
 // Handler for Format Track: write a track's sectors, each filled with the fill

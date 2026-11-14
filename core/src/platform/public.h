@@ -62,7 +62,7 @@ enum {
   // them again: 512 entries, 12KB. More entries help programs whose hot code
   // is large, such as compilers and interpreters, and make little difference
   // to booting DOS. The measurements are in src/cpu/AGENTS.md.
-  Y_PLATFORM_DECODE_CACHE_ENTRIES = 512,
+  Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES = 512,
 
   // The memory map is indexed by page so that a lookup is a load rather than a
   // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
@@ -371,7 +371,7 @@ typedef struct YPlatformConfig {
 
   // The number of floppy drives, 1 to 4, which the PPI's DIP switches report
   // to the BIOS. 0, the default, is taken as 1.
-  uint8_t floppy_drives;
+  uint8_t num_floppy_drives;
 
   // Conventional memory that the CPU reads and writes directly, through its
   // direct data window: direct_memory_size bytes from address 0. Required
@@ -472,7 +472,7 @@ typedef struct YPlatformState {
   YCPUState cpu;
   // Storage for the CPU's decode cache, handed to it through
   // YCPUConfig.decode_cache.
-  YCPUDecodeCacheEntry cpu_decode_cache[Y_PLATFORM_DECODE_CACHE_ENTRIES];
+  YCPUDecodeCacheEntry cpu_decode_cache[Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES];
 
   // PIC state.
   YPICState pic;

@@ -760,9 +760,9 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
         return Y_CPU_TICK_INVALID;
       }
       // The carry is a branch not taken until 2^32 instructions have run;
-      // see instructions_retired_low for why the count is split.
-      if (++cpu->instructions_retired_low == 0) {
-        ++cpu->instructions_retired_high;
+      // see num_instructions_retired_low for why the count is split.
+      if (++cpu->num_instructions_retired_low == 0) {
+        ++cpu->num_instructions_retired_high;
       }
 
       // Step 3: Carry on into the next instruction where nothing needs the

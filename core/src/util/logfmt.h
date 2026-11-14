@@ -129,9 +129,9 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddInt(
 }
 
 // A number in hexadecimal, with a 0x prefix, upper case digits, and at least
-// digits of them - 0x0201 for a port, 0x9A for a byte.
+// num_digits of them - 0x0201 for a port, 0x9A for a byte.
 Y_PUBLIC_HEADER inline void YLogfmtLineAddHex(
-    YLogfmtLine* line, const char* key, uint64_t value, uint8_t digits) {
+    YLogfmtLine* line, const char* key, uint64_t value, uint8_t num_digits) {
   if (line->truncated) {
     return;
   }
@@ -139,7 +139,8 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddHex(
   size_t position = YLogfmtLineBeginPair(line, key);
   YSNPrintFPutC(line->buffer, limit, &position, '0');
   YSNPrintFPutC(line->buffer, limit, &position, 'x');
-  YSNPrintFPutUI(line->buffer, limit, &position, value, 16, 1, digits, 1, 0);
+  YSNPrintFPutUI(
+      line->buffer, limit, &position, value, 16, 1, num_digits, 1, 0);
   YLogfmtLineEndPair(line, position);
 }
 

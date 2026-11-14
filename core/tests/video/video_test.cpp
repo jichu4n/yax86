@@ -12,7 +12,7 @@ using namespace video_test;
 TEST(VideoDirtyStateTest, RangeStorageIsZeroInitializedAndCompact) {
   YVideoDirtyState dirty = {0};
   EXPECT_EQ(
-      sizeof(dirty.ranges), static_cast<size_t>(Y_VIDEO_DIRTY_ROW_COUNT * 2));
+      sizeof(dirty.ranges), static_cast<size_t>(Y_VIDEO_NUM_DIRTY_ROWS * 2));
   EXPECT_EQ(sizeof(dirty), sizeof(dirty.ranges) + sizeof(YVideoDirtyStatus));
   // The tracker competes with the emulated guest for MCU SRAM, so its size is
   // part of the design rather than an implementation detail. 50 rows cover the
@@ -91,7 +91,7 @@ TEST_P(VideoTimingTest, VerticalRetraceAtTheEndOfAFrame) {
   AdvanceScanLines(1);
   EXPECT_NE(Status() & Y_VIDEO_STATUS_VERTICAL_RETRACE, 0);
   EXPECT_NE(Status() & Y_VIDEO_STATUS_DISPLAY_DISABLED, 0);
-  EXPECT_EQ(video_.frames, 0u);
+  EXPECT_EQ(video_.num_frames, 0u);
 
   AdvanceScanLines(
       adapter->scan_lines_per_frame - adapter->displayed_scan_lines - 1);
@@ -101,7 +101,7 @@ TEST_P(VideoTimingTest, VerticalRetraceAtTheEndOfAFrame) {
   AdvanceScanLines(1);
   EXPECT_EQ(Status() & Y_VIDEO_STATUS_VERTICAL_RETRACE, 0);
   EXPECT_EQ(video_.scan_line, 0);
-  EXPECT_EQ(video_.frames, 1u);
+  EXPECT_EQ(video_.num_frames, 1u);
 }
 
 TEST_P(VideoTimingTest, TickAccumulatesPartialScanLines) {

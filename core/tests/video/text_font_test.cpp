@@ -44,7 +44,7 @@ enum {
 
 // The font every test draws in.
 struct TestFont {
-  uint8_t glyphs[Y_VIDEO_TEXT_FONT_GLYPHS * kCellHeight] = {0};
+  uint8_t glyphs[Y_VIDEO_TEXT_FONT_NUM_GLYPHS * kCellHeight] = {0};
 
   TestFont() {
     for (int row = 0; row < kCellHeight; ++row) {

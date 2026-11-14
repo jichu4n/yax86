@@ -72,8 +72,8 @@ static const YVideoAdapterMetadata* g_video_adapter_metadata = NULL;
 
 static void MainWritePixels(
     Y_UNUSED struct YVideoState* video, YVideoPosition origin,
-    const YVideoRGB* pixels, uint8_t count) {
-  DisplayPutPixels(origin.x, origin.y, pixels, count);
+    const YVideoRGB* pixels, uint8_t num_pixels) {
+  DisplayPutPixels(origin.x, origin.y, pixels, num_pixels);
 }
 
 static void MainBeginRenderRegion(

@@ -57,11 +57,11 @@ TEST_F(PlatformDecodeCacheTest, ThePlatformHandsTheCPUItsDecodeCache) {
   EXPECT_EQ(platform_.cpu.config.decode_cache, platform_.cpu_decode_cache);
   EXPECT_EQ(
       platform_.cpu.config.decode_cache_num_entries,
-      Y_PLATFORM_DECODE_CACHE_ENTRIES);
+      Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES);
   // Which YCPUInit() accepted, rather than logging and running without one.
   EXPECT_EQ(
       platform_.cpu.decode_cache_index_mask,
-      Y_PLATFORM_DECODE_CACHE_ENTRIES - 1);
+      Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES - 1);
 }
 
 // The path DMA takes. DOS loads itself over the boot sector this way, so an

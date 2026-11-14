@@ -35,7 +35,7 @@ inline YVideoRGB mock_frame_buffer[kMaxFrameBufferHeight][kMaxFrameBufferWidth];
 // Render activity since the last call to Render().
 inline int mock_pixel_write_count;
 inline int mock_pixel_span_count;
-inline YVideoRegion mock_regions[Y_VIDEO_DIRTY_ROW_COUNT];
+inline YVideoRegion mock_regions[Y_VIDEO_NUM_DIRTY_ROWS];
 inline int mock_region_count;
 inline int mock_region_end_count;
 // The region currently open, and the pixels written into it so far. A real
@@ -54,22 +54,23 @@ inline int mock_pixels_outside_region;
 
 inline void MockWritePixels(
     YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
-    uint8_t count) {
-  EXPECT_GT(count, 0);
-  EXPECT_LE(count, Y_VIDEO_PIXEL_BATCH_SIZE);
-  EXPECT_LE(origin.x + count, kMaxFrameBufferWidth);
+    uint8_t num_pixels) {
+  EXPECT_GT(num_pixels, 0);
+  EXPECT_LE(num_pixels, Y_VIDEO_PIXEL_BATCH_SIZE);
+  EXPECT_LE(origin.x + num_pixels, kMaxFrameBufferWidth);
   ++mock_pixel_span_count;
-  mock_pixel_write_count += count;
-  mock_open_region_pixels += count;
+  mock_pixel_write_count += num_pixels;
+  mock_open_region_pixels += num_pixels;
   // A span stays on one scan line, so only its ends need testing against the
   // open region.
   if (origin.x < mock_open_region.origin.x ||
-      origin.x + count > mock_open_region.origin.x + mock_open_region.width ||
+      origin.x + num_pixels >
+          mock_open_region.origin.x + mock_open_region.width ||
       origin.y < mock_open_region.origin.y ||
       origin.y >= mock_open_region.origin.y + mock_open_region.height) {
-    mock_pixels_outside_region += count;
+    mock_pixels_outside_region += num_pixels;
   }
-  for (uint8_t i = 0; i < count; ++i) {
+  for (uint8_t i = 0; i < num_pixels; ++i) {
     uint16_t x = origin.x + i;
     if (x < kMaxFrameBufferWidth && origin.y < kMaxFrameBufferHeight) {
       mock_frame_buffer[origin.y][x] = pixels[i];
@@ -78,7 +79,7 @@ inline void MockWritePixels(
 }
 
 inline void MockBeginRenderRegion(YVideoState* video, YVideoRegion region) {
-  if (mock_region_count < Y_VIDEO_DIRTY_ROW_COUNT) {
+  if (mock_region_count < Y_VIDEO_NUM_DIRTY_ROWS) {
     mock_regions[mock_region_count] = region;
   }
   ++mock_region_count;

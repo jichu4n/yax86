@@ -42,7 +42,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
 
 Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
-  size_t count = 0;
+  size_t num_chars = 0;
   size_t len = 0;
   const char* tmp = s;
   while (*tmp++) len++;
@@ -52,13 +52,13 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += YSNPrintFPutC(buffer, size, pos, ' ');
+    num_chars += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += YSNPrintFPutC(buffer, size, pos, *s++);
+    num_chars += YSNPrintFPutC(buffer, size, pos, *s++);
   }
-  return count;
+  return num_chars;
 }
 
 Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
@@ -66,7 +66,7 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
-  size_t count = 0;
+  size_t num_chars = 0;
 
   if (value == 0) {
     temp[i++] = '0';
@@ -91,26 +91,26 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   // If zero padding is requested, sign should be printed before padding
   if (pad_zero) {
     if (negative) {
-      count += YSNPrintFPutC(buffer, size, pos, '-');
+      num_chars += YSNPrintFPutC(buffer, size, pos, '-');
       negative = 0; // Sign already handled
     }
     while (pad-- > 0) {
-      count += YSNPrintFPutC(buffer, size, pos, '0');
+      num_chars += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += YSNPrintFPutC(buffer, size, pos, ' ');
+      num_chars += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
   if (negative) {
-    count += YSNPrintFPutC(buffer, size, pos, '-');
+    num_chars += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
+    num_chars += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
-  return count;
+  return num_chars;
 }
 
 Y_MODULE_PRIVATE_HEADER int YVSNPrintF(

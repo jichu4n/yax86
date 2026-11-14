@@ -10,15 +10,15 @@ enum : uint8_t {
   kDriveCountMask = 0x03 << kDriveCountShift,
 };
 
-// Checks that YPlatformConfig.floppy_drives reaches the BIOS through the PPI's
-// DIP switches, as the guest reads them.
+// Checks that YPlatformConfig.num_floppy_drives reaches the BIOS through the
+// PPI's DIP switches, as the guest reads them.
 class PlatformFloppyDrivesTest : public ::testing::Test {
  protected:
-  void Init(uint8_t floppy_drives) {
+  void Init(uint8_t num_floppy_drives) {
     platform_.config.direct_memory_size = sizeof(ram_);
     platform_.config.direct_memory = ram_;
     platform_.config.vram = vram_;
-    platform_.config.floppy_drives = floppy_drives;
+    platform_.config.num_floppy_drives = num_floppy_drives;
     ASSERT_TRUE(YPlatformInit(&platform_));
   }
 

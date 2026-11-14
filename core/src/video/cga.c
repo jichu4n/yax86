@@ -5,7 +5,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  Y_VIDEO_CGA40_COLUMN_COUNT = 40,
+  Y_VIDEO_CGA40_COLUMNS = 40,
   Y_VIDEO_CGA40_COLUMN_SCALE = 2,
   Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE = 2,
   // Number of pixels per byte in 320x200 graphics mode.
@@ -64,7 +64,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   // and the range converts back to character cells by halving. Invalidation
   // always scales a character column by the same factor, so the range is
   // aligned to whole cells and neither end truncates.
-  uint8_t scale = metadata->columns == Y_VIDEO_CGA40_COLUMN_COUNT
+  uint8_t scale = metadata->columns == Y_VIDEO_CGA40_COLUMNS
                       ? Y_VIDEO_CGA40_COLUMN_SCALE
                       : 1;
   uint8_t first_char = scale == Y_VIDEO_CGA40_COLUMN_SCALE

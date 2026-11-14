@@ -161,7 +161,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
 
 Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
-  size_t count = 0;
+  size_t num_chars = 0;
   size_t len = 0;
   const char* tmp = s;
   while (*tmp++) len++;
@@ -171,13 +171,13 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += YSNPrintFPutC(buffer, size, pos, ' ');
+    num_chars += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += YSNPrintFPutC(buffer, size, pos, *s++);
+    num_chars += YSNPrintFPutC(buffer, size, pos, *s++);
   }
-  return count;
+  return num_chars;
 }
 
 Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
@@ -185,7 +185,7 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     int uppercase, int width, int pad_zero, int negative) {
   char temp[64];
   int i = 0;
-  size_t count = 0;
+  size_t num_chars = 0;
 
   if (value == 0) {
     temp[i++] = '0';
@@ -210,26 +210,26 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   // If zero padding is requested, sign should be printed before padding
   if (pad_zero) {
     if (negative) {
-      count += YSNPrintFPutC(buffer, size, pos, '-');
+      num_chars += YSNPrintFPutC(buffer, size, pos, '-');
       negative = 0; // Sign already handled
     }
     while (pad-- > 0) {
-      count += YSNPrintFPutC(buffer, size, pos, '0');
+      num_chars += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += YSNPrintFPutC(buffer, size, pos, ' ');
+      num_chars += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
   if (negative) {
-    count += YSNPrintFPutC(buffer, size, pos, '-');
+    num_chars += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
+    num_chars += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
-  return count;
+  return num_chars;
 }
 
 Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
@@ -537,9 +537,9 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddInt(
 }
 
 // A number in hexadecimal, with a 0x prefix, upper case digits, and at least
-// digits of them - 0x0201 for a port, 0x9A for a byte.
+// num_digits of them - 0x0201 for a port, 0x9A for a byte.
 Y_PUBLIC_HEADER inline void YLogfmtLineAddHex(
-    YLogfmtLine* line, const char* key, uint64_t value, uint8_t digits) {
+    YLogfmtLine* line, const char* key, uint64_t value, uint8_t num_digits) {
   if (line->truncated) {
     return;
   }
@@ -547,7 +547,8 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddHex(
   size_t position = YLogfmtLineBeginPair(line, key);
   YSNPrintFPutC(line->buffer, limit, &position, '0');
   YSNPrintFPutC(line->buffer, limit, &position, 'x');
-  YSNPrintFPutUI(line->buffer, limit, &position, value, 16, 1, digits, 1, 0);
+  YSNPrintFPutUI(
+      line->buffer, limit, &position, value, 16, 1, num_digits, 1, 0);
   YLogfmtLineEndPair(line, position);
 }
 
@@ -944,7 +945,7 @@ typedef struct YLogField {
   const char* key;
   YLogFieldType type;
   // How many hex digits to write at least, for Y_LOG_FIELD_HEX.
-  uint8_t digits;
+  uint8_t num_digits;
   union {
     uint64_t unsigned_value;
     int64_t signed_value;
@@ -957,7 +958,7 @@ Y_PUBLIC_HEADER inline YLogField YLogUInt(const char* key, uint64_t value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_UINT;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.unsigned_value = value;
   return field;
 }
@@ -966,18 +967,18 @@ Y_PUBLIC_HEADER inline YLogField YLogInt(const char* key, int64_t value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_INT;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.signed_value = value;
   return field;
 }
 
-// A number in hexadecimal, with at least digits digits: written 0x0201.
+// A number in hexadecimal, with at least num_digits digits: written 0x0201.
 Y_PUBLIC_HEADER inline YLogField YLogHex(
-    const char* key, uint64_t value, uint8_t digits) {
+    const char* key, uint64_t value, uint8_t num_digits) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_HEX;
-  field.digits = digits;
+  field.num_digits = num_digits;
   field.value.unsigned_value = value;
   return field;
 }
@@ -986,7 +987,7 @@ Y_PUBLIC_HEADER inline YLogField YLogBool(const char* key, bool value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_BOOL;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.bool_value = value;
   return field;
 }
@@ -996,7 +997,7 @@ Y_PUBLIC_HEADER inline YLogField YLogString(
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_STRING;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.string_value = value;
   return field;
 }
@@ -1005,7 +1006,7 @@ Y_PUBLIC_HEADER inline YLogField YLogEnd(void) {
   YLogField field;
   field.key = NULL;
   field.type = Y_LOG_FIELD_END;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.unsigned_value = 0;
   return field;
 }
@@ -1033,7 +1034,7 @@ Y_PUBLIC_HEADER inline void YLogAppendField(
       break;
     case Y_LOG_FIELD_HEX:
       YLogfmtLineAddHex(
-          line, field->key, field->value.unsigned_value, field->digits);
+          line, field->key, field->value.unsigned_value, field->num_digits);
       break;
     case Y_LOG_FIELD_BOOL:
       YLogfmtLineAddBool(line, field->key, field->value.bool_value);
@@ -2485,7 +2486,7 @@ typedef struct YCPUState {
 
   // Instructions retired since YCPUInit(), as the two halves of a 64-bit count.
   // A halted tick retires none. Read them as one number with
-  // YCPUInstructionsRetired().
+  // YCPUNumInstructionsRetired().
   //
   // Counted here rather than left to the caller because YCPUTick() already
   // knows whether it ran an instruction, while a caller can only find out by
@@ -2499,8 +2500,8 @@ typedef struct YCPUState {
   // branch not taken until 2^32 instructions have run. Worth 1.19% at -O3.
   // The count still has to reach 64 bits: a machine left running retires 2^32
   // in a couple of hours.
-  uint32_t instructions_retired_low;
-  uint32_t instructions_retired_high;
+  uint32_t num_instructions_retired_low;
+  uint32_t num_instructions_retired_high;
 
   // Cycles charged by the instruction currently executing on top of its base
   // cost: its time on the data bus, and whatever it adds for itself when its
@@ -2573,9 +2574,10 @@ typedef struct YCPUState {
 Y_PUBLIC void YCPUInit(YCPUState* cpu);
 
 // Instructions retired since YCPUInit(), as one number.
-Y_PUBLIC_HEADER inline uint64_t YCPUInstructionsRetired(const YCPUState* cpu) {
-  return ((uint64_t)cpu->instructions_retired_high << 32) |
-         cpu->instructions_retired_low;
+Y_PUBLIC_HEADER inline uint64_t YCPUNumInstructionsRetired(
+    const YCPUState* cpu) {
+  return ((uint64_t)cpu->num_instructions_retired_high << 32) |
+         cpu->num_instructions_retired_low;
 }
 
 // Get the value of a CPU flag.
@@ -6449,7 +6451,7 @@ typedef struct YCPUBulkStringRun {
   uint32_t destination;
   // Distance from one element to the next, negative while DF is set.
   int32_t step;
-  uint16_t count;
+  uint16_t num_elements;
   uint8_t element_size;
 } YCPUBulkStringRun;
 
@@ -6463,11 +6465,11 @@ typedef struct YCPUBulkStringRun {
 // offset every iteration. And a run that leaves the window has to go through
 // the memory map for the part outside it.
 Y_FILE_PRIVATE bool YCPUIsBulkRunAddressable(
-    uint32_t window_end, uint16_t offset, uint32_t linear, uint16_t count,
-    uint8_t element_size, bool backwards) {
+    uint32_t window_end, uint16_t offset, uint32_t linear,
+    uint16_t num_elements, uint8_t element_size, bool backwards) {
   // Distance from the first element to the last, which is one element short of
   // the whole run.
-  const uint32_t reach = (uint32_t)(count - 1) * element_size;
+  const uint32_t reach = (uint32_t)(num_elements - 1) * element_size;
   if (backwards) {
     // Elements run downwards, so the last one is the lowest and the first one
     // reaches highest.
@@ -6488,11 +6490,11 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
     return false;
   }
   YCPUState* const cpu = ctx->cpu;
-  const uint16_t count = cpu->registers[Y_CPU_CX];
+  const uint16_t num_elements = cpu->registers[Y_CPU_CX];
   // end is 0 exactly when the window is closed, so this is the whole test for
   // whether there is a window to index.
   const uint32_t window_end = cpu->direct_data_window.end;
-  if (count == 0 || window_end == 0) {
+  if (num_elements == 0 || window_end == 0) {
     return false;
   }
   const uint8_t element_size = YCPUNumBytes[ctx->metadata->width];
@@ -6502,8 +6504,8 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
   const uint32_t destination =
       YCPUToRawAddress(cpu, Y_CPU_ES, destination_offset);
   if (!YCPUIsBulkRunAddressable(
-          window_end, destination_offset, destination, count, element_size,
-          backwards)) {
+          window_end, destination_offset, destination, num_elements,
+          element_size, backwards)) {
     return false;
   }
 
@@ -6514,7 +6516,7 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
     const uint32_t source =
         YCPUToRawAddress(cpu, source_segment, source_offset);
     if (!YCPUIsBulkRunAddressable(
-            window_end, source_offset, source, count, element_size,
+            window_end, source_offset, source, num_elements, element_size,
             backwards)) {
       return false;
     }
@@ -6523,7 +6525,7 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
 
   run->destination = destination;
   run->step = backwards ? -(int32_t)element_size : (int32_t)element_size;
-  run->count = count;
+  run->num_elements = num_elements;
   run->element_size = element_size;
   return true;
 }
@@ -6539,7 +6541,7 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
 // missed.
 Y_FILE_PRIVATE void YCPUNotifyBulkStringWrite(
     YCPUState* cpu, const YCPUBulkStringRun* run) {
-  const uint32_t reach = (uint32_t)(run->count - 1) * run->element_size;
+  const uint32_t reach = (uint32_t)(run->num_elements - 1) * run->element_size;
   const uint32_t low =
       run->step < 0 ? run->destination - reach : run->destination;
   const uint32_t high = low + reach + run->element_size - 1;
@@ -6554,7 +6556,7 @@ Y_FILE_PRIVATE void YCPUNotifyBulkStringWrite(
 Y_FILE_PRIVATE void YCPUFinishBulkStringRun(
     YCPUState* cpu, const YCPUBulkStringRun* run, uint8_t bus_bytes_per_element,
     bool has_source) {
-  const int32_t total = run->step * (int32_t)run->count;
+  const int32_t total = run->step * (int32_t)run->num_elements;
   if (has_source) {
     cpu->registers[Y_CPU_SI] =
         (uint16_t)((int32_t)cpu->registers[Y_CPU_SI] + total);
@@ -6567,7 +6569,7 @@ Y_FILE_PRIVATE void YCPUFinishBulkStringRun(
   // Summing first and adding once wraps exactly where adding one at a time
   // wraps, which is what keeps the two costing the same.
   cpu->pending_cycles +=
-      (uint16_t)((uint32_t)run->count * bus_bytes_per_element *
+      (uint16_t)((uint32_t)run->num_elements * bus_bytes_per_element *
                  Y_CPU_BUS_CYCLES_PER_BYTE);
 }
 
@@ -6618,7 +6620,7 @@ Y_FILE_PRIVATE bool YCPUExecuteMovsBulkRun(const YCPUInstructionContext* ctx) {
   const uint8_t* source = memory + run.source;
   uint8_t* destination = memory + run.destination;
   if (run.element_size == YCPUNumBytes[Y_CPU_WORD]) {
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       // Both bytes are read before either is written, which is the order the
       // element path reads and writes a word in - and is what a copy whose
       // ends overlap by exactly one byte comes out of differently otherwise.
@@ -6630,7 +6632,7 @@ Y_FILE_PRIVATE bool YCPUExecuteMovsBulkRun(const YCPUInstructionContext* ctx) {
       destination += run.step;
     }
   } else {
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       *destination = *source;
       source += run.step;
       destination += run.step;
@@ -6676,14 +6678,14 @@ Y_FILE_PRIVATE bool YCPUExecuteStosBulkRun(const YCPUInstructionContext* ctx) {
   const uint16_t value = cpu->registers[Y_CPU_AX];
   uint8_t* destination = memory + run.destination;
   if (run.element_size == YCPUNumBytes[Y_CPU_WORD]) {
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       destination[0] = (uint8_t)value;
       destination[1] = (uint8_t)(value >> 8);
       destination += run.step;
     }
   } else {
     // A byte-wide STOS stores AL, which is the low byte of the same register.
-    for (uint16_t remaining = run.count; remaining > 0; --remaining) {
+    for (uint16_t remaining = run.num_elements; remaining > 0; --remaining) {
       *destination = (uint8_t)value;
       destination += run.step;
     }
@@ -10017,9 +10019,9 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
         return Y_CPU_TICK_INVALID;
       }
       // The carry is a branch not taken until 2^32 instructions have run;
-      // see instructions_retired_low for why the count is split.
-      if (++cpu->instructions_retired_low == 0) {
-        ++cpu->instructions_retired_high;
+      // see num_instructions_retired_low for why the count is split.
+      if (++cpu->num_instructions_retired_low == 0) {
+        ++cpu->num_instructions_retired_high;
       }
 
       // Step 3: Carry on into the next instruction where nothing needs the
@@ -11288,7 +11290,7 @@ enum {
   // the sector size code, the sectors to format, the gap length, and the
   // byte to fill each sector with.
   Y_FDC_FORMAT_PARAM_HEAD_AND_DRIVE = 1,
-  Y_FDC_FORMAT_PARAM_SECTORS = 3,
+  Y_FDC_FORMAT_PARAM_NUM_SECTORS = 3,
   Y_FDC_FORMAT_PARAM_FILL_BYTE = 5,
   // The ID the guest gives each sector, by DMA: cylinder, head, sector
   // number and sector size code.
@@ -11341,10 +11343,10 @@ Y_FILE_PRIVATE bool YFDCTakeFormatIDByte(YFDCState* fdc, uint8_t value) {
     }
   }
   ++fdc->transfer.sector_byte_index;
-  const uint8_t sectors = *YFDCCommandBufferGet(
-      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_SECTORS);
+  const uint8_t num_sectors = *YFDCCommandBufferGet(
+      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_NUM_SECTORS);
   return fdc->transfer.sector_byte_index >=
-         (uint16_t)sectors * Y_FDC_FORMAT_ID_BYTES;
+         (uint16_t)num_sectors * Y_FDC_FORMAT_ID_BYTES;
 }
 
 // Handler for Format Track: write a track's sectors, each filled with the fill
@@ -13115,9 +13117,9 @@ typedef enum YHDCIdentifyWord {
 
 // Lengths in words of the string fields of the Identify Device block.
 enum {
-  Y_HDC_IDENTIFY_SERIAL_NUMBER_WORDS = 10,
-  Y_HDC_IDENTIFY_FIRMWARE_REVISION_WORDS = 4,
-  Y_HDC_IDENTIFY_MODEL_NUMBER_WORDS = 20,
+  Y_HDC_IDENTIFY_SERIAL_NUMBER_NUM_WORDS = 10,
+  Y_HDC_IDENTIFY_FIRMWARE_REVISION_NUM_WORDS = 4,
+  Y_HDC_IDENTIFY_MODEL_NUMBER_NUM_WORDS = 20,
 };
 
 enum {
@@ -13277,7 +13279,7 @@ Y_FILE_PRIVATE void YHDCBuildIdentifyBlock(
       drive->geometry.num_sectors_per_track);
   YHDCWriteIdentifyString(
       hdc, Y_HDC_IDENTIFY_WORD_SERIAL_NUMBER, YHDCSerialNumber,
-      Y_HDC_IDENTIFY_SERIAL_NUMBER_WORDS);
+      Y_HDC_IDENTIFY_SERIAL_NUMBER_NUM_WORDS);
   YHDCWriteIdentifyWord(
       hdc, Y_HDC_IDENTIFY_WORD_BUFFER_TYPE,
       Y_HDC_IDENTIFY_BUFFER_TYPE_DUAL_PORTED);
@@ -13287,10 +13289,10 @@ Y_FILE_PRIVATE void YHDCBuildIdentifyBlock(
       hdc, Y_HDC_IDENTIFY_WORD_NUM_ECC_BYTES, Y_HDC_IDENTIFY_NUM_ECC_BYTES);
   YHDCWriteIdentifyString(
       hdc, Y_HDC_IDENTIFY_WORD_FIRMWARE_REVISION, YHDCFirmwareRevision,
-      Y_HDC_IDENTIFY_FIRMWARE_REVISION_WORDS);
+      Y_HDC_IDENTIFY_FIRMWARE_REVISION_NUM_WORDS);
   YHDCWriteIdentifyString(
       hdc, Y_HDC_IDENTIFY_WORD_MODEL_NUMBER, YHDCModelNumber,
-      Y_HDC_IDENTIFY_MODEL_NUMBER_WORDS);
+      Y_HDC_IDENTIFY_MODEL_NUMBER_NUM_WORDS);
   YHDCWriteIdentifyWord(
       hdc, Y_HDC_IDENTIFY_WORD_MAX_SECTORS_PER_TRANSFER,
       Y_HDC_IDENTIFY_MAX_SECTORS_PER_TRANSFER);
@@ -15406,7 +15408,7 @@ enum {
   // them again: 512 entries, 12KB. More entries help programs whose hot code
   // is large, such as compilers and interpreters, and make little difference
   // to booting DOS. The measurements are in src/cpu/AGENTS.md.
-  Y_PLATFORM_DECODE_CACHE_ENTRIES = 512,
+  Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES = 512,
 
   // The memory map is indexed by page so that a lookup is a load rather than a
   // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
@@ -15715,7 +15717,7 @@ typedef struct YPlatformConfig {
 
   // The number of floppy drives, 1 to 4, which the PPI's DIP switches report
   // to the BIOS. 0, the default, is taken as 1.
-  uint8_t floppy_drives;
+  uint8_t num_floppy_drives;
 
   // Conventional memory that the CPU reads and writes directly, through its
   // direct data window: direct_memory_size bytes from address 0. Required
@@ -15816,7 +15818,7 @@ typedef struct YPlatformState {
   YCPUState cpu;
   // Storage for the CPU's decode cache, handed to it through
   // YCPUConfig.decode_cache.
-  YCPUDecodeCacheEntry cpu_decode_cache[Y_PLATFORM_DECODE_CACHE_ENTRIES];
+  YCPUDecodeCacheEntry cpu_decode_cache[Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES];
 
   // PIC state.
   YPICState pic;
@@ -16835,7 +16837,7 @@ Y_FILE_PRIVATE void YPlatformInitCPU(YPlatformState* platform) {
       &platform->pic.has_unmasked_request;
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
   platform->cpu.config.decode_cache_num_entries =
-      Y_PLATFORM_DECODE_CACHE_ENTRIES;
+      Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES;
   platform->cpu.config.read_port = YPlatformCPUCallbackReadPortByte;
   platform->cpu.config.write_port = YPlatformCPUCallbackWritePortByte;
   YCPUInit(&platform->cpu);
@@ -16915,7 +16917,9 @@ Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
   platform->ppi.config.num_floppy_drives =
-      platform->config.floppy_drives > 0 ? platform->config.floppy_drives : 1;
+      platform->config.num_floppy_drives > 0
+          ? platform->config.num_floppy_drives
+          : 1;
   platform->ppi.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
@@ -18490,7 +18494,7 @@ enum {
   // Every supported mode divides horizontally into 80 natural rendering
   // units: text columns on the MDA and 80-column CGA, half-character cells in
   // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
-  Y_VIDEO_DIRTY_COLUMNS = 80,
+  Y_VIDEO_NUM_DIRTY_COLUMNS = 80,
   // Vertically, one horizontal range is tracked per dirty row. A text mode's
   // dirty row is one character row, which covers exactly the scan lines a
   // changed cell occupies. Graphics modes have no character rows, so
@@ -18501,14 +18505,14 @@ enum {
   // The most character rows in any text mode.
   Y_VIDEO_MAX_TEXT_ROWS = 25,
   // Dirty rows needed to cover the tallest graphics mode.
-  Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT = (
+  Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS = (
       Y_VIDEO_MAX_GRAPHICS_HEIGHT + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
       Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP,
   // The tracker is statically sized for whichever mode needs the most rows.
   // Graphics modes do, at 50 against a text mode's 25.
-  Y_VIDEO_DIRTY_ROW_COUNT =
-              Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT > Y_VIDEO_MAX_TEXT_ROWS
-      ? Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT
+  Y_VIDEO_NUM_DIRTY_ROWS =
+              Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS > Y_VIDEO_MAX_TEXT_ROWS
+      ? Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS
       : Y_VIDEO_MAX_TEXT_ROWS,
   // Pixels are transferred to the host in small horizontal spans. This removes
   // most callback overhead without requiring a frame or scan-line buffer.
@@ -18523,7 +18527,7 @@ enum {
   // Widest cell a host text font may have. A glyph row is one byte.
   Y_VIDEO_TEXT_FONT_MAX_WIDTH = 8,
   // Characters a text font covers: every value of a character byte.
-  Y_VIDEO_TEXT_FONT_GLYPHS = 256,
+  Y_VIDEO_TEXT_FONT_NUM_GLYPHS = 256,
 };
 
 // A font for text modes, in place of the adapter's own.
@@ -18540,7 +18544,7 @@ enum {
 // The cursor and the MDA underline, which the adapter places by scan line of
 // its own cell, are scaled to the font's cell height.
 typedef struct YVideoTextFont {
-  // Glyph rows for all Y_VIDEO_TEXT_FONT_GLYPHS characters, height rows a
+  // Glyph rows for all Y_VIDEO_TEXT_FONT_NUM_GLYPHS characters, height rows a
   // character, top to bottom. Bit (width - 1) of a row is its leftmost pixel,
   // the same layout as the adapters' own fonts. NULL for no host font.
   const uint8_t* glyphs;
@@ -18575,7 +18579,7 @@ typedef enum YVideoDirtyStatus {
 typedef struct YVideoDirtyState {
   // One horizontal range per dirty row, indexed by dirty row. Only meaningful
   // when status is Y_VIDEO_DIRTY.
-  YVideoDirtyRange ranges[Y_VIDEO_DIRTY_ROW_COUNT];
+  YVideoDirtyRange ranges[Y_VIDEO_NUM_DIRTY_ROWS];
   // What the next render has to do.
   YVideoDirtyStatus status;
 } YVideoDirtyState;
@@ -18625,10 +18629,10 @@ typedef struct YVideoConfig {
   // Callback to write a horizontal span of RGB pixels to the real display,
   // invoked from YVideoRender(). The pixels begin at origin, remain on one scan
   // line, and are valid only for the duration of the synchronous callback.
-  // count is between 1 and Y_VIDEO_PIXEL_BATCH_SIZE, inclusive.
+  // num_pixels is between 1 and Y_VIDEO_PIXEL_BATCH_SIZE, inclusive.
   void (*write_pixels)(
       struct YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
-      uint8_t count);
+      uint8_t num_pixels);
   // Optional callbacks surrounding each dirty rectangular region emitted by
   // YVideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
@@ -18700,7 +18704,7 @@ typedef struct YVideoState {
   // CPU cycles elapsed within the current scan line.
   uint32_t scan_line_cycles;
   // Number of frames since initialization. Drives blinking.
-  uint32_t frames;
+  uint32_t num_frames;
 
   // Portions of the retained host display that no longer match video state.
   YVideoDirtyState dirty_state;
@@ -18849,21 +18853,21 @@ typedef struct YVideoPixelRun {
   // Where the pixels currently buffered begin. Advances past each batch.
   YVideoPosition origin;
   YVideoRGB pixels[Y_VIDEO_PIXEL_BATCH_SIZE];
-  uint8_t count;
+  uint8_t num_pixels;
 } YVideoPixelRun;
 
 // Hand over what has been buffered and continue the run after it.
 Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunFlush(YVideoPixelRun* run) {
-  if (run->count == 0) {
+  if (run->num_pixels == 0) {
     return;
   }
   // Batching lets the region's pixel count be accumulated once per batch
   // rather than once per pixel.
-  run->video->num_pixels_emitted_for_region += run->count;
+  run->video->num_pixels_emitted_for_region += run->num_pixels;
   run->video->config.write_pixels(
-      run->video, run->origin, run->pixels, run->count);
-  run->origin.x += run->count;
-  run->count = 0;
+      run->video, run->origin, run->pixels, run->num_pixels);
+  run->origin.x += run->num_pixels;
+  run->num_pixels = 0;
 }
 
 // Open a run at the leftmost pixel of a row. Any partial batch is handed over
@@ -18877,9 +18881,9 @@ Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunBegin(
 
 Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunPush(
     YVideoPixelRun* run, YVideoRGB rgb) {
-  run->pixels[run->count] = rgb;
-  ++run->count;
-  if (run->count == Y_VIDEO_PIXEL_BATCH_SIZE) {
+  run->pixels[run->num_pixels] = rgb;
+  ++run->num_pixels;
+  if (run->num_pixels == Y_VIDEO_PIXEL_BATCH_SIZE) {
     YVideoPixelRunFlush(run);
   }
 }
@@ -19975,7 +19979,7 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  Y_VIDEO_CGA40_COLUMN_COUNT = 40,
+  Y_VIDEO_CGA40_COLUMNS = 40,
   Y_VIDEO_CGA40_COLUMN_SCALE = 2,
   Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE = 2,
   // Number of pixels per byte in 320x200 graphics mode.
@@ -20034,7 +20038,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   // and the range converts back to character cells by halving. Invalidation
   // always scales a character column by the same factor, so the range is
   // aligned to whole cells and neither end truncates.
-  uint8_t scale = metadata->columns == Y_VIDEO_CGA40_COLUMN_COUNT
+  uint8_t scale = metadata->columns == Y_VIDEO_CGA40_COLUMNS
                       ? Y_VIDEO_CGA40_COLUMN_SCALE
                       : 1;
   uint8_t first_char = scale == Y_VIDEO_CGA40_COLUMN_SCALE
@@ -20442,7 +20446,7 @@ Y_PUBLIC YVideoSize YVideoGetFrameSize(const YVideoState* video) {
     // A 40-column cell is drawn twice as wide, so both text widths come to
     // the same 80 font cells across.
     size.width =
-        (uint16_t)(Y_VIDEO_DIRTY_COLUMNS * video->config.text_font.width);
+        (uint16_t)(Y_VIDEO_NUM_DIRTY_COLUMNS * video->config.text_font.width);
     size.height = (uint16_t)(metadata->rows * video->config.text_font.height);
     return size;
   }
@@ -20484,11 +20488,11 @@ Y_MODULE_PRIVATE uint8_t YVideoGetCursorEndScanLine(const YVideoState* video) {
 }
 
 Y_MODULE_PRIVATE bool YVideoIsCursorBlinkOn(const YVideoState* video) {
-  return (video->frames / Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE) % 2 == 0;
+  return (video->num_frames / Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE) % 2 == 0;
 }
 
 Y_MODULE_PRIVATE bool YVideoIsTextBlinkOn(const YVideoState* video) {
-  return (video->frames / Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE) % 2 == 0;
+  return (video->num_frames / Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE) % 2 == 0;
 }
 
 Y_MODULE_PRIVATE bool YVideoGetVisibleCursorOffset(
@@ -20524,7 +20528,7 @@ Y_FILE_PRIVATE void YVideoDirtyRangeAdd(
 // The vertical unit of dirty tracking for the current mode.
 typedef struct YVideoDirtyGeometry {
   // Number of dirty rows covering the display.
-  uint8_t rows;
+  uint8_t num_rows;
   // Physical scan lines per dirty row.
   uint8_t scan_lines_per_row;
 } YVideoDirtyGeometry;
@@ -20534,16 +20538,16 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
   const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   YVideoDirtyGeometry geometry;
   if (metadata->type == Y_VIDEO_MODE_TEXT) {
-    geometry.rows = metadata->rows;
+    geometry.num_rows = metadata->rows;
     geometry.scan_lines_per_row = YVideoGetTextCellHeight(video, metadata);
   } else {
-    geometry.rows =
+    geometry.num_rows =
         (uint8_t)((metadata->height + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
                   Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP);
     geometry.scan_lines_per_row = Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP;
   }
-  if (geometry.rows > Y_VIDEO_DIRTY_ROW_COUNT) {
-    geometry.rows = Y_VIDEO_DIRTY_ROW_COUNT;
+  if (geometry.num_rows > Y_VIDEO_NUM_DIRTY_ROWS) {
+    geometry.num_rows = Y_VIDEO_NUM_DIRTY_ROWS;
   }
   return geometry;
 }
@@ -20551,12 +20555,12 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
 Y_MODULE_PRIVATE void YVideoInvalidateRows(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
-  if (start_column >= end_column || end_column > Y_VIDEO_DIRTY_COLUMNS ||
-      first_row >= end_row || first_row >= Y_VIDEO_DIRTY_ROW_COUNT) {
+  if (start_column >= end_column || end_column > Y_VIDEO_NUM_DIRTY_COLUMNS ||
+      first_row >= end_row || first_row >= Y_VIDEO_NUM_DIRTY_ROWS) {
     return;
   }
-  if (end_row > Y_VIDEO_DIRTY_ROW_COUNT) {
-    end_row = Y_VIDEO_DIRTY_ROW_COUNT;
+  if (end_row > Y_VIDEO_NUM_DIRTY_ROWS) {
+    end_row = Y_VIDEO_NUM_DIRTY_ROWS;
   }
 
   for (uint8_t row = first_row; row < end_row; ++row) {
@@ -20656,7 +20660,7 @@ Y_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video) {
                              ? Y_VIDEO_TEXT40_COLUMN_SCALE
                              : Y_VIDEO_TEXT80_COLUMN_SCALE;
   for (uint8_t row = 0; row < metadata->rows; ++row) {
-    uint8_t start_column = Y_VIDEO_DIRTY_COLUMNS;
+    uint8_t start_column = Y_VIDEO_NUM_DIRTY_COLUMNS;
     uint8_t end_column = 0;
     for (uint8_t col = 0; col < metadata->columns; ++col) {
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
@@ -20690,8 +20694,8 @@ Y_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video) {
 // toward the next scan line; the loop pays it off a scan line at a time,
 // looping rather than branching once since a single call can be worth more
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
-// incrementing frames, which YVideoIsCursorBlinkOn() and YVideoIsTextBlinkOn()
-// use to derive their blink phases.
+// incrementing num_frames, which YVideoIsCursorBlinkOn() and
+// YVideoIsTextBlinkOn() use to derive their blink phases.
 Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
@@ -20714,7 +20718,7 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
     return;
   }
   const uint32_t scan_line = (uint32_t)video->scan_line + elapsed_scan_lines;
-  video->frames += scan_line / adapter->scan_lines_per_frame;
+  video->num_frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 
   if (cursor_was_on != YVideoIsCursorBlinkOn(video) &&
@@ -20899,11 +20903,11 @@ Y_FILE_PRIVATE void YVideoRenderBlankRegion(
 Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
-  // Every mode divides the frame into Y_VIDEO_DIRTY_COLUMNS equal columns, so
-  // a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host text
-  // font's width in a text mode drawn in one.
+  // Every mode divides the frame into Y_VIDEO_NUM_DIRTY_COLUMNS equal columns,
+  // so a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host
+  // text font's width in a text mode drawn in one.
   uint16_t column_width =
-      YVideoGetFrameSize(video).width / Y_VIDEO_DIRTY_COLUMNS;
+      YVideoGetFrameSize(video).width / Y_VIDEO_NUM_DIRTY_COLUMNS;
   YVideoRegion region = {
       .origin = {.x = start_column * column_width, .y = first_y},
       .width = (end_column - start_column) * column_width,
@@ -20920,7 +20924,7 @@ Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
   // every region, which a graphics frame can split into fifty of them.
   YVideoPixelRun run;
   run.video = video;
-  run.count = 0;
+  run.num_pixels = 0;
 
   if (!(video->control_register & Y_VIDEO_CONTROL_VIDEO_ENABLE)) {
     YVideoRenderBlankRegion(video, &run, region);
@@ -20939,14 +20943,14 @@ Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
   // region declared leaves that pointer mid-window and displaces every pixel
   // after it, including those of later regions - so report the region that
   // caused it rather than let the corruption surface somewhere else.
-  uint32_t declared_pixels = (uint32_t)region.width * region.height;
-  if (video->num_pixels_emitted_for_region != declared_pixels) {
+  uint32_t num_declared_pixels = (uint32_t)region.width * region.height;
+  if (video->num_pixels_emitted_for_region != num_declared_pixels) {
     Y_VIDEO_ERROR(
         "render_region_pixel_count_mismatch", Y_LOG_UINT("width", region.width),
         Y_LOG_UINT("height", region.height), Y_LOG_UINT("x", region.origin.x),
         Y_LOG_UINT("y", region.origin.y),
         Y_LOG_UINT("emitted", video->num_pixels_emitted_for_region),
-        Y_LOG_UINT("expected", declared_pixels));
+        Y_LOG_UINT("expected", num_declared_pixels));
   }
 
   if (video->config.end_render_region) {
@@ -20962,10 +20966,11 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
 
   const YVideoSize frame = YVideoGetFrameSize(video);
   if (video->dirty_state.status == Y_VIDEO_FULL_REDRAW) {
-    YVideoRenderDirtyRegion(video, 0, Y_VIDEO_DIRTY_COLUMNS, 0, frame.height);
+    YVideoRenderDirtyRegion(
+        video, 0, Y_VIDEO_NUM_DIRTY_COLUMNS, 0, frame.height);
   } else {
     YVideoDirtyGeometry geometry = YVideoGetDirtyGeometry(video);
-    for (uint8_t row = 0; row < geometry.rows;) {
+    for (uint8_t row = 0; row < geometry.num_rows;) {
       YVideoDirtyRange range = video->dirty_state.ranges[row];
       if (range.end_column == 0) {
         ++row;
@@ -20973,7 +20978,7 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
       }
 
       uint8_t end_row = row + 1;
-      while (end_row < geometry.rows &&
+      while (end_row < geometry.num_rows &&
              video->dirty_state.ranges[end_row].start_column ==
                  range.start_column &&
              video->dirty_state.ranges[end_row].end_column ==

@@ -632,7 +632,7 @@ enum {
   // Every supported mode divides horizontally into 80 natural rendering
   // units: text columns on the MDA and 80-column CGA, half-character cells in
   // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
-  Y_VIDEO_DIRTY_COLUMNS = 80,
+  Y_VIDEO_NUM_DIRTY_COLUMNS = 80,
   // Vertically, one horizontal range is tracked per dirty row. A text mode's
   // dirty row is one character row, which covers exactly the scan lines a
   // changed cell occupies. Graphics modes have no character rows, so
@@ -643,14 +643,14 @@ enum {
   // The most character rows in any text mode.
   Y_VIDEO_MAX_TEXT_ROWS = 25,
   // Dirty rows needed to cover the tallest graphics mode.
-  Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT = (
+  Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS = (
       Y_VIDEO_MAX_GRAPHICS_HEIGHT + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
       Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP,
   // The tracker is statically sized for whichever mode needs the most rows.
   // Graphics modes do, at 50 against a text mode's 25.
-  Y_VIDEO_DIRTY_ROW_COUNT =
-              Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT > Y_VIDEO_MAX_TEXT_ROWS
-      ? Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT
+  Y_VIDEO_NUM_DIRTY_ROWS =
+              Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS > Y_VIDEO_MAX_TEXT_ROWS
+      ? Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS
       : Y_VIDEO_MAX_TEXT_ROWS,
   // Pixels are transferred to the host in small horizontal spans. This removes
   // most callback overhead without requiring a frame or scan-line buffer.
@@ -665,7 +665,7 @@ enum {
   // Widest cell a host text font may have. A glyph row is one byte.
   Y_VIDEO_TEXT_FONT_MAX_WIDTH = 8,
   // Characters a text font covers: every value of a character byte.
-  Y_VIDEO_TEXT_FONT_GLYPHS = 256,
+  Y_VIDEO_TEXT_FONT_NUM_GLYPHS = 256,
 };
 
 // A font for text modes, in place of the adapter's own.
@@ -682,7 +682,7 @@ enum {
 // The cursor and the MDA underline, which the adapter places by scan line of
 // its own cell, are scaled to the font's cell height.
 typedef struct YVideoTextFont {
-  // Glyph rows for all Y_VIDEO_TEXT_FONT_GLYPHS characters, height rows a
+  // Glyph rows for all Y_VIDEO_TEXT_FONT_NUM_GLYPHS characters, height rows a
   // character, top to bottom. Bit (width - 1) of a row is its leftmost pixel,
   // the same layout as the adapters' own fonts. NULL for no host font.
   const uint8_t* glyphs;
@@ -717,7 +717,7 @@ typedef enum YVideoDirtyStatus {
 typedef struct YVideoDirtyState {
   // One horizontal range per dirty row, indexed by dirty row. Only meaningful
   // when status is Y_VIDEO_DIRTY.
-  YVideoDirtyRange ranges[Y_VIDEO_DIRTY_ROW_COUNT];
+  YVideoDirtyRange ranges[Y_VIDEO_NUM_DIRTY_ROWS];
   // What the next render has to do.
   YVideoDirtyStatus status;
 } YVideoDirtyState;
@@ -767,10 +767,10 @@ typedef struct YVideoConfig {
   // Callback to write a horizontal span of RGB pixels to the real display,
   // invoked from YVideoRender(). The pixels begin at origin, remain on one scan
   // line, and are valid only for the duration of the synchronous callback.
-  // count is between 1 and Y_VIDEO_PIXEL_BATCH_SIZE, inclusive.
+  // num_pixels is between 1 and Y_VIDEO_PIXEL_BATCH_SIZE, inclusive.
   void (*write_pixels)(
       struct YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
-      uint8_t count);
+      uint8_t num_pixels);
   // Optional callbacks surrounding each dirty rectangular region emitted by
   // YVideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
@@ -842,7 +842,7 @@ typedef struct YVideoState {
   // CPU cycles elapsed within the current scan line.
   uint32_t scan_line_cycles;
   // Number of frames since initialization. Drives blinking.
-  uint32_t frames;
+  uint32_t num_frames;
 
   // Portions of the retained host display that no longer match video state.
   YVideoDirtyState dirty_state;

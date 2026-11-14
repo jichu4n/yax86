@@ -31,21 +31,21 @@ typedef struct YVideoPixelRun {
   // Where the pixels currently buffered begin. Advances past each batch.
   YVideoPosition origin;
   YVideoRGB pixels[Y_VIDEO_PIXEL_BATCH_SIZE];
-  uint8_t count;
+  uint8_t num_pixels;
 } YVideoPixelRun;
 
 // Hand over what has been buffered and continue the run after it.
 Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunFlush(YVideoPixelRun* run) {
-  if (run->count == 0) {
+  if (run->num_pixels == 0) {
     return;
   }
   // Batching lets the region's pixel count be accumulated once per batch
   // rather than once per pixel.
-  run->video->num_pixels_emitted_for_region += run->count;
+  run->video->num_pixels_emitted_for_region += run->num_pixels;
   run->video->config.write_pixels(
-      run->video, run->origin, run->pixels, run->count);
-  run->origin.x += run->count;
-  run->count = 0;
+      run->video, run->origin, run->pixels, run->num_pixels);
+  run->origin.x += run->num_pixels;
+  run->num_pixels = 0;
 }
 
 // Open a run at the leftmost pixel of a row. Any partial batch is handed over
@@ -59,9 +59,9 @@ Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunBegin(
 
 Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunPush(
     YVideoPixelRun* run, YVideoRGB rgb) {
-  run->pixels[run->count] = rgb;
-  ++run->count;
-  if (run->count == Y_VIDEO_PIXEL_BATCH_SIZE) {
+  run->pixels[run->num_pixels] = rgb;
+  ++run->num_pixels;
+  if (run->num_pixels == Y_VIDEO_PIXEL_BATCH_SIZE) {
     YVideoPixelRunFlush(run);
   }
 }

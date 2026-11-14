@@ -840,7 +840,7 @@ Y_FILE_PRIVATE void YPlatformInitCPU(YPlatformState* platform) {
       &platform->pic.has_unmasked_request;
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
   platform->cpu.config.decode_cache_num_entries =
-      Y_PLATFORM_DECODE_CACHE_ENTRIES;
+      Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES;
   platform->cpu.config.read_port = YPlatformCPUCallbackReadPortByte;
   platform->cpu.config.write_port = YPlatformCPUCallbackWritePortByte;
   YCPUInit(&platform->cpu);
@@ -920,7 +920,9 @@ Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
   platform->ppi.config.num_floppy_drives =
-      platform->config.floppy_drives > 0 ? platform->config.floppy_drives : 1;
+      platform->config.num_floppy_drives > 0
+          ? platform->config.num_floppy_drives
+          : 1;
   platform->ppi.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
