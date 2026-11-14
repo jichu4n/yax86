@@ -3,9 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 
 typedef enum StopItem {
   kStopCancel = 0,
@@ -13,7 +13,7 @@ typedef enum StopItem {
   kStopItemCount,
 } StopItem;
 
-static const MenuBoxItem kStopItems[kStopItemCount] = {
+static const BoxItem kStopItems[kStopItemCount] = {
     [kStopCancel] = {"Cancel", false},
     [kStopConfirm] = {"Disconnect anyway", false},
 };

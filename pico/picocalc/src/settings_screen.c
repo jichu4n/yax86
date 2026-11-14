@@ -3,12 +3,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "box.h"
 #include "display.h"
 #include "font_screen.h"
 #include "list_box.h"
-#include "menu_box.h"
 
-static const MenuBoxItem kSettingsItems[] = {{"Font", true}};
+static const BoxItem kSettingsItems[] = {{"Font", true}};
 enum {
   kSettingsItemCount = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
 };

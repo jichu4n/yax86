@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "box.h"
 #include "display.h"
 #include "file_browser.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "vm_config.h"
 
 enum {
@@ -44,7 +44,7 @@ typedef enum MainItem {
   kMainItemCount,
 } MainItem;
 
-static const MenuBoxItem kMainItems[kMainItemCount] = {
+static const BoxItem kMainItems[kMainItemCount] = {
     [kMainDriveA] = {"Floppy disk 1", true},
     [kMainDriveB] = {"Floppy disk 2", true},
     [kMainStatus] = {"Status", true},
@@ -65,7 +65,7 @@ typedef enum ResetItem {
   kResetItemCount,
 } ResetItem;
 
-static const MenuBoxItem kResetItems[kResetItemCount] = {
+static const BoxItem kResetItems[kResetItemCount] = {
     [kResetCancel] = {"Cancel", false},
     [kResetConfirm] = {"Reset", false},
 };
@@ -76,7 +76,7 @@ typedef enum PowerOffItem {
   kPowerOffItemCount,
 } PowerOffItem;
 
-static const MenuBoxItem kPowerOffItems[kPowerOffItemCount] = {
+static const BoxItem kPowerOffItems[kPowerOffItemCount] = {
     [kPowerOffCancel] = {"Cancel", false},
     [kPowerOffConfirm] = {"Power off", false},
 };
@@ -93,7 +93,7 @@ static bool g_dirty;
 static uint64_t g_status_drawn_us;
 // The box last drawn, whose size a new one has to match for nothing of it to
 // be left showing.
-static ListBoxFrame g_box;
+static BoxShown g_box_shown;
 // The browser, finding an image for the drive in g_drive.
 static FileBrowser g_browser;
 // Which Shift keys are held, from the controller's events.
@@ -358,7 +358,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   if (TrackHotkey(event)) {
     g_open = !g_open;
     if (g_open) {
-      g_box.drawn = false;
+      g_box_shown.drawn = false;
       ShowMainItem(kMainDriveA);
       return kMenuActionOpened;
     }
@@ -400,20 +400,20 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  MenuBoxPlace(menu, kListBoxWideColumns, kMenuStatusLines + 4);
+  BoxPlace(menu, kListBoxWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
-  MenuBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
-  MenuBoxBlankRow(&menu->text[row++], menu->columns);
+  BoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
+  BoxBlankRow(&menu->text[row++], menu->columns);
   for (uint8_t i = 0; i < kMenuStatusLines; ++i) {
     DisplayTextRow* text = &menu->text[row++];
-    MenuBoxBlankRow(text, menu->columns);
-    MenuBoxPutText(text, menu->columns, 2, lines[i].label, kMenuBoxAttrTitle);
-    MenuBoxPutText(
+    BoxBlankRow(text, menu->columns);
+    BoxPutText(text, menu->columns, 2, lines[i].label, kBoxAttrTitle);
+    BoxPutText(
         text, menu->columns, 2 + kStatusLabelColumns, lines[i].value,
-        kMenuBoxAttrText);
+        kBoxAttrText);
   }
-  MenuBoxBlankRow(&menu->text[row++], menu->columns);
-  MenuBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
+  BoxBlankRow(&menu->text[row++], menu->columns);
+  BoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
 static void DrawDrivePage(DisplayMenu* menu) {
@@ -428,7 +428,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
   } else if (empty) {
     in_drive = "empty";
   }
-  const MenuBoxItem items[kDriveItemCount] = {
+  const BoxItem items[kDriveItemCount] = {
       [kDriveInsert] = {empty ? "Choose disk image" : "Swap disk image", true},
       [kDriveEject] = {"Eject", false},
   };
@@ -448,7 +448,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
 static void DrawMainPage(DisplayMenu* menu) {
   MainItem shown[kMainItemCount];
   const uint8_t count = MainItems(shown);
-  MenuBoxItem items[kMainItemCount];
+  BoxItem items[kMainItemCount];
   for (uint8_t i = 0; i < count; ++i) {
     items[i] = kMainItems[shown[i]];
   }
@@ -498,10 +498,10 @@ void MenuDraw(uint64_t now_us) {
   // A box of another size than the last leaves part of the last showing, so
   // the guest's screen goes under it first. If core 1 cannot take that yet,
   // the box is laid out again next time.
-  if (ListBoxFrameResized(&g_box, menu) && !g_config.redraw_guest()) {
+  if (BoxShownResized(&g_box_shown, menu) && !g_config.redraw_guest()) {
     return;
   }
   DisplayEndMenu();
-  ListBoxFrameDrawn(&g_box, menu);
+  BoxShownRecord(&g_box_shown, menu);
   g_dirty = false;
 }

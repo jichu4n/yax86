@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "box.h"
 #include "core/hdc.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "vm_config.h"
 
 enum {
@@ -115,7 +115,7 @@ static const char* BrowseEmpty(const FileBrowser* browser) {
 void FileBrowserDraw(
     const FileBrowser* browser, DisplayMenu* menu, uint8_t selected) {
   const FileList* list = &browser->list;
-  MenuBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
+  BoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
   // The folder, from the card's root, keeping its end if it is too long.
   char title[kListBoxNarrowColumns - 6 + 1];
   const uint8_t room = sizeof(title) - 1;
@@ -130,32 +130,30 @@ void FileBrowserDraw(
   } else {
     snprintf(title, sizeof(title), "%s", full);
   }
-  MenuBoxEdgeRow(&menu->text[0], menu->columns, true, title);
+  BoxEdgeRow(&menu->text[0], menu->columns, true, title);
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(browser->top + i);
     if (index >= list->count) {
-      MenuBoxBlankRow(row, menu->columns);
+      BoxBlankRow(row, menu->columns);
       if (i == 0 && !list->readable) {
-        MenuBoxPutText(
-            row, menu->columns, 3, "The card cannot be read", kMenuBoxAttrText);
+        BoxPutText(
+            row, menu->columns, 3, "The card cannot be read", kBoxAttrText);
       } else if (i == 1 && list->count <= 1) {
-        MenuBoxPutText(
-            row, menu->columns, 3, BrowseEmpty(browser), kMenuBoxAttrText);
+        BoxPutText(row, menu->columns, 3, BrowseEmpty(browser), kBoxAttrText);
       }
       continue;
     }
     const FileListEntry* entry = &list->entries[index];
-    MenuBoxItemTextRow(row, menu->columns, entry->name, index == selected);
-    const uint8_t attr =
-        index == selected ? kMenuBoxAttrSelected : kMenuBoxAttrText;
+    BoxItemTextRow(row, menu->columns, entry->name, index == selected);
+    const uint8_t attr = index == selected ? kBoxAttrSelected : kBoxAttrText;
     char path[kFSMaxPath + 1];
     if (entry->kind != kFileListImage) {
-      MenuBoxPutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
+      BoxPutText(row, menu->columns, kBrowseNoteColumn, "<DIR>", attr);
       continue;
     }
     if (browser->images == kFileBrowserEither) {
-      MenuBoxPutText(
+      BoxPutText(
           row, menu->columns, kBrowseNoteColumn,
           entry->size == Y_FDC_FORMAT_360KB_IMAGE_SIZE ? "floppy" : "hard disk",
           attr);
@@ -169,12 +167,12 @@ void FileBrowserDraw(
       if (in_drive != NULL && FSSamePath(path, in_drive)) {
         char note[16];
         snprintf(note, sizeof(note), "in %s", kVMDriveLabels[drive]);
-        MenuBoxPutText(row, menu->columns, kBrowseNoteColumn, note, attr);
+        BoxPutText(row, menu->columns, kBrowseNoteColumn, note, attr);
       }
     }
   }
   // A folder with more entries than a list holds says so on the bottom edge.
-  MenuBoxEdgeRow(
+  BoxEdgeRow(
       &menu->text[kListBoxRows + 1], menu->columns, false,
       list->truncated ? "the first 64 entries" : NULL);
   ListBoxDrawScrollArrows(menu, browser->top, list->count);

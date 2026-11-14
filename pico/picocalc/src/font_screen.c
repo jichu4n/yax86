@@ -4,10 +4,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "display.h"
 #include "font_4x10.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
@@ -63,9 +63,9 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
   if (menu == NULL) {
     return;
   }
-  MenuBoxItem items[kFont4x10Count];
+  BoxItem items[kFont4x10Count];
   for (uint8_t i = 0; i < kFont4x10Count; ++i) {
-    items[i] = (MenuBoxItem){Font4x10Label((Font4x10)i), false};
+    items[i] = (BoxItem){Font4x10Label((Font4x10)i), false};
   }
   ListBoxDrawItems(
       menu, "Font", NULL, 0, items, kFont4x10Count, g_list_box.selected, true);

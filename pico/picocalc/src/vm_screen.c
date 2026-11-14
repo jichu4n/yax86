@@ -4,10 +4,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "disk_image.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "vm_config_screen.h"
 #include "vm_delete_screen.h"
 #include "vm_name_screen.h"
@@ -20,7 +20,7 @@ typedef enum VMItem {
   kVMItemCount,
 } VMItem;
 
-static const MenuBoxItem kVMItems[kVMItemCount] = {
+static const BoxItem kVMItems[kVMItemCount] = {
     [kVMConfigure] = {"Configure", true},
     [kVMRename] = {"Rename", true},
     [kVMClone] = {"Clone", true},

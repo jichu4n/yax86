@@ -2,11 +2,11 @@
 
 #include <stddef.h>
 
+#include "box.h"
 #include "browser_screen.h"
 #include "display.h"
 #include "file_browser.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "vm_config.h"
 
 // A drive's choices.
@@ -20,14 +20,14 @@ typedef enum DriveItem {
   kDriveItemCount,
 } DriveItem;
 
-static const MenuBoxItem kFloppyItems[kDriveItemCount] = {
+static const BoxItem kFloppyItems[kDriveItemCount] = {
     [kDriveDisabled] = {"Disabled", false},
     [kDriveNone] = {"Empty", false},
     [kDriveBlank] = {"New floppy image (360KB)", false},
     [kDriveImage] = {"Existing floppy image", true},
 };
 
-static const MenuBoxItem kHardDiskItems[kDriveItemCount] = {
+static const BoxItem kHardDiskItems[kDriveItemCount] = {
     [kDriveDisabled] = {"Disabled", false},
     [kDriveBlank] = {"New disk image (10MB)", false},
     [kDriveImage] = {"Existing disk image", true},
@@ -150,9 +150,9 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
   }
   uint8_t count = 0;
   const DriveItem* choices = Choices(&count);
-  const MenuBoxItem* labels =
+  const BoxItem* labels =
       g_drive >= kVMDriveHD1 ? kHardDiskItems : kFloppyItems;
-  MenuBoxItem items[kDriveItemCount];
+  BoxItem items[kDriveItemCount];
   for (uint8_t row = 0; row < count; ++row) {
     items[row] = labels[choices[row]];
   }

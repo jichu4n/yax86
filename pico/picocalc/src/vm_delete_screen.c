@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "runtime_log.h"
 
 typedef enum DeleteItem {
@@ -15,7 +15,7 @@ typedef enum DeleteItem {
   kDeleteItemCount,
 } DeleteItem;
 
-static const MenuBoxItem kDeleteItems[kDeleteItemCount] = {
+static const BoxItem kDeleteItems[kDeleteItemCount] = {
     [kDeleteCancel] = {"Cancel", false},
     [kDeleteConfirm] = {"Delete", false},
 };
