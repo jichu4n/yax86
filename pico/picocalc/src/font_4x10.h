@@ -9,7 +9,7 @@
 enum {
   kFont4x10Width = 4,
   kFont4x10Height = 10,
-  kFont4x10Glyphs = 256,
+  kFont4x10NumGlyphs = 256,
 };
 
 typedef enum Font4x10 {
@@ -18,14 +18,14 @@ typedef enum Font4x10 {
   kFont4x10Miniwi,
   kFont4x10Terminal,
   kFont4x10DCA,
-  kFont4x10Count,
+  kFont4x10NumFonts,
   kFont4x10Default = kFont4x10Ymini,
 } Font4x10;
 
 // One byte per row, top to bottom, in the low four bits: bit 3 is the leftmost
 // pixel. This is the layout the core's own fonts use, where bit (width - 1) is
 // the leftmost pixel of a row.
-typedef uint8_t Font4x10Table[kFont4x10Glyphs][kFont4x10Height];
+typedef uint8_t Font4x10Table[kFont4x10NumGlyphs][kFont4x10Height];
 
 // The font's glyphs.
 const Font4x10Table* Font4x10Glyphs(Font4x10 font);

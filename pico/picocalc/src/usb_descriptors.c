@@ -30,7 +30,7 @@ enum {
   kInterfaceCDC = 0,
   kInterfaceReset = 2,
   kInterfaceMSC = 3,
-  kInterfaces = 4,
+  kNumInterfaces = 4,
 
   kEndpointCDCNotify = 0x81,
   kEndpointCDCOut = 0x02,
@@ -48,7 +48,7 @@ enum {
   kStringCDC,
   kStringReset,
   kStringMSC,
-  kStrings,
+  kNumStrings,
 
   // US English, the only language the strings are in.
   kLanguageEnglishUS = 0x0409,
@@ -84,7 +84,7 @@ static const tusb_desc_device_t kDevice = {
 
 static const uint8_t kConfiguration[kConfigurationLength] = {
     TUD_CONFIG_DESCRIPTOR(
-        1, kInterfaces, 0, kConfigurationLength, 0, kMaxPowerMilliamps),
+        1, kNumInterfaces, 0, kConfigurationLength, 0, kMaxPowerMilliamps),
     TUD_CDC_DESCRIPTOR(
         kInterfaceCDC, kStringCDC, kEndpointCDCNotify, kCDCNotifySize,
         kEndpointCDCOut, kEndpointCDCIn, kBulkPacketSize),
@@ -97,7 +97,7 @@ static const uint8_t kConfiguration[kConfigurationLength] = {
 // The board's unique ID in hex, filled in when first asked for.
 static char g_serial[PICO_UNIQUE_BOARD_ID_SIZE_BYTES * 2 + 1];
 
-static const char* const kStringText[kStrings] = {
+static const char* const kStringText[kNumStrings] = {
     [kStringManufacturer] = "Raspberry Pi",
     [kStringProduct] = "Pico",
     [kStringSerial] = g_serial,
@@ -124,7 +124,7 @@ const uint16_t* tud_descriptor_string_cb(uint8_t index, uint16_t language) {
     descriptor[1] = kLanguageEnglishUS;
     length = 1;
   } else {
-    if (index >= kStrings || kStringText[index] == NULL) {
+    if (index >= kNumStrings || kStringText[index] == NULL) {
       return NULL;
     }
     if (g_serial[0] == '\0') {

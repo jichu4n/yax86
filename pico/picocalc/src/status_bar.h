@@ -67,9 +67,9 @@ void StatusBarPutBattery(
 // The rows, for a mode to compose its own on.
 DisplayStatus* StatusBarRows(void);
 
-// Send the rows to core 1 if changed says they were composed again, or if
+// Send the rows to core 1 if did_change says they were composed again, or if
 // they are still waiting because core 1 was busy the last time. Returns at
 // once while core 1 is still drawing the last ones, leaving them waiting.
-void StatusBarSend(bool changed);
+void StatusBarSend(bool did_change);
 
 #endif  // YAX86_PICOCALC_STATUS_BAR_H

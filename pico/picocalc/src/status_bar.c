@@ -10,8 +10,8 @@ enum {
 
   // The battery, whose widest - five cells, a space, "100%" and "+" - ends
   // at the row's end.
-  kBatteryCells = 5,
-  kBatteryColumn = kTextColumns - kBatteryCells - 6,
+  kNumBatteryCells = 5,
+  kBatteryColumn = kTextColumns - kNumBatteryCells - 6,
   kBatteryHighPercent = 50,
   kBatteryLowPercent = 20,
 
@@ -31,7 +31,7 @@ static char* g_problem = g_problems[0];
 // The rows each mode composes on, and whether they are waiting to be sent
 // to core 1, which was still drawing the last ones.
 static DisplayStatus g_status_rows;
-static bool g_status_rows_pending;
+static bool g_are_status_rows_pending;
 
 void StatusBarSetProblem(const char* problem) {
   g_problem = g_problem == g_problems[0] ? g_problems[1] : g_problems[0];
@@ -87,7 +87,7 @@ uint8_t StatusBarPutKeys(
 
 void StatusBarPutBattery(
     const SouthbridgeBattery* battery, DisplayTextRow* row) {
-  if (!battery->known) {
+  if (!battery->is_known) {
     return;
   }
   const uint8_t attr = battery->percent > kBatteryHighPercent ? kAttrBatteryHigh
@@ -96,27 +96,28 @@ void StatusBarPutBattery(
                            : kAttrBatteryLow;
   // A cell for each fifth of a charge begun, so at least one for any charge.
   const uint8_t filled =
-      (uint8_t)((battery->percent * kBatteryCells + kPercent - 1) / kPercent);
+      (uint8_t)((battery->percent * kNumBatteryCells + kPercent - 1) /
+                kPercent);
   uint8_t column = kBatteryColumn;
   const char cell[] = {(char)kCharBatteryCell, '\0'};
-  for (uint8_t i = 0; i < kBatteryCells; ++i) {
+  for (uint8_t i = 0; i < kNumBatteryCells; ++i) {
     column =
         StatusBarPut(row, column, cell, i < filled ? attr : kStatusBarAttrDim);
   }
   char text[8];
   snprintf(
       text, sizeof(text), " %u%%%s", (unsigned)battery->percent,
-      battery->charging ? "+" : "");
+      battery->is_charging ? "+" : "");
   StatusBarPut(row, column, text, attr);
 }
 
 DisplayStatus* StatusBarRows(void) { return &g_status_rows; }
 
-void StatusBarSend(bool changed) {
-  if (changed) {
-    g_status_rows_pending = true;
+void StatusBarSend(bool did_change) {
+  if (did_change) {
+    g_are_status_rows_pending = true;
   }
-  if (!g_status_rows_pending) {
+  if (!g_are_status_rows_pending) {
     return;
   }
   DisplayStatus* rows = DisplayBeginStatus();
@@ -125,5 +126,5 @@ void StatusBarSend(bool changed) {
   }
   *rows = g_status_rows;
   DisplayEndStatus();
-  g_status_rows_pending = false;
+  g_are_status_rows_pending = false;
 }

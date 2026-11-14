@@ -7,9 +7,10 @@
 
 enum {
   // The most guest RAM there can be to page, and so the largest page table.
-  kPagerMaxPages = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE >> kPagerPageShift,
+  kPagerMaxNumPages = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE >>
+      kPagerPageShift,
   // The most frames: all of the SRAM guest memory has.
-  kPagerMaxFrames = kPicoGuestSRAMSize >> kPagerPageShift,
+  kPagerMaxNumFrames = kPicoGuestSRAMSize >> kPagerPageShift,
   // A frame holding no page.
   kPagerNoPage = 0xFFFF,
 };
@@ -21,14 +22,14 @@ enum {
 // What PagerInit() returns, for the platform.
 static YPlatformPagedMemory g_memory;
 // The page table, entry i for page i. A page in no frame has entry 0.
-static uint16_t g_pages[kPagerMaxPages];
+static uint16_t g_pages[kPagerMaxNumPages];
 // The reverse of the page table: the page in each frame, or kPagerNoPage.
 // An entry's frame number alone cannot say whether the page is in a frame,
 // since a page in no frame has entry 0, which names frame 0; this can.
-static uint16_t g_frame_pages[kPagerMaxFrames];
+static uint16_t g_frame_pages[kPagerMaxNumFrames];
 // A bit per page: whether it has ever been written back, and so whether PSRAM
 // holds its bytes. One that has not is all zeros, as guest RAM starts.
-static uint8_t g_backed[kPagerMaxPages / 8];
+static uint8_t g_backed[kPagerMaxNumPages / 8];
 // How many frames there are, and the clock hand: the next frame
 // PagerTakeFrame() looks at.
 static uint32_t g_num_frames;
@@ -36,13 +37,13 @@ static uint32_t g_hand;
 static PagerStats g_stats;
 
 static void PagerPageFault(
-    YPlatformPagedMemory* memory, uint32_t page, bool write);
+    YPlatformPagedMemory* memory, uint32_t page, bool is_write);
 
 YPlatformPagedMemory* PagerInit(
     uint8_t* frames, uint32_t frames_size, uint32_t size) {
   g_num_frames = frames_size >> kPagerPageShift;
-  if (g_num_frames > kPagerMaxFrames) {
-    g_num_frames = kPagerMaxFrames;
+  if (g_num_frames > kPagerMaxNumFrames) {
+    g_num_frames = kPagerMaxNumFrames;
   }
   for (uint32_t i = 0; i < g_num_frames; ++i) {
     g_frame_pages[i] = kPagerNoPage;
@@ -51,7 +52,7 @@ YPlatformPagedMemory* PagerInit(
   memset(g_backed, 0, sizeof(g_backed));
   g_hand = 0;
   memset(&g_stats, 0, sizeof(g_stats));
-  g_stats.frames = g_num_frames;
+  g_stats.num_frames = g_num_frames;
   g_memory.context = NULL;
   g_memory.size = size;
   g_memory.page_shift = kPagerPageShift;
@@ -122,10 +123,10 @@ static uint32_t __not_in_flash_func(PagerTakeFrame)(void) {
     if (*entry & Y_CPU_PAGED_DATA_DIRTY) {
       if (!PsramWrite(
               PagerPsramAddress(page), PagerFrame(frame), kPagerPageSize)) {
-        ++g_stats.errors;
+        ++g_stats.num_errors;
       }
       PagerMarkBacked(page);
-      ++g_stats.write_backs;
+      ++g_stats.num_write_backs;
     }
     *entry = 0;
     g_frame_pages[frame] = kPagerNoPage;
@@ -135,9 +136,9 @@ static uint32_t __not_in_flash_func(PagerTakeFrame)(void) {
 
 // The page fault handler: YPlatformPagedMemory.page_fault_fn, called when the
 // CPU, or anything else reading or writing guest RAM, needs a page its entry
-// does not allow. page is the page's number, and write is true for a write.
-// It must leave the entry allowing the access: RESIDENT for a read, and
-// RESIDENT and DIRTY for a write.
+// does not allow. page is the page's number, and is_write is true for a
+// write. It must leave the entry allowing the access: RESIDENT for a read,
+// and RESIDENT and DIRTY for a write.
 //
 // There are three cases:
 //
@@ -153,31 +154,31 @@ static uint32_t __not_in_flash_func(PagerTakeFrame)(void) {
 //
 // A soft fault moves no data; it only sets bits.
 static void __not_in_flash_func(PagerPageFault)(
-    YPlatformPagedMemory* memory, uint32_t page, bool write) {
+    YPlatformPagedMemory* memory, uint32_t page, bool is_write) {
   (void)memory;
   const uint32_t start_us = time_us_32();
 
   // Whether the page is in a frame. Its entry names a frame even when it is
   // in none, since entry 0 names frame 0, so the frame's own record decides.
   uint32_t frame = g_pages[page] & Y_CPU_PAGED_DATA_FRAME_MASK;
-  const bool in_frame = frame < g_num_frames && g_frame_pages[frame] == page;
+  const bool is_in_frame = frame < g_num_frames && g_frame_pages[frame] == page;
 
-  if (in_frame) {
+  if (is_in_frame) {
     // A soft fault: the entry keeps its frame and its DIRTY bit, and only
     // gains the bits below.
-    ++g_stats.soft_faults;
+    ++g_stats.num_soft_faults;
   } else {
     // A hard fault: bring the page into a frame of its own.
     frame = PagerTakeFrame();
     if (PagerIsBacked(page)) {
       if (!PsramRead(
               PagerPsramAddress(page), PagerFrame(frame), kPagerPageSize)) {
-        ++g_stats.errors;
+        ++g_stats.num_errors;
       }
-      ++g_stats.page_ins;
+      ++g_stats.num_page_ins;
     } else {
       memset(PagerFrame(frame), 0, kPagerPageSize);
-      ++g_stats.zero_fills;
+      ++g_stats.num_zero_fills;
     }
     // Record the page in the frame both ways. The entry starts with neither
     // bit: the frame matches PSRAM until it is written.
@@ -189,7 +190,7 @@ static void __not_in_flash_func(PagerPageFault)(
   // page's later writes in its frame without calling here, and so that the
   // page is written back when it leaves the frame.
   g_pages[page] |= Y_CPU_PAGED_DATA_RESIDENT;
-  if (write) {
+  if (is_write) {
     g_pages[page] |= Y_CPU_PAGED_DATA_DIRTY;
   }
   g_stats.fault_us += time_us_32() - start_us;

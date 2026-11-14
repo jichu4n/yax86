@@ -104,22 +104,22 @@ static LauncherMenuExit g_exit;
 // than in the frames of the callers it would be inlined into.
 static __noinline bool ReadSettings(uint8_t* default_vm) {
   char problem[kVMProblemLength + 1];
-  bool read = SettingsRead(g_settings, problem);
+  bool was_read = SettingsRead(g_settings, problem);
   DisplaySetFont(g_settings->font);
   *default_vm = 0;
-  if (read && g_settings->boot_default[0] != '\0') {
+  if (was_read && g_settings->boot_default[0] != '\0') {
     // Past the list's end, the first is the default instead.
     const uint8_t index = VMListFind(g_vms, g_settings->boot_default);
-    if (index < kVMListMax) {
+    if (index < kVMListMaxNumVMs) {
       *default_vm = index;
     }
   }
-  if (!read) {
+  if (!was_read) {
     char message[kTextColumns + 1];
     snprintf(message, sizeof(message), "YAX86.CFG: %s", problem);
     StatusBarSetProblem(message);
   }
-  return read;
+  return was_read;
 }
 
 // Make the VM named name the one to start at the next power on, if it is not
@@ -197,36 +197,37 @@ typedef enum StartResult {
 // while the launcher menu shows.
 static __noinline StartResult Start(uint8_t* copy_buffer, VMConfig* vm) {
   StartNote note = {0};
-  const bool noted = TakeStartNote(&note);
+  const bool was_noted = TakeStartNote(&note);
   VMListRead(g_vms);
   // The VM selected: the default, or the one a power off left.
   uint8_t selected = 0;
-  const bool settings_read = ReadSettings(&selected);
+  const bool were_settings_read = ReadSettings(&selected);
   // Without a card there is no VM to start, or card to put on USB.
   if (DiskImageMountCard() != kDiskImageOpen) {
     return kStartNoCard;
   }
-  if (noted) {
+  if (was_noted) {
     SYSTEM_INFO(
         note.intent == kStartIntentRestart ? "restarting" : "powered_off",
         Y_LOG_STRING("name", note.name));
     const uint8_t index = VMListFind(g_vms, note.name);
-    if (index < kVMListMax) {
+    if (index < kVMListMaxNumVMs) {
       selected = index;
       if (note.intent == kStartIntentRestart && LoadSelectedVM(index, vm)) {
         return kStartLoadedVM;
       }
     }
   } else if (
-      settings_read && g_settings->boot_delay == 0 && g_vms->count > 0 &&
+      were_settings_read && g_settings->boot_delay == 0 && g_vms->num_vms > 0 &&
       LoadSelectedVM(selected, vm)) {
     return kStartLoadedVM;
   }
-  const bool counting =
-      !noted && g_settings->boot_delay > 0 && g_vms->count > 0;
+  const bool is_counting =
+      !was_noted && g_settings->boot_delay > 0 && g_vms->num_vms > 0;
   OpenMenu(
       copy_buffer, selected,
-      counting ? (uint32_t)g_settings->boot_delay * kMillisecondsPerSecond : 0);
+      is_counting ? (uint32_t)g_settings->boot_delay * kMillisecondsPerSecond
+                  : 0);
   return kStartShowsMenu;
 }
 
@@ -257,7 +258,8 @@ static void Report(const DebugCommand* command) {
   DEBUG_COMMAND_REPLY_GROUP(
       command, "display", Y_LOG_STRING("font", Font4x10Name(g_settings->font)));
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "vm", Y_LOG_STRING("name", ""), Y_LOG_UINT("vms", g_vms->count));
+      command, "vm", Y_LOG_STRING("name", ""),
+      Y_LOG_UINT("vms", g_vms->num_vms));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", true),
       Y_LOG_STRING("page", ScreenPageName()));
@@ -313,8 +315,8 @@ bool LauncherRun(
   for (;;) {
     PollCommand();
     SouthbridgeKeyEvent key;
-    const bool pressed = SouthbridgePollKey(&key) || TypingNext(&key);
-    if (pressed) {
+    const bool was_pressed = SouthbridgePollKey(&key) || TypingNext(&key);
+    if (was_pressed) {
       ScreenHandleKey(key);
     }
     if (ScreenIsOpen()) {
@@ -330,7 +332,7 @@ bool LauncherRun(
     }
     // The rows are updated at once after a key, so that the keys of the
     // screen it led to show without waiting for the next update.
-    if (pressed || time_reached(next_status_at)) {
+    if (was_pressed || time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       LauncherStatusBarUpdate(ScreenHint());
     }

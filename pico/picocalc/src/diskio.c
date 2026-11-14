@@ -11,29 +11,29 @@
 // clang-format on
 #include "sdcard.h"
 
-static bool g_card_up;
+static bool g_is_card_up;
 
 DSTATUS disk_status(BYTE pdrv) {
-  return pdrv == 0 && g_card_up ? 0 : STA_NOINIT;
+  return pdrv == 0 && g_is_card_up ? 0 : STA_NOINIT;
 }
 
 DSTATUS disk_initialize(BYTE pdrv) {
   if (pdrv != 0) {
     return STA_NOINIT;
   }
-  g_card_up = SdcardInit();
-  return g_card_up ? 0 : STA_NOINIT;
+  g_is_card_up = SdcardInit();
+  return g_is_card_up ? 0 : STA_NOINIT;
 }
 
 DRESULT disk_read(BYTE pdrv, BYTE* buff, LBA_t sector, UINT count) {
-  if (pdrv != 0 || !g_card_up) {
+  if (pdrv != 0 || !g_is_card_up) {
     return RES_NOTRDY;
   }
   return SdcardReadBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE* buff, LBA_t sector, UINT count) {
-  if (pdrv != 0 || !g_card_up) {
+  if (pdrv != 0 || !g_is_card_up) {
     return RES_NOTRDY;
   }
   return SdcardWriteBlocks(sector, buff, count) ? RES_OK : RES_ERROR;
@@ -42,7 +42,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE* buff, LBA_t sector, UINT count) {
 // FatFs asks for nothing but a sync, with the configuration it has here.
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void* buff) {
   (void)buff;
-  if (pdrv != 0 || !g_card_up) {
+  if (pdrv != 0 || !g_is_card_up) {
     return RES_NOTRDY;
   }
   if (cmd != CTRL_SYNC) {

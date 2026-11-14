@@ -9,21 +9,21 @@
 const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
 
-const char* const kVMDriveLabels[kVMDrives] = {
+const char* const kVMDriveLabels[kNumVMDrives] = {
     [kVMDriveFD1] = "FD1",
     [kVMDriveFD2] = "FD2",
     [kVMDriveHD1] = "HD1",
     [kVMDriveHD2] = "HD2",
 };
 
-const char* const kVMDriveNames[kVMDrives] = {
+const char* const kVMDriveNames[kNumVMDrives] = {
     [kVMDriveFD1] = "Floppy disk 1",
     [kVMDriveFD2] = "Floppy disk 2",
     [kVMDriveHD1] = "Hard disk 1",
     [kVMDriveHD2] = "Hard disk 2",
 };
 
-static const char* const kDriveKeys[kVMDrives] = {
+static const char* const kDriveKeys[kNumVMDrives] = {
     [kVMDriveFD1] = "fd1",
     [kVMDriveFD2] = "fd2",
     [kVMDriveHD1] = "hd1",
@@ -58,14 +58,14 @@ static bool TakeVMPair(
   VMReading* reading = context;
   VMConfig* config = reading->config;
   uint8_t drive = 0;
-  while (drive < kVMDrives && strcmp(key, kDriveKeys[drive]) != 0) {
+  while (drive < kNumVMDrives && strcmp(key, kDriveKeys[drive]) != 0) {
     ++drive;
   }
-  if (drive == kVMDrives) {
+  if (drive == kNumVMDrives) {
     snprintf(problem, kVMProblemLength + 1, "no setting %s", key);
     return false;
   }
-  config->present[drive] = true;
+  config->is_present[drive] = true;
   if (value[0] == '\0') {
     config->drives[drive][0] = '\0';
   } else if (!FSResolvePath(reading->folder, value, config->drives[drive])) {
@@ -79,9 +79,9 @@ static bool TakeVMPair(
 bool VMConfigRead(
     const VMEntry* vm, VMConfig* config, char problem[kVMProblemLength + 1]) {
   config->entry = *vm;
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     config->drives[drive][0] = '\0';
-    config->present[drive] = false;
+    config->is_present[drive] = false;
   }
   VMReading reading = {.config = config};
   FSFolderOf(vm->path, reading.folder);
@@ -106,14 +106,14 @@ bool VMConfigSaveDrive(
 }
 
 bool VMConfigSaveDrives(
-    const VMEntry* vm, const char* const drives[kVMDrives],
+    const VMEntry* vm, const char* const drives[kNumVMDrives],
     char problem[kVMProblemLength + 1]) {
   // Kept off the stack, with ConfigFileUpdate() under them.
-  static char values[kVMDrives][kFSMaxPath + 2];
+  static char values[kNumVMDrives][kFSMaxPath + 2];
   char folder[kFSMaxPath + 1];
   FSFolderOf(vm->path, folder);
-  ConfigFileSetting settings[kVMDrives];
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  ConfigFileSetting settings[kNumVMDrives];
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     values[drive][0] = '\0';
     if (drives[drive] != NULL && drives[drive][0] != '\0' &&
         !FSRelativePath(folder, drives[drive], values[drive])) {
@@ -124,5 +124,5 @@ bool VMConfigSaveDrives(
     settings[drive].key = kDriveKeys[drive];
     settings[drive].value = drives[drive] != NULL ? values[drive] : NULL;
   }
-  return ConfigFileUpdate(vm->path, settings, kVMDrives, problem);
+  return ConfigFileUpdate(vm->path, settings, kNumVMDrives, problem);
 }

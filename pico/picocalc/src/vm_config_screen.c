@@ -26,7 +26,7 @@ typedef enum FormItem {
   kFormDriveC,
   kFormDriveD,
   kFormCreate,
-  kFormItemCount,
+  kNumFormItems,
 } FormItem;
 
 extern const Screen kVMConfigScreen;
@@ -37,16 +37,18 @@ static ListBox g_list_box;
 // Whether the form configures the existing VM at g_vm, an index in the list,
 // rather than making a new one; it then has no name, and saves rather than
 // creates.
-static bool g_existing;
+static bool g_is_existing;
 static uint8_t g_vm;
 // A new VM's name, and what each drive is to hold.
 static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
-static VMDriveChoice g_drives[kVMDrives];
+static VMDriveChoice g_drives[kNumVMDrives];
 
 // The form's first item: its name for a new VM; for an existing one, at
 // the drives. g_list_box.selected counts from it.
-static uint8_t FirstItem(void) { return g_existing ? kFormDriveA : kFormName; }
+static uint8_t FirstItem(void) {
+  return g_is_existing ? kFormDriveA : kFormName;
+}
 
 static uint8_t SelectedItem(void) {
   return (uint8_t)(g_list_box.selected + FirstItem());
@@ -54,18 +56,18 @@ static uint8_t SelectedItem(void) {
 
 static void SelectItem(uint8_t item) {
   g_list_box.selected = (uint8_t)(item - FirstItem());
-  g_list_box.dirty = true;
+  g_list_box.is_dirty = true;
 }
 
 ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
   g_vm_manager = vm_manager;
-  g_existing = false;
+  g_is_existing = false;
   g_name[0] = '\0';
   g_name_length = 0;
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     g_drives[drive].path[0] = '\0';
-    g_drives[drive].blank = drive == kVMDriveHD1;
-    g_drives[drive].present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
+    g_drives[drive].is_blank = drive == kVMDriveHD1;
+    g_drives[drive].is_present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
   SelectItem(kFormName);
   return ScreenOpen(&kVMConfigScreen);
@@ -73,17 +75,17 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
 
 ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
   g_vm_manager = vm_manager;
-  g_existing = true;
+  g_is_existing = true;
   g_vm = index;
   static VMConfig config;
   char problem[kVMProblemLength + 1];
   VMConfigRead(&vm_manager->vms->vms[index], &config, problem);
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     FSCopyPath(config.drives[drive], g_drives[drive].path);
-    g_drives[drive].blank = false;
-    g_drives[drive].present =
+    g_drives[drive].is_blank = false;
+    g_drives[drive].is_present =
         drive == kVMDriveFD1 ||
-        (drive == kVMDriveFD2 ? config.present[drive]
+        (drive == kVMDriveFD2 ? config.is_present[drive]
                               : config.drives[drive][0] != '\0');
   }
   SelectItem(kFormDriveA);
@@ -92,10 +94,10 @@ ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
 
 // The drives as the form has them, its strings the form's.
 static void FormDrives(VMListDrives* drives) {
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     drives->paths[drive] =
-        g_drives[drive].present ? g_drives[drive].path : NULL;
-    drives->blank[drive] = g_drives[drive].blank;
+        g_drives[drive].is_present ? g_drives[drive].path : NULL;
+    drives->is_blank[drive] = g_drives[drive].is_blank;
   }
 }
 
@@ -120,10 +122,10 @@ static __noinline ScreenResult Create(void) {
   if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_BOOL("blank_fd1", drives.blank[kVMDriveFD1]),
-        Y_LOG_BOOL("blank_fd2", drives.blank[kVMDriveFD2]),
-        Y_LOG_BOOL("blank_hd1", drives.blank[kVMDriveHD1]),
-        Y_LOG_BOOL("blank_hd2", drives.blank[kVMDriveHD2]),
+        Y_LOG_BOOL("blank_fd1", drives.is_blank[kVMDriveFD1]),
+        Y_LOG_BOOL("blank_fd2", drives.is_blank[kVMDriveFD2]),
+        Y_LOG_BOOL("blank_hd1", drives.is_blank[kVMDriveHD1]),
+        Y_LOG_BOOL("blank_hd2", drives.is_blank[kVMDriveHD2]),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
@@ -164,7 +166,7 @@ static bool TypeName(uint8_t key) {
   if (key == kKeyCodeBackspace) {
     if (g_name_length > 0) {
       g_name[--g_name_length] = '\0';
-      g_list_box.dirty = true;
+      g_list_box.is_dirty = true;
     }
     return true;
   }
@@ -174,7 +176,7 @@ static bool TypeName(uint8_t key) {
   if (g_name_length < kFSMaxFolderName) {
     g_name[g_name_length++] = (char)toupper(key);
     g_name[g_name_length] = '\0';
-    g_list_box.dirty = true;
+    g_list_box.is_dirty = true;
   }
   return true;
 }
@@ -184,7 +186,7 @@ static bool TypeName(uint8_t key) {
 static ScreenResult OnSelect(void) {
   const uint8_t item = SelectedItem();
   if (item == kFormCreate) {
-    return g_existing ? Save() : Create();
+    return g_is_existing ? Save() : Create();
   }
   if (item == kFormName) {
     SelectItem(kFormDriveA);
@@ -204,8 +206,8 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
       event.key == kKeyCodeBackspace) {
     return ScreenStays();
   }
-  const uint8_t count = (uint8_t)(kFormItemCount - FirstItem());
-  switch (ListBoxHandleKeyCode(&g_list_box, event.key, count)) {
+  const uint8_t num_items = (uint8_t)(kNumFormItems - FirstItem());
+  switch (ListBoxHandleKeyCode(&g_list_box, event.key, num_items)) {
     case kListBoxActionSelect:
       return OnSelect();
     case kListBoxActionBack:
@@ -219,8 +221,8 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
 static void OnDraw(DisplayBox* box) {
-  char rows[kFormItemCount][kListBoxNarrowColumns];
-  BoxItem items[kFormItemCount];
+  char rows[kNumFormItems][kListBoxNarrowColumns];
+  BoxItem items[kNumFormItems];
   const char* cursor =
       SelectedItem() == kFormName && g_name_length < kFSMaxFolderName ? "_"
                                                                       : "";
@@ -228,13 +230,13 @@ static void OnDraw(DisplayBox* box) {
       rows[kFormName], sizeof(rows[kFormName]), "%-15s %s%s", "Name", g_name,
       cursor);
   items[kFormName] = (BoxItem){rows[kFormName], false};
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     const uint8_t item = (uint8_t)(kFormDriveA + drive);
     const char* what = "empty";
     char name[kDiskImageNameLength + 1];
-    if (!g_drives[drive].present) {
+    if (!g_drives[drive].is_present) {
       what = "disabled";
-    } else if (g_drives[drive].blank) {
+    } else if (g_drives[drive].is_blank) {
       what = drive >= kVMDriveHD1 ? "new disk image" : "new floppy image";
     } else if (g_drives[drive].path[0] != '\0') {
       DiskImageName(g_drives[drive].path, name);
@@ -244,10 +246,10 @@ static void OnDraw(DisplayBox* box) {
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (BoxItem){rows[item], true};
   }
-  items[kFormCreate] = (BoxItem){g_existing ? "Save" : "Create", false};
+  items[kFormCreate] = (BoxItem){g_is_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
-      box, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
-      &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
+      box, g_is_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL,
+      0, &items[FirstItem()], (uint8_t)(kNumFormItems - FirstItem()),
       g_list_box.selected, true);
 }
 
@@ -258,7 +260,7 @@ static const char* Hint(void) {
 }
 
 static const char* PageName(void) {
-  return g_existing ? "vm_configure" : "vm_create";
+  return g_is_existing ? "vm_configure" : "vm_create";
 }
 
 const Screen kVMConfigScreen = {
@@ -266,5 +268,5 @@ const Screen kVMConfigScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

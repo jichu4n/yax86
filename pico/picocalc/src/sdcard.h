@@ -20,8 +20,9 @@ bool SdcardIsInserted(void);
 bool SdcardInit(void);
 
 // Read or write whole 512 byte blocks, numbered from the start of the card.
-bool SdcardReadBlocks(uint32_t block, uint8_t* data, uint32_t count);
-bool SdcardWriteBlocks(uint32_t block, const uint8_t* data, uint32_t count);
+bool SdcardReadBlocks(uint32_t block, uint8_t* data, uint32_t num_blocks);
+bool SdcardWriteBlocks(
+    uint32_t block, const uint8_t* data, uint32_t num_blocks);
 
 // Wait for the card to finish the last write.
 bool SdcardSync(void);
@@ -31,6 +32,6 @@ uint32_t SdcardGetClockHz(void);
 
 // The card's size in 512-byte blocks, read from its card specific data
 // register when it was brought up, or 0 if that could not be read.
-uint32_t SdcardGetBlockCount(void);
+uint32_t SdcardGetNumBlocks(void);
 
 #endif  // YAX86_PICOCALC_SDCARD_H

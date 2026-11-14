@@ -10,7 +10,7 @@
 
 static const BoxItem kSettingsItems[] = {{"Font", true}};
 enum {
-  kSettingsItemCount = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
+  kNumSettingsItems = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
 };
 
 extern const Screen kSettingsScreen;
@@ -26,7 +26,7 @@ ScreenResult SettingsScreenOpen(Settings* settings) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, kSettingsItemCount)) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumSettingsItems)) {
     case kListBoxActionSelect:
       return FontScreenOpen(g_settings);
     case kListBoxActionBack:
@@ -38,7 +38,7 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 
 static void OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
-      box, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
+      box, "Settings", NULL, 0, kSettingsItems, kNumSettingsItems,
       g_list_box.selected, true);
 }
 
@@ -51,5 +51,5 @@ const Screen kSettingsScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

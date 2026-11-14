@@ -17,10 +17,10 @@ typedef enum VMItem {
   kVMRename,
   kVMClone,
   kVMDelete,
-  kVMItemCount,
+  kNumVMItems,
 } VMItem;
 
-static const BoxItem kVMItems[kVMItemCount] = {
+static const BoxItem kVMItems[kNumVMItems] = {
     [kVMConfigure] = {"Configure", true},
     [kVMRename] = {"Rename", true},
     [kVMClone] = {"Clone", true},
@@ -35,24 +35,25 @@ static ListBox g_list_box;
 // The VM, an index in the list; the names of the images in its drives,
 // empty for none; whether each drive is there; and whether its vm.cfg read.
 static uint8_t g_vm;
-static char g_drives[kVMDrives][kDiskImageNameLength + 1];
-static bool g_present[kVMDrives];
-static bool g_readable;
+static char g_drives[kNumVMDrives][kDiskImageNameLength + 1];
+static bool g_is_present[kNumVMDrives];
+static bool g_is_readable;
 
 ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
   g_vm_manager = vm_manager;
   g_vm = index;
   VMConfig config;
   char problem[kVMProblemLength + 1];
-  g_readable = VMConfigRead(&vm_manager->vms->vms[index], &config, problem);
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  g_is_readable = VMConfigRead(&vm_manager->vms->vms[index], &config, problem);
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     g_drives[drive][0] = '\0';
     if (config.drives[drive][0] != '\0') {
       DiskImageName(config.drives[drive], g_drives[drive]);
     }
-    g_present[drive] = drive == kVMDriveFD1 ||
-                       (drive == kVMDriveFD2 ? config.present[drive]
-                                             : config.drives[drive][0] != '\0');
+    g_is_present[drive] =
+        drive == kVMDriveFD1 ||
+        (drive == kVMDriveFD2 ? config.is_present[drive]
+                              : config.drives[drive][0] != '\0');
   }
   g_list_box.selected = kVMConfigure;
   return ScreenOpen(&kVMScreen);
@@ -73,7 +74,7 @@ static ScreenResult OnSelect(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, kVMItemCount)) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumVMItems)) {
     case kListBoxActionSelect:
       return OnSelect();
     case kListBoxActionBack:
@@ -86,7 +87,7 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // Back from a screen opened from the page: to Manage VMs too, if it changed
 // the card.
 static ScreenResult OnResume(void) {
-  if (g_vm_manager->changed) {
+  if (g_vm_manager->did_change) {
     return ScreenBack();
   }
   return ScreenStays();
@@ -98,7 +99,7 @@ static const char* DriveShown(uint8_t drive, const char* name) {
   if (name[0] != '\0') {
     return name;
   }
-  return g_present[drive] ? "empty" : "disabled";
+  return g_is_present[drive] ? "empty" : "disabled";
 }
 
 // The images in the VM's drives, over what can be done to it.
@@ -106,10 +107,10 @@ static void OnDraw(DisplayBox* box) {
   // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds
   // anything,
   // with room for any name, which the box cuts to its width.
-  char lines[kVMDrives / 2][64];
-  const char* line_pointers[kVMDrives / 2];
-  uint8_t line_count = 0;
-  for (uint8_t first = 0; first < kVMDrives; first += 2) {
+  char lines[kNumVMDrives / 2][64];
+  const char* line_pointers[kNumVMDrives / 2];
+  uint8_t num_lines = 0;
+  for (uint8_t first = 0; first < kNumVMDrives; first += 2) {
     char label_a[8];
     char label_b[8];
     snprintf(label_a, sizeof(label_a), "%s:", kVMDriveLabels[first]);
@@ -120,22 +121,22 @@ static void OnDraw(DisplayBox* box) {
       continue;
     }
     snprintf(
-        lines[line_count], sizeof(lines[line_count]),
-        "%-4s %-12.12s %-4s %.12s", label_a, DriveShown(first, a), label_b,
+        lines[num_lines], sizeof(lines[num_lines]), "%-4s %-12.12s %-4s %.12s",
+        label_a, DriveShown(first, a), label_b,
         DriveShown((uint8_t)(first + 1), b));
-    line_pointers[line_count] = lines[line_count];
-    ++line_count;
+    line_pointers[num_lines] = lines[num_lines];
+    ++num_lines;
   }
-  if (!g_readable) {
+  if (!g_is_readable) {
     line_pointers[0] = "Its vm.cfg has a problem.";
-    line_count = 1;
-  } else if (line_count == 0) {
+    num_lines = 1;
+  } else if (num_lines == 0) {
     line_pointers[0] = "No disks.";
-    line_count = 1;
+    num_lines = 1;
   }
   ListBoxDrawItems(
-      box, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
-      kVMItems, kVMItemCount, g_list_box.selected, true);
+      box, g_vm_manager->vms->vms[g_vm].name, line_pointers, num_lines,
+      kVMItems, kNumVMItems, g_list_box.selected, true);
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -148,5 +149,5 @@ const Screen kVMScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

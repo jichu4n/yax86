@@ -25,13 +25,13 @@ static ListBox g_list_box;
 static uint8_t g_vm;
 static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
-static bool g_cloning;
+static bool g_is_cloning;
 
 ScreenResult VMNameScreenOpen(
-    VMManager* vm_manager, uint8_t index, bool cloning) {
+    VMManager* vm_manager, uint8_t index, bool is_cloning) {
   g_vm_manager = vm_manager;
   g_vm = index;
-  g_cloning = cloning;
+  g_is_cloning = is_cloning;
   const char* name = vm_manager->vms->vms[index].name;
   g_name_length = 0;
   while (name[g_name_length] != '\0' && g_name_length < kFSMaxFolderName) {
@@ -39,7 +39,7 @@ ScreenResult VMNameScreenOpen(
     ++g_name_length;
   }
   // A clone's name has _2 at the end, in the name's 8 characters.
-  if (cloning) {
+  if (is_cloning) {
     if (g_name_length > kFSMaxFolderName - 2) {
       g_name_length = kFSMaxFolderName - 2;
     }
@@ -109,13 +109,13 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   const uint8_t key = event.key;
   switch (key) {
     case kKeyCodeEnter:
-      return g_cloning ? Clone() : Rename();
+      return g_is_cloning ? Clone() : Rename();
     case kKeyCodeEsc:
       return ScreenBack();
     case kKeyCodeBackspace:
       if (g_name_length > 0) {
         g_name[--g_name_length] = '\0';
-        g_list_box.dirty = true;
+        g_list_box.is_dirty = true;
       }
       return ScreenStays();
     default:
@@ -125,7 +125,7 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
       g_name_length < kFSMaxFolderName) {
     g_name[g_name_length++] = (char)toupper(key);
     g_name[g_name_length] = '\0';
-    g_list_box.dirty = true;
+    g_list_box.is_dirty = true;
   }
   return ScreenStays();
 }
@@ -135,10 +135,10 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 static void OnDraw(DisplayBox* box) {
   char title[kListBoxNarrowColumns];
   snprintf(
-      title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
+      title, sizeof(title), "%s %s", g_is_cloning ? "Clone" : "Rename",
       g_vm_manager->vms->vms[g_vm].name);
   const char* const lines[] = {
-      g_cloning ? "Name of the copy:" : "New name:",
+      g_is_cloning ? "Name of the copy:" : "New name:",
       "",
       "",
       "Up to 8 letters, digits, - and _.",
@@ -160,8 +160,8 @@ static void OnDraw(DisplayBox* box) {
 }
 
 static const char* Hint(void) {
-  return g_cloning ? "Enter=Clone  Backspace=Erase  Esc=Cancel"
-                   : "Enter=Rename  Backspace=Erase  Esc=Cancel";
+  return g_is_cloning ? "Enter=Clone  Backspace=Erase  Esc=Cancel"
+                      : "Enter=Rename  Backspace=Erase  Esc=Cancel";
 }
 
 static const char* PageName(void) { return "vm_name"; }
@@ -171,5 +171,5 @@ const Screen kVMNameScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

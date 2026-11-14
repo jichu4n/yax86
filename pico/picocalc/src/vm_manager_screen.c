@@ -22,16 +22,16 @@ static ListBox g_list_box;
 static uint8_t g_top;
 
 // The rows: a VM each, then New VM, after a line if there are any VMs.
-static uint8_t RowCount(void) {
-  return (uint8_t)(g_vm_manager.vms->count +
-                   (g_vm_manager.vms->count > 0 ? 2 : 1));
+static uint8_t NumRows(void) {
+  return (uint8_t)(g_vm_manager.vms->num_vms +
+                   (g_vm_manager.vms->num_vms > 0 ? 2 : 1));
 }
 
 // Keep the selected item among the rows.
 static void ScrollToSelected(void) {
   uint8_t row = g_list_box.selected;
-  if (g_vm_manager.vms->count > 0 &&
-      g_list_box.selected >= g_vm_manager.vms->count) {
+  if (g_vm_manager.vms->num_vms > 0 &&
+      g_list_box.selected >= g_vm_manager.vms->num_vms) {
     ++row;
   }
   ListBoxScrollTo(row, &g_top);
@@ -41,7 +41,7 @@ static void ScrollToSelected(void) {
 static void ShowSelected(uint8_t index) {
   g_top = 0;
   g_list_box.selected = index;
-  g_list_box.dirty = true;
+  g_list_box.is_dirty = true;
   ScrollToSelected();
 }
 
@@ -59,13 +59,13 @@ ScreenResult VMManagerScreenOpen(
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  const uint8_t count = (uint8_t)(g_vm_manager.vms->count + 1);
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, count)) {
+  const uint8_t num_items = (uint8_t)(g_vm_manager.vms->num_vms + 1);
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, num_items)) {
     case kListBoxActionMoved:
       ScrollToSelected();
       return ScreenStays();
     case kListBoxActionSelect:
-      if (g_list_box.selected == g_vm_manager.vms->count) {
+      if (g_list_box.selected == g_vm_manager.vms->num_vms) {
         return VMConfigScreenOpenNew(&g_vm_manager);
       }
       return VMScreenOpen(&g_vm_manager, g_list_box.selected);
@@ -83,16 +83,16 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // read again: what changes them, a rename or delete of the default VM,
 // updates them as it saves them.
 static __noinline ScreenResult OnResume(void) {
-  if (!g_vm_manager.changed) {
+  if (!g_vm_manager.did_change) {
     ShowSelected(g_list_box.selected);
     return ScreenStays();
   }
-  g_vm_manager.changed = false;
+  g_vm_manager.did_change = false;
   VMListRead(g_vm_manager.vms);
   const uint8_t index = VMListFind(g_vm_manager.vms, g_vm_manager.to_select);
-  const bool found = index < g_vm_manager.vms->count;
-  ShowSelected(found ? index : 0);
-  if (g_vm_manager.show_vm && found) {
+  const bool was_found = index < g_vm_manager.vms->num_vms;
+  ShowSelected(was_found ? index : 0);
+  if (g_vm_manager.should_show_vm && was_found) {
     return VMScreenOpen(&g_vm_manager, index);
   }
   return ScreenStays();
@@ -107,20 +107,20 @@ static void OnDraw(DisplayBox* box) {
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &box->text[1 + i];
     const uint8_t index = (uint8_t)(g_top + i);
-    if (index >= RowCount()) {
+    if (index >= NumRows()) {
       BoxBlankRow(row, box->columns);
-    } else if (index < vms->count) {
+    } else if (index < vms->num_vms) {
       const BoxItem item = {vms->vms[index].name, true};
       BoxItemRow(row, box->columns, &item, index == g_list_box.selected);
-    } else if (vms->count > 0 && index == vms->count) {
+    } else if (vms->num_vms > 0 && index == vms->num_vms) {
       BoxSeparatorRow(row, box->columns);
     } else {
       BoxItemRow(
-          row, box->columns, &kNewVMRow, g_list_box.selected == vms->count);
+          row, box->columns, &kNewVMRow, g_list_box.selected == vms->num_vms);
     }
   }
   BoxEdgeRow(&box->text[kListBoxRows + 1], box->columns, false, NULL);
-  ListBoxDrawScrollArrows(box, g_top, RowCount());
+  ListBoxDrawScrollArrows(box, g_top, NumRows());
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -133,5 +133,5 @@ const Screen kVMManagerScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

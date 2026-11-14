@@ -2,11 +2,11 @@
 
 #include "fs.h"
 
-static DiskImage g_images[kHardDisks];
-static char g_paths[kHardDisks][kFSMaxPath + 1];
+static DiskImage g_images[kNumHardDisks];
+static char g_paths[kNumHardDisks][kFSMaxPath + 1];
 
-void HardDiskOpen(const char* const paths[kHardDisks]) {
-  for (uint8_t drive = 0; drive < kHardDisks; ++drive) {
+void HardDiskOpen(const char* const paths[kNumHardDisks]) {
+  for (uint8_t drive = 0; drive < kNumHardDisks; ++drive) {
     DiskImage* image = &g_images[drive];
     if (paths[drive] == NULL || paths[drive][0] == '\0') {
       image->status = kDiskImageEjected;
@@ -23,7 +23,7 @@ const DiskImage* HardDiskGetImage(HardDiskDrive drive) {
 
 static uint8_t ReadByte(
     Y_UNUSED void* context, uint8_t drive, uint32_t offset) {
-  if (drive >= kHardDisks) {
+  if (drive >= kNumHardDisks) {
     return 0xFF;
   }
   return DiskImageReadByte(&g_images[drive], offset);
@@ -31,7 +31,7 @@ static uint8_t ReadByte(
 
 static void WriteByte(
     Y_UNUSED void* context, uint8_t drive, uint32_t offset, uint8_t value) {
-  if (drive >= kHardDisks) {
+  if (drive >= kNumHardDisks) {
     return;
   }
   DiskImageWriteByte(&g_images[drive], offset, value);
@@ -40,7 +40,7 @@ static void WriteByte(
 void HardDiskAttach(YHDCState* hdc) {
   hdc->config.read_image_byte = ReadByte;
   hdc->config.write_image_byte = WriteByte;
-  for (uint8_t drive = 0; drive < kHardDisks; ++drive) {
+  for (uint8_t drive = 0; drive < kNumHardDisks; ++drive) {
     if (g_images[drive].status == kDiskImageOpen) {
       YHDCAttachDrive(hdc, drive, &YHDCGeometry10MB);
     }

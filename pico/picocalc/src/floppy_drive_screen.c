@@ -16,7 +16,7 @@ typedef enum DriveItem {
   kDriveInsert = 0,
   // Shown only while there is a disk to eject.
   kDriveEject,
-  kDriveItemCount,
+  kNumDriveItems,
 } DriveItem;
 
 extern const Screen kFloppyDriveScreen;
@@ -28,7 +28,7 @@ static FloppyDrive g_drive;
 static ListBox g_list_box;
 // The images in the drives, which the browser marks, and where it writes the
 // image selected and its length.
-static const char* g_in_drives[kFloppyDrives];
+static const char* g_in_drives[kNumFloppyDrives];
 static char g_found_path[kFSMaxPath + 1];
 static uint32_t g_found_size;
 
@@ -40,12 +40,12 @@ ScreenResult FloppyDriveScreenOpen(
   return ScreenOpen(&kFloppyDriveScreen);
 }
 
-static bool DriveEmpty(void) {
+static bool IsDriveEmpty(void) {
   return FloppyGetImage(g_drive)->status == kDiskImageEjected;
 }
 
-static uint8_t ItemCount(void) {
-  return DriveEmpty() ? kDriveEject : kDriveItemCount;
+static uint8_t NumItems(void) {
+  return IsDriveEmpty() ? kDriveEject : kNumDriveItems;
 }
 
 // Open the browser to find an image for the drive. It starts in the folder
@@ -54,7 +54,7 @@ static uint8_t ItemCount(void) {
 // in the drives are marked, and the one in this drive selected. Kept out of
 // line, so that ejecting a disk does not carry its folder on the stack.
 static __noinline ScreenResult Browse(void) {
-  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     const DiskImage* image = FloppyGetImage((FloppyDrive)drive);
     g_in_drives[drive] = image->status == kDiskImageOpen ? image->path : NULL;
   }
@@ -82,12 +82,12 @@ static ScreenResult OnSelect(void) {
   }
   EmulatorSessionEjectFloppy(g_session, g_drive);
   g_list_box.selected = kDriveInsert;
-  g_list_box.dirty = true;
+  g_list_box.is_dirty = true;
   return ScreenStays();
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, ItemCount())) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, NumItems())) {
     case kListBoxActionSelect:
       return OnSelect();
     case kListBoxActionBack:
@@ -111,13 +111,13 @@ static ScreenResult OnResume(void) {
 // What the drive holds, over its items.
 static void OnDraw(DisplayBox* box) {
   const DiskImage* image = FloppyGetImage(g_drive);
-  const bool empty = DriveEmpty();
+  const bool is_empty = IsDriveEmpty();
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
   if (image->status == kDiskImageOpen) {
     DiskImageName(image->path, name);
     in_drive = name;
-  } else if (empty) {
+  } else if (is_empty) {
     in_drive = "empty";
   }
   char line[kListBoxNarrowColumns];
@@ -127,13 +127,14 @@ static void OnDraw(DisplayBox* box) {
       "Change disks only while DOS is",
       "not using the drive.",
   };
-  const BoxItem items[kDriveItemCount] = {
-      [kDriveInsert] = {empty ? "Choose disk image" : "Swap disk image", true},
+  const BoxItem items[kNumDriveItems] = {
+      [kDriveInsert] =
+          {is_empty ? "Choose disk image" : "Swap disk image", true},
       [kDriveEject] = {"Eject", false},
   };
   ListBoxDrawItems(
       box, kVMDriveNames[kVMDriveFD1 + g_drive], lines,
-      sizeof(lines) / sizeof(lines[0]), items, ItemCount(), g_list_box.selected,
+      sizeof(lines) / sizeof(lines[0]), items, NumItems(), g_list_box.selected,
       false);
 }
 
@@ -149,5 +150,5 @@ const Screen kFloppyDriveScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

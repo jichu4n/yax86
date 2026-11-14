@@ -12,7 +12,7 @@
 
 enum {
   // The lines on the page, and the longest value one can have.
-  kStatusScreenLines = 6,
+  kStatusScreenNumLines = 6,
   kStatusScreenValueColumns = 68,
 };
 
@@ -26,6 +26,7 @@ typedef struct StatusScreenLine {
 
 // Show the status page with lines, which the caller keeps current while it
 // shows. lines must outlive the screen.
-ScreenResult StatusScreenOpen(const StatusScreenLine lines[kStatusScreenLines]);
+ScreenResult StatusScreenOpen(
+    const StatusScreenLine lines[kStatusScreenNumLines]);
 
 #endif  // YAX86_PICOCALC_STATUS_SCREEN_H

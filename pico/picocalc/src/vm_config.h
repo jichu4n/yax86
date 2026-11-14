@@ -35,7 +35,7 @@ enum {
   kVMDriveFD2,
   kVMDriveHD1,
   kVMDriveHD2,
-  kVMDrives,
+  kNumVMDrives,
 
   // A VM's name: its folder's, an 8.3 name.
   kVMNameLength = 12,
@@ -49,8 +49,8 @@ extern const char kVMsFolder[];
 // Each drive's label - FD1, FD2, HD1, HD2 - and name - Floppy disk 1 ...
 // Hard disk 2 -
 // as the menu and status rows show them.
-extern const char* const kVMDriveLabels[kVMDrives];
-extern const char* const kVMDriveNames[kVMDrives];
+extern const char* const kVMDriveLabels[kNumVMDrives];
+extern const char* const kVMDriveNames[kNumVMDrives];
 
 // A VM: its name, in capitals, and its file's path from the card's root,
 // `yax86/vm/NAME/vm.cfg`.
@@ -62,10 +62,10 @@ typedef struct VMEntry {
 typedef struct VMConfig {
   VMEntry entry;
   // Each drive's image, as a path from the card's root, or empty.
-  char drives[kVMDrives][kFSMaxPath + 1];
+  char drives[kNumVMDrives][kFSMaxPath + 1];
   // Whether the file names each drive, even as empty. Floppy disk 2 is there
   // only if it does; a hard disk not named is empty either way.
-  bool present[kVMDrives];
+  bool is_present[kNumVMDrives];
 } VMConfig;
 
 // The entry of the VM named name, whether or not it is on the card. Returns
@@ -84,7 +84,7 @@ bool VMConfigRead(
 // none. Returns false, with the problem described, if a path
 // would be too long or the file could not be written.
 bool VMConfigSaveDrives(
-    const VMEntry* vm, const char* const drives[kVMDrives],
+    const VMEntry* vm, const char* const drives[kNumVMDrives],
     char problem[kVMProblemLength + 1]);
 
 // Save the image in a VM's drive, a path from the card's root or NULL or

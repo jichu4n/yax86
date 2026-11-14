@@ -100,8 +100,8 @@ enum {
   kBlockCRCBytes = 2,
 };
 
-static bool g_byte_addressed;
-static uint32_t g_block_count;
+static bool g_is_byte_addressed;
+static uint32_t g_num_blocks;
 static uint32_t g_clock_hz;
 
 static uint8_t Transfer(uint8_t out) {
@@ -206,7 +206,7 @@ static bool ReadData(uint8_t* data, uint32_t length);
 
 // The card's size in blocks, from its card specific data, or 0 if it could not
 // be read or has a layout this does not know.
-static uint32_t ReadBlockCount(void) {
+static uint32_t ReadNumBlocks(void) {
   uint8_t csd[kCSDBytes];
   if (SendCommand(kCommandSendCSD, 0) != kR1Ready ||
       !ReadData(csd, sizeof(csd))) {
@@ -272,24 +272,24 @@ static bool BringUp(void) {
     for (uint8_t i = 0; i < sizeof(ocr); ++i) {
       ocr[i] = Transfer(kSdcardIdleByte);
     }
-    g_byte_addressed = (ocr[0] & kOCRHighCapacityByte0) == 0;
+    g_is_byte_addressed = (ocr[0] & kOCRHighCapacityByte0) == 0;
   } else if (response & kR1IllegalCommand) {
     // Version 1: standard capacity, addressed by byte.
     if (!WaitForOpCond(0)) {
       return false;
     }
-    g_byte_addressed = true;
+    g_is_byte_addressed = true;
   } else {
     return false;
   }
 
   // A byte addressed card's block length can differ; a block addressed
   // card's is always 512.
-  if (g_byte_addressed &&
+  if (g_is_byte_addressed &&
       SendCommand(kCommandSetBlockLength, kSdcardBlockSize) != kR1Ready) {
     return false;
   }
-  g_block_count = ReadBlockCount();
+  g_num_blocks = ReadNumBlocks();
   return true;
 }
 
@@ -303,7 +303,7 @@ bool SdcardIsInserted(void) {
 }
 
 bool SdcardInit(void) {
-  g_block_count = 0;
+  g_num_blocks = 0;
   spi_init(kSdcardSPI, kSdcardInitHz);
   gpio_set_function(kSdcardPinMISO, GPIO_FUNC_SPI);
   gpio_set_function(kSdcardPinSCK, GPIO_FUNC_SPI);
@@ -314,20 +314,20 @@ bool SdcardInit(void) {
   gpio_set_dir(kSdcardPinCS, GPIO_OUT);
   gpio_put(kSdcardPinCS, 1);
 
-  const bool up = BringUp();
+  const bool is_up = BringUp();
   Deselect();
-  if (up) {
+  if (is_up) {
     g_clock_hz = spi_set_baudrate(kSdcardSPI, kSdcardFastHz);
   }
-  return up;
+  return is_up;
 }
 
 uint32_t SdcardGetClockHz(void) { return g_clock_hz; }
 
-uint32_t SdcardGetBlockCount(void) { return g_block_count; }
+uint32_t SdcardGetNumBlocks(void) { return g_num_blocks; }
 
 static uint32_t Address(uint32_t block) {
-  return g_byte_addressed ? block * kSdcardBlockSize : block;
+  return g_is_byte_addressed ? block * kSdcardBlockSize : block;
 }
 
 // Read the data block a command's R1 is followed by: its start token, length
@@ -381,47 +381,49 @@ static bool WriteData(uint8_t token, const uint8_t* data) {
 // which saves a command and a wait for each block after the first: a card
 // answering a read starts sending sooner, and programs a run of writes
 // together.
-bool SdcardReadBlocks(uint32_t block, uint8_t* data, uint32_t count) {
-  bool ok;
-  if (count == 1) {
-    ok = SendCommand(kCommandReadBlock, Address(block)) == kR1Ready &&
-         ReadData(data, kSdcardBlockSize);
+bool SdcardReadBlocks(uint32_t block, uint8_t* data, uint32_t num_blocks) {
+  bool is_ok;
+  if (num_blocks == 1) {
+    is_ok = SendCommand(kCommandReadBlock, Address(block)) == kR1Ready &&
+            ReadData(data, kSdcardBlockSize);
   } else {
-    ok = SendCommand(kCommandReadMultipleBlock, Address(block)) == kR1Ready;
-    for (uint32_t i = 0; i < count && ok; ++i) {
-      ok = ReadData(data + i * kSdcardBlockSize, kSdcardBlockSize);
+    is_ok = SendCommand(kCommandReadMultipleBlock, Address(block)) == kR1Ready;
+    for (uint32_t i = 0; i < num_blocks && is_ok; ++i) {
+      is_ok = ReadData(data + i * kSdcardBlockSize, kSdcardBlockSize);
     }
     // A read that failed part way is stopped all the same.
-    ok = StopReading() && ok;
+    is_ok = StopReading() && is_ok;
   }
   Deselect();
-  return ok;
+  return is_ok;
 }
 
-bool SdcardWriteBlocks(uint32_t block, const uint8_t* data, uint32_t count) {
-  bool ok;
-  if (count == 1) {
-    ok = SendCommand(kCommandWriteBlock, Address(block)) == kR1Ready;
-    if (ok) {
+bool SdcardWriteBlocks(
+    uint32_t block, const uint8_t* data, uint32_t num_blocks) {
+  bool is_ok;
+  if (num_blocks == 1) {
+    is_ok = SendCommand(kCommandWriteBlock, Address(block)) == kR1Ready;
+    if (is_ok) {
       Transfer(kSdcardIdleByte);
-      ok = WriteData(kTokenStartBlock, data);
+      is_ok = WriteData(kTokenStartBlock, data);
     }
   } else {
-    ok = SendCommand(kCommandWriteMultipleBlock, Address(block)) == kR1Ready;
-    if (ok) {
+    is_ok = SendCommand(kCommandWriteMultipleBlock, Address(block)) == kR1Ready;
+    if (is_ok) {
       Transfer(kSdcardIdleByte);
-      for (uint32_t i = 0; i < count && ok; ++i) {
-        ok = WriteData(kTokenStartMultipleWrite, data + i * kSdcardBlockSize);
+      for (uint32_t i = 0; i < num_blocks && is_ok; ++i) {
+        is_ok =
+            WriteData(kTokenStartMultipleWrite, data + i * kSdcardBlockSize);
       }
       // A write that failed part way is stopped all the same, which ends it
       // after the blocks the card accepted.
       Transfer(kTokenStopMultipleWrite);
       Transfer(kSdcardIdleByte);
-      ok = WaitReady() && ok;
+      is_ok = WaitReady() && is_ok;
     }
   }
   Deselect();
-  return ok;
+  return is_ok;
 }
 
 bool SdcardSync(void) {

@@ -39,7 +39,7 @@ void BoxBlankRow(DisplayTextRow* row, uint8_t columns);
 
 // The top or bottom edge of the box, with a title centered in the top one.
 void BoxEdgeRow(
-    DisplayTextRow* row, uint8_t columns, bool top, const char* title);
+    DisplayTextRow* row, uint8_t columns, bool is_top, const char* title);
 
 // A horizontal line across the box, separating groups of items.
 void BoxSeparatorRow(DisplayTextRow* row, uint8_t columns);
@@ -52,12 +52,13 @@ void BoxPutText(
 // An item's row: its text, and the whole width inside the border marked if
 // it is the item selected.
 void BoxItemTextRow(
-    DisplayTextRow* row, uint8_t columns, const char* text, bool selected);
+    DisplayTextRow* row, uint8_t columns, const char* text, bool is_selected);
 
 // An item's row, with a chevron near the right border if selecting it opens
 // another box.
 void BoxItemRow(
-    DisplayTextRow* row, uint8_t columns, const BoxItem* item, bool selected);
+    DisplayTextRow* row, uint8_t columns, const BoxItem* item,
+    bool is_selected);
 
 // Lay out a box of rows, centered on the guest's screen.
 void BoxPlace(DisplayBox* box, uint8_t columns, uint8_t rows);

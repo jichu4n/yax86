@@ -39,7 +39,7 @@ void SpeakerInit(void) {
 }
 
 void SpeakerSetFrequency(uint32_t frequency_hz) {
-  ++g_stats.changes;
+  ++g_stats.num_changes;
   g_stats.frequency_hz = frequency_hz;
   if (frequency_hz == 0 || frequency_hz > kSpeakerMaxHz) {
     Silence();

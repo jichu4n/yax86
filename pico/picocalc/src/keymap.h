@@ -22,12 +22,12 @@ enum {
   // The most scancodes one key event turns into: a key sent with Left Shift,
   // Right Shift and Alt let go around it, its make and break codes, and the
   // three modifiers pressed again.
-  kKeymapMaxScancodes = 8,
+  kKeymapMaxNumScancodes = 8,
 };
 
 // Translate one key event into the scancodes to send, in order, and return how
 // many there are. Keys a PC has no scancode for are dropped.
 uint8_t KeymapTranslate(
-    SouthbridgeKeyEvent event, uint8_t scancodes[kKeymapMaxScancodes]);
+    SouthbridgeKeyEvent event, uint8_t scancodes[kKeymapMaxNumScancodes]);
 
 #endif  // YAX86_PICOCALC_KEYMAP_H

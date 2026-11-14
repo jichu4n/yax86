@@ -33,7 +33,7 @@ typedef struct FileBrowser {
   // The images in the floppy drives, which their rows say: in FD1, in FD2.
   // NULL for an empty drive, or when the browser is not finding a floppy for
   // a drive.
-  const char* in_drives[kFloppyDrives];
+  const char* in_drives[kNumFloppyDrives];
 } FileBrowser;
 
 // What selecting an entry did.
@@ -52,14 +52,14 @@ typedef enum FileBrowserSelection {
 uint8_t FileBrowserOpen(FileBrowser* browser, const char* folder);
 
 // Whether the browser is at the card's root, with no folder above.
-bool FileBrowserAtRoot(const FileBrowser* browser);
+bool FileBrowserIsAtRoot(const FileBrowser* browser);
 
 // Show the folder above, with the folder just left selected. Returns that
 // entry.
 uint8_t FileBrowserUp(FileBrowser* browser);
 
 // How many entries the folder showing has.
-uint8_t FileBrowserCount(const FileBrowser* browser);
+uint8_t FileBrowserNumEntries(const FileBrowser* browser);
 
 // Open the entry at selected: a folder to look in, or an image, which is
 // returned in path and size.

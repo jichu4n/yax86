@@ -7,7 +7,7 @@
 
 // Whether a belongs before b: the way up first, then folders, then images,
 // each by name.
-static bool EntriesInOrder(const FileListEntry* a, const FileListEntry* b) {
+static bool AreEntriesInOrder(const FileListEntry* a, const FileListEntry* b) {
   if (a->kind != b->kind) {
     return a->kind < b->kind;
   }
@@ -17,17 +17,17 @@ static bool EntriesInOrder(const FileListEntry* a, const FileListEntry* b) {
 // Add an entry where it belongs, keeping the list sorted. An insertion sort:
 // a folder's worth of entries is few enough that nothing cleverer pays.
 static void Insert(FileList* list, const FileListEntry* entry) {
-  if (list->count == kFileListMaxEntries) {
-    list->truncated = true;
+  if (list->num_entries == kFileListMaxNumEntries) {
+    list->is_truncated = true;
     return;
   }
-  uint8_t i = list->count;
-  while (i > 0 && !EntriesInOrder(&list->entries[i - 1], entry)) {
+  uint8_t i = list->num_entries;
+  while (i > 0 && !AreEntriesInOrder(&list->entries[i - 1], entry)) {
     list->entries[i] = list->entries[i - 1];
     --i;
   }
   list->entries[i] = *entry;
-  ++list->count;
+  ++list->num_entries;
 }
 
 // A listing under way: the list, and the sizes an image may have.
@@ -63,9 +63,9 @@ void FileListRead(
     FileList* list, const char* path, const uint32_t* image_sizes,
     uint8_t num_sizes) {
   FSCopyPath(path, list->path);
-  list->count = 0;
-  list->truncated = false;
-  list->readable = false;
+  list->num_entries = 0;
+  list->is_truncated = false;
+  list->is_readable = false;
   if (list->path[0] != '\0') {
     const FileListEntry parent = {
         .kind = kFileListParent, .name = "..", .size = 0};
@@ -76,7 +76,7 @@ void FileListRead(
   }
   Reading reading = {
       .list = list, .image_sizes = image_sizes, .num_sizes = num_sizes};
-  list->readable = FSListFolder(list->path, TakeEntry, &reading) == FR_OK;
+  list->is_readable = FSListFolder(list->path, TakeEntry, &reading) == FR_OK;
 }
 
 bool FileListEntryPath(

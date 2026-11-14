@@ -30,14 +30,15 @@ typedef struct VMManager {
   // Set by a screen that changed the card, before it goes back: the VM to
   // select once the list is read again, the first if it is not there, and
   // whether to show its screen too.
-  bool changed;
+  bool did_change;
   char to_select[kVMNameLength + 1];
-  bool show_vm;
+  bool should_show_vm;
 } VMManager;
 
 // Note that the card changed, with name the VM to select after, and with
-// show_vm, to show its screen too.
-void VMManagerNoteChange(VMManager* vm_manager, const char* name, bool show_vm);
+// should_show_vm, to show its screen too.
+void VMManagerNoteChange(
+    VMManager* vm_manager, const char* name, bool should_show_vm);
 
 // Show why something could not be done to vm, and log it as event.
 void VMManagerShowProblem(

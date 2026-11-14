@@ -19,16 +19,16 @@
 
 enum {
   // The most VMs listed: the first found past this are left out.
-  kVMListMax = 16,
+  kVMListMaxNumVMs = 16,
   // The most files and VMs VMListDescribe() names.
-  kVMListNamed = 3,
+  kVMListNumNamed = 3,
 };
 
 typedef struct VMList {
-  VMEntry vms[kVMListMax];
-  uint8_t count;
+  VMEntry vms[kVMListMaxNumVMs];
+  uint8_t num_vms;
   // Whether there were more VMs than the list holds.
-  bool truncated;
+  bool is_truncated;
 } VMList;
 
 // List the VMs in `yax86/vm`, sorted by name. An empty list, with
@@ -36,27 +36,27 @@ typedef struct VMList {
 void VMListRead(VMList* list);
 
 // The index in the list of the VM named name, in any capitals, or
-// kVMListMax if there is none.
+// kVMListMaxNumVMs if there is none.
 uint8_t VMListFind(const VMList* list, const char* name);
 
 // What deleting a VM would take with it.
 typedef struct VMListContents {
   // The files and folders in the VM's folder besides its vm.cfg, and the
   // first few of their names.
-  uint8_t file_count;
-  char files[kVMListNamed][kFSMaxName + 1];
+  uint8_t num_files;
+  char files[kVMListNumNamed][kFSMaxName + 1];
   // The other VMs with a drive naming a file in the folder, which would be
   // left without that disk, and the first few of their names.
-  uint8_t user_count;
-  char users[kVMListNamed][kVMNameLength + 1];
+  uint8_t num_users;
+  char users[kVMListNumNamed][kVMNameLength + 1];
 } VMListContents;
 
 // What a VM's drives are to hold: each an image, a path from the card's root
 // or empty for none, or NULL for floppy disk 2 left out of the machine - or a
 // new blank disk of the VM's own.
 typedef struct VMListDrives {
-  const char* paths[kVMDrives];
-  bool blank[kVMDrives];
+  const char* paths[kNumVMDrives];
+  bool is_blank[kNumVMDrives];
 } VMListDrives;
 
 // How making, renaming or cloning a VM went.

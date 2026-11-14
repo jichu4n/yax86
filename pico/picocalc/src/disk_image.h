@@ -30,9 +30,9 @@ typedef enum DiskImageStatus {
 typedef struct DiskImageStats {
   // Sectors read from and written to the card, reads and writes that failed,
   // and the time they took, which the VM waits for.
-  uint32_t sector_reads;
-  uint32_t sector_writes;
-  uint32_t errors;
+  uint32_t num_sector_reads;
+  uint32_t num_sector_writes;
+  uint32_t num_errors;
   uint64_t read_us;
   uint64_t write_us;
 } DiskImageStats;
@@ -42,7 +42,7 @@ enum {
   // entries for each run of clusters that follow each other, and two more.
   // 64 covers an image in up to 31 pieces, and a file copied onto a card is
   // usually in one.
-  kDiskImageLinkMapEntries = 64,
+  kDiskImageNumLinkMapEntries = 64,
   // The longest name DiskImageName() gives: an 8.3 name, which is all the
   // card's file system keeps.
   kDiskImageNameLength = 12,
@@ -56,19 +56,19 @@ typedef struct DiskImage {
   // Whether seeking looks the sector up in link_map. Without it, FatFs walks
   // the cluster chain from the start of the file to seek backwards, which an
   // image that is too fragmented for the map falls back to.
-  bool fast_seek;
+  bool uses_fast_seek;
   DiskImageStats stats;
 
   FIL file;
   uint32_t size;
-  DWORD link_map[kDiskImageLinkMapEntries];
+  DWORD link_map[kDiskImageNumLinkMapEntries];
 
   // The one sector of the image held in memory. A drive moves a sector a byte
   // at a time, in order, so one is enough to read or write each from the card
   // once.
   uint8_t sector[kSdcardBlockSize];
   int32_t sector_index;
-  bool sector_dirty;
+  bool is_sector_dirty;
 } DiskImage;
 
 // Open the image at path on the card, which must be exactly size bytes, and
@@ -103,14 +103,15 @@ void DiskImageName(const char* path, char name[kDiskImageNameLength + 1]);
 uint8_t DiskImageReadByte(DiskImage* image, uint32_t offset);
 void DiskImageWriteByte(DiskImage* image, uint32_t offset, uint8_t value);
 
-// Read or write count whole sectors of an open image from the one at index,
-// all of which must be in it, and return whether the card took them. A run
-// goes to the card in as few accesses as its clusters allow - for a computer
-// over USB, rather than a drive's byte at a time. The sector held for the
-// bytes is written back first, and is read again after a write.
+// Read or write num_sectors whole sectors of an open image from the one at
+// index, all of which must be in it, and return whether the card took them. A
+// run goes to the card in as few accesses as its clusters allow - for a
+// computer over USB, rather than a drive's byte at a time. The sector held for
+// the bytes is written back first, and is read again after a write.
 bool DiskImageReadSectors(
-    DiskImage* image, uint32_t index, uint8_t* data, uint32_t count);
+    DiskImage* image, uint32_t index, uint8_t* data, uint32_t num_sectors);
 bool DiskImageWriteSectors(
-    DiskImage* image, uint32_t index, const uint8_t* data, uint32_t count);
+    DiskImage* image, uint32_t index, const uint8_t* data,
+    uint32_t num_sectors);
 
 #endif  // YAX86_PICOCALC_DISK_IMAGE_H

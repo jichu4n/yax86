@@ -29,9 +29,9 @@ static const InitStatus* g_init_status;
 // The line being read, and whether it has outgrown the buffer.
 static char g_line[kMaxLineLength];
 static uint16_t g_length;
-static bool g_too_long;
+static bool g_is_too_long;
 
-static bool StringsEqual(const char* a, const char* b) {
+static bool AreStringsEqual(const char* a, const char* b) {
   while (*a != '\0' && *a == *b) {
     ++a;
     ++b;
@@ -50,7 +50,8 @@ static void ReplyToBadLine(const char* error) {
 // Make a command of a whole line, answering it here if it is not one.
 static bool ParseLine(DebugCommand* command) {
   if (!YLogfmtParse(
-          g_line, command->pairs, kDebugCommandMaxPairs, &command->num_pairs)) {
+          g_line, command->pairs, kDebugCommandMaxNumPairs,
+          &command->num_pairs)) {
     ReplyToBadLine("malformed_line");
     return false;
   }
@@ -89,15 +90,15 @@ bool DebugCommandPoll(DebugCommand* command) {
       if (g_length + 1 < kMaxLineLength) {
         g_line[g_length++] = (char)c;
       } else {
-        g_too_long = true;
+        g_is_too_long = true;
       }
       continue;
     }
     g_line[g_length] = '\0';
-    const bool too_long = g_too_long;
+    const bool is_too_long = g_is_too_long;
     g_length = 0;
-    g_too_long = false;
-    if (too_long) {
+    g_is_too_long = false;
+    if (is_too_long) {
       ReplyToBadLine("line_too_long");
       continue;
     }
@@ -109,7 +110,7 @@ bool DebugCommandPoll(DebugCommand* command) {
 }
 
 bool DebugCommandIs(const DebugCommand* command, const char* name) {
-  return StringsEqual(command->name, name);
+  return AreStringsEqual(command->name, name);
 }
 
 const char* DebugCommandArgument(const DebugCommand* command, const char* key) {
@@ -147,7 +148,7 @@ static __noinline void ReportSystem(const DebugCommand* command) {
       Y_LOG_STRING("overclock", InitOverclockName(g_init_status->overclock)),
       Y_LOG_UINT("lcd_spi_hz", g_init_status->lcd_spi_hz),
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
-      Y_LOG_UINT("sd_blocks", SdcardGetBlockCount()),
+      Y_LOG_UINT("sd_blocks", SdcardGetNumBlocks()),
       Y_LOG_STRING("keyboard_fw", version));
   const PsramStats psram = PsramGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
@@ -157,7 +158,7 @@ static __noinline void ReportSystem(const DebugCommand* command) {
       Y_LOG_UINT("write_512_us", psram.write_512_us),
       Y_LOG_UINT("bytes_read", psram.bytes_read),
       Y_LOG_UINT("bytes_written", psram.bytes_written),
-      Y_LOG_UINT("timeouts", psram.timeouts));
+      Y_LOG_UINT("timeouts", psram.num_timeouts));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "stack", Y_LOG_UINT("size", StackUsageSize()),
       Y_LOG_UINT("core0_used", StackUsageCore0()),
@@ -168,26 +169,27 @@ static __noinline void ReportSystem(const DebugCommand* command) {
 static __noinline void ReportDevices(const DebugCommand* command) {
   const UsbStorageStats usb = UsbStorageGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "usb", Y_LOG_BOOL("exporting", usb.exporting),
+      command, "usb", Y_LOG_BOOL("exporting", usb.is_exporting),
       Y_LOG_STRING("image", usb.image_path != NULL ? usb.image_path : ""),
-      Y_LOG_BOOL("connected", usb.connected), Y_LOG_BOOL("seen", usb.seen),
-      Y_LOG_BOOL("ejected", usb.ejected),
-      Y_LOG_UINT("blocks_read", usb.blocks_read),
-      Y_LOG_UINT("blocks_written", usb.blocks_written),
+      Y_LOG_BOOL("connected", usb.is_connected),
+      Y_LOG_BOOL("host_seen", usb.was_seen),
+      Y_LOG_BOOL("ejected", usb.was_ejected),
+      Y_LOG_UINT("blocks_read", usb.num_blocks_read),
+      Y_LOG_UINT("blocks_written", usb.num_blocks_written),
       Y_LOG_UINT("read_us", usb.read_us), Y_LOG_UINT("write_us", usb.write_us),
-      Y_LOG_UINT("errors", usb.errors));
+      Y_LOG_UINT("errors", usb.num_errors));
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "keyboard", Y_LOG_UINT("reads", keyboard.reads),
-      Y_LOG_UINT("keys", keyboard.keys),
-      Y_LOG_UINT("stale_keys", keyboard.stale_keys),
-      Y_LOG_UINT("aborts", keyboard.aborts),
-      Y_LOG_UINT("timeouts", keyboard.timeouts));
+      command, "keyboard", Y_LOG_UINT("reads", keyboard.num_reads),
+      Y_LOG_UINT("keys", keyboard.num_keys),
+      Y_LOG_UINT("stale_keys", keyboard.num_stale_keys),
+      Y_LOG_UINT("aborts", keyboard.num_aborts),
+      Y_LOG_UINT("timeouts", keyboard.num_timeouts));
   const SpeakerStats speaker = SpeakerGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "speaker", Y_LOG_UINT("frequency_hz", speaker.frequency_hz),
       Y_LOG_UINT("output_hz", speaker.output_hz),
-      Y_LOG_UINT("changes", speaker.changes));
+      Y_LOG_UINT("changes", speaker.num_changes));
 }
 
 void DebugCommandReportSystem(const DebugCommand* command) {

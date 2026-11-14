@@ -21,11 +21,11 @@ typedef struct RowContents {
 static RowContents g_last_contents;
 static bool g_has_last_contents;
 
-static bool RowContentsEqual(const RowContents* a, const RowContents* b) {
-  return a->battery.known == b->battery.known &&
+static bool AreRowContentsEqual(const RowContents* a, const RowContents* b) {
+  return a->battery.is_known == b->battery.is_known &&
          a->battery.percent == b->battery.percent &&
-         a->battery.charging == b->battery.charging && a->hint == b->hint &&
-         a->problem == b->problem;
+         a->battery.is_charging == b->battery.is_charging &&
+         a->hint == b->hint && a->problem == b->problem;
 }
 
 void LauncherStatusBarUpdate(const char* hint) {
@@ -33,13 +33,13 @@ void LauncherStatusBarUpdate(const char* hint) {
   contents.battery = SouthbridgeGetBattery();
   contents.hint = hint;
   contents.problem = StatusBarProblem();
-  const bool changed =
-      !g_has_last_contents || !RowContentsEqual(&contents, &g_last_contents);
-  if (changed) {
+  const bool did_change =
+      !g_has_last_contents || !AreRowContentsEqual(&contents, &g_last_contents);
+  if (did_change) {
     g_last_contents = contents;
     g_has_last_contents = true;
     DisplayStatus* rows = StatusBarRows();
-    for (uint8_t row = 0; row < kDisplayStatusRows; ++row) {
+    for (uint8_t row = 0; row < kDisplayNumStatusRows; ++row) {
       StatusBarClearRow(&rows->rows[row]);
     }
     DisplayTextRow* messages = &rows->rows[kStatusBarRowMessages];
@@ -52,5 +52,5 @@ void LauncherStatusBarUpdate(const char* hint) {
     }
     StatusBarPutBattery(&contents.battery, &rows->rows[kStatusBarRowDevices]);
   }
-  StatusBarSend(changed);
+  StatusBarSend(did_change);
 }

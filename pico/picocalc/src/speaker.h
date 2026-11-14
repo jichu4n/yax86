@@ -17,7 +17,7 @@ typedef struct SpeakerStats {
   // divides to, or 0 when silent, which a tone too high to hear is as well.
   uint32_t output_hz;
   // How many times the tone has changed, silence included.
-  uint32_t changes;
+  uint32_t num_changes;
 } SpeakerStats;
 
 // Bring the audio pins up, silent. Call after the system clock is set.

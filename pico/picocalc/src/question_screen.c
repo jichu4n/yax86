@@ -9,29 +9,29 @@
 typedef enum QuestionItem {
   kQuestionCancel = 0,
   kQuestionAction,
-  kQuestionItemCount,
+  kNumQuestionItems,
 } QuestionItem;
 
 extern const Screen kQuestionScreen;
 
 static const Question* g_question;
 // Where the answer goes, the parent's.
-static bool* g_confirmed;
+static bool* g_is_confirmed;
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
 
-ScreenResult QuestionScreenOpen(const Question* question, bool* confirmed) {
+ScreenResult QuestionScreenOpen(const Question* question, bool* is_confirmed) {
   g_question = question;
-  g_confirmed = confirmed;
-  *g_confirmed = false;
+  g_is_confirmed = is_confirmed;
+  *g_is_confirmed = false;
   g_list_box.selected = kQuestionCancel;
   return ScreenOpen(&kQuestionScreen);
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, kQuestionItemCount)) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumQuestionItems)) {
     case kListBoxActionSelect:
-      *g_confirmed = g_list_box.selected == kQuestionAction;
+      *g_is_confirmed = g_list_box.selected == kQuestionAction;
       return ScreenBack();
     case kListBoxActionBack:
       return ScreenBack();
@@ -41,13 +41,13 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(DisplayBox* box) {
-  const BoxItem items[kQuestionItemCount] = {
+  const BoxItem items[kNumQuestionItems] = {
       [kQuestionCancel] = {"Cancel", false},
       [kQuestionAction] = {g_question->action, false},
   };
   ListBoxDrawItems(
       box, g_question->title, &g_question->question, 1, items,
-      kQuestionItemCount, g_list_box.selected, false);
+      kNumQuestionItems, g_list_box.selected, false);
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -59,5 +59,5 @@ const Screen kQuestionScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

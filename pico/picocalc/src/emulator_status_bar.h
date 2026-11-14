@@ -28,7 +28,7 @@ typedef struct EmulatorStatusBarInputs {
   // the machine does not have, such as floppy disk 2 when it is disabled. A
   // hard disk is shown only while it has an image open, since one with none
   // is not there either. A floppy drive is always shown.
-  const DiskImage* drives[kVMDrives];
+  const DiskImage* drives[kNumVMDrives];
   // The VM's name, or NULL without a VM.
   const char* vm;
   // The guest BIOS's keyboard flags, at 0040:0017, which hold its lock and

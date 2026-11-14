@@ -265,8 +265,8 @@ uint32_t LcdInit(void) {
   return actual_hz;
 }
 
-void LcdSetDisplayOn(bool on) {
-  if (on) {
+void LcdSetDisplayOn(bool is_on) {
+  if (is_on) {
     LcdSendCommand(kCmdSleepOut, NULL, 0);
     sleep_ms(kSleepOutMs);
     LcdSendCommand(kCmdDisplayOn, NULL, 0);
@@ -303,9 +303,9 @@ void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   LcdGuard();
 }
 
-void LcdWritePixels(const uint16_t* pixels, uint32_t count) {
+void LcdWritePixels(const uint16_t* pixels, uint32_t num_pixels) {
   // High byte first, which is the order the panel expects.
-  for (uint32_t i = 0; i < count; ++i) {
+  for (uint32_t i = 0; i < num_pixels; ++i) {
     LcdPutByte((uint8_t)(pixels[i] >> 8));
     LcdPutByte((uint8_t)pixels[i]);
   }
@@ -342,18 +342,18 @@ void LcdBeginRead(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   spi_read_blocking(kLcdReadSPI, 0xFF, &dummy, 1);
 }
 
-void LcdReadPixels(uint16_t* pixels, uint32_t count) {
+void LcdReadPixels(uint16_t* pixels, uint32_t num_pixels) {
   uint8_t bytes[kLcdReadChunkPixels * kLcdReadBytesPerPixel];
-  while (count > 0) {
+  while (num_pixels > 0) {
     const uint32_t chunk =
-        count < kLcdReadChunkPixels ? count : kLcdReadChunkPixels;
+        num_pixels < kLcdReadChunkPixels ? num_pixels : kLcdReadChunkPixels;
     spi_read_blocking(kLcdReadSPI, 0xFF, bytes, chunk * kLcdReadBytesPerPixel);
     const uint8_t* byte = bytes;
     for (uint32_t i = 0; i < chunk; ++i) {
       *pixels++ = (uint16_t)((byte[0] << 8) | byte[1]);
       byte += kLcdReadBytesPerPixel;
     }
-    count -= chunk;
+    num_pixels -= chunk;
   }
 }
 

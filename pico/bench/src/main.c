@@ -80,7 +80,7 @@ enum {
   // video memory.
   kTextColumns = 80,
   kTextRows = 25,
-  kTextCells = kTextColumns * kTextRows,
+  kNumTextCells = kTextColumns * kTextRows,
   kBytesPerTextCell = 2,
   // The printable range of the character set. Everything else is a box drawing
   // or line drawing glyph as far as this is concerned, and is matched as a
@@ -109,7 +109,7 @@ static uint8_t g_guest_ram[kGuestRAMSize];
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 // Whether guest RAM is paged through the PSRAM, and how much there is. Set
 // once the PSRAM has been brought up, before the first run.
-static bool g_paging;
+static bool g_is_paging;
 static uint32_t g_guest_ram_size = kGuestRAMSize;
 static YPlatformState g_platform;
 // What the machine logs through: errors only, since the core's warnings come
@@ -146,13 +146,13 @@ static uint32_t __uninitialized_ram(g_psram_marker);
 // no host I/O happens while the guest is executing.
 typedef struct BenchResult {
   // Retired guest instructions.
-  uint64_t instructions;
+  uint64_t num_instructions;
   // Emulated CPU cycles at 4.77MHz.
   uint64_t cycles;
   // Host time the run took, in microseconds.
   uint64_t elapsed_us;
   // Whether the command prompt was reached.
-  bool completed;
+  bool did_complete;
   // Why the run stopped, if it stopped before completing.
   YPlatformRunStatus status;
 } BenchResult;
@@ -193,7 +193,7 @@ static bool ResetMachine(void) {
 
   YPlatformConfig* config = &g_platform.config;
   config->logger_config = &g_machine_log_config;
-  if (g_paging) {
+  if (g_is_paging) {
     // Every page starts as zeros, as the SRAM does without paging.
     config->paged_memory = PagerInit(
         g_guest_ram, kGuestRAMSize, Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE);
@@ -241,9 +241,9 @@ static char ScreenCharacter(uint16_t cell) {
 // than through a copy of the screen, which would want two kilobytes of a four
 // kilobyte stack.
 static bool ScreenContains(const char* needle) {
-  for (uint16_t start = 0; start < kTextCells; ++start) {
+  for (uint16_t start = 0; start < kNumTextCells; ++start) {
     uint16_t i = 0;
-    while (needle[i] != '\0' && start + i < kTextCells &&
+    while (needle[i] != '\0' && start + i < kNumTextCells &&
            ScreenCharacter((uint16_t)(start + i)) == needle[i]) {
       ++i;
     }
@@ -307,12 +307,12 @@ enum {
   // named, which put samples on functions this workload cannot reach.
   kProfileSRAMBucketShift = 4,
   kProfileSRAMBase = 0x20000000u,
-  kProfileSRAMBuckets = 4096,
+  kProfileNumSRAMBuckets = 4096,
   // Flash stays coarse, covering 512KB of the XIP window. Buckets there only
   // have to be fine enough to say which region the time went to.
   kProfileFlashBucketShift = 7,
   kProfileFlashBase = 0x10000000u,
-  kProfileFlashBuckets = 4096,
+  kProfileNumFlashBuckets = 4096,
   // 50kHz. Sixteen byte buckets need proportionally more samples to say
   // anything: at 10kHz a six second run left about twenty per bucket, which is
   // noise. The interrupt perturbs every bucket alike.
@@ -320,35 +320,35 @@ enum {
   kProfileAlarm = 1,
 };
 
-static uint32_t g_profile_sram[kProfileSRAMBuckets];
-static uint32_t g_profile_flash[kProfileFlashBuckets];
-static uint32_t g_profile_samples;
-static uint32_t g_profile_elsewhere;
-static bool g_profile_running;
+static uint32_t g_profile_sram[kProfileNumSRAMBuckets];
+static uint32_t g_profile_flash[kProfileNumFlashBuckets];
+static uint32_t g_num_profile_samples;
+static uint32_t g_num_profile_samples_elsewhere;
+static bool g_is_profile_running;
 
 // Called from the interrupt with the exception frame, whose seventh word is
 // the PC the interrupt arrived at.
 void __not_in_flash_func(ProfileSampleFromFrame)(const uint32_t* frame) {
   timer_hw->intr = 1u << kProfileAlarm;
   timer_hw->alarm[kProfileAlarm] = timer_hw->timerawl + kProfileIntervalUs;
-  if (!g_profile_running) {
+  if (!g_is_profile_running) {
     return;
   }
   const uint32_t pc = frame[6];
-  ++g_profile_samples;
+  ++g_num_profile_samples;
   const uint32_t sram_index =
       (pc - kProfileSRAMBase) >> kProfileSRAMBucketShift;
-  if (pc >= kProfileSRAMBase && sram_index < kProfileSRAMBuckets) {
+  if (pc >= kProfileSRAMBase && sram_index < kProfileNumSRAMBuckets) {
     ++g_profile_sram[sram_index];
     return;
   }
   const uint32_t flash_index =
       (pc - kProfileFlashBase) >> kProfileFlashBucketShift;
-  if (pc >= kProfileFlashBase && flash_index < kProfileFlashBuckets) {
+  if (pc >= kProfileFlashBase && flash_index < kProfileNumFlashBuckets) {
     ++g_profile_flash[flash_index];
     return;
   }
-  ++g_profile_elsewhere;
+  ++g_num_profile_samples_elsewhere;
 }
 
 // The hardware pushes {r0-r3, r12, lr, pc, xpsr} on exception entry, and a C
@@ -374,15 +374,15 @@ static void ProfileInit(void) {
 // Emitted as address and count so that a host can map them to symbols with
 // nm; printing names here would mean carrying a symbol table on the board.
 static Y_NOINLINE void ProfileLog(void) {
-  if (g_profile_samples == 0) {
+  if (g_num_profile_samples == 0) {
     return;
   }
   BENCH_INFO(
-      "profile", Y_LOG_UINT("samples", g_profile_samples),
+      "profile", Y_LOG_UINT("samples", g_num_profile_samples),
       Y_LOG_UINT("sram_bucket_bytes", 1u << kProfileSRAMBucketShift),
       Y_LOG_UINT("flash_bucket_bytes", 1u << kProfileFlashBucketShift),
-      Y_LOG_UINT("elsewhere", g_profile_elsewhere));
-  for (uint32_t i = 0; i < kProfileSRAMBuckets; ++i) {
+      Y_LOG_UINT("samples_elsewhere", g_num_profile_samples_elsewhere));
+  for (uint32_t i = 0; i < kProfileNumSRAMBuckets; ++i) {
     if (g_profile_sram[i] > 0) {
       BENCH_INFO(
           "profile_bucket",
@@ -391,7 +391,7 @@ static Y_NOINLINE void ProfileLog(void) {
           Y_LOG_UINT("samples", g_profile_sram[i]));
     }
   }
-  for (uint32_t i = 0; i < kProfileFlashBuckets; ++i) {
+  for (uint32_t i = 0; i < kProfileNumFlashBuckets; ++i) {
     if (g_profile_flash[i] > 0) {
       BENCH_INFO(
           "profile_bucket",
@@ -426,7 +426,7 @@ static BenchResult RunBenchmark(void) {
   uint32_t last_ticks = g_platform.ticks;
 
 #if YAX86_PICO_PROFILE
-  g_profile_running = true;
+  g_is_profile_running = true;
 #endif
   const uint64_t start_us = time_us_64();
   while (result.cycles < max_cycles) {
@@ -452,7 +452,7 @@ static BenchResult RunBenchmark(void) {
         break;
       }
     }
-    result.instructions +=
+    result.num_instructions +=
         YCPUInstructionsRetired(&g_platform.cpu) - retired_before;
     result.cycles += (uint32_t)(g_platform.ticks - last_ticks);
     last_ticks = g_platform.ticks;
@@ -471,13 +471,13 @@ static BenchResult RunBenchmark(void) {
       next_poll_cycles += kBootPollCycles;
     } while (next_poll_cycles <= result.cycles);
     if (AdvanceBootToPrompt()) {
-      result.completed = true;
+      result.did_complete = true;
       break;
     }
   }
   result.elapsed_us = time_us_64() - start_us;
 #if YAX86_PICO_PROFILE
-  g_profile_running = false;
+  g_is_profile_running = false;
 #endif
   result.cycles += (uint32_t)(g_platform.ticks - last_ticks);
   return result;
@@ -498,11 +498,11 @@ static BenchResult RunBenchmark(void) {
 static Y_NOINLINE void LogResult(const BenchResult* r) {
   BENCH_INFO(
       "result", Y_LOG_STRING("workload", "dos-boot"),
-      Y_LOG_BOOL("completed", r->completed),
+      Y_LOG_BOOL("completed", r->did_complete),
       Y_LOG_UINT("elapsed_us", r->elapsed_us),
-      Y_LOG_UINT("instructions", r->instructions),
+      Y_LOG_UINT("instructions", r->num_instructions),
       Y_LOG_UINT("cycles", r->cycles));
-  if (!r->completed) {
+  if (!r->did_complete) {
     // The rate is still valid, but the run was cut short.
     BENCH_WARN("prompt_not_reached", Y_LOG_INT("status", r->status));
   }
@@ -517,19 +517,19 @@ static Y_NOINLINE void LogPaging(void) {
       "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
       Y_LOG_UINT("read_512_us", psram.read_512_us),
       Y_LOG_UINT("write_512_us", psram.write_512_us),
-      Y_LOG_UINT("timeouts", psram.timeouts));
-  if (!g_paging) {
+      Y_LOG_UINT("timeouts", psram.num_timeouts));
+  if (!g_is_paging) {
     return;
   }
   const PagerStats pager = PagerGetStats();
   BENCH_INFO(
-      "paging", Y_LOG_UINT("frames", pager.frames),
+      "paging", Y_LOG_UINT("frames", pager.num_frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
-      Y_LOG_UINT("page_ins", pager.page_ins),
-      Y_LOG_UINT("zero_fills", pager.zero_fills),
-      Y_LOG_UINT("write_backs", pager.write_backs),
-      Y_LOG_UINT("soft_faults", pager.soft_faults),
-      Y_LOG_UINT("errors", pager.errors),
+      Y_LOG_UINT("page_ins", pager.num_page_ins),
+      Y_LOG_UINT("zero_fills", pager.num_zero_fills),
+      Y_LOG_UINT("write_backs", pager.num_write_backs),
+      Y_LOG_UINT("soft_faults", pager.num_soft_faults),
+      Y_LOG_UINT("errors", pager.num_errors),
       Y_LOG_UINT("fault_us", pager.fault_us));
 }
 
@@ -611,7 +611,7 @@ static Y_NOINLINE void LogHeader(void) {
       "header", Y_LOG_STRING("emulator", "yax86"),
       Y_LOG_STRING("target", "rp2040"), Y_LOG_STRING("opt", YAX86_PICO_OPT),
       Y_LOG_UINT("guest_ram_kb", g_guest_ram_size / 1024),
-      Y_LOG_BOOL("paging", g_paging),
+      Y_LOG_BOOL("paging", g_is_paging),
       Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / 1000),
       Y_LOG_BOOL("profile", YAX86_PICO_PROFILE),
       Y_LOG_UINT("state_bytes", sizeof(YPlatformState)));
@@ -674,12 +674,12 @@ static void StartPsram(void) {
   const bool watchdog_was_armed = watchdog_hw->ctrl & WATCHDOG_CTRL_ENABLE_BITS;
   g_psram_marker = kPsramAttemptMarker;
   watchdog_enable(kWatchdogTimeoutMs, true);
-  g_paging = PsramInit(false);
+  g_is_paging = PsramInit(false);
   g_psram_marker = 0;
   if (!watchdog_was_armed) {
     watchdog_disable();
   }
-  if (g_paging) {
+  if (g_is_paging) {
     g_guest_ram_size = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE;
   }
 }

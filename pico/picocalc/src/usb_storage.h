@@ -32,25 +32,25 @@
 typedef struct UsbStorageStats {
   // Whether anything is exported, and the image's path if that is what it is
   // - NULL for the entire card.
-  bool exporting;
+  bool is_exporting;
   const char* image_path;
   // Whether a host has the PicoCalc's USB device configured.
-  bool connected;
+  bool is_connected;
   // Whether the host has seen the volume since it was exported - it asked
   // whether the reader was ready, and was told yes - which it does as it
   // mounts it.
-  bool seen;
+  bool was_seen;
   // Whether the host has ejected it, after which the reader is empty to
   // it again.
-  bool ejected;
-  uint32_t blocks_read;
-  uint32_t blocks_written;
+  bool was_ejected;
+  uint32_t num_blocks_read;
+  uint32_t num_blocks_written;
   // The time the reads and writes took on the card, of all the time the
   // host took to move them: the rest is USB's.
   uint64_t read_us;
   uint64_t write_us;
   // Reads and writes the card failed, or that were past its end.
-  uint32_t errors;
+  uint32_t num_errors;
 } UsbStorageStats;
 
 // Export the SD card, which the caller has unmounted, to the host. The host

@@ -11,16 +11,16 @@ enum {
   kOpenBusByte = 0xFF,
 };
 
-static DiskImage g_images[kFloppyDrives];
+static DiskImage g_images[kNumFloppyDrives];
 // The paths of the images, which the images point to.
-static char g_inserted_paths[kFloppyDrives][kFSMaxPath + 1];
+static char g_inserted_paths[kNumFloppyDrives][kFSMaxPath + 1];
 // Whether drive A holds the floppy built into flash.
-static bool g_built_in;
+static bool g_is_built_in;
 
 void FloppyOpen(
-    const char* const paths[kFloppyDrives], bool built_in,
-    DiskImageStatus opened[kFloppyDrives]) {
-  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+    const char* const paths[kNumFloppyDrives], bool is_built_in,
+    DiskImageStatus opened[kNumFloppyDrives]) {
+  for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     DiskImage* image = &g_images[drive];
     if (paths[drive] == NULL || paths[drive][0] == '\0') {
       image->status = kDiskImageEjected;
@@ -31,13 +31,13 @@ void FloppyOpen(
     }
     opened[drive] = image->status;
   }
-  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     if (g_images[drive].status != kDiskImageOpen) {
       g_images[drive].status = kDiskImageEjected;
     }
   }
-  g_built_in = built_in;
-  if (built_in) {
+  g_is_built_in = is_built_in;
+  if (is_built_in) {
     // Why drive A has no image on the card, for the status page.
     const DiskImageStatus card = DiskImageMountCard();
     DiskImage* image = &g_images[kFloppyDriveA];
@@ -49,21 +49,21 @@ void FloppyOpen(
 const DiskImage* FloppyGetImage(FloppyDrive drive) { return &g_images[drive]; }
 
 FloppyDrive FloppyDriveHolding(const char* path) {
-  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     const DiskImage* image = &g_images[drive];
-    if (image->status == kDiskImageOpen && FSSamePath(image->path, path)) {
+    if (image->status == kDiskImageOpen && FSIsSamePath(image->path, path)) {
       return (FloppyDrive)drive;
     }
   }
-  return kFloppyDrives;
+  return kNumFloppyDrives;
 }
 
 static uint8_t ReadByte(
     Y_UNUSED void* context, uint8_t drive, uint32_t offset) {
-  if (drive == kFloppyDriveA && g_built_in) {
+  if (drive == kFloppyDriveA && g_is_built_in) {
     return offset < kDOSFloppyDataSize ? kDOSFloppyData[offset] : kOpenBusByte;
   }
-  if (drive >= kFloppyDrives) {
+  if (drive >= kNumFloppyDrives) {
     return kOpenBusByte;
   }
   return DiskImageReadByte(&g_images[drive], offset);
@@ -71,7 +71,7 @@ static uint8_t ReadByte(
 
 static void WriteByte(
     Y_UNUSED void* context, uint8_t drive, uint32_t offset, uint8_t value) {
-  if ((drive == kFloppyDriveA && g_built_in) || drive >= kFloppyDrives) {
+  if ((drive == kFloppyDriveA && g_is_built_in) || drive >= kNumFloppyDrives) {
     return;
   }
   DiskImageWriteByte(&g_images[drive], offset, value);
@@ -80,9 +80,9 @@ static void WriteByte(
 void FloppyAttach(YFDCState* fdc) {
   fdc->config.read_image_byte = ReadByte;
   fdc->config.write_image_byte = WriteByte;
-  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     if (g_images[drive].status == kDiskImageOpen ||
-        (drive == kFloppyDriveA && g_built_in)) {
+        (drive == kFloppyDriveA && g_is_built_in)) {
       YFDCInsertDisk(fdc, drive, &YFDCFormat360KB);
     }
   }
@@ -91,7 +91,7 @@ void FloppyAttach(YFDCState* fdc) {
 void FloppyEject(YFDCState* fdc, FloppyDrive drive) {
   DiskImageClose(&g_images[drive]);
   if (drive == kFloppyDriveA) {
-    g_built_in = false;
+    g_is_built_in = false;
   }
   YFDCEjectDisk(fdc, drive);
 }

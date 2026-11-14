@@ -12,10 +12,10 @@
 typedef enum DeleteItem {
   kDeleteCancel = 0,
   kDeleteConfirm,
-  kDeleteItemCount,
+  kNumDeleteItems,
 } DeleteItem;
 
-static const BoxItem kDeleteItems[kDeleteItemCount] = {
+static const BoxItem kDeleteItems[kNumDeleteItems] = {
     [kDeleteCancel] = {"Cancel", false},
     [kDeleteConfirm] = {"Delete", false},
 };
@@ -40,10 +40,10 @@ ScreenResult VMDeleteScreenOpen(VMManager* vm_manager, uint8_t index) {
 static __noinline ScreenResult Delete(void) {
   const VMEntry vm = g_vm_manager->vms->vms[g_vm];
   char problem[kVMProblemLength + 1];
-  const bool deleted = VMListDelete(g_vm_manager->settings, &vm, problem);
+  const bool was_deleted = VMListDelete(g_vm_manager->settings, &vm, problem);
   // Gone from the list, it leaves the first VM selected.
   VMManagerNoteChange(g_vm_manager, vm.name, false);
-  if (deleted) {
+  if (was_deleted) {
     SYSTEM_INFO("vm_deleted", Y_LOG_STRING("name", vm.name));
   } else {
     VMManagerShowProblem("vm_not_deleted", &vm, problem);
@@ -52,7 +52,7 @@ static __noinline ScreenResult Delete(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, kDeleteItemCount)) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumDeleteItems)) {
     case kListBoxActionSelect:
       if (g_list_box.selected == kDeleteConfirm) {
         return Delete();
@@ -69,19 +69,20 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // more": as many of the first named as fit with the rest counted after.
 static void JoinNames(
     char* text, uint8_t size, char (*names)[kFSMaxName + 1], uint8_t named,
-    uint8_t count) {
+    uint8_t num_named) {
   for (uint8_t shown = named;; --shown) {
     size_t length = 0;
     text[0] = '\0';
     for (uint8_t i = 0; i < shown && length < size; ++i) {
-      const char* separator = i == 0 ? "" : (i + 1 == count ? " and " : ", ");
+      const char* separator =
+          i == 0 ? "" : (i + 1 == num_named ? " and " : ", ");
       length += (size_t)snprintf(
           text + length, size - length, "%s%s", separator, names[i]);
     }
-    if (shown < count && length < size) {
+    if (shown < num_named && length < size) {
       length += (size_t)snprintf(
           text + length, size - length, "%s%u more", shown > 0 ? " and " : "",
-          (unsigned)(count - shown));
+          (unsigned)(num_named - shown));
     }
     if (length < size || shown == 0) {
       return;
@@ -90,37 +91,37 @@ static void JoinNames(
 }
 
 static void OnDraw(DisplayBox* box) {
-  const uint8_t named = g_contents.file_count < kVMListNamed
-                            ? g_contents.file_count
-                            : kVMListNamed;
+  const uint8_t named = g_contents.num_files < kVMListNumNamed
+                            ? g_contents.num_files
+                            : kVMListNumNamed;
   char question[kListBoxNarrowColumns];
   snprintf(
       question, sizeof(question), "Delete %s?",
       g_vm_manager->vms->vms[g_vm].name);
   char files[kListBoxNarrowColumns - 4];
   JoinNames(
-      files, sizeof(files), g_contents.files, named, g_contents.file_count);
+      files, sizeof(files), g_contents.files, named, g_contents.num_files);
   char users[64];
   const char* lines[5] = {question, ""};
-  uint8_t line_count = 1;
-  if (g_contents.file_count > 0 || g_contents.user_count > 0) {
-    ++line_count;
+  uint8_t num_lines = 1;
+  if (g_contents.num_files > 0 || g_contents.num_users > 0) {
+    ++num_lines;
   }
-  if (g_contents.file_count > 0) {
-    lines[line_count++] = "Deleted with it:";
-    lines[line_count++] = files;
+  if (g_contents.num_files > 0) {
+    lines[num_lines++] = "Deleted with it:";
+    lines[num_lines++] = files;
   }
-  if (g_contents.user_count == 1) {
+  if (g_contents.num_users == 1) {
     snprintf(users, sizeof(users), "%s will lose a disk.", g_contents.users[0]);
-    lines[line_count++] = users;
-  } else if (g_contents.user_count > 1) {
+    lines[num_lines++] = users;
+  } else if (g_contents.num_users > 1) {
     snprintf(
         users, sizeof(users), "%s and %u more VMs will lose disks.",
-        g_contents.users[0], (unsigned)(g_contents.user_count - 1));
-    lines[line_count++] = users;
+        g_contents.users[0], (unsigned)(g_contents.num_users - 1));
+    lines[num_lines++] = users;
   }
   ListBoxDrawItems(
-      box, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
+      box, "Delete", lines, num_lines, kDeleteItems, kNumDeleteItems,
       g_list_box.selected, true);
 }
 
@@ -133,5 +134,5 @@ const Screen kVMDeleteScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };
