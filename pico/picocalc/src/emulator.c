@@ -10,6 +10,7 @@
 #include "core/video.h"
 #include "debug_command.h"
 #include "display.h"
+#include "display_power.h"
 #include "emulator_menu_screen.h"
 #include "emulator_session.h"
 #include "emulator_status_bar.h"
@@ -70,10 +71,6 @@ enum {
   // wrong. Reaching the prompt takes under six emulated seconds.
   kBootMaxEmulatedSeconds = 30,
 
-  // How long the screen stays on after the boot is over or a key is pressed,
-  // whichever was later, before it is blanked. A static image left showing for
-  // hours can leave its mark on the panel. A key turns it on again.
-  kScreenOnMs = 30 * 1000,
   // How often the status rows are composed again. Often enough that a drive's
   // light comes on while it is in use; core 1 is only handed them, and draws
   // only the rows that changed, when something has.
@@ -162,7 +159,7 @@ typedef struct RuntimeStatus {
 static const InitStatus* g_init_status;
 static uint8_t* g_guest_ram;
 static const VMList* g_vms;
-static const Settings* g_settings;
+static Settings* g_settings;
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
 // The VM started, main.c's, if one was: without one drive A holds the
@@ -467,7 +464,7 @@ static void UpdateStatusRows(void) {
 // log, and of the boot's group of a report.
 #define BOOT_FIELDS()                                                   \
   Y_LOG_STRING("stage", kBootStageEvents[g_status.boot_stage]),         \
-      Y_LOG_UINT("instructions", g_status.num_instructions),        \
+      Y_LOG_UINT("instructions", g_status.num_instructions),            \
       Y_LOG_UINT("cycles", g_status.boot_cycles),                       \
       Y_LOG_UINT(                                                       \
           "emulated_us", g_status.boot_cycles* kMicrosecondsPerSecond / \
@@ -516,8 +513,9 @@ static __noinline void ReportRunning(const DebugCommand* command) {
   DEBUG_COMMAND_REPLY_GROUP(command, "boot", BOOT_FIELDS());
   const DisplayStats display = DisplayGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "display",
-      Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
+      command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
+      Y_LOG_BOOL("on", DisplayPowerIsOn()),
+      Y_LOG_UINT("timeout_s", g_settings->display_timeout),
       Y_LOG_STRING("font", Font4x10Name(g_settings->font)),
       Y_LOG_UINT("frames_drawn", display.num_frames_drawn),
       Y_LOG_UINT("pixels_drawn", display.num_pixels_drawn),
@@ -886,6 +884,7 @@ static bool RedrawGuest(void) {
 // Without a VM there is no card, and a plain reboot boots the built-in floppy
 // again.
 static void ResetVM(void) {
+  DisplayPowerFlush(true);
   SYSTEM_INFO("reset", Y_LOG_STRING("path", g_vm->entry.path));
   if (!g_has_vm) {
     watchdog_reboot(0, 0, 0);
@@ -898,6 +897,7 @@ static void ResetVM(void) {
 
 // Back to the launcher menu, which waits for a key with the VM selected.
 static void PowerOffVM(void) {
+  DisplayPowerFlush(true);
   SYSTEM_INFO("power_off", Y_LOG_STRING("path", g_vm->entry.path));
   LauncherLeaveStartNote(kStartIntentMenu, g_vm->entry.name);
 }
@@ -1045,9 +1045,8 @@ static void RunVM(bool is_vm_ready) {
   uint64_t next_poll_cycles = kBootPollCycles;
   uint64_t next_render_cycles = kCyclesPerRender;
   bool is_running = is_vm_ready;
-  bool is_screen_on = true;
-  absolute_time_t blank_at = at_the_end_of_time;
   absolute_time_t next_status_at = get_absolute_time();
+  DisplayPowerDisarm();
   g_clock.last_ticks = g_platform.ticks;
   g_clock.start_us = time_us_64();
   g_clock.anchor_us = g_clock.start_us;
@@ -1064,22 +1063,24 @@ static void RunVM(bool is_vm_ready) {
     PollCommand(&g_command_us);
     // Between batches, so the keyboard is never written while the VM
     // runs, and a key a host typed only in a batch the keyboard had none, so
-    // that the two never land in one. A key also keeps the screen on, and
-    // turns it back on if it was blanked: its contents are kept, and what
+    // that the two never land in one. A key also keeps the display on, and
+    // turns it back on if it was off: the panel keeps its frame memory, so what
     // changed meanwhile is drawn with the next frame.
+    const bool was_display_on = DisplayPowerIsOn();
     SouthbridgeKeyEvent key;
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      HandleKey(key, is_running);
-      if (!is_screen_on) {
-        DisplayTurnOn();
-        is_screen_on = true;
+      if (!was_display_on) {
+        DisplayPowerDisarm();
       }
-      if (IsBootOver()) {
-        blank_at = make_timeout_time_ms(kScreenOnMs);
+      HandleKey(key, is_running);
+      if (IsBootOver() || ScreenIsOpen()) {
+        DisplayPowerResetTimer();
+      } else {
+        DisplayPowerDisarm();
       }
     }
 
-    if (is_screen_on && !ScreenIsOpen() &&
+    if (DisplayPowerIsOn() && !ScreenIsOpen() &&
         g_clock.cycles >= next_render_cycles) {
       do {
         next_render_cycles += kCyclesPerRender;
@@ -1108,25 +1109,26 @@ static void RunVM(bool is_vm_ready) {
         // of emulation. Not before now: DOS idles at the date and time
         // prompts too, and skipping there would move the dos-boot invariant.
         YPlatformSetDOSIdleSkip(&g_platform, true);
-        blank_at = make_timeout_time_ms(kScreenOnMs);
+        DisplayPowerResetTimer();
         BOOT_INFO("done");
       }
     }
 
-    if (is_screen_on && time_reached(next_status_at)) {
+    if (DisplayPowerIsOn() &&
+        (!was_display_on || time_reached(next_status_at))) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       UpdateStatusRows();
     }
     if (ScreenIsOpen()) {
       TickMenu();
+      if (!ScreenIsOpen() && !IsBootOver()) {
+        DisplayPowerDisarm();
+      }
     }
-    if (is_screen_on && ScreenIsOpen()) {
+    if (DisplayPowerIsOn() && ScreenIsOpen()) {
       DrawMenu();
     }
-    if (is_screen_on && time_reached(blank_at)) {
-      DisplayTurnOff();
-      is_screen_on = false;
-    }
+    DisplayPowerTick(IsBootOver() || ScreenIsOpen());
 
     if (ScreenIsOpen()) {
       sleep_ms(kPausedPollMs);
@@ -1199,7 +1201,7 @@ static __noinline void OpenDrives(void) {
 // ============================================================================
 
 void EmulatorInit(
-    const InitStatus* init_status, const VMList* vms, const Settings* settings,
+    const InitStatus* init_status, const VMList* vms, Settings* settings,
     uint8_t* guest_ram) {
   g_init_status = init_status;
   g_vms = vms;

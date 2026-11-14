@@ -10,6 +10,9 @@
 static const char kSettingsPath[] = "yax86/yax86.cfg";
 static const char kBootDefaultKey[] = "boot_default";
 static const char kFontKey[] = "font";
+static const char kDisplayTimeoutKey[] = "display_timeout";
+static const char kDisplayBrightnessKey[] = "display_brightness";
+static const char kKeyboardBrightnessKey[] = "keyboard_brightness";
 
 static bool TakeSettingsPair(
     const char* key, const char* value, void* context,
@@ -50,6 +53,49 @@ static bool TakeSettingsPair(
     }
     return true;
   }
+  if (strcmp(key, kDisplayTimeoutKey) == 0) {
+    uint64_t seconds = 0;
+    if (!YLogfmtParseUInt(value, &seconds) ||
+        seconds > kSettingsMaxDisplayTimeout) {
+      snprintf(
+          problem, kConfigFileProblemLength + 1,
+          "display_timeout is not 0 to %u",
+          (unsigned)kSettingsMaxDisplayTimeout);
+      return false;
+    }
+    settings->display_timeout = (uint16_t)seconds;
+    return true;
+  }
+  if (strcmp(key, kDisplayBrightnessKey) == 0) {
+    uint64_t brightness = 0;
+    if (!YLogfmtParseUInt(value, &brightness) ||
+        brightness < kSettingsMinDisplayBrightness ||
+        brightness > kSettingsMaxBrightness) {
+      snprintf(
+          problem, kConfigFileProblemLength + 1,
+          "display_brightness is not %u to %u",
+          (unsigned)kSettingsMinDisplayBrightness,
+          (unsigned)kSettingsMaxBrightness);
+      return false;
+    }
+    settings->display_brightness = (uint8_t)brightness;
+    settings->has_display_brightness = true;
+    return true;
+  }
+  if (strcmp(key, kKeyboardBrightnessKey) == 0) {
+    uint64_t brightness = 0;
+    if (!YLogfmtParseUInt(value, &brightness) ||
+        brightness > kSettingsMaxBrightness) {
+      snprintf(
+          problem, kConfigFileProblemLength + 1,
+          "keyboard_brightness is not 0 to %u",
+          (unsigned)kSettingsMaxBrightness);
+      return false;
+    }
+    settings->keyboard_brightness = (uint8_t)brightness;
+    settings->has_keyboard_brightness = true;
+    return true;
+  }
   // A key this firmware does not know, perhaps one a later firmware wrote,
   // is left for whatever reads it, rather than stopping the reading.
   SYSTEM_WARN("settings_key_ignored", Y_LOG_STRING("key", key));
@@ -62,6 +108,11 @@ static bool ReadFile(
   settings->boot_default[0] = '\0';
   settings->boot_delay = kSettingsDefaultBootDelay;
   settings->font = kFont4x10Default;
+  settings->display_timeout = kSettingsDefaultDisplayTimeout;
+  settings->display_brightness = kSettingsDefaultDisplayBrightness;
+  settings->keyboard_brightness = kSettingsDefaultKeyboardBrightness;
+  settings->has_display_brightness = false;
+  settings->has_keyboard_brightness = false;
   const ConfigFileResult result =
       ConfigFileRead(kSettingsPath, TakeSettingsPair, settings, problem);
   if (result == kConfigFileMissing) {
@@ -109,4 +160,36 @@ bool SettingsSaveFont(
   const ConfigFileSetting setting = {
       .key = kFontKey, .value = Font4x10Name(font)};
   return ConfigFileUpdate(kSettingsPath, &setting, 1, problem);
+}
+
+bool SettingsSaveDisplayTimeout(
+    Settings* settings, uint16_t seconds,
+    char problem[kConfigFileProblemLength + 1]) {
+  settings->display_timeout = seconds;
+  char value[8];
+  snprintf(value, sizeof(value), "%u", (unsigned)seconds);
+  const ConfigFileSetting setting = {.key = kDisplayTimeoutKey, .value = value};
+  return ConfigFileUpdate(kSettingsPath, &setting, 1, problem);
+}
+
+bool SettingsSaveBrightness(
+    Settings* settings, uint8_t display_brightness, uint8_t keyboard_brightness,
+    char problem[kConfigFileProblemLength + 1]) {
+  settings->display_brightness = display_brightness;
+  settings->keyboard_brightness = keyboard_brightness;
+  settings->has_display_brightness = true;
+  settings->has_keyboard_brightness = true;
+  char display_value[4];
+  char keyboard_value[4];
+  snprintf(
+      display_value, sizeof(display_value), "%u", (unsigned)display_brightness);
+  snprintf(
+      keyboard_value, sizeof(keyboard_value), "%u",
+      (unsigned)keyboard_brightness);
+  const ConfigFileSetting pairs[2] = {
+      {.key = kDisplayBrightnessKey, .value = display_value},
+      {.key = kKeyboardBrightnessKey, .value = keyboard_value},
+  };
+  return ConfigFileUpdate(
+      kSettingsPath, pairs, sizeof(pairs) / sizeof(pairs[0]), problem);
 }

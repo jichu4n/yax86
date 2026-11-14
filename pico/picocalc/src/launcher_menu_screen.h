@@ -19,6 +19,7 @@
 #ifndef YAX86_PICOCALC_LAUNCHER_MENU_SCREEN_H
 #define YAX86_PICOCALC_LAUNCHER_MENU_SCREEN_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "screen.h"
@@ -50,14 +51,18 @@ typedef struct LauncherMenuExit {
 // itself, or 0 for no countdown.
 //
 // The screens opened from the menu change vms and settings: the VM manager
-// as it makes, renames and deletes VMs, and Settings as it saves the font.
-// The VM manager also copies files through copy_buffer, copy_buffer_size
-// bytes of guest RAM. All of these must outlive the menu.
+// as it makes, renames and deletes VMs, and Settings as it saves the font and
+// display timeout. The VM manager also copies files through copy_buffer,
+// copy_buffer_size bytes of guest RAM. All of these must outlive the menu.
 //
 // When the menu closes, why is written to *exit.
 ScreenResult LauncherMenuScreenOpen(
     VMList* vms, Settings* settings, uint8_t* copy_buffer,
     uint32_t copy_buffer_size, uint8_t selected, uint32_t countdown_ms,
     LauncherMenuExit* exit);
+
+// Whether the launcher menu is open and still counting down to starting the
+// selected VM by itself.
+bool LauncherMenuScreenIsCounting(void);
 
 #endif  // YAX86_PICOCALC_LAUNCHER_MENU_SCREEN_H

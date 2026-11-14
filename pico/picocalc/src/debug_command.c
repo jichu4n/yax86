@@ -178,12 +178,15 @@ static __noinline void ReportDevices(const DebugCommand* command) {
       Y_LOG_UINT("read_us", usb.read_us), Y_LOG_UINT("write_us", usb.write_us),
       Y_LOG_UINT("errors", usb.num_errors));
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
+  const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "keyboard", Y_LOG_UINT("reads", keyboard.num_reads),
       Y_LOG_UINT("keys", keyboard.num_keys),
       Y_LOG_UINT("stale_keys", keyboard.num_stale_keys),
       Y_LOG_UINT("aborts", keyboard.num_aborts),
-      Y_LOG_UINT("timeouts", keyboard.num_timeouts));
+      Y_LOG_UINT("timeouts", keyboard.num_timeouts),
+      Y_LOG_UINT("display_backlight", backlights.display),
+      Y_LOG_UINT("keyboard_backlight", backlights.keyboard));
   const SpeakerStats speaker = SpeakerGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "speaker", Y_LOG_UINT("frequency_hz", speaker.frequency_hz),

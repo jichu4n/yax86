@@ -104,6 +104,10 @@ ScreenResult LauncherMenuScreenOpen(
   return ScreenOpen(&kLauncherMenuScreen);
 }
 
+bool LauncherMenuScreenIsCounting(void) {
+  return ScreenIsOpen() && g_is_counting;
+}
+
 // Show the seconds left before the selected VM starts by itself on the
 // bottom edge, or with 0, nothing there.
 static void SetCountdown(uint8_t seconds) {

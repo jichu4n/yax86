@@ -48,10 +48,18 @@ enum {
   kSouthbridgePollTimeoutUs = 50 * 1000,
 
   kRegisterVersion = 0x01,
+  kRegisterDisplayBacklight = 0x05,
   kRegisterKeyFIFO = 0x09,
+  kRegisterKeyboardBacklight = 0x0A,
   // Answers the register number, then the percentage in the low seven bits,
   // with the top bit set while charging.
   kRegisterBattery = 0x0B,
+  // Setting the top bit of a register number writes the byte that follows it.
+  kRegisterWriteBit = 0x80,
+  // The earliest firmware version where reading and writing both backlight
+  // registers is supported without side effects.
+  kMinBacklightVersion = 0x16,
+  kNumBacklightRegisters = 2,
   kBatteryChargingBit = 0x80,
   kBatteryPercentMask = 0x7F,
   kBatteryMaxPercent = 100,
@@ -59,13 +67,28 @@ enum {
   // controller measures it every 20 seconds, so more often would find
   // nothing new.
   kBatteryReadIntervalUs = 10 * 1000 * 1000,
+  // How often the poll reads the backlights while they are on, besides reading
+  // them straight after Alt comes up.
+  kBacklightReadIntervalUs = 5 * 1000 * 1000,
   // The bytes a register answers with.
   kRegisterAnswerBytes = 2,
 };
 
+// Whether the controller's firmware supports the backlight registers.
+static bool g_has_backlights;
+// Whether the poll keeps g_backlights fresh from the controller, and how many
+// of the two registers are queued to be read next.
+static bool g_should_poll_backlights;
+static uint8_t g_num_pending_backlight_reads;
+static uint64_t g_next_backlight_read_us;
+static SouthbridgeBacklights g_backlights;
 // The read in flight, if any, and which register it is of.
 static bool g_is_poll_in_flight;
 static uint8_t g_poll_register;
+// A key collected while waiting out an in-flight read before a synchronous
+// transfer, to be returned by the next SouthbridgePollKey().
+static bool g_has_saved_key;
+static SouthbridgeKeyEvent g_saved_key;
 // When the poll next reads the battery rather than the key FIFO: straight
 // away, the first time.
 static uint64_t g_next_battery_read_us;
@@ -106,6 +129,14 @@ static bool SouthbridgeReadRegister(uint8_t reg, uint8_t answer[2]) {
              kSouthbridgeTimeoutUs) == 2;
 }
 
+// Write a one byte value to a register.
+static bool SouthbridgeWriteRegister(uint8_t reg, uint8_t value) {
+  const uint8_t command[2] = {(uint8_t)(reg | kRegisterWriteBit), value};
+  return i2c_write_timeout_us(
+             kSouthbridgeI2C, kSouthbridgeAddress, command, sizeof(command),
+             false, kSouthbridgeTimeoutUs) == sizeof(command);
+}
+
 // Read a register, retrying for a while if the controller does not answer.
 //
 // On one unit the controller acknowledged nothing for two boots in a row and
@@ -128,24 +159,38 @@ bool SouthbridgeReadVersion(uint8_t* version) {
   // The first byte is always zero; the version is the second.
   uint8_t answer[2] = {0, 0};
   if (!SouthbridgeReadRegisterPatiently(kRegisterVersion, answer)) {
+    g_has_backlights = false;
     return false;
   }
   *version = answer[1];
+  g_has_backlights = *version >= kMinBacklightVersion;
   return true;
 }
 
-// Queue a whole read of the key FIFO, or every so often of the battery: the
-// register number, then a two byte read, each ending in a STOP. The I2C block
-// carries the commands out from its own FIFO, so nothing waits for the bus.
-// The controller prepares its answer as the register number arrives, so the
-// read can follow straight on.
+bool SouthbridgeHasBacklights(void) { return g_has_backlights; }
+
+// Queue a whole read of the key FIFO, or every so often of the battery or a
+// backlight: the register number, then a two byte read, each ending in a STOP.
+// The I2C block carries the commands out from its own FIFO, so nothing waits
+// for the bus. The controller prepares its answer as the register number
+// arrives, so the read can follow straight on.
 static void StartKeyFIFORead(void) {
   i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
   const uint64_t now_us = time_us_64();
+  if (g_should_poll_backlights && g_num_pending_backlight_reads == 0 &&
+      now_us >= g_next_backlight_read_us) {
+    g_num_pending_backlight_reads = kNumBacklightRegisters;
+    g_next_backlight_read_us = now_us + kBacklightReadIntervalUs;
+  }
   g_poll_register = kRegisterKeyFIFO;
   if (now_us >= g_next_battery_read_us) {
     g_poll_register = kRegisterBattery;
     g_next_battery_read_us = now_us + kBatteryReadIntervalUs;
+  } else if (g_should_poll_backlights && g_num_pending_backlight_reads > 0) {
+    g_poll_register = g_num_pending_backlight_reads == kNumBacklightRegisters
+                          ? kRegisterDisplayBacklight
+                          : kRegisterKeyboardBacklight;
+    --g_num_pending_backlight_reads;
   }
   hw->data_cmd = I2C_IC_DATA_CMD_STOP_BITS | g_poll_register;
   hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS;
@@ -160,7 +205,169 @@ static void DrainReceiveFIFO(void) {
   }
 }
 
+// Take the two bytes of a completed poll read, returning whether they held a
+// key event for the caller.
+static bool CollectPollReply(SouthbridgeKeyEvent* event) {
+  const uint8_t first = i2c_read_byte_raw(kSouthbridgeI2C);
+  const uint8_t second = i2c_read_byte_raw(kSouthbridgeI2C);
+  ++g_poll_stats.num_reads;
+  if (g_poll_register == kRegisterBattery) {
+    const uint8_t percent = second & kBatteryPercentMask;
+    g_battery.is_known = percent > 0 && percent <= kBatteryMaxPercent;
+    g_battery.percent = percent;
+    g_battery.is_charging = (second & kBatteryChargingBit) != 0;
+    return false;
+  }
+  if (g_poll_register == kRegisterDisplayBacklight) {
+    if (first == kRegisterDisplayBacklight && g_should_poll_backlights) {
+      g_backlights.display = second;
+      g_backlights.is_known = true;
+    }
+    return false;
+  }
+  if (g_poll_register == kRegisterKeyboardBacklight) {
+    if (first == kRegisterKeyboardBacklight && g_should_poll_backlights) {
+      g_backlights.keyboard = second;
+      g_backlights.is_known = true;
+    }
+    return false;
+  }
+  if (first == kSouthbridgeKeyIdle) {
+    g_has_poll_caught_up = true;
+    return false;
+  }
+  if (!g_has_poll_caught_up) {
+    ++g_poll_stats.num_stale_keys;
+    return false;
+  }
+  if (first <= kSouthbridgeKeyReleased) {
+    event->state = (SouthbridgeKeyState)first;
+    event->key = second;
+    ++g_poll_stats.num_keys;
+    if (g_should_poll_backlights && event->state == kSouthbridgeKeyReleased &&
+        event->key == kKeyCodeAlt) {
+      // Alt with comma, full stop or space changes a backlight on the
+      // controller without reporting the second key, so read both once Alt
+      // comes up.
+      g_num_pending_backlight_reads = kNumBacklightRegisters;
+    }
+    return true;
+  }
+  return false;
+}
+
+// Wait out a poll read already on the bus before a synchronous transfer,
+// keeping any key it brings back for the next SouthbridgePollKey().
+static void FinishPollInFlight(void) {
+  if (!g_is_poll_in_flight) {
+    return;
+  }
+  i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
+  for (;;) {
+    if (hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS) {
+      (void)hw->clr_tx_abrt;
+      DrainReceiveFIFO();
+      ++g_poll_stats.num_aborts;
+      break;
+    }
+    if (i2c_get_read_available(kSouthbridgeI2C) >= kRegisterAnswerBytes) {
+      SouthbridgeKeyEvent key;
+      if (!g_has_saved_key && CollectPollReply(&key)) {
+        g_saved_key = key;
+        g_has_saved_key = true;
+      }
+      break;
+    }
+    if (time_us_64() - g_poll_started_us > kSouthbridgePollTimeoutUs) {
+      i2c_deinit(kSouthbridgeI2C);
+      SouthbridgeInit();
+      ++g_poll_stats.num_timeouts;
+      break;
+    }
+    tight_loop_contents();
+  }
+  // Wait for the STOP after the last byte before the SDK disables the block to
+  // set its target address.
+  const uint64_t stop_start_us = time_us_64();
+  while ((hw->status & I2C_IC_STATUS_ACTIVITY_BITS) != 0 &&
+         time_us_64() - stop_start_us < kSouthbridgePollTimeoutUs) {
+    tight_loop_contents();
+  }
+  g_is_poll_in_flight = false;
+}
+
+bool SouthbridgeReadBacklights(uint8_t* display, uint8_t* keyboard) {
+  if (!g_has_backlights) {
+    return false;
+  }
+  FinishPollInFlight();
+  uint8_t display_answer[2] = {0, 0};
+  uint8_t keyboard_answer[2] = {0, 0};
+  if (!SouthbridgeReadRegister(kRegisterDisplayBacklight, display_answer) ||
+      display_answer[0] != kRegisterDisplayBacklight ||
+      !SouthbridgeReadRegister(kRegisterKeyboardBacklight, keyboard_answer) ||
+      keyboard_answer[0] != kRegisterKeyboardBacklight) {
+    return false;
+  }
+  *display = display_answer[1];
+  *keyboard = keyboard_answer[1];
+  g_backlights = (SouthbridgeBacklights){
+      .is_known = true,
+      .display = *display,
+      .keyboard = *keyboard,
+  };
+  return true;
+}
+
+bool SouthbridgeSetBacklights(uint8_t display, uint8_t keyboard) {
+  if (!g_has_backlights) {
+    return false;
+  }
+  FinishPollInFlight();
+  g_should_poll_backlights = false;
+  g_num_pending_backlight_reads = 0;
+  if (!SouthbridgeWriteRegister(kRegisterDisplayBacklight, display) ||
+      !SouthbridgeWriteRegister(kRegisterKeyboardBacklight, keyboard)) {
+    return false;
+  }
+  uint8_t display_answer[2] = {0, 0};
+  uint8_t keyboard_answer[2] = {0, 0};
+  if (SouthbridgeReadRegister(kRegisterDisplayBacklight, display_answer) &&
+      display_answer[0] == kRegisterDisplayBacklight &&
+      SouthbridgeReadRegister(kRegisterKeyboardBacklight, keyboard_answer) &&
+      keyboard_answer[0] == kRegisterKeyboardBacklight) {
+    g_backlights = (SouthbridgeBacklights){
+        .is_known = true,
+        .display = display_answer[1],
+        .keyboard = keyboard_answer[1],
+    };
+  } else {
+    g_backlights = (SouthbridgeBacklights){
+        .is_known = true,
+        .display = display,
+        .keyboard = keyboard,
+    };
+  }
+  if (display > 0) {
+    g_should_poll_backlights = true;
+    g_next_backlight_read_us = time_us_64() + kBacklightReadIntervalUs;
+  }
+  return true;
+}
+
+SouthbridgeBacklights SouthbridgeGetBacklights(void) { return g_backlights; }
+
 bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
+  if (g_has_saved_key) {
+    *event = g_saved_key;
+    g_has_saved_key = false;
+    if (!g_is_poll_in_flight) {
+      SetTargetAddress();
+      StartKeyFIFORead();
+    }
+    return true;
+  }
+
   i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
   if (!g_is_poll_in_flight) {
     SetTargetAddress();
@@ -176,24 +383,7 @@ bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
     DrainReceiveFIFO();
     ++g_poll_stats.num_aborts;
   } else if (i2c_get_read_available(kSouthbridgeI2C) >= kRegisterAnswerBytes) {
-    const uint8_t state = i2c_read_byte_raw(kSouthbridgeI2C);
-    const uint8_t key = i2c_read_byte_raw(kSouthbridgeI2C);
-    ++g_poll_stats.num_reads;
-    if (g_poll_register == kRegisterBattery) {
-      const uint8_t percent = key & kBatteryPercentMask;
-      g_battery.is_known = percent > 0 && percent <= kBatteryMaxPercent;
-      g_battery.percent = percent;
-      g_battery.is_charging = (key & kBatteryChargingBit) != 0;
-    } else if (state == kSouthbridgeKeyIdle) {
-      g_has_poll_caught_up = true;
-    } else if (!g_has_poll_caught_up) {
-      ++g_poll_stats.num_stale_keys;
-    } else if (state <= kSouthbridgeKeyReleased) {
-      event->state = (SouthbridgeKeyState)state;
-      event->key = key;
-      ++g_poll_stats.num_keys;
-      has_key = true;
-    }
+    has_key = CollectPollReply(event);
   } else if (time_us_64() - g_poll_started_us > kSouthbridgePollTimeoutUs) {
     // Start again from a freshly reset block, which drops whatever it was
     // stuck on.
