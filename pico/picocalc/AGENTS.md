@@ -799,9 +799,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   `src/status_screen.c`, and `src/question_screen.c` for Reset and Power
   off. A drive's page opens the browser, `src/browser_screen.c`, which
   launcher mode uses too.
-- **The menu changes the VM's floppy disks through the running VM**,
-  `src/running_vm.c`, which says so on the status rows and saves the drive
-  to `vm.cfg`. Inserting a disk closes the menu.
+- **The menu works on the emulator session**, `src/emulator_session.c`:
+  the VM's configuration and the machine's floppy disk controller.
+  `src/emulator.c` holds it, and each page passes it to the pages it opens,
+  as the launcher's Manage VMs pages pass the `VMManager`.
+- **A drive's page changes the disk itself**, as the launcher's screens
+  carry out their items: it changes the drive through `src/floppy.c`, saves
+  it to `vm.cfg` through `src/vm_config.c`, and says so on the status rows.
+  Inserting a disk closes the menu.
 - **Reset and Power off only decide**: a question answered yes closes the
   menu with an `EmulatorMenuExit`, and `src/emulator.c` carries it out.
 - **The status page's lines are the emulator's**: it fills them in on

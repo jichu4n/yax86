@@ -20,7 +20,7 @@
 #ifndef YAX86_PICOCALC_EMULATOR_MENU_SCREEN_H
 #define YAX86_PICOCALC_EMULATOR_MENU_SCREEN_H
 
-#include "running_vm.h"
+#include "emulator_session.h"
 #include "screen.h"
 #include "status_screen.h"
 
@@ -36,14 +36,16 @@ typedef enum EmulatorMenuExit {
 
 // Open the in-VM menu's main page.
 //
-// vm is the running VM, whose floppy disks the drives' pages change.
+// session is the emulator session, whose floppy disks the drives' pages
+// change.
 // status_lines is the status page's lines, which the caller keeps current
 // while the menu shows.
 //
 // *exit is set to kEmulatorMenuExitResume, and to what the emulator is to do
 // once the menu closes. All of these must outlive the menu.
 ScreenResult EmulatorMenuScreenOpen(
-    RunningVM* vm, const StatusScreenLine status_lines[kStatusScreenLines],
+    EmulatorSession* session,
+    const StatusScreenLine status_lines[kStatusScreenLines],
     EmulatorMenuExit* exit);
 
 #endif  // YAX86_PICOCALC_EMULATOR_MENU_SCREEN_H

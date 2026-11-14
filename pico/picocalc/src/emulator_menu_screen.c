@@ -44,9 +44,9 @@ static const Question kPowerOffQuestion = {
 
 extern const Screen kEmulatorMenuScreen;
 
-// The caller's: the running VM, the status page's lines, and where to write
-// what the emulator is to do once the menu closes.
-static RunningVM* g_vm;
+// The caller's: the emulator session, the status page's lines, and where to
+// write what the emulator is to do once the menu closes.
+static EmulatorSession* g_session;
 static const StatusScreenLine* g_status_lines;
 static EmulatorMenuExit* g_exit;
 // The list box: the item selected, and whether it is out of date.
@@ -56,9 +56,10 @@ static bool g_reset_confirmed;
 static bool g_power_off_confirmed;
 
 ScreenResult EmulatorMenuScreenOpen(
-    RunningVM* vm, const StatusScreenLine status_lines[kStatusScreenLines],
+    EmulatorSession* session,
+    const StatusScreenLine status_lines[kStatusScreenLines],
     EmulatorMenuExit* exit) {
-  g_vm = vm;
+  g_session = session;
   g_status_lines = status_lines;
   g_exit = exit;
   *g_exit = kEmulatorMenuExitResume;
@@ -74,8 +75,8 @@ ScreenResult EmulatorMenuScreenOpen(
 static uint8_t ShownItems(MainItem items[kMainItemCount]) {
   uint8_t count = 0;
   for (uint8_t item = 0; item < kMainItemCount; ++item) {
-    if ((item == kMainDriveB && RunningVMFloppyDrives(g_vm) < 2) ||
-        (item == kMainPowerOff && !RunningVMCanPowerOff(g_vm))) {
+    if ((item == kMainDriveB && EmulatorSessionFloppyDrives(g_session) < 2) ||
+        (item == kMainPowerOff && !EmulatorSessionCanPowerOff(g_session))) {
       continue;
     }
     items[count++] = (MainItem)item;
@@ -102,7 +103,8 @@ static ScreenResult OnSelect(void) {
   switch (item) {
     case kMainDriveA:
     case kMainDriveB:
-      return FloppyDriveScreenOpen(g_vm, (FloppyDrive)(item - kMainDriveA));
+      return FloppyDriveScreenOpen(
+          g_session, (FloppyDrive)(item - kMainDriveA));
     case kMainStatus:
       return StatusScreenOpen(g_status_lines);
     case kMainReset:

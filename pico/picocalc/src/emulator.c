@@ -11,6 +11,7 @@
 #include "debug_command.h"
 #include "display.h"
 #include "emulator_menu_screen.h"
+#include "emulator_session.h"
 #include "emulator_status_bar.h"
 #include "file_list.h"
 #include "floppy.h"
@@ -23,7 +24,6 @@
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "psram.h"
-#include "running_vm.h"
 #include "runtime_log.h"
 #include "screen.h"
 #include "sdcard.h"
@@ -169,9 +169,9 @@ static YPlatformState g_platform;
 // built-in floppy and no other drive has a disk.
 static VMConfig* g_vm;
 static bool g_has_vm;
-// The running VM, for the menu to change its floppy disks: g_vm and the
-// machine's floppy disk controller.
-static RunningVM g_running_vm;
+// The emulator session the in-VM menu works on: g_vm and the machine's
+// floppy disk controller.
+static EmulatorSession g_session;
 static RuntimeStatus g_status;
 static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
@@ -449,7 +449,7 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
 static void UpdateStatusRows(void) {
   EmulatorStatusBarInputs inputs = {0};
   inputs.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
-  inputs.drives[kFloppyDriveB] = RunningVMFloppyDrives(&g_running_vm) > 1
+  inputs.drives[kFloppyDriveB] = EmulatorSessionFloppyDrives(&g_session) > 1
                                      ? FloppyGetImage(kFloppyDriveB)
                                      : NULL;
   inputs.drives[kVMDriveHD1] = HardDiskGetImage(kHardDisk1);
@@ -599,7 +599,7 @@ static bool InitVM(void) {
   ConfigureGuestRAM(config);
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
-  config->floppy_drives = RunningVMFloppyDrives(&g_running_vm);
+  config->floppy_drives = EmulatorSessionFloppyDrives(&g_session);
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -940,7 +940,7 @@ static void OpenMenu(bool running) {
   // is showing yet.
   g_box_shown.drawn = false;
   g_box_pending = false;
-  ScreenShow(EmulatorMenuScreenOpen(&g_running_vm, g_status_lines, &g_exit));
+  ScreenShow(EmulatorMenuScreenOpen(&g_session, g_status_lines, &g_exit));
   SYSTEM_INFO("menu_opened");
 }
 
@@ -1194,8 +1194,8 @@ void EmulatorInit(
 void EmulatorRun(VMConfig* vm) {
   g_vm = vm;
   g_has_vm = vm != NULL;
-  g_running_vm.config = vm;
-  g_running_vm.fdc = &g_platform.fdc;
+  g_session.config = vm;
+  g_session.fdc = &g_platform.fdc;
   OpenDrives();
   RunVM(InitVM());
 }
