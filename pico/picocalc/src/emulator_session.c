@@ -15,7 +15,7 @@ static const char* const kDriveNames[kFloppyDrives] = {
     [kFloppyDriveB] = "fd2",
 };
 
-uint8_t EmulatorSessionFloppyDrives(const EmulatorSession* session) {
+uint8_t EmulatorSessionNumFloppyDrives(const EmulatorSession* session) {
   return session->config != NULL && !session->config->present[kVMDriveFD2]
              ? 1
              : kFloppyDrives;

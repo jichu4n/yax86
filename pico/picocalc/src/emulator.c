@@ -451,7 +451,7 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
 static void UpdateStatusRows(void) {
   EmulatorStatusBarInputs inputs = {0};
   inputs.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
-  inputs.drives[kFloppyDriveB] = EmulatorSessionFloppyDrives(&g_session) > 1
+  inputs.drives[kFloppyDriveB] = EmulatorSessionNumFloppyDrives(&g_session) > 1
                                      ? FloppyGetImage(kFloppyDriveB)
                                      : NULL;
   inputs.drives[kVMDriveHD1] = HardDiskGetImage(kHardDisk1);
@@ -601,7 +601,7 @@ static bool InitVM(void) {
   ConfigureGuestRAM(config);
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
-  config->floppy_drives = EmulatorSessionFloppyDrives(&g_session);
+  config->floppy_drives = EmulatorSessionNumFloppyDrives(&g_session);
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -885,7 +885,7 @@ static void PowerOffVM(void) {
 static bool CanPowerOff(void) { return EmulatorSessionCanPowerOff(&g_session); }
 
 static uint8_t FloppyDrives(void) {
-  return EmulatorSessionFloppyDrives(&g_session);
+  return EmulatorSessionNumFloppyDrives(&g_session);
 }
 
 static void EjectDrive(FloppyDrive drive) {
