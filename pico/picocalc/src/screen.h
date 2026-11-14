@@ -47,8 +47,9 @@ struct Screen {
   ScreenResult (*on_tick)(void);
   // Called every pass of the loop, to draw the screen into box if it has
   // changed. Returns whether it drew, so that the loop sends box to core 1.
-  // now_us is the time of the pass.
-  bool (*on_draw)(DisplayBox* box, uint64_t now_us);
+  // A screen whose figures change with time reads the time itself, and
+  // draws again when they are due.
+  bool (*on_draw)(DisplayBox* box);
   // Called when the screen above was taken off, so that this one shows
   // again and has to be drawn. What the screen above left can lead this one
   // on, as a key does: back, say, once what it was opened for is done.
@@ -107,7 +108,7 @@ void ScreenTick(void);
 // with DisplayEndBox() if the screen drew. A mode's loop does the sending
 // so that it can do what it needs first, such as drawing the guest's screen
 // under a box of a new size.
-bool ScreenDraw(DisplayBox* box, uint64_t now_us);
+bool ScreenDraw(DisplayBox* box);
 
 // The keys of the screen on top, for the loop to compose the status rows
 // from, with what else its rows show.

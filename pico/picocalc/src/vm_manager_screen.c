@@ -100,7 +100,7 @@ static __noinline ScreenResult OnResume(void) {
 
 // The VMs in yax86/vm, a row each, then New VM after a line if there are
 // any, with arrows on the border where there are more above or below.
-static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }

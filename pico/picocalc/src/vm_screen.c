@@ -104,7 +104,7 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 }
 
 // The images in the VM's drives, over what can be done to it.
-static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
