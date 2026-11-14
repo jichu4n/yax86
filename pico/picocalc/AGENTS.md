@@ -807,13 +807,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   screens, and the menu's pages. `src/list_box.c` has what they share:
   moving the selection, scrolling a long list, and drawing the items. A
   screen keeps a `ListBox`, the item selected and whether it is out of
-  date. It hands it keys with `ListBoxTakeEvent()`, which ignores releases,
-  clears the problem, moves the selection and says whether the key
-  selected or went back. It draws when `ListBoxTakeDirty()` says the box
-  is out of date. A screen with keys of its own takes them first,
-  after `ListBoxKeyPressed()`, and passes the rest to `ListBoxTakeKey()`:
-  the name being typed, Backspace up a folder in the browser, Esc ignored
-  on the list.
+  date. It hands the list box each key with `ListBoxHandleKeyEvent()`,
+  which ignores releases, clears the problem, moves the selection and
+  returns a `ListBoxAction`: whether the key selected the item or went
+  back. It draws when `ListBoxTakeDirty()` says the box is out of date. A
+  screen with keys of its own checks `ListBoxIsKeyPress()`, handles its
+  own keys, and hands the rest to `ListBoxHandleKeyCode()`: the name being
+  typed, Backspace up a folder in the browser, Esc ignored on the list.
 - **The file browser both modes use is `src/file_browser.c`**, which says
   which image was chosen and leaves what to do with it to its user.
 - **The VM is paused while it is open**: no batches run and no frames

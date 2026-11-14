@@ -87,15 +87,15 @@ static __noinline ScreenResult ShareImage(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, kUSBItemCount)) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kUSBItemCount)) {
+    case kListBoxActionSelect:
       if (g_list_box.selected == kUSBImage) {
         return BrowserScreenOpen(
             kFileBrowserEither, "yax86", NULL, NULL, g_found_path,
             &g_found_size);
       }
       return ShareCard();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();

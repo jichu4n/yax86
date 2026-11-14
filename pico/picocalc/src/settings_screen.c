@@ -27,10 +27,10 @@ ScreenResult SettingsScreenOpen(Settings* settings) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, kSettingsItemCount)) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kSettingsItemCount)) {
+    case kListBoxActionSelect:
       return FontScreenOpen(g_settings);
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
