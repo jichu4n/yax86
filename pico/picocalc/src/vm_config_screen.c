@@ -195,7 +195,7 @@ static ScreenResult OnSelect(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  if (!ListBoxKeyPressed(event)) {
+  if (!ListBoxIsKeyPress(event)) {
     return ScreenStays();
   }
   // Backspace erases the name rather than leaving the form, wherever it is:
@@ -205,10 +205,10 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
     return ScreenStays();
   }
   const uint8_t count = (uint8_t)(kFormItemCount - FirstItem());
-  switch (ListBoxTakeKey(&g_list_box, event.key, count)) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyCode(&g_list_box, event.key, count)) {
+    case kListBoxActionSelect:
       return OnSelect();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
