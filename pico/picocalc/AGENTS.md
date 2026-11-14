@@ -380,7 +380,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   screen is open. Back from the bottom screen closes too. The open
   function is typed, so a page cannot be opened without its state, and
   there is no `void*` context. Each screen is on the stack at most once, so
-  it keeps those pointers and its own state, such as the item chosen, in
+  it keeps those pointers and its own state, such as the item selected, in
   statics. `main.c` holds the models, `g_vms`, `g_settings` and `g_vm`,
   and passes them to `LauncherRun()`, which passes them down; nothing
   asks the launcher for them back. Settings and Font
@@ -780,12 +780,21 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 
 - **Both Shift keys held together open it**, which nothing in DOS does and
   typing never does, and close it again. `src/menu.c` keeps its state and
-  draws it, in boxes and rows from `src/ui_box.c`. What its pages have in
-  common with the list at power on's is in `src/ui_page.c`: moving the
-  chosen item, scrolling a list, and a page of items. The file browser both
-  use is `src/ui_browser.c`, which says which image was chosen and leaves
-  what to do with it to its user. `src/emulator.c` carries out what the
-  menu's items do, through the callbacks in `MenuConfig`.
+  draws it, in boxes and rows from `src/ui_box.c`. `src/emulator.c` carries
+  out what the menu's items do, through the callbacks in `MenuConfig`.
+- **A list box is a box that lists items, one of them selected**: most
+  screens, and the menu's pages. `src/list_box.c` has what they share:
+  moving the selection, scrolling a long list, and drawing the items. A
+  screen keeps a `ListBox`, the item selected and whether it is out of
+  date. It hands the list box each key with `ListBoxHandleKeyEvent()`,
+  which ignores releases, clears the problem, moves the selection and
+  returns a `ListBoxAction`: whether the key selected the item or went
+  back. It draws between `ListBoxBeginDraw()` and `ListBoxEndDraw()`. A
+  screen with keys of its own checks `ListBoxIsKeyPress()`, handles its
+  own keys, and hands the rest to `ListBoxHandleKeyCode()`: the name being
+  typed, Backspace up a folder in the browser, Esc ignored on the list.
+- **The file browser both modes use is `src/ui_browser.c`**, which says
+  which image was chosen and leaves what to do with it to its user.
 - **The VM is paused while it is open**: no batches run and no frames
   are drawn, and on closing, pacing starts again from the present rather
   than running flat out to catch up. The time is `paused_us` in the report,

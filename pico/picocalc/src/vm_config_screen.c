@@ -7,11 +7,11 @@
 
 #include "disk_image.h"
 #include "display.h"
+#include "list_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "ui_box.h"
-#include "ui_page.h"
 #include "vm_drive_config_screen.h"
 
 enum {
@@ -32,9 +32,8 @@ typedef enum FormItem {
 extern const Screen kVMConfigScreen;
 
 static VMManager* g_vm_manager;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 // Whether the form configures the existing VM at g_vm, an index in the list,
 // rather than making a new one; it then has no name, and saves rather than
 // creates.
@@ -46,14 +45,16 @@ static uint8_t g_name_length;
 static VMDriveChoice g_drives[kVMDrives];
 
 // The form's first item: its name for a new VM; for an existing one, at
-// the drives. g_chosen counts from it.
+// the drives. g_list_box.selected counts from it.
 static uint8_t FirstItem(void) { return g_existing ? kFormDriveA : kFormName; }
 
-static uint8_t ChosenItem(void) { return (uint8_t)(g_chosen + FirstItem()); }
+static uint8_t SelectedItem(void) {
+  return (uint8_t)(g_list_box.selected + FirstItem());
+}
 
-static void ChooseItem(uint8_t item) {
-  g_chosen = (uint8_t)(item - FirstItem());
-  g_dirty = true;
+static void SelectItem(uint8_t item) {
+  g_list_box.selected = (uint8_t)(item - FirstItem());
+  g_list_box.dirty = true;
 }
 
 ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
@@ -66,7 +67,7 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
     g_drives[drive].blank = drive == kVMDriveHD1;
     g_drives[drive].present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
-  ChooseItem(kFormName);
+  SelectItem(kFormName);
   return ScreenOpen(&kVMConfigScreen);
 }
 
@@ -85,7 +86,7 @@ ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
         (drive == kVMDriveFD2 ? config.present[drive]
                               : config.drives[drive][0] != '\0');
   }
-  ChooseItem(kFormDriveA);
+  SelectItem(kFormDriveA);
   return ScreenOpen(&kVMConfigScreen);
 }
 
@@ -103,7 +104,7 @@ static __noinline ScreenResult Create(void) {
   FormDrives(&drives);
   VMEntry created;
   char problem[kVMProblemLength + 1];
-  char what[kUIPageNarrowColumns];
+  char what[kListBoxNarrowColumns];
   snprintf(what, sizeof(what), "Writing %s's blank disks...", g_name);
   const uint64_t start_us = time_us_64();
   // Blank disks are written through the guest's RAM, which is zeroed after.
@@ -139,7 +140,7 @@ static __noinline ScreenResult Save(void) {
   VMListDrives drives;
   FormDrives(&drives);
   char problem[kVMProblemLength + 1];
-  char what[kUIPageNarrowColumns];
+  char what[kListBoxNarrowColumns];
   snprintf(what, sizeof(what), "Writing %s's blank disks...", vm.name);
   FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Configure", what);
   const VMListResult result = VMListEdit(&vm, &drives, &transfer, problem);
@@ -157,13 +158,13 @@ static __noinline ScreenResult Save(void) {
   return ScreenBack();
 }
 
-// A key while the name is chosen: a character a name can have to add, and
+// A key while the name is selected: a character a name can have to add, and
 // Backspace to take the last off. Returns whether the key was the name's.
 static bool TypeName(uint8_t key) {
   if (key == kKeyCodeBackspace) {
     if (g_name_length > 0) {
       g_name[--g_name_length] = '\0';
-      g_dirty = true;
+      g_list_box.dirty = true;
     }
     return true;
   }
@@ -173,18 +174,18 @@ static bool TypeName(uint8_t key) {
   if (g_name_length < kFSMaxFolderName) {
     g_name[g_name_length++] = (char)toupper(key);
     g_name[g_name_length] = '\0';
-    g_dirty = true;
+    g_list_box.dirty = true;
   }
   return true;
 }
 
 static ScreenResult Choose(void) {
-  const uint8_t item = ChosenItem();
+  const uint8_t item = SelectedItem();
   if (item == kFormCreate) {
     return g_existing ? Save() : Create();
   }
   if (item == kFormName) {
-    ChooseItem(kFormDriveA);
+    SelectItem(kFormDriveA);
     return ScreenStays();
   }
   const uint8_t drive = (uint8_t)(item - kFormDriveA);
@@ -192,29 +193,20 @@ static ScreenResult Choose(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
+  if (!ListBoxIsKeyPress(event)) {
     return ScreenStays();
   }
-  StatusBarClearProblem();
   // Backspace erases the name rather than leaving the form, wherever it is:
   // Esc leaves it.
-  if ((ChosenItem() == kFormName && TypeName(event.key)) ||
+  if ((SelectedItem() == kFormName && TypeName(event.key)) ||
       event.key == kKeyCodeBackspace) {
     return ScreenStays();
   }
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(
-            event.key, (uint8_t)(kFormItemCount - FirstItem()), &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  const uint8_t count = (uint8_t)(kFormItemCount - FirstItem());
+  switch (ListBoxHandleKeyCode(&g_list_box, event.key, count)) {
+    case kListBoxActionSelect:
       return Choose();
-    case kKeyCodeEsc:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -223,25 +215,23 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Back from a drive's choices, with the drive chosen still.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
-// A new VM's name, typed in place with a cursor while it is chosen, and the
+// A new VM's name, typed in place with a cursor while it is selected, and the
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  char rows[kFormItemCount][kUIPageNarrowColumns];
+  char rows[kFormItemCount][kListBoxNarrowColumns];
   UIBoxItem items[kFormItemCount];
   const char* cursor =
-      ChosenItem() == kFormName && g_name_length < kFSMaxFolderName ? "_" : "";
+      SelectedItem() == kFormName && g_name_length < kFSMaxFolderName ? "_"
+                                                                      : "";
   snprintf(
       rows[kFormName], sizeof(rows[kFormName]), "%-15s %s%s", "Name", g_name,
       cursor);
@@ -263,16 +253,15 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     items[item] = (UIBoxItem){rows[item], true};
   }
   items[kFormCreate] = (UIBoxItem){g_existing ? "Save" : "Create", false};
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
-      &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()), g_chosen,
-      true);
-  DisplayEndMenu();
-  g_dirty = false;
+      &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
+      g_list_box.selected, true);
+  ListBoxEndDraw(&g_list_box);
 }
 
 static const char* Hint(void) {
-  return ChosenItem() == kFormName
+  return SelectedItem() == kFormName
              ? "Type the name  \x18\x19=Move  Backspace=Erase  Esc=Cancel"
              : "\x18\x19=Move  Enter=Select  Esc=Cancel";
 }

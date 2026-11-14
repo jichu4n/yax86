@@ -4,10 +4,9 @@
 
 #include "browser_screen.h"
 #include "display.h"
-#include "status_bar.h"
+#include "list_box.h"
 #include "ui_box.h"
 #include "ui_browser.h"
-#include "ui_page.h"
 #include "vm_config.h"
 
 // A drive's choices.
@@ -46,9 +45,8 @@ static const DriveItem kHardDiskChoices[] = {
 
 extern const Screen kVMDriveConfigScreen;
 
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 // The drive, and the form's choice for it.
 static uint8_t g_drive;
 static VMDriveChoice* g_choice;
@@ -93,8 +91,8 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* chosen) {
   } else if (chosen->path[0] != '\0') {
     item = kDriveImage;
   }
-  g_chosen = ChoiceRow(item);
-  g_dirty = true;
+  g_list_box.selected = ChoiceRow(item);
+  g_list_box.dirty = true;
   return ScreenOpen(&kVMDriveConfigScreen);
 }
 
@@ -102,7 +100,7 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* chosen) {
 // browser, starting where the one chosen is, if one is.
 static ScreenResult Choose(void) {
   uint8_t count = 0;
-  const DriveItem choice = Choices(&count)[g_chosen];
+  const DriveItem choice = Choices(&count)[g_list_box.selected];
   if (choice == kDriveImage) {
     char folder[kFSMaxPath + 1];
     if (g_choice->path[0] != '\0') {
@@ -121,23 +119,11 @@ static ScreenResult Choose(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, ChoiceRow(kDriveItemCount), &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  switch (
+      ListBoxHandleKeyEvent(&g_list_box, event, ChoiceRow(kDriveItemCount))) {
+    case kListBoxActionSelect:
       return Choose();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -153,15 +139,12 @@ static ScreenResult Resume(void) {
     g_choice->present = true;
     return ScreenBack();
   }
-  g_dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
@@ -173,15 +156,13 @@ static void Draw(Y_UNUSED uint64_t now_us) {
   for (uint8_t row = 0; row < count; ++row) {
     items[row] = labels[choices[row]];
   }
-  UIPageDrawItems(
-      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+  ListBoxDrawItems(
+      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
+      true);
+  ListBoxEndDraw(&g_list_box);
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "vm_drive_config"; }
 

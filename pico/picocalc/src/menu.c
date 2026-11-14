@@ -5,9 +5,9 @@
 #include <string.h>
 
 #include "display.h"
+#include "list_box.h"
 #include "ui_box.h"
 #include "ui_browser.h"
-#include "ui_page.h"
 #include "vm_config.h"
 
 enum {
@@ -93,7 +93,7 @@ static bool g_dirty;
 static uint64_t g_status_drawn_us;
 // The box last drawn, whose size a new one has to match for nothing of it to
 // be left showing.
-static UIPageBox g_box;
+static ListBoxFrame g_box;
 // The browser, finding an image for the drive in g_drive.
 static UIBrowser g_browser;
 // Which Shift keys are held, from the controller's events.
@@ -367,8 +367,8 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
   if (!g_open || event.state == kSouthbridgeKeyReleased) {
     return kMenuActionNone;
   }
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, PageItemCount(), &g_chosen)) {
+  if (ListBoxIsMoveKey(event.key)) {
+    if (ListBoxMove(event.key, PageItemCount(), &g_chosen)) {
       g_dirty = true;
     }
     ScrollToChosen();
@@ -399,7 +399,7 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
 static void DrawStatusPage(DisplayMenu* menu) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  UIBoxPlace(menu, kUIPageWideColumns, kMenuStatusLines + 4);
+  UIBoxPlace(menu, kListBoxWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
   UIBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
   UIBoxBlankRow(&menu->text[row++], menu->columns);
@@ -417,7 +417,7 @@ static void DrawStatusPage(DisplayMenu* menu) {
 
 static void DrawDrivePage(DisplayMenu* menu) {
   const DiskImage* image = g_config.drive(g_drive);
-  char line[kUIPageNarrowColumns];
+  char line[kListBoxNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
   char name[kDiskImageNameLength + 1];
   const bool empty = DriveEmpty();
@@ -438,7 +438,7 @@ static void DrawDrivePage(DisplayMenu* menu) {
       "not using the drive.",
   };
   const char* title = kVMDriveNames[kVMDriveFD1 + g_drive];
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, title, lines, sizeof(lines) / sizeof(lines[0]), items,
       DriveItemCount(), g_chosen, false);
 }
@@ -451,7 +451,7 @@ static void DrawMainPage(DisplayMenu* menu) {
   for (uint8_t i = 0; i < count; ++i) {
     items[i] = kMainItems[shown[i]];
   }
-  UIPageDrawItems(menu, "yax86", NULL, 0, items, count, g_chosen, false);
+  ListBoxDrawItems(menu, "yax86", NULL, 0, items, count, g_chosen, false);
 }
 
 void MenuDraw(uint64_t now_us) {
@@ -474,12 +474,12 @@ void MenuDraw(uint64_t now_us) {
       DrawMainPage(menu);
       break;
     case kMenuPageReset:
-      UIPageDrawItems(
+      ListBoxDrawItems(
           menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
           kResetItemCount, g_chosen, false);
       break;
     case kMenuPagePowerOff:
-      UIPageDrawItems(
+      ListBoxDrawItems(
           menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
           kPowerOffItems, kPowerOffItemCount, g_chosen, false);
       break;
@@ -497,10 +497,10 @@ void MenuDraw(uint64_t now_us) {
   // A box of another size than the last leaves part of the last showing, so
   // the guest's screen goes under it first. If core 1 cannot take that yet,
   // the box is laid out again next time.
-  if (UIPageBoxResized(&g_box, menu) && !g_config.redraw_guest()) {
+  if (ListBoxFrameResized(&g_box, menu) && !g_config.redraw_guest()) {
     return;
   }
   DisplayEndMenu();
-  UIPageBoxDrawn(&g_box, menu);
+  ListBoxFrameDrawn(&g_box, menu);
   g_dirty = false;
 }

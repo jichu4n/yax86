@@ -5,9 +5,8 @@
 
 #include "display.h"
 #include "font_screen.h"
-#include "status_bar.h"
+#include "list_box.h"
 #include "ui_box.h"
-#include "ui_page.h"
 
 static const UIBoxItem kSettingsItems[] = {{"Font", true}};
 enum {
@@ -17,35 +16,21 @@ enum {
 extern const Screen kSettingsScreen;
 
 static Settings* g_settings;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 
 ScreenResult SettingsScreenOpen(Settings* settings) {
   g_settings = settings;
-  g_chosen = 0;
-  g_dirty = true;
+  g_list_box.selected = 0;
+  g_list_box.dirty = true;
   return ScreenOpen(&kSettingsScreen);
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, kSettingsItemCount, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kSettingsItemCount)) {
+    case kListBoxActionSelect:
       return FontScreenOpen(g_settings);
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -53,28 +38,22 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  UIPageDrawItems(
-      menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount, g_chosen,
-      true);
-  DisplayEndMenu();
-  g_dirty = false;
+  ListBoxDrawItems(
+      menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
+      g_list_box.selected, true);
+  ListBoxEndDraw(&g_list_box);
 }
 
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "settings"; }
 

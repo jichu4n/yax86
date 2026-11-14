@@ -8,11 +8,11 @@
 #include "disk_image.h"
 #include "display.h"
 #include "fs.h"
+#include "list_box.h"
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "text.h"
 #include "ui_box.h"
-#include "ui_page.h"
 #include "usb_storage.h"
 #include "usb_storage_active_screen.h"
 
@@ -29,9 +29,8 @@ static const UIBoxItem kUSBItems[kUSBItemCount] = {
 
 extern const Screen kUSBStorageScreen;
 
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The list box: the item selected, and whether it is out of date.
+static ListBox g_list_box;
 // The parent's, set once exporting has ended.
 static bool* g_exported;
 // Whether exporting has ended, which the active screen sets.
@@ -45,8 +44,8 @@ static char g_image_path[kFSMaxPath + 1];
 
 ScreenResult USBStorageScreenOpen(bool* exported) {
   g_exported = exported;
-  g_chosen = kUSBCard;
-  g_dirty = true;
+  g_list_box.selected = kUSBCard;
+  g_list_box.dirty = true;
   return ScreenOpen(&kUSBStorageScreen);
 }
 
@@ -88,27 +87,14 @@ static __noinline ScreenResult ShareImage(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the items as a press does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, kUSBItemCount, &g_chosen)) {
-      g_dirty = true;
-    }
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
-      if (g_chosen == kUSBImage) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kUSBItemCount)) {
+    case kListBoxActionSelect:
+      if (g_list_box.selected == kUSBImage) {
         return BrowserScreenOpen(
             kUIBrowserEither, "yax86", NULL, g_found_path, &g_found_size);
       }
       return ShareCard();
-    case kKeyCodeBackspace:
-    case kKeyCodeEsc:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -123,7 +109,7 @@ static ScreenResult Resume(void) {
     *g_exported = true;
     return ScreenBack();
   }
-  g_dirty = true;
+  g_list_box.dirty = true;
   if (g_found_path[0] != '\0') {
     return ShareImage();
   }
@@ -131,23 +117,17 @@ static ScreenResult Resume(void) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  UIPageDrawItems(
+  ListBoxDrawItems(
       menu, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
-      kUSBItems, kUSBItemCount, g_chosen, true);
-  DisplayEndMenu();
-  g_dirty = false;
+      kUSBItems, kUSBItemCount, g_list_box.selected, true);
+  ListBoxEndDraw(&g_list_box);
 }
 
-static const char* Hint(void) {
-  return "\x18\x19=Move  Enter=Select  Esc=Back";
-}
+static const char* Hint(void) { return kListBoxHint; }
 
 static const char* PageName(void) { return "usb_storage"; }
 

@@ -5,15 +5,13 @@
 
 #include "display.h"
 #include "floppy.h"
-#include "status_bar.h"
-#include "ui_page.h"
+#include "list_box.h"
 
 extern const Screen kBrowserScreen;
 
 static UIBrowser g_browser;
-static uint8_t g_chosen;
-// Whether what is on the panel is out of date.
-static bool g_dirty;
+// The list box: the entry selected, and whether it is out of date.
+static ListBox g_list_box;
 // Where the image chosen goes, the parent's.
 static char* g_path;
 static uint32_t* g_size;
@@ -29,29 +27,29 @@ ScreenResult BrowserScreenOpen(
   g_path = path;
   g_size = size;
   g_path[0] = '\0';
-  g_chosen = UIBrowserOpen(&g_browser, folder);
-  g_dirty = true;
+  g_list_box.selected = UIBrowserOpen(&g_browser, folder);
+  g_list_box.dirty = true;
   return ScreenOpen(&kBrowserScreen);
 }
 
 ScreenResult BrowserScreenReopen(void) {
   g_path[0] = '\0';
-  g_dirty = true;
+  g_list_box.dirty = true;
   return ScreenOpen(&kBrowserScreen);
 }
 
-// Open the chosen entry: a folder to look in, or an image, which is the
+// Open the selected entry: a folder to look in, or an image, which is the
 // parent's.
 static ScreenResult OpenEntry(void) {
-  uint8_t chosen = g_chosen;
+  uint8_t chosen = g_list_box.selected;
   char path[kFSMaxPath + 1];
   uint32_t size = 0;
   switch (UIBrowserChoose(&g_browser, &chosen, path, &size)) {
     case kUIBrowserNothing:
       return ScreenStays();
     case kUIBrowserOpened:
-      g_chosen = chosen;
-      g_dirty = true;
+      g_list_box.selected = chosen;
+      g_list_box.dirty = true;
       return ScreenStays();
     case kUIBrowserChoseImage:
       break;
@@ -62,32 +60,20 @@ static ScreenResult OpenEntry(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  // A key held down repeats, which moves through the entries as a press
-  // does.
-  if (event.state == kSouthbridgeKeyReleased) {
-    return ScreenStays();
-  }
-  StatusBarClearProblem();
-  if (UIPageIsMoveKey(event.key)) {
-    if (UIPageMove(event.key, UIBrowserCount(&g_browser), &g_chosen)) {
-      g_dirty = true;
-    }
-    UIBrowserScrollTo(&g_browser, g_chosen);
-    return ScreenStays();
-  }
-  switch (event.key) {
-    case kKeyCodeEnter:
-    case kKeyCodeSpace:
+  switch (
+      ListBoxHandleKeyEvent(&g_list_box, event, UIBrowserCount(&g_browser))) {
+    case kListBoxActionMoved:
+      UIBrowserScrollTo(&g_browser, g_list_box.selected);
+      return ScreenStays();
+    case kListBoxActionSelect:
       return OpenEntry();
-    case kKeyCodeBackspace:
-      // Up a folder, until the card's root.
-      if (!UIBrowserAtRoot(&g_browser)) {
-        g_chosen = UIBrowserUp(&g_browser);
-        g_dirty = true;
+    case kListBoxActionBack:
+      // Backspace goes up a folder, until the card's root.
+      if (event.key == kKeyCodeBackspace && !UIBrowserAtRoot(&g_browser)) {
+        g_list_box.selected = UIBrowserUp(&g_browser);
+        g_list_box.dirty = true;
         return ScreenStays();
       }
-      return ScreenBack();
-    case kKeyCodeEsc:
       return ScreenBack();
     default:
       return ScreenStays();
@@ -95,21 +81,17 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 static void Draw(Y_UNUSED uint64_t now_us) {
-  if (!g_dirty) {
-    return;
-  }
-  DisplayMenu* menu = DisplayBeginMenu();
+  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
   if (menu == NULL) {
     return;
   }
-  UIBrowserDraw(&g_browser, menu, g_chosen);
-  DisplayEndMenu();
-  g_dirty = false;
+  UIBrowserDraw(&g_browser, menu, g_list_box.selected);
+  ListBoxEndDraw(&g_list_box);
 }
 
 // Nothing opens over the browser.
 static ScreenResult Resume(void) {
-  g_dirty = true;
+  g_list_box.dirty = true;
   return ScreenStays();
 }
 
