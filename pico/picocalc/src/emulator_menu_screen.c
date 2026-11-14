@@ -66,7 +66,6 @@ ScreenResult EmulatorMenuScreenOpen(
   g_reset_confirmed = false;
   g_power_off_confirmed = false;
   g_list_box.selected = 0;
-  g_list_box.dirty = true;
   return ScreenOpen(&kEmulatorMenuScreen);
 }
 
@@ -141,14 +140,10 @@ static ScreenResult OnResume(void) {
     *g_exit = kEmulatorMenuExitPowerOff;
     return ScreenClose();
   }
-  g_list_box.dirty = true;
   return ScreenStays();
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   MainItem shown[kMainItemCount];
   const uint8_t count = ShownItems(shown);
   BoxItem items[kMainItemCount];
@@ -157,7 +152,6 @@ static bool OnDraw(DisplayBox* box) {
   }
   ListBoxDrawItems(
       box, "yax86", NULL, 0, items, count, g_list_box.selected, false);
-  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -170,4 +164,5 @@ const Screen kEmulatorMenuScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

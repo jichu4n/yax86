@@ -29,13 +29,11 @@ ScreenResult BrowserScreenOpen(
   g_size = size;
   g_path[0] = '\0';
   g_list_box.selected = FileBrowserOpen(&g_browser, folder);
-  g_list_box.dirty = true;
   return ScreenOpen(&kBrowserScreen);
 }
 
 ScreenResult BrowserScreenReopen(void) {
   g_path[0] = '\0';
-  g_list_box.dirty = true;
   return ScreenOpen(&kBrowserScreen);
 }
 
@@ -81,18 +79,8 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   FileBrowserDraw(&g_browser, box, g_list_box.selected);
-  return true;
-}
-
-// Nothing opens over the browser.
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
 }
 
 static const char* Hint(void) {
@@ -104,7 +92,7 @@ static const char* PageName(void) { return "browse"; }
 const Screen kBrowserScreen = {
     .on_key = OnKey,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

@@ -27,7 +27,6 @@ static bool* g_confirmed;
 ScreenResult USBStorageDisconnectScreenOpen(bool* confirmed) {
   g_confirmed = confirmed;
   g_list_box.selected = kStopCancel;
-  g_list_box.dirty = true;
   return ScreenOpen(&kUSBStorageDisconnectScreen);
 }
 
@@ -45,10 +44,7 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, "Unsafe disconnect",
       (const char* const[]){
@@ -56,13 +52,6 @@ static bool OnDraw(DisplayBox* box) {
           "Writes may still be pending.",
       },
       2, kStopItems, kStopItemCount, g_list_box.selected, true);
-  return true;
-}
-
-// Nothing opens over the question.
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -72,7 +61,7 @@ static const char* PageName(void) { return "usb_storage_disconnect"; }
 const Screen kUSBStorageDisconnectScreen = {
     .on_key = OnKey,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

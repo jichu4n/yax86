@@ -215,19 +215,10 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-// Back from a drive's choices, with the drive selected still.
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
-}
-
 // A new VM's name, typed in place with a cursor while it is selected, and the
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   char rows[kFormItemCount][kListBoxNarrowColumns];
   BoxItem items[kFormItemCount];
   const char* cursor =
@@ -258,7 +249,6 @@ static bool OnDraw(DisplayBox* box) {
       box, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
       g_list_box.selected, true);
-  return true;
 }
 
 static const char* Hint(void) {
@@ -274,7 +264,7 @@ static const char* PageName(void) {
 const Screen kVMConfigScreen = {
     .on_key = OnKey,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

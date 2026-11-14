@@ -21,15 +21,15 @@ extern const Screen kStatusScreen;
 static const StatusScreenLine* g_lines;
 // The list box, for whether it is out of date. It has no items to select.
 static ListBox g_list_box;
-// When the page was last drawn, in microseconds since boot. It is drawn
-// again kRefreshUs later, so that its figures stay current.
-static uint64_t g_drawn_us;
+// When the page was last marked out of date, in microseconds since boot. It
+// is marked again kRefreshUs later, so that its figures stay current.
+static uint64_t g_refreshed_us;
 
 ScreenResult StatusScreenOpen(
     const StatusScreenLine lines[kStatusScreenLines]) {
   g_lines = lines;
   g_list_box.selected = 0;
-  g_list_box.dirty = true;
+  g_refreshed_us = time_us_64();
   return ScreenOpen(&kStatusScreen);
 }
 
@@ -43,14 +43,18 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayBox* box) {
+// Mark the page out of date once a second, so that it is drawn again with
+// the figures the emulator has filled in since.
+static ScreenResult OnTick(void) {
   const uint64_t now_us = time_us_64();
-  if (now_us - g_drawn_us >= kRefreshUs) {
+  if (now_us - g_refreshed_us >= kRefreshUs) {
+    g_refreshed_us = now_us;
     g_list_box.dirty = true;
   }
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+  return ScreenStays();
+}
+
+static void OnDraw(DisplayBox* box) {
   BoxPlace(box, kListBoxWideColumns, kStatusScreenLines + 4);
   uint8_t row = 0;
   BoxEdgeRow(&box->text[row++], box->columns, true, "Status");
@@ -64,14 +68,6 @@ static bool OnDraw(DisplayBox* box) {
   }
   BoxBlankRow(&box->text[row++], box->columns);
   BoxEdgeRow(&box->text[row], box->columns, false, NULL);
-  g_drawn_us = now_us;
-  return true;
-}
-
-// Nothing opens over the page.
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
 }
 
 static const char* Hint(void) { return "Esc=Back"; }
@@ -80,8 +76,9 @@ static const char* PageName(void) { return "status"; }
 
 const Screen kStatusScreen = {
     .on_key = OnKey,
+    .on_tick = OnTick,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

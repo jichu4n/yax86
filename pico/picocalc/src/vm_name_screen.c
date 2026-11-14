@@ -47,7 +47,6 @@ ScreenResult VMNameScreenOpen(
     g_name[g_name_length++] = '2';
   }
   g_name[g_name_length] = '\0';
-  g_list_box.dirty = true;
   return ScreenOpen(&kVMNameScreen);
 }
 
@@ -131,18 +130,9 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   return ScreenStays();
 }
 
-// Nothing opens over the name.
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
-}
-
 // The name being typed, in a field marked as the item selected is, with a
 // cursor after it while there is room.
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   char title[kListBoxNarrowColumns];
   snprintf(
       title, sizeof(title), "%s %s", g_cloning ? "Clone" : "Rename",
@@ -167,7 +157,6 @@ static bool OnDraw(DisplayBox* box) {
   }
   field[kFSMaxFolderName] = '\0';
   BoxPutText(row, box->columns, 3, field, kBoxAttrSelected);
-  return true;
 }
 
 static const char* Hint(void) {
@@ -180,7 +169,7 @@ static const char* PageName(void) { return "vm_name"; }
 const Screen kVMNameScreen = {
     .on_key = OnKey,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

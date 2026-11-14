@@ -45,19 +45,23 @@ struct Screen {
   // Called every pass of the loop, for what happens with time, such as a
   // countdown. NULL for a screen that nothing happens to with time.
   ScreenResult (*on_tick)(void);
-  // Called every pass of the loop, to draw the screen into box if it has
-  // changed. Returns whether it drew, so that the loop sends box to core 1.
-  // A screen whose figures change with time reads the time itself, and
-  // draws again when they are due.
-  bool (*on_draw)(DisplayBox* box);
+  // Called to draw the screen into box, on the loop's first pass after its
+  // dirty flag was set.
+  void (*on_draw)(DisplayBox* box);
   // Called when the screen above was taken off, so that this one shows
-  // again and has to be drawn. What the screen above left can lead this one
-  // on, as a key does: back, say, once what it was opened for is done.
+  // again. What the screen above left can lead this one on, as a key does:
+  // back, say, once what it was opened for is done. NULL for a screen that
+  // only shows again.
   ScreenResult (*on_resume)(void);
   // The keys to show on the status rows' message row, as Key=Action pairs.
   const char* (*hint)(void);
   // The page showing, as the report gives it.
   const char* (*page_name)(void);
+  // The screen's dirty flag, which is set while what it shows is out of
+  // date, and cleared once it is drawn. The router sets it when the screen
+  // opens and when it shows again. The screen sets it when a key or time
+  // passing changes what it shows.
+  bool* dirty;
 };
 
 extern const Screen kScreenBackMarker;
@@ -100,14 +104,15 @@ void ScreenHandleKey(SouthbridgeKeyEvent key);
 
 // Let the screen on top act on time passing, if it does anything with time,
 // and open or take off screens as it says. Call every pass of the loop while
-// a screen shows.
+// a screen shows, as a screen that draws again with time sets its dirty
+// flag here.
 void ScreenTick(void);
 
-// Draw the screen on top into box, if it has changed, and return whether it
-// did. The loop takes box from DisplayBeginBox(), and sends it to core 1
-// with DisplayEndBox() if the screen drew. A mode's loop does the sending
-// so that it can do what it needs first, such as drawing the guest's screen
-// under a box of a new size.
+// Draw the screen on top into box if its dirty flag is set, clear the flag,
+// and return whether it drew. The loop takes box from DisplayBeginBox(), and
+// sends it to core 1 with DisplayEndBox() if the screen drew. A mode's loop
+// does the sending so that it can do what it needs first, such as drawing the
+// guest's screen under a box of a new size.
 bool ScreenDraw(DisplayBox* box);
 
 // The keys of the screen on top, for the loop to compose the status rows

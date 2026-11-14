@@ -92,7 +92,6 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* selected) {
     item = kDriveImage;
   }
   g_list_box.selected = ChoiceRow(item);
-  g_list_box.dirty = true;
   return ScreenOpen(&kVMDriveConfigScreen);
 }
 
@@ -139,14 +138,10 @@ static ScreenResult OnResume(void) {
     g_choice->present = true;
     return ScreenBack();
   }
-  g_list_box.dirty = true;
   return ScreenStays();
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   uint8_t count = 0;
   const DriveItem* choices = Choices(&count);
   const BoxItem* labels =
@@ -158,7 +153,6 @@ static bool OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
       true);
-  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -171,4 +165,5 @@ const Screen kVMDriveConfigScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

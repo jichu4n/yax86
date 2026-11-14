@@ -55,7 +55,6 @@ ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
                                              : config.drives[drive][0] != '\0');
   }
   g_list_box.selected = kVMConfigure;
-  g_list_box.dirty = true;
   return ScreenOpen(&kVMScreen);
 }
 
@@ -90,7 +89,6 @@ static ScreenResult OnResume(void) {
   if (g_vm_manager->changed) {
     return ScreenBack();
   }
-  g_list_box.dirty = true;
   return ScreenStays();
 }
 
@@ -104,10 +102,7 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 }
 
 // The images in the VM's drives, over what can be done to it.
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds
   // anything,
   // with room for any name, which the box cuts to its width.
@@ -141,7 +136,6 @@ static bool OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
       kVMItems, kVMItemCount, g_list_box.selected, true);
-  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -154,4 +148,5 @@ const Screen kVMScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

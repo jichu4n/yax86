@@ -34,7 +34,6 @@ ScreenResult VMDeleteScreenOpen(VMManager* vm_manager, uint8_t index) {
   g_vm = index;
   VMListDescribe(vm_manager->vms, &vm_manager->vms->vms[index], &g_contents);
   g_list_box.selected = kDeleteCancel;
-  g_list_box.dirty = true;
   return ScreenOpen(&kVMDeleteScreen);
 }
 
@@ -66,12 +65,6 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-// Nothing opens over the question.
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
-}
-
 // Join names into text as "A, B and C", or with fewer shown, "A, B and 2
 // more": as many of the first named as fit with the rest counted after.
 static void JoinNames(
@@ -96,10 +89,7 @@ static void JoinNames(
   }
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   const uint8_t named = g_contents.file_count < kVMListNamed
                             ? g_contents.file_count
                             : kVMListNamed;
@@ -132,7 +122,6 @@ static bool OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
       g_list_box.selected, true);
-  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -142,7 +131,7 @@ static const char* PageName(void) { return "vm_delete"; }
 const Screen kVMDeleteScreen = {
     .on_key = OnKey,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

@@ -40,7 +40,9 @@ typedef struct ListBox {
   // The index of the item selected.
   uint8_t selected;
   // Whether what is on the panel is out of date, so that the box is to be
-  // drawn again.
+  // drawn again. A key that moves the selection sets it. A screen points
+  // the router at it as its dirty flag, and the router clears it once the
+  // screen has drawn.
   bool dirty;
 } ListBox;
 
@@ -77,11 +79,6 @@ ListBoxAction ListBoxHandleKeyEvent(
 // screen is to do.
 ListBoxAction ListBoxHandleKeyCode(
     ListBox* list_box, uint8_t key, uint8_t count);
-
-// Return whether a list box is out of date, and clear its dirty flag. A
-// screen's on_draw calls this first, and draws the list box only when it
-// returns true.
-bool ListBoxTestAndClearDirty(ListBox* list_box);
 
 // Whether key moves the selection: Up, Down, Page Up or Page Down.
 bool ListBoxIsMoveKey(uint8_t key);

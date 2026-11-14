@@ -985,6 +985,16 @@ static __noinline void HandleKey(SouthbridgeKeyEvent key, bool running) {
   }
 }
 
+// Let the screen showing act on time passing, such as the status page
+// drawing its figures again, and close the menu if that closed every screen.
+// Kept out of line, as HandleKey() is.
+static __noinline void TickMenu(void) {
+  ScreenTick();
+  if (!ScreenIsOpen()) {
+    CloseMenu();
+  }
+}
+
 // Whether a box over the guest's screen is one of another size than the one
 // shown, so that the guest's screen has to be drawn under it first.
 static bool BoxResized(const DisplayBox* box) {
@@ -1002,9 +1012,8 @@ static __noinline void DrawMenu(void) {
   if (box == NULL) {
     return;
   }
-  // The status page reads its lines as it draws, every second while it
-  // shows. Filling them in costs nothing that matters while the VM is
-  // paused.
+  // The status page draws its lines every second while it shows. Filling them
+  // in costs nothing that matters while the VM is paused.
   DescribeStatus(g_status_lines);
   if (ScreenDraw(box)) {
     g_box_pending = true;
@@ -1103,6 +1112,9 @@ static void RunVM(bool vm_ready) {
     if (screen_on && time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       UpdateStatusRows();
+    }
+    if (ScreenIsOpen()) {
+      TickMenu();
     }
     if (screen_on && ScreenIsOpen()) {
       DrawMenu();

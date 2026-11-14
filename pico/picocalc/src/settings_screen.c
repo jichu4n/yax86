@@ -22,7 +22,6 @@ static ListBox g_list_box;
 ScreenResult SettingsScreenOpen(Settings* settings) {
   g_settings = settings;
   g_list_box.selected = 0;
-  g_list_box.dirty = true;
   return ScreenOpen(&kSettingsScreen);
 }
 
@@ -37,19 +36,10 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
       g_list_box.selected, true);
-  return true;
-}
-
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -59,7 +49,7 @@ static const char* PageName(void) { return "settings"; }
 const Screen kSettingsScreen = {
     .on_key = OnKey,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };
