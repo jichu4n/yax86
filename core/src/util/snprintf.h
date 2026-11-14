@@ -92,7 +92,8 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   if (should_pad_zero) {
     if (is_negative) {
       num_chars += YSNPrintFPutC(buffer, size, pos, '-');
-      is_negative = 0;  // Sign already handled
+      // The sign is written, so it is not written again below.
+      is_negative = 0;
     }
     while (pad-- > 0) {
       num_chars += YSNPrintFPutC(buffer, size, pos, '0');
@@ -139,9 +140,10 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
       format++;
     }
 
-    // Length modifiers
-    int length_l = 0;      // 0: int, 1: long, 2: long long
-    int has_length_z = 0;  // size_t
+    // The length modifier. length_l counts the l's, 0 for an int, 1 for a long
+    // and 2 for a long long. has_length_z is set by a z, for a size_t.
+    int length_l = 0;
+    int has_length_z = 0;
     if (*format == 'l') {
       length_l++;
       format++;

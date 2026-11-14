@@ -210,12 +210,19 @@ name it defines is taken from the host. All of them are in a `Y` namespace:
   and `Max` / `max_` / `MAX_`**: `Y_VIDEO_NUM_MODES`, `YCPUNumBytes`,
   `num_floppy_drives`, `kNumFloppyDrives`, and `Y_LOG_MAX_MODULES`,
   `max_pairs`, `kFileListMaxEntries`. Measurements in a unit (`*_SIZE`,
-  `*_BYTES`, `columns`, `rows`, `cycles`) and hardware register names
-  (`sector_count`, `base_count`) keep their names.
-- **Booleans and predicate functions lead with a verb**: `is_`, `has_`, `was_`,
-  `did_`, `should_`, `can_`, `YVideoIsBlinking()`, `SpeakerIsBeeping()`.
-  Functions that perform an action and return whether it succeeded keep their
-  action verb, and logfmt keys stay plain unless ambiguous.
+  `*_BYTES`, `columns`, `rows`, `cycles`), hardware register names
+  (`sector_count`, `base_count`), the shift and rotate operand Intel calls
+  `count`, and `YStaticVector`'s `length` and `max_length` keep their names.
+- **Booleans and predicate functions lead with a verb**: `is_` for a state,
+  `was_` or `did_` for something that happened, and `has_`, `should_`,
+  `can_`, `does_` or `uses_` where those read better: `is_present`,
+  `was_tc_received`, `uses_carry`, `YVideoIsCursorBlinkOn()`,
+  `YPITDoesModeOscillate()`, `ListBoxIsKeyPress()`. A function that performs
+  an action and returns whether it worked keeps its action verb, such as
+  `YLogfmtParseHexDigit()`. A 1-bit value that is data rather than a
+  condition keeps a plain name, such as an ALU's `op1_sign` or
+  `YLogField.bool_value`, and so do hardware pin names such as `clock_low`.
+  Logfmt keys stay plain unless they are unclear.
 
 ### Visibility
 

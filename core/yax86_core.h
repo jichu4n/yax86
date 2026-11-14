@@ -211,7 +211,8 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
   if (should_pad_zero) {
     if (is_negative) {
       num_chars += YSNPrintFPutC(buffer, size, pos, '-');
-      is_negative = 0;  // Sign already handled
+      // The sign is written, so it is not written again below.
+      is_negative = 0;
     }
     while (pad-- > 0) {
       num_chars += YSNPrintFPutC(buffer, size, pos, '0');
@@ -258,9 +259,10 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
       format++;
     }
 
-    // Length modifiers
-    int length_l = 0;      // 0: int, 1: long, 2: long long
-    int has_length_z = 0;  // size_t
+    // The length modifier. length_l counts the l's, 0 for an int, 1 for a long
+    // and 2 for a long long. has_length_z is set by a z, for a size_t.
+    int length_l = 0;
+    int has_length_z = 0;
     if (*format == 'l') {
       length_l++;
       format++;
@@ -5112,11 +5114,11 @@ typedef void (*YCPUSetFlagsAfterAddFn)(
 // Common logic for ADD, ADC, and INC instructions.
 Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteAddCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
-    YCPUOperandValue src_value, bool use_carry,
+    YCPUOperandValue src_value, bool uses_carry,
     YCPUSetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = YCPUFromOperand(dest);
   uint32_t raw_src_value = YCPUFromOperandValue(src_value);
-  bool should_carry = use_carry && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
+  bool should_carry = uses_carry && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   uint32_t result = raw_dest_value + raw_src_value + (should_carry ? 1 : 0);
   YCPUWriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
@@ -5129,7 +5131,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteAdd(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteAddCommon(
-      ctx, dest, src_value, /* use_carry */ false, YCPUSetFlagsAfterAdd);
+      ctx, dest, src_value, /* uses_carry */ false, YCPUSetFlagsAfterAdd);
 }
 
 // ADD r/m8, r8
@@ -5169,7 +5171,7 @@ Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteAddWithCarry(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteAddCommon(
-      ctx, dest, src_value, /* use_carry */ true, YCPUSetFlagsAfterAdd);
+      ctx, dest, src_value, /* uses_carry */ true, YCPUSetFlagsAfterAdd);
 }
 
 // ADC r/m8, r8
@@ -5210,7 +5212,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteInc(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperandValue src_value = 1;
   return YCPUExecuteAddCommon(
-      ctx, dest, src_value, /* use_carry */ false, YCPUSetFlagsAfterInc);
+      ctx, dest, src_value, /* uses_carry */ false, YCPUSetFlagsAfterInc);
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
@@ -5296,11 +5298,11 @@ typedef void (*YCPUSetFlagsAfterSubFn)(
 // Common logic for SUB, SBB, and DEC instructions.
 Y_FILE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteSubCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
-    YCPUOperandValue src_value, bool use_borrow,
+    YCPUOperandValue src_value, bool uses_borrow,
     YCPUSetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = YCPUFromOperand(dest);
   uint32_t raw_src_value = YCPUFromOperandValue(src_value);
-  bool should_borrow = use_borrow && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
+  bool should_borrow = uses_borrow && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   uint32_t result = raw_dest_value - raw_src_value - (should_borrow ? 1 : 0);
   YCPUWriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
@@ -5313,7 +5315,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSub(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* use_borrow */ false, YCPUSetFlagsAfterSub);
+      ctx, dest, src_value, /* uses_borrow */ false, YCPUSetFlagsAfterSub);
 }
 
 // SUB r/m8, r8
@@ -5353,7 +5355,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSubWithBorrow(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* use_borrow */ true, YCPUSetFlagsAfterSub);
+      ctx, dest, src_value, /* uses_borrow */ true, YCPUSetFlagsAfterSub);
 }
 
 // SBB r/m8, r8
@@ -5395,7 +5397,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDec(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperandValue src_value = 1;
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* use_borrow */ false, YCPUSetFlagsAfterDec);
+      ctx, dest, src_value, /* uses_borrow */ false, YCPUSetFlagsAfterDec);
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
@@ -10926,7 +10928,9 @@ typedef struct YFDCState {
     // Command parameters governing the transfer.
     uint8_t sector_size_code;  // N
     uint8_t eot;               // End of Track sector number
-    bool is_multi_track;       // MT bit set (read/write across heads)
+    // Whether the command's MT bit is set, so that the transfer goes on from
+    // head 0 to head 1 of the same cylinder.
+    bool is_multi_track;
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.
@@ -10934,8 +10938,12 @@ typedef struct YFDCState {
     // ID bytes taken so far.
     uint16_t sector_byte_index;
     uint8_t data_register;  // Buffer for the byte currently being transferred.
-    bool is_dma_request_active;  // DREQ is asserted, waiting for DMA access.
-    bool was_tc_received;  // TC (Terminal Count) signal received from DMA.
+    // Whether DREQ is asserted, so the controller is waiting for the DMA
+    // controller to move a byte.
+    bool is_dma_request_active;
+    // Whether the DMA controller has signalled TC (Terminal Count), the end of
+    // the transfer it was programmed for.
+    bool was_tc_received;
   } transfer;
 } YFDCState;
 

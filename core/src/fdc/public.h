@@ -282,7 +282,9 @@ typedef struct YFDCState {
     // Command parameters governing the transfer.
     uint8_t sector_size_code;  // N
     uint8_t eot;               // End of Track sector number
-    bool is_multi_track;       // MT bit set (read/write across heads)
+    // Whether the command's MT bit is set, so that the transfer goes on from
+    // head 0 to head 1 of the same cylinder.
+    bool is_multi_track;
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.
@@ -290,8 +292,12 @@ typedef struct YFDCState {
     // ID bytes taken so far.
     uint16_t sector_byte_index;
     uint8_t data_register;  // Buffer for the byte currently being transferred.
-    bool is_dma_request_active;  // DREQ is asserted, waiting for DMA access.
-    bool was_tc_received;  // TC (Terminal Count) signal received from DMA.
+    // Whether DREQ is asserted, so the controller is waiting for the DMA
+    // controller to move a byte.
+    bool is_dma_request_active;
+    // Whether the DMA controller has signalled TC (Terminal Count), the end of
+    // the transfer it was programmed for.
+    bool was_tc_received;
   } transfer;
 } YFDCState;
 

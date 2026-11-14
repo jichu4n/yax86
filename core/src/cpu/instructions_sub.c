@@ -61,11 +61,11 @@ typedef void (*YCPUSetFlagsAfterSubFn)(
 // Common logic for SUB, SBB, and DEC instructions.
 Y_FILE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteSubCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
-    YCPUOperandValue src_value, bool use_borrow,
+    YCPUOperandValue src_value, bool uses_borrow,
     YCPUSetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = YCPUFromOperand(dest);
   uint32_t raw_src_value = YCPUFromOperandValue(src_value);
-  bool should_borrow = use_borrow && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
+  bool should_borrow = uses_borrow && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   uint32_t result = raw_dest_value - raw_src_value - (should_borrow ? 1 : 0);
   YCPUWriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
@@ -78,7 +78,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSub(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* use_borrow */ false, YCPUSetFlagsAfterSub);
+      ctx, dest, src_value, /* uses_borrow */ false, YCPUSetFlagsAfterSub);
 }
 
 // SUB r/m8, r8
@@ -118,7 +118,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSubWithBorrow(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* use_borrow */ true, YCPUSetFlagsAfterSub);
+      ctx, dest, src_value, /* uses_borrow */ true, YCPUSetFlagsAfterSub);
 }
 
 // SBB r/m8, r8
@@ -160,7 +160,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDec(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperandValue src_value = 1;
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* use_borrow */ false, YCPUSetFlagsAfterDec);
+      ctx, dest, src_value, /* uses_borrow */ false, YCPUSetFlagsAfterDec);
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
