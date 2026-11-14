@@ -62,7 +62,7 @@ enum {
   // them again: 512 entries, 12KB. More entries help programs whose hot code
   // is large, such as compilers and interpreters, and make little difference
   // to booting DOS. The measurements are in src/cpu/AGENTS.md.
-  Y_PLATFORM_DECODE_CACHE_ENTRIES = 512,
+  Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES = 512,
 
   // The memory map is indexed by page so that a lookup is a load rather than a
   // walk. 4KB pages over the 8086's 1MB address space, which is 256 bytes of
@@ -133,17 +133,17 @@ typedef struct YPlatformPagedMemory {
   //   - page: the page's index in pages, counted from the start of the
   //     region, not a guest address. Its first byte is at guest address
   //     direct_memory_size + (page << page_shift).
-  //   - write: true for a write, false for a read or an instruction fetch.
+  //   - is_write: true for a write, false for a read or an instruction fetch.
   //
   // What it must do: set pages[page] so that it allows the access, that is
-  // RESIDENT, plus DIRTY if write is true. Typically that means choosing a
+  // RESIDENT, plus DIRTY if is_write is true. Typically that means choosing a
   // frame, writing back the page already in it if that one is DIRTY, loading
   // this page into it and setting this page's entry. A page that is still in
   // its frame, with RESIDENT cleared to sample use, needs only RESIDENT set
   // again. The access then proceeds in the frame. If the entry still refuses
   // it, the read gives 0xFF and the write is dropped, as for unmapped memory.
   void (*page_fault_fn)(
-      struct YPlatformPagedMemory* memory, uint32_t page, bool write);
+      struct YPlatformPagedMemory* memory, uint32_t page, bool is_write);
 } YPlatformPagedMemory;
 
 // A memory map entry for a region in logical address space. Memory regions
@@ -371,7 +371,7 @@ typedef struct YPlatformConfig {
 
   // The number of floppy drives, 1 to 4, which the PPI's DIP switches report
   // to the BIOS. 0, the default, is taken as 1.
-  uint8_t floppy_drives;
+  uint8_t num_floppy_drives;
 
   // Conventional memory that the CPU reads and writes directly, through its
   // direct data window: direct_memory_size bytes from address 0. Required
@@ -472,7 +472,7 @@ typedef struct YPlatformState {
   YCPUState cpu;
   // Storage for the CPU's decode cache, handed to it through
   // YCPUConfig.decode_cache.
-  YCPUDecodeCacheEntry cpu_decode_cache[Y_PLATFORM_DECODE_CACHE_ENTRIES];
+  YCPUDecodeCacheEntry cpu_decode_cache[Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES];
 
   // PIC state.
   YPICState pic;
@@ -622,7 +622,8 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
 // CPU's interrupt path as well as a flag, and a host may want it only once DOS
 // has reached its prompt, which leaves everything before that exactly as it
 // would be without it.
-Y_PUBLIC void YPlatformSetDOSIdleSkip(YPlatformState* platform, bool enable);
+Y_PUBLIC void YPlatformSetDOSIdleSkip(
+    YPlatformState* platform, bool is_enabled);
 
 // Bring every device up to date with the cycles that have run so far.
 //

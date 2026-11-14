@@ -154,7 +154,7 @@ static void TrackModifiers(uint8_t scancode) {
 }
 
 uint8_t KeymapTranslate(
-    SouthbridgeKeyEvent event, uint8_t scancodes[kKeymapMaxNumScancodes]) {
+    SouthbridgeKeyEvent event, uint8_t scancodes[kKeymapMaxScancodes]) {
   const KeymapEntry entry = kKeymap[event.key];
   if (entry.scancode == 0) {
     return 0;

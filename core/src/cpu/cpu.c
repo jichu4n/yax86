@@ -390,7 +390,7 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu) {
     return;
   }
   for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
-    cache[i].valid = false;
+    cache[i].is_valid = false;
   }
 }
 
@@ -403,7 +403,7 @@ Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
   }
   for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
     if ((cache[i].address >> Y_CPU_CODE_PAGE_SHIFT) == page) {
-      cache[i].valid = false;
+      cache[i].is_valid = false;
     }
   }
 }
@@ -412,7 +412,7 @@ Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
 // current. The generation is passed in because both callers have it already.
 Y_FILE_PRIVATE Y_ALWAYS_INLINE bool YCPUIsDecodeCacheHit(
     const YCPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
-  return entry->valid && entry->address == address &&
+  return entry->is_valid && entry->address == address &&
          entry->generation == generation;
 }
 
@@ -461,7 +461,7 @@ YCPUFetchNextInstructionCached(
     }
     // A decode that fails partway leaves the entry holding whatever it got to,
     // so the entry disowns its contents before the decode rather than after.
-    target->valid = false;
+    target->is_valid = false;
   }
 
   *entry = target;
@@ -488,7 +488,7 @@ YCPUFetchNextInstructionCached(
     }
     target->address = address;
     target->generation = generation;
-    target->valid = true;
+    target->is_valid = true;
   }
   return Y_CPU_FETCH_SUCCESS;
 }
@@ -690,7 +690,7 @@ Y_PUBLIC Y_HOT YCPUTickResult
 YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
-  bool executed_instruction = false;
+  bool did_execute_instruction = false;
 
   // A halted CPU still consumes time - it is sitting in a wait state, not
   // stopped - so a tick that runs no instruction still has to advance the
@@ -701,7 +701,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // The trap flag is sampled before the instruction runs, not after. An
   // instruction that sets TF - POPF or IRET - must not trap on itself, and one
   // that clears TF still traps once for the instruction it was set during.
-  const bool trap_flag_was_set = YCPUGetFlag(cpu, Y_CPU_TF);
+  const bool was_trap_flag_set = YCPUGetFlag(cpu, Y_CPU_TF);
 
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
@@ -724,13 +724,13 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
 
     // A successful fetch is always followed by an instruction: the only way
     // out of the loop below without running one is a return.
-    executed_instruction = true;
+    did_execute_instruction = true;
 
     // A tick that has to trap runs exactly one instruction: TF was set when it
     // started, so the single-step interrupt belongs to the instruction about
     // to run, and one that clears TF still owes that trap.
     uint8_t remaining =
-        trap_flag_was_set ? 1 : (uint8_t)Y_CPU_MAX_INSTRUCTIONS_PER_TICK;
+        was_trap_flag_set ? 1 : (uint8_t)Y_CPU_MAX_INSTRUCTIONS_PER_TICK;
 
     for (;;) {
       YCPUInstruction* const instruction = &entry->instruction;
@@ -760,9 +760,9 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
         return Y_CPU_TICK_INVALID;
       }
       // The carry is a branch not taken until 2^32 instructions have run;
-      // see instructions_retired_low for why the count is split.
-      if (++cpu->instructions_retired_low == 0) {
-        ++cpu->instructions_retired_high;
+      // see num_instructions_retired_low for why the count is split.
+      if (++cpu->num_instructions_retired_low == 0) {
+        ++cpu->num_instructions_retired_high;
       }
 
       // Step 3: Carry on into the next instruction where nothing needs the
@@ -787,7 +787,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // Step 4: Handle a pending interrupt. This runs even while halted, because
   // an interrupt is the only thing that can clear the halted state -
   // YCPUExecutePendingInterrupt() resets is_halted when it dispatches one.
-  const bool dispatched_interrupt = YCPUExecutePendingInterrupt(cpu);
+  const bool did_dispatch_interrupt = YCPUExecutePendingInterrupt(cpu);
 
   // Step 5: The trap flag raises a single-step interrupt after an instruction
   // executes, so a halted CPU must not trap - otherwise the trap would wake it
@@ -796,7 +796,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // Single-stepping is the lowest priority of the interrupt sources recognized
   // at an instruction boundary, so an interrupt dispatched above takes its
   // place rather than both firing.
-  if (executed_instruction && trap_flag_was_set && !dispatched_interrupt) {
+  if (did_execute_instruction && was_trap_flag_set && !did_dispatch_interrupt) {
     YCPURaiseInternalInterrupt(cpu, Y_CPU_INTERRUPT_SINGLE_STEP);
     YCPUExecutePendingInterrupt(cpu);
   }
@@ -805,5 +805,5 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // that executes HLT ran an instruction, so it reports Y_CPU_TICK_EXECUTED
   // even though the CPU is now halted; the ticks that follow report
   // Y_CPU_TICK_HALTED.
-  return executed_instruction ? Y_CPU_TICK_EXECUTED : Y_CPU_TICK_HALTED;
+  return did_execute_instruction ? Y_CPU_TICK_EXECUTED : Y_CPU_TICK_HALTED;
 }

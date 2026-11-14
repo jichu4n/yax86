@@ -21,7 +21,7 @@ TEST_F(PortCTest, ReadSwitches1to4) {
 
   // Test Case 1: 1 FDD, no FPU, 256KB RAM
   ppi_.config.num_floppy_drives = 1;
-  ppi_.config.fpu_installed = false;
+  ppi_.config.is_fpu_installed = false;
   ppi_.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // Expected: 0b00001101
   // Bit 0 (FDD): 1
@@ -31,7 +31,7 @@ TEST_F(PortCTest, ReadSwitches1to4) {
 
   // Test Case 2: 0 FDD, FPU, 64KB RAM
   ppi_.config.num_floppy_drives = 0;
-  ppi_.config.fpu_installed = true;
+  ppi_.config.is_fpu_installed = true;
   ppi_.config.memory_size = Y_PPI_MEMORY_SIZE_64KB;
   // Expected: 0b00000010
   // Bit 0 (FDD): 0 (num_floppy_drives is not > 0)
@@ -41,7 +41,7 @@ TEST_F(PortCTest, ReadSwitches1to4) {
 
   // Test Case 3: 4 FDDs, FPU, 192KB RAM
   ppi_.config.num_floppy_drives = 4;
-  ppi_.config.fpu_installed = true;
+  ppi_.config.is_fpu_installed = true;
   ppi_.config.memory_size = Y_PPI_MEMORY_SIZE_192KB;
   // Expected: 0b00001011
   // Bit 0 (FDD): 1

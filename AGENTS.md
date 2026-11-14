@@ -206,6 +206,23 @@ name it defines is taken from the host. All of them are in a `Y` namespace:
   file-scope variables, CamelCase functions led by the host's module word
   (`DisplayPutPixels()`), and plain `static` or nothing for visibility. A host
   must never take the `Y` prefix: a later core name could collide with it.
+- **Counts use `Num` / `num_` / `NUM_`, and bounds use `Min` / `min_` / `MIN_`
+  and `Max` / `max_` / `MAX_`**: `Y_VIDEO_NUM_MODES`, `YCPUNumBytes`,
+  `num_floppy_drives`, `kNumFloppyDrives`, and `Y_LOG_MAX_MODULES`,
+  `max_pairs`, `kFileListMaxEntries`. Measurements in a unit (`*_SIZE`,
+  `*_BYTES`, `columns`, `rows`, `cycles`), hardware register names
+  (`sector_count`, `base_count`), the shift and rotate operand Intel calls
+  `count`, and `YStaticVector`'s `length` and `max_length` keep their names.
+- **Booleans and predicate functions lead with a verb**: `is_` for a state,
+  `was_` or `did_` for something that happened, and `has_`, `should_`,
+  `can_`, `does_` or `uses_` where those read better: `is_present`,
+  `was_tc_received`, `uses_carry`, `YVideoIsCursorBlinkOn()`,
+  `YPITDoesModeOscillate()`, `ListBoxIsKeyPress()`. A function that performs
+  an action and returns whether it worked keeps its action verb, such as
+  `YLogfmtParseHexDigit()`. A 1-bit value that is data rather than a
+  condition keeps a plain name, such as an ALU's `op1_sign` or
+  `YLogField.bool_value`, and so do hardware pin names such as `clock_low`.
+  Logfmt keys stay plain unless they are unclear.
 
 ### Visibility
 

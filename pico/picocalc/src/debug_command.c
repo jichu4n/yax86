@@ -50,8 +50,7 @@ static void ReplyToBadLine(const char* error) {
 // Make a command of a whole line, answering it here if it is not one.
 static bool ParseLine(DebugCommand* command) {
   if (!YLogfmtParse(
-          g_line, command->pairs, kDebugCommandMaxNumPairs,
-          &command->num_pairs)) {
+          g_line, command->pairs, kDebugCommandMaxPairs, &command->num_pairs)) {
     ReplyToBadLine("malformed_line");
     return false;
   }

@@ -65,7 +65,7 @@ TEST_F(PlatformVideoTest, RegistersCGA) {
 // YPlatformInit() replaces the video config wholesale, so a font only reaches
 // the adapter if the platform passes it on.
 TEST_F(PlatformVideoTest, PassesTheTextFontToTheAdapter) {
-  static const uint8_t kGlyphs[Y_VIDEO_TEXT_FONT_GLYPHS * 10] = {0};
+  static const uint8_t kGlyphs[Y_VIDEO_TEXT_FONT_NUM_GLYPHS * 10] = {0};
   platform_.config.video_text_font.glyphs = kGlyphs;
   platform_.config.video_text_font.width = 4;
   platform_.config.video_text_font.height = 10;

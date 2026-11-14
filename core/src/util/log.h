@@ -120,7 +120,7 @@ typedef struct YLogField {
   const char* key;
   YLogFieldType type;
   // How many hex digits to write at least, for Y_LOG_FIELD_HEX.
-  uint8_t digits;
+  uint8_t num_digits;
   union {
     uint64_t unsigned_value;
     int64_t signed_value;
@@ -133,7 +133,7 @@ Y_PUBLIC_HEADER inline YLogField YLogUInt(const char* key, uint64_t value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_UINT;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.unsigned_value = value;
   return field;
 }
@@ -142,18 +142,18 @@ Y_PUBLIC_HEADER inline YLogField YLogInt(const char* key, int64_t value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_INT;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.signed_value = value;
   return field;
 }
 
-// A number in hexadecimal, with at least digits digits: written 0x0201.
+// A number in hexadecimal, with at least num_digits digits: written 0x0201.
 Y_PUBLIC_HEADER inline YLogField YLogHex(
-    const char* key, uint64_t value, uint8_t digits) {
+    const char* key, uint64_t value, uint8_t num_digits) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_HEX;
-  field.digits = digits;
+  field.num_digits = num_digits;
   field.value.unsigned_value = value;
   return field;
 }
@@ -162,7 +162,7 @@ Y_PUBLIC_HEADER inline YLogField YLogBool(const char* key, bool value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_BOOL;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.bool_value = value;
   return field;
 }
@@ -172,7 +172,7 @@ Y_PUBLIC_HEADER inline YLogField YLogString(
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_STRING;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.string_value = value;
   return field;
 }
@@ -181,7 +181,7 @@ Y_PUBLIC_HEADER inline YLogField YLogEnd(void) {
   YLogField field;
   field.key = NULL;
   field.type = Y_LOG_FIELD_END;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.unsigned_value = 0;
   return field;
 }
@@ -209,7 +209,7 @@ Y_PUBLIC_HEADER inline void YLogAppendField(
       break;
     case Y_LOG_FIELD_HEX:
       YLogfmtLineAddHex(
-          line, field->key, field->value.unsigned_value, field->digits);
+          line, field->key, field->value.unsigned_value, field->num_digits);
       break;
     case Y_LOG_FIELD_BOOL:
       YLogfmtLineAddBool(line, field->key, field->value.bool_value);

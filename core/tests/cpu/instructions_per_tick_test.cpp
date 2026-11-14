@@ -100,16 +100,16 @@ class InstructionsPerTickTest : public ::testing::Test {
     cpu_.registers[Y_CPU_SP] = 0xFFFE;
     cpu_.is_halted = false;
     cpu_.flags = Y_CPU_INITIAL_FLAGS;
-    cpu_.instructions_retired_low = 0;
-    cpu_.instructions_retired_high = 0;
+    cpu_.num_instructions_retired_low = 0;
+    cpu_.num_instructions_retired_high = 0;
   }
 
   // Runs one tick with a budget too large to be what ends the run, and returns
   // how many instructions it retired.
   uint64_t RunOneTick() {
-    const uint64_t before = YCPUInstructionsRetired(&cpu_);
+    const uint64_t before = YCPUNumInstructionsRetired(&cpu_);
     YCPUTick(&cpu_, UINT16_MAX);
-    return YCPUInstructionsRetired(&cpu_) - before;
+    return YCPUNumInstructionsRetired(&cpu_) - before;
   }
 
   static uint8_t TestReadMemoryByte(YCPUState* cpu, uint32_t address) {
@@ -173,11 +173,11 @@ TEST_F(InstructionsPerTickTest, ARunRetiresSeveralInstructionsInOneTick) {
 TEST_F(InstructionsPerTickTest, TheRetiredCountCarriesIntoItsHighHalf) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(2);
-  cpu_.instructions_retired_low = UINT32_MAX;
+  cpu_.num_instructions_retired_low = UINT32_MAX;
 
   EXPECT_EQ(RunOneTick(), 2u);
-  EXPECT_EQ(YCPUInstructionsRetired(&cpu_), (uint64_t)UINT32_MAX + 2u);
-  EXPECT_EQ(cpu_.instructions_retired_high, 1u);
+  EXPECT_EQ(YCPUNumInstructionsRetired(&cpu_), (uint64_t)UINT32_MAX + 2u);
+  EXPECT_EQ(cpu_.num_instructions_retired_high, 1u);
 }
 
 // A run that cannot finish still retired everything up to the instruction that
@@ -196,7 +196,7 @@ TEST_F(
   Reset();
 
   EXPECT_EQ(YCPUTick(&cpu_, UINT16_MAX), Y_CPU_TICK_INVALID);
-  EXPECT_EQ(YCPUInstructionsRetired(&cpu_), 2u);
+  EXPECT_EQ(YCPUNumInstructionsRetired(&cpu_), 2u);
   EXPECT_EQ(cpu_.registers[Y_CPU_AX], 2u);
 }
 
@@ -238,9 +238,9 @@ TEST_F(InstructionsPerTickTest, NoBudgetRunsOneInstructionPerTick) {
   Load(kProgramAddress, {kOpIncAx, kOpIncAx, kOpIncAx, kOpHlt});
   WarmCache(3);
 
-  const uint64_t before = YCPUInstructionsRetired(&cpu_);
+  const uint64_t before = YCPUNumInstructionsRetired(&cpu_);
   YCPUTick(&cpu_, 0);
-  EXPECT_EQ(YCPUInstructionsRetired(&cpu_) - before, 1u);
+  EXPECT_EQ(YCPUNumInstructionsRetired(&cpu_) - before, 1u);
 }
 
 // A run stops where the host would have taken control back anyway, which is
@@ -258,7 +258,7 @@ TEST_F(InstructionsPerTickTest, ARunStopsAtTheBudget) {
   // Two instructions' worth of budget is spent by two instructions, so the
   // third does not start.
   YCPUTick(&cpu_, (uint16_t)(2 * one_instruction));
-  EXPECT_EQ(YCPUInstructionsRetired(&cpu_), 2u);
+  EXPECT_EQ(YCPUNumInstructionsRetired(&cpu_), 2u);
   EXPECT_EQ(cpu_.cycles_this_tick, 2 * one_instruction);
 }
 

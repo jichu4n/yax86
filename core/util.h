@@ -161,7 +161,7 @@ YSNPrintFPutC(char* buffer, size_t size, size_t* pos, char c) {
 
 Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
     char* buffer, size_t size, size_t* pos, const char* s, int width) {
-  size_t count = 0;
+  size_t num_chars = 0;
   size_t len = 0;
   const char* tmp = s;
   while (*tmp++) len++;
@@ -171,21 +171,21 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
 
   // Strings always use space padding (zero flag is ignored per standard)
   while (pad-- > 0) {
-    count += YSNPrintFPutC(buffer, size, pos, ' ');
+    num_chars += YSNPrintFPutC(buffer, size, pos, ' ');
   }
 
   while (*s) {
-    count += YSNPrintFPutC(buffer, size, pos, *s++);
+    num_chars += YSNPrintFPutC(buffer, size, pos, *s++);
   }
-  return count;
+  return num_chars;
 }
 
 Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
-    int uppercase, int width, int pad_zero, int negative) {
+    int is_uppercase, int width, int should_pad_zero, int is_negative) {
   char temp[64];
   int i = 0;
-  size_t count = 0;
+  size_t num_chars = 0;
 
   if (value == 0) {
     temp[i++] = '0';
@@ -195,41 +195,42 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
       if (digit < 10) {
         temp[i++] = digit + '0';
       } else {
-        temp[i++] = digit - 10 + (uppercase ? 'A' : 'a');
+        temp[i++] = digit - 10 + (is_uppercase ? 'A' : 'a');
       }
       value /= base;
     }
   }
 
   int len = i;
-  if (negative) len++;
+  if (is_negative) len++;
 
   int pad = width - len;
   if (pad < 0) pad = 0;
 
   // If zero padding is requested, sign should be printed before padding
-  if (pad_zero) {
-    if (negative) {
-      count += YSNPrintFPutC(buffer, size, pos, '-');
-      negative = 0; // Sign already handled
+  if (should_pad_zero) {
+    if (is_negative) {
+      num_chars += YSNPrintFPutC(buffer, size, pos, '-');
+      // The sign is written, so it is not written again below.
+      is_negative = 0;
     }
     while (pad-- > 0) {
-      count += YSNPrintFPutC(buffer, size, pos, '0');
+      num_chars += YSNPrintFPutC(buffer, size, pos, '0');
     }
   } else {
     while (pad-- > 0) {
-      count += YSNPrintFPutC(buffer, size, pos, ' ');
+      num_chars += YSNPrintFPutC(buffer, size, pos, ' ');
     }
   }
 
-  if (negative) {
-    count += YSNPrintFPutC(buffer, size, pos, '-');
+  if (is_negative) {
+    num_chars += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
   while (i > 0) {
-    count += YSNPrintFPutC(buffer, size, pos, temp[--i]);
+    num_chars += YSNPrintFPutC(buffer, size, pos, temp[--i]);
   }
-  return count;
+  return num_chars;
 }
 
 Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
@@ -245,9 +246,9 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     format++;  // Skip '%'
 
     // Flags
-    int pad_zero = 0;
+    int should_pad_zero = 0;
     if (*format == '0') {
-      pad_zero = 1;
+      should_pad_zero = 1;
       format++;
     }
 
@@ -258,9 +259,10 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
       format++;
     }
 
-    // Length modifiers
-    int length_l = 0;  // 0: int, 1: long, 2: long long
-    int length_z = 0;  // size_t
+    // The length modifier. length_l counts the l's, 0 for an int, 1 for a long
+    // and 2 for a long long. has_length_z is set by a z, for a size_t.
+    int length_l = 0;
+    int has_length_z = 0;
     if (*format == 'l') {
       length_l++;
       format++;
@@ -269,7 +271,7 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
         format++;
       }
     } else if (*format == 'z') {
-      length_z = 1;
+      has_length_z = 1;
       format++;
     }
 
@@ -294,7 +296,7 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
       case 'd':
       case 'i': {
         long long val;
-        if (length_z)
+        if (has_length_z)
           // Treat size_t as signed (ssize_t) for %d, or just cast to compatible signed type.
           // Since we don't have ssize_t here explicitly, we assume the user passes a signed type
           // compatible with size_t or we cast.
@@ -306,10 +308,10 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
         else
           val = va_arg(args, int);
 
-        int negative = 0;
+        int is_negative = 0;
         unsigned long long uval;
         if (val < 0) {
-          negative = 1;
+          is_negative = 1;
           // Negated as unsigned: the magnitude of the most negative value
           // does not fit in a long long.
           uval = 0ULL - (unsigned long long)val;
@@ -317,7 +319,8 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
           uval = (unsigned long long)val;
         }
         YSNPrintFPutUI(
-            buffer, size, &pos, uval, 10, 0, width, pad_zero, negative);
+            buffer, size, &pos, uval, 10, 0, width, should_pad_zero,
+            is_negative);
         break;
       }
       case 'u':
@@ -325,16 +328,16 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
       case 'X': {
         unsigned long long val;
         int base = 10;
-        int uppercase = 0;
+        int is_uppercase = 0;
 
         if (*format == 'x') {
           base = 16;
         } else if (*format == 'X') {
           base = 16;
-          uppercase = 1;
+          is_uppercase = 1;
         }
 
-        if (length_z)
+        if (has_length_z)
           val = va_arg(args, size_t);
         else if (length_l == 2)
           val = va_arg(args, unsigned long long);
@@ -344,7 +347,8 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
           val = va_arg(args, unsigned int);
 
         YSNPrintFPutUI(
-            buffer, size, &pos, val, base, uppercase, width, pad_zero, 0);
+            buffer, size, &pos, val, base, is_uppercase, width, should_pad_zero,
+            0);
         break;
       }
       case 'p': {
@@ -356,7 +360,7 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
         // Adjust width to account for "0x" prefix
         int adjusted_width = width > 2 ? width - 2 : 0;
         YSNPrintFPutUI(
-            buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero, 0);
+            buffer, size, &pos, val, 16, 0, adjusted_width, should_pad_zero, 0);
         break;
       }
       case '%': {
@@ -443,7 +447,7 @@ typedef struct YLogfmtLine {
   // Characters in the line so far, not counting the terminating null byte.
   size_t length;
   // Whether a pair has been dropped for want of room.
-  bool truncated;
+  bool is_truncated;
 } YLogfmtLine;
 
 // What a truncated line ends with, in place of the pairs that did not fit.
@@ -464,7 +468,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineInit(
   line->buffer = buffer;
   line->size = size;
   line->length = 0;
-  line->truncated = false;
+  line->is_truncated = false;
   if (size > 0) {
     buffer[0] = '\0';
   }
@@ -502,7 +506,7 @@ Y_MODULE_PRIVATE_HEADER inline void YLogfmtLineEndPair(
   if (position <= YLogfmtLineLimit(line)) {
     line->length = position;
   } else {
-    line->truncated = true;
+    line->is_truncated = true;
   }
   if (line->size > 0) {
     line->buffer[line->length] = '\0';
@@ -511,7 +515,7 @@ Y_MODULE_PRIVATE_HEADER inline void YLogfmtLineEndPair(
 
 Y_PUBLIC_HEADER inline void YLogfmtLineAddUInt(
     YLogfmtLine* line, const char* key, uint64_t value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   size_t position = YLogfmtLineBeginPair(line, key);
@@ -522,7 +526,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddUInt(
 
 Y_PUBLIC_HEADER inline void YLogfmtLineAddInt(
     YLogfmtLine* line, const char* key, int64_t value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   size_t position = YLogfmtLineBeginPair(line, key);
@@ -537,23 +541,24 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddInt(
 }
 
 // A number in hexadecimal, with a 0x prefix, upper case digits, and at least
-// digits of them - 0x0201 for a port, 0x9A for a byte.
+// num_digits of them - 0x0201 for a port, 0x9A for a byte.
 Y_PUBLIC_HEADER inline void YLogfmtLineAddHex(
-    YLogfmtLine* line, const char* key, uint64_t value, uint8_t digits) {
-  if (line->truncated) {
+    YLogfmtLine* line, const char* key, uint64_t value, uint8_t num_digits) {
+  if (line->is_truncated) {
     return;
   }
   const size_t limit = YLogfmtLineLimit(line);
   size_t position = YLogfmtLineBeginPair(line, key);
   YSNPrintFPutC(line->buffer, limit, &position, '0');
   YSNPrintFPutC(line->buffer, limit, &position, 'x');
-  YSNPrintFPutUI(line->buffer, limit, &position, value, 16, 1, digits, 1, 0);
+  YSNPrintFPutUI(
+      line->buffer, limit, &position, value, 16, 1, num_digits, 1, 0);
   YLogfmtLineEndPair(line, position);
 }
 
 Y_PUBLIC_HEADER inline void YLogfmtLineAddBool(
     YLogfmtLine* line, const char* key, bool value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   size_t position = YLogfmtLineBeginPair(line, key);
@@ -586,7 +591,7 @@ Y_MODULE_PRIVATE_HEADER inline bool YLogfmtIsBare(const char* value) {
 // empty one.
 Y_PUBLIC_HEADER inline void YLogfmtLineAddString(
     YLogfmtLine* line, const char* key, const char* value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   if (value == NULL) {
@@ -620,7 +625,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddString(
 // Finish the line, marking it if anything was dropped, and return its length.
 // The line is null terminated whether or not this is called.
 Y_PUBLIC_HEADER inline size_t YLogfmtLineFinish(YLogfmtLine* line) {
-  if (line->truncated && line->size >= Y_LOGFMT_RESERVED_LENGTH) {
+  if (line->is_truncated && line->size >= Y_LOGFMT_RESERVED_LENGTH) {
     // A line with no pairs in it does not start with the separator.
     const char* marker =
         line->length == 0 ? YLogfmtTruncatedPair + 1 : YLogfmtTruncatedPair;
@@ -644,7 +649,8 @@ typedef struct YLogfmtPair {
 } YLogfmtPair;
 
 // Read a hex digit, returning whether it was one.
-Y_MODULE_PRIVATE_HEADER inline bool YLogfmtHexDigit(char c, uint8_t* digit) {
+Y_MODULE_PRIVATE_HEADER inline bool YLogfmtParseHexDigit(
+    char c, uint8_t* digit) {
   if (c >= '0' && c <= '9') {
     *digit = (uint8_t)(c - '0');
   } else if (c >= 'A' && c <= 'F') {
@@ -694,7 +700,8 @@ Y_MODULE_PRIVATE_HEADER inline bool YLogfmtParseValue(
     } else if (escaped == 'x') {
       uint8_t high = 0;
       uint8_t low = 0;
-      if (!YLogfmtHexDigit(read[2], &high) || !YLogfmtHexDigit(read[3], &low)) {
+      if (!YLogfmtParseHexDigit(read[2], &high) ||
+          !YLogfmtParseHexDigit(read[3], &low)) {
         return false;
       }
       *out++ = (char)((high << 4) | low);
@@ -747,15 +754,15 @@ Y_PUBLIC_HEADER inline bool YLogfmtParse(
     }
     // What ends the value - a space, or the end of the line - is either past
     // the write or is the write, so terminating there loses nothing unread.
-    const bool at_end = *read == '\0';
+    const bool is_at_end = *read == '\0';
     *write = '\0';
-    if (!at_end) {
+    if (!is_at_end) {
       ++read;
     }
     pairs[*num_pairs].key = key;
     pairs[*num_pairs].value = value;
     ++*num_pairs;
-    if (at_end) {
+    if (is_at_end) {
       return true;
     }
   }
@@ -783,15 +790,15 @@ Y_PUBLIC_HEADER inline const char* YLogfmtFind(
 Y_PUBLIC_HEADER inline bool YLogfmtParseUInt(
     const char* value, uint64_t* number) {
   uint64_t result = 0;
-  const bool hex = value[0] == '0' && (value[1] == 'x' || value[1] == 'X');
-  const char* digits = hex ? value + 2 : value;
+  const bool is_hex = value[0] == '0' && (value[1] == 'x' || value[1] == 'X');
+  const char* digits = is_hex ? value + 2 : value;
   if (*digits == '\0') {
     return false;
   }
   for (const char* c = digits; *c != '\0'; ++c) {
     uint8_t digit = 0;
-    if (hex) {
-      if (!YLogfmtHexDigit(*c, &digit) || result > (UINT64_MAX >> 4)) {
+    if (is_hex) {
+      if (!YLogfmtParseHexDigit(*c, &digit) || result > (UINT64_MAX >> 4)) {
         return false;
       }
       result = (result << 4) | digit;
@@ -944,7 +951,7 @@ typedef struct YLogField {
   const char* key;
   YLogFieldType type;
   // How many hex digits to write at least, for Y_LOG_FIELD_HEX.
-  uint8_t digits;
+  uint8_t num_digits;
   union {
     uint64_t unsigned_value;
     int64_t signed_value;
@@ -957,7 +964,7 @@ Y_PUBLIC_HEADER inline YLogField YLogUInt(const char* key, uint64_t value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_UINT;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.unsigned_value = value;
   return field;
 }
@@ -966,18 +973,18 @@ Y_PUBLIC_HEADER inline YLogField YLogInt(const char* key, int64_t value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_INT;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.signed_value = value;
   return field;
 }
 
-// A number in hexadecimal, with at least digits digits: written 0x0201.
+// A number in hexadecimal, with at least num_digits digits: written 0x0201.
 Y_PUBLIC_HEADER inline YLogField YLogHex(
-    const char* key, uint64_t value, uint8_t digits) {
+    const char* key, uint64_t value, uint8_t num_digits) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_HEX;
-  field.digits = digits;
+  field.num_digits = num_digits;
   field.value.unsigned_value = value;
   return field;
 }
@@ -986,7 +993,7 @@ Y_PUBLIC_HEADER inline YLogField YLogBool(const char* key, bool value) {
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_BOOL;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.bool_value = value;
   return field;
 }
@@ -996,7 +1003,7 @@ Y_PUBLIC_HEADER inline YLogField YLogString(
   YLogField field;
   field.key = key;
   field.type = Y_LOG_FIELD_STRING;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.string_value = value;
   return field;
 }
@@ -1005,7 +1012,7 @@ Y_PUBLIC_HEADER inline YLogField YLogEnd(void) {
   YLogField field;
   field.key = NULL;
   field.type = Y_LOG_FIELD_END;
-  field.digits = 0;
+  field.num_digits = 0;
   field.value.unsigned_value = 0;
   return field;
 }
@@ -1033,7 +1040,7 @@ Y_PUBLIC_HEADER inline void YLogAppendField(
       break;
     case Y_LOG_FIELD_HEX:
       YLogfmtLineAddHex(
-          line, field->key, field->value.unsigned_value, field->digits);
+          line, field->key, field->value.unsigned_value, field->num_digits);
       break;
     case Y_LOG_FIELD_BOOL:
       YLogfmtLineAddBool(line, field->key, field->value.bool_value);

@@ -188,7 +188,7 @@ typedef struct YFDCDriveState {
   // Whether there is a disk inserted in the drive, i.e. whether an image is
   // mounted. The real hardware doesn't actually know this and will attempt to
   // access the disk and time out.
-  bool present;
+  bool is_present;
   // The format of the disk currently inserted in the drive.
   const YFDCDiskFormat* format;
   // The track the read/write head is currently on.
@@ -196,7 +196,7 @@ typedef struct YFDCDriveState {
   // The currently active head (0 or 1).
   uint8_t head;
   // Whether the drive is currently busy.
-  bool busy;
+  bool is_busy;
   // Status Register 0 (ST0) for the last completed Seek or Recalibrate
   // operation on this drive.
   uint8_t st0;
@@ -282,7 +282,9 @@ typedef struct YFDCState {
     // Command parameters governing the transfer.
     uint8_t sector_size_code;  // N
     uint8_t eot;               // End of Track sector number
-    bool multi_track;          // MT bit set (read/write across heads)
+    // Whether the command's MT bit is set, so that the transfer goes on from
+    // head 0 to head 1 of the same cylinder.
+    bool is_multi_track;
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.
@@ -290,8 +292,12 @@ typedef struct YFDCState {
     // ID bytes taken so far.
     uint16_t sector_byte_index;
     uint8_t data_register;  // Buffer for the byte currently being transferred.
-    bool dma_request_active;  // DREQ is asserted, waiting for DMA access.
-    bool tc_received;         // TC (Terminal Count) signal received from DMA.
+    // Whether DREQ is asserted, so the controller is waiting for the DMA
+    // controller to move a byte.
+    bool is_dma_request_active;
+    // Whether the DMA controller has signalled TC (Terminal Count), the end of
+    // the transfer it was programmed for.
+    bool was_tc_received;
   } transfer;
 } YFDCState;
 

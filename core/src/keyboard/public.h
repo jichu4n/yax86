@@ -106,7 +106,7 @@ typedef struct YKeyboardState {
   // Whether we are currently waiting for ack from BIOS before sending the next
   // scancode. The keyboard will not send any further scancodes until the BIOS
   // pulses the enable_clear line high then low.
-  bool waiting_for_ack;
+  bool is_waiting_for_ack;
 
   // Buffer of key presses received.
   YKeyboardBuffer buffer;

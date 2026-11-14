@@ -602,7 +602,7 @@ static bool InitVM(void) {
   ConfigureGuestRAM(config);
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
-  config->floppy_drives = EmulatorSessionNumFloppyDrives(&g_session);
+  config->num_floppy_drives = EmulatorSessionNumFloppyDrives(&g_session);
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -678,7 +678,7 @@ static void SetBootStage(BootStage stage) {
   g_status.boot_cycles = g_clock.cycles;
   g_status.boot_elapsed_us = ElapsedUs();
   g_status.boot_busy_us = BusyUs();
-  g_status.num_instructions = YCPUInstructionsRetired(&g_platform.cpu);
+  g_status.num_instructions = YCPUNumInstructionsRetired(&g_platform.cpu);
   BOOT_INFO("boot_stage", BOOT_FIELDS());
 }
 
@@ -733,7 +733,7 @@ static void PaceToRealTime(void) {
 
 // Pass a key on to the guest, as the scancodes a PC/XT keyboard would send.
 static void TypeKey(SouthbridgeKeyEvent event) {
-  uint8_t scancodes[kKeymapMaxNumScancodes];
+  uint8_t scancodes[kKeymapMaxScancodes];
   const uint8_t num_scancodes = KeymapTranslate(event, scancodes);
   for (uint8_t i = 0; i < num_scancodes; ++i) {
     YKeyboardHandleKeyPress(&g_platform.keyboard, scancodes[i]);

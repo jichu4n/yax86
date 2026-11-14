@@ -74,7 +74,7 @@ Y_FILE_PRIVATE const uint16_t YCPUMulDivCycles[Y_CPU_NUM_WIDTHS][2] = {
 // Common logic for MUL and IMUL instructions.
 Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest, uint32_t result,
-    bool overflow) {
+    bool did_overflow) {
   YCPUWidth width = ctx->metadata->width;
 
   uint32_t result_low_half = result & YCPUMaxValue[width];
@@ -86,8 +86,8 @@ Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
   YCPUWriteOperandAddress(
       ctx, &YCPUMulDivResultHighHalfAddress[width], result_high_half);
 
-  YCPUSetFlag(ctx->cpu, Y_CPU_CF, overflow);
-  YCPUSetFlag(ctx->cpu, Y_CPU_OF, overflow);
+  YCPUSetFlag(ctx->cpu, Y_CPU_CF, did_overflow);
+  YCPUSetFlag(ctx->cpu, Y_CPU_OF, did_overflow);
 
   return Y_CPU_INSTRUCTION_EXECUTED;
 }

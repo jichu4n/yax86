@@ -169,7 +169,7 @@ typedef struct YPPIConfig {
   YPPIDisplayMode display_mode;
 
   // Whether FPU is installed.
-  bool fpu_installed;
+  bool is_fpu_installed;
 
   // Callback to control PC speaker.If frequency_hz is 0, the speaker should
   // be turned off. Otherwise, it should be set to the specified frequency.
@@ -268,7 +268,7 @@ Y_PUBLIC uint8_t YPPIReadPort(YPPIState* ppi, uint16_t port) {
         // Bit 0: Floppy drive (IPL) installed
         port_c |= (ppi->config.num_floppy_drives > 0) & 0x01;
         // Bit 1: FPU installed
-        port_c |= (ppi->config.fpu_installed << 1);
+        port_c |= (ppi->config.is_fpu_installed << 1);
         // Bits 2-3: Memory size
         port_c |= ((ppi->config.memory_size & 0x03) << 2);
         // Bits 4-7 are for unsupported features (cassette, parity, etc.).
@@ -305,7 +305,7 @@ Y_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
   switch (port) {
     case Y_PPI_PORT_B: {
       // Save old states in order to check for changes after the write.
-      bool old_speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
+      bool was_speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
       uint8_t old_keyboard_control = YPPIGetKeyboardControl(ppi);
 
       ppi->port_b = value;
@@ -316,8 +316,8 @@ Y_PUBLIC void YPPIWritePort(YPPIState* ppi, uint16_t port, uint8_t value) {
       }
 
       // Check for changes in PC speaker control bits and fire callback.
-      bool speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
-      if (old_speaker_enabled != speaker_enabled &&
+      bool is_speaker_enabled = YPPIIsPCSpeakerEnabled(ppi);
+      if (was_speaker_enabled != is_speaker_enabled &&
           ppi->config.set_pc_speaker_frequency) {
         const uint32_t frequency = YPPIIsPCSpeakerEnabled(ppi)
                                        ? ppi->pc_speaker_frequency_from_pit

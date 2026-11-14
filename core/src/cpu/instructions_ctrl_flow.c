@@ -146,10 +146,10 @@ YCPUExecuteLoop(const YCPUInstructionContext* ctx) {
 // LOOPNZ rel8
 Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoopZOrNZ(const YCPUInstructionContext* ctx) {
-  bool condition1 = --(ctx->cpu->registers[Y_CPU_CX]) != 0;
-  bool condition2 = YCPUGetFlag(ctx->cpu, Y_CPU_ZF) ==
-                    (bool)(ctx->instruction->opcode - 0xE0);
-  return YCPUExecuteConditionalJump(ctx, condition1 && condition2, true);
+  bool is_cx_nonzero = --(ctx->cpu->registers[Y_CPU_CX]) != 0;
+  bool does_zf_match = YCPUGetFlag(ctx->cpu, Y_CPU_ZF) ==
+                       (bool)(ctx->instruction->opcode - 0xE0);
+  return YCPUExecuteConditionalJump(ctx, is_cx_nonzero && does_zf_match, true);
 }
 
 // JCXZ rel8

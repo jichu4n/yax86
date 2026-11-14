@@ -50,9 +50,9 @@ typedef enum YHDCIdentifyWord {
 
 // Lengths in words of the string fields of the Identify Device block.
 enum {
-  Y_HDC_IDENTIFY_SERIAL_NUMBER_WORDS = 10,
-  Y_HDC_IDENTIFY_FIRMWARE_REVISION_WORDS = 4,
-  Y_HDC_IDENTIFY_MODEL_NUMBER_WORDS = 20,
+  Y_HDC_IDENTIFY_SERIAL_NUMBER_NUM_WORDS = 10,
+  Y_HDC_IDENTIFY_FIRMWARE_REVISION_NUM_WORDS = 4,
+  Y_HDC_IDENTIFY_MODEL_NUMBER_NUM_WORDS = 20,
 };
 
 enum {
@@ -212,7 +212,7 @@ Y_FILE_PRIVATE void YHDCBuildIdentifyBlock(
       drive->geometry.num_sectors_per_track);
   YHDCWriteIdentifyString(
       hdc, Y_HDC_IDENTIFY_WORD_SERIAL_NUMBER, YHDCSerialNumber,
-      Y_HDC_IDENTIFY_SERIAL_NUMBER_WORDS);
+      Y_HDC_IDENTIFY_SERIAL_NUMBER_NUM_WORDS);
   YHDCWriteIdentifyWord(
       hdc, Y_HDC_IDENTIFY_WORD_BUFFER_TYPE,
       Y_HDC_IDENTIFY_BUFFER_TYPE_DUAL_PORTED);
@@ -222,10 +222,10 @@ Y_FILE_PRIVATE void YHDCBuildIdentifyBlock(
       hdc, Y_HDC_IDENTIFY_WORD_NUM_ECC_BYTES, Y_HDC_IDENTIFY_NUM_ECC_BYTES);
   YHDCWriteIdentifyString(
       hdc, Y_HDC_IDENTIFY_WORD_FIRMWARE_REVISION, YHDCFirmwareRevision,
-      Y_HDC_IDENTIFY_FIRMWARE_REVISION_WORDS);
+      Y_HDC_IDENTIFY_FIRMWARE_REVISION_NUM_WORDS);
   YHDCWriteIdentifyString(
       hdc, Y_HDC_IDENTIFY_WORD_MODEL_NUMBER, YHDCModelNumber,
-      Y_HDC_IDENTIFY_MODEL_NUMBER_WORDS);
+      Y_HDC_IDENTIFY_MODEL_NUMBER_NUM_WORDS);
   YHDCWriteIdentifyWord(
       hdc, Y_HDC_IDENTIFY_WORD_MAX_SECTORS_PER_TRANSFER,
       Y_HDC_IDENTIFY_MAX_SECTORS_PER_TRANSFER);
@@ -371,7 +371,7 @@ Y_FILE_PRIVATE void YHDCHandleReadVerifySectors(
 
 Y_FILE_PRIVATE void YHDCExecuteCommand(YHDCState* hdc, uint8_t opcode) {
   YHDCDriveState* drive = YHDCSelectedDrive(hdc);
-  if (!drive->present) {
+  if (!drive->is_present) {
     // An absent drive never answers, so the command simply goes unheard. The
     // status register is shared by both drives, and YHDCReadPort already
     // reports an absent one as never ready, so writing to it here would do
@@ -532,7 +532,7 @@ Y_FILE_PRIVATE void YHDCWriteDataRegister(
 // slot leaves the bus undriven, which the guest reads as a drive that is never
 // ready.
 Y_FILE_PRIVATE uint8_t YHDCReadStatusRegister(YHDCState* hdc) {
-  return YHDCSelectedDrive(hdc)->present ? hdc->status : 0;
+  return YHDCSelectedDrive(hdc)->is_present ? hdc->status : 0;
 }
 
 // Handles a write to the device control register.
@@ -628,7 +628,7 @@ Y_PUBLIC void YHDCAttachDrive(
     return;
   }
   YHDCDriveState* drive_state = &hdc->drives[drive];
-  drive_state->present = true;
+  drive_state->is_present = true;
   drive_state->geometry = *geometry;
   // Until the guest says otherwise, addresses are translated against the
   // drive's own geometry.

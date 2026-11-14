@@ -239,8 +239,8 @@ Y_PUBLIC Y_HOT YPlatformMemoryMapEntry* YPlatformGetMemoryMapEntryByType(
 // the next fetch opens a fresh one.
 Y_FILE_PRIVATE Y_NOINLINE uint16_t YPlatformFaultPagedMemory(
     YPlatformState* platform, YPlatformPagedMemory* memory, uint32_t page,
-    bool write) {
-  memory->page_fault_fn(memory, page, write);
+    bool is_write) {
+  memory->page_fault_fn(memory, page, is_write);
   YCPUInvalidateInstructionFetchWindow(&platform->cpu);
   return memory->pages[page];
 }
@@ -840,7 +840,7 @@ Y_FILE_PRIVATE void YPlatformInitCPU(YPlatformState* platform) {
       &platform->pic.has_unmasked_request;
   platform->cpu.config.decode_cache = platform->cpu_decode_cache;
   platform->cpu.config.decode_cache_num_entries =
-      Y_PLATFORM_DECODE_CACHE_ENTRIES;
+      Y_PLATFORM_DECODE_CACHE_NUM_ENTRIES;
   platform->cpu.config.read_port = YPlatformCPUCallbackReadPortByte;
   platform->cpu.config.write_port = YPlatformCPUCallbackWritePortByte;
   YCPUInit(&platform->cpu);
@@ -920,7 +920,9 @@ Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
   platform->ppi.config.num_floppy_drives =
-      platform->config.floppy_drives > 0 ? platform->config.floppy_drives : 1;
+      platform->config.num_floppy_drives > 0
+          ? platform->config.num_floppy_drives
+          : 1;
   platform->ppi.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
@@ -928,7 +930,7 @@ Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
       platform->config.video_adapter == Y_VIDEO_ADAPTER_CGA
           ? Y_PPI_DISPLAY_CGA_80X25
           : Y_PPI_DISPLAY_MDA;
-  platform->ppi.config.fpu_installed = false;
+  platform->ppi.config.is_fpu_installed = false;
   platform->ppi.config.set_pc_speaker_frequency =
       YPlatformPPICallbackSetPCSpeakerFrequency;
   platform->ppi.config.set_keyboard_control =
@@ -1398,10 +1400,11 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles) {
   return Y_PLATFORM_RUNNING;
 }
 
-Y_PUBLIC void YPlatformSetDOSIdleSkip(YPlatformState* platform, bool enable) {
-  platform->is_dos_idle_skip_enabled = enable;
+Y_PUBLIC void YPlatformSetDOSIdleSkip(
+    YPlatformState* platform, bool is_enabled) {
+  platform->is_dos_idle_skip_enabled = is_enabled;
   platform->cpu.config.handle_interrupt =
-      enable ? YPlatformCPUCallbackHandleInterrupt : NULL;
+      is_enabled ? YPlatformCPUCallbackHandleInterrupt : NULL;
   // An idle declared before the skip went off must not be acted on after it.
   platform->is_guest_idle = false;
 }

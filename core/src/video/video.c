@@ -203,7 +203,7 @@ Y_PUBLIC YVideoSize YVideoGetFrameSize(const YVideoState* video) {
     // A 40-column cell is drawn twice as wide, so both text widths come to
     // the same 80 font cells across.
     size.width =
-        (uint16_t)(Y_VIDEO_DIRTY_COLUMNS * video->config.text_font.width);
+        (uint16_t)(Y_VIDEO_NUM_DIRTY_COLUMNS * video->config.text_font.width);
     size.height = (uint16_t)(metadata->rows * video->config.text_font.height);
     return size;
   }
@@ -245,11 +245,11 @@ Y_MODULE_PRIVATE uint8_t YVideoGetCursorEndScanLine(const YVideoState* video) {
 }
 
 Y_MODULE_PRIVATE bool YVideoIsCursorBlinkOn(const YVideoState* video) {
-  return (video->frames / Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE) % 2 == 0;
+  return (video->num_frames / Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE) % 2 == 0;
 }
 
 Y_MODULE_PRIVATE bool YVideoIsTextBlinkOn(const YVideoState* video) {
-  return (video->frames / Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE) % 2 == 0;
+  return (video->num_frames / Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE) % 2 == 0;
 }
 
 Y_MODULE_PRIVATE bool YVideoGetVisibleCursorOffset(
@@ -285,7 +285,7 @@ Y_FILE_PRIVATE void YVideoDirtyRangeAdd(
 // The vertical unit of dirty tracking for the current mode.
 typedef struct YVideoDirtyGeometry {
   // Number of dirty rows covering the display.
-  uint8_t rows;
+  uint8_t num_rows;
   // Physical scan lines per dirty row.
   uint8_t scan_lines_per_row;
 } YVideoDirtyGeometry;
@@ -295,16 +295,16 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
   const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   YVideoDirtyGeometry geometry;
   if (metadata->type == Y_VIDEO_MODE_TEXT) {
-    geometry.rows = metadata->rows;
+    geometry.num_rows = metadata->rows;
     geometry.scan_lines_per_row = YVideoGetTextCellHeight(video, metadata);
   } else {
-    geometry.rows =
+    geometry.num_rows =
         (uint8_t)((metadata->height + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
                   Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP);
     geometry.scan_lines_per_row = Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP;
   }
-  if (geometry.rows > Y_VIDEO_DIRTY_ROW_COUNT) {
-    geometry.rows = Y_VIDEO_DIRTY_ROW_COUNT;
+  if (geometry.num_rows > Y_VIDEO_NUM_DIRTY_ROWS) {
+    geometry.num_rows = Y_VIDEO_NUM_DIRTY_ROWS;
   }
   return geometry;
 }
@@ -312,12 +312,12 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
 Y_MODULE_PRIVATE void YVideoInvalidateRows(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
-  if (start_column >= end_column || end_column > Y_VIDEO_DIRTY_COLUMNS ||
-      first_row >= end_row || first_row >= Y_VIDEO_DIRTY_ROW_COUNT) {
+  if (start_column >= end_column || end_column > Y_VIDEO_NUM_DIRTY_COLUMNS ||
+      first_row >= end_row || first_row >= Y_VIDEO_NUM_DIRTY_ROWS) {
     return;
   }
-  if (end_row > Y_VIDEO_DIRTY_ROW_COUNT) {
-    end_row = Y_VIDEO_DIRTY_ROW_COUNT;
+  if (end_row > Y_VIDEO_NUM_DIRTY_ROWS) {
+    end_row = Y_VIDEO_NUM_DIRTY_ROWS;
   }
 
   for (uint8_t row = first_row; row < end_row; ++row) {
@@ -417,7 +417,7 @@ Y_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video) {
                              ? Y_VIDEO_TEXT40_COLUMN_SCALE
                              : Y_VIDEO_TEXT80_COLUMN_SCALE;
   for (uint8_t row = 0; row < metadata->rows; ++row) {
-    uint8_t start_column = Y_VIDEO_DIRTY_COLUMNS;
+    uint8_t start_column = Y_VIDEO_NUM_DIRTY_COLUMNS;
     uint8_t end_column = 0;
     for (uint8_t col = 0; col < metadata->columns; ++col) {
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
@@ -451,8 +451,8 @@ Y_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video) {
 // toward the next scan line; the loop pays it off a scan line at a time,
 // looping rather than branching once since a single call can be worth more
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
-// incrementing frames, which YVideoIsCursorBlinkOn() and YVideoIsTextBlinkOn()
-// use to derive their blink phases.
+// incrementing num_frames, which YVideoIsCursorBlinkOn() and
+// YVideoIsTextBlinkOn() use to derive their blink phases.
 Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
@@ -461,8 +461,8 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
     return;
   }
 
-  bool cursor_was_on = YVideoIsCursorBlinkOn(video);
-  bool text_was_on = YVideoIsTextBlinkOn(video);
+  bool was_cursor_on = YVideoIsCursorBlinkOn(video);
+  bool was_text_on = YVideoIsTextBlinkOn(video);
 
   // Computed rather than stepped, because the platform advances the beam in
   // arrears - only when something actually looks at it - so cycles here can be
@@ -475,14 +475,14 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
     return;
   }
   const uint32_t scan_line = (uint32_t)video->scan_line + elapsed_scan_lines;
-  video->frames += scan_line / adapter->scan_lines_per_frame;
+  video->num_frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 
-  if (cursor_was_on != YVideoIsCursorBlinkOn(video) &&
+  if (was_cursor_on != YVideoIsCursorBlinkOn(video) &&
       YVideoIsCursorEnabled(video)) {
     YVideoInvalidateCursor(video);
   }
-  if (text_was_on != YVideoIsTextBlinkOn(video)) {
+  if (was_text_on != YVideoIsTextBlinkOn(video)) {
     YVideoInvalidateBlinkingText(video);
   }
 }
@@ -491,16 +491,17 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
 // currently is.
 Y_FILE_PRIVATE uint8_t YVideoGetStatus(const YVideoState* video) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
-  bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
-  bool in_horizontal_retrace =
+  bool is_in_vertical_retrace =
+      video->scan_line >= adapter->displayed_scan_lines;
+  bool is_in_horizontal_retrace =
       video->scan_line_cycles >= adapter->display_cycles_per_scan_line;
 
   // No light pen is emulated, so its switch always reads as off.
   uint8_t status = Y_VIDEO_STATUS_LIGHT_PEN_SWITCH_OFF;
-  if (in_vertical_retrace || in_horizontal_retrace) {
+  if (is_in_vertical_retrace || is_in_horizontal_retrace) {
     status |= Y_VIDEO_STATUS_DISPLAY_DISABLED;
   }
-  if (in_vertical_retrace) {
+  if (is_in_vertical_retrace) {
     status |= Y_VIDEO_STATUS_VERTICAL_RETRACE;
   }
   // Note that the unused high bits are deliberately left clear rather than
@@ -660,11 +661,11 @@ Y_FILE_PRIVATE void YVideoRenderBlankRegion(
 Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
-  // Every mode divides the frame into Y_VIDEO_DIRTY_COLUMNS equal columns, so
-  // a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host text
-  // font's width in a text mode drawn in one.
+  // Every mode divides the frame into Y_VIDEO_NUM_DIRTY_COLUMNS equal columns,
+  // so a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host
+  // text font's width in a text mode drawn in one.
   uint16_t column_width =
-      YVideoGetFrameSize(video).width / Y_VIDEO_DIRTY_COLUMNS;
+      YVideoGetFrameSize(video).width / Y_VIDEO_NUM_DIRTY_COLUMNS;
   YVideoRegion region = {
       .origin = {.x = start_column * column_width, .y = first_y},
       .width = (end_column - start_column) * column_width,
@@ -681,7 +682,7 @@ Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
   // every region, which a graphics frame can split into fifty of them.
   YVideoPixelRun run;
   run.video = video;
-  run.count = 0;
+  run.num_pixels = 0;
 
   if (!(video->control_register & Y_VIDEO_CONTROL_VIDEO_ENABLE)) {
     YVideoRenderBlankRegion(video, &run, region);
@@ -700,14 +701,14 @@ Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
   // region declared leaves that pointer mid-window and displaces every pixel
   // after it, including those of later regions - so report the region that
   // caused it rather than let the corruption surface somewhere else.
-  uint32_t declared_pixels = (uint32_t)region.width * region.height;
-  if (video->num_pixels_emitted_for_region != declared_pixels) {
+  uint32_t num_declared_pixels = (uint32_t)region.width * region.height;
+  if (video->num_pixels_emitted_for_region != num_declared_pixels) {
     Y_VIDEO_ERROR(
         "render_region_pixel_count_mismatch", Y_LOG_UINT("width", region.width),
         Y_LOG_UINT("height", region.height), Y_LOG_UINT("x", region.origin.x),
         Y_LOG_UINT("y", region.origin.y),
         Y_LOG_UINT("emitted", video->num_pixels_emitted_for_region),
-        Y_LOG_UINT("expected", declared_pixels));
+        Y_LOG_UINT("expected", num_declared_pixels));
   }
 
   if (video->config.end_render_region) {
@@ -723,10 +724,11 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
 
   const YVideoSize frame = YVideoGetFrameSize(video);
   if (video->dirty_state.status == Y_VIDEO_FULL_REDRAW) {
-    YVideoRenderDirtyRegion(video, 0, Y_VIDEO_DIRTY_COLUMNS, 0, frame.height);
+    YVideoRenderDirtyRegion(
+        video, 0, Y_VIDEO_NUM_DIRTY_COLUMNS, 0, frame.height);
   } else {
     YVideoDirtyGeometry geometry = YVideoGetDirtyGeometry(video);
-    for (uint8_t row = 0; row < geometry.rows;) {
+    for (uint8_t row = 0; row < geometry.num_rows;) {
       YVideoDirtyRange range = video->dirty_state.ranges[row];
       if (range.end_column == 0) {
         ++row;
@@ -734,7 +736,7 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
       }
 
       uint8_t end_row = row + 1;
-      while (end_row < geometry.rows &&
+      while (end_row < geometry.num_rows &&
              video->dirty_state.ranges[end_row].start_column ==
                  range.start_column &&
              video->dirty_state.ranges[end_row].end_column ==

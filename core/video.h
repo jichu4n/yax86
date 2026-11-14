@@ -652,7 +652,7 @@ enum {
   // Every supported mode divides horizontally into 80 natural rendering
   // units: text columns on the MDA and 80-column CGA, half-character cells in
   // 40-column CGA text modes, and VRAM bytes in CGA graphics modes.
-  Y_VIDEO_DIRTY_COLUMNS = 80,
+  Y_VIDEO_NUM_DIRTY_COLUMNS = 80,
   // Vertically, one horizontal range is tracked per dirty row. A text mode's
   // dirty row is one character row, which covers exactly the scan lines a
   // changed cell occupies. Graphics modes have no character rows, so
@@ -663,14 +663,14 @@ enum {
   // The most character rows in any text mode.
   Y_VIDEO_MAX_TEXT_ROWS = 25,
   // Dirty rows needed to cover the tallest graphics mode.
-  Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT = (
+  Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS = (
       Y_VIDEO_MAX_GRAPHICS_HEIGHT + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
       Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP,
   // The tracker is statically sized for whichever mode needs the most rows.
   // Graphics modes do, at 50 against a text mode's 25.
-  Y_VIDEO_DIRTY_ROW_COUNT =
-              Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT > Y_VIDEO_MAX_TEXT_ROWS
-      ? Y_VIDEO_DIRTY_GRAPHICS_ROW_COUNT
+  Y_VIDEO_NUM_DIRTY_ROWS =
+              Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS > Y_VIDEO_MAX_TEXT_ROWS
+      ? Y_VIDEO_NUM_DIRTY_GRAPHICS_ROWS
       : Y_VIDEO_MAX_TEXT_ROWS,
   // Pixels are transferred to the host in small horizontal spans. This removes
   // most callback overhead without requiring a frame or scan-line buffer.
@@ -685,7 +685,7 @@ enum {
   // Widest cell a host text font may have. A glyph row is one byte.
   Y_VIDEO_TEXT_FONT_MAX_WIDTH = 8,
   // Characters a text font covers: every value of a character byte.
-  Y_VIDEO_TEXT_FONT_GLYPHS = 256,
+  Y_VIDEO_TEXT_FONT_NUM_GLYPHS = 256,
 };
 
 // A font for text modes, in place of the adapter's own.
@@ -702,7 +702,7 @@ enum {
 // The cursor and the MDA underline, which the adapter places by scan line of
 // its own cell, are scaled to the font's cell height.
 typedef struct YVideoTextFont {
-  // Glyph rows for all Y_VIDEO_TEXT_FONT_GLYPHS characters, height rows a
+  // Glyph rows for all Y_VIDEO_TEXT_FONT_NUM_GLYPHS characters, height rows a
   // character, top to bottom. Bit (width - 1) of a row is its leftmost pixel,
   // the same layout as the adapters' own fonts. NULL for no host font.
   const uint8_t* glyphs;
@@ -737,7 +737,7 @@ typedef enum YVideoDirtyStatus {
 typedef struct YVideoDirtyState {
   // One horizontal range per dirty row, indexed by dirty row. Only meaningful
   // when status is Y_VIDEO_DIRTY.
-  YVideoDirtyRange ranges[Y_VIDEO_DIRTY_ROW_COUNT];
+  YVideoDirtyRange ranges[Y_VIDEO_NUM_DIRTY_ROWS];
   // What the next render has to do.
   YVideoDirtyStatus status;
 } YVideoDirtyState;
@@ -787,10 +787,10 @@ typedef struct YVideoConfig {
   // Callback to write a horizontal span of RGB pixels to the real display,
   // invoked from YVideoRender(). The pixels begin at origin, remain on one scan
   // line, and are valid only for the duration of the synchronous callback.
-  // count is between 1 and Y_VIDEO_PIXEL_BATCH_SIZE, inclusive.
+  // num_pixels is between 1 and Y_VIDEO_PIXEL_BATCH_SIZE, inclusive.
   void (*write_pixels)(
       struct YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
-      uint8_t count);
+      uint8_t num_pixels);
   // Optional callbacks surrounding each dirty rectangular region emitted by
   // YVideoRender(). A retained display can use them to set a transfer window
   // before the row-major pixel stream begins.
@@ -862,7 +862,7 @@ typedef struct YVideoState {
   // CPU cycles elapsed within the current scan line.
   uint32_t scan_line_cycles;
   // Number of frames since initialization. Drives blinking.
-  uint32_t frames;
+  uint32_t num_frames;
 
   // Portions of the retained host display that no longer match video state.
   YVideoDirtyState dirty_state;
@@ -1011,21 +1011,21 @@ typedef struct YVideoPixelRun {
   // Where the pixels currently buffered begin. Advances past each batch.
   YVideoPosition origin;
   YVideoRGB pixels[Y_VIDEO_PIXEL_BATCH_SIZE];
-  uint8_t count;
+  uint8_t num_pixels;
 } YVideoPixelRun;
 
 // Hand over what has been buffered and continue the run after it.
 Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunFlush(YVideoPixelRun* run) {
-  if (run->count == 0) {
+  if (run->num_pixels == 0) {
     return;
   }
   // Batching lets the region's pixel count be accumulated once per batch
   // rather than once per pixel.
-  run->video->num_pixels_emitted_for_region += run->count;
+  run->video->num_pixels_emitted_for_region += run->num_pixels;
   run->video->config.write_pixels(
-      run->video, run->origin, run->pixels, run->count);
-  run->origin.x += run->count;
-  run->count = 0;
+      run->video, run->origin, run->pixels, run->num_pixels);
+  run->origin.x += run->num_pixels;
+  run->num_pixels = 0;
 }
 
 // Open a run at the leftmost pixel of a row. Any partial batch is handed over
@@ -1039,9 +1039,9 @@ Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunBegin(
 
 Y_MODULE_PRIVATE_HEADER inline void YVideoPixelRunPush(
     YVideoPixelRun* run, YVideoRGB rgb) {
-  run->pixels[run->count] = rgb;
-  ++run->count;
-  if (run->count == Y_VIDEO_PIXEL_BATCH_SIZE) {
+  run->pixels[run->num_pixels] = rgb;
+  ++run->num_pixels;
+  if (run->num_pixels == Y_VIDEO_PIXEL_BATCH_SIZE) {
     YVideoPixelRunFlush(run);
   }
 }
@@ -1988,7 +1988,7 @@ enum {
 typedef struct YVideoMDACellColors {
   const YVideoRGB* foreground;
   const YVideoRGB* background;
-  bool underline;
+  bool has_underline;
 } YVideoMDACellColors;
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
@@ -1999,12 +1999,12 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
   YVideoMDACellColors colors = {
       .foreground = &config->foreground,
       .background = &config->background,
-      .underline = false,
+      .has_underline = false,
   };
 
-  bool intense = (attr_value & Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND) != 0;
+  bool is_intense = (attr_value & Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND) != 0;
   const YVideoRGB* intense_aware_foreground =
-      intense ? &config->intense_foreground : &config->foreground;
+      is_intense ? &config->intense_foreground : &config->foreground;
   uint8_t background_attr = (attr_value & Y_VIDEO_ATTRIBUTE_BACKGROUND_MASK) >>
                             Y_VIDEO_ATTRIBUTE_BACKGROUND_SHIFT;
   uint8_t foreground_attr = attr_value & Y_VIDEO_ATTRIBUTE_FOREGROUND_MASK;
@@ -2028,7 +2028,7 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
       background_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE &&
       foreground_attr == Y_VIDEO_MDA_ATTRIBUTE_UNDERLINE) {
     // Underline mode.
-    colors.underline = true;
+    colors.has_underline = true;
     colors.foreground = intense_aware_foreground;
   } else {
     // Other combinations are treated as normal.
@@ -2041,7 +2041,7 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
       (video->control_register & Y_VIDEO_CONTROL_ENABLE_BLINK) &&
       !YVideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
-    colors.underline = false;
+    colors.has_underline = false;
   }
   return colors;
 }
@@ -2060,7 +2060,7 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
   // only be in one place, so the loop just tests each cell against it.
   uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = YVideoGetVisibleCursorOffset(
+  bool is_cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
   uint16_t cursor_start = YVideoScaleTextScanLineStart(
       video, metadata, YVideoGetCursorStartScanLine(video));
@@ -2096,22 +2096,22 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
       // a bitmap with the leftmost pixel in the high bit, and is 16 bits wide
       // because an MDA cell is 9 pixels across.
       uint16_t row_bitmap;
-      if (char_scan_line == underline_scan_line && colors.underline) {
+      if (char_scan_line == underline_scan_line && colors.has_underline) {
         row_bitmap = 0xFFFF;
       } else if (video->has_text_font) {
         row_bitmap = YVideoGetTextFontRow(video, char_value, char_scan_line);
       } else {
         row_bitmap = YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
       }
-      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
-                              char_scan_line >= cursor_start &&
-                              char_scan_line <= cursor_end;
+      bool is_cursor_scan_line =
+          is_cursor_visible && cursor_offset == cell_offset &&
+          char_scan_line >= cursor_start && char_scan_line <= cursor_end;
       for (uint8_t x = 0; x < cell_width; ++x) {
         bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
         const YVideoRGB* rgb =
-            cursor_scan_line
+            is_cursor_scan_line
                 ? &video->config.foreground
                 : (is_foreground ? colors.foreground : colors.background);
         YVideoPixelRunPush(run, *rgb);
@@ -2137,7 +2137,7 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
 #endif  // YAX86_IMPLEMENTATION
 
 enum {
-  Y_VIDEO_CGA40_COLUMN_COUNT = 40,
+  Y_VIDEO_CGA40_COLUMNS = 40,
   Y_VIDEO_CGA40_COLUMN_SCALE = 2,
   Y_VIDEO_CGA_320X200_HORIZONTAL_SCALE = 2,
   // Number of pixels per byte in 320x200 graphics mode.
@@ -2196,7 +2196,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   // and the range converts back to character cells by halving. Invalidation
   // always scales a character column by the same factor, so the range is
   // aligned to whole cells and neither end truncates.
-  uint8_t scale = metadata->columns == Y_VIDEO_CGA40_COLUMN_COUNT
+  uint8_t scale = metadata->columns == Y_VIDEO_CGA40_COLUMNS
                       ? Y_VIDEO_CGA40_COLUMN_SCALE
                       : 1;
   uint8_t first_char = scale == Y_VIDEO_CGA40_COLUMN_SCALE
@@ -2210,7 +2210,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   // only be in one place, so the loop just tests each cell against it.
   uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = YVideoGetVisibleCursorOffset(
+  bool is_cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
   uint16_t cursor_start = YVideoScaleTextScanLineStart(
       video, metadata, YVideoGetCursorStartScanLine(video));
@@ -2260,9 +2260,9 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
 
       YVideoRGB foreground = YVideoCGAGetColor(video, foreground_color);
       YVideoRGB background = YVideoCGAGetColor(video, background_color);
-      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
-                              char_scan_line >= cursor_start &&
-                              char_scan_line <= cursor_end;
+      bool is_cursor_scan_line =
+          is_cursor_visible && cursor_offset == cell_offset &&
+          char_scan_line >= cursor_start && char_scan_line <= cursor_end;
       // The glyph row is a bitmap with the leftmost pixel in the high bit.
       uint8_t row_bitmap =
           video->has_text_font
@@ -2270,7 +2270,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
               : YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
       for (uint8_t x = 0; x < cell_width; ++x) {
         bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
-        YVideoRGB rgb = cursor_scan_line
+        YVideoRGB rgb = is_cursor_scan_line
                             ? cursor_foreground
                             : (is_foreground ? foreground : background);
         // In 40-column mode each glyph pixel is emitted twice, which is how
@@ -2604,7 +2604,7 @@ Y_PUBLIC YVideoSize YVideoGetFrameSize(const YVideoState* video) {
     // A 40-column cell is drawn twice as wide, so both text widths come to
     // the same 80 font cells across.
     size.width =
-        (uint16_t)(Y_VIDEO_DIRTY_COLUMNS * video->config.text_font.width);
+        (uint16_t)(Y_VIDEO_NUM_DIRTY_COLUMNS * video->config.text_font.width);
     size.height = (uint16_t)(metadata->rows * video->config.text_font.height);
     return size;
   }
@@ -2646,11 +2646,11 @@ Y_MODULE_PRIVATE uint8_t YVideoGetCursorEndScanLine(const YVideoState* video) {
 }
 
 Y_MODULE_PRIVATE bool YVideoIsCursorBlinkOn(const YVideoState* video) {
-  return (video->frames / Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE) % 2 == 0;
+  return (video->num_frames / Y_VIDEO_FRAMES_PER_CURSOR_BLINK_PHASE) % 2 == 0;
 }
 
 Y_MODULE_PRIVATE bool YVideoIsTextBlinkOn(const YVideoState* video) {
-  return (video->frames / Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE) % 2 == 0;
+  return (video->num_frames / Y_VIDEO_FRAMES_PER_TEXT_BLINK_PHASE) % 2 == 0;
 }
 
 Y_MODULE_PRIVATE bool YVideoGetVisibleCursorOffset(
@@ -2686,7 +2686,7 @@ Y_FILE_PRIVATE void YVideoDirtyRangeAdd(
 // The vertical unit of dirty tracking for the current mode.
 typedef struct YVideoDirtyGeometry {
   // Number of dirty rows covering the display.
-  uint8_t rows;
+  uint8_t num_rows;
   // Physical scan lines per dirty row.
   uint8_t scan_lines_per_row;
 } YVideoDirtyGeometry;
@@ -2696,16 +2696,16 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
   const YVideoModeMetadata* metadata = YVideoGetModeMetadata(video);
   YVideoDirtyGeometry geometry;
   if (metadata->type == Y_VIDEO_MODE_TEXT) {
-    geometry.rows = metadata->rows;
+    geometry.num_rows = metadata->rows;
     geometry.scan_lines_per_row = YVideoGetTextCellHeight(video, metadata);
   } else {
-    geometry.rows =
+    geometry.num_rows =
         (uint8_t)((metadata->height + Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP - 1) /
                   Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP);
     geometry.scan_lines_per_row = Y_VIDEO_DIRTY_SCAN_LINES_PER_GROUP;
   }
-  if (geometry.rows > Y_VIDEO_DIRTY_ROW_COUNT) {
-    geometry.rows = Y_VIDEO_DIRTY_ROW_COUNT;
+  if (geometry.num_rows > Y_VIDEO_NUM_DIRTY_ROWS) {
+    geometry.num_rows = Y_VIDEO_NUM_DIRTY_ROWS;
   }
   return geometry;
 }
@@ -2713,12 +2713,12 @@ YVideoGetDirtyGeometry(const YVideoState* video) {
 Y_MODULE_PRIVATE void YVideoInvalidateRows(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint8_t first_row, uint8_t end_row) {
-  if (start_column >= end_column || end_column > Y_VIDEO_DIRTY_COLUMNS ||
-      first_row >= end_row || first_row >= Y_VIDEO_DIRTY_ROW_COUNT) {
+  if (start_column >= end_column || end_column > Y_VIDEO_NUM_DIRTY_COLUMNS ||
+      first_row >= end_row || first_row >= Y_VIDEO_NUM_DIRTY_ROWS) {
     return;
   }
-  if (end_row > Y_VIDEO_DIRTY_ROW_COUNT) {
-    end_row = Y_VIDEO_DIRTY_ROW_COUNT;
+  if (end_row > Y_VIDEO_NUM_DIRTY_ROWS) {
+    end_row = Y_VIDEO_NUM_DIRTY_ROWS;
   }
 
   for (uint8_t row = first_row; row < end_row; ++row) {
@@ -2818,7 +2818,7 @@ Y_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video) {
                              ? Y_VIDEO_TEXT40_COLUMN_SCALE
                              : Y_VIDEO_TEXT80_COLUMN_SCALE;
   for (uint8_t row = 0; row < metadata->rows; ++row) {
-    uint8_t start_column = Y_VIDEO_DIRTY_COLUMNS;
+    uint8_t start_column = Y_VIDEO_NUM_DIRTY_COLUMNS;
     uint8_t end_column = 0;
     for (uint8_t col = 0; col < metadata->columns; ++col) {
       uint16_t cell_offset = (uint16_t)row * metadata->columns + col;
@@ -2852,8 +2852,8 @@ Y_FILE_PRIVATE void YVideoInvalidateBlinkingText(YVideoState* video) {
 // toward the next scan line; the loop pays it off a scan line at a time,
 // looping rather than branching once since a single call can be worth more
 // than one scan line. scan_line wraps at the adapter's scan_lines_per_frame,
-// incrementing frames, which YVideoIsCursorBlinkOn() and YVideoIsTextBlinkOn()
-// use to derive their blink phases.
+// incrementing num_frames, which YVideoIsCursorBlinkOn() and
+// YVideoIsTextBlinkOn() use to derive their blink phases.
 Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
   if (adapter->cycles_per_scan_line == 0 ||
@@ -2862,8 +2862,8 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
     return;
   }
 
-  bool cursor_was_on = YVideoIsCursorBlinkOn(video);
-  bool text_was_on = YVideoIsTextBlinkOn(video);
+  bool was_cursor_on = YVideoIsCursorBlinkOn(video);
+  bool was_text_on = YVideoIsTextBlinkOn(video);
 
   // Computed rather than stepped, because the platform advances the beam in
   // arrears - only when something actually looks at it - so cycles here can be
@@ -2876,14 +2876,14 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
     return;
   }
   const uint32_t scan_line = (uint32_t)video->scan_line + elapsed_scan_lines;
-  video->frames += scan_line / adapter->scan_lines_per_frame;
+  video->num_frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 
-  if (cursor_was_on != YVideoIsCursorBlinkOn(video) &&
+  if (was_cursor_on != YVideoIsCursorBlinkOn(video) &&
       YVideoIsCursorEnabled(video)) {
     YVideoInvalidateCursor(video);
   }
-  if (text_was_on != YVideoIsTextBlinkOn(video)) {
+  if (was_text_on != YVideoIsTextBlinkOn(video)) {
     YVideoInvalidateBlinkingText(video);
   }
 }
@@ -2892,16 +2892,17 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
 // currently is.
 Y_FILE_PRIVATE uint8_t YVideoGetStatus(const YVideoState* video) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
-  bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
-  bool in_horizontal_retrace =
+  bool is_in_vertical_retrace =
+      video->scan_line >= adapter->displayed_scan_lines;
+  bool is_in_horizontal_retrace =
       video->scan_line_cycles >= adapter->display_cycles_per_scan_line;
 
   // No light pen is emulated, so its switch always reads as off.
   uint8_t status = Y_VIDEO_STATUS_LIGHT_PEN_SWITCH_OFF;
-  if (in_vertical_retrace || in_horizontal_retrace) {
+  if (is_in_vertical_retrace || is_in_horizontal_retrace) {
     status |= Y_VIDEO_STATUS_DISPLAY_DISABLED;
   }
-  if (in_vertical_retrace) {
+  if (is_in_vertical_retrace) {
     status |= Y_VIDEO_STATUS_VERTICAL_RETRACE;
   }
   // Note that the unused high bits are deliberately left clear rather than
@@ -3061,11 +3062,11 @@ Y_FILE_PRIVATE void YVideoRenderBlankRegion(
 Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
     YVideoState* video, uint8_t start_column, uint8_t end_column,
     uint16_t first_y, uint16_t end_y) {
-  // Every mode divides the frame into Y_VIDEO_DIRTY_COLUMNS equal columns, so
-  // a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host text
-  // font's width in a text mode drawn in one.
+  // Every mode divides the frame into Y_VIDEO_NUM_DIRTY_COLUMNS equal columns,
+  // so a dirty column is 9 pixels wide on the MDA, 8 on the CGA, and a host
+  // text font's width in a text mode drawn in one.
   uint16_t column_width =
-      YVideoGetFrameSize(video).width / Y_VIDEO_DIRTY_COLUMNS;
+      YVideoGetFrameSize(video).width / Y_VIDEO_NUM_DIRTY_COLUMNS;
   YVideoRegion region = {
       .origin = {.x = start_column * column_width, .y = first_y},
       .width = (end_column - start_column) * column_width,
@@ -3082,7 +3083,7 @@ Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
   // every region, which a graphics frame can split into fifty of them.
   YVideoPixelRun run;
   run.video = video;
-  run.count = 0;
+  run.num_pixels = 0;
 
   if (!(video->control_register & Y_VIDEO_CONTROL_VIDEO_ENABLE)) {
     YVideoRenderBlankRegion(video, &run, region);
@@ -3101,14 +3102,14 @@ Y_FILE_PRIVATE void YVideoRenderDirtyRegion(
   // region declared leaves that pointer mid-window and displaces every pixel
   // after it, including those of later regions - so report the region that
   // caused it rather than let the corruption surface somewhere else.
-  uint32_t declared_pixels = (uint32_t)region.width * region.height;
-  if (video->num_pixels_emitted_for_region != declared_pixels) {
+  uint32_t num_declared_pixels = (uint32_t)region.width * region.height;
+  if (video->num_pixels_emitted_for_region != num_declared_pixels) {
     Y_VIDEO_ERROR(
         "render_region_pixel_count_mismatch", Y_LOG_UINT("width", region.width),
         Y_LOG_UINT("height", region.height), Y_LOG_UINT("x", region.origin.x),
         Y_LOG_UINT("y", region.origin.y),
         Y_LOG_UINT("emitted", video->num_pixels_emitted_for_region),
-        Y_LOG_UINT("expected", declared_pixels));
+        Y_LOG_UINT("expected", num_declared_pixels));
   }
 
   if (video->config.end_render_region) {
@@ -3124,10 +3125,11 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
 
   const YVideoSize frame = YVideoGetFrameSize(video);
   if (video->dirty_state.status == Y_VIDEO_FULL_REDRAW) {
-    YVideoRenderDirtyRegion(video, 0, Y_VIDEO_DIRTY_COLUMNS, 0, frame.height);
+    YVideoRenderDirtyRegion(
+        video, 0, Y_VIDEO_NUM_DIRTY_COLUMNS, 0, frame.height);
   } else {
     YVideoDirtyGeometry geometry = YVideoGetDirtyGeometry(video);
-    for (uint8_t row = 0; row < geometry.rows;) {
+    for (uint8_t row = 0; row < geometry.num_rows;) {
       YVideoDirtyRange range = video->dirty_state.ranges[row];
       if (range.end_column == 0) {
         ++row;
@@ -3135,7 +3137,7 @@ Y_PUBLIC void YVideoRender(YVideoState* video) {
       }
 
       uint8_t end_row = row + 1;
-      while (end_row < geometry.rows &&
+      while (end_row < geometry.num_rows &&
              video->dirty_state.ranges[end_row].start_column ==
                  range.start_column &&
              video->dirty_state.ranges[end_row].end_column ==

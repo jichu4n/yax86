@@ -208,7 +208,7 @@ typedef struct YFDCDriveState {
   // Whether there is a disk inserted in the drive, i.e. whether an image is
   // mounted. The real hardware doesn't actually know this and will attempt to
   // access the disk and time out.
-  bool present;
+  bool is_present;
   // The format of the disk currently inserted in the drive.
   const YFDCDiskFormat* format;
   // The track the read/write head is currently on.
@@ -216,7 +216,7 @@ typedef struct YFDCDriveState {
   // The currently active head (0 or 1).
   uint8_t head;
   // Whether the drive is currently busy.
-  bool busy;
+  bool is_busy;
   // Status Register 0 (ST0) for the last completed Seek or Recalibrate
   // operation on this drive.
   uint8_t st0;
@@ -302,7 +302,9 @@ typedef struct YFDCState {
     // Command parameters governing the transfer.
     uint8_t sector_size_code;  // N
     uint8_t eot;               // End of Track sector number
-    bool multi_track;          // MT bit set (read/write across heads)
+    // Whether the command's MT bit is set, so that the transfer goes on from
+    // head 0 to head 1 of the same cylinder.
+    bool is_multi_track;
 
     // Internal tracking.
     uint32_t current_offset;  // Current byte offset in the disk image.
@@ -310,8 +312,12 @@ typedef struct YFDCState {
     // ID bytes taken so far.
     uint16_t sector_byte_index;
     uint8_t data_register;  // Buffer for the byte currently being transferred.
-    bool dma_request_active;  // DREQ is asserted, waiting for DMA access.
-    bool tc_received;         // TC (Terminal Count) signal received from DMA.
+    // Whether DREQ is asserted, so the controller is waiting for the DMA
+    // controller to move a byte.
+    bool is_dma_request_active;
+    // Whether the DMA controller has signalled TC (Terminal Count), the end of
+    // the transfer it was programmed for.
+    bool was_tc_received;
   } transfer;
 } YFDCState;
 
@@ -465,13 +471,13 @@ Y_FILE_PRIVATE void YFDCPerformSeek(
 
   // On initial tick, start seeking.
   if (fdc->current_command_ticks == 0) {
-    drive->busy = true;
+    drive->is_busy = true;
     return;
   }
 
   // On 2nd tick, seek is complete.
   drive->track = target_track;
-  drive->busy = false;
+  drive->is_busy = false;
 
   // Set Status Register 0 (ST0)
   // Bits 7-6: Interrupt Code = 00 (Normal Termination)
@@ -540,7 +546,7 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
-    fdc->transfer.multi_track = (cmd_byte & 0x80) != 0;
+    fdc->transfer.is_multi_track = (cmd_byte & 0x80) != 0;
 
     uint8_t drive_head = *YFDCCommandBufferGet(&fdc->command_buffer, 1);
     uint8_t drive_index = drive_head & 0x03;
@@ -555,7 +561,7 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
     // GPL and DTL are ignored.
 
     YFDCDriveState* drive = &fdc->drives[drive_index];
-    if (!drive->present) {
+    if (!drive->is_present) {
       // Drive not ready.
       YFDCFinishReadWrite(
           fdc,
@@ -579,8 +585,8 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
 
     fdc->transfer.sector_byte_index = 0;
     // For Write, we need to request the first byte immediately.
-    fdc->transfer.dma_request_active = true;
-    fdc->transfer.tc_received = false;
+    fdc->transfer.is_dma_request_active = true;
+    fdc->transfer.was_tc_received = false;
     if (fdc->config.request_dma) {
       fdc->config.request_dma(fdc->config.context);
     }
@@ -593,8 +599,8 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
 
   // While DREQ is active, wait for the system to write a byte to us - unless
   // the DMA's count has run out without one.
-  if (fdc->transfer.dma_request_active) {
-    if (fdc->transfer.tc_received) {
+  if (fdc->transfer.is_dma_request_active) {
+    if (fdc->transfer.was_tc_received) {
       YFDCFinishReadWrite(
           fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index,
           0, 0);
@@ -625,14 +631,14 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   }
 
   // Check for sector boundary.
-  bool end_of_track = false;
+  bool is_end_of_track = false;
   if (fdc->transfer.sector_byte_index >= sector_size) {
     YFDCDriveState* drive = &fdc->drives[drive_index];
     if (fdc->transfer.sector >= fdc->transfer.eot &&
-        !(fdc->transfer.multi_track && (fdc->transfer.head & 1) == 0)) {
+        !(fdc->transfer.is_multi_track && (fdc->transfer.head & 1) == 0)) {
       // End of Track reached, with no other head to go on to.
       fdc->transfer.sector++;
-      end_of_track = true;
+      is_end_of_track = true;
     } else {
       if (fdc->transfer.sector >= fdc->transfer.eot) {
         // Multi-Track rollover.
@@ -646,11 +652,11 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
       fdc->transfer.current_offset = YFDCComputeOffset(
           *drive->format, fdc->transfer.head, fdc->transfer.cylinder,
           fdc->transfer.sector, 0);
-      end_of_track = fdc->transfer.current_offset == Y_FDC_INVALID_OFFSET;
+      is_end_of_track = fdc->transfer.current_offset == Y_FDC_INVALID_OFFSET;
     }
   }
 
-  if (end_of_track || fdc->transfer.tc_received) {
+  if (is_end_of_track || fdc->transfer.was_tc_received) {
     head_address = (fdc->transfer.head & 0x01);
     YFDCFinishReadWrite(
         fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index, 0,
@@ -659,7 +665,7 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   }
 
   // Request next byte via DMA.
-  fdc->transfer.dma_request_active = true;
+  fdc->transfer.is_dma_request_active = true;
   if (fdc->config.request_dma) {
     fdc->config.request_dma(fdc->config.context);
   }
@@ -670,7 +676,7 @@ enum {
   // the sector size code, the sectors to format, the gap length, and the
   // byte to fill each sector with.
   Y_FDC_FORMAT_PARAM_HEAD_AND_DRIVE = 1,
-  Y_FDC_FORMAT_PARAM_SECTORS = 3,
+  Y_FDC_FORMAT_PARAM_NUM_SECTORS = 3,
   Y_FDC_FORMAT_PARAM_FILL_BYTE = 5,
   // The ID the guest gives each sector, by DMA: cylinder, head, sector
   // number and sector size code.
@@ -723,10 +729,10 @@ Y_FILE_PRIVATE bool YFDCTakeFormatIDByte(YFDCState* fdc, uint8_t value) {
     }
   }
   ++fdc->transfer.sector_byte_index;
-  const uint8_t sectors = *YFDCCommandBufferGet(
-      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_SECTORS);
+  const uint8_t num_sectors = *YFDCCommandBufferGet(
+      &fdc->command_buffer, Y_FDC_FORMAT_PARAM_NUM_SECTORS);
   return fdc->transfer.sector_byte_index >=
-         (uint16_t)sectors * Y_FDC_FORMAT_ID_BYTES;
+         (uint16_t)num_sectors * Y_FDC_FORMAT_ID_BYTES;
 }
 
 // Handler for Format Track: write a track's sectors, each filled with the fill
@@ -745,7 +751,7 @@ Y_FILE_PRIVATE void YFDCHandleFormatTrack(YFDCState* fdc) {
     fdc->transfer.sector = 1;
     fdc->transfer.sector_size_code = *YFDCCommandBufferGet(
         &fdc->command_buffer, 2);
-    if (!fdc->drives[drive_index].present) {
+    if (!fdc->drives[drive_index].is_present) {
       YFDCFinishReadWrite(
           fdc,
           Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY |
@@ -754,25 +760,25 @@ Y_FILE_PRIVATE void YFDCHandleFormatTrack(YFDCState* fdc) {
       return;
     }
     fdc->transfer.sector_byte_index = 0;
-    fdc->transfer.tc_received = false;
-    fdc->transfer.dma_request_active = true;
+    fdc->transfer.was_tc_received = false;
+    fdc->transfer.is_dma_request_active = true;
     if (fdc->config.request_dma) {
       fdc->config.request_dma(fdc->config.context);
     }
     return;
   }
 
-  bool done = fdc->transfer.tc_received;
-  if (!fdc->transfer.dma_request_active) {
-    done = YFDCTakeFormatIDByte(fdc, fdc->transfer.data_register) || done;
-    if (!done) {
-      fdc->transfer.dma_request_active = true;
+  bool is_done = fdc->transfer.was_tc_received;
+  if (!fdc->transfer.is_dma_request_active) {
+    is_done = YFDCTakeFormatIDByte(fdc, fdc->transfer.data_register) || is_done;
+    if (!is_done) {
+      fdc->transfer.is_dma_request_active = true;
       if (fdc->config.request_dma) {
         fdc->config.request_dma(fdc->config.context);
       }
     }
   }
-  if (done) {
+  if (is_done) {
     YFDCFinishReadWrite(
         fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index,
         0, 0);
@@ -784,7 +790,7 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
     // Initialization.
     uint8_t cmd_byte = *YFDCCommandBufferGet(&fdc->command_buffer, 0);
-    fdc->transfer.multi_track = (cmd_byte & 0x80) != 0;
+    fdc->transfer.is_multi_track = (cmd_byte & 0x80) != 0;
 
     uint8_t drive_head = *YFDCCommandBufferGet(&fdc->command_buffer, 1);
     uint8_t drive_index = drive_head & 0x03;
@@ -800,7 +806,7 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
     // init.
 
     YFDCDriveState* drive = &fdc->drives[drive_index];
-    if (!drive->present) {
+    if (!drive->is_present) {
       // Drive not ready.
       YFDCFinishReadWrite(
           fdc,
@@ -826,15 +832,15 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
     }
 
     fdc->transfer.sector_byte_index = 0;
-    fdc->transfer.dma_request_active = false;
-    fdc->transfer.tc_received = false;
+    fdc->transfer.is_dma_request_active = false;
+    fdc->transfer.was_tc_received = false;
     return;
   }
 
   // Execution Loop.
 
   // Check for Terminal Count (TC).
-  if (fdc->transfer.tc_received) {
+  if (fdc->transfer.was_tc_received) {
     // Transfer complete.
     uint8_t drive_index = *YFDCCommandBufferGet(&fdc->command_buffer, 1) & 0x03;
     uint8_t head_address = (fdc->transfer.head & 0x01);
@@ -845,7 +851,7 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
   }
 
   // If DREQ is active, wait for the system to service it.
-  if (fdc->transfer.dma_request_active) {
+  if (fdc->transfer.is_dma_request_active) {
     return;
   }
 
@@ -863,7 +869,7 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
   fdc->transfer.sector_byte_index++;
 
   // Request DMA transfer.
-  fdc->transfer.dma_request_active = true;
+  fdc->transfer.is_dma_request_active = true;
   if (fdc->config.request_dma) {
     fdc->config.request_dma(fdc->config.context);
   }
@@ -882,7 +888,7 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
     // Sector done.
     if (fdc->transfer.sector >= fdc->transfer.eot) {
       // End of Track reached.
-      if (fdc->transfer.multi_track && (fdc->transfer.head & 1) == 0) {
+      if (fdc->transfer.is_multi_track && (fdc->transfer.head & 1) == 0) {
         // Multi-Track rollover: Side 0 -> Side 1.
         fdc->transfer.head ^= 1;   // Flip to Head 1
         fdc->transfer.sector = 1;  // Reset to Sector 1
@@ -895,13 +901,13 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
             fdc->transfer.sector, 0);
 
         if (fdc->transfer.current_offset == Y_FDC_INVALID_OFFSET) {
-          fdc->transfer.tc_received = true;
+          fdc->transfer.was_tc_received = true;
         }
       } else {
         // Standard termination (MT=0 or already on Head 1).
         // Increment sector so result phase reports the *next* logical sector.
         fdc->transfer.sector++;
-        fdc->transfer.tc_received = true;
+        fdc->transfer.was_tc_received = true;
       }
     } else {
       // Move to next sector.
@@ -916,7 +922,7 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
       if (fdc->transfer.current_offset == Y_FDC_INVALID_OFFSET) {
         // Should not happen if EOT is correct, but if we ran off the end
         // of the image despite EOT, terminate.
-        fdc->transfer.tc_received = true;
+        fdc->transfer.was_tc_received = true;
       }
     }
   }
@@ -1067,7 +1073,7 @@ Y_FILE_PRIVATE uint8_t YFDCReadMSRPort(YFDCState* fdc) {
   }
   // Set drive busy flags.
   for (int i = 0; i < Y_FDC_NUM_DRIVES; ++i) {
-    if (fdc->drives[i].busy) {
+    if (fdc->drives[i].is_busy) {
       msr |= (1 << i);
     }
   }
@@ -1078,7 +1084,7 @@ Y_FILE_PRIVATE uint8_t YFDCReadDataPort(YFDCState* fdc) {
   switch (fdc->phase) {
     case Y_FDC_PHASE_EXECUTION:
       // DMA or Polling read during execution.
-      fdc->transfer.dma_request_active = false;
+      fdc->transfer.is_dma_request_active = false;
       return fdc->transfer.data_register;
 
     case Y_FDC_PHASE_RESULT: {
@@ -1120,19 +1126,19 @@ Y_FILE_PRIVATE void YFDCWriteDORPort(YFDCState* fdc, uint8_t value) {
   uint8_t old_dor = fdc->dor;
   fdc->dor = value;
 
-  bool old_reset_bit = (old_dor & Y_FDC_DOR_RESET) != 0;
-  bool new_reset_bit = (value & Y_FDC_DOR_RESET) != 0;
+  bool was_reset_bit_set = (old_dor & Y_FDC_DOR_RESET) != 0;
+  bool is_reset_bit_set = (value & Y_FDC_DOR_RESET) != 0;
 
-  if (!new_reset_bit && old_reset_bit) {
+  if (!is_reset_bit_set && was_reset_bit_set) {
     // Entering reset state (1 -> 0).
     fdc->phase = Y_FDC_PHASE_IDLE;
     YFDCCommandBufferClear(&fdc->command_buffer);
     YFDCResultBufferClear(&fdc->result_buffer);
     for (int i = 0; i < Y_FDC_NUM_DRIVES; ++i) {
-      fdc->drives[i].busy = false;
+      fdc->drives[i].is_busy = false;
       fdc->drives[i].has_pending_interrupt = false;
     }
-  } else if (new_reset_bit && !old_reset_bit) {
+  } else if (is_reset_bit_set && !was_reset_bit_set) {
     // Exiting reset state (0 -> 1).
     // The FDC generates an interrupt and sets up status for Sense
     // Interrupt Status for all drives.
@@ -1200,7 +1206,7 @@ Y_FILE_PRIVATE void YFDCWriteDataPort(YFDCState* fdc, uint8_t value) {
     case Y_FDC_PHASE_EXECUTION:
       // DMA or Polling write during execution.
       fdc->transfer.data_register = value;
-      fdc->transfer.dma_request_active = false;
+      fdc->transfer.is_dma_request_active = false;
       break;
 
     case Y_FDC_PHASE_RESULT:
@@ -1226,7 +1232,9 @@ Y_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
   }
 }
 
-Y_PUBLIC void YFDCHandleTC(YFDCState* fdc) { fdc->transfer.tc_received = true; }
+Y_PUBLIC void YFDCHandleTC(YFDCState* fdc) {
+  fdc->transfer.was_tc_received = true;
+}
 
 Y_PUBLIC void YFDCInsertDisk(
     YFDCState* fdc, uint8_t drive, const YFDCDiskFormat* format) {
@@ -1234,7 +1242,7 @@ Y_PUBLIC void YFDCInsertDisk(
     return;
   }
   YFDCDriveState* drive_state = &fdc->drives[drive];
-  drive_state->present = true;
+  drive_state->is_present = true;
   drive_state->format = format;
   drive_state->head = 0;
   drive_state->track = 0;
@@ -1245,7 +1253,7 @@ Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
     return;
   }
   YFDCDriveState* drive_state = &fdc->drives[drive];
-  drive_state->present = false;
+  drive_state->is_present = false;
   drive_state->format = NULL;
 }
 

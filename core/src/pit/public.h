@@ -110,12 +110,12 @@ typedef struct YPITChannelState {
   uint8_t mode;
   // The read/write access mode.
   YPITAccessMode access_mode;
-  // The current output state of the channel.
-  bool output_state;
+  // Whether the channel's output is high.
+  bool is_output_high;
   // Which byte to read/write next when in mode Y_PIT_ACCESS_LSB_THEN_MSB.
   YPITByte rw_byte;
   // Whether a latch command is active.
-  bool latch_active;
+  bool is_latch_active;
 } YPITChannelState;
 
 // State of the PIT.
