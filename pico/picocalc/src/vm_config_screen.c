@@ -224,7 +224,7 @@ static ScreenResult OnResume(void) {
 // A new VM's name, typed in place with a cursor while it is selected, and the
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
-static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }

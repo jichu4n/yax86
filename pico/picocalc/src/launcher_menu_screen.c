@@ -200,7 +200,7 @@ static ScreenResult OnResume(void) {
 // Draw the rows that fit in the box from g_top_row, with arrows on its border
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
-static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
