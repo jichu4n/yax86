@@ -323,8 +323,7 @@ bool LauncherRun(
     const bool was_display_on = DisplayPowerIsOn();
     SouthbridgeKeyEvent key;
     const bool was_pressed = SouthbridgePollKey(&key) || TypingNext(&key);
-    if (was_pressed) {
-      DisplayPowerResetTimer();
+    if (was_pressed && !DisplayPowerConsumeWakeKey(key, true)) {
       ScreenHandleKey(key);
       DisplayPowerResetTimer();
     }

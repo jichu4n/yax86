@@ -214,19 +214,20 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   the VM runs on, and the frames due are drawn together. Putting drawing
   code in SRAM has not been tried. Nor has timing a full graphics frame.
 - **The display turns off after `display_timeout` seconds with no key** (120
-  without a setting, 0 to stay on): in launcher mode while neither counting
-  down nor exporting over USB, and in emulator mode once the boot is over or
-  the menu is open. `src/display_power.c` puts the panel's display off and
-  into sleep, `LcdSetDisplayOn(false)` - a static image can mark the panel -
-  and on keyboard controller firmware v1.6 and later writes 0 to both
-  backlight registers, turning the keyboard LEDs off and dimming the display
-  backlight to whatever floor the controller allows (16 of 255 on ClockworkPi's
-  stock v1.6/v1.7, 0 on third-party controller firmware), logged as
-  `module=display` `timeout`. Nothing is rendered while off; changes wait in
-  the live state. A key wakes the panel first, restores `display_brightness`
-  and `keyboard_brightness` (`module=display` `resume`) - the panel keeps its
-  frame memory, so only changes are drawn - and goes on to the screen or the
-  guest.
+  without a setting): in launcher mode while neither counting down nor
+  exporting over USB, and in emulator mode once the boot is over or the menu is
+  open. `src/display_power.c` puts the panel's display off and into sleep,
+  `LcdSetDisplayOn(false)` - a static image can mark the panel, though `0`
+  (`Never`) lets the user opt out and keep it on - and on keyboard controller
+  firmware v1.6 and later writes 0 to both backlight registers, turning the
+  keyboard LEDs off and dimming the display backlight to whatever floor the
+  controller allows (16 of 255 on ClockworkPi's stock v1.6/v1.7, 0 on
+  third-party controller firmware), logged as `module=display` `timeout`.
+  Nothing is rendered while off; changes wait in the live state. A key wakes
+  the panel, restores `display_brightness` and `keyboard_brightness`
+  (`module=display` `resume`) - the panel keeps its frame memory, so only
+  changes are drawn - and is swallowed, its repeats and release included, so
+  waking never acts on a screen nobody could see or types blind into the guest.
 
 ## The keyboard controller
 

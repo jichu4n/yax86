@@ -1063,15 +1063,13 @@ static void RunVM(bool is_vm_ready) {
     PollCommand(&g_command_us);
     // Between batches, so the keyboard is never written while the VM
     // runs, and a key a host typed only in a batch the keyboard had none, so
-    // that the two never land in one. A key also keeps the display on, and
-    // turns it back on if it was off: the panel keeps its frame memory, so what
-    // changed meanwhile is drawn with the next frame.
+    // that the two never land in one. A key also keeps the display on, or
+    // wakes it and is swallowed if it was off: the panel keeps its frame
+    // memory, so what changed meanwhile is drawn with the next frame.
     const bool was_display_on = DisplayPowerIsOn();
     SouthbridgeKeyEvent key;
-    if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      if (!was_display_on) {
-        DisplayPowerDisarm();
-      }
+    if ((SouthbridgePollKey(&key) || TypingNext(&key)) &&
+        !DisplayPowerConsumeWakeKey(key, IsBootOver() || ScreenIsOpen())) {
       HandleKey(key, is_running);
       if (IsBootOver() || ScreenIsOpen()) {
         DisplayPowerResetTimer();

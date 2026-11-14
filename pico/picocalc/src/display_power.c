@@ -6,17 +6,23 @@
 #include "display.h"
 #include "pico/time.h"
 #include "runtime_log.h"
-#include "southbridge.h"
 
 enum {
   kMillisecondsPerSecond = 1000,
   // How long after the last brightness change to wait before writing yax86.cfg,
   // so stepping through several Alt+, or Alt+. presses writes once.
   kBrightnessSaveDelayMs = 1500,
+  // How long to wait before retrying a failed backlight restore. From v1.6 the
+  // controller restarts its I2C peripheral after 2.5 quiet seconds.
+  kBacklightRetryMs = 3000,
 };
 
 static Settings* g_settings;
 static bool g_is_on = true;
+static bool g_are_backlights_synced = true;
+static absolute_time_t g_retry_backlights_at;
+static bool g_is_swallowing_wake_key;
+static uint8_t g_wake_key;
 static absolute_time_t g_off_at;
 static bool g_is_brightness_dirty;
 static absolute_time_t g_save_brightness_at;
@@ -27,6 +33,21 @@ static absolute_time_t NextDeadline(void) {
   }
   return make_timeout_time_ms(
       (uint32_t)g_settings->display_timeout * kMillisecondsPerSecond);
+}
+
+static bool SyncActiveBacklights(void) {
+  if (g_settings == NULL || !SouthbridgeHasBacklights()) {
+    g_are_backlights_synced = true;
+    return true;
+  }
+  if (SouthbridgeSetBacklights(
+          g_settings->display_brightness, g_settings->keyboard_brightness)) {
+    g_are_backlights_synced = true;
+    return true;
+  }
+  g_are_backlights_synced = false;
+  g_retry_backlights_at = make_timeout_time_ms(kBacklightRetryMs);
+  return false;
 }
 
 static void ObserveBrightness(uint8_t display, uint8_t keyboard) {
@@ -46,8 +67,8 @@ static void ObserveBrightness(uint8_t display, uint8_t keyboard) {
   }
 }
 
-// Kept out of line, so that problem stays off core 0's stack while the loops
-// run.
+// Kept out of line, so that the problem buffer stays off core 0's stack while
+// the loops run.
 static __noinline void SaveBrightnessNow(void) {
   g_is_brightness_dirty = false;
   if (DiskImageMountCard() != kDiskImageOpen) {
@@ -70,39 +91,51 @@ static __noinline void SaveBrightnessNow(void) {
 // run.
 static __noinline void Wake(void) {
   DisplayTurnOn();
-  if (g_settings != NULL && SouthbridgeHasBacklights() &&
-      !SouthbridgeSetBacklights(
-          g_settings->display_brightness, g_settings->keyboard_brightness)) {
+  if (!SyncActiveBacklights()) {
     DISPLAY_WARN("backlights_not_set");
   }
   g_is_on = true;
-  const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
-  DISPLAY_INFO(
-      "resume", Y_LOG_UINT("display_backlight", backlights.display),
-      Y_LOG_UINT("keyboard_backlight", backlights.keyboard));
+  if (SouthbridgeHasBacklights()) {
+    const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
+    DISPLAY_INFO(
+        "resume", Y_LOG_UINT("display_backlight", backlights.display),
+        Y_LOG_UINT("keyboard_backlight", backlights.keyboard));
+  } else {
+    DISPLAY_INFO("resume");
+  }
 }
 
+// Kept out of line, as Wake() is, so that log fields stay off core 0's stack.
 static __noinline void TurnOff(void) {
+  g_is_swallowing_wake_key = false;
   uint8_t display = 0;
   uint8_t keyboard = 0;
-  if (SouthbridgeReadBacklights(&display, &keyboard)) {
+  if (g_are_backlights_synced &&
+      SouthbridgeReadBacklights(&display, &keyboard)) {
     ObserveBrightness(display, keyboard);
   }
   DisplayTurnOff();
   if (SouthbridgeHasBacklights() && !SouthbridgeSetBacklights(0, 0)) {
     DISPLAY_WARN("backlights_not_set");
   }
+  g_are_backlights_synced = false;
   g_is_on = false;
-  const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
-  DISPLAY_INFO(
-      "timeout", Y_LOG_UINT("timeout_s", g_settings->display_timeout),
-      Y_LOG_UINT("display_backlight", backlights.display),
-      Y_LOG_UINT("keyboard_backlight", backlights.keyboard));
+  if (SouthbridgeHasBacklights()) {
+    const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
+    DISPLAY_INFO(
+        "timeout", Y_LOG_UINT("timeout_s", g_settings->display_timeout),
+        Y_LOG_UINT("display_backlight", backlights.display),
+        Y_LOG_UINT("keyboard_backlight", backlights.keyboard));
+  } else {
+    DISPLAY_INFO(
+        "timeout", Y_LOG_UINT("timeout_s", g_settings->display_timeout));
+  }
 }
 
 void DisplayPowerApplySettings(Settings* settings) {
   g_settings = settings;
-  if (SouthbridgeHasBacklights() && g_is_on) {
+  g_is_swallowing_wake_key = false;
+  if (SouthbridgeHasBacklights() && g_is_on && g_are_backlights_synced) {
     uint8_t live_display = 0;
     uint8_t live_keyboard = 0;
     if (g_is_brightness_dirty &&
@@ -130,13 +163,11 @@ void DisplayPowerApplySettings(Settings* settings) {
   }
   if (!g_is_on) {
     Wake();
-  } else if (
-      SouthbridgeHasBacklights() &&
-      !SouthbridgeSetBacklights(
-          settings->display_brightness, settings->keyboard_brightness)) {
+  } else if (!SyncActiveBacklights()) {
     DISPLAY_WARN("backlights_not_set");
   }
-  if (SouthbridgeHasBacklights() && !g_is_brightness_dirty) {
+  if (SouthbridgeHasBacklights() && g_are_backlights_synced &&
+      !g_is_brightness_dirty) {
     // Match settings to any step rounding or clamping the controller applied,
     // so the next poll does not treat that rounding as a shortcut press.
     const SouthbridgeBacklights applied = SouthbridgeGetBacklights();
@@ -151,6 +182,33 @@ void DisplayPowerApplySettings(Settings* settings) {
 }
 
 bool DisplayPowerIsOn(void) { return g_is_on; }
+
+bool DisplayPowerConsumeWakeKey(
+    SouthbridgeKeyEvent event, bool should_arm_timer) {
+  if (!g_is_on) {
+    Wake();
+    g_off_at = should_arm_timer ? NextDeadline() : at_the_end_of_time;
+    if (event.state != kSouthbridgeKeyReleased) {
+      g_is_swallowing_wake_key = true;
+      g_wake_key = event.key;
+    } else {
+      g_is_swallowing_wake_key = false;
+    }
+    return true;
+  }
+  if (!g_is_swallowing_wake_key || event.key != g_wake_key) {
+    return false;
+  }
+  if (event.state == kSouthbridgeKeyPressed) {
+    g_is_swallowing_wake_key = false;
+    return false;
+  }
+  if (event.state == kSouthbridgeKeyReleased) {
+    g_is_swallowing_wake_key = false;
+  }
+  g_off_at = should_arm_timer ? NextDeadline() : at_the_end_of_time;
+  return true;
+}
 
 void DisplayPowerResetTimer(void) {
   if (!g_is_on) {
@@ -171,9 +229,14 @@ void DisplayPowerTick(bool can_save_settings) {
     return;
   }
   if (g_is_on) {
-    const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
-    if (backlights.is_known) {
-      ObserveBrightness(backlights.display, backlights.keyboard);
+    if (!g_are_backlights_synced && time_reached(g_retry_backlights_at)) {
+      (void)SyncActiveBacklights();
+    }
+    if (g_are_backlights_synced) {
+      const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
+      if (backlights.is_known) {
+        ObserveBrightness(backlights.display, backlights.keyboard);
+      }
     }
     if (time_reached(g_off_at)) {
       TurnOff();
@@ -189,7 +252,7 @@ void DisplayPowerFlush(bool can_save_settings) {
   if (g_settings == NULL || !can_save_settings) {
     return;
   }
-  if (g_is_on) {
+  if (g_is_on && g_are_backlights_synced) {
     const SouthbridgeBacklights backlights = SouthbridgeGetBacklights();
     if (backlights.is_known) {
       ObserveBrightness(backlights.display, backlights.keyboard);

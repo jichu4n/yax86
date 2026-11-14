@@ -116,14 +116,18 @@ static void SetTargetAddress(void) {
   hw->enable = 1;
 }
 
-// Read a register's two byte answer.
-static bool SouthbridgeReadRegister(uint8_t reg, uint8_t answer[2]) {
+// Read a register's two byte answer, waiting reply_delay_ms between writing the
+// register number and reading its value.
+static bool SouthbridgeReadRegister(
+    uint8_t reg, uint8_t answer[2], uint32_t reply_delay_ms) {
   if (i2c_write_timeout_us(
           kSouthbridgeI2C, kSouthbridgeAddress, &reg, 1, false,
           kSouthbridgeTimeoutUs) != 1) {
     return false;
   }
-  sleep_ms(kSouthbridgeReplyDelayMs);
+  if (reply_delay_ms > 0) {
+    sleep_ms(reply_delay_ms);
+  }
   return i2c_read_timeout_us(
              kSouthbridgeI2C, kSouthbridgeAddress, answer, 2, false,
              kSouthbridgeTimeoutUs) == 2;
@@ -146,7 +150,7 @@ static bool SouthbridgeWriteRegister(uint8_t reg, uint8_t value) {
 static bool SouthbridgeReadRegisterPatiently(uint8_t reg, uint8_t answer[2]) {
   const absolute_time_t deadline =
       make_timeout_time_ms(kSouthbridgeAnswerWindowMs);
-  while (!SouthbridgeReadRegister(reg, answer)) {
+  while (!SouthbridgeReadRegister(reg, answer, kSouthbridgeReplyDelayMs)) {
     if (time_reached(deadline)) {
       return false;
     }
@@ -272,7 +276,7 @@ static void FinishPollInFlight(void) {
     }
     if (i2c_get_read_available(kSouthbridgeI2C) >= kRegisterAnswerBytes) {
       SouthbridgeKeyEvent key;
-      if (!g_has_saved_key && CollectPollReply(&key)) {
+      if (CollectPollReply(&key)) {
         g_saved_key = key;
         g_has_saved_key = true;
       }
@@ -296,21 +300,29 @@ static void FinishPollInFlight(void) {
   g_is_poll_in_flight = false;
 }
 
-bool SouthbridgeReadBacklights(uint8_t* display, uint8_t* keyboard) {
-  if (!g_has_backlights) {
-    return false;
-  }
-  FinishPollInFlight();
+static bool ReadBacklightPair(uint8_t* display, uint8_t* keyboard) {
   uint8_t display_answer[2] = {0, 0};
   uint8_t keyboard_answer[2] = {0, 0};
-  if (!SouthbridgeReadRegister(kRegisterDisplayBacklight, display_answer) ||
+  if (!SouthbridgeReadRegister(kRegisterDisplayBacklight, display_answer, 0) ||
       display_answer[0] != kRegisterDisplayBacklight ||
-      !SouthbridgeReadRegister(kRegisterKeyboardBacklight, keyboard_answer) ||
+      !SouthbridgeReadRegister(
+          kRegisterKeyboardBacklight, keyboard_answer, 0) ||
       keyboard_answer[0] != kRegisterKeyboardBacklight) {
     return false;
   }
   *display = display_answer[1];
   *keyboard = keyboard_answer[1];
+  return true;
+}
+
+bool SouthbridgeReadBacklights(uint8_t* display, uint8_t* keyboard) {
+  if (!g_has_backlights) {
+    return false;
+  }
+  FinishPollInFlight();
+  if (!ReadBacklightPair(display, keyboard)) {
+    return false;
+  }
   g_backlights = (SouthbridgeBacklights){
       .is_known = true,
       .display = *display,
@@ -326,28 +338,19 @@ bool SouthbridgeSetBacklights(uint8_t display, uint8_t keyboard) {
   FinishPollInFlight();
   g_should_poll_backlights = false;
   g_num_pending_backlight_reads = 0;
+  g_backlights.is_known = false;
   if (!SouthbridgeWriteRegister(kRegisterDisplayBacklight, display) ||
       !SouthbridgeWriteRegister(kRegisterKeyboardBacklight, keyboard)) {
     return false;
   }
-  uint8_t display_answer[2] = {0, 0};
-  uint8_t keyboard_answer[2] = {0, 0};
-  if (SouthbridgeReadRegister(kRegisterDisplayBacklight, display_answer) &&
-      display_answer[0] == kRegisterDisplayBacklight &&
-      SouthbridgeReadRegister(kRegisterKeyboardBacklight, keyboard_answer) &&
-      keyboard_answer[0] == kRegisterKeyboardBacklight) {
-    g_backlights = (SouthbridgeBacklights){
-        .is_known = true,
-        .display = display_answer[1],
-        .keyboard = keyboard_answer[1],
-    };
-  } else {
-    g_backlights = (SouthbridgeBacklights){
-        .is_known = true,
-        .display = display,
-        .keyboard = keyboard,
-    };
-  }
+  uint8_t applied_display = display;
+  uint8_t applied_keyboard = keyboard;
+  (void)ReadBacklightPair(&applied_display, &applied_keyboard);
+  g_backlights = (SouthbridgeBacklights){
+      .is_known = true,
+      .display = applied_display,
+      .keyboard = applied_keyboard,
+  };
   if (display > 0) {
     g_should_poll_backlights = true;
     g_next_backlight_read_us = time_us_64() + kBacklightReadIntervalUs;
