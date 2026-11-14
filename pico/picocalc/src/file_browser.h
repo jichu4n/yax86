@@ -73,6 +73,6 @@ void FileBrowserScrollTo(FileBrowser* browser, uint8_t selected);
 // The browser: the folder as the title, and a row for each entry that
 // shows, with arrows on the border where there is more above or below.
 void FileBrowserDraw(
-    const FileBrowser* browser, DisplayMenu* menu, uint8_t selected);
+    const FileBrowser* browser, DisplayBox* box, uint8_t selected);
 
 #endif  // YAX86_PICOCALC_FILE_BROWSER_H

@@ -56,7 +56,7 @@ typedef enum DisplayMessage {
   kDisplayMessageTurnOff,
   kDisplayMessageTurnOn,
   kDisplayMessageScreenshot,
-  kDisplayMessageMenu,
+  kDisplayMessageBox,
   kDisplayMessageFont,
 } DisplayMessage;
 
@@ -70,8 +70,8 @@ static uint8_t g_frame_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static volatile bool g_frame_busy;
 static DisplayStatus g_status;
 static volatile bool g_status_busy;
-static DisplayMenu g_menu;
-static volatile bool g_menu_busy;
+static DisplayBox g_box;
+static volatile bool g_box_busy;
 static volatile Font4x10 g_font = kFont4x10Default;
 // The id of the command a screenshot answers.
 static uint32_t g_screenshot_id;
@@ -233,11 +233,11 @@ static void DrawStatus(void) {
   g_status_drawn = true;
 }
 
-static void DrawMenu(void) {
-  for (uint8_t row = 0; row < g_menu.rows; ++row) {
+static void DrawBox(void) {
+  for (uint8_t row = 0; row < g_box.rows; ++row) {
     TextDrawCells(
-        g_menu.column, (uint8_t)(g_menu.row + row), g_menu.text[row].chars,
-        g_menu.text[row].attrs, g_menu.columns, g_palette);
+        g_box.column, (uint8_t)(g_box.row + row), g_box.text[row].chars,
+        g_box.text[row].attrs, g_box.columns, g_palette);
   }
 }
 
@@ -333,9 +333,9 @@ static void DisplayMain(void) {
       case kDisplayMessageTurnOn:
         LcdSetDisplayOn(true);
         break;
-      case kDisplayMessageMenu:
-        DrawMenu();
-        GiveBack(&g_menu_busy);
+      case kDisplayMessageBox:
+        DrawBox();
+        GiveBack(&g_box_busy);
         break;
       case kDisplayMessageFont:
         TextSetFont(g_font);
@@ -407,9 +407,9 @@ DisplayStatus* DisplayBeginStatus(void) {
 
 void DisplayEndStatus(void) { HandOver(kDisplayMessageStatus, &g_status_busy); }
 
-DisplayMenu* DisplayBeginMenu(void) { return g_menu_busy ? NULL : &g_menu; }
+DisplayBox* DisplayBeginBox(void) { return g_box_busy ? NULL : &g_box; }
 
-void DisplayEndMenu(void) { HandOver(kDisplayMessageMenu, &g_menu_busy); }
+void DisplayEndBox(void) { HandOver(kDisplayMessageBox, &g_box_busy); }
 
 void DisplaySetFont(Font4x10 font) {
   if (font == g_font) {
