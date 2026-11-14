@@ -5,12 +5,19 @@
 
 #include "box.h"
 #include "display.h"
+#include "display_timeout_screen.h"
 #include "font_screen.h"
 #include "list_box.h"
 
-static const BoxItem kSettingsItems[] = {{"Font", true}};
-enum {
-  kNumSettingsItems = sizeof(kSettingsItems) / sizeof(kSettingsItems[0]),
+typedef enum SettingsItem {
+  kSettingsItemFont = 0,
+  kSettingsItemDisplayTimeout,
+  kNumSettingsItems,
+} SettingsItem;
+
+static const BoxItem kSettingsItems[kNumSettingsItems] = {
+    [kSettingsItemFont] = {"Font", true},
+    [kSettingsItemDisplayTimeout] = {"Display timeout", true},
 };
 
 extern const Screen kSettingsScreen;
@@ -28,6 +35,9 @@ ScreenResult SettingsScreenOpen(Settings* settings) {
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumSettingsItems)) {
     case kListBoxActionSelect:
+      if (g_list_box.selected == kSettingsItemDisplayTimeout) {
+        return DisplayTimeoutScreenOpen(g_settings);
+      }
       return FontScreenOpen(g_settings);
     case kListBoxActionBack:
       return ScreenBack();

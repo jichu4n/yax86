@@ -1,0 +1,54 @@
+// Turning the display and backlights off on keyboard inactivity and back on at
+// a key, swallowing the key that woke them, and saving display_brightness and
+// keyboard_brightness to yax86.cfg as the keyboard controller's Alt shortcuts
+// change them.
+//
+// Shared by launcher mode and emulator mode. Turning off puts the ST7365P panel
+// to sleep through DisplayTurnOff(). On keyboard controller firmware v1.6 and
+// later it also writes 0 to both backlight registers through
+// SouthbridgeSetBacklights(), turning the keyboard backlight off and lowering
+// the display backlight to the controller's floor (16 on stock v1.6 and v1.7,
+// 0 on third-party controller firmware).
+#ifndef YAX86_PICOCALC_DISPLAY_POWER_H
+#define YAX86_PICOCALC_DISPLAY_POWER_H
+
+#include <stdbool.h>
+
+#include "settings.h"
+#include "southbridge.h"
+
+// Sync the display and keyboard backlights with *settings after reading
+// yax86.cfg (or taking defaults without a card), turn the display on if it was
+// off, and arm the inactivity timeout from settings->display_timeout. settings
+// must outlive the mode loops.
+void DisplayPowerApplySettings(Settings* settings);
+
+// Whether the display and backlights are currently on.
+bool DisplayPowerIsOn(void);
+
+// If the display is off, wake it, arm or disarm the inactivity timeout per
+// should_arm_timer, and swallow a waking press together with any held repeats
+// and release of that same key (or drop a waking repeat, while passing through
+// a waking release of a key held across the timeout). Returns true when event
+// was swallowed and should not be passed to a screen or the guest.
+bool DisplayPowerConsumeWakeKey(
+    SouthbridgeKeyEvent event, bool should_arm_timer);
+
+// Wake the display and restore the saved backlights if they are off, and start
+// the inactivity timeout afresh from settings->display_timeout.
+void DisplayPowerResetTimer(void);
+
+// Wake the display if it is off, and disarm the inactivity timeout until
+// DisplayPowerResetTimer() arms it again.
+void DisplayPowerDisarm(void);
+
+// Check for backlight changes from the keyboard controller, turn the display
+// and backlights off when the timeout expires, and save debounced brightness
+// changes to yax86.cfg when can_save_settings allows touching the card.
+void DisplayPowerTick(bool can_save_settings);
+
+// Save any pending brightness change to yax86.cfg at once, if can_save_settings
+// allows touching the card.
+void DisplayPowerFlush(bool can_save_settings);
+
+#endif  // YAX86_PICOCALC_DISPLAY_POWER_H

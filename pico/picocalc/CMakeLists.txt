@@ -129,6 +129,8 @@ add_executable(yax86_picocalc
     src/disk_image.c
     src/diskio.c
     src/display.c
+    src/display_power.c
+    src/display_timeout_screen.c
     src/file_list.c
     src/fs.c
     src/config_file.c

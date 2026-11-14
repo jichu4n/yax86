@@ -213,13 +213,23 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - A scrolling screen redraws all 80,000 pixels a line, about 53ms at 250MHz;
   the VM runs on, and the frames due are drawn together. Putting drawing
   code in SRAM has not been tried. Nor has timing a full graphics frame.
-- **The screen is blanked 30 seconds after the boot or the last key**, with
-  the panel's display off and sleep in, `LcdSetDisplayOn(false)` - a static
-  image can mark the panel. Nothing is rendered while blank; changes wait in
-  the live state. A key turns it back on - the panel keeps its frame memory,
-  so only changes are drawn - and goes on to the guest. The backlight is the
-  controller's and will not dim below 16 of 255, so blanking is the panel's
-  job.
+- **The display turns off after `display_timeout` seconds with no key** (120
+  without a setting): in launcher mode while neither counting down nor
+  exporting over USB, and in emulator mode once the boot is over or the menu is
+  open. `src/display_power.c` puts the panel's display off and into sleep,
+  `LcdSetDisplayOn(false)` - a static image can mark the panel, though `0`
+  (`Never`) lets the user opt out and keep it on - and on keyboard controller
+  firmware v1.6 and later writes 0 to both backlight registers, turning the
+  keyboard LEDs off and dimming the display backlight to whatever floor the
+  controller allows (16 of 255 on ClockworkPi's stock v1.6/v1.7, 0 on
+  third-party controller firmware), logged as `module=display` `timeout`.
+  Nothing is rendered while off; changes wait in the live state. A key wakes
+  the panel and restores `display_brightness` and `keyboard_brightness`
+  (`module=display` `resume`) - the panel keeps its frame memory, so only
+  changes are drawn. A waking press (with its repeats and release) or repeat is
+  swallowed so waking never acts on a screen nobody could see or types blind
+  into the guest, while a waking release is passed on so a key held across the
+  timeout still comes up in the guest.
 
 ## The keyboard controller
 
@@ -247,7 +257,18 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   firmware answers unknown registers with zeros, reported as "older than
   v1.6". **v1.7 reports itself as v1.6**: its one change did not touch
   `BIOSVERSION`. The battery register answers
-  `[0B, percent]`.
+  `[0B, percent]`. The display and keyboard backlight registers, `0x05` and
+  `0x0A`, answer `[reg, brightness]` and are written with
+  `[reg | 0x80, brightness]`, then read back to learn what the controller
+  applied. ClockworkPi's stock v1.6/v1.7 passes writes to `0x05` through
+  `lcd_backlight_update(0)`, which rounds to steps of 16 and clamps to 16..240
+  even over I2C - so writing 0 dims the display backlight to 16 rather than 0,
+  while `0x0A` (`kbd_backlight_update(0)`, steps of 32) goes all the way to 0;
+  third-party controller firmware allows 0 on `0x05` as well. Firmware before
+  v1.6 mishandles I2C writes to `0x05`, so both registers are touched only
+  from v1.6 on. While the display is on, the key FIFO poll reads them after
+  `Alt` comes up and every five seconds so shortcut changes can be saved to
+  `yax86.cfg`.
 - **It can stop acknowledging for minutes**: the development unit, then
   older than v1.6, acknowledged nothing for two boots, then everything, cause
   unknown. v1.6 restarts its I2C after 2.5 quiet seconds, so the boot-time
@@ -332,15 +353,20 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the name
   of the VM to highlight and start - `boot_default=DOS330` - `boot_delay`,
   the seconds the list waits for a key, 5 without it, 0 to start the default
-  without showing the list, and `font`, the 4x10 font (`ymini`, `atari800`,
-  `miniwi` or `creep`, `ymini` without it). Each key read is logged as
+  without showing the list, `font`, the 4x10 font (`ymini`, `atari800`,
+  `miniwi` or `creep`, `ymini` without it), `display_timeout`, the seconds
+  with no key before the display turns off (0 to 3600, 120 without it, 0 to
+  stay on), and `display_brightness` (1 to 255, 255 without it) and
+  `keyboard_brightness` (0 to 255, 0 without it), applied on controller
+  firmware v1.6 and later and updated as the `Alt` shortcuts change them.
+  Each key read is logged as
   `settings_key`, with its value. A key it does not know is logged as
   `settings_key_ignored` and skipped, so a file written by a later firmware
   still reads. A problem, such as a bad value, is logged as
   `settings_problem`.
 - **At power on, with a card, the menu lists its VMs**, before the VM
   exists, then a separator line, Manage VMs - see below - USB mass storage -
-  see "The USB device" - and Settings (which holds Font). The countdown runs on
+  see "The USB device" - and Settings (which holds Font and Display timeout). The countdown runs on
   the list's bottom edge until a key is pressed, then the default starts.
   With no VMs the list has Manage VMs, USB mass storage and Settings, with no
   separator, and nothing counts down or starts by itself; the built-in floppy boots only without a
@@ -403,8 +429,9 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   it keeps those pointers and its own state, such as the item selected, in
   statics. `main.c` holds the models, `g_vms`, `g_settings` and `g_vm`,
   and passes them to `LauncherRun()`, which passes them down; nothing
-  asks the launcher for them back. Settings and Font
-  are screens, in `src/settings_screen.c` and `src/font_screen.c`, and so
+  asks the launcher for them back. Settings, Font and Display timeout
+  are screens, in `src/settings_screen.c`, `src/font_screen.c` and
+  `src/display_timeout_screen.c`, and so
   are USB mass storage, the page while it exports, and the question before
   an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
   under it, in `src/vm_manager_screen.c` and `src/vm_*screen.c`; and the list
@@ -879,7 +906,11 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   the built-in floppy with no note.
 - **A test drives it as a hand would**, with `key shift press`, `key rshift
   press` and their releases, and checks it with `screenshot`; the report's
-  `menu` group says whether it is open and which page shows.
+  `menu` group says whether it is open and which page shows. Keys from `key`
+  and `type` wake a dark display and have their waking press swallowed as a
+  physical key does, so a script running against a board that may have idled
+  past `display_timeout` should check `[display] on` in `report` first (and tap
+  a harmless key to wake it if off).
 - **A change to the menu or the list at power on is checked against master
   on the board, screen by screen.** Build master's image and the branch's,
   and with each: boot DOS330, walk the same pages with `key`, and take a
@@ -890,8 +921,8 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   - The walk covers the menu and each of its pages: a drive's page, the
     browser, Status, and the questions before Reset and Power off. Then,
     powered off to the list: the list itself, Manage VMs, a VM's page, the
-    New VM form and a drive's choices on it, USB mass storage, Settings and
-    Font.
+    New VM form and a drive's choices on it, USB mass storage, Settings, Font
+    and Display timeout.
   - It only looks and backs out, with Esc or Cancel, so the card is as it
     was. Pages reached only by acting, such as copying or exporting, need a
     VM or an image made for the test, and deleted after.
@@ -1007,8 +1038,9 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
   mode. Then it gives its own. The emulator's, which `src/emulator.c`
   answers, are the VM's `paging`, `boot`, `display`, `fd1`, `fd2`, `hd1`,
-  `hd2`, `vm`, `menu` and `pacing`. The launcher's are `display` with the
-  font, `vm` with the number of VMs, and `menu` with the page showing; and
+  `hd2`, `vm`, `menu` and `pacing`. The launcher's are `display` with whether
+  it is on, its timeout and the font, `vm` with the number of VMs, and `menu`
+  with the page showing; and
   as no guest runs yet, its `screen` answers `no_guest`, which `debug.js`'s
   `wait` takes as no match yet.
 - **`src/init.c` initializes the system at startup**, after `main()` has
