@@ -96,7 +96,7 @@ static void JoinNames(
   }
 }
 
-static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
@@ -130,7 +130,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
     lines[line_count++] = users;
   }
   ListBoxDrawItems(
-      menu, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
+      box, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
       g_list_box.selected, true);
   return true;
 }

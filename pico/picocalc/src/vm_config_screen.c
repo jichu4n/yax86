@@ -224,7 +224,7 @@ static ScreenResult OnResume(void) {
 // A new VM's name, typed in place with a cursor while it is selected, and the
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
-static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
@@ -255,7 +255,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
   }
   items[kFormCreate] = (BoxItem){g_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
-      menu, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
+      box, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
       g_list_box.selected, true);
   return true;

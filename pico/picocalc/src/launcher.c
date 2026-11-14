@@ -289,9 +289,9 @@ static __noinline void PollCommand(void) {
 // launcher draws is the size of a list at least, so a new one covers the
 // last, and there is no guest's screen to draw under it.
 static void DrawScreen(void) {
-  DisplayMenu* menu = DisplayBeginMenu();
-  if (menu != NULL && ScreenDraw(menu, time_us_64())) {
-    DisplayEndMenu();
+  DisplayBox* box = DisplayBeginBox();
+  if (box != NULL && ScreenDraw(box, time_us_64())) {
+    DisplayEndBox();
   }
 }
 

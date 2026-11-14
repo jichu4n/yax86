@@ -95,20 +95,20 @@ void BoxItemRow(
   }
 }
 
-void BoxPlace(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
-  menu->columns = columns;
-  menu->rows = rows;
-  menu->column = (uint8_t)((kTextColumns - columns) / 2);
-  menu->row = (uint8_t)((kGuestScreenRows - rows) / 2);
+void BoxPlace(DisplayBox* box, uint8_t columns, uint8_t rows) {
+  box->columns = columns;
+  box->rows = rows;
+  box->column = (uint8_t)((kTextColumns - columns) / 2);
+  box->row = (uint8_t)((kGuestScreenRows - rows) / 2);
 }
 
-bool BoxShownResized(const BoxShown* shown, const DisplayMenu* menu) {
+bool BoxShownResized(const BoxShown* shown, const DisplayBox* box) {
   return shown->drawn &&
-         (menu->columns != shown->columns || menu->rows != shown->rows);
+         (box->columns != shown->columns || box->rows != shown->rows);
 }
 
-void BoxShownRecord(BoxShown* shown, const DisplayMenu* menu) {
-  shown->columns = menu->columns;
-  shown->rows = menu->rows;
+void BoxShownRecord(BoxShown* shown, const DisplayBox* box) {
+  shown->columns = box->columns;
+  shown->rows = box->rows;
   shown->drawn = true;
 }

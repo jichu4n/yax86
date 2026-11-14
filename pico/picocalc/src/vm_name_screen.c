@@ -139,7 +139,7 @@ static ScreenResult OnResume(void) {
 
 // The name being typed, in a field marked as the item selected is, with a
 // cursor after it while there is room.
-static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
@@ -154,10 +154,10 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
       "Up to 8 letters, digits, - and _.",
   };
   ListBoxDrawItems(
-      menu, title, lines, sizeof(lines) / sizeof(lines[0]), NULL, 0, 0, true);
+      box, title, lines, sizeof(lines) / sizeof(lines[0]), NULL, 0, 0, true);
   // The field, on the blank line: the box's edge, a blank row, then the
   // first line.
-  DisplayTextRow* row = &menu->text[3];
+  DisplayTextRow* row = &box->text[3];
   char field[kFSMaxFolderName + 1];
   for (uint8_t i = 0; i < kFSMaxFolderName; ++i) {
     field[i] = i < g_name_length ? g_name[i] : ' ';
@@ -166,7 +166,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
     field[g_name_length] = '_';
   }
   field[kFSMaxFolderName] = '\0';
-  BoxPutText(row, menu->columns, 3, field, kBoxAttrSelected);
+  BoxPutText(row, box->columns, 3, field, kBoxAttrSelected);
   return true;
 }
 

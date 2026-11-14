@@ -104,7 +104,7 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 }
 
 // The images in the VM's drives, over what can be done to it.
-static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
@@ -139,7 +139,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
     line_count = 1;
   }
   ListBoxDrawItems(
-      menu, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
+      box, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
       kVMItems, kVMItemCount, g_list_box.selected, true);
   return true;
 }
