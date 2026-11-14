@@ -188,13 +188,13 @@ bool DisplayPowerConsumeWakeKey(
   if (!g_is_on) {
     Wake();
     g_off_at = should_arm_timer ? NextDeadline() : at_the_end_of_time;
-    if (event.state != kSouthbridgeKeyReleased) {
-      g_is_swallowing_wake_key = true;
-      g_wake_key = event.key;
-    } else {
-      g_is_swallowing_wake_key = false;
-    }
-    return true;
+    // Only a press starts something nobody saw. A repeat or a release that
+    // wakes the display belongs to a key pressed while it was on, which the
+    // guest has seen go down: the repeat is dropped, and the release is
+    // passed on so the guest sees it come up.
+    g_is_swallowing_wake_key = event.state == kSouthbridgeKeyPressed;
+    g_wake_key = event.key;
+    return event.state != kSouthbridgeKeyReleased;
   }
   if (!g_is_swallowing_wake_key || event.key != g_wake_key) {
     return false;

@@ -27,9 +27,10 @@ void DisplayPowerApplySettings(Settings* settings);
 bool DisplayPowerIsOn(void);
 
 // If the display is off, wake it, arm or disarm the inactivity timeout per
-// should_arm_timer, and swallow event together with any held repeats and
-// release of that same key. Returns true when event was swallowed and should
-// not be passed to a screen or the guest.
+// should_arm_timer, and swallow a waking press together with any held repeats
+// and release of that same key (or drop a waking repeat, while passing through
+// a waking release of a key held across the timeout). Returns true when event
+// was swallowed and should not be passed to a screen or the guest.
 bool DisplayPowerConsumeWakeKey(
     SouthbridgeKeyEvent event, bool should_arm_timer);
 

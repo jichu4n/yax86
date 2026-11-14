@@ -224,10 +224,12 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   controller allows (16 of 255 on ClockworkPi's stock v1.6/v1.7, 0 on
   third-party controller firmware), logged as `module=display` `timeout`.
   Nothing is rendered while off; changes wait in the live state. A key wakes
-  the panel, restores `display_brightness` and `keyboard_brightness`
+  the panel and restores `display_brightness` and `keyboard_brightness`
   (`module=display` `resume`) - the panel keeps its frame memory, so only
-  changes are drawn - and is swallowed, its repeats and release included, so
-  waking never acts on a screen nobody could see or types blind into the guest.
+  changes are drawn. A waking press (with its repeats and release) or repeat is
+  swallowed so waking never acts on a screen nobody could see or types blind
+  into the guest, while a waking release is passed on so a key held across the
+  timeout still comes up in the guest.
 
 ## The keyboard controller
 
@@ -904,7 +906,11 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   the built-in floppy with no note.
 - **A test drives it as a hand would**, with `key shift press`, `key rshift
   press` and their releases, and checks it with `screenshot`; the report's
-  `menu` group says whether it is open and which page shows.
+  `menu` group says whether it is open and which page shows. Keys from `key`
+  and `type` wake a dark display and have their waking press swallowed as a
+  physical key does, so a script running against a board that may have idled
+  past `display_timeout` should check `[display] on` in `report` first (and tap
+  a harmless key to wake it if off).
 - **A change to the menu or the list at power on is checked against master
   on the board, screen by screen.** Build master's image and the branch's,
   and with each: boot DOS330, walk the same pages with `key`, and take a
