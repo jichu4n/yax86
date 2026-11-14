@@ -5,9 +5,8 @@
 //
 // An image selected in the browser goes in the drive, and the whole menu
 // closes, so that the VM carries on with it. Eject leaves the page showing,
-// with the first item selected. Either way the page says so on the status
-// rows, and saves what the drive now holds to the VM's vm.cfg, so that the
-// next start has it.
+// with the first item selected. Both go through the emulator session, which
+// says so on the status rows and saves the drive to the VM's vm.cfg.
 #ifndef YAX86_PICOCALC_FLOPPY_DRIVE_SCREEN_H
 #define YAX86_PICOCALC_FLOPPY_DRIVE_SCREEN_H
 
@@ -15,8 +14,8 @@
 #include "floppy.h"
 #include "screen.h"
 
-// Show drive's page, changing the disk in session's drive. session must
-// outlive the screen.
+// Show drive's page, changing its disk through session, which must outlive
+// the screen.
 ScreenResult FloppyDriveScreenOpen(EmulatorSession* session, FloppyDrive drive);
 
 #endif  // YAX86_PICOCALC_FLOPPY_DRIVE_SCREEN_H
