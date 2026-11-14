@@ -109,7 +109,7 @@ class FDCTest : public ::testing::Test {
       uint8_t cylinder, uint8_t head, uint8_t sector, bool tc = false) {
     const uint8_t id[] = {cylinder, head, sector, 0x02};
     for (int i = 0; i < 4; ++i) {
-      ASSERT_TRUE(fdc_.transfer.dma_request_active);
+      ASSERT_TRUE(fdc_.transfer.is_dma_request_active);
       WriteDmaByte(id[i]);
       if (tc && i == 3) {
         YFDCHandleTC(&fdc_);
@@ -331,7 +331,7 @@ TEST_F(FDCTest, FormatTrackEndsAfterItsSectorsWithoutTerminalCount) {
   EXPECT_EQ(written_.begin()->first, 0u);
   EXPECT_TRUE(irq6_raised_);
   EXPECT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
-  EXPECT_FALSE(fdc_.transfer.dma_request_active);
+  EXPECT_FALSE(fdc_.transfer.is_dma_request_active);
 }
 
 TEST_F(FDCTest, FormatTrackLeavesASectorTheImageHasNoPlaceFor) {
@@ -392,9 +392,10 @@ TEST_F(FDCTest, ReadTrackEnd) {
   }
 
   // At this point, we finished the last byte of Sector 9.
-  // The handler should have incremented sector to 10 and set tc_received (EOT).
+  // The handler should have incremented sector to 10 and set was_tc_received
+  // (EOT).
 
-  // Tick: Terminate command (detects tc_received).
+  // Tick: Terminate command (detects was_tc_received).
   YFDCTick(&fdc_);
 
   // Verify IRQ6.

@@ -149,7 +149,7 @@ typedef struct YPPIConfig {
   YPPIDisplayMode display_mode;
 
   // Whether FPU is installed.
-  bool fpu_installed;
+  bool is_fpu_installed;
 
   // Callback to control PC speaker.If frequency_hz is 0, the speaker should
   // be turned off. Otherwise, it should be set to the specified frequency.

@@ -825,7 +825,7 @@ typedef struct YCPUDecodeCacheEntry {
   // What code_page_generation said for that address's page when the decode was
   // taken. A hit requires it to still say the same.
   uint8_t generation;
-  bool valid;
+  bool is_valid;
 } YCPUDecodeCacheEntry;
 
 // ============================================================================
@@ -2709,11 +2709,11 @@ Y_MODULE_PRIVATE void YCPUPushSourceOperand(
   // PUSH SP stores the value SP has after the decrement rather than the one it
   // had on entry. SP is the only source that can tell the difference. The
   // 80286 and later store the entry value instead.
-  const bool source_is_stack_pointer =
+  const bool is_source_stack_pointer =
       src->address.type == Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER &&
       src->address.register_index == Y_CPU_SP;
   const YCPUOperandValue value =
-      source_is_stack_pointer ? cpu->registers[Y_CPU_SP] : src->value;
+      is_source_stack_pointer ? cpu->registers[Y_CPU_SP] : src->value;
   YCPUWriteToStackTop(cpu, value);
 }
 
@@ -3093,11 +3093,11 @@ typedef void (*YCPUSetFlagsAfterAddFn)(
 // Common logic for ADD, ADC, and INC instructions.
 Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteAddCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
-    YCPUOperandValue src_value, bool carry,
+    YCPUOperandValue src_value, bool use_carry,
     YCPUSetFlagsAfterAddFn set_flags_after_fn) {
   uint32_t raw_dest_value = YCPUFromOperand(dest);
   uint32_t raw_src_value = YCPUFromOperandValue(src_value);
-  bool should_carry = carry && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
+  bool should_carry = use_carry && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   uint32_t result = raw_dest_value + raw_src_value + (should_carry ? 1 : 0);
   YCPUWriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
@@ -3110,7 +3110,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteAdd(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteAddCommon(
-      ctx, dest, src_value, /* carry */ false, YCPUSetFlagsAfterAdd);
+      ctx, dest, src_value, /* use_carry */ false, YCPUSetFlagsAfterAdd);
 }
 
 // ADD r/m8, r8
@@ -3150,7 +3150,7 @@ Y_MODULE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteAddWithCarry(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteAddCommon(
-      ctx, dest, src_value, /* carry */ true, YCPUSetFlagsAfterAdd);
+      ctx, dest, src_value, /* use_carry */ true, YCPUSetFlagsAfterAdd);
 }
 
 // ADC r/m8, r8
@@ -3191,7 +3191,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteInc(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperandValue src_value = 1;
   return YCPUExecuteAddCommon(
-      ctx, dest, src_value, /* carry */ false, YCPUSetFlagsAfterInc);
+      ctx, dest, src_value, /* use_carry */ false, YCPUSetFlagsAfterInc);
 }
 
 // INC AX/CX/DX/BX/SP/BP/SI/DI
@@ -3277,11 +3277,11 @@ typedef void (*YCPUSetFlagsAfterSubFn)(
 // Common logic for SUB, SBB, and DEC instructions.
 Y_FILE_PRIVATE Y_HOT YCPUInstructionResult YCPUExecuteSubCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
-    YCPUOperandValue src_value, bool borrow,
+    YCPUOperandValue src_value, bool use_borrow,
     YCPUSetFlagsAfterSubFn set_flags_after_fn) {
   uint32_t raw_dest_value = YCPUFromOperand(dest);
   uint32_t raw_src_value = YCPUFromOperandValue(src_value);
-  bool should_borrow = borrow && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
+  bool should_borrow = use_borrow && YCPUGetFlag(ctx->cpu, Y_CPU_CF);
   uint32_t result = raw_dest_value - raw_src_value - (should_borrow ? 1 : 0);
   YCPUWriteOperand(ctx, dest, result);
   (*set_flags_after_fn)(
@@ -3294,7 +3294,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSub(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* borrow */ false, YCPUSetFlagsAfterSub);
+      ctx, dest, src_value, /* use_borrow */ false, YCPUSetFlagsAfterSub);
 }
 
 // SUB r/m8, r8
@@ -3334,7 +3334,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult YCPUExecuteSubWithBorrow(
     const YCPUInstructionContext* ctx, YCPUOperand* dest,
     YCPUOperandValue src_value) {
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* borrow */ true, YCPUSetFlagsAfterSub);
+      ctx, dest, src_value, /* use_borrow */ true, YCPUSetFlagsAfterSub);
 }
 
 // SBB r/m8, r8
@@ -3376,7 +3376,7 @@ Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteDec(const YCPUInstructionContext* ctx, YCPUOperand* dest) {
   YCPUOperandValue src_value = 1;
   return YCPUExecuteSubCommon(
-      ctx, dest, src_value, /* borrow */ false, YCPUSetFlagsAfterDec);
+      ctx, dest, src_value, /* use_borrow */ false, YCPUSetFlagsAfterDec);
 }
 
 // DEC AX/CX/DX/BX/SP/BP/SI/DI
@@ -3846,10 +3846,10 @@ YCPUExecuteLoop(const YCPUInstructionContext* ctx) {
 // LOOPNZ rel8
 Y_MODULE_PRIVATE YCPUInstructionResult
 YCPUExecuteLoopZOrNZ(const YCPUInstructionContext* ctx) {
-  bool condition1 = --(ctx->cpu->registers[Y_CPU_CX]) != 0;
-  bool condition2 = YCPUGetFlag(ctx->cpu, Y_CPU_ZF) ==
-                    (bool)(ctx->instruction->opcode - 0xE0);
-  return YCPUExecuteConditionalJump(ctx, condition1 && condition2, true);
+  bool is_cx_nonzero = --(ctx->cpu->registers[Y_CPU_CX]) != 0;
+  bool does_zf_match = YCPUGetFlag(ctx->cpu, Y_CPU_ZF) ==
+                       (bool)(ctx->instruction->opcode - 0xE0);
+  return YCPUExecuteConditionalJump(ctx, is_cx_nonzero && does_zf_match, true);
 }
 
 // JCXZ rel8
@@ -4451,11 +4451,11 @@ typedef struct YCPUBulkStringRun {
 // the memory map for the part outside it.
 Y_FILE_PRIVATE bool YCPUIsBulkRunAddressable(
     uint32_t window_end, uint16_t offset, uint32_t linear,
-    uint16_t num_elements, uint8_t element_size, bool backwards) {
+    uint16_t num_elements, uint8_t element_size, bool is_backwards) {
   // Distance from the first element to the last, which is one element short of
   // the whole run.
   const uint32_t reach = (uint32_t)(num_elements - 1) * element_size;
-  if (backwards) {
+  if (is_backwards) {
     // Elements run downwards, so the last one is the lowest and the first one
     // reaches highest.
     return (uint32_t)offset + element_size <= Y_CPU_SEGMENT_SIZE &&
@@ -4483,14 +4483,14 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
     return false;
   }
   const uint8_t element_size = YCPUNumBytes[ctx->metadata->width];
-  const bool backwards = YCPUGetFlag(cpu, Y_CPU_DF);
+  const bool is_backwards = YCPUGetFlag(cpu, Y_CPU_DF);
 
   const uint16_t destination_offset = cpu->registers[Y_CPU_DI];
   const uint32_t destination =
       YCPUToRawAddress(cpu, Y_CPU_ES, destination_offset);
   if (!YCPUIsBulkRunAddressable(
           window_end, destination_offset, destination, num_elements,
-          element_size, backwards)) {
+          element_size, is_backwards)) {
     return false;
   }
 
@@ -4502,14 +4502,14 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
         YCPUToRawAddress(cpu, source_segment, source_offset);
     if (!YCPUIsBulkRunAddressable(
             window_end, source_offset, source, num_elements, element_size,
-            backwards)) {
+            is_backwards)) {
       return false;
     }
     run->source = source;
   }
 
   run->destination = destination;
-  run->step = backwards ? -(int32_t)element_size : (int32_t)element_size;
+  run->step = is_backwards ? -(int32_t)element_size : (int32_t)element_size;
   run->num_elements = num_elements;
   run->element_size = element_size;
   return true;
@@ -4802,8 +4802,8 @@ YCPUExecuteCmps(const YCPUInstructionContext* ctx) {
 // entry. That is not what Intel's published pseudocode says, which uses 0x99
 // throughout, but it is what the 8086/8088 does - and with AL between 0x9A and
 // 0x9F it is the difference between adjusting and not.
-Y_FILE_PRIVATE uint8_t YCPUGetBCDHighDigitLimit(bool auxiliary_carry) {
-  return auxiliary_carry ? 0x9F : 0x99;
+Y_FILE_PRIVATE uint8_t YCPUGetBCDHighDigitLimit(bool has_auxiliary_carry) {
+  return has_auxiliary_carry ? 0x9F : 0x99;
 }
 
 // AAA
@@ -5038,9 +5038,9 @@ typedef YCPUInstructionResult (*YCPUGroup2ExecuteInstructionFn)(
 // differs from the sign bit left behind, which is to say the last pass changed
 // the sign of the value.
 Y_FILE_PRIVATE void YCPUSetOverflowFlagAfterLeftShift(
-    const YCPUInstructionContext* ctx, uint32_t result, bool carry) {
+    const YCPUInstructionContext* ctx, uint32_t result, bool did_carry) {
   const bool result_sign = (result & YCPUSignBit[ctx->metadata->width]) != 0;
-  YCPUSetFlag(ctx->cpu, Y_CPU_OF, carry != result_sign);
+  YCPUSetFlag(ctx->cpu, Y_CPU_OF, did_carry != result_sign);
 }
 
 // Overflow after a right rotate: the top two bits of the result differ. The
@@ -5397,7 +5397,7 @@ Y_FILE_PRIVATE const uint16_t YCPUMulDivCycles[Y_CPU_NUM_WIDTHS][2] = {
 // Common logic for MUL and IMUL instructions.
 Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
     const YCPUInstructionContext* ctx, YCPUOperand* dest, uint32_t result,
-    bool overflow) {
+    bool did_overflow) {
   YCPUWidth width = ctx->metadata->width;
 
   uint32_t result_low_half = result & YCPUMaxValue[width];
@@ -5409,8 +5409,8 @@ Y_FILE_PRIVATE YCPUInstructionResult YCPUExecuteMulCommon(
   YCPUWriteOperandAddress(
       ctx, &YCPUMulDivResultHighHalfAddress[width], result_high_half);
 
-  YCPUSetFlag(ctx->cpu, Y_CPU_CF, overflow);
-  YCPUSetFlag(ctx->cpu, Y_CPU_OF, overflow);
+  YCPUSetFlag(ctx->cpu, Y_CPU_CF, did_overflow);
+  YCPUSetFlag(ctx->cpu, Y_CPU_OF, did_overflow);
 
   return Y_CPU_INSTRUCTION_EXECUTED;
 }
@@ -7634,7 +7634,7 @@ Y_PUBLIC void YCPUInvalidateDecodeCache(YCPUState* cpu) {
     return;
   }
   for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
-    cache[i].valid = false;
+    cache[i].is_valid = false;
   }
 }
 
@@ -7647,7 +7647,7 @@ Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
   }
   for (uint32_t i = 0; i <= cpu->decode_cache_index_mask; ++i) {
     if ((cache[i].address >> Y_CPU_CODE_PAGE_SHIFT) == page) {
-      cache[i].valid = false;
+      cache[i].is_valid = false;
     }
   }
 }
@@ -7656,7 +7656,7 @@ Y_PUBLIC void YCPUInvalidateDecodeCachePage(YCPUState* cpu, uint32_t page) {
 // current. The generation is passed in because both callers have it already.
 Y_FILE_PRIVATE Y_ALWAYS_INLINE bool YCPUIsDecodeCacheHit(
     const YCPUDecodeCacheEntry* entry, uint32_t address, uint8_t generation) {
-  return entry->valid && entry->address == address &&
+  return entry->is_valid && entry->address == address &&
          entry->generation == generation;
 }
 
@@ -7705,7 +7705,7 @@ YCPUFetchNextInstructionCached(
     }
     // A decode that fails partway leaves the entry holding whatever it got to,
     // so the entry disowns its contents before the decode rather than after.
-    target->valid = false;
+    target->is_valid = false;
   }
 
   *entry = target;
@@ -7732,7 +7732,7 @@ YCPUFetchNextInstructionCached(
     }
     target->address = address;
     target->generation = generation;
-    target->valid = true;
+    target->is_valid = true;
   }
   return Y_CPU_FETCH_SUCCESS;
 }
@@ -7934,7 +7934,7 @@ Y_PUBLIC Y_HOT YCPUTickResult
 YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // Whether this tick ran an instruction. A halted CPU runs none until an
   // interrupt wakes it.
-  bool executed_instruction = false;
+  bool did_execute_instruction = false;
 
   // A halted CPU still consumes time - it is sitting in a wait state, not
   // stopped - so a tick that runs no instruction still has to advance the
@@ -7945,7 +7945,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // The trap flag is sampled before the instruction runs, not after. An
   // instruction that sets TF - POPF or IRET - must not trap on itself, and one
   // that clears TF still traps once for the instruction it was set during.
-  const bool trap_flag_was_set = YCPUGetFlag(cpu, Y_CPU_TF);
+  const bool was_trap_flag_set = YCPUGetFlag(cpu, Y_CPU_TF);
 
   // Execute next CPU instruction if not halted.
   if (!cpu->is_halted) {
@@ -7968,13 +7968,13 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
 
     // A successful fetch is always followed by an instruction: the only way
     // out of the loop below without running one is a return.
-    executed_instruction = true;
+    did_execute_instruction = true;
 
     // A tick that has to trap runs exactly one instruction: TF was set when it
     // started, so the single-step interrupt belongs to the instruction about
     // to run, and one that clears TF still owes that trap.
     uint8_t remaining =
-        trap_flag_was_set ? 1 : (uint8_t)Y_CPU_MAX_INSTRUCTIONS_PER_TICK;
+        was_trap_flag_set ? 1 : (uint8_t)Y_CPU_MAX_INSTRUCTIONS_PER_TICK;
 
     for (;;) {
       YCPUInstruction* const instruction = &entry->instruction;
@@ -8031,7 +8031,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // Step 4: Handle a pending interrupt. This runs even while halted, because
   // an interrupt is the only thing that can clear the halted state -
   // YCPUExecutePendingInterrupt() resets is_halted when it dispatches one.
-  const bool dispatched_interrupt = YCPUExecutePendingInterrupt(cpu);
+  const bool did_dispatch_interrupt = YCPUExecutePendingInterrupt(cpu);
 
   // Step 5: The trap flag raises a single-step interrupt after an instruction
   // executes, so a halted CPU must not trap - otherwise the trap would wake it
@@ -8040,7 +8040,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // Single-stepping is the lowest priority of the interrupt sources recognized
   // at an instruction boundary, so an interrupt dispatched above takes its
   // place rather than both firing.
-  if (executed_instruction && trap_flag_was_set && !dispatched_interrupt) {
+  if (did_execute_instruction && was_trap_flag_set && !did_dispatch_interrupt) {
     YCPURaiseInternalInterrupt(cpu, Y_CPU_INTERRUPT_SINGLE_STEP);
     YCPUExecutePendingInterrupt(cpu);
   }
@@ -8049,7 +8049,7 @@ YCPUTick(YCPUState* cpu, uint16_t max_run_cycles) {
   // that executes HLT ran an instruction, so it reports Y_CPU_TICK_EXECUTED
   // even though the CPU is now halted; the ticks that follow report
   // Y_CPU_TICK_HALTED.
-  return executed_instruction ? Y_CPU_TICK_EXECUTED : Y_CPU_TICK_HALTED;
+  return did_execute_instruction ? Y_CPU_TICK_EXECUTED : Y_CPU_TICK_HALTED;
 }
 
 

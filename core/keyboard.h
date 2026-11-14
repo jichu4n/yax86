@@ -126,7 +126,7 @@ typedef struct YKeyboardState {
   // Whether we are currently waiting for ack from BIOS before sending the next
   // scancode. The keyboard will not send any further scancodes until the BIOS
   // pulses the enable_clear line high then low.
-  bool waiting_for_ack;
+  bool is_waiting_for_ack;
 
   // Buffer of key presses received.
   YKeyboardBuffer buffer;
@@ -181,7 +181,7 @@ Y_PUBLIC void YKeyboardInit(YKeyboardState* keyboard) {
   keyboard->clock_low = true;
   keyboard->clock_low_ms = 0;
   YKeyboardBufferInit(&keyboard->buffer);
-  keyboard->waiting_for_ack = false;
+  keyboard->is_waiting_for_ack = false;
 }
 
 // Helper to send a scancode to the PPI and raise IRQ1 if needed.
@@ -193,7 +193,7 @@ Y_FILE_PRIVATE inline void YKeyboardSendScancode(
   if (keyboard->config.raise_irq1) {
     keyboard->config.raise_irq1(keyboard->config.context);
   }
-  keyboard->waiting_for_ack = true;
+  keyboard->is_waiting_for_ack = true;
 }
 
 // Helper to send the next scancode in the buffer if available.
@@ -203,7 +203,7 @@ Y_FILE_PRIVATE inline void YKeyboardSendNextScancode(YKeyboardState* keyboard) {
     return;
   }
   // Can only send after previous scancode has been acked.
-  if (keyboard->waiting_for_ack) {
+  if (keyboard->is_waiting_for_ack) {
     return;
   }
   // If buffer is empty, nothing to send.
@@ -228,11 +228,11 @@ Y_PUBLIC void YKeyboardHandleControl(
   keyboard->clock_low = clock_low;
 
   // Falling edge of enable_clear bit indicates ack from BIOS. we clear the
-  // waiting_for_ack bit, allowing the next queued scancode to be sent on the
+  // is_waiting_for_ack bit, allowing the next queued scancode to be sent on the
   // next tick.
   if (old_enable_clear == true && keyboard->enable_clear == false &&
       keyboard->clock_low == true) {
-    keyboard->waiting_for_ack = false;
+    keyboard->is_waiting_for_ack = false;
   }
 
   // Falling edge of clock_low bit possibly indicates the start of a reset
@@ -273,7 +273,7 @@ Y_PUBLIC void YKeyboardTickMs(YKeyboardState* keyboard) {
 
     // Reached threshold, trigger reset.
     YKeyboardBufferClear(&keyboard->buffer);
-    keyboard->waiting_for_ack = false;
+    keyboard->is_waiting_for_ack = false;
     // Set to special value indicating reset has been triggered.
     keyboard->clock_low_ms = Y_KEYBOARD_RESET_TRIGGERED;
     // Send self-test passed scancode on next falling edge of enable_clear.

@@ -41,7 +41,7 @@ TEST_F(KeyboardTest, Initialization) {
   ASSERT_FALSE(keyboard_.enable_clear);
   ASSERT_TRUE(keyboard_.clock_low);
   ASSERT_EQ(keyboard_.clock_low_ms, 0);
-  ASSERT_FALSE(keyboard_.waiting_for_ack);
+  ASSERT_FALSE(keyboard_.is_waiting_for_ack);
   ASSERT_EQ(YKeyboardBufferLength(&keyboard_.buffer), 0);
 }
 
@@ -69,7 +69,7 @@ TEST_F(KeyboardTest, ResetSequence) {
   ASSERT_EQ(g_sent_scancodes.size(), 1);
   ASSERT_EQ(g_sent_scancodes[0], 0xAA);
   ASSERT_EQ(g_irq1_count, 1);
-  ASSERT_TRUE(keyboard_.waiting_for_ack);
+  ASSERT_TRUE(keyboard_.is_waiting_for_ack);
 }
 
 TEST_F(KeyboardTest, KeyPressAndAck) {
@@ -81,7 +81,7 @@ TEST_F(KeyboardTest, KeyPressAndAck) {
   ASSERT_EQ(g_sent_scancodes.size(), 1);
   ASSERT_EQ(g_sent_scancodes[0], 0x1E);
   ASSERT_EQ(g_irq1_count, 1);
-  ASSERT_TRUE(keyboard_.waiting_for_ack);
+  ASSERT_TRUE(keyboard_.is_waiting_for_ack);
 
   // 3. Buffer another key press and tick again.
   YKeyboardHandleKeyPress(&keyboard_, 0x1F);  // 'S' key
@@ -94,7 +94,7 @@ TEST_F(KeyboardTest, KeyPressAndAck) {
   // 4. Simulate BIOS acknowledgement pulse.
   YKeyboardHandleControl(&keyboard_, true, true);   // Pulse high
   YKeyboardHandleControl(&keyboard_, false, true);  // Pulse low (ack)
-  ASSERT_FALSE(keyboard_.waiting_for_ack);
+  ASSERT_FALSE(keyboard_.is_waiting_for_ack);
 
   // 5. Tick again.
   YKeyboardTickMs(&keyboard_);

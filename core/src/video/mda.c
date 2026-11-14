@@ -16,7 +16,7 @@ enum {
 typedef struct YVideoMDACellColors {
   const YVideoRGB* foreground;
   const YVideoRGB* background;
-  bool underline;
+  bool has_underline;
 } YVideoMDACellColors;
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
@@ -27,12 +27,12 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
   YVideoMDACellColors colors = {
       .foreground = &config->foreground,
       .background = &config->background,
-      .underline = false,
+      .has_underline = false,
   };
 
-  bool intense = (attr_value & Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND) != 0;
+  bool is_intense = (attr_value & Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND) != 0;
   const YVideoRGB* intense_aware_foreground =
-      intense ? &config->intense_foreground : &config->foreground;
+      is_intense ? &config->intense_foreground : &config->foreground;
   uint8_t background_attr = (attr_value & Y_VIDEO_ATTRIBUTE_BACKGROUND_MASK) >>
                             Y_VIDEO_ATTRIBUTE_BACKGROUND_SHIFT;
   uint8_t foreground_attr = attr_value & Y_VIDEO_ATTRIBUTE_FOREGROUND_MASK;
@@ -56,7 +56,7 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
       background_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE &&
       foreground_attr == Y_VIDEO_MDA_ATTRIBUTE_UNDERLINE) {
     // Underline mode.
-    colors.underline = true;
+    colors.has_underline = true;
     colors.foreground = intense_aware_foreground;
   } else {
     // Other combinations are treated as normal.
@@ -69,7 +69,7 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
       (video->control_register & Y_VIDEO_CONTROL_ENABLE_BLINK) &&
       !YVideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
-    colors.underline = false;
+    colors.has_underline = false;
   }
   return colors;
 }
@@ -88,7 +88,7 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
   // only be in one place, so the loop just tests each cell against it.
   uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = YVideoGetVisibleCursorOffset(
+  bool is_cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
   uint16_t cursor_start = YVideoScaleTextScanLineStart(
       video, metadata, YVideoGetCursorStartScanLine(video));
@@ -124,22 +124,22 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
       // a bitmap with the leftmost pixel in the high bit, and is 16 bits wide
       // because an MDA cell is 9 pixels across.
       uint16_t row_bitmap;
-      if (char_scan_line == underline_scan_line && colors.underline) {
+      if (char_scan_line == underline_scan_line && colors.has_underline) {
         row_bitmap = 0xFFFF;
       } else if (video->has_text_font) {
         row_bitmap = YVideoGetTextFontRow(video, char_value, char_scan_line);
       } else {
         row_bitmap = YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
       }
-      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
-                              char_scan_line >= cursor_start &&
-                              char_scan_line <= cursor_end;
+      bool is_cursor_scan_line =
+          is_cursor_visible && cursor_offset == cell_offset &&
+          char_scan_line >= cursor_start && char_scan_line <= cursor_end;
       for (uint8_t x = 0; x < cell_width; ++x) {
         bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
         const YVideoRGB* rgb =
-            cursor_scan_line
+            is_cursor_scan_line
                 ? &video->config.foreground
                 : (is_foreground ? colors.foreground : colors.background);
         YVideoPixelRunPush(run, *rgb);

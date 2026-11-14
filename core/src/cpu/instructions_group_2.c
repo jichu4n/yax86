@@ -22,9 +22,9 @@ typedef YCPUInstructionResult (*YCPUGroup2ExecuteInstructionFn)(
 // differs from the sign bit left behind, which is to say the last pass changed
 // the sign of the value.
 Y_FILE_PRIVATE void YCPUSetOverflowFlagAfterLeftShift(
-    const YCPUInstructionContext* ctx, uint32_t result, bool carry) {
+    const YCPUInstructionContext* ctx, uint32_t result, bool did_carry) {
   const bool result_sign = (result & YCPUSignBit[ctx->metadata->width]) != 0;
-  YCPUSetFlag(ctx->cpu, Y_CPU_OF, carry != result_sign);
+  YCPUSetFlag(ctx->cpu, Y_CPU_OF, did_carry != result_sign);
 }
 
 // Overflow after a right rotate: the top two bits of the result differ. The

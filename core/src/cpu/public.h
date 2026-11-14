@@ -805,7 +805,7 @@ typedef struct YCPUDecodeCacheEntry {
   // What code_page_generation said for that address's page when the decode was
   // taken. A hit requires it to still say the same.
   uint8_t generation;
-  bool valid;
+  bool is_valid;
 } YCPUDecodeCacheEntry;
 
 // ============================================================================

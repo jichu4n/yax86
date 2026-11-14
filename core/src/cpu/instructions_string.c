@@ -121,11 +121,11 @@ typedef struct YCPUBulkStringRun {
 // the memory map for the part outside it.
 Y_FILE_PRIVATE bool YCPUIsBulkRunAddressable(
     uint32_t window_end, uint16_t offset, uint32_t linear,
-    uint16_t num_elements, uint8_t element_size, bool backwards) {
+    uint16_t num_elements, uint8_t element_size, bool is_backwards) {
   // Distance from the first element to the last, which is one element short of
   // the whole run.
   const uint32_t reach = (uint32_t)(num_elements - 1) * element_size;
-  if (backwards) {
+  if (is_backwards) {
     // Elements run downwards, so the last one is the lowest and the first one
     // reaches highest.
     return (uint32_t)offset + element_size <= Y_CPU_SEGMENT_SIZE &&
@@ -153,14 +153,14 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
     return false;
   }
   const uint8_t element_size = YCPUNumBytes[ctx->metadata->width];
-  const bool backwards = YCPUGetFlag(cpu, Y_CPU_DF);
+  const bool is_backwards = YCPUGetFlag(cpu, Y_CPU_DF);
 
   const uint16_t destination_offset = cpu->registers[Y_CPU_DI];
   const uint32_t destination =
       YCPUToRawAddress(cpu, Y_CPU_ES, destination_offset);
   if (!YCPUIsBulkRunAddressable(
           window_end, destination_offset, destination, num_elements,
-          element_size, backwards)) {
+          element_size, is_backwards)) {
     return false;
   }
 
@@ -172,14 +172,14 @@ Y_FILE_PRIVATE bool YCPUPlanBulkStringRun(
         YCPUToRawAddress(cpu, source_segment, source_offset);
     if (!YCPUIsBulkRunAddressable(
             window_end, source_offset, source, num_elements, element_size,
-            backwards)) {
+            is_backwards)) {
       return false;
     }
     run->source = source;
   }
 
   run->destination = destination;
-  run->step = backwards ? -(int32_t)element_size : (int32_t)element_size;
+  run->step = is_backwards ? -(int32_t)element_size : (int32_t)element_size;
   run->num_elements = num_elements;
   run->element_size = element_size;
   return true;

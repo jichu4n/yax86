@@ -461,8 +461,8 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
     return;
   }
 
-  bool cursor_was_on = YVideoIsCursorBlinkOn(video);
-  bool text_was_on = YVideoIsTextBlinkOn(video);
+  bool was_cursor_on = YVideoIsCursorBlinkOn(video);
+  bool was_text_on = YVideoIsTextBlinkOn(video);
 
   // Computed rather than stepped, because the platform advances the beam in
   // arrears - only when something actually looks at it - so cycles here can be
@@ -478,11 +478,11 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
   video->num_frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 
-  if (cursor_was_on != YVideoIsCursorBlinkOn(video) &&
+  if (was_cursor_on != YVideoIsCursorBlinkOn(video) &&
       YVideoIsCursorEnabled(video)) {
     YVideoInvalidateCursor(video);
   }
-  if (text_was_on != YVideoIsTextBlinkOn(video)) {
+  if (was_text_on != YVideoIsTextBlinkOn(video)) {
     YVideoInvalidateBlinkingText(video);
   }
 }
@@ -491,16 +491,17 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
 // currently is.
 Y_FILE_PRIVATE uint8_t YVideoGetStatus(const YVideoState* video) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
-  bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
-  bool in_horizontal_retrace =
+  bool is_in_vertical_retrace =
+      video->scan_line >= adapter->displayed_scan_lines;
+  bool is_in_horizontal_retrace =
       video->scan_line_cycles >= adapter->display_cycles_per_scan_line;
 
   // No light pen is emulated, so its switch always reads as off.
   uint8_t status = Y_VIDEO_STATUS_LIGHT_PEN_SWITCH_OFF;
-  if (in_vertical_retrace || in_horizontal_retrace) {
+  if (is_in_vertical_retrace || is_in_horizontal_retrace) {
     status |= Y_VIDEO_STATUS_DISPLAY_DISABLED;
   }
-  if (in_vertical_retrace) {
+  if (is_in_vertical_retrace) {
     status |= Y_VIDEO_STATUS_VERTICAL_RETRACE;
   }
   // Note that the unused high bits are deliberately left clear rather than

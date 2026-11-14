@@ -78,7 +78,7 @@ class AdvanceTest : public ::testing::Test {
     EXPECT_EQ(advanced.channels[0].counter, stepped.channels[0].counter)
         << context;
     EXPECT_EQ(
-        advanced.channels[0].output_state, stepped.channels[0].output_state)
+        advanced.channels[0].is_output_high, stepped.channels[0].is_output_high)
         << context;
     // The tick numbers differ because an advance reports them all at once, so
     // only the number of edges is comparable.
@@ -136,10 +136,10 @@ TEST_F(AdvanceTest, TicksUntilNextEventNeverOvershoots) {
       }
 
       // Nothing may change before the predicted tick.
-      const bool initial_output = pit.channels[0].output_state;
+      const bool initial_output = pit.channels[0].is_output_high;
       for (uint32_t i = 0; i + 1 < predicted; ++i) {
         YPITTick(&pit);
-        ASSERT_EQ(pit.channels[0].output_state, initial_output)
+        ASSERT_EQ(pit.channels[0].is_output_high, initial_output)
             << "mode " << static_cast<int>(mode) << ", reload " << reload
             << " changed output at tick " << i << " but " << predicted
             << " was predicted";
@@ -202,7 +202,7 @@ TEST_F(AdvanceTest, UnscheduledChannelsStillAdvance) {
 
   EXPECT_EQ(advanced.channels[2].counter, stepped.channels[2].counter);
   EXPECT_EQ(
-      advanced.channels[2].output_state, stepped.channels[2].output_state);
+      advanced.channels[2].is_output_high, stepped.channels[2].is_output_high);
 }
 
 }  // namespace

@@ -63,7 +63,7 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutS(
 
 Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     char* buffer, size_t size, size_t* pos, unsigned long long value, int base,
-    int uppercase, int width, int pad_zero, int negative) {
+    int is_uppercase, int width, int should_pad_zero, int is_negative) {
   char temp[64];
   int i = 0;
   size_t num_chars = 0;
@@ -76,23 +76,23 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
       if (digit < 10) {
         temp[i++] = digit + '0';
       } else {
-        temp[i++] = digit - 10 + (uppercase ? 'A' : 'a');
+        temp[i++] = digit - 10 + (is_uppercase ? 'A' : 'a');
       }
       value /= base;
     }
   }
 
   int len = i;
-  if (negative) len++;
+  if (is_negative) len++;
 
   int pad = width - len;
   if (pad < 0) pad = 0;
 
   // If zero padding is requested, sign should be printed before padding
-  if (pad_zero) {
-    if (negative) {
+  if (should_pad_zero) {
+    if (is_negative) {
       num_chars += YSNPrintFPutC(buffer, size, pos, '-');
-      negative = 0; // Sign already handled
+      is_negative = 0;  // Sign already handled
     }
     while (pad-- > 0) {
       num_chars += YSNPrintFPutC(buffer, size, pos, '0');
@@ -103,7 +103,7 @@ Y_MODULE_PRIVATE_HEADER size_t YSNPrintFPutUI(
     }
   }
 
-  if (negative) {
+  if (is_negative) {
     num_chars += YSNPrintFPutC(buffer, size, pos, '-');
   }
 
@@ -126,9 +126,9 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     format++;  // Skip '%'
 
     // Flags
-    int pad_zero = 0;
+    int should_pad_zero = 0;
     if (*format == '0') {
-      pad_zero = 1;
+      should_pad_zero = 1;
       format++;
     }
 
@@ -140,8 +140,8 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
     }
 
     // Length modifiers
-    int length_l = 0;  // 0: int, 1: long, 2: long long
-    int length_z = 0;  // size_t
+    int length_l = 0;      // 0: int, 1: long, 2: long long
+    int has_length_z = 0;  // size_t
     if (*format == 'l') {
       length_l++;
       format++;
@@ -150,7 +150,7 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
         format++;
       }
     } else if (*format == 'z') {
-      length_z = 1;
+      has_length_z = 1;
       format++;
     }
 
@@ -175,7 +175,7 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
       case 'd':
       case 'i': {
         long long val;
-        if (length_z)
+        if (has_length_z)
           // Treat size_t as signed (ssize_t) for %d, or just cast to compatible signed type.
           // Since we don't have ssize_t here explicitly, we assume the user passes a signed type
           // compatible with size_t or we cast.
@@ -187,10 +187,10 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
         else
           val = va_arg(args, int);
 
-        int negative = 0;
+        int is_negative = 0;
         unsigned long long uval;
         if (val < 0) {
-          negative = 1;
+          is_negative = 1;
           // Negated as unsigned: the magnitude of the most negative value
           // does not fit in a long long.
           uval = 0ULL - (unsigned long long)val;
@@ -198,7 +198,8 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
           uval = (unsigned long long)val;
         }
         YSNPrintFPutUI(
-            buffer, size, &pos, uval, 10, 0, width, pad_zero, negative);
+            buffer, size, &pos, uval, 10, 0, width, should_pad_zero,
+            is_negative);
         break;
       }
       case 'u':
@@ -206,16 +207,16 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
       case 'X': {
         unsigned long long val;
         int base = 10;
-        int uppercase = 0;
+        int is_uppercase = 0;
 
         if (*format == 'x') {
           base = 16;
         } else if (*format == 'X') {
           base = 16;
-          uppercase = 1;
+          is_uppercase = 1;
         }
 
-        if (length_z)
+        if (has_length_z)
           val = va_arg(args, size_t);
         else if (length_l == 2)
           val = va_arg(args, unsigned long long);
@@ -225,7 +226,8 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
           val = va_arg(args, unsigned int);
 
         YSNPrintFPutUI(
-            buffer, size, &pos, val, base, uppercase, width, pad_zero, 0);
+            buffer, size, &pos, val, base, is_uppercase, width, should_pad_zero,
+            0);
         break;
       }
       case 'p': {
@@ -237,7 +239,7 @@ Y_MODULE_PRIVATE_HEADER int YVSNPrintF(
         // Adjust width to account for "0x" prefix
         int adjusted_width = width > 2 ? width - 2 : 0;
         YSNPrintFPutUI(
-            buffer, size, &pos, val, 16, 0, adjusted_width, pad_zero, 0);
+            buffer, size, &pos, val, 16, 0, adjusted_width, should_pad_zero, 0);
         break;
       }
       case '%': {

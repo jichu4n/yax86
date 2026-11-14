@@ -199,7 +199,7 @@ typedef enum YHDCTransfer {
 // State of a single drive.
 typedef struct YHDCDriveState {
   // Whether a drive is attached.
-  bool present;
+  bool is_present;
 
   // Physical geometry of the drive.
   YHDCDriveGeometry geometry;

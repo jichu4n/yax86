@@ -1988,7 +1988,7 @@ enum {
 typedef struct YVideoMDACellColors {
   const YVideoRGB* foreground;
   const YVideoRGB* background;
-  bool underline;
+  bool has_underline;
 } YVideoMDACellColors;
 
 // Decode the documented normal, inverse, invisible, underline, intensity and
@@ -1999,12 +1999,12 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
   YVideoMDACellColors colors = {
       .foreground = &config->foreground,
       .background = &config->background,
-      .underline = false,
+      .has_underline = false,
   };
 
-  bool intense = (attr_value & Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND) != 0;
+  bool is_intense = (attr_value & Y_VIDEO_ATTRIBUTE_INTENSE_FOREGROUND) != 0;
   const YVideoRGB* intense_aware_foreground =
-      intense ? &config->intense_foreground : &config->foreground;
+      is_intense ? &config->intense_foreground : &config->foreground;
   uint8_t background_attr = (attr_value & Y_VIDEO_ATTRIBUTE_BACKGROUND_MASK) >>
                             Y_VIDEO_ATTRIBUTE_BACKGROUND_SHIFT;
   uint8_t foreground_attr = attr_value & Y_VIDEO_ATTRIBUTE_FOREGROUND_MASK;
@@ -2028,7 +2028,7 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
       background_attr == Y_VIDEO_MDA_ATTRIBUTE_INVERSE &&
       foreground_attr == Y_VIDEO_MDA_ATTRIBUTE_UNDERLINE) {
     // Underline mode.
-    colors.underline = true;
+    colors.has_underline = true;
     colors.foreground = intense_aware_foreground;
   } else {
     // Other combinations are treated as normal.
@@ -2041,7 +2041,7 @@ YVideoMDADecodeAttribute(YVideoState* video, uint8_t attr_value) {
       (video->control_register & Y_VIDEO_CONTROL_ENABLE_BLINK) &&
       !YVideoIsTextBlinkOn(video)) {
     colors.foreground = colors.background;
-    colors.underline = false;
+    colors.has_underline = false;
   }
   return colors;
 }
@@ -2060,7 +2060,7 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
   // only be in one place, so the loop just tests each cell against it.
   uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = YVideoGetVisibleCursorOffset(
+  bool is_cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
   uint16_t cursor_start = YVideoScaleTextScanLineStart(
       video, metadata, YVideoGetCursorStartScanLine(video));
@@ -2096,22 +2096,22 @@ Y_MODULE_PRIVATE void YVideoMDARenderRegion(
       // a bitmap with the leftmost pixel in the high bit, and is 16 bits wide
       // because an MDA cell is 9 pixels across.
       uint16_t row_bitmap;
-      if (char_scan_line == underline_scan_line && colors.underline) {
+      if (char_scan_line == underline_scan_line && colors.has_underline) {
         row_bitmap = 0xFFFF;
       } else if (video->has_text_font) {
         row_bitmap = YVideoGetTextFontRow(video, char_value, char_scan_line);
       } else {
         row_bitmap = YVideoFontMDA9x14Bitmap[char_value][char_scan_line];
       }
-      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
-                              char_scan_line >= cursor_start &&
-                              char_scan_line <= cursor_end;
+      bool is_cursor_scan_line =
+          is_cursor_visible && cursor_offset == cell_offset &&
+          char_scan_line >= cursor_start && char_scan_line <= cursor_end;
       for (uint8_t x = 0; x < cell_width; ++x) {
         bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
         // The cursor overrides the cell entirely, including a blinking
         // character that is currently hidden.
         const YVideoRGB* rgb =
-            cursor_scan_line
+            is_cursor_scan_line
                 ? &video->config.foreground
                 : (is_foreground ? colors.foreground : colors.background);
         YVideoPixelRunPush(run, *rgb);
@@ -2210,7 +2210,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   // only be in one place, so the loop just tests each cell against it.
   uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = YVideoGetVisibleCursorOffset(
+  bool is_cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
   uint16_t cursor_start = YVideoScaleTextScanLineStart(
       video, metadata, YVideoGetCursorStartScanLine(video));
@@ -2260,9 +2260,9 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
 
       YVideoRGB foreground = YVideoCGAGetColor(video, foreground_color);
       YVideoRGB background = YVideoCGAGetColor(video, background_color);
-      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
-                              char_scan_line >= cursor_start &&
-                              char_scan_line <= cursor_end;
+      bool is_cursor_scan_line =
+          is_cursor_visible && cursor_offset == cell_offset &&
+          char_scan_line >= cursor_start && char_scan_line <= cursor_end;
       // The glyph row is a bitmap with the leftmost pixel in the high bit.
       uint8_t row_bitmap =
           video->has_text_font
@@ -2270,7 +2270,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
               : YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
       for (uint8_t x = 0; x < cell_width; ++x) {
         bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
-        YVideoRGB rgb = cursor_scan_line
+        YVideoRGB rgb = is_cursor_scan_line
                             ? cursor_foreground
                             : (is_foreground ? foreground : background);
         // In 40-column mode each glyph pixel is emitted twice, which is how
@@ -2862,8 +2862,8 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
     return;
   }
 
-  bool cursor_was_on = YVideoIsCursorBlinkOn(video);
-  bool text_was_on = YVideoIsTextBlinkOn(video);
+  bool was_cursor_on = YVideoIsCursorBlinkOn(video);
+  bool was_text_on = YVideoIsTextBlinkOn(video);
 
   // Computed rather than stepped, because the platform advances the beam in
   // arrears - only when something actually looks at it - so cycles here can be
@@ -2879,11 +2879,11 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
   video->num_frames += scan_line / adapter->scan_lines_per_frame;
   video->scan_line = (uint16_t)(scan_line % adapter->scan_lines_per_frame);
 
-  if (cursor_was_on != YVideoIsCursorBlinkOn(video) &&
+  if (was_cursor_on != YVideoIsCursorBlinkOn(video) &&
       YVideoIsCursorEnabled(video)) {
     YVideoInvalidateCursor(video);
   }
-  if (text_was_on != YVideoIsTextBlinkOn(video)) {
+  if (was_text_on != YVideoIsTextBlinkOn(video)) {
     YVideoInvalidateBlinkingText(video);
   }
 }
@@ -2892,16 +2892,17 @@ Y_PUBLIC Y_HOT void YVideoTick(YVideoState* video, uint32_t cycles) {
 // currently is.
 Y_FILE_PRIVATE uint8_t YVideoGetStatus(const YVideoState* video) {
   const YVideoAdapterMetadata* adapter = YVideoGetAdapterMetadata(video);
-  bool in_vertical_retrace = video->scan_line >= adapter->displayed_scan_lines;
-  bool in_horizontal_retrace =
+  bool is_in_vertical_retrace =
+      video->scan_line >= adapter->displayed_scan_lines;
+  bool is_in_horizontal_retrace =
       video->scan_line_cycles >= adapter->display_cycles_per_scan_line;
 
   // No light pen is emulated, so its switch always reads as off.
   uint8_t status = Y_VIDEO_STATUS_LIGHT_PEN_SWITCH_OFF;
-  if (in_vertical_retrace || in_horizontal_retrace) {
+  if (is_in_vertical_retrace || is_in_horizontal_retrace) {
     status |= Y_VIDEO_STATUS_DISPLAY_DISABLED;
   }
-  if (in_vertical_retrace) {
+  if (is_in_vertical_retrace) {
     status |= Y_VIDEO_STATUS_VERTICAL_RETRACE;
   }
   // Note that the unused high bits are deliberately left clear rather than

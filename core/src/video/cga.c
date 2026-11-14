@@ -78,7 +78,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
   // only be in one place, so the loop just tests each cell against it.
   uint16_t start_address = YVideoGetStartAddress(video);
   uint16_t cursor_offset = 0;
-  bool cursor_visible = YVideoGetVisibleCursorOffset(
+  bool is_cursor_visible = YVideoGetVisibleCursorOffset(
       video, metadata, start_address, &cursor_offset);
   uint16_t cursor_start = YVideoScaleTextScanLineStart(
       video, metadata, YVideoGetCursorStartScanLine(video));
@@ -128,9 +128,9 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
 
       YVideoRGB foreground = YVideoCGAGetColor(video, foreground_color);
       YVideoRGB background = YVideoCGAGetColor(video, background_color);
-      bool cursor_scan_line = cursor_visible && cursor_offset == cell_offset &&
-                              char_scan_line >= cursor_start &&
-                              char_scan_line <= cursor_end;
+      bool is_cursor_scan_line =
+          is_cursor_visible && cursor_offset == cell_offset &&
+          char_scan_line >= cursor_start && char_scan_line <= cursor_end;
       // The glyph row is a bitmap with the leftmost pixel in the high bit.
       uint8_t row_bitmap =
           video->has_text_font
@@ -138,7 +138,7 @@ Y_FILE_PRIVATE void YVideoCGARenderTextRegion(
               : YVideoFontCGA8x8Bitmap[char_value][char_scan_line];
       for (uint8_t x = 0; x < cell_width; ++x) {
         bool is_foreground = (row_bitmap & (1 << (cell_width - 1 - x))) != 0;
-        YVideoRGB rgb = cursor_scan_line
+        YVideoRGB rgb = is_cursor_scan_line
                             ? cursor_foreground
                             : (is_foreground ? foreground : background);
         // In 40-column mode each glyph pixel is emitted twice, which is how

@@ -63,9 +63,9 @@ class PlatformPagedMemoryTest : public ::testing::Test {
   }
 
   static void PageFault(
-      YPlatformPagedMemory* memory, uint32_t page, bool write) {
+      YPlatformPagedMemory* memory, uint32_t page, bool is_write) {
     auto* self = static_cast<PlatformPagedMemoryTest*>(memory->context);
-    self->faults_.push_back({page, write});
+    self->faults_.push_back({page, is_write});
     if (self->fail_faults_) {
       return;
     }
@@ -91,7 +91,7 @@ class PlatformPagedMemoryTest : public ::testing::Test {
       self->frame_page_[frame] = page;
       entry = static_cast<uint16_t>(frame | Y_CPU_PAGED_DATA_RESIDENT);
     }
-    if (write) {
+    if (is_write) {
       entry |= Y_CPU_PAGED_DATA_DIRTY;
     }
   }

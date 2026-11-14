@@ -35,7 +35,7 @@ typedef struct YLogfmtLine {
   // Characters in the line so far, not counting the terminating null byte.
   size_t length;
   // Whether a pair has been dropped for want of room.
-  bool truncated;
+  bool is_truncated;
 } YLogfmtLine;
 
 // What a truncated line ends with, in place of the pairs that did not fit.
@@ -56,7 +56,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineInit(
   line->buffer = buffer;
   line->size = size;
   line->length = 0;
-  line->truncated = false;
+  line->is_truncated = false;
   if (size > 0) {
     buffer[0] = '\0';
   }
@@ -94,7 +94,7 @@ Y_MODULE_PRIVATE_HEADER inline void YLogfmtLineEndPair(
   if (position <= YLogfmtLineLimit(line)) {
     line->length = position;
   } else {
-    line->truncated = true;
+    line->is_truncated = true;
   }
   if (line->size > 0) {
     line->buffer[line->length] = '\0';
@@ -103,7 +103,7 @@ Y_MODULE_PRIVATE_HEADER inline void YLogfmtLineEndPair(
 
 Y_PUBLIC_HEADER inline void YLogfmtLineAddUInt(
     YLogfmtLine* line, const char* key, uint64_t value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   size_t position = YLogfmtLineBeginPair(line, key);
@@ -114,7 +114,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddUInt(
 
 Y_PUBLIC_HEADER inline void YLogfmtLineAddInt(
     YLogfmtLine* line, const char* key, int64_t value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   size_t position = YLogfmtLineBeginPair(line, key);
@@ -132,7 +132,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddInt(
 // num_digits of them - 0x0201 for a port, 0x9A for a byte.
 Y_PUBLIC_HEADER inline void YLogfmtLineAddHex(
     YLogfmtLine* line, const char* key, uint64_t value, uint8_t num_digits) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   const size_t limit = YLogfmtLineLimit(line);
@@ -146,7 +146,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddHex(
 
 Y_PUBLIC_HEADER inline void YLogfmtLineAddBool(
     YLogfmtLine* line, const char* key, bool value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   size_t position = YLogfmtLineBeginPair(line, key);
@@ -179,7 +179,7 @@ Y_MODULE_PRIVATE_HEADER inline bool YLogfmtIsBare(const char* value) {
 // empty one.
 Y_PUBLIC_HEADER inline void YLogfmtLineAddString(
     YLogfmtLine* line, const char* key, const char* value) {
-  if (line->truncated) {
+  if (line->is_truncated) {
     return;
   }
   if (value == NULL) {
@@ -213,7 +213,7 @@ Y_PUBLIC_HEADER inline void YLogfmtLineAddString(
 // Finish the line, marking it if anything was dropped, and return its length.
 // The line is null terminated whether or not this is called.
 Y_PUBLIC_HEADER inline size_t YLogfmtLineFinish(YLogfmtLine* line) {
-  if (line->truncated && line->size >= Y_LOGFMT_RESERVED_LENGTH) {
+  if (line->is_truncated && line->size >= Y_LOGFMT_RESERVED_LENGTH) {
     // A line with no pairs in it does not start with the separator.
     const char* marker =
         line->length == 0 ? YLogfmtTruncatedPair + 1 : YLogfmtTruncatedPair;
@@ -237,7 +237,8 @@ typedef struct YLogfmtPair {
 } YLogfmtPair;
 
 // Read a hex digit, returning whether it was one.
-Y_MODULE_PRIVATE_HEADER inline bool YLogfmtHexDigit(char c, uint8_t* digit) {
+Y_MODULE_PRIVATE_HEADER inline bool YLogfmtParseHexDigit(
+    char c, uint8_t* digit) {
   if (c >= '0' && c <= '9') {
     *digit = (uint8_t)(c - '0');
   } else if (c >= 'A' && c <= 'F') {
@@ -287,7 +288,8 @@ Y_MODULE_PRIVATE_HEADER inline bool YLogfmtParseValue(
     } else if (escaped == 'x') {
       uint8_t high = 0;
       uint8_t low = 0;
-      if (!YLogfmtHexDigit(read[2], &high) || !YLogfmtHexDigit(read[3], &low)) {
+      if (!YLogfmtParseHexDigit(read[2], &high) ||
+          !YLogfmtParseHexDigit(read[3], &low)) {
         return false;
       }
       *out++ = (char)((high << 4) | low);
@@ -340,15 +342,15 @@ Y_PUBLIC_HEADER inline bool YLogfmtParse(
     }
     // What ends the value - a space, or the end of the line - is either past
     // the write or is the write, so terminating there loses nothing unread.
-    const bool at_end = *read == '\0';
+    const bool is_at_end = *read == '\0';
     *write = '\0';
-    if (!at_end) {
+    if (!is_at_end) {
       ++read;
     }
     pairs[*num_pairs].key = key;
     pairs[*num_pairs].value = value;
     ++*num_pairs;
-    if (at_end) {
+    if (is_at_end) {
       return true;
     }
   }
@@ -376,15 +378,15 @@ Y_PUBLIC_HEADER inline const char* YLogfmtFind(
 Y_PUBLIC_HEADER inline bool YLogfmtParseUInt(
     const char* value, uint64_t* number) {
   uint64_t result = 0;
-  const bool hex = value[0] == '0' && (value[1] == 'x' || value[1] == 'X');
-  const char* digits = hex ? value + 2 : value;
+  const bool is_hex = value[0] == '0' && (value[1] == 'x' || value[1] == 'X');
+  const char* digits = is_hex ? value + 2 : value;
   if (*digits == '\0') {
     return false;
   }
   for (const char* c = digits; *c != '\0'; ++c) {
     uint8_t digit = 0;
-    if (hex) {
-      if (!YLogfmtHexDigit(*c, &digit) || result > (UINT64_MAX >> 4)) {
+    if (is_hex) {
+      if (!YLogfmtParseHexDigit(*c, &digit) || result > (UINT64_MAX >> 4)) {
         return false;
       }
       result = (result << 4) | digit;

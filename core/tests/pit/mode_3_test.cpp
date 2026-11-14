@@ -38,21 +38,21 @@ TEST_F(Mode3Test, SystemTimerSquareWave) {
   YPITWritePort(&pit_, Y_PIT_PORT_CHANNEL0, 0x27);  // MSB
 
   // Initial state should be high output, no IRQ.
-  EXPECT_TRUE(pit_.channels[0].output_state);
+  EXPECT_TRUE(pit_.channels[0].is_output_high);
   EXPECT_EQ(irq_0_call_count, 0);
 
   // Tick for half the period (falling edge).
   for (int i = 0; i < 5000; ++i) {
     YPITTick(&pit_);
   }
-  EXPECT_FALSE(pit_.channels[0].output_state);
+  EXPECT_FALSE(pit_.channels[0].is_output_high);
   EXPECT_EQ(irq_0_call_count, 0);  // IRQ should NOT be raised on falling edge.
 
   // Tick for the second half of the period (rising edge).
   for (int i = 0; i < 5000; ++i) {
     YPITTick(&pit_);
   }
-  EXPECT_TRUE(pit_.channels[0].output_state);
+  EXPECT_TRUE(pit_.channels[0].is_output_high);
   EXPECT_EQ(irq_0_call_count, 1);  // IRQ SHOULD be raised on rising edge.
 
   // --- Second cycle to test periodicity ---
@@ -62,14 +62,14 @@ TEST_F(Mode3Test, SystemTimerSquareWave) {
   for (int i = 0; i < 5000; ++i) {
     YPITTick(&pit_);
   }
-  EXPECT_FALSE(pit_.channels[0].output_state);
+  EXPECT_FALSE(pit_.channels[0].is_output_high);
   EXPECT_EQ(irq_0_call_count, 0);
 
   // Tick for the next rising edge.
   for (int i = 0; i < 5000; ++i) {
     YPITTick(&pit_);
   }
-  EXPECT_TRUE(pit_.channels[0].output_state);
+  EXPECT_TRUE(pit_.channels[0].is_output_high);
   EXPECT_EQ(irq_0_call_count, 1);
 }
 
@@ -114,20 +114,20 @@ TEST_F(Mode3Test, LSBThenMSBReadWrite) {
 
   // Issue latch command for Channel 0.
   YPITWritePort(&pit_, Y_PIT_PORT_CONTROL, 0x00);
-  EXPECT_TRUE(pit_.channels[0].latch_active);
+  EXPECT_TRUE(pit_.channels[0].is_latch_active);
   EXPECT_EQ(pit_.channels[0].latch, 0x5678);
 
   // Read LSB
   uint8_t lsb = YPITReadPort(&pit_, Y_PIT_PORT_CHANNEL0);
   EXPECT_EQ(lsb, 0x78);
   EXPECT_EQ(pit_.channels[0].rw_byte, Y_PIT_BYTE_MSB);
-  EXPECT_TRUE(pit_.channels[0].latch_active);  // Latch remains active.
+  EXPECT_TRUE(pit_.channels[0].is_latch_active);  // Latch remains active.
 
   // Read MSB
   uint8_t msb = YPITReadPort(&pit_, Y_PIT_PORT_CHANNEL0);
   EXPECT_EQ(msb, 0x56);
   EXPECT_EQ(pit_.channels[0].rw_byte, Y_PIT_BYTE_LSB);
-  EXPECT_FALSE(pit_.channels[0].latch_active);  // Now latch is cleared.
+  EXPECT_FALSE(pit_.channels[0].is_latch_active);  // Now latch is cleared.
 }
 
 }  // namespace

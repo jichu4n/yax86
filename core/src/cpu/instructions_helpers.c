@@ -55,11 +55,11 @@ Y_MODULE_PRIVATE void YCPUPushSourceOperand(
   // PUSH SP stores the value SP has after the decrement rather than the one it
   // had on entry. SP is the only source that can tell the difference. The
   // 80286 and later store the entry value instead.
-  const bool source_is_stack_pointer =
+  const bool is_source_stack_pointer =
       src->address.type == Y_CPU_OPERAND_ADDRESS_TYPE_REGISTER &&
       src->address.register_index == Y_CPU_SP;
   const YCPUOperandValue value =
-      source_is_stack_pointer ? cpu->registers[Y_CPU_SP] : src->value;
+      is_source_stack_pointer ? cpu->registers[Y_CPU_SP] : src->value;
   YCPUWriteToStackTop(cpu, value);
 }
 

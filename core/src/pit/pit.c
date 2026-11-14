@@ -15,8 +15,8 @@ enum {
 
 // Specifies the behavior of a timer channel in a specific mode (0-5).
 typedef struct YPITModeMetadata {
-  // Initial output state when a timer channel is programmed in this mode.
-  bool initial_output_state;
+  // Whether the channel's output starts high when programmed in this mode.
+  bool is_initial_output_high;
   // Callback to handle a tick for this mode.
   void (*handle_tick)(
       YPITState* pit, YPITChannelState* channel, int channel_index);
@@ -40,21 +40,21 @@ Y_FILE_PRIVATE const YPITModeMetadata YPITUnsupportedMode = {0};
 // Handles a channel reaching terminal count.
 Y_FILE_PRIVATE inline void YPITChannelSetOutputState(
     YPITState* pit, YPITChannelState* channel, int channel_index,
-    bool new_output_state) {
+    bool is_output_high) {
   // No-op if the output state is unchanged.
-  if (channel->output_state == new_output_state) {
+  if (channel->is_output_high == is_output_high) {
     return;
   }
 
   // Set the new output state.
-  channel->output_state = new_output_state;
+  channel->is_output_high = is_output_high;
 
   // On rising edge of channel 0 output state, raise IRQ 0.
   //
   // This is the only effect any channel's output has outside the PIT, which is
   // why YPITTicksUntilNextEvent() schedules deadlines for channel 0 alone. Give
   // another channel's output an effect here and that has to change with it.
-  if (channel_index == Y_PIT_CHANNEL_TIMER && new_output_state &&
+  if (channel_index == Y_PIT_CHANNEL_TIMER && is_output_high &&
       pit->config.raise_irq_0) {
     pit->config.raise_irq_0(pit->config.context);
   }
@@ -92,7 +92,7 @@ YPITMode0TicksUntilEvent(const YPITChannelState* channel) {
 
 // Metadata for Mode 0: Interrupt on Terminal Count.
 Y_FILE_PRIVATE const YPITModeMetadata YPITMode0Metadata = {
-    .initial_output_state = false,
+    .is_initial_output_high = false,
     .handle_tick = YPITMode0HandleTick,
     .counter_step = 1,
     .skip_ticks = YPITMode0SkipTicks,
@@ -135,7 +135,7 @@ YPITMode2TicksUntilEvent(const YPITChannelState* channel) {
 
 // Metadata for Mode 2: Rate Generator.
 Y_FILE_PRIVATE const YPITModeMetadata YPITMode2Metadata = {
-    .initial_output_state = true,
+    .is_initial_output_high = true,
     .handle_tick = YPITMode2HandleTick,
     .counter_step = 1,
     .skip_ticks = YPITMode2SkipTicks,
@@ -155,7 +155,7 @@ Y_FILE_PRIVATE void YPITMode3HandleTick(
       // When the counter reaches terminal count, reload and toggle output.
       channel->counter = channel->reload_value;
       YPITChannelSetOutputState(
-          pit, channel, channel_index, !channel->output_state);
+          pit, channel, channel_index, !channel->is_output_high);
       break;
     default:
       break;
@@ -181,7 +181,7 @@ YPITMode3TicksUntilEvent(const YPITChannelState* channel) {
 
 // Metadata for Mode 3: Square Wave Generator.
 Y_FILE_PRIVATE const YPITModeMetadata YPITMode3Metadata = {
-    .initial_output_state = true,
+    .is_initial_output_high = true,
     .handle_tick = YPITMode3HandleTick,
     .counter_step = 2,
     .skip_ticks = YPITMode3SkipTicks,
@@ -203,14 +203,14 @@ Y_PUBLIC void YPITInit(YPITState* pit) {
   // On the IBM PC, the output pins of all three channels are initially pulled
   // high.
   for (int i = 0; i < Y_PIT_NUM_CHANNELS; ++i) {
-    pit->channels[i].output_state = true;
+    pit->channels[i].is_output_high = true;
   }
 }
 
 // Whether a channel in this mode drives its output at the reload frequency.
 // Only modes 2 and 3 oscillate; the others produce a single edge, which a
 // frequency has no way to express.
-Y_FILE_PRIVATE inline bool YPITModeOscillates(uint8_t mode) {
+Y_FILE_PRIVATE inline bool YPITDoesModeOscillate(uint8_t mode) {
   return mode == 2 || mode == 3;
 }
 
@@ -230,7 +230,7 @@ Y_FILE_PRIVATE inline void YPITNotifySpeakerFrequency(
     return;
   }
   uint32_t frequency = 0;
-  if (has_count && YPITModeOscillates(channel->mode)) {
+  if (has_count && YPITDoesModeOscillate(channel->mode)) {
     frequency = Y_PIT_TICK_FREQUENCY_HZ / (channel->reload_value
                                                ? channel->reload_value
                                                : Y_PIT_FALLBACK_RELOAD_VALUE);
@@ -305,7 +305,7 @@ Y_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
       if (access_mode == Y_PIT_ACCESS_LATCH) {
         // Latch command.
         channel->latch = channel->counter;
-        channel->latch_active = true;
+        channel->is_latch_active = true;
       } else {
         // Programming command.
         channel->access_mode = access_mode;
@@ -317,7 +317,7 @@ Y_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
         channel->rw_byte = Y_PIT_BYTE_LSB;
         YPITChannelSetOutputState(
             pit, channel, channel_index,
-            YPITModeMetadataTable[channel->mode]->initial_output_state);
+            YPITModeMetadataTable[channel->mode]->is_initial_output_high);
         // A reprogrammed channel is silent until its count arrives, so a tone
         // playing on channel 2 stops here and resumes on the next counter
         // load.
@@ -344,7 +344,7 @@ Y_PUBLIC void YPITWritePort(YPITState* pit, uint16_t port, uint8_t value) {
 Y_FILE_PRIVATE inline uint8_t YPITChannelReadPort(
     Y_UNUSED YPITState* pit, YPITChannelState* channel,
     Y_UNUSED int channel_index) {
-  uint16_t value = channel->latch_active ? channel->latch : channel->counter;
+  uint16_t value = channel->is_latch_active ? channel->latch : channel->counter;
   uint8_t result = 0;
 
   switch (channel->access_mode) {
@@ -353,11 +353,11 @@ Y_FILE_PRIVATE inline uint8_t YPITChannelReadPort(
       break;
     case Y_PIT_ACCESS_LSB_ONLY:
       result = value & 0xFF;
-      channel->latch_active = false;
+      channel->is_latch_active = false;
       break;
     case Y_PIT_ACCESS_MSB_ONLY:
       result = (value >> 8) & 0xFF;
-      channel->latch_active = false;
+      channel->is_latch_active = false;
       break;
     case Y_PIT_ACCESS_LSB_THEN_MSB:
       switch (channel->rw_byte) {
@@ -369,7 +369,7 @@ Y_FILE_PRIVATE inline uint8_t YPITChannelReadPort(
           result = (value >> 8) & 0xFF;
           channel->rw_byte = Y_PIT_BYTE_LSB;
           // The full value has been read, so deactivate the latch.
-          channel->latch_active = false;
+          channel->is_latch_active = false;
           break;
         default:
           // Should not happen.

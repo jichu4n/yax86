@@ -159,7 +159,7 @@ static void WritePair(Writer* writer, const ConfigFileSetting* setting) {
   YLogfmtLine line;
   YLogfmtLineInit(&line, pair, sizeof(pair));
   YLogfmtLineAddString(&line, setting->key, setting->value);
-  if (line.truncated) {
+  if (line.is_truncated) {
     writer->does_fit = false;
     return;
   }
