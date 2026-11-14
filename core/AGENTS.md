@@ -32,7 +32,7 @@ visibility, and how performance work is measured - are in the root
   in `core`** - `core/src/cpu` becomes `core/cpu.h` - and all of them into
   `core/yax86_core.h`, which `libyax86_core.a` is built from. A module's
   external interface is its `public.h`.
-- **The util headers are a bundle of their own, `core/util.h`**, which every
+- **`util` has a bundle of its own, `core/util.h`**, which every
   module's bundle includes rather than copies: `"requires": ["util"]` in its
   `bundle.json` puts a guarded `#include "util.h"` ahead of the module's
   `extern "C"` block. `util.h` comes first in `yax86_core.h`, so each util
@@ -394,6 +394,13 @@ visibility, and how performance work is measured - are in the root
 - A line is at most `Y_LOG_MAX_LINE_LENGTH` bytes, in the logger's own
   buffer. A pair that does not fit is dropped with every pair after it, and
   the line ends `truncated=true`, so it is still valid.
+- **`YLoggerWrite()`, `YLoggerWriteReply()` and `YLogfmt*` are out of line** -
+  `Y_PUBLIC` in `util/log.c` and `util/logfmt.c`, with `util/snprintf.{h,c}`
+  in `util`'s private half - while `YLoggerIsEnabled()` and the `YLogField`
+  builders stay `inline` in `util/log.h` so a suppressed log still makes no
+  call. Defining them `static` in the header instead gives every host file that
+  logs its own specialised ~4.4KB copy of `YLoggerWrite` (68KB across
+  `pico/picocalc`) and shifts flash layout whenever another file logs.
 
 ## util - hot path placement
 

@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "src/util/log.h"
+#include "util.h"
 
 using namespace std;
 

@@ -25,8 +25,7 @@
 #endif  // YAX86_IMPLEMENTATION
 
 // Shared between a module's source files, but defined in a header rather than
-// in a source file: one copy per translation unit. Also used for internal
-// utilities (like snprintf) that are included into multiple module bundles.
+// in a source file: one copy per translation unit.
 #define Y_MODULE_PRIVATE_HEADER static
 
 // Visible only within the source file that defines it.

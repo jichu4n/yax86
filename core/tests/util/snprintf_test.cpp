@@ -1,4 +1,7 @@
-#include "src/util/snprintf.h"
+#define YAX86_IMPLEMENTATION
+extern "C" {
+#include "src/util/snprintf.c"
+}
 
 #include <gtest/gtest.h>
 
