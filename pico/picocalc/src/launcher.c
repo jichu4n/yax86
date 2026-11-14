@@ -290,7 +290,7 @@ static __noinline void PollCommand(void) {
 // last, and there is no guest's screen to draw under it.
 static void DrawScreen(void) {
   DisplayBox* box = DisplayBeginBox();
-  if (box != NULL && ScreenDraw(box, time_us_64())) {
+  if (box != NULL && ScreenDraw(box)) {
     DisplayEndBox();
   }
 }

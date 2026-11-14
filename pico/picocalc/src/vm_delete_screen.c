@@ -96,7 +96,7 @@ static void JoinNames(
   }
 }
 
-static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }

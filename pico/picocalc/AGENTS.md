@@ -370,11 +370,16 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   nothing to core 0's. Calls go one way, from the loop to the screen and
   from the screen down.
 - **A screen draws into the box the loop hands it, and the loop sends it**:
-  `ScreenDraw(menu, now_us)` says whether the screen drew into `menu`, and
-  the loop then sends it to core 1 with `DisplayEndBox()`. The sending is
-  each mode's, as the status rows are, so that a mode can do what it needs
-  first. Launcher mode has nothing to do: every box it draws is the size of
-  a list at least, and covers the last.
+  the loop takes a box from `DisplayBeginBox()`, `ScreenDraw(box)` says
+  whether the screen drew into it, and the loop then sends it to core 1
+  with `DisplayEndBox()`. The sending is each mode's, as the status rows
+  are, so that a mode can do what it needs first. Launcher mode has nothing
+  to do: every box it draws is the size of a list at least, and covers the
+  last.
+- **A screen whose figures change with time reads the clock itself**, in
+  its `on_draw`, and draws again when they are due: USB mass storage while
+  it shares, every second. The loop passes no time, since most screens
+  change only on a key.
 - **Every page is a screen of its own**, and is opened through its own
   open function, which takes what the page works on as parameters:
   `SettingsScreenOpen(&g_settings)`. The parent holds the state and passes
