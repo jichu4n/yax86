@@ -6,6 +6,7 @@
 #include "box.h"
 #include "display.h"
 #include "list_box.h"
+#include "pico/time.h"
 
 enum {
   // A label's width, in columns, before its value.
@@ -16,10 +17,12 @@ enum {
 
 extern const Screen kStatusScreen;
 
+// The lines to draw, the emulator's, which it keeps current.
 static const StatusScreenLine* g_lines;
 // The list box, for whether it is out of date. It has no items to select.
 static ListBox g_list_box;
-// When the page was last drawn.
+// When the page was last drawn, in microseconds since boot. It is drawn
+// again kRefreshUs later, so that its figures stay current.
 static uint64_t g_drawn_us;
 
 ScreenResult StatusScreenOpen(
@@ -40,7 +43,8 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayBox* box, uint64_t now_us) {
+static bool OnDraw(DisplayBox* box) {
+  const uint64_t now_us = time_us_64();
   if (now_us - g_drawn_us >= kRefreshUs) {
     g_list_box.dirty = true;
   }

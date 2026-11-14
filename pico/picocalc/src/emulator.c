@@ -997,7 +997,7 @@ static bool BoxResized(const DisplayBox* box) {
 // in full under it first. If core 1 cannot take that yet, the box waits, and
 // is sent on a later pass, drawn again if the screen has changed meanwhile.
 // Kept out of line, as HandleKey() is.
-static __noinline void DrawMenu(uint64_t now_us) {
+static __noinline void DrawMenu(void) {
   DisplayBox* box = DisplayBeginBox();
   if (box == NULL) {
     return;
@@ -1006,7 +1006,7 @@ static __noinline void DrawMenu(uint64_t now_us) {
   // shows. Filling them in costs nothing that matters while the VM is
   // paused.
   DescribeStatus(g_status_lines);
-  if (ScreenDraw(box, now_us)) {
+  if (ScreenDraw(box)) {
     g_box_pending = true;
   }
   if (!g_box_pending || (BoxResized(box) && !RedrawGuest())) {
@@ -1105,7 +1105,7 @@ static void RunVM(bool vm_ready) {
       UpdateStatusRows();
     }
     if (screen_on && ScreenIsOpen()) {
-      DrawMenu(time_us_64());
+      DrawMenu();
     }
     if (screen_on && time_reached(blank_at)) {
       DisplayTurnOff();

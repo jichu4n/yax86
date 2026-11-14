@@ -378,8 +378,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   last.
 - **A screen whose figures change with time reads the clock itself**, in
   its `on_draw`, and draws again when they are due: USB mass storage while
-  it shares, every second. The loop passes no time, since most screens
-  change only on a key.
+  it shares, and the in-VM menu's Status page, each every second. The loop
+  passes no time, since most screens change only on a key.
 - **Every page is a screen of its own**, and is opened through its own
   open function, which takes what the page works on as parameters:
   `SettingsScreenOpen(&g_settings)`. The parent holds the state and passes
