@@ -105,8 +105,8 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 
 // The images in the VM's drives, over what can be done to it.
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds
@@ -140,7 +140,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
     line_count = 1;
   }
   ListBoxDrawItems(
-      menu, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
+      box, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
       kVMItems, kVMItemCount, g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
 }

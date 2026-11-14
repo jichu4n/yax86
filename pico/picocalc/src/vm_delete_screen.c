@@ -97,8 +97,8 @@ static void JoinNames(
 }
 
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   const uint8_t named = g_contents.file_count < kVMListNamed
@@ -131,7 +131,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
     lines[line_count++] = users;
   }
   ListBoxDrawItems(
-      menu, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
+      box, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
       g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
 }

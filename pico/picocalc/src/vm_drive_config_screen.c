@@ -144,8 +144,8 @@ static ScreenResult OnResume(void) {
 }
 
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   uint8_t count = 0;
@@ -157,7 +157,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
     items[row] = labels[choices[row]];
   }
   ListBoxDrawItems(
-      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
+      box, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
       true);
   ListBoxEndDraw(&g_list_box);
 }

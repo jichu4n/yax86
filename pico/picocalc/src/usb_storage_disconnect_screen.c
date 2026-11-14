@@ -46,12 +46,12 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   ListBoxDrawItems(
-      menu, "Unsafe disconnect",
+      box, "Unsafe disconnect",
       (const char* const[]){
           "Not ejected by the host.",
           "Writes may still be pending.",

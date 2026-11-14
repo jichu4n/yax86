@@ -32,7 +32,7 @@ enum {
   kListBoxWideColumns = kTextColumns,
   // The rows of a list, which with its edges fill the most rows a box can
   // have. Page Up and Page Down move this far.
-  kListBoxRows = kDisplayMenuMaxRows - 2,
+  kListBoxRows = kDisplayBoxMaxRows - 2,
 };
 
 // A list box's state.
@@ -81,7 +81,7 @@ ListBoxAction ListBoxHandleKeyCode(
 // Start drawing a list box that is out of date. Returns the box to draw it
 // in, or NULL if it is not out of date or core 1 is still drawing the last
 // one. ListBoxEndDraw() hands the box to core 1.
-DisplayMenu* ListBoxBeginDraw(ListBox* list_box);
+DisplayBox* ListBoxBeginDraw(ListBox* list_box);
 void ListBoxEndDraw(ListBox* list_box);
 
 // Whether key moves the selection: Up, Down, Page Up or Page Down.
@@ -97,7 +97,7 @@ void ListBoxScrollTo(uint8_t row, uint8_t* top);
 
 // Draw up and down arrows on a list's border where it has more rows than it
 // shows, above or below. The list has total rows, and shows them from top.
-void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total);
+void ListBoxDrawScrollArrows(DisplayBox* box, uint8_t top, uint8_t total);
 
 // Draw count items, under line_count lines of text if there are any, with
 // the item at selected marked. With list_sized, the box is at least the size
@@ -105,7 +105,7 @@ void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total);
 // at power on there is no guest's screen to draw under a smaller box to hide
 // the list's.
 void ListBoxDrawItems(
-    DisplayMenu* menu, const char* title, const char* const* lines,
+    DisplayBox* box, const char* title, const char* const* lines,
     uint8_t line_count, const BoxItem* items, uint8_t count, uint8_t selected,
     bool list_sized);
 

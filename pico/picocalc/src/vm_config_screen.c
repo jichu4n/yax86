@@ -225,8 +225,8 @@ static ScreenResult OnResume(void) {
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   char rows[kFormItemCount][kListBoxNarrowColumns];
@@ -256,7 +256,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
   }
   items[kFormCreate] = (BoxItem){g_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
-      menu, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
+      box, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
       g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);

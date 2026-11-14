@@ -81,11 +81,11 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
-  FileBrowserDraw(&g_browser, menu, g_list_box.selected);
+  FileBrowserDraw(&g_browser, box, g_list_box.selected);
   ListBoxEndDraw(&g_list_box);
 }
 

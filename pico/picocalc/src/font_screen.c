@@ -59,8 +59,8 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   BoxItem items[kFont4x10Count];
@@ -68,7 +68,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
     items[i] = (BoxItem){Font4x10Label((Font4x10)i), false};
   }
   ListBoxDrawItems(
-      menu, "Font", NULL, 0, items, kFont4x10Count, g_list_box.selected, true);
+      box, "Font", NULL, 0, items, kFont4x10Count, g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
 }
 

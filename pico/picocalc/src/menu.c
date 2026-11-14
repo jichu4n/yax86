@@ -397,26 +397,26 @@ MenuAction MenuHandleKey(SouthbridgeKeyEvent event) {
 // Drawing
 // ============================================================================
 
-static void DrawStatusPage(DisplayMenu* menu) {
+static void DrawStatusPage(DisplayBox* box) {
   MenuStatusLine lines[kMenuStatusLines];
   g_config.describe_status(lines);
-  BoxPlace(menu, kListBoxWideColumns, kMenuStatusLines + 4);
+  BoxPlace(box, kListBoxWideColumns, kMenuStatusLines + 4);
   uint8_t row = 0;
-  BoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
-  BoxBlankRow(&menu->text[row++], menu->columns);
+  BoxEdgeRow(&box->text[row++], box->columns, true, "Status");
+  BoxBlankRow(&box->text[row++], box->columns);
   for (uint8_t i = 0; i < kMenuStatusLines; ++i) {
-    DisplayTextRow* text = &menu->text[row++];
-    BoxBlankRow(text, menu->columns);
-    BoxPutText(text, menu->columns, 2, lines[i].label, kBoxAttrTitle);
+    DisplayTextRow* text = &box->text[row++];
+    BoxBlankRow(text, box->columns);
+    BoxPutText(text, box->columns, 2, lines[i].label, kBoxAttrTitle);
     BoxPutText(
-        text, menu->columns, 2 + kStatusLabelColumns, lines[i].value,
+        text, box->columns, 2 + kStatusLabelColumns, lines[i].value,
         kBoxAttrText);
   }
-  BoxBlankRow(&menu->text[row++], menu->columns);
-  BoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
+  BoxBlankRow(&box->text[row++], box->columns);
+  BoxEdgeRow(&box->text[row], box->columns, false, NULL);
 }
 
-static void DrawDrivePage(DisplayMenu* menu) {
+static void DrawDrivePage(DisplayBox* box) {
   const DiskImage* image = g_config.drive(g_drive);
   char line[kListBoxNarrowColumns];
   const char* in_drive = "the built-in boot floppy";
@@ -440,19 +440,19 @@ static void DrawDrivePage(DisplayMenu* menu) {
   };
   const char* title = kVMDriveNames[kVMDriveFD1 + g_drive];
   ListBoxDrawItems(
-      menu, title, lines, sizeof(lines) / sizeof(lines[0]), items,
+      box, title, lines, sizeof(lines) / sizeof(lines[0]), items,
       DriveItemCount(), g_selected, false);
 }
 
 // The main page: its items as they show.
-static void DrawMainPage(DisplayMenu* menu) {
+static void DrawMainPage(DisplayBox* box) {
   MainItem shown[kMainItemCount];
   const uint8_t count = MainItems(shown);
   BoxItem items[kMainItemCount];
   for (uint8_t i = 0; i < count; ++i) {
     items[i] = kMainItems[shown[i]];
   }
-  ListBoxDrawItems(menu, "yax86", NULL, 0, items, count, g_selected, false);
+  ListBoxDrawItems(box, "yax86", NULL, 0, items, count, g_selected, false);
 }
 
 void MenuDraw(uint64_t now_us) {
@@ -466,42 +466,42 @@ void MenuDraw(uint64_t now_us) {
   if (!g_dirty) {
     return;
   }
-  DisplayMenu* menu = DisplayBeginMenu();
-  if (menu == NULL) {
+  DisplayBox* box = DisplayBeginBox();
+  if (box == NULL) {
     return;
   }
   switch (g_page) {
     case kMenuPageMain:
-      DrawMainPage(menu);
+      DrawMainPage(box);
       break;
     case kMenuPageReset:
       ListBoxDrawItems(
-          menu, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
+          box, "Reset", (const char* const[]){"Reset the VM?"}, 1, kResetItems,
           kResetItemCount, g_selected, false);
       break;
     case kMenuPagePowerOff:
       ListBoxDrawItems(
-          menu, "Power off", (const char* const[]){"Power off the VM?"}, 1,
+          box, "Power off", (const char* const[]){"Power off the VM?"}, 1,
           kPowerOffItems, kPowerOffItemCount, g_selected, false);
       break;
     case kMenuPageDrive:
-      DrawDrivePage(menu);
+      DrawDrivePage(box);
       break;
     case kMenuPageBrowse:
-      FileBrowserDraw(&g_browser, menu, g_selected);
+      FileBrowserDraw(&g_browser, box, g_selected);
       break;
     case kMenuPageStatus:
-      DrawStatusPage(menu);
+      DrawStatusPage(box);
       g_status_drawn_us = now_us;
       break;
   }
   // A box of another size than the last leaves part of the last showing, so
   // the guest's screen goes under it first. If core 1 cannot take that yet,
   // the box is laid out again next time.
-  if (BoxShownResized(&g_box_shown, menu) && !g_config.redraw_guest()) {
+  if (BoxShownResized(&g_box_shown, box) && !g_config.redraw_guest()) {
     return;
   }
-  DisplayEndMenu();
-  BoxShownRecord(&g_box_shown, menu);
+  DisplayEndBox();
+  BoxShownRecord(&g_box_shown, box);
   g_dirty = false;
 }

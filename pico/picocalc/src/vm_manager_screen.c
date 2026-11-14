@@ -101,30 +101,30 @@ static __noinline ScreenResult OnResume(void) {
 // The VMs in yax86/vm, a row each, then New VM after a line if there are
 // any, with arrows on the border where there are more above or below.
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   const VMList* vms = g_vm_manager.vms;
-  BoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
-  BoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
+  BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);
+  BoxEdgeRow(&box->text[0], box->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
-    DisplayTextRow* row = &menu->text[1 + i];
+    DisplayTextRow* row = &box->text[1 + i];
     const uint8_t index = (uint8_t)(g_top + i);
     if (index >= RowCount()) {
-      BoxBlankRow(row, menu->columns);
+      BoxBlankRow(row, box->columns);
     } else if (index < vms->count) {
       const BoxItem item = {vms->vms[index].name, true};
-      BoxItemRow(row, menu->columns, &item, index == g_list_box.selected);
+      BoxItemRow(row, box->columns, &item, index == g_list_box.selected);
     } else if (vms->count > 0 && index == vms->count) {
-      BoxSeparatorRow(row, menu->columns);
+      BoxSeparatorRow(row, box->columns);
     } else {
       BoxItemRow(
-          row, menu->columns, &kNewVMRow, g_list_box.selected == vms->count);
+          row, box->columns, &kNewVMRow, g_list_box.selected == vms->count);
     }
   }
-  BoxEdgeRow(&menu->text[kListBoxRows + 1], menu->columns, false, NULL);
-  ListBoxDrawScrollArrows(menu, g_top, RowCount());
+  BoxEdgeRow(&box->text[kListBoxRows + 1], box->columns, false, NULL);
+  ListBoxDrawScrollArrows(box, g_top, RowCount());
   ListBoxEndDraw(&g_list_box);
 }
 

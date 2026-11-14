@@ -118,8 +118,8 @@ static void OnDraw(uint64_t now_us) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
     g_list_box.dirty = true;
   }
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   const UsbStorageStats stats = UsbStorageGetStats();
@@ -157,7 +157,7 @@ static void OnDraw(uint64_t now_us) {
       HostHasVolume() ? "Eject it on the host first." : "",
   };
   ListBoxDrawItems(
-      menu, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
+      box, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
       kSharingItems, 1, g_list_box.selected, true);
   g_drawn_us = now_us;
   ListBoxEndDraw(&g_list_box);

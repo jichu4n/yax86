@@ -38,12 +38,12 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   ListBoxDrawItems(
-      menu, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
+      box, "Settings", NULL, 0, kSettingsItems, kSettingsItemCount,
       g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
 }

@@ -201,32 +201,32 @@ static ScreenResult OnResume(void) {
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
-  BoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
-  BoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
+  BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);
+  BoxEdgeRow(&box->text[0], box->columns, true, "YAX86");
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
-    DisplayTextRow* row = &menu->text[1 + i];
+    DisplayTextRow* row = &box->text[1 + i];
     const uint8_t index = (uint8_t)(g_top_row + i);
     if (index >= RowCount()) {
-      BoxBlankRow(row, menu->columns);
+      BoxBlankRow(row, box->columns);
     } else if (index < g_vms->count) {
       BoxItemTextRow(
-          row, menu->columns, g_vms->vms[index].name,
+          row, box->columns, g_vms->vms[index].name,
           index == g_list_box.selected);
     } else if (g_vms->count > 0 && index == g_vms->count) {
-      BoxSeparatorRow(row, menu->columns);
+      BoxSeparatorRow(row, box->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
       const bool selected = item == g_list_box.selected;
       if (item == RowItem(kMenuRowVMManager)) {
-        BoxItemRow(row, menu->columns, &kVMManagerRow, selected);
+        BoxItemRow(row, box->columns, &kVMManagerRow, selected);
       } else if (item == RowItem(kMenuRowUSB)) {
-        BoxItemRow(row, menu->columns, &kUSBRow, selected);
+        BoxItemRow(row, box->columns, &kUSBRow, selected);
       } else {
-        BoxItemRow(row, menu->columns, &kSettingsRow, selected);
+        BoxItemRow(row, box->columns, &kSettingsRow, selected);
       }
     }
   }
@@ -237,9 +237,9 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
         (unsigned)g_countdown);
   }
   BoxEdgeRow(
-      &menu->text[kListBoxRows + 1], menu->columns, false,
+      &box->text[kListBoxRows + 1], box->columns, false,
       g_countdown > 0 ? countdown : NULL);
-  ListBoxDrawScrollArrows(menu, g_top_row, RowCount());
+  ListBoxDrawScrollArrows(box, g_top_row, RowCount());
   ListBoxEndDraw(&g_list_box);
 }
 

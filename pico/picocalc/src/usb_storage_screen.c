@@ -117,12 +117,12 @@ static ScreenResult OnResume(void) {
 }
 
 static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   ListBoxDrawItems(
-      menu, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
+      box, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
       kUSBItems, kUSBItemCount, g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
 }
