@@ -37,7 +37,7 @@
 // guest_ram, kPicoGuestSRAMSize bytes, which the launcher borrows until the
 // VM starts. Each must outlive the emulator.
 void EmulatorInit(
-    const InitStatus* init_status, const VMList* vms, const Settings* settings,
+    const InitStatus* init_status, const VMList* vms, Settings* settings,
     uint8_t* guest_ram);
 
 // Run vm, main.c's, whose floppy drives' images are saved to it as they

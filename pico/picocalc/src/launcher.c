@@ -9,6 +9,7 @@
 #include "debug_command.h"
 #include "disk_image.h"
 #include "display.h"
+#include "display_power.h"
 #include "font_4x10.h"
 #include "hardware/watchdog.h"
 #include "launcher_menu_screen.h"
@@ -20,6 +21,7 @@
 #include "status_bar.h"
 #include "text.h"
 #include "typing.h"
+#include "usb_storage.h"
 #include "vm_list.h"
 
 enum {
@@ -105,6 +107,7 @@ static LauncherMenuExit g_exit;
 static __noinline bool ReadSettings(uint8_t* default_vm) {
   char problem[kVMProblemLength + 1];
   bool was_read = SettingsRead(g_settings, problem);
+  DisplayPowerApplySettings(g_settings);
   DisplaySetFont(g_settings->font);
   *default_vm = 0;
   if (was_read && g_settings->boot_default[0] != '\0') {
@@ -251,12 +254,14 @@ static __noinline bool HandleMenuExit(uint8_t* copy_buffer, VMConfig* vm) {
   return false;
 }
 
-// Launcher mode's groups of a report, after the system's: the font, the VMs
+// Launcher mode's groups of a report, after the system's: the display, the VMs
 // on the card, and the screen showing.
 static void Report(const DebugCommand* command) {
   DebugCommandReportSystem(command);
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "display", Y_LOG_STRING("font", Font4x10Name(g_settings->font)));
+      command, "display", Y_LOG_BOOL("on", DisplayPowerIsOn()),
+      Y_LOG_UINT("timeout_s", g_settings->display_timeout),
+      Y_LOG_STRING("font", Font4x10Name(g_settings->font)));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", ""),
       Y_LOG_UINT("vms", g_vms->num_vms));
@@ -303,6 +308,7 @@ bool LauncherRun(
   g_settings = settings;
   switch (Start(copy_buffer, vm)) {
     case kStartLoadedVM:
+      DisplayPowerFlush(true);
       // A problem shown at the start is the launcher's, and goes with it.
       StatusBarClearProblem();
       return true;
@@ -314,10 +320,13 @@ bool LauncherRun(
   absolute_time_t next_status_at = get_absolute_time();
   for (;;) {
     PollCommand();
+    const bool was_display_on = DisplayPowerIsOn();
     SouthbridgeKeyEvent key;
     const bool was_pressed = SouthbridgePollKey(&key) || TypingNext(&key);
     if (was_pressed) {
+      DisplayPowerResetTimer();
       ScreenHandleKey(key);
+      DisplayPowerResetTimer();
     }
     if (ScreenIsOpen()) {
       ScreenTick();
@@ -327,16 +336,26 @@ bool LauncherRun(
     // problem it showed goes with it, as the emulator's rows have nothing to
     // clear it.
     if (!ScreenIsOpen() && HandleMenuExit(copy_buffer, vm)) {
+      DisplayPowerResetTimer();
+      DisplayPowerFlush(true);
       StatusBarClearProblem();
       return true;
     }
-    // The rows are updated at once after a key, so that the keys of the
+    // The rows are updated at once after a key or wake, so that the keys of the
     // screen it led to show without waiting for the next update.
-    if (was_pressed || time_reached(next_status_at)) {
+    if (DisplayPowerIsOn() &&
+        (!was_display_on || was_pressed || time_reached(next_status_at))) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       LauncherStatusBarUpdate(ScreenHint());
     }
-    DrawScreen();
+    if (DisplayPowerIsOn()) {
+      DrawScreen();
+    }
+    const bool is_exporting = UsbStorageGetStats().is_exporting;
+    if (LauncherMenuScreenIsCounting() || is_exporting) {
+      DisplayPowerResetTimer();
+    }
+    DisplayPowerTick(!is_exporting);
     sleep_ms(kPollMs);
   }
 }

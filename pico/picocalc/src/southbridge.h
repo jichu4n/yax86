@@ -19,6 +19,27 @@ void SouthbridgeInit(void);
 // v1.6. Returns false if the controller did not answer at all.
 bool SouthbridgeReadVersion(uint8_t* version);
 
+// Whether the controller answered SouthbridgeReadVersion() with v1.6 or later,
+// where the display and keyboard backlight registers can be read and written.
+bool SouthbridgeHasBacklights(void);
+
+// The display and keyboard backlights, 0 (off) to 255, as last read from or
+// written to the controller.
+typedef struct SouthbridgeBacklights {
+  bool is_known;
+  uint8_t display;
+  uint8_t keyboard;
+} SouthbridgeBacklights;
+
+// Read or set the display and keyboard backlights, waiting for the bus.
+// Setting display above 0 also has SouthbridgePollKey() keep them fresh as Alt
+// shortcuts change them; setting display to 0 stops that until it is turned
+// back on, so the off state stays distinct from the user's brightness. Both
+// return false without SouthbridgeHasBacklights() or if the bus fails.
+bool SouthbridgeReadBacklights(uint8_t* display, uint8_t* keyboard);
+bool SouthbridgeSetBacklights(uint8_t display, uint8_t keyboard);
+SouthbridgeBacklights SouthbridgeGetBacklights(void);
+
 // What became of a key, as the controller's key FIFO reports it.
 typedef enum SouthbridgeKeyState {
   // The FIFO was empty.
@@ -70,7 +91,8 @@ enum {
 
 // How the key FIFO poll has gone, for the report.
 typedef struct SouthbridgePollStats {
-  // Reads that completed, the battery's included, and how many held a key.
+  // Reads that completed, the battery's and backlights' included, and how many
+  // held a key.
   uint32_t num_reads;
   uint32_t num_keys;
   // Keys dropped because they were already queued when the poll started.
