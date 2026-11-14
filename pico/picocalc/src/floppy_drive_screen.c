@@ -109,7 +109,7 @@ static ScreenResult OnResume(void) {
 }
 
 // What the drive holds, over its items.
-static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
@@ -135,7 +135,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
       [kDriveEject] = {"Eject", false},
   };
   ListBoxDrawItems(
-      menu, kVMDriveNames[kVMDriveFD1 + g_drive], lines,
+      box, kVMDriveNames[kVMDriveFD1 + g_drive], lines,
       sizeof(lines) / sizeof(lines[0]), items, ItemCount(), g_list_box.selected,
       false);
   return true;

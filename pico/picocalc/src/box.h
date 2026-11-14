@@ -1,7 +1,8 @@
 // A box: what every screen in both modes draws over the guest's screen,
-// which display.h calls a DisplayMenu. It has code page 437's double-lined
-// border, a title in its top edge, and rows of text and items inside. This has the colors a box is drawn in, draws its rows, and centers
-// it on the guest's screen. list_box.h builds a list to select from on it.
+// display.h's DisplayBox. It has code page 437's double-lined border, a title
+// in its top edge, and rows of text and items inside. This has the colors a
+// box is drawn in, draws its rows, and centers it on the guest's screen.
+// list_box.h builds a list to select from on it.
 #ifndef YAX86_PICOCALC_BOX_H
 #define YAX86_PICOCALC_BOX_H
 
@@ -59,6 +60,6 @@ void BoxItemRow(
     DisplayTextRow* row, uint8_t columns, const BoxItem* item, bool selected);
 
 // Lay out a box of rows, centered on the guest's screen.
-void BoxPlace(DisplayMenu* menu, uint8_t columns, uint8_t rows);
+void BoxPlace(DisplayBox* box, uint8_t columns, uint8_t rows);
 
 #endif  // YAX86_PICOCALC_BOX_H

@@ -114,7 +114,7 @@ static void FormatSize(uint64_t size, char* text, size_t length) {
 }
 
 // What is exported and its size, the host's state, and how much has moved.
-static bool OnDraw(DisplayMenu* menu, uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, uint64_t now_us) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
     g_list_box.dirty = true;
   }
@@ -156,7 +156,7 @@ static bool OnDraw(DisplayMenu* menu, uint64_t now_us) {
       HostHasVolume() ? "Eject it on the host first." : "",
   };
   ListBoxDrawItems(
-      menu, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
+      box, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
       kSharingItems, 1, g_list_box.selected, true);
   g_drawn_us = now_us;
   return true;

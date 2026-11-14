@@ -69,8 +69,8 @@ void ScreenTick(void) {
   }
 }
 
-bool ScreenDraw(DisplayMenu* menu, uint64_t now_us) {
-  return Top()->on_draw(menu, now_us);
+bool ScreenDraw(DisplayBox* box, uint64_t now_us) {
+  return Top()->on_draw(box, now_us);
 }
 
 const char* ScreenHint(void) { return Top()->hint(); }

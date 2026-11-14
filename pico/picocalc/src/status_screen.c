@@ -40,26 +40,26 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayMenu* menu, uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, uint64_t now_us) {
   if (now_us - g_drawn_us >= kRefreshUs) {
     g_list_box.dirty = true;
   }
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
-  BoxPlace(menu, kListBoxWideColumns, kStatusScreenLines + 4);
+  BoxPlace(box, kListBoxWideColumns, kStatusScreenLines + 4);
   uint8_t row = 0;
-  BoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
-  BoxBlankRow(&menu->text[row++], menu->columns);
+  BoxEdgeRow(&box->text[row++], box->columns, true, "Status");
+  BoxBlankRow(&box->text[row++], box->columns);
   for (uint8_t i = 0; i < kStatusScreenLines; ++i) {
-    DisplayTextRow* text = &menu->text[row++];
-    BoxBlankRow(text, menu->columns);
-    BoxPutText(text, menu->columns, 2, g_lines[i].label, kBoxAttrTitle);
+    DisplayTextRow* text = &box->text[row++];
+    BoxBlankRow(text, box->columns);
+    BoxPutText(text, box->columns, 2, g_lines[i].label, kBoxAttrTitle);
     BoxPutText(
-        text, menu->columns, 2 + kLabelColumns, g_lines[i].value, kBoxAttrText);
+        text, box->columns, 2 + kLabelColumns, g_lines[i].value, kBoxAttrText);
   }
-  BoxBlankRow(&menu->text[row++], menu->columns);
-  BoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
+  BoxBlankRow(&box->text[row++], box->columns);
+  BoxEdgeRow(&box->text[row], box->columns, false, NULL);
   g_drawn_us = now_us;
   return true;
 }

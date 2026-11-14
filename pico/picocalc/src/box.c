@@ -95,9 +95,9 @@ void BoxItemRow(
   }
 }
 
-void BoxPlace(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
-  menu->columns = columns;
-  menu->rows = rows;
-  menu->column = (uint8_t)((kTextColumns - columns) / 2);
-  menu->row = (uint8_t)((kGuestScreenRows - rows) / 2);
+void BoxPlace(DisplayBox* box, uint8_t columns, uint8_t rows) {
+  box->columns = columns;
+  box->rows = rows;
+  box->column = (uint8_t)((kTextColumns - columns) / 2);
+  box->row = (uint8_t)((kGuestScreenRows - rows) / 2);
 }

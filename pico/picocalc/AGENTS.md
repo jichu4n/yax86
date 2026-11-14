@@ -371,7 +371,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   from the screen down.
 - **A screen draws into the box the loop hands it, and the loop sends it**:
   `ScreenDraw(menu, now_us)` says whether the screen drew into `menu`, and
-  the loop then sends it to core 1 with `DisplayEndMenu()`. The sending is
+  the loop then sends it to core 1 with `DisplayEndBox()`. The sending is
   each mode's, as the status rows are, so that a mode can do what it needs
   first. Launcher mode has nothing to do: every box it draws is the size of
   a list at least, and covers the last.
@@ -472,7 +472,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A copy's page is drawn from the copy's progress callback** by
   `VMManagerBeginCopy()`, not as a screen: the loop that would draw a screen
   waits for the copy, and nothing can be pressed until it is done.
-- **A box holds at most `kDisplayMenuMaxRows`, 12, rows**, and
+- **A box holds at most `kDisplayBoxMaxRows`, 12, rows**, and
   `ListBoxDrawItems()` leaves out text lines past what fits rather than
   drawing past the box's rows. A VM's page with a line per drive over four items needed 13.
 - **A VM's folder is its own, and an image outside it shared.** Rename

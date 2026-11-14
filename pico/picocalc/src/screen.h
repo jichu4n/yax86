@@ -45,10 +45,10 @@ struct Screen {
   // Called every pass of the loop, for what happens with time, such as a
   // countdown. NULL for a screen that nothing happens to with time.
   ScreenResult (*on_tick)(void);
-  // Called every pass of the loop, to draw the screen into menu if it has
-  // changed. Returns whether it drew, so that the loop sends menu to core 1.
+  // Called every pass of the loop, to draw the screen into box if it has
+  // changed. Returns whether it drew, so that the loop sends box to core 1.
   // now_us is the time of the pass.
-  bool (*on_draw)(DisplayMenu* menu, uint64_t now_us);
+  bool (*on_draw)(DisplayBox* box, uint64_t now_us);
   // Called when the screen above was taken off, so that this one shows
   // again and has to be drawn. What the screen above left can lead this one
   // on, as a key does: back, say, once what it was opened for is done.
@@ -102,12 +102,12 @@ void ScreenHandleKey(SouthbridgeKeyEvent key);
 // a screen shows.
 void ScreenTick(void);
 
-// Draw the screen on top into menu, if it has changed, and return whether it
-// did. The loop takes menu from DisplayBeginMenu(), and sends it to core 1
-// with DisplayEndMenu() if the screen drew. A mode's loop does the sending
+// Draw the screen on top into box, if it has changed, and return whether it
+// did. The loop takes box from DisplayBeginBox(), and sends it to core 1
+// with DisplayEndBox() if the screen drew. A mode's loop does the sending
 // so that it can do what it needs first, such as drawing the guest's screen
 // under a box of a new size.
-bool ScreenDraw(DisplayMenu* menu, uint64_t now_us);
+bool ScreenDraw(DisplayBox* box, uint64_t now_us);
 
 // The keys of the screen on top, for the loop to compose the status rows
 // from, with what else its rows show.

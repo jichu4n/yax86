@@ -987,9 +987,9 @@ static __noinline void HandleKey(SouthbridgeKeyEvent key, bool running) {
 
 // Whether a box over the guest's screen is one of another size than the one
 // shown, so that the guest's screen has to be drawn under it first.
-static bool BoxResized(const DisplayMenu* menu) {
-  return g_box_shown.drawn && (menu->columns != g_box_shown.columns ||
-                               menu->rows != g_box_shown.rows);
+static bool BoxResized(const DisplayBox* box) {
+  return g_box_shown.drawn &&
+         (box->columns != g_box_shown.columns || box->rows != g_box_shown.rows);
 }
 
 // Draw the screen showing, and send it to core 1. A box of another size than
@@ -998,23 +998,23 @@ static bool BoxResized(const DisplayMenu* menu) {
 // is sent on a later pass, drawn again if the screen has changed meanwhile.
 // Kept out of line, as HandleKey() is.
 static __noinline void DrawMenu(uint64_t now_us) {
-  DisplayMenu* menu = DisplayBeginMenu();
-  if (menu == NULL) {
+  DisplayBox* box = DisplayBeginBox();
+  if (box == NULL) {
     return;
   }
   // The status page reads its lines as it draws, every second while it
   // shows. Filling them in costs nothing that matters while the VM is
   // paused.
   DescribeStatus(g_status_lines);
-  if (ScreenDraw(menu, now_us)) {
+  if (ScreenDraw(box, now_us)) {
     g_box_pending = true;
   }
-  if (!g_box_pending || (BoxResized(menu) && !RedrawGuest())) {
+  if (!g_box_pending || (BoxResized(box) && !RedrawGuest())) {
     return;
   }
-  DisplayEndMenu();
-  g_box_shown.columns = menu->columns;
-  g_box_shown.rows = menu->rows;
+  DisplayEndBox();
+  g_box_shown.columns = box->columns;
+  g_box_shown.rows = box->rows;
   g_box_shown.drawn = true;
   g_box_pending = false;
 }

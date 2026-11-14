@@ -45,12 +45,12 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
+static bool OnDraw(DisplayBox* box, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
   ListBoxDrawItems(
-      menu, "Unsafe disconnect",
+      box, "Unsafe disconnect",
       (const char* const[]){
           "Not ejected by the host.",
           "Writes may still be pending.",
