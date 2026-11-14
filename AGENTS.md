@@ -206,6 +206,16 @@ name it defines is taken from the host. All of them are in a `Y` namespace:
   file-scope variables, CamelCase functions led by the host's module word
   (`DisplayPutPixels()`), and plain `static` or nothing for visibility. A host
   must never take the `Y` prefix: a later core name could collide with it.
+- **Counts use `Num` / `num_` / `NUM_`, and bounds use `Min` / `min_` / `MIN_`
+  and `Max` / `max_` / `MAX_`**: `Y_VIDEO_NUM_MODES`, `YCPUNumBytes`,
+  `num_floppy_drives`, `kNumFloppyDrives`, and `Y_LOG_MAX_MODULES`,
+  `max_pairs`, `kFileListMaxEntries`. Measurements in a unit (`*_SIZE`,
+  `*_BYTES`, `columns`, `rows`, `cycles`) and hardware register names
+  (`sector_count`, `base_count`) keep their names.
+- **Booleans and predicate functions lead with a verb**: `is_`, `has_`, `was_`,
+  `did_`, `should_`, `can_`, `YVideoIsBlinking()`, `SpeakerIsBeeping()`.
+  Functions that perform an action and return whether it succeeded keep their
+  action verb, and logfmt keys stay plain unless ambiguous.
 
 ### Visibility
 

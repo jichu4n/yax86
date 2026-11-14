@@ -557,7 +557,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - **Floppy disk 2 is there only if `vm.cfg` names it**, and without a VM.
   With two drives DOS has a B: of its own rather than one it shares with A,
   prompting for a disk swap; DOS330 names `fd2=""` for that, and its boot
-  is measured with two. `YPlatformConfig.floppy_drives` sets what the
+  is measured with two. `YPlatformConfig.num_floppy_drives` sets what the
   BIOS's DIP switches report.
 - **The menu changes the disk in either drive** for any 360KB image on the
   card, or ejects it. `DiskImageClose()` writes back the sector held and

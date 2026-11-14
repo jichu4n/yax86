@@ -515,7 +515,7 @@ round-trips through memory costs more than its instruction count suggests.**
   decode cache and a wash on the one that landed (0.12% better at `-O3`,
   0.25% worse at `-O2`), so the simpler locals stayed - the helper also
   relies on no handler touching CS or IP before rejecting. Hoisting
-  `executed_instruction` out of the loop is neutral; GCC already does.
+  `did_execute_instruction` out of the loop is neutral; GCC already does.
 
 ## Instruction counting
 
@@ -523,7 +523,7 @@ round-trips through memory costs more than its instruction count suggests.**
   the CPU because `YCPUTick()` knows which it did: 0.17% under callgrind,
   against 1.09% driven from `YPlatformTick()`.
 - **Two `uint32_t` halves, not a `uint64_t`**, read by
-  `YCPUInstructionsRetired()`. A 64-bit increment is eight instructions on a
+  `YCPUNumInstructionsRetired()`. A 64-bit increment is eight instructions on a
   Cortex-M0+ in the hottest block; the low half is three, and the carry a
   branch not taken for 2^32 instructions. Worth **1.19% at `-O3`** for 16
   bytes. It must reach 64 bits: a running machine passes 2^32 in hours.
