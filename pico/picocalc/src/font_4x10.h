@@ -16,7 +16,8 @@ typedef enum Font4x10 {
   kFont4x10Ymini = 0,
   kFont4x10Atari800,
   kFont4x10Miniwi,
-  kFont4x10Creep,
+  kFont4x10Terminal,
+  kFont4x10DCA,
   kFont4x10Count,
   kFont4x10Default = kFont4x10Ymini,
 } Font4x10;
