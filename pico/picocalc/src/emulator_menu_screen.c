@@ -3,10 +3,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "box.h"
 #include "display.h"
 #include "floppy_drive_screen.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "question_screen.h"
 
 typedef enum MainItem {
@@ -20,7 +20,7 @@ typedef enum MainItem {
   kMainItemCount,
 } MainItem;
 
-static const MenuBoxItem kMainItems[kMainItemCount] = {
+static const BoxItem kMainItems[kMainItemCount] = {
     [kMainDriveA] = {"Floppy disk 1", true},
     [kMainDriveB] = {"Floppy disk 2", true},
     [kMainStatus] = {"Status", true},
@@ -148,7 +148,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
   }
   MainItem shown[kMainItemCount];
   const uint8_t count = ShownItems(shown);
-  MenuBoxItem items[kMainItemCount];
+  BoxItem items[kMainItemCount];
   for (uint8_t i = 0; i < count; ++i) {
     items[i] = kMainItems[shown[i]];
   }

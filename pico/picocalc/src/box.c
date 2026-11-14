@@ -1,4 +1,4 @@
-#include "menu_box.h"
+#include "box.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -19,18 +19,18 @@ enum {
   kGuestScreenRows = 25,
 };
 
-void MenuBoxBlankRow(DisplayTextRow* row, uint8_t columns) {
+void BoxBlankRow(DisplayTextRow* row, uint8_t columns) {
   row->chars[0] = (char)kBoxVertical;
-  row->attrs[0] = kMenuBoxAttrFrame;
+  row->attrs[0] = kBoxAttrBorder;
   for (uint8_t i = 1; i + 1 < columns; ++i) {
     row->chars[i] = ' ';
-    row->attrs[i] = kMenuBoxAttrText;
+    row->attrs[i] = kBoxAttrText;
   }
   row->chars[columns - 1] = (char)kBoxVertical;
-  row->attrs[columns - 1] = kMenuBoxAttrFrame;
+  row->attrs[columns - 1] = kBoxAttrBorder;
 }
 
-void MenuBoxEdgeRow(
+void BoxEdgeRow(
     DisplayTextRow* row, uint8_t columns, bool top, const char* title) {
   row->chars[0] = (char)(top ? kBoxTopLeft : kBoxBottomLeft);
   for (uint8_t i = 1; i + 1 < columns; ++i) {
@@ -38,7 +38,7 @@ void MenuBoxEdgeRow(
   }
   row->chars[columns - 1] = (char)(top ? kBoxTopRight : kBoxBottomRight);
   for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kMenuBoxAttrFrame;
+    row->attrs[i] = kBoxAttrBorder;
   }
   if (title == NULL) {
     return;
@@ -47,27 +47,27 @@ void MenuBoxEdgeRow(
   // The title, with a space either side, over the middle of the edge.
   uint8_t column = (uint8_t)((columns - length - 2) / 2);
   row->chars[column] = ' ';
-  row->attrs[column++] = kMenuBoxAttrTitle;
+  row->attrs[column++] = kBoxAttrTitle;
   for (uint8_t i = 0; i < length; ++i) {
     row->chars[column] = title[i];
-    row->attrs[column++] = kMenuBoxAttrTitle;
+    row->attrs[column++] = kBoxAttrTitle;
   }
   row->chars[column] = ' ';
-  row->attrs[column] = kMenuBoxAttrTitle;
+  row->attrs[column] = kBoxAttrTitle;
 }
 
-void MenuBoxSeparatorRow(DisplayTextRow* row, uint8_t columns) {
+void BoxSeparatorRow(DisplayTextRow* row, uint8_t columns) {
   row->chars[0] = (char)kBoxSeparatorLeft;
   for (uint8_t i = 1; i + 1 < columns; ++i) {
     row->chars[i] = (char)kBoxSeparator;
   }
   row->chars[columns - 1] = (char)kBoxSeparatorRight;
   for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kMenuBoxAttrFrame;
+    row->attrs[i] = kBoxAttrBorder;
   }
 }
 
-void MenuBoxPutText(
+void BoxPutText(
     DisplayTextRow* row, uint8_t columns, uint8_t column, const char* text,
     uint8_t attr) {
   while (*text != '\0' && column + 1 < columns) {
@@ -76,29 +76,26 @@ void MenuBoxPutText(
   }
 }
 
-void MenuBoxItemTextRow(
+void BoxItemTextRow(
     DisplayTextRow* row, uint8_t columns, const char* text, bool selected) {
-  MenuBoxBlankRow(row, columns);
+  BoxBlankRow(row, columns);
   if (selected) {
     for (uint8_t i = 1; i + 1 < columns; ++i) {
-      row->attrs[i] = kMenuBoxAttrSelected;
+      row->attrs[i] = kBoxAttrSelected;
     }
   }
-  MenuBoxPutText(
-      row, columns, 3, text,
-      selected ? kMenuBoxAttrSelected : kMenuBoxAttrText);
+  BoxPutText(row, columns, 3, text, selected ? kBoxAttrSelected : kBoxAttrText);
 }
 
-void MenuBoxItemRow(
-    DisplayTextRow* row, uint8_t columns, const MenuBoxItem* item,
-    bool selected) {
-  MenuBoxItemTextRow(row, columns, item->text, selected);
-  if (item->opens_menu) {
+void BoxItemRow(
+    DisplayTextRow* row, uint8_t columns, const BoxItem* item, bool selected) {
+  BoxItemTextRow(row, columns, item->text, selected);
+  if (item->opens_box) {
     row->chars[columns - 3] = '>';
   }
 }
 
-void MenuBoxPlace(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
+void BoxPlace(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
   menu->columns = columns;
   menu->rows = rows;
   menu->column = (uint8_t)((kTextColumns - columns) / 2);

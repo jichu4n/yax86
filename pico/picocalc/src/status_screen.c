@@ -3,9 +3,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 
 enum {
   // A label's width, in columns, before its value.
@@ -47,20 +47,19 @@ static bool OnDraw(DisplayMenu* menu, uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
-  MenuBoxPlace(menu, kListBoxWideColumns, kStatusScreenLines + 4);
+  BoxPlace(menu, kListBoxWideColumns, kStatusScreenLines + 4);
   uint8_t row = 0;
-  MenuBoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
-  MenuBoxBlankRow(&menu->text[row++], menu->columns);
+  BoxEdgeRow(&menu->text[row++], menu->columns, true, "Status");
+  BoxBlankRow(&menu->text[row++], menu->columns);
   for (uint8_t i = 0; i < kStatusScreenLines; ++i) {
     DisplayTextRow* text = &menu->text[row++];
-    MenuBoxBlankRow(text, menu->columns);
-    MenuBoxPutText(text, menu->columns, 2, g_lines[i].label, kMenuBoxAttrTitle);
-    MenuBoxPutText(
-        text, menu->columns, 2 + kLabelColumns, g_lines[i].value,
-        kMenuBoxAttrText);
+    BoxBlankRow(text, menu->columns);
+    BoxPutText(text, menu->columns, 2, g_lines[i].label, kBoxAttrTitle);
+    BoxPutText(
+        text, menu->columns, 2 + kLabelColumns, g_lines[i].value, kBoxAttrText);
   }
-  MenuBoxBlankRow(&menu->text[row++], menu->columns);
-  MenuBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
+  BoxBlankRow(&menu->text[row++], menu->columns);
+  BoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
   g_drawn_us = now_us;
   return true;
 }

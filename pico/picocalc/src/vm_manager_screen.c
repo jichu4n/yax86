@@ -3,14 +3,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "vm_config_screen.h"
 #include "vm_manager.h"
 #include "vm_screen.h"
 
-static const MenuBoxItem kNewVMRow = {"New VM", true};
+static const BoxItem kNewVMRow = {"New VM", true};
 
 extern const Screen kVMManagerScreen;
 
@@ -105,24 +105,24 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
     return false;
   }
   const VMList* vms = g_vm_manager.vms;
-  MenuBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
-  MenuBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
+  BoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
+  BoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_top + i);
     if (index >= RowCount()) {
-      MenuBoxBlankRow(row, menu->columns);
+      BoxBlankRow(row, menu->columns);
     } else if (index < vms->count) {
-      const MenuBoxItem item = {vms->vms[index].name, true};
-      MenuBoxItemRow(row, menu->columns, &item, index == g_list_box.selected);
+      const BoxItem item = {vms->vms[index].name, true};
+      BoxItemRow(row, menu->columns, &item, index == g_list_box.selected);
     } else if (vms->count > 0 && index == vms->count) {
-      MenuBoxSeparatorRow(row, menu->columns);
+      BoxSeparatorRow(row, menu->columns);
     } else {
-      MenuBoxItemRow(
+      BoxItemRow(
           row, menu->columns, &kNewVMRow, g_list_box.selected == vms->count);
     }
   }
-  MenuBoxEdgeRow(&menu->text[kListBoxRows + 1], menu->columns, false, NULL);
+  BoxEdgeRow(&menu->text[kListBoxRows + 1], menu->columns, false, NULL);
   ListBoxDrawScrollArrows(menu, g_top, RowCount());
   return true;
 }

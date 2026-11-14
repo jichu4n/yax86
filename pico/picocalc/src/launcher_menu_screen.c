@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "pico/stdlib.h"
 #include "settings_screen.h"
 #include "status_bar.h"
@@ -29,9 +29,9 @@ typedef enum MenuRow {
   kMenuRowCount,
 } MenuRow;
 
-static const MenuBoxItem kVMManagerRow = {"Manage VMs", true};
-static const MenuBoxItem kUSBRow = {"USB mass storage", true};
-static const MenuBoxItem kSettingsRow = {"Settings", true};
+static const BoxItem kVMManagerRow = {"Manage VMs", true};
+static const BoxItem kUSBRow = {"USB mass storage", true};
+static const BoxItem kSettingsRow = {"Settings", true};
 
 extern const Screen kLauncherMenuScreen;
 
@@ -204,28 +204,28 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
-  MenuBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
-  MenuBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
+  BoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
+  BoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &menu->text[1 + i];
     const uint8_t index = (uint8_t)(g_top_row + i);
     if (index >= RowCount()) {
-      MenuBoxBlankRow(row, menu->columns);
+      BoxBlankRow(row, menu->columns);
     } else if (index < g_vms->count) {
-      MenuBoxItemTextRow(
+      BoxItemTextRow(
           row, menu->columns, g_vms->vms[index].name,
           index == g_list_box.selected);
     } else if (g_vms->count > 0 && index == g_vms->count) {
-      MenuBoxSeparatorRow(row, menu->columns);
+      BoxSeparatorRow(row, menu->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
       const bool selected = item == g_list_box.selected;
       if (item == RowItem(kMenuRowVMManager)) {
-        MenuBoxItemRow(row, menu->columns, &kVMManagerRow, selected);
+        BoxItemRow(row, menu->columns, &kVMManagerRow, selected);
       } else if (item == RowItem(kMenuRowUSB)) {
-        MenuBoxItemRow(row, menu->columns, &kUSBRow, selected);
+        BoxItemRow(row, menu->columns, &kUSBRow, selected);
       } else {
-        MenuBoxItemRow(row, menu->columns, &kSettingsRow, selected);
+        BoxItemRow(row, menu->columns, &kSettingsRow, selected);
       }
     }
   }
@@ -235,7 +235,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
         countdown, sizeof(countdown), "starting in %u s",
         (unsigned)g_countdown);
   }
-  MenuBoxEdgeRow(
+  BoxEdgeRow(
       &menu->text[kListBoxRows + 1], menu->columns, false,
       g_countdown > 0 ? countdown : NULL);
   ListBoxDrawScrollArrows(menu, g_top_row, RowCount());

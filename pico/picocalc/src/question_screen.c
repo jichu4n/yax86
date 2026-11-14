@@ -2,9 +2,9 @@
 
 #include <stddef.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 
 typedef enum QuestionItem {
   kQuestionCancel = 0,
@@ -45,7 +45,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
   if (!ListBoxTakeDirty(&g_list_box)) {
     return false;
   }
-  const MenuBoxItem items[kQuestionItemCount] = {
+  const BoxItem items[kQuestionItemCount] = {
       [kQuestionCancel] = {"Cancel", false},
       [kQuestionAction] = {g_question->action, false},
   };

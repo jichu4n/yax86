@@ -4,12 +4,12 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "browser_screen.h"
 #include "disk_image.h"
 #include "display.h"
 #include "fs.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "text.h"
@@ -22,7 +22,7 @@ typedef enum USBItem {
   kUSBItemCount,
 } USBItem;
 
-static const MenuBoxItem kUSBItems[kUSBItemCount] = {
+static const BoxItem kUSBItems[kUSBItemCount] = {
     [kUSBCard] = {"Entire SD card", false},
     [kUSBImage] = {"Disk image", true},
 };

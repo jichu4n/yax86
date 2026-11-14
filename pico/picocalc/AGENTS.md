@@ -472,9 +472,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A copy's page is drawn from the copy's progress callback** by
   `VMManagerBeginCopy()`, not as a screen: the loop that would draw a screen
   waits for the copy, and nothing can be pressed until it is done.
-- **A menu box holds at most `kDisplayMenuMaxRows`, 12**, and `DrawItems()`
-  leaves out text lines past what fits rather than drawing past the box's
-  rows. A VM's page with a line per drive over four items needed 13.
+- **A box holds at most `kDisplayMenuMaxRows`, 12, rows**, and
+  `ListBoxDrawItems()` leaves out text lines past what fits rather than
+  drawing past the box's rows. A VM's page with a line per drive over four items needed 13.
 - **A VM's folder is its own, and an image outside it shared.** Rename
   moves the folder with `f_rename()`, at once whatever is in it; Clone
   copies all of it, at any depth; Delete removes all of it, its `vm.cfg`

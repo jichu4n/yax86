@@ -4,12 +4,12 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "browser_screen.h"
 #include "disk_image.h"
 #include "display.h"
 #include "fs.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "vm_config.h"
 
 typedef enum DriveItem {
@@ -130,7 +130,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
       "Change disks only while DOS is",
       "not using the drive.",
   };
-  const MenuBoxItem items[kDriveItemCount] = {
+  const BoxItem items[kDriveItemCount] = {
       [kDriveInsert] = {empty ? "Choose disk image" : "Swap disk image", true},
       [kDriveEject] = {"Eject", false},
   };

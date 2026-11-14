@@ -3,7 +3,7 @@
 // modes are one, and the in-VM menu draws its pages with it too.
 //
 // This has what they have in common, apart from drawing the box itself,
-// which is menu_box.h's:
+// which is box.h's:
 //
 // - handling a key: moving the selection with the move keys, and telling
 //   the screen whether Enter or Space selected the item, or Esc or Backspace
@@ -20,8 +20,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "box.h"
 #include "display.h"
-#include "menu_box.h"
 #include "southbridge.h"
 
 enum {
@@ -104,7 +104,7 @@ void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total);
 // the list's.
 void ListBoxDrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const MenuBoxItem* items, uint8_t count,
-    uint8_t selected, bool list_sized);
+    uint8_t line_count, const BoxItem* items, uint8_t count, uint8_t selected,
+    bool list_sized);
 
 #endif  // YAX86_PICOCALC_LIST_BOX_H
