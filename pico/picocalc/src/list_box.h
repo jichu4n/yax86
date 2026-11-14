@@ -5,8 +5,8 @@
 // This has what they have in common, apart from drawing the box itself,
 // which is menu_box.h's:
 //
-// - taking a key: moving the selection with the move keys, and telling the
-//   screen whether Enter or Space selected the item, or Esc or Backspace
+// - handling a key: moving the selection with the move keys, and telling
+//   the screen whether Enter or Space selected the item, or Esc or Backspace
 //   went back;
 // - keeping the selected row of a long list in view, with arrows on the
 //   border where there is more;
@@ -57,36 +57,39 @@ typedef struct ListBox {
   bool dirty;
 } ListBox;
 
-// What a key did in a list box.
-typedef enum ListBoxKey {
-  // Nothing for the screen to do: a key released, or one a list box does not
-  // take.
-  kListBoxKeyNone = 0,
+// What a key did in a list box, which the screen acts on.
+typedef enum ListBoxAction {
+  // Nothing for the screen to do: a key released, or one a list box has no
+  // use for.
+  kListBoxActionNone = 0,
   // A move key, which moved the selection if there were items to move
   // among. A long list keeps the selected row in view.
-  kListBoxKeyMoved,
+  kListBoxActionMoved,
   // Enter or Space: the selected item is to be carried out.
-  kListBoxKeySelect,
+  kListBoxActionSelect,
   // Esc or Backspace: go back.
-  kListBoxKeyBack,
-} ListBoxKey;
+  kListBoxActionBack,
+} ListBoxAction;
 
 // The keys of most list boxes, for the status rows.
 extern const char kListBoxHint[];
 
-// Whether event is a press, a held key's repeats included, which a list box
-// acts on. A press also clears the problem the status rows show, as any key
-// does.
-bool ListBoxKeyPressed(SouthbridgeKeyEvent event);
+// Whether event is a key pressed, or a held key repeating, rather than a key
+// released. A screen acts only on these. A press also clears the problem the
+// status rows show, as any key does. A screen with keys of its own checks
+// this before handling them, and hands the rest to ListBoxHandleKeyCode().
+bool ListBoxIsKeyPress(SouthbridgeKeyEvent event);
 
-// Take a key pressed in a list box of count items. A move key moves the
-// selection, and Enter, Space, Esc and Backspace say what the screen is to
-// do.
-ListBoxKey ListBoxTakeKey(ListBox* list_box, uint8_t key, uint8_t count);
-
-// The same for a key event. A release does nothing.
-ListBoxKey ListBoxTakeEvent(
+// Handle a key event in a list box of count items. A release does nothing.
+// A press is handled as ListBoxHandleKeyCode() handles its key code.
+ListBoxAction ListBoxHandleKeyEvent(
     ListBox* list_box, SouthbridgeKeyEvent event, uint8_t count);
+
+// Handle the code of a key pressed in a list box of count items. A move key
+// moves the selection, and Enter, Space, Esc and Backspace say what the
+// screen is to do.
+ListBoxAction ListBoxHandleKeyCode(
+    ListBox* list_box, uint8_t key, uint8_t count);
 
 // Whether a list box is out of date, which a screen's on_draw asks before it
 // draws it. Marks it drawn: the screen is to draw it now.
@@ -95,10 +98,9 @@ bool ListBoxTakeDirty(ListBox* list_box);
 // Whether key moves the selection: Up, Down, Page Up or Page Down.
 bool ListBoxIsMoveKey(uint8_t key);
 
-// Move *selected for a key ListBoxIsMoveKey() takes, among count items. Up
-// and Down wrap around, and Page Up and Page Down stop at the ends. Returns
-// whether there are items to move among, which is when the box needs drawing
-// again.
+// Move *selected for a move key, among count items. Up and Down wrap
+// around, and Page Up and Page Down stop at the ends. Returns whether there
+// are items to move among, which is when the box needs drawing again.
 bool ListBoxMove(uint8_t key, uint8_t count, uint8_t* selected);
 
 // Keep row among a list's rows, with *top the row at the top of them.
