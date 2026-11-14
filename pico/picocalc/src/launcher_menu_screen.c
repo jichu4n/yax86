@@ -4,12 +4,12 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
 #include "pico/stdlib.h"
 #include "settings_screen.h"
 #include "status_bar.h"
-#include "ui_box.h"
 #include "usb_storage_screen.h"
 #include "vm_manager_screen.h"
 
@@ -29,9 +29,9 @@ typedef enum MenuRow {
   kMenuRowCount,
 } MenuRow;
 
-static const UIBoxItem kVMManagerRow = {"Manage VMs", true};
-static const UIBoxItem kUSBRow = {"USB mass storage", true};
-static const UIBoxItem kSettingsRow = {"Settings", true};
+static const BoxItem kVMManagerRow = {"Manage VMs", true};
+static const BoxItem kUSBRow = {"USB mass storage", true};
+static const BoxItem kSettingsRow = {"Settings", true};
 
 extern const Screen kLauncherMenuScreen;
 
@@ -139,7 +139,7 @@ static ScreenResult OnSelect(void) {
 
 // Any key stops the countdown. Up and Down move the selection, and Enter or
 // Space acts on it.
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   g_counting = false;
   SetCountdown(0);
   // Esc and Backspace do nothing: the menu is the first screen, with nothing
@@ -167,7 +167,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Run the countdown, showing the seconds left, and start the selected VM
 // once they run out.
-static ScreenResult CountDown(void) {
+static ScreenResult OnTick(void) {
   if (!g_counting) {
     return ScreenStays();
   }
@@ -187,7 +187,7 @@ static ScreenResult CountDown(void) {
 // card to the host, close the menu, for the launcher to read the card again.
 // Otherwise select the row that opened the screen again: the VM manager may
 // have changed how many VMs there are, which moves it.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   if (g_exported) {
     g_exported = false;
     *g_exit = (LauncherMenuExit){kLauncherMenuExitReadCard, 0};
@@ -200,33 +200,33 @@ static ScreenResult Resume(void) {
 // Draw the rows that fit in the box from g_top_row, with arrows on its border
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
-static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
-  UIBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
-  UIBoxEdgeRow(&menu->text[0], menu->columns, true, "YAX86");
+  BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);
+  BoxEdgeRow(&box->text[0], box->columns, true, "YAX86");
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
-    DisplayTextRow* row = &menu->text[1 + i];
+    DisplayTextRow* row = &box->text[1 + i];
     const uint8_t index = (uint8_t)(g_top_row + i);
     if (index >= RowCount()) {
-      UIBoxBlankRow(row, menu->columns);
+      BoxBlankRow(row, box->columns);
     } else if (index < g_vms->count) {
-      UIBoxItemRow(
-          row, menu->columns, g_vms->vms[index].name,
+      BoxItemTextRow(
+          row, box->columns, g_vms->vms[index].name,
           index == g_list_box.selected);
     } else if (g_vms->count > 0 && index == g_vms->count) {
-      UIBoxSeparatorRow(row, menu->columns);
+      BoxSeparatorRow(row, box->columns);
     } else {
       const uint8_t item = g_vms->count > 0 ? (uint8_t)(index - 1) : index;
       const bool selected = item == g_list_box.selected;
       if (item == RowItem(kMenuRowVMManager)) {
-        UIBoxMenuItemRow(row, menu->columns, &kVMManagerRow, selected);
+        BoxItemRow(row, box->columns, &kVMManagerRow, selected);
       } else if (item == RowItem(kMenuRowUSB)) {
-        UIBoxMenuItemRow(row, menu->columns, &kUSBRow, selected);
+        BoxItemRow(row, box->columns, &kUSBRow, selected);
       } else {
-        UIBoxMenuItemRow(row, menu->columns, &kSettingsRow, selected);
+        BoxItemRow(row, box->columns, &kSettingsRow, selected);
       }
     }
   }
@@ -236,10 +236,10 @@ static void Draw(Y_UNUSED uint64_t now_us) {
         countdown, sizeof(countdown), "starting in %u s",
         (unsigned)g_countdown);
   }
-  UIBoxEdgeRow(
-      &menu->text[kListBoxRows + 1], menu->columns, false,
+  BoxEdgeRow(
+      &box->text[kListBoxRows + 1], box->columns, false,
       g_countdown > 0 ? countdown : NULL);
-  ListBoxDrawScrollArrows(menu, g_top_row, RowCount());
+  ListBoxDrawScrollArrows(box, g_top_row, RowCount());
   ListBoxEndDraw(&g_list_box);
 }
 
@@ -248,10 +248,10 @@ static const char* Hint(void) { return "\x18\x19=Move  Enter=Select"; }
 static const char* PageName(void) { return "vms"; }
 
 const Screen kLauncherMenuScreen = {
-    .handle_key = HandleKey,
-    .tick = CountDown,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_tick = OnTick,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

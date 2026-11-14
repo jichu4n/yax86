@@ -11,9 +11,9 @@
 // produces for the one that opened it, or for the loop, it writes through
 // those pointers: there is no value in a result. A screen that is done
 // returns ScreenBack(), and the one under it shows again, told so by its
-// resume function, and finds there whatever the screen above changed. A
+// on_resume function, and finds there whatever the screen above changed. A
 // screen that ends the whole menu returns ScreenClose(), and the loop, seeing
-// no screen open, finds what was chosen through the pointer it passed.
+// no screen open, finds what was selected through the pointer it passed.
 #ifndef YAX86_PICOCALC_SCREEN_H
 #define YAX86_PICOCALC_SCREEN_H
 
@@ -34,19 +34,22 @@ typedef struct ScreenResult {
   const Screen* screen;
 } ScreenResult;
 
-// What a screen does, called only while it is on top.
+// What a screen does. The router calls each function only while the screen
+// is on top. The on_ functions are called when something happens to the
+// screen, and say what it leads to. The others answer questions about it.
 struct Screen {
-  // Carry out what a key event leads to.
-  ScreenResult (*handle_key)(SouthbridgeKeyEvent key);
+  // Called with each key event: a press, a held key's repeat or a release.
+  ScreenResult (*on_key)(SouthbridgeKeyEvent key);
   // Called every pass of the loop, for what happens with time, such as a
   // countdown. NULL for a screen that nothing happens to with time.
-  ScreenResult (*tick)(void);
-  // Draw the screen if it has changed. Called every pass of the loop.
-  void (*draw)(uint64_t now_us);
-  // The screen above was taken off, so this one shows again and has to be
-  // drawn. What it finds the screen above left can lead it on, as a key
-  // does: back, say, once what it was opened for is done.
-  ScreenResult (*resume)(void);
+  ScreenResult (*on_tick)(void);
+  // Called every pass of the loop, to draw the screen if it has changed.
+  // now_us is the time of the pass.
+  void (*on_draw)(uint64_t now_us);
+  // Called when the screen above was taken off, so that this one shows
+  // again and has to be drawn. What the screen above left can lead this one
+  // on, as a key does: back, say, once what it was opened for is done.
+  ScreenResult (*on_resume)(void);
   // The keys to show on the status rows' message row, as Key=Action pairs.
   const char* (*hint)(void);
   // The page showing, as the report gives it.

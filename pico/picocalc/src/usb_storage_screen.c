@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "browser_screen.h"
 #include "disk_image.h"
 #include "display.h"
@@ -12,7 +13,6 @@
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "text.h"
-#include "ui_box.h"
 #include "usb_storage.h"
 #include "usb_storage_active_screen.h"
 
@@ -22,7 +22,7 @@ typedef enum USBItem {
   kUSBItemCount,
 } USBItem;
 
-static const UIBoxItem kUSBItems[kUSBItemCount] = {
+static const BoxItem kUSBItems[kUSBItemCount] = {
     [kUSBCard] = {"Entire SD card", false},
     [kUSBImage] = {"Disk image", true},
 };
@@ -86,12 +86,12 @@ static __noinline ScreenResult ShareImage(void) {
   return USBStorageActiveScreenOpen(&g_image, &g_stopped);
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxHandleKeyEvent(&g_list_box, event, kUSBItemCount)) {
     case kListBoxActionSelect:
       if (g_list_box.selected == kUSBImage) {
         return BrowserScreenOpen(
-            kUIBrowserEither, "yax86", NULL, g_found_path, &g_found_size);
+            kFileBrowserEither, "yax86", NULL, g_found_path, &g_found_size);
       }
       return ShareCard();
     case kListBoxActionBack:
@@ -103,7 +103,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Back from exporting, which has ended, or from the browser, with an image
 // found or none.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   if (g_stopped) {
     g_stopped = false;
     *g_exported = true;
@@ -116,13 +116,13 @@ static ScreenResult Resume(void) {
   return ScreenStays();
 }
 
-static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   ListBoxDrawItems(
-      menu, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
+      box, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
       kUSBItems, kUSBItemCount, g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
 }
@@ -132,9 +132,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "usb_storage"; }
 
 const Screen kUSBStorageScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

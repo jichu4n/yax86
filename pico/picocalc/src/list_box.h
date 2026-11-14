@@ -3,28 +3,26 @@
 // modes are one, and the in-VM menu draws its pages with it too.
 //
 // This has what they have in common, apart from drawing the box itself,
-// which is ui_box.h's:
+// which is box.h's:
 //
 // - handling a key: moving the selection with the move keys, and telling
 //   the screen whether Enter or Space selected the item, or Esc or Backspace
 //   went back;
 // - keeping the selected row of a long list in view, with arrows on the
 //   border where there is more;
-// - drawing the items, under lines of text if there are any;
-// - noticing a box of another size than the one last drawn.
+// - drawing the items, under lines of text if there are any.
 //
-// A list box's state is its screen's. These functions take it, the top row
-// of a list and the box last drawn as parameters, and keep nothing of their
-// own.
+// A list box's state is its screen's. These functions take it and the top
+// row of a list as parameters, and keep nothing of their own.
 #ifndef YAX86_PICOCALC_LIST_BOX_H
 #define YAX86_PICOCALC_LIST_BOX_H
 
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "box.h"
 #include "display.h"
 #include "southbridge.h"
-#include "ui_box.h"
 
 enum {
   // The width of a box, in columns. Most boxes are narrow, centered on the
@@ -34,19 +32,8 @@ enum {
   kListBoxWideColumns = kTextColumns,
   // The rows of a list, which with its edges fill the most rows a box can
   // have. Page Up and Page Down move this far.
-  kListBoxRows = kDisplayMenuMaxRows - 2,
+  kListBoxRows = kDisplayBoxMaxRows - 2,
 };
-
-// The box last drawn. A new box of another size would leave part of the old
-// one showing, so the guest's screen is drawn under it first.
-typedef struct ListBoxFrame {
-  // The box's size, in columns and rows.
-  uint8_t columns;
-  uint8_t rows;
-  // Whether a box is showing: false once the guest's screen has been drawn
-  // over it.
-  bool drawn;
-} ListBoxFrame;
 
 // A list box's state.
 typedef struct ListBox {
@@ -94,7 +81,7 @@ ListBoxAction ListBoxHandleKeyCode(
 // Start drawing a list box that is out of date. Returns the box to draw it
 // in, or NULL if it is not out of date or core 1 is still drawing the last
 // one. ListBoxEndDraw() hands the box to core 1.
-DisplayMenu* ListBoxBeginDraw(ListBox* list_box);
+DisplayBox* ListBoxBeginDraw(ListBox* list_box);
 void ListBoxEndDraw(ListBox* list_box);
 
 // Whether key moves the selection: Up, Down, Page Up or Page Down.
@@ -110,7 +97,7 @@ void ListBoxScrollTo(uint8_t row, uint8_t* top);
 
 // Draw up and down arrows on a list's border where it has more rows than it
 // shows, above or below. The list has total rows, and shows them from top.
-void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total);
+void ListBoxDrawScrollArrows(DisplayBox* box, uint8_t top, uint8_t total);
 
 // Draw count items, under line_count lines of text if there are any, with
 // the item at selected marked. With list_sized, the box is at least the size
@@ -118,15 +105,8 @@ void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total);
 // at power on there is no guest's screen to draw under a smaller box to hide
 // the list's.
 void ListBoxDrawItems(
-    DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const UIBoxItem* items, uint8_t count, uint8_t selected,
+    DisplayBox* box, const char* title, const char* const* lines,
+    uint8_t line_count, const BoxItem* items, uint8_t count, uint8_t selected,
     bool list_sized);
-
-// Whether menu is a box of another size than the one last drawn, so that the
-// guest's screen has to be drawn under it first.
-bool ListBoxFrameResized(const ListBoxFrame* frame, const DisplayMenu* menu);
-
-// Record menu as the box last drawn.
-void ListBoxFrameDrawn(ListBoxFrame* frame, const DisplayMenu* menu);
 
 #endif  // YAX86_PICOCALC_LIST_BOX_H

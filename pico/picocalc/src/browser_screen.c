@@ -9,15 +9,15 @@
 
 extern const Screen kBrowserScreen;
 
-static UIBrowser g_browser;
+static FileBrowser g_browser;
 // The list box: the entry selected, and whether it is out of date.
 static ListBox g_list_box;
-// Where the image chosen goes, the parent's.
+// Where the image selected goes, the parent's.
 static char* g_path;
 static uint32_t* g_size;
 
 ScreenResult BrowserScreenOpen(
-    UIBrowserImages images, const char* folder, const char* current,
+    FileBrowserImages images, const char* folder, const char* current,
     char path[kFSMaxPath + 1], uint32_t* size) {
   g_browser.images = images;
   g_browser.current = current;
@@ -27,7 +27,7 @@ ScreenResult BrowserScreenOpen(
   g_path = path;
   g_size = size;
   g_path[0] = '\0';
-  g_list_box.selected = UIBrowserOpen(&g_browser, folder);
+  g_list_box.selected = FileBrowserOpen(&g_browser, folder);
   g_list_box.dirty = true;
   return ScreenOpen(&kBrowserScreen);
 }
@@ -41,17 +41,17 @@ ScreenResult BrowserScreenReopen(void) {
 // Open the selected entry: a folder to look in, or an image, which is the
 // parent's.
 static ScreenResult OpenEntry(void) {
-  uint8_t chosen = g_list_box.selected;
+  uint8_t selected = g_list_box.selected;
   char path[kFSMaxPath + 1];
   uint32_t size = 0;
-  switch (UIBrowserChoose(&g_browser, &chosen, path, &size)) {
-    case kUIBrowserNothing:
+  switch (FileBrowserSelect(&g_browser, &selected, path, &size)) {
+    case kFileBrowserNothing:
       return ScreenStays();
-    case kUIBrowserOpened:
-      g_list_box.selected = chosen;
+    case kFileBrowserOpenedFolder:
+      g_list_box.selected = selected;
       g_list_box.dirty = true;
       return ScreenStays();
-    case kUIBrowserChoseImage:
+    case kFileBrowserSelectedImage:
       break;
   }
   FSCopyPath(path, g_path);
@@ -59,18 +59,18 @@ static ScreenResult OpenEntry(void) {
   return ScreenBack();
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (
-      ListBoxHandleKeyEvent(&g_list_box, event, UIBrowserCount(&g_browser))) {
+      ListBoxHandleKeyEvent(&g_list_box, event, FileBrowserCount(&g_browser))) {
     case kListBoxActionMoved:
-      UIBrowserScrollTo(&g_browser, g_list_box.selected);
+      FileBrowserScrollTo(&g_browser, g_list_box.selected);
       return ScreenStays();
     case kListBoxActionSelect:
       return OpenEntry();
     case kListBoxActionBack:
       // Backspace goes up a folder, until the card's root.
-      if (event.key == kKeyCodeBackspace && !UIBrowserAtRoot(&g_browser)) {
-        g_list_box.selected = UIBrowserUp(&g_browser);
+      if (event.key == kKeyCodeBackspace && !FileBrowserAtRoot(&g_browser)) {
+        g_list_box.selected = FileBrowserUp(&g_browser);
         g_list_box.dirty = true;
         return ScreenStays();
       }
@@ -80,17 +80,17 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
-  UIBrowserDraw(&g_browser, menu, g_list_box.selected);
+  FileBrowserDraw(&g_browser, box, g_list_box.selected);
   ListBoxEndDraw(&g_list_box);
 }
 
 // Nothing opens over the browser.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   g_list_box.dirty = true;
   return ScreenStays();
 }
@@ -102,9 +102,9 @@ static const char* Hint(void) {
 static const char* PageName(void) { return "browse"; }
 
 const Screen kBrowserScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

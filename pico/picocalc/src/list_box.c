@@ -44,24 +44,24 @@ void ListBoxScrollTo(uint8_t row, uint8_t* top) {
   }
 }
 
-void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total) {
+void ListBoxDrawScrollArrows(DisplayBox* box, uint8_t top, uint8_t total) {
   if (top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kUIBoxArrowUp;
+    box->text[1].chars[box->columns - 1] = (char)kBoxArrowUp;
   }
   if (top + kListBoxRows < total) {
-    menu->text[kListBoxRows].chars[menu->columns - 1] = (char)kUIBoxArrowDown;
+    box->text[kListBoxRows].chars[box->columns - 1] = (char)kBoxArrowDown;
   }
 }
 
 void ListBoxDrawItems(
-    DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const UIBoxItem* items, uint8_t count, uint8_t selected,
+    DisplayBox* box, const char* title, const char* const* lines,
+    uint8_t line_count, const BoxItem* items, uint8_t count, uint8_t selected,
     bool list_sized) {
-  // The box holds kDisplayMenuMaxRows: lines past what fits are left out,
+  // The box holds kDisplayBoxMaxRows: lines past what fits are left out,
   // rather than drawn past its rows.
-  if (count + 4 + line_count + 1 > kDisplayMenuMaxRows) {
-    line_count = count + 5 < kDisplayMenuMaxRows
-                     ? (uint8_t)(kDisplayMenuMaxRows - count - 5)
+  if (count + 4 + line_count + 1 > kDisplayBoxMaxRows) {
+    line_count = count + 5 < kDisplayBoxMaxRows
+                     ? (uint8_t)(kDisplayBoxMaxRows - count - 5)
                      : 0;
   }
   const uint8_t text_rows = line_count > 0 ? (uint8_t)(line_count + 1) : 0;
@@ -72,39 +72,26 @@ void ListBoxDrawItems(
   if (list_sized && rows < kListBoxRows + 2) {
     rows = kListBoxRows + 2;
   }
-  UIBoxPlace(menu, kListBoxNarrowColumns, rows);
+  BoxPlace(box, kListBoxNarrowColumns, rows);
   uint8_t row = 0;
-  UIBoxEdgeRow(&menu->text[row++], menu->columns, true, title);
+  BoxEdgeRow(&box->text[row++], box->columns, true, title);
   if (!list_sized || line_count > 0) {
-    UIBoxBlankRow(&menu->text[row++], menu->columns);
+    BoxBlankRow(&box->text[row++], box->columns);
   }
   for (uint8_t i = 0; i < line_count; ++i) {
-    UIBoxBlankRow(&menu->text[row], menu->columns);
-    UIBoxPutText(
-        &menu->text[row++], menu->columns, 3, lines[i], kUIBoxAttrText);
+    BoxBlankRow(&box->text[row], box->columns);
+    BoxPutText(&box->text[row++], box->columns, 3, lines[i], kBoxAttrText);
   }
   if (line_count > 0) {
-    UIBoxBlankRow(&menu->text[row++], menu->columns);
+    BoxBlankRow(&box->text[row++], box->columns);
   }
   for (uint8_t i = 0; i < count; ++i) {
-    UIBoxMenuItemRow(
-        &menu->text[row++], menu->columns, &items[i], i == selected);
+    BoxItemRow(&box->text[row++], box->columns, &items[i], i == selected);
   }
   while (row + 1 < rows) {
-    UIBoxBlankRow(&menu->text[row++], menu->columns);
+    BoxBlankRow(&box->text[row++], box->columns);
   }
-  UIBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
-}
-
-bool ListBoxFrameResized(const ListBoxFrame* frame, const DisplayMenu* menu) {
-  return frame->drawn &&
-         (menu->columns != frame->columns || menu->rows != frame->rows);
-}
-
-void ListBoxFrameDrawn(ListBoxFrame* frame, const DisplayMenu* menu) {
-  frame->columns = menu->columns;
-  frame->rows = menu->rows;
-  frame->drawn = true;
+  BoxEdgeRow(&box->text[row], box->columns, false, NULL);
 }
 
 const char kListBoxHint[] = "\x18\x19=Move  Enter=Select  Esc=Back";
@@ -146,14 +133,14 @@ ListBoxAction ListBoxHandleKeyEvent(
   return ListBoxHandleKeyCode(list_box, event.key, count);
 }
 
-DisplayMenu* ListBoxBeginDraw(ListBox* list_box) {
+DisplayBox* ListBoxBeginDraw(ListBox* list_box) {
   if (!list_box->dirty) {
     return NULL;
   }
-  return DisplayBeginMenu();
+  return DisplayBeginBox();
 }
 
 void ListBoxEndDraw(ListBox* list_box) {
-  DisplayEndMenu();
+  DisplayEndBox();
   list_box->dirty = false;
 }

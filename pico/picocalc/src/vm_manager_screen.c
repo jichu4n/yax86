@@ -3,14 +3,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "ui_box.h"
 #include "vm_config_screen.h"
 #include "vm_manager.h"
 #include "vm_screen.h"
 
-static const UIBoxItem kNewVMRow = {"New VM", true};
+static const BoxItem kNewVMRow = {"New VM", true};
 
 extern const Screen kVMManagerScreen;
 
@@ -58,7 +58,7 @@ ScreenResult VMManagerScreenOpen(
   return ScreenOpen(&kVMManagerScreen);
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   const uint8_t count = (uint8_t)(g_vm_manager.vms->count + 1);
   switch (ListBoxHandleKeyEvent(&g_list_box, event, count)) {
     case kListBoxActionMoved:
@@ -82,14 +82,14 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 // it is not there, showing its page too if it said so. The settings are not
 // read again: what changes them, a rename or delete of the default VM,
 // updates them as it saves them.
-static __noinline ScreenResult Resume(void) {
+static __noinline ScreenResult OnResume(void) {
   if (!g_vm_manager.changed) {
     ShowSelected(g_list_box.selected);
     return ScreenStays();
   }
   g_vm_manager.changed = false;
   VMListRead(g_vm_manager.vms);
-  const uint8_t index = VMListFind(g_vm_manager.vms, g_vm_manager.chosen);
+  const uint8_t index = VMListFind(g_vm_manager.vms, g_vm_manager.to_select);
   const bool found = index < g_vm_manager.vms->count;
   ShowSelected(found ? index : 0);
   if (g_vm_manager.show_vm && found) {
@@ -100,31 +100,31 @@ static __noinline ScreenResult Resume(void) {
 
 // The VMs in yax86/vm, a row each, then New VM after a line if there are
 // any, with arrows on the border where there are more above or below.
-static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   const VMList* vms = g_vm_manager.vms;
-  UIBoxPlace(menu, kListBoxNarrowColumns, kListBoxRows + 2);
-  UIBoxEdgeRow(&menu->text[0], menu->columns, true, "Manage VMs");
+  BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);
+  BoxEdgeRow(&box->text[0], box->columns, true, "Manage VMs");
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
-    DisplayTextRow* row = &menu->text[1 + i];
+    DisplayTextRow* row = &box->text[1 + i];
     const uint8_t index = (uint8_t)(g_top + i);
     if (index >= RowCount()) {
-      UIBoxBlankRow(row, menu->columns);
+      BoxBlankRow(row, box->columns);
     } else if (index < vms->count) {
-      const UIBoxItem item = {vms->vms[index].name, true};
-      UIBoxMenuItemRow(row, menu->columns, &item, index == g_list_box.selected);
+      const BoxItem item = {vms->vms[index].name, true};
+      BoxItemRow(row, box->columns, &item, index == g_list_box.selected);
     } else if (vms->count > 0 && index == vms->count) {
-      UIBoxSeparatorRow(row, menu->columns);
+      BoxSeparatorRow(row, box->columns);
     } else {
-      UIBoxMenuItemRow(
-          row, menu->columns, &kNewVMRow, g_list_box.selected == vms->count);
+      BoxItemRow(
+          row, box->columns, &kNewVMRow, g_list_box.selected == vms->count);
     }
   }
-  UIBoxEdgeRow(&menu->text[kListBoxRows + 1], menu->columns, false, NULL);
-  ListBoxDrawScrollArrows(menu, g_top, RowCount());
+  BoxEdgeRow(&box->text[kListBoxRows + 1], box->columns, false, NULL);
+  ListBoxDrawScrollArrows(box, g_top, RowCount());
   ListBoxEndDraw(&g_list_box);
 }
 
@@ -133,9 +133,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "vm_manager"; }
 
 const Screen kVMManagerScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

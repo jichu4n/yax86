@@ -1,4 +1,4 @@
-#include "ui_box.h"
+#include "box.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -19,18 +19,18 @@ enum {
   kGuestScreenRows = 25,
 };
 
-void UIBoxBlankRow(DisplayTextRow* row, uint8_t columns) {
+void BoxBlankRow(DisplayTextRow* row, uint8_t columns) {
   row->chars[0] = (char)kBoxVertical;
-  row->attrs[0] = kUIBoxAttrFrame;
+  row->attrs[0] = kBoxAttrBorder;
   for (uint8_t i = 1; i + 1 < columns; ++i) {
     row->chars[i] = ' ';
-    row->attrs[i] = kUIBoxAttrText;
+    row->attrs[i] = kBoxAttrText;
   }
   row->chars[columns - 1] = (char)kBoxVertical;
-  row->attrs[columns - 1] = kUIBoxAttrFrame;
+  row->attrs[columns - 1] = kBoxAttrBorder;
 }
 
-void UIBoxEdgeRow(
+void BoxEdgeRow(
     DisplayTextRow* row, uint8_t columns, bool top, const char* title) {
   row->chars[0] = (char)(top ? kBoxTopLeft : kBoxBottomLeft);
   for (uint8_t i = 1; i + 1 < columns; ++i) {
@@ -38,7 +38,7 @@ void UIBoxEdgeRow(
   }
   row->chars[columns - 1] = (char)(top ? kBoxTopRight : kBoxBottomRight);
   for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kUIBoxAttrFrame;
+    row->attrs[i] = kBoxAttrBorder;
   }
   if (title == NULL) {
     return;
@@ -47,27 +47,27 @@ void UIBoxEdgeRow(
   // The title, with a space either side, over the middle of the edge.
   uint8_t column = (uint8_t)((columns - length - 2) / 2);
   row->chars[column] = ' ';
-  row->attrs[column++] = kUIBoxAttrTitle;
+  row->attrs[column++] = kBoxAttrTitle;
   for (uint8_t i = 0; i < length; ++i) {
     row->chars[column] = title[i];
-    row->attrs[column++] = kUIBoxAttrTitle;
+    row->attrs[column++] = kBoxAttrTitle;
   }
   row->chars[column] = ' ';
-  row->attrs[column] = kUIBoxAttrTitle;
+  row->attrs[column] = kBoxAttrTitle;
 }
 
-void UIBoxSeparatorRow(DisplayTextRow* row, uint8_t columns) {
+void BoxSeparatorRow(DisplayTextRow* row, uint8_t columns) {
   row->chars[0] = (char)kBoxSeparatorLeft;
   for (uint8_t i = 1; i + 1 < columns; ++i) {
     row->chars[i] = (char)kBoxSeparator;
   }
   row->chars[columns - 1] = (char)kBoxSeparatorRight;
   for (uint8_t i = 0; i < columns; ++i) {
-    row->attrs[i] = kUIBoxAttrFrame;
+    row->attrs[i] = kBoxAttrBorder;
   }
 }
 
-void UIBoxPutText(
+void BoxPutText(
     DisplayTextRow* row, uint8_t columns, uint8_t column, const char* text,
     uint8_t attr) {
   while (*text != '\0' && column + 1 < columns) {
@@ -76,29 +76,39 @@ void UIBoxPutText(
   }
 }
 
-void UIBoxItemRow(
-    DisplayTextRow* row, uint8_t columns, const char* text, bool chosen) {
-  UIBoxBlankRow(row, columns);
-  if (chosen) {
+void BoxItemTextRow(
+    DisplayTextRow* row, uint8_t columns, const char* text, bool selected) {
+  BoxBlankRow(row, columns);
+  if (selected) {
     for (uint8_t i = 1; i + 1 < columns; ++i) {
-      row->attrs[i] = kUIBoxAttrChosen;
+      row->attrs[i] = kBoxAttrSelected;
     }
   }
-  UIBoxPutText(
-      row, columns, 3, text, chosen ? kUIBoxAttrChosen : kUIBoxAttrText);
+  BoxPutText(row, columns, 3, text, selected ? kBoxAttrSelected : kBoxAttrText);
 }
 
-void UIBoxMenuItemRow(
-    DisplayTextRow* row, uint8_t columns, const UIBoxItem* item, bool chosen) {
-  UIBoxItemRow(row, columns, item->text, chosen);
-  if (item->opens_menu) {
+void BoxItemRow(
+    DisplayTextRow* row, uint8_t columns, const BoxItem* item, bool selected) {
+  BoxItemTextRow(row, columns, item->text, selected);
+  if (item->opens_box) {
     row->chars[columns - 3] = '>';
   }
 }
 
-void UIBoxPlace(DisplayMenu* menu, uint8_t columns, uint8_t rows) {
-  menu->columns = columns;
-  menu->rows = rows;
-  menu->column = (uint8_t)((kTextColumns - columns) / 2);
-  menu->row = (uint8_t)((kGuestScreenRows - rows) / 2);
+void BoxPlace(DisplayBox* box, uint8_t columns, uint8_t rows) {
+  box->columns = columns;
+  box->rows = rows;
+  box->column = (uint8_t)((kTextColumns - columns) / 2);
+  box->row = (uint8_t)((kGuestScreenRows - rows) / 2);
+}
+
+bool BoxShownResized(const BoxShown* shown, const DisplayBox* box) {
+  return shown->drawn &&
+         (box->columns != shown->columns || box->rows != shown->rows);
+}
+
+void BoxShownRecord(BoxShown* shown, const DisplayBox* box) {
+  shown->columns = box->columns;
+  shown->rows = box->rows;
+  shown->drawn = true;
 }

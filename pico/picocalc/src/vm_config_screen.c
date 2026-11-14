@@ -5,13 +5,13 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "disk_image.h"
 #include "display.h"
 #include "list_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
-#include "ui_box.h"
 #include "vm_drive_config_screen.h"
 
 enum {
@@ -179,7 +179,9 @@ static bool TypeName(uint8_t key) {
   return true;
 }
 
-static ScreenResult Choose(void) {
+// Carry out the item selected: create or save the VM, move on from the
+// name to the first drive, or open a drive's choices.
+static ScreenResult OnSelect(void) {
   const uint8_t item = SelectedItem();
   if (item == kFormCreate) {
     return g_existing ? Save() : Create();
@@ -192,7 +194,7 @@ static ScreenResult Choose(void) {
   return VMDriveConfigScreenOpen(drive, &g_drives[drive]);
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   if (!ListBoxIsKeyPress(event)) {
     return ScreenStays();
   }
@@ -205,7 +207,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   const uint8_t count = (uint8_t)(kFormItemCount - FirstItem());
   switch (ListBoxHandleKeyCode(&g_list_box, event.key, count)) {
     case kListBoxActionSelect:
-      return Choose();
+      return OnSelect();
     case kListBoxActionBack:
       return ScreenBack();
     default:
@@ -213,8 +215,8 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   }
 }
 
-// Back from a drive's choices, with the drive chosen still.
-static ScreenResult Resume(void) {
+// Back from a drive's choices, with the drive selected still.
+static ScreenResult OnResume(void) {
   g_list_box.dirty = true;
   return ScreenStays();
 }
@@ -222,20 +224,20 @@ static ScreenResult Resume(void) {
 // A new VM's name, typed in place with a cursor while it is selected, and the
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
-static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   char rows[kFormItemCount][kListBoxNarrowColumns];
-  UIBoxItem items[kFormItemCount];
+  BoxItem items[kFormItemCount];
   const char* cursor =
       SelectedItem() == kFormName && g_name_length < kFSMaxFolderName ? "_"
                                                                       : "";
   snprintf(
       rows[kFormName], sizeof(rows[kFormName]), "%-15s %s%s", "Name", g_name,
       cursor);
-  items[kFormName] = (UIBoxItem){rows[kFormName], false};
+  items[kFormName] = (BoxItem){rows[kFormName], false};
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const uint8_t item = (uint8_t)(kFormDriveA + drive);
     const char* what = "empty";
@@ -250,11 +252,11 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     }
     snprintf(
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
-    items[item] = (UIBoxItem){rows[item], true};
+    items[item] = (BoxItem){rows[item], true};
   }
-  items[kFormCreate] = (UIBoxItem){g_existing ? "Save" : "Create", false};
+  items[kFormCreate] = (BoxItem){g_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
-      menu, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
+      box, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),
       g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
@@ -271,9 +273,9 @@ static const char* PageName(void) {
 }
 
 const Screen kVMConfigScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

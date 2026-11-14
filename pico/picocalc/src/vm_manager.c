@@ -21,7 +21,7 @@ static const char* g_copy_what;
 void VMManagerNoteChange(
     VMManager* vm_manager, const char* name, bool show_vm) {
   vm_manager->changed = true;
-  snprintf(vm_manager->chosen, sizeof(vm_manager->chosen), "%s", name);
+  snprintf(vm_manager->to_select, sizeof(vm_manager->to_select), "%s", name);
   vm_manager->show_vm = show_vm;
 }
 
@@ -36,8 +36,8 @@ void VMManagerShowProblem(
 // is waiting for the copy.
 static void ShowCopyProgress(uint64_t done, uint64_t total) {
   LauncherStatusBarUpdate("");
-  DisplayMenu* menu = DisplayBeginMenu();
-  if (menu == NULL) {
+  DisplayBox* box = DisplayBeginBox();
+  if (box == NULL) {
     return;
   }
   char progress[kListBoxNarrowColumns];
@@ -46,8 +46,8 @@ static void ShowCopyProgress(uint64_t done, uint64_t total) {
       (unsigned long)(done / kBytesPerKB),
       (unsigned long)(total / kBytesPerKB));
   const char* const lines[] = {g_copy_what, progress};
-  ListBoxDrawItems(menu, g_copy_title, lines, 2, NULL, 0, 0, true);
-  DisplayEndMenu();
+  ListBoxDrawItems(box, g_copy_title, lines, 2, NULL, 0, 0, true);
+  DisplayEndBox();
 }
 
 FSTransfer VMManagerBeginCopy(

@@ -318,8 +318,8 @@ bool LauncherRun(
       StatusBarClearProblem();
       return true;
     }
-    // The keys for the page a key led to are offered at once rather than at
-    // the next update.
+    // The rows are updated at once after a key, so that the keys of the
+    // screen it led to show without waiting for the next update.
     if (pressed || time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       LauncherStatusBarUpdate(ScreenHint());

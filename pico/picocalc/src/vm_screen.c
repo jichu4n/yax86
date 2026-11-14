@@ -4,10 +4,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "disk_image.h"
 #include "display.h"
 #include "list_box.h"
-#include "ui_box.h"
 #include "vm_config_screen.h"
 #include "vm_delete_screen.h"
 #include "vm_name_screen.h"
@@ -20,7 +20,7 @@ typedef enum VMItem {
   kVMItemCount,
 } VMItem;
 
-static const UIBoxItem kVMItems[kVMItemCount] = {
+static const BoxItem kVMItems[kVMItemCount] = {
     [kVMConfigure] = {"Configure", true},
     [kVMRename] = {"Rename", true},
     [kVMClone] = {"Clone", true},
@@ -59,7 +59,9 @@ ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
   return ScreenOpen(&kVMScreen);
 }
 
-static ScreenResult Choose(void) {
+// Open the screen of the item selected: the VM's form, the delete
+// question, or the name screen for a rename or a clone.
+static ScreenResult OnSelect(void) {
   switch (g_list_box.selected) {
     case kVMConfigure:
       return VMConfigScreenOpenExisting(g_vm_manager, g_vm);
@@ -71,10 +73,10 @@ static ScreenResult Choose(void) {
   }
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxHandleKeyEvent(&g_list_box, event, kVMItemCount)) {
     case kListBoxActionSelect:
-      return Choose();
+      return OnSelect();
     case kListBoxActionBack:
       return ScreenBack();
     default:
@@ -84,7 +86,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Back from a screen opened from the page: to Manage VMs too, if it changed
 // the card.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   if (g_vm_manager->changed) {
     return ScreenBack();
   }
@@ -102,9 +104,9 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 }
 
 // The images in the VM's drives, over what can be done to it.
-static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds
@@ -138,7 +140,7 @@ static void Draw(Y_UNUSED uint64_t now_us) {
     line_count = 1;
   }
   ListBoxDrawItems(
-      menu, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
+      box, g_vm_manager->vms->vms[g_vm].name, line_pointers, line_count,
       kVMItems, kVMItemCount, g_list_box.selected, true);
   ListBoxEndDraw(&g_list_box);
 }
@@ -148,9 +150,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "vm"; }
 
 const Screen kVMScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

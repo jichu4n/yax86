@@ -43,7 +43,7 @@ static void Follow(ScreenResult result) {
     if (--g_depth == 0) {
       return;
     }
-    result = Top()->resume();
+    result = Top()->on_resume();
   }
   if (result.screen == NULL) {
     return;
@@ -58,17 +58,15 @@ static void Follow(ScreenResult result) {
   g_stack[g_depth++] = result.screen;
 }
 
-void ScreenHandleKey(SouthbridgeKeyEvent key) {
-  Follow(Top()->handle_key(key));
-}
+void ScreenHandleKey(SouthbridgeKeyEvent key) { Follow(Top()->on_key(key)); }
 
 void ScreenTick(void) {
-  if (Top()->tick != NULL) {
-    Follow(Top()->tick());
+  if (Top()->on_tick != NULL) {
+    Follow(Top()->on_tick());
   }
 }
 
-void ScreenDraw(uint64_t now_us) { Top()->draw(now_us); }
+void ScreenDraw(uint64_t now_us) { Top()->on_draw(now_us); }
 
 const char* ScreenHint(void) { return Top()->hint(); }
 

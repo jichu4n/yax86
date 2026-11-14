@@ -1,12 +1,15 @@
-// Everything on the LCD - the guest's screen, the menu over it and the status
-// rows below it - drawn by core 1, which owns the LCD and does nothing else.
+// Everything on the LCD: the guest's screen, a box over it, and the status
+// rows below it. Core 1 draws all of it. It owns the LCD and does nothing
+// else.
 //
 // Core 0 runs the VM and never touches the LCD. It hands core 1 what to
 // draw: a copy of the guest's screen once a frame, the status rows and the
-// menu as text, and the requests to turn the panel off and on, and to read
-// it back. Each is
-// handed over only while core 1 is not using the last one, so the two cores
-// never share anything either of them is changing.
+// box as text, and the requests to turn the panel off and on, and to read it
+// back. Each is handed over only while core 1 is not using the last one, so
+// the two cores never share anything either of them is changing.
+//
+// A box is what a screen draws over the guest's screen, such as the list of
+// VMs or a page of the in-VM menu. box.h draws its rows.
 //
 // Every function here is called from core 0.
 #ifndef YAX86_PICOCALC_DISPLAY_H
@@ -21,9 +24,9 @@
 enum {
   // The status rows: the two text rows at the bottom of the panel.
   kDisplayStatusRows = 2,
-  // The most rows the menu's box can take: its tallest page, the status
-  // page, needs 10. A row is 160 bytes of SRAM.
-  kDisplayMenuMaxRows = 12,
+  // The most rows a box can have. The tallest, the in-VM menu's status page,
+  // needs 10. A row is 160 bytes of SRAM.
+  kDisplayBoxMaxRows = 12,
 };
 
 // A row of the runtime's own text: code page 437 characters, and a CGA
@@ -40,15 +43,17 @@ typedef struct DisplayStatus {
   DisplayTextRow rows[kDisplayStatusRows];
 } DisplayStatus;
 
-// The menu, a box of text drawn over the guest's screen: its top left cell,
-// in the panel's text cells, its size, and its rows.
-typedef struct DisplayMenu {
+// A box of text drawn over the guest's screen.
+typedef struct DisplayBox {
+  // Its top left cell, in the panel's text cells.
   uint8_t column;
   uint8_t row;
+  // Its size, in text cells.
   uint8_t columns;
   uint8_t rows;
-  DisplayTextRow text[kDisplayMenuMaxRows];
-} DisplayMenu;
+  // Its rows, from the top. Only the first rows of them are drawn.
+  DisplayTextRow text[kDisplayBoxMaxRows];
+} DisplayBox;
 
 // What drawing has cost, for the status page and the report.
 typedef struct DisplayStats {
@@ -67,13 +72,14 @@ typedef struct DisplayStats {
 // from then on. Returns the LCD's serial clock in Hz, once it is up.
 uint32_t DisplayStart(void);
 
-// Hand core 1 a copy of the guest's screen, if it has changed since the last
-// one. If core 1 is still drawing the last one, nothing is copied, and what
-// changed is left recorded in video for the next.
+// Send core 1 a copy of the guest's screen, if it has changed since the last
+// one sent. This never waits. If core 1 is still drawing the last copy,
+// nothing is copied, and what changed stays recorded in video for the next
+// call.
 //
 // Returns whether core 1 has what changed: true if it took the copy, or if
 // nothing had changed.
-bool DisplayOfferFrame(YVideoState* video);
+bool DisplaySendFrame(YVideoState* video);
 
 // The status rows to fill in, or NULL while core 1 is still drawing the last
 // ones. Filling them in and calling DisplayEndStatus() hands them over. Only
@@ -81,14 +87,14 @@ bool DisplayOfferFrame(YVideoState* video);
 DisplayStatus* DisplayBeginStatus(void);
 void DisplayEndStatus(void);
 
-// The menu to fill in, or NULL while core 1 is still drawing the last one.
-// Filling it in and calling DisplayEndMenu() hands it over, to be drawn over
+// The box to fill in, or NULL while core 1 is still drawing the last one.
+// Filling it in and calling DisplayEndBox() hands it over, to be drawn over
 // the guest's screen. What it covers is drawn again by the next frame, once
 // the caller marks the guest's screen to be drawn in full.
-DisplayMenu* DisplayBeginMenu(void);
-void DisplayEndMenu(void);
+DisplayBox* DisplayBeginBox(void);
+void DisplayEndBox(void);
 
-// Set the font the runtime's own text - the menu and the status rows - is
+// Set the font the runtime's own text, in the box and the status rows, is
 // drawn in, redrawing the status rows if they are already showing.
 void DisplaySetFont(Font4x10 font);
 

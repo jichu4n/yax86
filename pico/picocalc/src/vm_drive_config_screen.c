@@ -2,11 +2,11 @@
 
 #include <stddef.h>
 
+#include "box.h"
 #include "browser_screen.h"
 #include "display.h"
+#include "file_browser.h"
 #include "list_box.h"
-#include "ui_box.h"
-#include "ui_browser.h"
 #include "vm_config.h"
 
 // A drive's choices.
@@ -20,14 +20,14 @@ typedef enum DriveItem {
   kDriveItemCount,
 } DriveItem;
 
-static const UIBoxItem kFloppyItems[kDriveItemCount] = {
+static const BoxItem kFloppyItems[kDriveItemCount] = {
     [kDriveDisabled] = {"Disabled", false},
     [kDriveNone] = {"Empty", false},
     [kDriveBlank] = {"New floppy image (360KB)", false},
     [kDriveImage] = {"Existing floppy image", true},
 };
 
-static const UIBoxItem kHardDiskItems[kDriveItemCount] = {
+static const BoxItem kHardDiskItems[kDriveItemCount] = {
     [kDriveDisabled] = {"Disabled", false},
     [kDriveBlank] = {"New disk image (10MB)", false},
     [kDriveImage] = {"Existing disk image", true},
@@ -80,15 +80,15 @@ static uint8_t ChoiceRow(DriveItem choice) {
   return choice == kDriveItemCount ? count : 0;
 }
 
-ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* chosen) {
+ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* selected) {
   g_drive = drive;
-  g_choice = chosen;
+  g_choice = selected;
   DriveItem item = kDriveNone;
-  if (!chosen->present) {
+  if (!selected->present) {
     item = kDriveDisabled;
-  } else if (chosen->blank) {
+  } else if (selected->blank) {
     item = kDriveBlank;
-  } else if (chosen->path[0] != '\0') {
+  } else if (selected->path[0] != '\0') {
     item = kDriveImage;
   }
   g_list_box.selected = ChoiceRow(item);
@@ -97,8 +97,8 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* chosen) {
 }
 
 // Take the choice, back to the form; or for an image, find it in the
-// browser, starting where the one chosen is, if one is.
-static ScreenResult Choose(void) {
+// browser, starting where the one selected is, if one is.
+static ScreenResult OnSelect(void) {
   uint8_t count = 0;
   const DriveItem choice = Choices(&count)[g_list_box.selected];
   if (choice == kDriveImage) {
@@ -109,7 +109,7 @@ static ScreenResult Choose(void) {
       FSCopyPath("yax86", folder);
     }
     return BrowserScreenOpen(
-        g_drive >= kVMDriveHD1 ? kUIBrowserHardDisks : kUIBrowserFloppies,
+        g_drive >= kVMDriveHD1 ? kFileBrowserHardDisks : kFileBrowserFloppies,
         folder, g_choice->path, g_found_path, &g_found_size);
   }
   g_choice->path[0] = '\0';
@@ -118,11 +118,11 @@ static ScreenResult Choose(void) {
   return ScreenBack();
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (
       ListBoxHandleKeyEvent(&g_list_box, event, ChoiceRow(kDriveItemCount))) {
     case kListBoxActionSelect:
-      return Choose();
+      return OnSelect();
     case kListBoxActionBack:
       return ScreenBack();
     default:
@@ -132,7 +132,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 
 // Back from the browser: with an image found, it is the drive's, back on
 // the form.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   if (g_found_path[0] != '\0') {
     FSCopyPath(g_found_path, g_choice->path);
     g_choice->blank = false;
@@ -143,21 +143,21 @@ static ScreenResult Resume(void) {
   return ScreenStays();
 }
 
-static void Draw(Y_UNUSED uint64_t now_us) {
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+static void OnDraw(Y_UNUSED uint64_t now_us) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   uint8_t count = 0;
   const DriveItem* choices = Choices(&count);
-  const UIBoxItem* labels =
+  const BoxItem* labels =
       g_drive >= kVMDriveHD1 ? kHardDiskItems : kFloppyItems;
-  UIBoxItem items[kDriveItemCount];
+  BoxItem items[kDriveItemCount];
   for (uint8_t row = 0; row < count; ++row) {
     items[row] = labels[choices[row]];
   }
   ListBoxDrawItems(
-      menu, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
+      box, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
       true);
   ListBoxEndDraw(&g_list_box);
 }
@@ -167,9 +167,9 @@ static const char* Hint(void) { return kListBoxHint; }
 static const char* PageName(void) { return "vm_drive_config"; }
 
 const Screen kVMDriveConfigScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };

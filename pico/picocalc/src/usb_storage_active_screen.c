@@ -4,11 +4,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
 #include "runtime_log.h"
 #include "sdcard.h"
-#include "ui_box.h"
 #include "usb_storage.h"
 #include "usb_storage_disconnect_screen.h"
 
@@ -20,7 +20,7 @@ enum {
   kBytesPerGB = 1024 * 1024 * 1024,
 };
 
-static const UIBoxItem kSharingItems[] = {{"Disconnect", false}};
+static const BoxItem kSharingItems[] = {{"Disconnect", false}};
 
 extern const Screen kUSBStorageActiveScreen;
 
@@ -79,7 +79,7 @@ static ScreenResult Disconnect(void) {
   return StopSharing();
 }
 
-static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
+static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxHandleKeyEvent(&g_list_box, event, 1)) {
     case kListBoxActionSelect:
     case kListBoxActionBack:
@@ -90,7 +90,7 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
 }
 
 // Back from the question: disconnect anyway, or keep exporting.
-static ScreenResult Resume(void) {
+static ScreenResult OnResume(void) {
   if (g_confirmed) {
     g_confirmed = false;
     return StopSharing();
@@ -114,12 +114,12 @@ static void FormatSize(uint64_t size, char* text, size_t length) {
 }
 
 // What is exported and its size, the host's state, and how much has moved.
-static void Draw(uint64_t now_us) {
+static void OnDraw(uint64_t now_us) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
     g_list_box.dirty = true;
   }
-  DisplayMenu* menu = ListBoxBeginDraw(&g_list_box);
-  if (menu == NULL) {
+  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
+  if (box == NULL) {
     return;
   }
   const UsbStorageStats stats = UsbStorageGetStats();
@@ -157,7 +157,7 @@ static void Draw(uint64_t now_us) {
       HostHasVolume() ? "Eject it on the host first." : "",
   };
   ListBoxDrawItems(
-      menu, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
+      box, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
       kSharingItems, 1, g_list_box.selected, true);
   g_drawn_us = now_us;
   ListBoxEndDraw(&g_list_box);
@@ -168,9 +168,9 @@ static const char* Hint(void) { return "Enter=Disconnect"; }
 static const char* PageName(void) { return "usb_storage_active"; }
 
 const Screen kUSBStorageActiveScreen = {
-    .handle_key = HandleKey,
-    .draw = Draw,
-    .resume = Resume,
+    .on_key = OnKey,
+    .on_draw = OnDraw,
+    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
 };
