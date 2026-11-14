@@ -30,8 +30,8 @@ reports and why.
 
   | board | guest memory | header |
   | --- | --- | --- |
-  | a Pico in a PicoCalc | 640KB, all paged through the PSRAM with 128KB of SRAM frames | `is_paging=true guest_ram_kb=640` |
-  | a bare Pico | 128KB held directly in SRAM | `is_paging=false guest_ram_kb=128` |
+  | a Pico in a PicoCalc | 640KB, all paged through the PSRAM with 128KB of SRAM frames | `paging=true guest_ram_kb=640` |
+  | a bare Pico | 128KB held directly in SRAM | `paging=false guest_ram_kb=128` |
 
 - **It is deterministic, with an invariant for each layout, every run, at
   every level**: paged, 2,353,188 retired instructions and 27,922,137

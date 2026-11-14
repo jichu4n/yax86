@@ -467,7 +467,7 @@ static void UpdateStatusRows(void) {
 // log, and of the boot's group of a report.
 #define BOOT_FIELDS()                                                   \
   Y_LOG_STRING("stage", kBootStageEvents[g_status.boot_stage]),         \
-      Y_LOG_UINT("num_instructions", g_status.num_instructions),        \
+      Y_LOG_UINT("instructions", g_status.num_instructions),        \
       Y_LOG_UINT("cycles", g_status.boot_cycles),                       \
       Y_LOG_UINT(                                                       \
           "emulated_us", g_status.boot_cycles* kMicrosecondsPerSecond / \
@@ -484,10 +484,10 @@ static void ReplyDiskImage(
       command, group,
       Y_LOG_STRING("image", DiskImageDescribeStatus(image->status)),
       Y_LOG_STRING("path", image->path != NULL ? image->path : ""),
-      Y_LOG_BOOL("uses_fast_seek", image->uses_fast_seek),
-      Y_LOG_UINT("num_reads", stats->num_sector_reads),
-      Y_LOG_UINT("num_writes", stats->num_sector_writes),
-      Y_LOG_UINT("num_errors", stats->num_errors),
+      Y_LOG_BOOL("fast_seek", image->uses_fast_seek),
+      Y_LOG_UINT("reads", stats->num_sector_reads),
+      Y_LOG_UINT("writes", stats->num_sector_writes),
+      Y_LOG_UINT("errors", stats->num_errors),
       Y_LOG_UINT("read_us", stats->read_us),
       Y_LOG_UINT("write_us", stats->write_us));
 }
@@ -503,26 +503,26 @@ static __noinline void ReportRunning(const DebugCommand* command) {
   const PagerStats pager = PagerGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "paging", Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024),
-      Y_LOG_BOOL("is_on", g_is_paging),
-      Y_LOG_BOOL("is_off_after_fault", g_init_status->is_after_fault),
-      Y_LOG_UINT("num_frames", pager.num_frames),
+      Y_LOG_BOOL("on", g_is_paging),
+      Y_LOG_BOOL("off_after_fault", g_init_status->is_after_fault),
+      Y_LOG_UINT("frames", pager.num_frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
-      Y_LOG_UINT("num_page_ins", pager.num_page_ins),
-      Y_LOG_UINT("num_zero_fills", pager.num_zero_fills),
-      Y_LOG_UINT("num_write_backs", pager.num_write_backs),
-      Y_LOG_UINT("num_soft_faults", pager.num_soft_faults),
-      Y_LOG_UINT("num_errors", pager.num_errors),
+      Y_LOG_UINT("page_ins", pager.num_page_ins),
+      Y_LOG_UINT("zero_fills", pager.num_zero_fills),
+      Y_LOG_UINT("write_backs", pager.num_write_backs),
+      Y_LOG_UINT("soft_faults", pager.num_soft_faults),
+      Y_LOG_UINT("errors", pager.num_errors),
       Y_LOG_UINT("fault_us", pager.fault_us));
   DEBUG_COMMAND_REPLY_GROUP(command, "boot", BOOT_FIELDS());
   const DisplayStats display = DisplayGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "display",
-      Y_LOG_BOOL("does_draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
+      Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
       Y_LOG_STRING("font", Font4x10Name(g_settings->font)),
-      Y_LOG_UINT("num_frames_drawn", display.num_frames_drawn),
-      Y_LOG_UINT("num_pixels_drawn", display.num_pixels_drawn),
+      Y_LOG_UINT("frames_drawn", display.num_frames_drawn),
+      Y_LOG_UINT("pixels_drawn", display.num_pixels_drawn),
       Y_LOG_UINT("render_us", display.render_us),
-      Y_LOG_UINT("num_frames_late", display.num_frames_late),
+      Y_LOG_UINT("frames_late", display.num_frames_late),
       Y_LOG_UINT("copy_us", display.copy_us));
 }
 
@@ -534,9 +534,9 @@ static __noinline void ReportDrives(const DebugCommand* command) {
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm->entry.name : ""),
-      Y_LOG_UINT("num_vms", g_vms->num_vms));
+      Y_LOG_UINT("vms", g_vms->num_vms));
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "menu", Y_LOG_BOOL("is_open", ScreenIsOpen()),
+      command, "menu", Y_LOG_BOOL("open", ScreenIsOpen()),
       Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : ""));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
@@ -548,7 +548,7 @@ static __noinline void ReportDrives(const DebugCommand* command) {
       Y_LOG_UINT("dropped_us", g_clock.dropped_us),
       Y_LOG_UINT("command_us", g_command_us),
       Y_LOG_UINT("paused_us", PausedUs()),
-      Y_LOG_BOOL("uses_idle_skip", g_platform.is_dos_idle_skip_enabled));
+      Y_LOG_BOOL("idle_skip", g_platform.is_dos_idle_skip_enabled));
 }
 
 static void Report(const DebugCommand* command) {

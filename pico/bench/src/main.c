@@ -378,17 +378,17 @@ static Y_NOINLINE void ProfileLog(void) {
     return;
   }
   BENCH_INFO(
-      "profile", Y_LOG_UINT("num_samples", g_num_profile_samples),
+      "profile", Y_LOG_UINT("samples", g_num_profile_samples),
       Y_LOG_UINT("sram_bucket_bytes", 1u << kProfileSRAMBucketShift),
       Y_LOG_UINT("flash_bucket_bytes", 1u << kProfileFlashBucketShift),
-      Y_LOG_UINT("num_samples_elsewhere", g_num_profile_samples_elsewhere));
+      Y_LOG_UINT("samples_elsewhere", g_num_profile_samples_elsewhere));
   for (uint32_t i = 0; i < kProfileNumSRAMBuckets; ++i) {
     if (g_profile_sram[i] > 0) {
       BENCH_INFO(
           "profile_bucket",
           Y_LOG_HEX32(
               "address", kProfileSRAMBase + (i << kProfileSRAMBucketShift)),
-          Y_LOG_UINT("num_samples", g_profile_sram[i]));
+          Y_LOG_UINT("samples", g_profile_sram[i]));
     }
   }
   for (uint32_t i = 0; i < kProfileNumFlashBuckets; ++i) {
@@ -397,7 +397,7 @@ static Y_NOINLINE void ProfileLog(void) {
           "profile_bucket",
           Y_LOG_HEX32(
               "address", kProfileFlashBase + (i << kProfileFlashBucketShift)),
-          Y_LOG_UINT("num_samples", g_profile_flash[i]));
+          Y_LOG_UINT("samples", g_profile_flash[i]));
     }
   }
 }
@@ -498,9 +498,9 @@ static BenchResult RunBenchmark(void) {
 static Y_NOINLINE void LogResult(const BenchResult* r) {
   BENCH_INFO(
       "result", Y_LOG_STRING("workload", "dos-boot"),
-      Y_LOG_BOOL("did_complete", r->did_complete),
+      Y_LOG_BOOL("completed", r->did_complete),
       Y_LOG_UINT("elapsed_us", r->elapsed_us),
-      Y_LOG_UINT("num_instructions", r->num_instructions),
+      Y_LOG_UINT("instructions", r->num_instructions),
       Y_LOG_UINT("cycles", r->cycles));
   if (!r->did_complete) {
     // The rate is still valid, but the run was cut short.
@@ -517,19 +517,19 @@ static Y_NOINLINE void LogPaging(void) {
       "psram", Y_LOG_STRING("state", PsramStateName(psram.state)),
       Y_LOG_UINT("read_512_us", psram.read_512_us),
       Y_LOG_UINT("write_512_us", psram.write_512_us),
-      Y_LOG_UINT("num_timeouts", psram.num_timeouts));
+      Y_LOG_UINT("timeouts", psram.num_timeouts));
   if (!g_is_paging) {
     return;
   }
   const PagerStats pager = PagerGetStats();
   BENCH_INFO(
-      "paging", Y_LOG_UINT("num_frames", pager.num_frames),
+      "paging", Y_LOG_UINT("frames", pager.num_frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
-      Y_LOG_UINT("num_page_ins", pager.num_page_ins),
-      Y_LOG_UINT("num_zero_fills", pager.num_zero_fills),
-      Y_LOG_UINT("num_write_backs", pager.num_write_backs),
-      Y_LOG_UINT("num_soft_faults", pager.num_soft_faults),
-      Y_LOG_UINT("num_errors", pager.num_errors),
+      Y_LOG_UINT("page_ins", pager.num_page_ins),
+      Y_LOG_UINT("zero_fills", pager.num_zero_fills),
+      Y_LOG_UINT("write_backs", pager.num_write_backs),
+      Y_LOG_UINT("soft_faults", pager.num_soft_faults),
+      Y_LOG_UINT("errors", pager.num_errors),
       Y_LOG_UINT("fault_us", pager.fault_us));
 }
 
@@ -599,7 +599,7 @@ static Y_NOINLINE void LogStackUsage(void) {
   // bank and the peak is a floor rather than a measurement.
   BENCH_INFO(
       "stack_peak", Y_LOG_UINT("bytes", peak), Y_LOG_UINT("total", total),
-      Y_LOG_BOOL("did_overflow", peak >= total));
+      Y_LOG_BOOL("overflowed", peak >= total));
 }
 
 // ============================================================================
@@ -611,9 +611,9 @@ static Y_NOINLINE void LogHeader(void) {
       "header", Y_LOG_STRING("emulator", "yax86"),
       Y_LOG_STRING("target", "rp2040"), Y_LOG_STRING("opt", YAX86_PICO_OPT),
       Y_LOG_UINT("guest_ram_kb", g_guest_ram_size / 1024),
-      Y_LOG_BOOL("is_paging", g_is_paging),
+      Y_LOG_BOOL("paging", g_is_paging),
       Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / 1000),
-      Y_LOG_BOOL("is_profiling", YAX86_PICO_PROFILE),
+      Y_LOG_BOOL("profile", YAX86_PICO_PROFILE),
       Y_LOG_UINT("state_bytes", sizeof(YPlatformState)));
 }
 

@@ -64,10 +64,10 @@ static ScreenResult StopSharing(void) {
   SYSTEM_INFO(
       "usb_returned",
       Y_LOG_STRING("image", stats.image_path != NULL ? stats.image_path : ""),
-      Y_LOG_BOOL("was_ejected", stats.was_ejected),
-      Y_LOG_UINT("num_blocks_read", stats.num_blocks_read),
-      Y_LOG_UINT("num_blocks_written", stats.num_blocks_written),
-      Y_LOG_UINT("num_errors", stats.num_errors));
+      Y_LOG_BOOL("ejected", stats.was_ejected),
+      Y_LOG_UINT("blocks_read", stats.num_blocks_read),
+      Y_LOG_UINT("blocks_written", stats.num_blocks_written),
+      Y_LOG_UINT("errors", stats.num_errors));
   *g_did_stop = true;
   return ScreenBack();
 }

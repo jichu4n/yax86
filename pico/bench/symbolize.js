@@ -98,7 +98,7 @@ async function symbolize(elfFilePath, captureFilePath) {
       continue;
     }
     const name = symbolNameAt(symbols, toNumber(record.address));
-    const count = toNumber(record.num_samples);
+    const count = toNumber(record.samples);
     samplesByName.set(name, (samplesByName.get(name) ?? 0) + count);
     total += count;
   }

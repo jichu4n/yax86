@@ -148,7 +148,7 @@ static __noinline void ReportSystem(const DebugCommand* command) {
       Y_LOG_STRING("overclock", InitOverclockName(g_init_status->overclock)),
       Y_LOG_UINT("lcd_spi_hz", g_init_status->lcd_spi_hz),
       Y_LOG_UINT("sd_clock_hz", SdcardGetClockHz()),
-      Y_LOG_UINT("sd_num_blocks", SdcardGetNumBlocks()),
+      Y_LOG_UINT("sd_blocks", SdcardGetNumBlocks()),
       Y_LOG_STRING("keyboard_fw", version));
   const PsramStats psram = PsramGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
@@ -158,7 +158,7 @@ static __noinline void ReportSystem(const DebugCommand* command) {
       Y_LOG_UINT("write_512_us", psram.write_512_us),
       Y_LOG_UINT("bytes_read", psram.bytes_read),
       Y_LOG_UINT("bytes_written", psram.bytes_written),
-      Y_LOG_UINT("num_timeouts", psram.num_timeouts));
+      Y_LOG_UINT("timeouts", psram.num_timeouts));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "stack", Y_LOG_UINT("size", StackUsageSize()),
       Y_LOG_UINT("core0_used", StackUsageCore0()),
@@ -169,27 +169,27 @@ static __noinline void ReportSystem(const DebugCommand* command) {
 static __noinline void ReportDevices(const DebugCommand* command) {
   const UsbStorageStats usb = UsbStorageGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "usb", Y_LOG_BOOL("is_exporting", usb.is_exporting),
+      command, "usb", Y_LOG_BOOL("exporting", usb.is_exporting),
       Y_LOG_STRING("image", usb.image_path != NULL ? usb.image_path : ""),
-      Y_LOG_BOOL("is_connected", usb.is_connected),
-      Y_LOG_BOOL("was_seen", usb.was_seen),
-      Y_LOG_BOOL("was_ejected", usb.was_ejected),
-      Y_LOG_UINT("num_blocks_read", usb.num_blocks_read),
-      Y_LOG_UINT("num_blocks_written", usb.num_blocks_written),
+      Y_LOG_BOOL("connected", usb.is_connected),
+      Y_LOG_BOOL("host_seen", usb.was_seen),
+      Y_LOG_BOOL("ejected", usb.was_ejected),
+      Y_LOG_UINT("blocks_read", usb.num_blocks_read),
+      Y_LOG_UINT("blocks_written", usb.num_blocks_written),
       Y_LOG_UINT("read_us", usb.read_us), Y_LOG_UINT("write_us", usb.write_us),
-      Y_LOG_UINT("num_errors", usb.num_errors));
+      Y_LOG_UINT("errors", usb.num_errors));
   const SouthbridgePollStats keyboard = SouthbridgeGetPollStats();
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "keyboard", Y_LOG_UINT("num_reads", keyboard.num_reads),
-      Y_LOG_UINT("num_keys", keyboard.num_keys),
-      Y_LOG_UINT("num_stale_keys", keyboard.num_stale_keys),
-      Y_LOG_UINT("num_aborts", keyboard.num_aborts),
-      Y_LOG_UINT("num_timeouts", keyboard.num_timeouts));
+      command, "keyboard", Y_LOG_UINT("reads", keyboard.num_reads),
+      Y_LOG_UINT("keys", keyboard.num_keys),
+      Y_LOG_UINT("stale_keys", keyboard.num_stale_keys),
+      Y_LOG_UINT("aborts", keyboard.num_aborts),
+      Y_LOG_UINT("timeouts", keyboard.num_timeouts));
   const SpeakerStats speaker = SpeakerGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "speaker", Y_LOG_UINT("frequency_hz", speaker.frequency_hz),
       Y_LOG_UINT("output_hz", speaker.output_hz),
-      Y_LOG_UINT("num_changes", speaker.num_changes));
+      Y_LOG_UINT("changes", speaker.num_changes));
 }
 
 void DebugCommandReportSystem(const DebugCommand* command) {

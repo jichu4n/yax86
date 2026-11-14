@@ -427,7 +427,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   borrows for copies until the VM starts; the card's VMs and settings; and
   the VM chosen. `InitSystem()` is out of line, so that its locals are off
   core 0's stack while the modes run.
-- **The report gives the list as the menu**, `is_open=true` with its page, and
+- **The report gives the list as the menu**, `open=true` with its page, and
   pacing counts the time before a VM starts as paused, as it does the menu.
 - **A VM's image that does not open leaves its drive empty**, and the
   message row says why after the start; so does one named for two drives,
@@ -607,7 +607,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - **Each image keeps a cluster map, FatFs's fast seek**: without it a seek
   backwards walks the chain from the start, and a hard disk seeks backwards
   constantly. It has room for 31 fragments; a more fragmented image goes
-  without, shown as `uses_fast_seek` in the report.
+  without, shown as `fast_seek` in the report.
 - **The card costs 1.5% of `dos-boot`**: 4.8896 seconds against 4.8171 from
   flash. DOS reads 214 sectors, 75ms, about 0.35ms a sector.
 - **The invariant holds only off an image identical to `resources`', with no
@@ -704,7 +704,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   directly. A hard fault on either core reboots the board through
   `isr_hardfault()`, which replaces the SDK's breakpoint, and leaves a marker
   in RAM startup does not clear; the start after it pages nothing, says so
-  on the message row, and reports `is_off_after_fault`. Paging is the newest
+  on the message row, and reports `off_after_fault`. Paging is the newest
   code a fault could come from, and a board that halts on one needs its
   cable replugged.
 - **The runtime reads the BIOS data area through the memory map**,
@@ -981,7 +981,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - Each write has reached the card before its callback returns, so
   SYNCHRONIZE CACHE has nothing to do.
 - **The card's size** is read from its CSD register (CMD9) when it is
-  brought up - `SdcardGetNumBlocks()`, `sd_num_blocks` in the report - as the
+  brought up - `SdcardGetNumBlocks()`, `sd_blocks` in the report - as the
   reader has to say how many blocks it holds. FatFs never needed it.
 
 ## Commands over USB
