@@ -100,10 +100,7 @@ static __noinline ScreenResult OnResume(void) {
 
 // The VMs in yax86/vm, a row each, then New VM after a line if there are
 // any, with arrows on the border where there are more above or below.
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   const VMList* vms = g_vm_manager.vms;
   BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);
   BoxEdgeRow(&box->text[0], box->columns, true, "Manage VMs");
@@ -124,7 +121,6 @@ static bool OnDraw(DisplayBox* box) {
   }
   BoxEdgeRow(&box->text[kListBoxRows + 1], box->columns, false, NULL);
   ListBoxDrawScrollArrows(box, g_top, RowCount());
-  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -137,4 +133,5 @@ const Screen kVMManagerScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

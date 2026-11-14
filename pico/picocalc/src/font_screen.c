@@ -23,7 +23,6 @@ static ListBox g_list_box;
 ScreenResult FontScreenOpen(Settings* settings) {
   g_settings = settings;
   g_list_box.selected = settings->font;
-  g_list_box.dirty = true;
   return ScreenOpen(&kFontScreen);
 }
 
@@ -58,23 +57,13 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   }
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   BoxItem items[kFont4x10Count];
   for (uint8_t i = 0; i < kFont4x10Count; ++i) {
     items[i] = (BoxItem){Font4x10Label((Font4x10)i), false};
   }
   ListBoxDrawItems(
       box, "Font", NULL, 0, items, kFont4x10Count, g_list_box.selected, true);
-  return true;
-}
-
-// Nothing opens over Font.
-static ScreenResult OnResume(void) {
-  g_list_box.dirty = true;
-  return ScreenStays();
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -84,7 +73,7 @@ static const char* PageName(void) { return "font"; }
 const Screen kFontScreen = {
     .on_key = OnKey,
     .on_draw = OnDraw,
-    .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

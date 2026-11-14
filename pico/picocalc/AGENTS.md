@@ -1,4 +1,4 @@
-# pico/picocalc - the PicoCalc runtime
+#pico / picocalc - the PicoCalc runtime
 
 The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld with
 a 320x320 LCD, a keyboard, an SD card slot, speakers and a battery. It raises
@@ -64,12 +64,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   picotool save -a picocalc-factory-flash.bin
   picotool load -f -x -o 0x10000000 picocalc-factory-flash.bin
   ```
-  The factory firmware has no picotool reset interface; opening its serial
-  port at 1200 baud reboots it into BOOTSEL: `stty -F /dev/ttyACM0 1200`.
-- `YAX86_PICOCALC_DRAW_SCREEN=0` builds an otherwise identical image that
-  does not draw the guest's screen, into `build-pico/picocalc-no-draw`, which
-  is how drawing's cost is measured.
-- `YAX86_PICOCALC_SYS_CLK_KHZ` sets the clock, 250000 by default; empty is the
+  The factory firmware has no picotool reset interface;
+opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
+    F / dev / ttyACM0 1200`.- `YAX86_PICOCALC_DRAW_SCREEN =
+    0` builds an otherwise identical image that does not draw the
+        guest's screen, into `build-pico/picocalc-no-draw`, which is how
+            drawing's cost is measured. - `YAX86_PICOCALC_SYS_CLK_KHZ` sets the
+                clock,
+                              250000 by default; empty is the
   stock 125MHz, and past 400000 is refused.
 - **The Pico is powered by its USB cable**: a crashed board needs the cable
   replugged, not the PicoCalc's power button. The PicoCalc's own power must be
@@ -302,7 +304,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   with a leading `/`, so VMs can share images and keep their own:
 
   ```
-  # yax86/vm/dos330/vm.cfg
+#yax86 / vm / dos330 / vm.cfg
   fd1=../../images/msdos330/disk01.img
   fd2=../../images/msdos330/disk02.img
   hd1=hd1.img
@@ -372,14 +374,20 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
 - **A screen draws into the box the loop hands it, and the loop sends it**:
   the loop takes a box from `DisplayBeginBox()`, `ScreenDraw(box)` says
   whether the screen drew into it, and the loop then sends it to core 1
-  with `DisplayEndBox()`. The sending is each mode's, as the status rows
+  with `DisplayEndBox()`. A screen draws only when its dirty flag, the
+  `bool` its `Screen.dirty` points at, is set. The router sets it when the
+  screen opens and when it shows again, and clears it once `on_draw` has
+  drawn, so `on_draw` only draws, and an `on_resume` with nothing to do is
+  left out. The sending is each mode's, as the status rows
   are, so that a mode can do what it needs first. Launcher mode has nothing
   to do: every box it draws is the size of a list at least, and covers the
   last.
 - **A screen whose figures change with time reads the clock itself**, in
-  its `on_draw`, and draws again when they are due: USB mass storage while
-  it shares, and the in-VM menu's Status page, each every second. The loop
-  passes no time, since most screens change only on a key.
+  its `on_tick`, and sets its dirty flag when they are due: USB mass
+  storage while it shares, and the in-VM menu's Status page, each every
+  second. Both modes' loops call `ScreenTick()` on every pass while a
+  screen shows. The loop passes no time, since most screens change only on
+  a key.
 - **Every page is a screen of its own**, and is opened through its own
   open function, which takes what the page works on as parameters:
   `SettingsScreenOpen(&g_settings)`. The parent holds the state and passes
@@ -818,8 +826,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   date. It hands the list box each key with `ListBoxHandleKeyEvent()`,
   which ignores releases, clears the problem, moves the selection and
   returns a `ListBoxAction`: whether the key selected the item or went
-  back. It draws when `ListBoxTestAndClearDirty()` says the box is out of
-  date, which also clears its flag. A screen with keys of its own checks
+  back. The screen's `Screen.dirty` points at the list box's flag, which a
+  key that moves the selection sets. A screen with keys of its own checks
   `ListBoxIsKeyPress()`, handles its own keys, and hands the rest to
   `ListBoxHandleKeyCode()`: the name being typed, Backspace up a folder in
   the browser, Esc ignored on the list.

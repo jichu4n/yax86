@@ -200,10 +200,7 @@ static ScreenResult OnResume(void) {
 // Draw the rows that fit in the box from g_top_row, with arrows on its border
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);
   BoxEdgeRow(&box->text[0], box->columns, true, "YAX86");
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
@@ -239,7 +236,6 @@ static bool OnDraw(DisplayBox* box) {
       &box->text[kListBoxRows + 1], box->columns, false,
       g_countdown > 0 ? countdown : NULL);
   ListBoxDrawScrollArrows(box, g_top_row, RowCount());
-  return true;
 }
 
 static const char* Hint(void) { return "\x18\x19=Move  Enter=Select"; }
@@ -253,4 +249,5 @@ const Screen kLauncherMenuScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

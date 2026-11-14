@@ -37,7 +37,6 @@ ScreenResult FloppyDriveScreenOpen(
   g_session = session;
   g_drive = drive;
   g_list_box.selected = kDriveInsert;
-  g_list_box.dirty = true;
   return ScreenOpen(&kFloppyDriveScreen);
 }
 
@@ -106,15 +105,11 @@ static ScreenResult OnResume(void) {
     return ScreenClose();
   }
   g_list_box.selected = kDriveInsert;
-  g_list_box.dirty = true;
   return ScreenStays();
 }
 
 // What the drive holds, over its items.
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   const DiskImage* image = FloppyGetImage(g_drive);
   const bool empty = DriveEmpty();
   const char* in_drive = "the built-in boot floppy";
@@ -140,7 +135,6 @@ static bool OnDraw(DisplayBox* box) {
       box, kVMDriveNames[kVMDriveFD1 + g_drive], lines,
       sizeof(lines) / sizeof(lines[0]), items, ItemCount(), g_list_box.selected,
       false);
-  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -155,4 +149,5 @@ const Screen kFloppyDriveScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

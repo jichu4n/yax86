@@ -132,9 +132,3 @@ ListBoxAction ListBoxHandleKeyEvent(
   }
   return ListBoxHandleKeyCode(list_box, event.key, count);
 }
-
-bool ListBoxTestAndClearDirty(ListBox* list_box) {
-  const bool dirty = list_box->dirty;
-  list_box->dirty = false;
-  return dirty;
-}

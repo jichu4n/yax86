@@ -45,7 +45,6 @@ static char g_image_path[kFSMaxPath + 1];
 ScreenResult USBStorageScreenOpen(bool* exported) {
   g_exported = exported;
   g_list_box.selected = kUSBCard;
-  g_list_box.dirty = true;
   return ScreenOpen(&kUSBStorageScreen);
 }
 
@@ -110,21 +109,16 @@ static ScreenResult OnResume(void) {
     *g_exported = true;
     return ScreenBack();
   }
-  g_list_box.dirty = true;
   if (g_found_path[0] != '\0') {
     return ShareImage();
   }
   return ScreenStays();
 }
 
-static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
       kUSBItems, kUSBItemCount, g_list_box.selected, true);
-  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -137,4 +131,5 @@ const Screen kUSBStorageScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

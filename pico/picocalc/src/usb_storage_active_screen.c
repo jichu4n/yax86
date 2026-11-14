@@ -27,10 +27,10 @@ extern const Screen kUSBStorageActiveScreen;
 
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
-// When the page was last drawn, in microseconds since boot. It is drawn
-// again kStatusRefreshUs later, so that the host's state and the counts stay
-// current.
-static uint64_t g_drawn_us;
+// When the page was last marked out of date, in microseconds since boot. It
+// is marked again kStatusRefreshUs later, so that the host's state and the
+// counts stay current.
+static uint64_t g_refreshed_us;
 // The parent's: the image exported, NULL for the card, and where to say
 // exporting has ended.
 static DiskImage* g_image;
@@ -42,7 +42,7 @@ ScreenResult USBStorageActiveScreenOpen(DiskImage* image, bool* stopped) {
   g_image = image;
   g_stopped = stopped;
   g_list_box.selected = 0;
-  g_list_box.dirty = true;
+  g_refreshed_us = time_us_64();
   return ScreenOpen(&kUSBStorageActiveScreen);
 }
 
@@ -98,7 +98,17 @@ static ScreenResult OnResume(void) {
     g_confirmed = false;
     return StopSharing();
   }
-  g_list_box.dirty = true;
+  return ScreenStays();
+}
+
+// Mark the page out of date once a second, so that it is drawn again with
+// the host's state and the counts as they are now.
+static ScreenResult OnTick(void) {
+  const uint64_t now_us = time_us_64();
+  if (now_us - g_refreshed_us >= kStatusRefreshUs) {
+    g_refreshed_us = now_us;
+    g_list_box.dirty = true;
+  }
   return ScreenStays();
 }
 
@@ -117,14 +127,7 @@ static void FormatSize(uint64_t size, char* text, size_t length) {
 }
 
 // What is exported and its size, the host's state, and how much has moved.
-static bool OnDraw(DisplayBox* box) {
-  const uint64_t now_us = time_us_64();
-  if (now_us - g_drawn_us >= kStatusRefreshUs) {
-    g_list_box.dirty = true;
-  }
-  if (!ListBoxTestAndClearDirty(&g_list_box)) {
-    return false;
-  }
+static void OnDraw(DisplayBox* box) {
   const UsbStorageStats stats = UsbStorageGetStats();
   const char* state = "Waiting for the host...";
   if (!stats.connected) {
@@ -162,8 +165,6 @@ static bool OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, "USB mass storage", lines, sizeof(lines) / sizeof(lines[0]),
       kSharingItems, 1, g_list_box.selected, true);
-  g_drawn_us = now_us;
-  return true;
 }
 
 static const char* Hint(void) { return "Enter=Disconnect"; }
@@ -172,8 +173,10 @@ static const char* PageName(void) { return "usb_storage_active"; }
 
 const Screen kUSBStorageActiveScreen = {
     .on_key = OnKey,
+    .on_tick = OnTick,
     .on_draw = OnDraw,
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
+    .dirty = &g_list_box.dirty,
 };

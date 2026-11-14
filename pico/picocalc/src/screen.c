@@ -33,6 +33,7 @@ void ScreenShow(ScreenResult opened) {
   }
   g_stack[0] = opened.screen;
   g_depth = 1;
+  *opened.screen->dirty = true;
 }
 
 void ScreenHide(void) { g_depth = 0; }
@@ -46,7 +47,8 @@ static void Follow(ScreenResult result) {
     if (--g_depth == 0) {
       return;
     }
-    result = Top()->on_resume();
+    *Top()->dirty = true;
+    result = Top()->on_resume != NULL ? Top()->on_resume() : ScreenStays();
   }
   if (result.screen == NULL) {
     return;
@@ -59,6 +61,7 @@ static void Follow(ScreenResult result) {
     panic("screens nested past %d", kScreenStackMax);
   }
   g_stack[g_depth++] = result.screen;
+  *result.screen->dirty = true;
 }
 
 void ScreenHandleKey(SouthbridgeKeyEvent key) { Follow(Top()->on_key(key)); }
@@ -69,7 +72,15 @@ void ScreenTick(void) {
   }
 }
 
-bool ScreenDraw(DisplayBox* box) { return Top()->on_draw(box); }
+bool ScreenDraw(DisplayBox* box) {
+  const Screen* top = Top();
+  if (!*top->dirty) {
+    return false;
+  }
+  *top->dirty = false;
+  top->on_draw(box);
+  return true;
+}
 
 const char* ScreenHint(void) { return Top()->hint(); }
 
