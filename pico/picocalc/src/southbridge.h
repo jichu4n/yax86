@@ -31,11 +31,15 @@ typedef struct SouthbridgeBacklights {
   uint8_t keyboard;
 } SouthbridgeBacklights;
 
-// Read or set the display and keyboard backlights, waiting for the bus.
-// Setting display above 0 also has SouthbridgePollKey() keep them fresh as Alt
-// shortcuts change them; setting display to 0 stops that until it is turned
-// back on, so the off state stays distinct from the user's brightness. Both
-// return false without SouthbridgeHasBacklights() or if the bus fails.
+// Read or set the display and keyboard backlights, waiting for the bus. After
+// writing, SouthbridgeSetBacklights() reads both registers back so
+// SouthbridgeGetBacklights() reflects any clamping or step rounding by the
+// controller (stock v1.6/v1.7 clamps display to 16..240 in steps of 16, while
+// keyboard goes down to 0 in steps of 32). Setting display above 0 also has
+// SouthbridgePollKey() keep them fresh as Alt shortcuts change them; setting
+// display to 0 stops that until it is turned back on, so the idle state stays
+// distinct from the user's brightness. Both return false without
+// SouthbridgeHasBacklights() or if the bus fails.
 bool SouthbridgeReadBacklights(uint8_t* display, uint8_t* keyboard);
 bool SouthbridgeSetBacklights(uint8_t display, uint8_t keyboard);
 SouthbridgeBacklights SouthbridgeGetBacklights(void);

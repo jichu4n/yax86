@@ -4,8 +4,10 @@
 //
 // Shared by launcher mode and emulator mode. Turning off puts the ST7365P panel
 // to sleep through DisplayTurnOff() and, on keyboard controller firmware v1.6
-// and later, sets both backlight registers to 0 through
-// SouthbridgeSetBacklights().
+// and later, writes 0 to both backlight registers through
+// SouthbridgeSetBacklights() (turning the keyboard backlight off and dimming
+// the display backlight to the controller's floor - 16 on stock v1.6/v1.7, 0 on
+// third-party controller firmware).
 #ifndef YAX86_PICOCALC_DISPLAY_POWER_H
 #define YAX86_PICOCALC_DISPLAY_POWER_H
 

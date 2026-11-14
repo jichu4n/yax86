@@ -330,11 +330,24 @@ bool SouthbridgeSetBacklights(uint8_t display, uint8_t keyboard) {
       !SouthbridgeWriteRegister(kRegisterKeyboardBacklight, keyboard)) {
     return false;
   }
-  g_backlights = (SouthbridgeBacklights){
-      .is_known = true,
-      .display = display,
-      .keyboard = keyboard,
-  };
+  uint8_t display_answer[2] = {0, 0};
+  uint8_t keyboard_answer[2] = {0, 0};
+  if (SouthbridgeReadRegister(kRegisterDisplayBacklight, display_answer) &&
+      display_answer[0] == kRegisterDisplayBacklight &&
+      SouthbridgeReadRegister(kRegisterKeyboardBacklight, keyboard_answer) &&
+      keyboard_answer[0] == kRegisterKeyboardBacklight) {
+    g_backlights = (SouthbridgeBacklights){
+        .is_known = true,
+        .display = display_answer[1],
+        .keyboard = keyboard_answer[1],
+    };
+  } else {
+    g_backlights = (SouthbridgeBacklights){
+        .is_known = true,
+        .display = display,
+        .keyboard = keyboard,
+    };
+  }
   if (display > 0) {
     g_should_poll_backlights = true;
     g_next_backlight_read_us = time_us_64() + kBacklightReadIntervalUs;

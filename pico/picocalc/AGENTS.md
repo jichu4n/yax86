@@ -219,9 +219,12 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   the menu is open. `src/display_power.c` puts the panel's display off and
   into sleep, `LcdSetDisplayOn(false)` - a static image can mark the panel -
   and on keyboard controller firmware v1.6 and later writes 0 to both
-  backlight registers, cutting the LEDs' power as well. Nothing is rendered
-  while off; changes wait in the live state. A key wakes the panel first,
-  restores `display_brightness` and `keyboard_brightness` - the panel keeps its
+  backlight registers, turning the keyboard LEDs off and dimming the display
+  backlight to whatever floor the controller allows (16 of 255 on ClockworkPi's
+  stock v1.6/v1.7, 0 on third-party controller firmware), logged as
+  `module=display` `timeout`. Nothing is rendered while off; changes wait in
+  the live state. A key wakes the panel first, restores `display_brightness`
+  and `keyboard_brightness` (`module=display` `resume`) - the panel keeps its
   frame memory, so only changes are drawn - and goes on to the screen or the
   guest.
 
@@ -253,12 +256,16 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   `BIOSVERSION`. The battery register answers
   `[0B, percent]`. The display and keyboard backlight registers, `0x05` and
   `0x0A`, answer `[reg, brightness]` and are written with
-  `[reg | 0x80, brightness]`; the controller's `Alt` shortcuts will not dim
-  the display below 16, whereas an I2C write of 0 turns the PWM off
-  completely. Firmware before v1.6 mishandles I2C writes to `0x05`, so both
-  registers are touched only from v1.6 on. While the display is on, the key
-  FIFO poll reads them after `Alt` comes up and every five seconds so shortcut
-  changes can be saved to `yax86.cfg`.
+  `[reg | 0x80, brightness]`, then read back to learn what the controller
+  applied. ClockworkPi's stock v1.6/v1.7 passes writes to `0x05` through
+  `lcd_backlight_update(0)`, which rounds to steps of 16 and clamps to 16..240
+  even over I2C - so writing 0 dims the display backlight to 16 rather than 0,
+  while `0x0A` (`kbd_backlight_update(0)`, steps of 32) goes all the way to 0;
+  third-party controller firmware allows 0 on `0x05` as well. Firmware before
+  v1.6 mishandles I2C writes to `0x05`, so both registers are touched only
+  from v1.6 on. While the display is on, the key FIFO poll reads them after
+  `Alt` comes up and every five seconds so shortcut changes can be saved to
+  `yax86.cfg`.
 - **It can stop acknowledging for minutes**: the development unit, then
   older than v1.6, acknowledged nothing for two boots, then everything, cause
   unknown. v1.6 restarts its I2C after 2.5 quiet seconds, so the boot-time
