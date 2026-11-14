@@ -154,7 +154,7 @@ add_executable(yax86_picocalc
     src/emulator_status_bar.c
     src/text.c
     src/typing.c
-    src/menu_box.c
+    src/box.c
     src/file_browser.c
     src/list_box.c
     src/usb_storage_screen.c

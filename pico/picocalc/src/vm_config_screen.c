@@ -5,10 +5,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "disk_image.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
@@ -229,14 +229,14 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
     return false;
   }
   char rows[kFormItemCount][kListBoxNarrowColumns];
-  MenuBoxItem items[kFormItemCount];
+  BoxItem items[kFormItemCount];
   const char* cursor =
       SelectedItem() == kFormName && g_name_length < kFSMaxFolderName ? "_"
                                                                       : "";
   snprintf(
       rows[kFormName], sizeof(rows[kFormName]), "%-15s %s%s", "Name", g_name,
       cursor);
-  items[kFormName] = (MenuBoxItem){rows[kFormName], false};
+  items[kFormName] = (BoxItem){rows[kFormName], false};
   for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
     const uint8_t item = (uint8_t)(kFormDriveA + drive);
     const char* what = "empty";
@@ -251,9 +251,9 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
     }
     snprintf(
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
-    items[item] = (MenuBoxItem){rows[item], true};
+    items[item] = (BoxItem){rows[item], true};
   }
-  items[kFormCreate] = (MenuBoxItem){g_existing ? "Save" : "Create", false};
+  items[kFormCreate] = (BoxItem){g_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
       menu, g_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL, 0,
       &items[FirstItem()], (uint8_t)(kFormItemCount - FirstItem()),

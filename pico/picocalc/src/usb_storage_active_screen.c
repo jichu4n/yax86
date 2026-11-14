@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "runtime_log.h"
 #include "sdcard.h"
 #include "usb_storage.h"
@@ -20,7 +20,7 @@ enum {
   kBytesPerGB = 1024 * 1024 * 1024,
 };
 
-static const MenuBoxItem kSharingItems[] = {{"Disconnect", false}};
+static const BoxItem kSharingItems[] = {{"Disconnect", false}};
 
 extern const Screen kUSBStorageActiveScreen;
 
