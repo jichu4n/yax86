@@ -133,14 +133,8 @@ ListBoxAction ListBoxHandleKeyEvent(
   return ListBoxHandleKeyCode(list_box, event.key, count);
 }
 
-DisplayBox* ListBoxBeginDraw(ListBox* list_box) {
-  if (!list_box->dirty) {
-    return NULL;
-  }
-  return DisplayBeginBox();
-}
-
-void ListBoxEndDraw(ListBox* list_box) {
-  DisplayEndBox();
+bool ListBoxTestAndClearDirty(ListBox* list_box) {
+  const bool dirty = list_box->dirty;
   list_box->dirty = false;
+  return dirty;
 }

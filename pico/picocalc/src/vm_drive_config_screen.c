@@ -143,10 +143,9 @@ static ScreenResult OnResume(void) {
   return ScreenStays();
 }
 
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
-  if (box == NULL) {
-    return;
+static bool OnDraw(DisplayBox* box) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
+    return false;
   }
   uint8_t count = 0;
   const DriveItem* choices = Choices(&count);
@@ -159,7 +158,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
   ListBoxDrawItems(
       box, kVMDriveNames[g_drive], NULL, 0, items, count, g_list_box.selected,
       true);
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }

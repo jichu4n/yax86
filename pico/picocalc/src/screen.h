@@ -1,8 +1,9 @@
 // Screens: the pages of a menu, each a screen of its own, kept as a stack
 // with the page first shown at the bottom and above it each page opened from
-// the one below. A loop shows them until they close, handing each key to the
-// screen on top, letting it count time, composing the status rows from its
-// keys and drawing it, through the functions here. A screen does the rest
+// the one below. A mode's loop shows them until they close. Through the
+// functions here, it hands each key to the screen on top, lets it count
+// time, and has it draw into a box, which the loop sends to core 1. The loop
+// composes the status rows from the screen's keys. A screen does the rest
 // itself, and calls only down, into the modules it shares with the others.
 //
 // A screen is opened through its own open function, which takes what the
@@ -20,6 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "display.h"
 #include "southbridge.h"
 
 typedef struct Screen Screen;
@@ -43,9 +45,11 @@ struct Screen {
   // Called every pass of the loop, for what happens with time, such as a
   // countdown. NULL for a screen that nothing happens to with time.
   ScreenResult (*on_tick)(void);
-  // Called every pass of the loop, to draw the screen if it has changed.
-  // now_us is the time of the pass.
-  void (*on_draw)(uint64_t now_us);
+  // Called every pass of the loop, to draw the screen into box if it has
+  // changed. Returns whether it drew, so that the loop sends box to core 1.
+  // A screen whose figures change with time reads the time itself, and
+  // draws again when they are due.
+  bool (*on_draw)(DisplayBox* box);
   // Called when the screen above was taken off, so that this one shows
   // again and has to be drawn. What the screen above left can lead this one
   // on, as a key does: back, say, once what it was opened for is done.
@@ -94,8 +98,12 @@ void ScreenHandleKey(SouthbridgeKeyEvent key);
 // a screen shows.
 void ScreenTick(void);
 
-// Draw the screen on top, if it has changed.
-void ScreenDraw(uint64_t now_us);
+// Draw the screen on top into box, if it has changed, and return whether it
+// did. The loop takes box from DisplayBeginBox(), and sends it to core 1
+// with DisplayEndBox() if the screen drew. A mode's loop does the sending
+// so that it can do what it needs first, such as drawing the guest's screen
+// under a box of a new size.
+bool ScreenDraw(DisplayBox* box);
 
 // The keys of the screen on top, for the loop to compose the status rows
 // from, with what else its rows show.

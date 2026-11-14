@@ -285,6 +285,16 @@ static __noinline void PollCommand(void) {
   }
 }
 
+// Draw the screen showing, and send it to core 1 if it drew. Every box the
+// launcher draws is the size of a list at least, so a new one covers the
+// last, and there is no guest's screen to draw under it.
+static void DrawScreen(void) {
+  DisplayBox* box = DisplayBeginBox();
+  if (box != NULL && ScreenDraw(box)) {
+    DisplayEndBox();
+  }
+}
+
 bool LauncherRun(
     VMList* vms, Settings* settings, uint8_t* copy_buffer, VMConfig* vm) {
   g_vms = vms;
@@ -324,7 +334,7 @@ bool LauncherRun(
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       LauncherStatusBarUpdate(ScreenHint());
     }
-    ScreenDraw(time_us_64());
+    DrawScreen();
     sleep_ms(kPollMs);
   }
 }

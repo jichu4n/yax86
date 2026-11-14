@@ -360,7 +360,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   VM selected, or reads the card again, and shows the menu again if no VM
   loaded. The loop answers debug commands, its own and the common ones.
   Through `src/screen.c`, it hands the screen showing its keys, a tick for
-  what happens with time, and the chance to draw. It composes the status
+  what happens with time, and a box to draw in. It composes the status
   rows itself, with `src/launcher_status_bar.c`, from the keys `ScreenHint()`
   gives: the router leaves the rows to each loop, as the VM's have its
   drives and locks too. A `Screen` is those functions, `on_key`, `on_tick`
@@ -369,6 +369,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   bottom, and only the one on top is called, so the stack's depth adds
   nothing to core 0's. Calls go one way, from the loop to the screen and
   from the screen down.
+- **A screen draws into the box the loop hands it, and the loop sends it**:
+  the loop takes a box from `DisplayBeginBox()`, `ScreenDraw(box)` says
+  whether the screen drew into it, and the loop then sends it to core 1
+  with `DisplayEndBox()`. The sending is each mode's, as the status rows
+  are, so that a mode can do what it needs first. Launcher mode has nothing
+  to do: every box it draws is the size of a list at least, and covers the
+  last.
+- **A screen whose figures change with time reads the clock itself**, in
+  its `on_draw`, and draws again when they are due: USB mass storage while
+  it shares, every second. The loop passes no time, since most screens
+  change only on a key.
 - **Every page is a screen of its own**, and is opened through its own
   open function, which takes what the page works on as parameters:
   `SettingsScreenOpen(&g_settings)`. The parent holds the state and passes
@@ -790,10 +801,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   date. It hands the list box each key with `ListBoxHandleKeyEvent()`,
   which ignores releases, clears the problem, moves the selection and
   returns a `ListBoxAction`: whether the key selected the item or went
-  back. It draws between `ListBoxBeginDraw()` and `ListBoxEndDraw()`. A
-  screen with keys of its own checks `ListBoxIsKeyPress()`, handles its
-  own keys, and hands the rest to `ListBoxHandleKeyCode()`: the name being
-  typed, Backspace up a folder in the browser, Esc ignored on the list.
+  back. It draws when `ListBoxTestAndClearDirty()` says the box is out of
+  date, which also clears its flag. A screen with keys of its own checks
+  `ListBoxIsKeyPress()`, handles its own keys, and hands the rest to
+  `ListBoxHandleKeyCode()`: the name being typed, Backspace up a folder in
+  the browser, Esc ignored on the list.
 - **The file browser both modes use is `src/file_browser.c`**, which says
   which image was chosen and leaves what to do with it to its user.
 - **The VM is paused while it is open**: no batches run and no frames

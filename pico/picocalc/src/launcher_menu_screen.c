@@ -200,10 +200,9 @@ static ScreenResult OnResume(void) {
 // Draw the rows that fit in the box from g_top_row, with arrows on its border
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
-  if (box == NULL) {
-    return;
+static bool OnDraw(DisplayBox* box) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
+    return false;
   }
   BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);
   BoxEdgeRow(&box->text[0], box->columns, true, "YAX86");
@@ -240,7 +239,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
       &box->text[kListBoxRows + 1], box->columns, false,
       g_countdown > 0 ? countdown : NULL);
   ListBoxDrawScrollArrows(box, g_top_row, RowCount());
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 static const char* Hint(void) { return "\x18\x19=Move  Enter=Select"; }

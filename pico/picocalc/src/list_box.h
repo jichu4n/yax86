@@ -78,11 +78,10 @@ ListBoxAction ListBoxHandleKeyEvent(
 ListBoxAction ListBoxHandleKeyCode(
     ListBox* list_box, uint8_t key, uint8_t count);
 
-// Start drawing a list box that is out of date. Returns the box to draw it
-// in, or NULL if it is not out of date or core 1 is still drawing the last
-// one. ListBoxEndDraw() hands the box to core 1.
-DisplayBox* ListBoxBeginDraw(ListBox* list_box);
-void ListBoxEndDraw(ListBox* list_box);
+// Return whether a list box is out of date, and clear its dirty flag. A
+// screen's on_draw calls this first, and draws the list box only when it
+// returns true.
+bool ListBoxTestAndClearDirty(ListBox* list_box);
 
 // Whether key moves the selection: Up, Down, Page Up or Page Down.
 bool ListBoxIsMoveKey(uint8_t key);

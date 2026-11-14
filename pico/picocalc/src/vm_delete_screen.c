@@ -96,10 +96,9 @@ static void JoinNames(
   }
 }
 
-static void OnDraw(Y_UNUSED uint64_t now_us) {
-  DisplayBox* box = ListBoxBeginDraw(&g_list_box);
-  if (box == NULL) {
-    return;
+static bool OnDraw(DisplayBox* box) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
+    return false;
   }
   const uint8_t named = g_contents.file_count < kVMListNamed
                             ? g_contents.file_count
@@ -133,7 +132,7 @@ static void OnDraw(Y_UNUSED uint64_t now_us) {
   ListBoxDrawItems(
       box, "Delete", lines, line_count, kDeleteItems, kDeleteItemCount,
       g_list_box.selected, true);
-  ListBoxEndDraw(&g_list_box);
+  return true;
 }
 
 static const char* Hint(void) { return kListBoxHint; }

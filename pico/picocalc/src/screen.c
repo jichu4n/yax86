@@ -66,7 +66,7 @@ void ScreenTick(void) {
   }
 }
 
-void ScreenDraw(uint64_t now_us) { Top()->on_draw(now_us); }
+bool ScreenDraw(DisplayBox* box) { return Top()->on_draw(box); }
 
 const char* ScreenHint(void) { return Top()->hint(); }
 
