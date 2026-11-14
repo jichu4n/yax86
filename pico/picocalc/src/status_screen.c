@@ -31,9 +31,9 @@ ScreenResult StatusScreenOpen(
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, 0)) {
-    case kListBoxKeySelect:
-    case kListBoxKeyBack:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, 0)) {
+    case kListBoxActionSelect:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();

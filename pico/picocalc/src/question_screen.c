@@ -30,11 +30,11 @@ ScreenResult QuestionScreenOpen(const Question* question, bool* confirmed) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, kQuestionItemCount)) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kQuestionItemCount)) {
+    case kListBoxActionSelect:
       *g_confirmed = g_list_box.selected == kQuestionAction;
       return ScreenBack();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();

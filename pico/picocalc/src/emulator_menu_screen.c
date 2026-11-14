@@ -116,10 +116,10 @@ static ScreenResult OnSelect(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, ItemCount())) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, ItemCount())) {
+    case kListBoxActionSelect:
       return OnSelect();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
