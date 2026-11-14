@@ -61,7 +61,7 @@ struct Screen {
   // date, and cleared once it is drawn. The router sets it when the screen
   // opens and when it shows again. The screen sets it when a key or time
   // passing changes what it shows.
-  bool* dirty;
+  bool* is_dirty;
 };
 
 extern const Screen kScreenBackMarker;

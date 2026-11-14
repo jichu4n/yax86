@@ -7,9 +7,9 @@
 
 #include "screen.h"
 
-// Ask whether to disconnect anyway. *confirmed is set if so, before the
-// screen goes back; Cancel goes back leaving it as it is. confirmed must
+// Ask whether to disconnect anyway. *is_confirmed is set if so, before the
+// screen goes back; Cancel goes back leaving it as it is. is_confirmed must
 // outlive the screen.
-ScreenResult USBStorageDisconnectScreenOpen(bool* confirmed);
+ScreenResult USBStorageDisconnectScreenOpen(bool* is_confirmed);
 
 #endif  // YAX86_PICOCALC_USB_STORAGE_DISCONNECT_SCREEN_H

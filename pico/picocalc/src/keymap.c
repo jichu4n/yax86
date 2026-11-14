@@ -16,7 +16,7 @@ enum {
   kScancodeRightShift = 0x36,
   kScancodeAlt = 0x38,
 
-  kKeyCodeCount = 256,
+  kNumKeyCodes = 256,
 };
 
 // How the PC types one of the controller's key codes.
@@ -33,7 +33,7 @@ typedef struct KeymapEntry {
 
 // Laid out a key to a line, both characters it types side by side.
 // clang-format off
-static const KeymapEntry kKeymap[kKeyCodeCount] = {
+static const KeymapEntry kKeymap[kNumKeyCodes] = {
     // The number row, unshifted and shifted.
     ['`'] = KEY(0x29), ['~'] = KEY(0x29),
     ['1'] = KEY(0x02), ['!'] = KEY(0x02),
@@ -141,34 +141,34 @@ static const uint8_t kHiddenModifiers[] = {
     kScancodeRightShift,
     kScancodeAlt,
 };
-enum { kHiddenModifierCount = sizeof(kHiddenModifiers) / sizeof(uint8_t) };
-static bool g_modifier_held[kHiddenModifierCount];
+enum { kNumHiddenModifiers = sizeof(kHiddenModifiers) / sizeof(uint8_t) };
+static bool g_is_modifier_held[kNumHiddenModifiers];
 
 // Record what a scancode sent tells the guest about the modifiers.
 static void TrackModifiers(uint8_t scancode) {
-  for (uint8_t i = 0; i < kHiddenModifierCount; ++i) {
+  for (uint8_t i = 0; i < kNumHiddenModifiers; ++i) {
     if ((scancode & ~kBreakBit) == kHiddenModifiers[i]) {
-      g_modifier_held[i] = (scancode & kBreakBit) == 0;
+      g_is_modifier_held[i] = (scancode & kBreakBit) == 0;
     }
   }
 }
 
 uint8_t KeymapTranslate(
-    SouthbridgeKeyEvent event, uint8_t scancodes[kKeymapMaxScancodes]) {
+    SouthbridgeKeyEvent event, uint8_t scancodes[kKeymapMaxNumScancodes]) {
   const KeymapEntry entry = kKeymap[event.key];
   if (entry.scancode == 0) {
     return 0;
   }
-  uint8_t count = 0;
+  uint8_t num_scancodes = 0;
 
   if (!entry.is_modified_form) {
     // A key held down repeats as a run of make codes, as a PC/XT keyboard's
     // does.
-    scancodes[count++] = event.state == kSouthbridgeKeyReleased
-                             ? (uint8_t)(entry.scancode | kBreakBit)
-                             : entry.scancode;
+    scancodes[num_scancodes++] = event.state == kSouthbridgeKeyReleased
+                                     ? (uint8_t)(entry.scancode | kBreakBit)
+                                     : entry.scancode;
     TrackModifiers(scancodes[0]);
-    return count;
+    return num_scancodes;
   }
 
   // A modified form is a whole key press, sent when it is pressed and again
@@ -178,17 +178,17 @@ uint8_t KeymapTranslate(
   if (event.state == kSouthbridgeKeyReleased) {
     return 0;
   }
-  for (uint8_t i = 0; i < kHiddenModifierCount; ++i) {
-    if (g_modifier_held[i]) {
-      scancodes[count++] = (uint8_t)(kHiddenModifiers[i] | kBreakBit);
+  for (uint8_t i = 0; i < kNumHiddenModifiers; ++i) {
+    if (g_is_modifier_held[i]) {
+      scancodes[num_scancodes++] = (uint8_t)(kHiddenModifiers[i] | kBreakBit);
     }
   }
-  scancodes[count++] = entry.scancode;
-  scancodes[count++] = (uint8_t)(entry.scancode | kBreakBit);
-  for (uint8_t i = 0; i < kHiddenModifierCount; ++i) {
-    if (g_modifier_held[i]) {
-      scancodes[count++] = kHiddenModifiers[i];
+  scancodes[num_scancodes++] = entry.scancode;
+  scancodes[num_scancodes++] = (uint8_t)(entry.scancode | kBreakBit);
+  for (uint8_t i = 0; i < kNumHiddenModifiers; ++i) {
+    if (g_is_modifier_held[i]) {
+      scancodes[num_scancodes++] = kHiddenModifiers[i];
     }
   }
-  return count;
+  return num_scancodes;
 }

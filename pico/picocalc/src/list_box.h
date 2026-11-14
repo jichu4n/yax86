@@ -43,7 +43,7 @@ typedef struct ListBox {
   // drawn again. A key that moves the selection sets it. A screen points
   // the router at it as its dirty flag, and the router clears it once the
   // screen has drawn.
-  bool dirty;
+  bool is_dirty;
 } ListBox;
 
 // What a key did in a list box, which the screen acts on.
@@ -69,40 +69,41 @@ extern const char kListBoxHint[];
 // this before handling them, and hands the rest to ListBoxHandleKeyCode().
 bool ListBoxIsKeyPress(SouthbridgeKeyEvent event);
 
-// Handle a key event in a list box of count items. A release does nothing.
-// A press is handled as ListBoxHandleKeyCode() handles its key code.
+// Handle a key event in a list box with num_items items. A release does
+// nothing. A press is handled as ListBoxHandleKeyCode() handles its key code.
 ListBoxAction ListBoxHandleKeyEvent(
-    ListBox* list_box, SouthbridgeKeyEvent event, uint8_t count);
+    ListBox* list_box, SouthbridgeKeyEvent event, uint8_t num_items);
 
-// Handle the code of a key pressed in a list box of count items. A move key
-// moves the selection, and Enter, Space, Esc and Backspace say what the
-// screen is to do.
+// Handle the code of a key pressed in a list box with num_items items. A
+// move key moves the selection, and Enter, Space, Esc and Backspace say what
+// the screen is to do.
 ListBoxAction ListBoxHandleKeyCode(
-    ListBox* list_box, uint8_t key, uint8_t count);
+    ListBox* list_box, uint8_t key, uint8_t num_items);
 
 // Whether key moves the selection: Up, Down, Page Up or Page Down.
 bool ListBoxIsMoveKey(uint8_t key);
 
-// Move *selected for a move key, among count items. Up and Down wrap
-// around, and Page Up and Page Down stop at the ends. Returns whether there
-// are items to move among, which is when the box needs drawing again.
-bool ListBoxMove(uint8_t key, uint8_t count, uint8_t* selected);
+// Move *selected for a move key, in a list with num_items items. Up and Down
+// wrap around, and Page Up and Page Down stop at the ends. Returns whether
+// there are items to move among, which is when the box needs drawing again.
+bool ListBoxMove(uint8_t key, uint8_t num_items, uint8_t* selected);
 
 // Keep row among a list's rows, with *top the row at the top of them.
 void ListBoxScrollTo(uint8_t row, uint8_t* top);
 
 // Draw up and down arrows on a list's border where it has more rows than it
-// shows, above or below. The list has total rows, and shows them from top.
-void ListBoxDrawScrollArrows(DisplayBox* box, uint8_t top, uint8_t total);
+// shows, above or below. The list has num_rows rows in all, and shows them
+// from top.
+void ListBoxDrawScrollArrows(DisplayBox* box, uint8_t top, uint8_t num_rows);
 
-// Draw count items, under line_count lines of text if there are any, with
-// the item at selected marked. With list_sized, the box is at least the size
-// of a list, and has no blank row above the items when there are no lines:
-// at power on there is no guest's screen to draw under a smaller box to hide
-// the list's.
+// Draw the items, num_items of them, under the lines of text, num_lines of
+// them, if there are any, with the item at selected marked. If is_list_sized
+// is set, the box is at least the size of a list, and has no blank row above
+// the items when there are no lines: at power on there is no guest's screen
+// to draw under a smaller box to hide the list's.
 void ListBoxDrawItems(
     DisplayBox* box, const char* title, const char* const* lines,
-    uint8_t line_count, const BoxItem* items, uint8_t count, uint8_t selected,
-    bool list_sized);
+    uint8_t num_lines, const BoxItem* items, uint8_t num_items,
+    uint8_t selected, bool is_list_sized);
 
 #endif  // YAX86_PICOCALC_LIST_BOX_H

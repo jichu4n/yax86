@@ -10,7 +10,7 @@
 
 enum {
   // The most pairs a line may have.
-  kMaxPairs = 8,
+  kMaxNumPairs = 8,
 };
 
 static const char kNewExtension[] = "new";
@@ -48,13 +48,13 @@ static ConfigFileResult LoadFile(
   }
   UINT read = 0;
   const FRESULT result = f_read(&file, g_text, kConfigFileMaxBytes, &read);
-  const bool whole = f_eof(&file);
+  const bool is_whole = f_eof(&file);
   f_close(&file);
   if (result != FR_OK) {
     Describe(problem, "could not read the file");
     return kConfigFileProblem;
   }
-  if (!whole) {
+  if (!is_whole) {
     snprintf(
         problem, kConfigFileProblemLength + 1, "longer than %u bytes",
         (unsigned)kConfigFileMaxBytes);
@@ -71,9 +71,9 @@ static bool ReadLine(
   if (line[0] == '#') {
     return true;
   }
-  YLogfmtPair pairs[kMaxPairs];
+  YLogfmtPair pairs[kMaxNumPairs];
   uint8_t num_pairs = 0;
-  if (!YLogfmtParse(line, pairs, kMaxPairs, &num_pairs)) {
+  if (!YLogfmtParse(line, pairs, kMaxNumPairs, &num_pairs)) {
     snprintf(
         problem, kConfigFileProblemLength + 1, "line %u is not key=value pairs",
         line_number);
@@ -106,7 +106,7 @@ ConfigFileResult ConfigFileRead(
     while (*end != '\0' && *end != '\n') {
       ++end;
     }
-    const bool last = *end == '\0';
+    const bool is_last = *end == '\0';
     *end = '\0';
     if (end > line && end[-1] == '\r') {
       end[-1] = '\0';
@@ -114,7 +114,7 @@ ConfigFileResult ConfigFileRead(
     if (!ReadLine(line, line_number, take, context, problem)) {
       return kConfigFileProblem;
     }
-    if (last) {
+    if (is_last) {
       break;
     }
     line = end + 1;
@@ -131,13 +131,13 @@ ConfigFileResult ConfigFileRead(
 typedef struct Writer {
   char text[kConfigFileMaxBytes + 1];
   uint16_t length;
-  bool fits;
+  bool does_fit;
 } Writer;
 
 static void Write(Writer* writer, const char* from, const char* end) {
   for (const char* c = from; c < end; ++c) {
     if (writer->length == kConfigFileMaxBytes) {
-      writer->fits = false;
+      writer->does_fit = false;
       return;
     }
     writer->text[writer->length++] = *c;
@@ -160,7 +160,7 @@ static void WritePair(Writer* writer, const ConfigFileSetting* setting) {
   YLogfmtLineInit(&line, pair, sizeof(pair));
   YLogfmtLineAddString(&line, setting->key, setting->value);
   if (line.truncated) {
-    writer->fits = false;
+    writer->does_fit = false;
     return;
   }
   Write(writer, pair, pair + line.length);
@@ -210,11 +210,11 @@ static bool NextPair(
   return true;
 }
 
-// The setting whose key is from start to end, or count if there is none.
+// The setting whose key is from start to end, or num_settings if there is none.
 static uint8_t SettingFor(
-    const ConfigFileSetting* settings, uint8_t count, const char* start,
+    const ConfigFileSetting* settings, uint8_t num_settings, const char* start,
     const char* end) {
-  for (uint8_t i = 0; i < count; ++i) {
+  for (uint8_t i = 0; i < num_settings; ++i) {
     const char* k = settings[i].key;
     const char* t = start;
     while (*k != '\0' && t < end && *k == *t) {
@@ -225,7 +225,7 @@ static uint8_t SettingFor(
       return i;
     }
   }
-  return count;
+  return num_settings;
 }
 
 // path with its extension, if it has one, replaced by .new.
@@ -271,12 +271,12 @@ static bool Replace(
 }
 
 bool ConfigFileUpdate(
-    const char* path, const ConfigFileSetting* settings, uint8_t count,
+    const char* path, const ConfigFileSetting* settings, uint8_t num_settings,
     char problem[kConfigFileProblemLength + 1]) {
   static Writer writer;
   writer.length = 0;
-  writer.fits = true;
-  if (count > kConfigFileMaxSettings) {
+  writer.does_fit = true;
+  if (num_settings > kConfigFileMaxNumSettings) {
     Describe(problem, "too many settings at once");
     return false;
   }
@@ -300,7 +300,7 @@ bool ConfigFileUpdate(
 
   // Which settings have a pair already, each bit a setting.
   uint32_t written = 0;
-  bool crlf = false;
+  bool has_crlf = false;
   const char* line = g_text;
   while (*line != '\0') {
     const char* end = line;
@@ -310,7 +310,7 @@ bool ConfigFileUpdate(
     const char* content_end = end;
     if (content_end > line && content_end[-1] == '\r') {
       --content_end;
-      crlf = true;
+      has_crlf = true;
     }
     const char* first = line;
     while (first < content_end && IsSpace(*first)) {
@@ -320,20 +320,21 @@ bool ConfigFileUpdate(
     // Where the line starts in the new file, and whether a pair was removed
     // from it, which can leave nothing on it.
     const uint16_t line_start = writer.length;
-    bool removed = false;
+    bool was_removed = false;
     if (first < content_end && *first != '#') {
       const char* pair_start;
       const char* key_end;
       const char* pair_end;
       const char* copied = line;
       while (NextPair(&c, content_end, &pair_start, &key_end, &pair_end)) {
-        const uint8_t i = SettingFor(settings, count, pair_start, key_end);
-        if (i < count) {
+        const uint8_t i =
+            SettingFor(settings, num_settings, pair_start, key_end);
+        if (i < num_settings) {
           Write(&writer, copied, pair_start);
           if (settings[i].value != NULL) {
             WritePair(&writer, &settings[i]);
           } else {
-            removed = true;
+            was_removed = true;
           }
           written |= (uint32_t)1 << i;
           copied = pair_end;
@@ -342,11 +343,11 @@ bool ConfigFileUpdate(
       c = copied;
     }
     Write(&writer, c, content_end);
-    bool blank = removed;
-    for (uint16_t i = line_start; blank && i < writer.length; ++i) {
-      blank = IsSpace(writer.text[i]);
+    bool is_blank = was_removed;
+    for (uint16_t i = line_start; is_blank && i < writer.length; ++i) {
+      is_blank = IsSpace(writer.text[i]);
     }
-    if (blank) {
+    if (is_blank) {
       // A line its pairs were all removed from goes with them.
       writer.length = line_start;
     } else {
@@ -354,8 +355,8 @@ bool ConfigFileUpdate(
     }
     line = *end == '\0' ? end : end + 1;
   }
-  const char* const newline = crlf ? "\r\n" : "\n";
-  for (uint8_t i = 0; i < count; ++i) {
+  const char* const newline = has_crlf ? "\r\n" : "\n";
+  for (uint8_t i = 0; i < num_settings; ++i) {
     if ((written & ((uint32_t)1 << i)) || settings[i].value == NULL) {
       continue;
     }
@@ -365,7 +366,7 @@ bool ConfigFileUpdate(
     WritePair(&writer, &settings[i]);
     WriteText(&writer, newline);
   }
-  if (!writer.fits) {
+  if (!writer.does_fit) {
     snprintf(
         problem, kConfigFileProblemLength + 1, "would be longer than %u bytes",
         (unsigned)kConfigFileMaxBytes);

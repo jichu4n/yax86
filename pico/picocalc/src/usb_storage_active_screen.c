@@ -34,13 +34,13 @@ static uint64_t g_refreshed_us;
 // The parent's: the image exported, NULL for the card, and where to say
 // exporting has ended.
 static DiskImage* g_image;
-static bool* g_stopped;
+static bool* g_did_stop;
 // Whether Disconnect anyway was chosen, which the question sets.
-static bool g_confirmed;
+static bool g_is_confirmed;
 
-ScreenResult USBStorageActiveScreenOpen(DiskImage* image, bool* stopped) {
+ScreenResult USBStorageActiveScreenOpen(DiskImage* image, bool* did_stop) {
   g_image = image;
-  g_stopped = stopped;
+  g_did_stop = did_stop;
   g_list_box.selected = 0;
   g_refreshed_us = time_us_64();
   return ScreenOpen(&kUSBStorageActiveScreen);
@@ -50,7 +50,7 @@ ScreenResult USBStorageActiveScreenOpen(DiskImage* image, bool* stopped) {
 // mounted.
 static bool HostHasVolume(void) {
   const UsbStorageStats stats = UsbStorageGetStats();
-  return stats.connected && stats.seen && !stats.ejected;
+  return stats.is_connected && stats.was_seen && !stats.was_ejected;
 }
 
 // Take the card or image back from the host. An image is closed, writing
@@ -64,11 +64,11 @@ static ScreenResult StopSharing(void) {
   SYSTEM_INFO(
       "usb_returned",
       Y_LOG_STRING("image", stats.image_path != NULL ? stats.image_path : ""),
-      Y_LOG_BOOL("ejected", stats.ejected),
+      Y_LOG_BOOL("ejected", stats.was_ejected),
       Y_LOG_UINT("blocks_read", stats.blocks_read),
       Y_LOG_UINT("blocks_written", stats.blocks_written),
       Y_LOG_UINT("errors", stats.errors));
-  *g_stopped = true;
+  *g_did_stop = true;
   return ScreenBack();
 }
 
@@ -76,8 +76,8 @@ static ScreenResult StopSharing(void) {
 // one has.
 static ScreenResult Disconnect(void) {
   if (HostHasVolume()) {
-    g_confirmed = false;
-    return USBStorageDisconnectScreenOpen(&g_confirmed);
+    g_is_confirmed = false;
+    return USBStorageDisconnectScreenOpen(&g_is_confirmed);
   }
   return StopSharing();
 }
@@ -94,8 +94,8 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 
 // Back from the question: disconnect anyway, or keep exporting.
 static ScreenResult OnResume(void) {
-  if (g_confirmed) {
-    g_confirmed = false;
+  if (g_is_confirmed) {
+    g_is_confirmed = false;
     return StopSharing();
   }
   return ScreenStays();
@@ -107,7 +107,7 @@ static ScreenResult OnTick(void) {
   const uint64_t now_us = time_us_64();
   if (now_us - g_refreshed_us >= kStatusRefreshUs) {
     g_refreshed_us = now_us;
-    g_list_box.dirty = true;
+    g_list_box.is_dirty = true;
   }
   return ScreenStays();
 }
@@ -130,11 +130,11 @@ static void FormatSize(uint64_t size, char* text, size_t length) {
 static void OnDraw(DisplayBox* box) {
   const UsbStorageStats stats = UsbStorageGetStats();
   const char* state = "Waiting for the host...";
-  if (!stats.connected) {
+  if (!stats.is_connected) {
     state = "No host connected.";
-  } else if (stats.ejected) {
+  } else if (stats.was_ejected) {
     state = "Ejected by the host.";
-  } else if (stats.seen) {
+  } else if (stats.was_seen) {
     state = "Mounted by the host.";
   }
   // Room for two of the largest counts, which a box cuts to its width.
@@ -153,7 +153,7 @@ static void OnDraw(DisplayBox* box) {
     snprintf(what, sizeof(what), "Exporting %s (%s).", name, size);
   } else {
     FormatSize(
-        (uint64_t)SdcardGetBlockCount() * kBytesPerBlock, size, sizeof(size));
+        (uint64_t)SdcardGetNumBlocks() * kBytesPerBlock, size, sizeof(size));
     snprintf(what, sizeof(what), "Exporting the SD card (%s).", size);
   }
   const char* const lines[] = {
@@ -178,5 +178,5 @@ const Screen kUSBStorageActiveScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

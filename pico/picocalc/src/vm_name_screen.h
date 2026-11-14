@@ -11,11 +11,11 @@
 #include "vm_manager.h"
 
 // Type a name for the VM at index in vm_manager's list: to rename it, starting
-// from its name, or with cloning, to clone it, starting from its name with
+// from its name, or with is_cloning, to clone it, starting from its name with
 // _2 at the end. A name that will not do shows why and stays to be typed
 // again; a rename or clone done, or failed, is noted in vm_manager before the
 // screen goes back. vm_manager must outlive the screen.
 ScreenResult VMNameScreenOpen(
-    VMManager* vm_manager, uint8_t index, bool cloning);
+    VMManager* vm_manager, uint8_t index, bool is_cloning);
 
 #endif  // YAX86_PICOCALC_VM_NAME_SCREEN_H

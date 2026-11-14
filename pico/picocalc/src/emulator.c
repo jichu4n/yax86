@@ -57,7 +57,7 @@ enum {
   // attribute alternate, so the characters are the even bytes.
   kScreenColumns = 80,
   kScreenRows = 25,
-  kScreenCells = kScreenColumns * kScreenRows,
+  kNumScreenCells = kScreenColumns * kScreenRows,
   kBytesPerScreenCell = 2,
   kFirstPrintableCharacter = 0x20,
   kFirstNonPrintableCharacter = 0x7F,
@@ -100,7 +100,7 @@ enum {
   // The BIOS's count of timer ticks since midnight, in the BIOS data area,
   // which is the time of day DOS reports. A tick is 65,536 counts of the
   // PIT's 1,193,182Hz input clock, about 18.2 a second.
-  kBIOSTickCountAddress = 0x46C,
+  kBIOSNumTicksAddress = 0x46C,
   kPITInputHz = 1193182,
   kPITCountsPerBIOSTick = 65536,
 
@@ -173,7 +173,7 @@ static bool g_has_vm;
 // floppy disk controller.
 static EmulatorSession g_session;
 static RuntimeStatus g_status;
-static bool g_host_attached;
+static bool g_is_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
 // them is that much slower for.
 static uint64_t g_command_us;
@@ -206,14 +206,14 @@ static RunClock g_clock;
 
 // Whether guest RAM is paged, and whether the VM is up, before which there is
 // no guest RAM to read.
-static bool g_paging;
-static bool g_vm_up;
+static bool g_is_paging;
+static bool g_is_vm_up;
 
 // ============================================================================
 // Reporting
 // ============================================================================
 
-static bool BootIsOver(void) {
+static bool IsBootOver(void) {
   return g_status.boot_stage == kBootStagePrompt ||
          g_status.boot_stage == kBootStageFailed;
 }
@@ -230,13 +230,13 @@ static uint64_t PausedUs(void) {
 
 // How much guest RAM the VM has.
 static uint32_t GuestRAMSize(void) {
-  return g_paging ? Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE : kGuestRAMSize;
+  return g_is_paging ? Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE : kGuestRAMSize;
 }
 
 // A byte of guest RAM, read through the memory map since it may be paged. 0
 // before the VM is up, which is what guest RAM starts as.
 static uint8_t GuestRAMByte(uint32_t address) {
-  return g_vm_up ? YPlatformReadMemoryByte(&g_platform, address) : 0;
+  return g_is_vm_up ? YPlatformReadMemoryByte(&g_platform, address) : 0;
 }
 
 static uint64_t BusyUs(void) {
@@ -249,7 +249,7 @@ static uint64_t BusyUs(void) {
 static uint64_t GuestClockMs(void) {
   uint64_t ticks = 0;
   for (uint32_t i = 0; i < 4; ++i) {
-    ticks |= (uint64_t)GuestRAMByte(kBIOSTickCountAddress + i) << (8 * i);
+    ticks |= (uint64_t)GuestRAMByte(kBIOSNumTicksAddress + i) << (8 * i);
   }
   return ticks * kPITCountsPerBIOSTick * kMillisecondsPerSecond / kPITInputHz;
 }
@@ -379,7 +379,7 @@ static size_t FormatDrive(
 }
 
 static void FormatDiskLine(char* buffer, size_t size) {
-  const DiskImage* const images[kVMDrives] = {
+  const DiskImage* const images[kNumVMDrives] = {
       [kVMDriveFD1] = FloppyGetImage(kFloppyDriveA),
       [kVMDriveFD2] = FloppyGetImage(kFloppyDriveB),
       [kVMDriveHD1] = HardDiskGetImage(kHardDisk1),
@@ -387,13 +387,13 @@ static void FormatDiskLine(char* buffer, size_t size) {
   };
   size_t length = 0;
   uint64_t card_us = 0;
-  bool any_open = false;
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  bool is_any_open = false;
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     const DiskImage* image = images[drive];
     char label[8];
     snprintf(label, sizeof(label), "%s:", kVMDriveLabels[drive]);
     if (image->status == kDiskImageOpen) {
-      any_open = true;
+      is_any_open = true;
       length += FormatDrive(buffer + length, size - length, label, image, "");
     } else if (image->status != kDiskImageEjected) {
       // What drive A has instead, or why a configured image did not open.
@@ -403,7 +403,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
     }
     card_us += image->stats.read_us + image->stats.write_us;
   }
-  if (!any_open) {
+  if (!is_any_open) {
     return;
   }
   const uint64_t card_ms = card_us / kMicrosecondsPerMillisecond;
@@ -415,11 +415,11 @@ static void FormatDiskLine(char* buffer, size_t size) {
 
 // Fill in the menu's status page: what the runtime found, and what running
 // the VM has cost so far.
-static void DescribeStatus(StatusScreenLine lines[kStatusScreenLines]) {
-  static const char* const kLabels[kStatusScreenLines] = {
+static void DescribeStatus(StatusScreenLine lines[kStatusScreenNumLines]) {
+  static const char* const kLabels[kStatusScreenNumLines] = {
       "System", "Boot", "Speed", "Clock", "Display", "Disk",
   };
-  for (uint8_t i = 0; i < kStatusScreenLines; ++i) {
+  for (uint8_t i = 0; i < kStatusScreenNumLines; ++i) {
     lines[i].label = kLabels[i];
   }
   const size_t size = sizeof(lines[0].value);
@@ -433,15 +433,16 @@ static void DescribeStatus(StatusScreenLine lines[kStatusScreenLines]) {
 
 // Say once that the battery is low, until it has charged back up.
 static void WarnOfLowBattery(SouthbridgeBattery battery) {
-  static bool warned;
-  if (!battery.known) {
+  static bool did_warn;
+  if (!battery.is_known) {
     return;
   }
-  if (!warned && !battery.charging && battery.percent < kBatteryLowPercent) {
+  if (!did_warn && !battery.is_charging &&
+      battery.percent < kBatteryLowPercent) {
     EmulatorStatusBarPostMessage("Battery low");
-    warned = true;
+    did_warn = true;
   } else if (battery.percent >= kBatteryRecoveredPercent) {
-    warned = false;
+    did_warn = false;
   }
 }
 
@@ -483,7 +484,7 @@ static void ReplyDiskImage(
       command, group,
       Y_LOG_STRING("image", DiskImageDescribeStatus(image->status)),
       Y_LOG_STRING("path", image->path != NULL ? image->path : ""),
-      Y_LOG_BOOL("fast_seek", image->fast_seek),
+      Y_LOG_BOOL("fast_seek", image->uses_fast_seek),
       Y_LOG_UINT("reads", stats->sector_reads),
       Y_LOG_UINT("writes", stats->sector_writes),
       Y_LOG_UINT("errors", stats->errors),
@@ -502,8 +503,8 @@ static __noinline void ReportRunning(const DebugCommand* command) {
   const PagerStats pager = PagerGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
       command, "paging", Y_LOG_UINT("guest_ram_kb", GuestRAMSize() / 1024),
-      Y_LOG_BOOL("on", g_paging),
-      Y_LOG_BOOL("off_after_fault", g_init_status->after_fault),
+      Y_LOG_BOOL("on", g_is_paging),
+      Y_LOG_BOOL("off_after_fault", g_init_status->is_after_fault),
       Y_LOG_UINT("frames", pager.frames),
       Y_LOG_UINT("page_bytes", kPagerPageSize),
       Y_LOG_UINT("page_ins", pager.page_ins),
@@ -532,7 +533,7 @@ static __noinline void ReportDrives(const DebugCommand* command) {
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm->entry.name : ""),
-      Y_LOG_UINT("vms", g_vms->count));
+      Y_LOG_UINT("vms", g_vms->num_vms));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", ScreenIsOpen()),
       Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : ""));
@@ -560,11 +561,11 @@ static void Report(const DebugCommand* command) {
 // it is: one that attached after the boot would otherwise not know. Cheap
 // enough to call every batch: it reads a flag the USB stack keeps.
 static void AnnounceToNewHost(void) {
-  const bool attached = stdio_usb_connected();
-  if (attached && !g_host_attached && BootIsOver()) {
+  const bool is_attached = stdio_usb_connected();
+  if (is_attached && !g_is_host_attached && IsBootOver()) {
     BOOT_INFO("done");
   }
-  g_host_attached = attached;
+  g_is_host_attached = is_attached;
 }
 
 // ============================================================================
@@ -580,8 +581,9 @@ static void SetPCSpeakerFrequency(
 // did not end in a hard fault: paging is the newest thing a fault could come
 // from, and without it the VM has the SRAM alone - see yax86_pico.h.
 static void ConfigureGuestRAM(YPlatformConfig* config) {
-  g_paging = PsramGetStats().state == kPsramOk && !g_init_status->after_fault;
-  if (!g_paging) {
+  g_is_paging =
+      PsramGetStats().state == kPsramOk && !g_init_status->is_after_fault;
+  if (!g_is_paging) {
     config->direct_memory_size = kGuestRAMSize;
     config->direct_memory = g_guest_ram;
     config->paged_memory = NULL;
@@ -609,8 +611,8 @@ static bool InitVM(void) {
   }
   FloppyAttach(&g_platform.fdc);
   HardDiskAttach(&g_platform.hdc);
-  g_vm_up = true;
-  if (g_init_status->after_fault) {
+  g_is_vm_up = true;
+  if (g_init_status->is_after_fault) {
     EmulatorStatusBarPostMessage("Paging off: the last start crashed");
   }
   return true;
@@ -627,9 +629,9 @@ static char ScreenCharacter(uint16_t cell) {
 }
 
 static bool ScreenContains(const char* needle) {
-  for (uint16_t start = 0; start < kScreenCells; ++start) {
+  for (uint16_t start = 0; start < kNumScreenCells; ++start) {
     uint16_t i = 0;
-    while (needle[i] != '\0' && start + i < kScreenCells &&
+    while (needle[i] != '\0' && start + i < kNumScreenCells &&
            ScreenCharacter((uint16_t)(start + i)) == needle[i]) {
       ++i;
     }
@@ -730,9 +732,9 @@ static void PaceToRealTime(void) {
 
 // Pass a key on to the guest, as the scancodes a PC/XT keyboard would send.
 static void TypeKey(SouthbridgeKeyEvent event) {
-  uint8_t scancodes[kKeymapMaxScancodes];
-  const uint8_t count = KeymapTranslate(event, scancodes);
-  for (uint8_t i = 0; i < count; ++i) {
+  uint8_t scancodes[kKeymapMaxNumScancodes];
+  const uint8_t num_scancodes = KeymapTranslate(event, scancodes);
+  for (uint8_t i = 0; i < num_scancodes; ++i) {
     YKeyboardHandleKeyPress(&g_platform.keyboard, scancodes[i]);
   }
 }
@@ -764,7 +766,7 @@ static void RunScreen(const DebugCommand* command) {
     return;
   }
   const char* attrs = DebugCommandArgument(command, "attrs");
-  const bool with_attributes = attrs != NULL && attrs[0] == 't';
+  const bool has_attributes = attrs != NULL && attrs[0] == 't';
   const uint8_t* registers = video->registers;
   const uint32_t start = ((uint32_t)registers[kCRTCStartAddressHigh] << 8) |
                          registers[kCRTCStartAddressLow];
@@ -806,7 +808,7 @@ static void RunScreen(const DebugCommand* command) {
     Y_LOG_REPLY(
         &g_runtime_logger, command->id, command->name, Y_LOG_UINT("row", row),
         Y_LOG_STRING("chars", hex));
-    if (with_attributes) {
+    if (has_attributes) {
       for (uint8_t column = 0; column < mode->columns; ++column) {
         snprintf(&hex[column * 2], 3, "%02X", attributes[column]);
       }
@@ -856,19 +858,19 @@ typedef struct BoxShown {
   uint8_t rows;
   // Whether a box is showing: false while the guest's screen is drawn in
   // full, as it is when the menu opens.
-  bool drawn;
+  bool is_drawn;
 } BoxShown;
 
 // Which Shift keys are held, from the keyboard controller's events.
-static bool g_left_shift_held;
-static bool g_right_shift_held;
+static bool g_is_left_shift_held;
+static bool g_is_right_shift_held;
 // The status page's lines, which the menu's status screen draws, and what
 // the menu decided, which it writes as it closes.
-static StatusScreenLine g_status_lines[kStatusScreenLines];
+static StatusScreenLine g_status_lines[kStatusScreenNumLines];
 static EmulatorMenuExit g_exit;
 // The box last sent to core 1, and whether one drawn has still to be sent.
 static BoxShown g_box_shown;
-static bool g_box_pending;
+static bool g_is_box_pending;
 
 // Mark the guest's screen to be drawn in full, and send it to core 1 now
 // rather than at the next frame, which never comes while the VM is paused.
@@ -914,32 +916,32 @@ static void ResumeFromMenu(void) {
 // that opens and closes the menu: both held, the second just pressed. Nothing
 // in DOS holds both, and typing never does.
 static bool TrackHotkey(SouthbridgeKeyEvent event) {
-  bool* held = NULL;
+  bool* is_held = NULL;
   if (event.key == kKeyCodeLeftShift) {
-    held = &g_left_shift_held;
+    is_held = &g_is_left_shift_held;
   } else if (event.key == kKeyCodeRightShift) {
-    held = &g_right_shift_held;
+    is_held = &g_is_right_shift_held;
   } else {
     return false;
   }
-  const bool was_held = *held;
-  *held = event.state != kSouthbridgeKeyReleased;
-  return *held && !was_held && g_left_shift_held && g_right_shift_held;
+  const bool was_held = *is_held;
+  *is_held = event.state != kSouthbridgeKeyReleased;
+  return *is_held && !was_held && g_is_left_shift_held && g_is_right_shift_held;
 }
 
 // Open the menu over the VM, which pauses it. The guest has seen both Shift
 // keys go down, and while the menu has the keyboard it would not see them
 // come up, so it is told now.
-static void OpenMenu(bool running) {
-  if (running) {
+static void OpenMenu(bool is_running) {
+  if (is_running) {
     TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeLeftShift});
     TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeRightShift});
   }
   g_clock.pause_start_us = time_us_64();
   // The guest's screen is under the first box in full, so nothing of a box
   // is showing yet.
-  g_box_shown.drawn = false;
-  g_box_pending = false;
+  g_box_shown.is_drawn = false;
+  g_is_box_pending = false;
   ScreenShow(EmulatorMenuScreenOpen(&g_session, g_status_lines, &g_exit));
   SYSTEM_INFO("menu_opened");
 }
@@ -965,17 +967,17 @@ static void CloseMenu(void) {
 // Otherwise it goes to the menu while the menu shows, and to the guest while
 // it does not. Kept out of line, so that the menu's locals are on core 0's
 // stack only while a key is handled, not under the whole run loop.
-static __noinline void HandleKey(SouthbridgeKeyEvent key, bool running) {
+static __noinline void HandleKey(SouthbridgeKeyEvent key, bool is_running) {
   const bool menu_was_open = ScreenIsOpen();
-  const bool hotkey = TrackHotkey(key);
-  if (!menu_was_open && running) {
+  const bool is_hotkey = TrackHotkey(key);
+  if (!menu_was_open && is_running) {
     TypeKey(key);
   }
-  if (hotkey && !menu_was_open) {
-    OpenMenu(running);
+  if (is_hotkey && !menu_was_open) {
+    OpenMenu(is_running);
     return;
   }
-  if (hotkey) {
+  if (is_hotkey) {
     ScreenHide();
   } else if (menu_was_open) {
     ScreenHandleKey(key);
@@ -997,8 +999,8 @@ static __noinline void TickMenu(void) {
 
 // Whether a box over the guest's screen is one of another size than the one
 // shown, so that the guest's screen has to be drawn under it first.
-static bool BoxResized(const DisplayBox* box) {
-  return g_box_shown.drawn &&
+static bool IsBoxResized(const DisplayBox* box) {
+  return g_box_shown.is_drawn &&
          (box->columns != g_box_shown.columns || box->rows != g_box_shown.rows);
 }
 
@@ -1016,16 +1018,16 @@ static __noinline void DrawMenu(void) {
   // in costs nothing that matters while the VM is paused.
   DescribeStatus(g_status_lines);
   if (ScreenDraw(box)) {
-    g_box_pending = true;
+    g_is_box_pending = true;
   }
-  if (!g_box_pending || (BoxResized(box) && !RedrawGuest())) {
+  if (!g_is_box_pending || (IsBoxResized(box) && !RedrawGuest())) {
     return;
   }
   DisplayEndBox();
   g_box_shown.columns = box->columns;
   g_box_shown.rows = box->rows;
-  g_box_shown.drawn = true;
-  g_box_pending = false;
+  g_box_shown.is_drawn = true;
+  g_is_box_pending = false;
 }
 
 // ============================================================================
@@ -1036,13 +1038,13 @@ static __noinline void DrawMenu(void) {
 // The boot is watched on the way, and DOS's questions answered. While the
 // menu is open, the VM is paused and the loop only looks after the menu,
 // the keyboard and commands.
-static void RunVM(bool vm_ready) {
+static void RunVM(bool is_vm_ready) {
   const uint64_t max_boot_cycles =
       (uint64_t)kBootMaxEmulatedSeconds * Y_PLATFORM_CPU_CYCLES_PER_SECOND;
   uint64_t next_poll_cycles = kBootPollCycles;
   uint64_t next_render_cycles = kCyclesPerRender;
-  bool running = vm_ready;
-  bool screen_on = true;
+  bool is_running = is_vm_ready;
+  bool is_screen_on = true;
   absolute_time_t blank_at = at_the_end_of_time;
   absolute_time_t next_status_at = get_absolute_time();
   g_clock.last_ticks = g_platform.ticks;
@@ -1052,10 +1054,10 @@ static void RunVM(bool vm_ready) {
   for (;;) {
     AnnounceToNewHost();
 
-    if (running && !ScreenIsOpen() && RunBatch() == Y_PLATFORM_HUNG) {
+    if (is_running && !ScreenIsOpen() && RunBatch() == Y_PLATFORM_HUNG) {
       // The CPU halted with nothing to wake it.
       SYSTEM_ERROR("vm_stopped");
-      running = false;
+      is_running = false;
     }
 
     PollCommand(&g_command_us);
@@ -1066,17 +1068,18 @@ static void RunVM(bool vm_ready) {
     // changed meanwhile is drawn with the next frame.
     SouthbridgeKeyEvent key;
     if (SouthbridgePollKey(&key) || TypingNext(&key)) {
-      HandleKey(key, running);
-      if (!screen_on) {
+      HandleKey(key, is_running);
+      if (!is_screen_on) {
         DisplayTurnOn();
-        screen_on = true;
+        is_screen_on = true;
       }
-      if (BootIsOver()) {
+      if (IsBootOver()) {
         blank_at = make_timeout_time_ms(kScreenOnMs);
       }
     }
 
-    if (screen_on && !ScreenIsOpen() && g_clock.cycles >= next_render_cycles) {
+    if (is_screen_on && !ScreenIsOpen() &&
+        g_clock.cycles >= next_render_cycles) {
       do {
         next_render_cycles += kCyclesPerRender;
       } while (next_render_cycles <= g_clock.cycles);
@@ -1085,9 +1088,9 @@ static void RunVM(bool vm_ready) {
       }
     }
 
-    if (!BootIsOver() && !ScreenIsOpen()) {
+    if (!IsBootOver() && !ScreenIsOpen()) {
       BootStage stage = g_status.boot_stage;
-      if (!running || g_clock.cycles >= max_boot_cycles) {
+      if (!is_running || g_clock.cycles >= max_boot_cycles) {
         stage = kBootStageFailed;
       } else if (g_clock.cycles >= next_poll_cycles) {
         do {
@@ -1098,7 +1101,7 @@ static void RunVM(bool vm_ready) {
       if (stage != g_status.boot_stage) {
         SetBootStage(stage);
       }
-      if (BootIsOver()) {
+      if (IsBootOver()) {
         // DOS polls for a key at the prompt rather than halting, and the
         // idle skip is what keeps that from costing a real time loop's worth
         // of emulation. Not before now: DOS idles at the date and time
@@ -1109,24 +1112,24 @@ static void RunVM(bool vm_ready) {
       }
     }
 
-    if (screen_on && time_reached(next_status_at)) {
+    if (is_screen_on && time_reached(next_status_at)) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       UpdateStatusRows();
     }
     if (ScreenIsOpen()) {
       TickMenu();
     }
-    if (screen_on && ScreenIsOpen()) {
+    if (is_screen_on && ScreenIsOpen()) {
       DrawMenu();
     }
-    if (screen_on && time_reached(blank_at)) {
+    if (is_screen_on && time_reached(blank_at)) {
       DisplayTurnOff();
-      screen_on = false;
+      is_screen_on = false;
     }
 
     if (ScreenIsOpen()) {
       sleep_ms(kPausedPollMs);
-    } else if (running) {
+    } else if (is_running) {
       PaceToRealTime();
     } else {
       sleep_ms(kStoppedPollMs);
@@ -1144,16 +1147,16 @@ static void RunVM(bool vm_ready) {
 // goes in the first: two drives writing one image would each overwrite the
 // other's sectors.
 static __noinline void OpenDrives(void) {
-  const char* paths[kVMDrives] = {"", "", "", ""};
+  const char* paths[kNumVMDrives] = {"", "", "", ""};
   char message[kTextColumns + 1];
   if (g_has_vm) {
     snprintf(message, sizeof(message), "Started %s", g_vm->entry.name);
     EmulatorStatusBarPostMessage(message);
-    for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+    for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
       paths[drive] = g_vm->drives[drive];
       for (uint8_t earlier = 0; earlier < drive; ++earlier) {
         if (paths[drive][0] != '\0' &&
-            FSSamePath(paths[drive], paths[earlier])) {
+            FSIsSamePath(paths[drive], paths[earlier])) {
           char name[kDiskImageNameLength + 1];
           DiskImageName(paths[drive], name);
           snprintf(
@@ -1165,7 +1168,7 @@ static __noinline void OpenDrives(void) {
       }
     }
   }
-  DiskImageStatus opened[kVMDrives];
+  DiskImageStatus opened[kNumVMDrives];
   FloppyOpen(&paths[kVMDriveFD1], !g_has_vm, &opened[kVMDriveFD1]);
   HardDiskOpen(&paths[kVMDriveHD1]);
   opened[kVMDriveHD1] = HardDiskGetImage(kHardDisk1)->status;
@@ -1173,7 +1176,7 @@ static __noinline void OpenDrives(void) {
   if (!g_has_vm) {
     return;
   }
-  for (uint8_t drive = 0; drive < kVMDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     if (paths[drive][0] == '\0' || opened[drive] == kDiskImageOpen) {
       continue;
     }

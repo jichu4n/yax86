@@ -12,7 +12,7 @@
 enum {
   // The most entries a list holds. A folder with more lists the first ones
   // found and says it was cut short.
-  kFileListMaxEntries = 64,
+  kFileListMaxNumEntries = 64,
 };
 
 typedef enum FileListKind {
@@ -32,12 +32,12 @@ typedef struct FileListEntry {
 typedef struct FileList {
   // The folder listed.
   char path[kFSMaxPath + 1];
-  FileListEntry entries[kFileListMaxEntries];
-  uint8_t count;
-  // Whether the folder had more than kFileListMaxEntries.
-  bool truncated;
+  FileListEntry entries[kFileListMaxNumEntries];
+  uint8_t num_entries;
+  // Whether the folder had more than kFileListMaxNumEntries.
+  bool is_truncated;
   // Whether the folder could be read at all.
-  bool readable;
+  bool is_readable;
 } FileList;
 
 // Read the folder at path, listing the files exactly one of image_sizes long

@@ -23,11 +23,11 @@ enum {
   // The status rows, the panel's last two rows of 4x10 cells, and the line
   // a pixel high that sets them off from the guest's screen, two pixels above
   // them. The rows between are left black.
-  kStatusFirstRow = kTextRows - kDisplayStatusRows,
+  kStatusFirstRow = kTextRows - kDisplayNumStatusRows,
   kStatusSeparatorY = kStatusFirstRow * kFont4x10Height - 2,
   kStatusSeparatorColor = 8,
 
-  kCGAColors = 16,
+  kNumCGAColors = 16,
 
   // How a graphics mode's 640x200 is drawn in the guest's screen's 320x250:
   // two pixels across to one, and four rows down to five.
@@ -67,15 +67,15 @@ typedef enum DisplayMessage {
 // buffer alone and tries again later.
 static YVideoState g_frame;
 static uint8_t g_frame_vram[Y_VIDEO_CGA_VRAM_SIZE];
-static volatile bool g_frame_busy;
+static volatile bool g_is_frame_busy;
 static DisplayStatus g_status;
-static volatile bool g_status_busy;
+static volatile bool g_is_status_busy;
 static DisplayBox g_box;
-static volatile bool g_box_busy;
+static volatile bool g_is_box_busy;
 static volatile Font4x10 g_font = kFont4x10Default;
 // The id of the command a screenshot answers.
 static uint32_t g_screenshot_id;
-static volatile bool g_screenshot_busy;
+static volatile bool g_is_screenshot_busy;
 
 // Shared between the cores, so only read or written under the lock.
 static critical_section_t g_stats_lock;
@@ -83,8 +83,8 @@ static DisplayStats g_stats;
 
 // Core 1's own, while it draws a frame: whether the region being drawn is on
 // the panel, and whether it is in a graphics mode.
-static bool g_region_on_panel;
-static bool g_region_graphics;
+static bool g_is_region_on_panel;
+static bool g_is_region_graphics;
 static uint16_t g_pixel_batch[Y_VIDEO_PIXEL_BATCH_SIZE];
 static uint64_t g_frame_pixels;
 // A graphics mode's row, scaled to the panel, as it is put together, and how
@@ -95,11 +95,11 @@ static uint16_t g_graphics_row_width;
 
 // The CGA's colors in the panel's RGB565, which the runtime's own text is
 // drawn in. Core 1's, filled in before it draws anything.
-static uint16_t g_palette[kCGAColors];
+static uint16_t g_palette[kNumCGAColors];
 // The status rows as core 1 last drew them, so that only the rows that change
 // are drawn again.
 static DisplayStatus g_drawn_status;
-static bool g_status_drawn;
+static bool g_is_status_drawn;
 
 // ============================================================================
 // Core 1
@@ -119,13 +119,13 @@ static uint16_t GraphicsPanelRow(uint16_t y) {
 // and the panel keeps its own frame memory, so a region goes straight to the
 // panel as a window of its own.
 static void BeginRenderRegion(YVideoState* video, YVideoRegion region) {
-  g_region_graphics =
+  g_is_region_graphics =
       YVideoGetModeMetadata(video)->type == Y_VIDEO_MODE_GRAPHICS;
   uint16_t x = region.origin.x;
   uint16_t y = region.origin.y;
   uint16_t width = region.width;
   uint16_t height = region.height;
-  if (g_region_graphics) {
+  if (g_is_region_graphics) {
     x /= kGraphicsColumnsPerPixel;
     width /= kGraphicsColumnsPerPixel;
     y = GraphicsPanelRow(region.origin.y);
@@ -133,9 +133,9 @@ static void BeginRenderRegion(YVideoState* video, YVideoRegion region) {
     g_graphics_row_length = 0;
     g_graphics_row_width = width;
   }
-  g_region_on_panel =
+  g_is_region_on_panel =
       x + width <= kGuestScreenWidth && y + height <= kGuestScreenHeight;
-  if (g_region_on_panel) {
+  if (g_is_region_on_panel) {
     LcdBeginWrite(x, (uint16_t)(kGuestScreenTop + y), width, height);
   }
 }
@@ -155,8 +155,8 @@ static uint16_t GraphicsBlend(YVideoRGB left, YVideoRGB right) {
 // the core's dirty columns across, 8 pixels each in a graphics mode, so a
 // batch is always an even number of pixels and a pair never spans two.
 static void WriteGraphicsPixels(
-    YVideoPosition origin, const YVideoRGB* pixels, uint8_t count) {
-  for (uint8_t i = 0; i + 1 < count; i += kGraphicsColumnsPerPixel) {
+    YVideoPosition origin, const YVideoRGB* pixels, uint8_t num_pixels) {
+  for (uint8_t i = 0; i + 1 < num_pixels; i += kGraphicsColumnsPerPixel) {
     g_graphics_row[g_graphics_row_length++] =
         GraphicsBlend(pixels[i], pixels[i + 1]);
   }
@@ -174,23 +174,23 @@ static void WriteGraphicsPixels(
 
 static void WriteGuestPixels(
     Y_UNUSED YVideoState* video, YVideoPosition origin, const YVideoRGB* pixels,
-    uint8_t count) {
-  if (!g_region_on_panel) {
+    uint8_t num_pixels) {
+  if (!g_is_region_on_panel) {
     return;
   }
-  if (g_region_graphics) {
-    WriteGraphicsPixels(origin, pixels, count);
+  if (g_is_region_graphics) {
+    WriteGraphicsPixels(origin, pixels, num_pixels);
     return;
   }
-  for (uint8_t i = 0; i < count; ++i) {
+  for (uint8_t i = 0; i < num_pixels; ++i) {
     g_pixel_batch[i] = LcdRGB565(pixels[i].r, pixels[i].g, pixels[i].b);
   }
-  LcdWritePixels(g_pixel_batch, count);
-  g_frame_pixels += count;
+  LcdWritePixels(g_pixel_batch, num_pixels);
+  g_frame_pixels += num_pixels;
 }
 
 static void EndRenderRegion(Y_UNUSED YVideoState* video) {
-  if (g_region_on_panel) {
+  if (g_is_region_on_panel) {
     LcdEndWrite();
   }
 }
@@ -209,7 +209,7 @@ static void DrawFrame(void) {
   critical_section_exit(&g_stats_lock);
 }
 
-static bool TextRowsEqual(const DisplayTextRow* a, const DisplayTextRow* b) {
+static bool AreTextRowsEqual(const DisplayTextRow* a, const DisplayTextRow* b) {
   for (uint8_t i = 0; i < kTextColumns; ++i) {
     if (a->chars[i] != b->chars[i] || a->attrs[i] != b->attrs[i]) {
       return false;
@@ -220,9 +220,10 @@ static bool TextRowsEqual(const DisplayTextRow* a, const DisplayTextRow* b) {
 
 // Draw the status rows that differ from the ones last drawn.
 static void DrawStatus(void) {
-  for (uint8_t row = 0; row < kDisplayStatusRows; ++row) {
+  for (uint8_t row = 0; row < kDisplayNumStatusRows; ++row) {
     const DisplayTextRow* text = &g_status.rows[row];
-    if (g_status_drawn && TextRowsEqual(text, &g_drawn_status.rows[row])) {
+    if (g_is_status_drawn &&
+        AreTextRowsEqual(text, &g_drawn_status.rows[row])) {
       continue;
     }
     TextDrawCells(
@@ -230,7 +231,7 @@ static void DrawStatus(void) {
         kTextColumns, g_palette);
     g_drawn_status.rows[row] = *text;
   }
-  g_status_drawn = true;
+  g_is_status_drawn = true;
 }
 
 static void DrawBox(void) {
@@ -300,13 +301,13 @@ static void SendScreenshot(uint32_t id) {
 }
 
 // Mark a buffer core 0 handed over as drawn, giving it back.
-static void GiveBack(volatile bool* busy) {
+static void GiveBack(volatile bool* is_busy) {
   __dmb();
-  *busy = false;
+  *is_busy = false;
 }
 
 static void DisplayMain(void) {
-  for (uint8_t i = 0; i < kCGAColors; ++i) {
+  for (uint8_t i = 0; i < kNumCGAColors; ++i) {
     const YVideoRGB rgb = YVideoDefaultConfig.cga_palette[i];
     g_palette[i] = LcdRGB565(rgb.r, rgb.g, rgb.b);
   }
@@ -321,11 +322,11 @@ static void DisplayMain(void) {
     switch (message) {
       case kDisplayMessageFrame:
         DrawFrame();
-        GiveBack(&g_frame_busy);
+        GiveBack(&g_is_frame_busy);
         break;
       case kDisplayMessageStatus:
         DrawStatus();
-        GiveBack(&g_status_busy);
+        GiveBack(&g_is_status_busy);
         break;
       case kDisplayMessageTurnOff:
         LcdSetDisplayOn(false);
@@ -335,12 +336,12 @@ static void DisplayMain(void) {
         break;
       case kDisplayMessageBox:
         DrawBox();
-        GiveBack(&g_box_busy);
+        GiveBack(&g_is_box_busy);
         break;
       case kDisplayMessageFont:
         TextSetFont(g_font);
-        if (g_status_drawn) {
-          for (uint8_t row = 0; row < kDisplayStatusRows; ++row) {
+        if (g_is_status_drawn) {
+          for (uint8_t row = 0; row < kDisplayNumStatusRows; ++row) {
             const DisplayTextRow* text = &g_drawn_status.rows[row];
             TextDrawCells(
                 0, (uint8_t)(kStatusFirstRow + row), text->chars, text->attrs,
@@ -350,7 +351,7 @@ static void DisplayMain(void) {
         break;
       case kDisplayMessageScreenshot:
         SendScreenshot(g_screenshot_id);
-        GiveBack(&g_screenshot_busy);
+        GiveBack(&g_is_screenshot_busy);
         break;
     }
   }
@@ -363,8 +364,8 @@ static void DisplayMain(void) {
 // Hand core 1 a buffer core 0 has just filled in. There is never more than one
 // message of each kind outstanding, so the FIFO, eight deep, never fills and
 // this never waits.
-static void HandOver(DisplayMessage message, volatile bool* busy) {
-  *busy = true;
+static void HandOver(DisplayMessage message, volatile bool* is_busy) {
+  *is_busy = true;
   __dmb();
   multicore_fifo_push_blocking(message);
 }
@@ -379,7 +380,7 @@ bool DisplaySendFrame(YVideoState* video) {
   if (video->dirty_state.status == Y_VIDEO_CLEAN) {
     return true;
   }
-  if (g_frame_busy) {
+  if (g_is_frame_busy) {
     critical_section_enter_blocking(&g_stats_lock);
     ++g_stats.frames_late;
     critical_section_exit(&g_stats_lock);
@@ -397,19 +398,21 @@ bool DisplaySendFrame(YVideoState* video) {
   critical_section_enter_blocking(&g_stats_lock);
   g_stats.copy_us += copy_us - start_us;
   critical_section_exit(&g_stats_lock);
-  HandOver(kDisplayMessageFrame, &g_frame_busy);
+  HandOver(kDisplayMessageFrame, &g_is_frame_busy);
   return true;
 }
 
 DisplayStatus* DisplayBeginStatus(void) {
-  return g_status_busy ? NULL : &g_status;
+  return g_is_status_busy ? NULL : &g_status;
 }
 
-void DisplayEndStatus(void) { HandOver(kDisplayMessageStatus, &g_status_busy); }
+void DisplayEndStatus(void) {
+  HandOver(kDisplayMessageStatus, &g_is_status_busy);
+}
 
-DisplayBox* DisplayBeginBox(void) { return g_box_busy ? NULL : &g_box; }
+DisplayBox* DisplayBeginBox(void) { return g_is_box_busy ? NULL : &g_box; }
 
-void DisplayEndBox(void) { HandOver(kDisplayMessageBox, &g_box_busy); }
+void DisplayEndBox(void) { HandOver(kDisplayMessageBox, &g_is_box_busy); }
 
 void DisplaySetFont(Font4x10 font) {
   if (font == g_font) {
@@ -431,11 +434,11 @@ void DisplayTurnOn(void) {
 }
 
 bool DisplaySendScreenshot(uint32_t id) {
-  if (g_screenshot_busy) {
+  if (g_is_screenshot_busy) {
     return false;
   }
   g_screenshot_id = id;
-  HandOver(kDisplayMessageScreenshot, &g_screenshot_busy);
+  HandOver(kDisplayMessageScreenshot, &g_is_screenshot_busy);
   return true;
 }
 

@@ -19,10 +19,10 @@ static const char* g_copy_title;
 static const char* g_copy_what;
 
 void VMManagerNoteChange(
-    VMManager* vm_manager, const char* name, bool show_vm) {
-  vm_manager->changed = true;
+    VMManager* vm_manager, const char* name, bool should_show_vm) {
+  vm_manager->did_change = true;
   snprintf(vm_manager->to_select, sizeof(vm_manager->to_select), "%s", name);
-  vm_manager->show_vm = show_vm;
+  vm_manager->should_show_vm = should_show_vm;
 }
 
 void VMManagerShowProblem(

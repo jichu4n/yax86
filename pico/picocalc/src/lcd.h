@@ -28,7 +28,7 @@ void LcdBeginWrite(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 // Write pixels into the window LcdBeginWrite() opened. A window may be filled
 // over any number of calls, and each one costs only the transfer: the bus is
 // set up for pixels once, when the write begins.
-void LcdWritePixels(const uint16_t* pixels, uint32_t count);
+void LcdWritePixels(const uint16_t* pixels, uint32_t num_pixels);
 
 // End the write LcdBeginWrite() began.
 void LcdEndWrite(void);
@@ -44,7 +44,7 @@ void LcdBeginRead(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
 // Read pixels from the window LcdBeginRead() opened, in RGB565, exactly as
 // they were written.
-void LcdReadPixels(uint16_t* pixels, uint32_t count);
+void LcdReadPixels(uint16_t* pixels, uint32_t num_pixels);
 
 // End the read LcdBeginRead() began.
 void LcdEndRead(void);
@@ -53,7 +53,7 @@ void LcdEndRead(void);
 // panel to sleep, at its lowest power; what it last held is kept, so turning
 // it back on shows that again. A static image left showing for hours can
 // leave its mark on the panel, which is what turning it off is for.
-void LcdSetDisplayOn(bool on);
+void LcdSetDisplayOn(bool is_on);
 
 // Fill a rectangle with one color.
 void LcdFillRect(

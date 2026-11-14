@@ -26,7 +26,7 @@ static ListBox g_list_box;
 static uint64_t g_refreshed_us;
 
 ScreenResult StatusScreenOpen(
-    const StatusScreenLine lines[kStatusScreenLines]) {
+    const StatusScreenLine lines[kStatusScreenNumLines]) {
   g_lines = lines;
   g_list_box.selected = 0;
   g_refreshed_us = time_us_64();
@@ -49,17 +49,17 @@ static ScreenResult OnTick(void) {
   const uint64_t now_us = time_us_64();
   if (now_us - g_refreshed_us >= kRefreshUs) {
     g_refreshed_us = now_us;
-    g_list_box.dirty = true;
+    g_list_box.is_dirty = true;
   }
   return ScreenStays();
 }
 
 static void OnDraw(DisplayBox* box) {
-  BoxPlace(box, kListBoxWideColumns, kStatusScreenLines + 4);
+  BoxPlace(box, kListBoxWideColumns, kStatusScreenNumLines + 4);
   uint8_t row = 0;
   BoxEdgeRow(&box->text[row++], box->columns, true, "Status");
   BoxBlankRow(&box->text[row++], box->columns);
-  for (uint8_t i = 0; i < kStatusScreenLines; ++i) {
+  for (uint8_t i = 0; i < kStatusScreenNumLines; ++i) {
     DisplayTextRow* text = &box->text[row++];
     BoxBlankRow(text, box->columns);
     BoxPutText(text, box->columns, 2, g_lines[i].label, kBoxAttrTitle);
@@ -80,5 +80,5 @@ const Screen kStatusScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

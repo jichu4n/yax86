@@ -21,9 +21,11 @@ void FSCopyPath(const char* from, char to[kFSMaxPath + 1]) {
   snprintf(to, kFSMaxPath + 1, "%s", from);
 }
 
-bool FSSamePath(const char* a, const char* b) { return strcasecmp(a, b) == 0; }
+bool FSIsSamePath(const char* a, const char* b) {
+  return strcasecmp(a, b) == 0;
+}
 
-bool FSInFolder(const char* path, const char* folder) {
+bool FSIsInFolder(const char* path, const char* folder) {
   const size_t length = strlen(folder);
   return strncasecmp(path, folder, length) == 0 && path[length] == '/';
 }

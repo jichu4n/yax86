@@ -24,21 +24,21 @@ static const char* const kStatusDescriptions[] = {
 };
 
 static FATFS g_volume;
-static bool g_mount_tried;
+static bool g_did_try_mount;
 static DiskImageStatus g_mount_status;
 
 void DiskImageUnmountCard(void) {
-  if (g_mount_tried && g_mount_status == kDiskImageOpen) {
+  if (g_did_try_mount && g_mount_status == kDiskImageOpen) {
     f_mount(NULL, "", 0);
   }
-  g_mount_tried = false;
+  g_did_try_mount = false;
 }
 
 DiskImageStatus DiskImageMountCard(void) {
-  if (g_mount_tried) {
+  if (g_did_try_mount) {
     return g_mount_status;
   }
-  g_mount_tried = true;
+  g_did_try_mount = true;
   g_mount_status = kDiskImageOpen;
   if (!SdcardIsInserted()) {
     g_mount_status = kDiskImageNoCard;
@@ -57,7 +57,7 @@ DiskImageStatus DiskImageMountCard(void) {
 
 // Have FatFs map where the image's clusters are, so that a seek is a lookup.
 static bool MapClusters(DiskImage* image) {
-  image->link_map[0] = kDiskImageLinkMapEntries;
+  image->link_map[0] = kDiskImageNumLinkMapEntries;
   image->file.cltbl = image->link_map;
   if (f_lseek(&image->file, CREATE_LINKMAP) == FR_OK) {
     return true;
@@ -80,7 +80,7 @@ static DiskImageStatus Open(DiskImage* image, const char* path, uint32_t size) {
   }
   image->size = size;
   image->sector_index = kNoSector;
-  image->fast_seek = MapClusters(image);
+  image->uses_fast_seek = MapClusters(image);
   return kDiskImageOpen;
 }
 
@@ -118,7 +118,7 @@ static bool SeekSector(DiskImage* image, int32_t index) {
 }
 
 static void WriteBackSector(DiskImage* image) {
-  if (!image->sector_dirty) {
+  if (!image->is_sector_dirty) {
     return;
   }
   const uint64_t start_us = time_us_64();
@@ -130,7 +130,7 @@ static void WriteBackSector(DiskImage* image) {
   }
   ++image->stats.sector_writes;
   image->stats.write_us += time_us_64() - start_us;
-  image->sector_dirty = false;
+  image->is_sector_dirty = false;
 }
 
 // Bring a sector of the image into memory, writing back the one it replaces
@@ -169,35 +169,36 @@ void DiskImageWriteByte(DiskImage* image, uint32_t offset, uint8_t value) {
   }
   LoadSector(image, (int32_t)(offset / kSectorSize));
   image->sector[offset % kSectorSize] = value;
-  image->sector_dirty = true;
+  image->is_sector_dirty = true;
   if (offset % kSectorSize == kSectorSize - 1) {
     WriteBackSector(image);
   }
 }
 
 bool DiskImageReadSectors(
-    DiskImage* image, uint32_t index, uint8_t* data, uint32_t count) {
+    DiskImage* image, uint32_t index, uint8_t* data, uint32_t num_sectors) {
   if (image->status != kDiskImageOpen) {
     return false;
   }
   // The held sector may have bytes the card does not.
   WriteBackSector(image);
   const uint64_t start_us = time_us_64();
-  const UINT length = count * kSectorSize;
+  const UINT length = num_sectors * kSectorSize;
   UINT read = 0;
-  const bool ok = SeekSector(image, (int32_t)index) &&
-                  f_read(&image->file, data, length, &read) == FR_OK &&
-                  read == length;
-  if (!ok) {
+  const bool is_ok = SeekSector(image, (int32_t)index) &&
+                     f_read(&image->file, data, length, &read) == FR_OK &&
+                     read == length;
+  if (!is_ok) {
     ++image->stats.errors;
   }
-  image->stats.sector_reads += count;
+  image->stats.sector_reads += num_sectors;
   image->stats.read_us += time_us_64() - start_us;
-  return ok;
+  return is_ok;
 }
 
 bool DiskImageWriteSectors(
-    DiskImage* image, uint32_t index, const uint8_t* data, uint32_t count) {
+    DiskImage* image, uint32_t index, const uint8_t* data,
+    uint32_t num_sectors) {
   if (image->status != kDiskImageOpen) {
     return false;
   }
@@ -205,17 +206,17 @@ bool DiskImageWriteSectors(
   // The held sector may be one of these, which would leave it stale.
   image->sector_index = kNoSector;
   const uint64_t start_us = time_us_64();
-  const UINT length = count * kSectorSize;
+  const UINT length = num_sectors * kSectorSize;
   UINT written = 0;
-  const bool ok = SeekSector(image, (int32_t)index) &&
-                  f_write(&image->file, data, length, &written) == FR_OK &&
-                  written == length;
-  if (!ok) {
+  const bool is_ok = SeekSector(image, (int32_t)index) &&
+                     f_write(&image->file, data, length, &written) == FR_OK &&
+                     written == length;
+  if (!is_ok) {
     ++image->stats.errors;
   }
-  image->stats.sector_writes += count;
+  image->stats.sector_writes += num_sectors;
   image->stats.write_us += time_us_64() - start_us;
-  return ok;
+  return is_ok;
 }
 
 void DiskImageClose(DiskImage* image) {
@@ -224,5 +225,5 @@ void DiskImageClose(DiskImage* image) {
     f_close(&image->file);
   }
   image->status = kDiskImageEjected;
-  image->sector_dirty = false;
+  image->is_sector_dirty = false;
 }

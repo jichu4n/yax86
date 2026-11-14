@@ -51,9 +51,9 @@ static const NamedKey kNamedKeys[] = {
 
 static SouthbridgeKeyEvent g_queue[kTypingQueueSize];
 static uint16_t g_head;
-static uint16_t g_count;
+static uint16_t g_num_queued;
 
-static bool NamesEqual(const char* a, const char* b) {
+static bool AreNamesEqual(const char* a, const char* b) {
   while (*a != '\0' && *a == *b) {
     ++a;
     ++b;
@@ -62,15 +62,15 @@ static bool NamesEqual(const char* a, const char* b) {
 }
 
 static void Push(uint8_t code, SouthbridgeKeyState state) {
-  const uint16_t tail = (uint16_t)((g_head + g_count) % kTypingQueueSize);
+  const uint16_t tail = (uint16_t)((g_head + g_num_queued) % kTypingQueueSize);
   g_queue[tail].state = state;
   g_queue[tail].key = code;
-  ++g_count;
+  ++g_num_queued;
 }
 
 bool TypingQueueKey(uint8_t code, TypingAction action) {
   const uint16_t needed = action == kTypingTap ? 2 : 1;
-  if (needed > kTypingQueueSize - g_count) {
+  if (needed > kTypingQueueSize - g_num_queued) {
     return false;
   }
   if (action != kTypingRelease) {
@@ -84,7 +84,7 @@ bool TypingQueueKey(uint8_t code, TypingAction action) {
 
 bool TypingFindKey(const char* name, uint8_t* code) {
   for (uint32_t i = 0; i < sizeof(kNamedKeys) / sizeof(kNamedKeys[0]); ++i) {
-    if (NamesEqual(name, kNamedKeys[i].name)) {
+    if (AreNamesEqual(name, kNamedKeys[i].name)) {
       *code = kNamedKeys[i].code;
       return true;
     }
@@ -99,11 +99,11 @@ bool TypingFindKey(const char* name, uint8_t* code) {
 }
 
 bool TypingNext(SouthbridgeKeyEvent* event) {
-  if (g_count == 0) {
+  if (g_num_queued == 0) {
     return false;
   }
   *event = g_queue[g_head];
   g_head = (uint16_t)((g_head + 1) % kTypingQueueSize);
-  --g_count;
+  --g_num_queued;
   return true;
 }

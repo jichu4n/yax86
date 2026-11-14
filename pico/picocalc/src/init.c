@@ -57,7 +57,7 @@ const char* InitOverclockName(OverclockResult overclock) {
 
 void InitFormatKeyboardVersion(
     const InitStatus* status, char* buffer, size_t size) {
-  if (!status->southbridge_answered) {
+  if (!status->did_southbridge_answer) {
     snprintf(buffer, size, "not answering");
   } else if (status->southbridge_version == 0) {
     snprintf(buffer, size, "older than v1.6");
@@ -98,10 +98,10 @@ static OverclockResult Overclock(void) {
     vreg_set_voltage(VREG_VOLTAGE_1_20);
   }
   busy_wait_us(kVoltageSettleUs);
-  const bool applied = set_sys_clock_khz(YAX86_PICOCALC_SYS_CLK_KHZ, false);
+  const bool was_applied = set_sys_clock_khz(YAX86_PICOCALC_SYS_CLK_KHZ, false);
   watchdog_disable();
   g_overclock_marker = 0;
-  return applied ? kOverclockApplied : kOverclockPLLCannot;
+  return was_applied ? kOverclockApplied : kOverclockPLLCannot;
 }
 #endif
 
@@ -138,7 +138,7 @@ void isr_hardfault(void) {
 // stack while the modes run.
 __noinline void InitSystem(InitStatus* status) {
   // Before anything can fault again.
-  status->after_fault = g_fault_marker == kFaultMarker;
+  status->is_after_fault = g_fault_marker == kFaultMarker;
   g_fault_marker = 0;
   stdio_init_all();
 #if YAX86_PICOCALC_SYS_CLK_KHZ
@@ -156,6 +156,6 @@ __noinline void InitSystem(InitStatus* status) {
   status->lcd_spi_hz = DisplayStart();
   SouthbridgeInit();
   SpeakerInit();
-  status->southbridge_answered =
+  status->did_southbridge_answer =
       SouthbridgeReadVersion(&status->southbridge_version);
 }

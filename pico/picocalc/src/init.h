@@ -35,11 +35,11 @@ typedef struct InitStatus {
   // Whether the keyboard controller answered when asked its firmware's
   // version, and the version it gave, as 0x16 for v1.6, or 0 for one older
   // than v1.6, which cannot say.
-  bool southbridge_answered;
+  bool did_southbridge_answer;
   uint8_t southbridge_version;
   // Whether the last start ended in a hard fault, which leaves paging off for
   // this one.
-  bool after_fault;
+  bool is_after_fault;
 } InitStatus;
 
 // Initialize the system, recording what was found in *status. Call once, at

@@ -2644,38 +2644,38 @@ static const Font4x10Table kFontDCA = {
 };
 // clang-format on
 
-static const Font4x10Table* const kFonts[kFont4x10Count] = {
+static const Font4x10Table* const kFonts[kFont4x10NumFonts] = {
     [kFont4x10Ymini] = &kFontYmini,   [kFont4x10Atari800] = &kFontAtari800,
     [kFont4x10Miniwi] = &kFontMiniwi, [kFont4x10Terminal] = &kFontTerminal,
     [kFont4x10DCA] = &kFontDCA,
 };
 
-static const char* const kFontNames[kFont4x10Count] = {
+static const char* const kFontNames[kFont4x10NumFonts] = {
     [kFont4x10Ymini] = "ymini",   [kFont4x10Atari800] = "atari800",
     [kFont4x10Miniwi] = "miniwi", [kFont4x10Terminal] = "terminal",
     [kFont4x10DCA] = "dca",
 };
 
-static const char* const kFontLabels[kFont4x10Count] = {
+static const char* const kFontLabels[kFont4x10NumFonts] = {
     [kFont4x10Ymini] = "Ymini",     [kFont4x10Atari800] = "Atari800",
     [kFont4x10Miniwi] = "Miniwi-8", [kFont4x10Terminal] = "Terminal 4x6",
     [kFont4x10DCA] = "DCA 4x7",
 };
 
 const Font4x10Table* Font4x10Glyphs(Font4x10 font) {
-  return kFonts[font < kFont4x10Count ? font : kFont4x10Default];
+  return kFonts[font < kFont4x10NumFonts ? font : kFont4x10Default];
 }
 
 const char* Font4x10Name(Font4x10 font) {
-  return kFontNames[font < kFont4x10Count ? font : kFont4x10Default];
+  return kFontNames[font < kFont4x10NumFonts ? font : kFont4x10Default];
 }
 
 const char* Font4x10Label(Font4x10 font) {
-  return kFontLabels[font < kFont4x10Count ? font : kFont4x10Default];
+  return kFontLabels[font < kFont4x10NumFonts ? font : kFont4x10Default];
 }
 
 bool Font4x10FromName(const char* name, Font4x10* font) {
-  for (uint8_t i = 0; i < kFont4x10Count; ++i) {
+  for (uint8_t i = 0; i < kFont4x10NumFonts; ++i) {
     if (strcasecmp(name, kFontNames[i]) == 0) {
       *font = (Font4x10)i;
       return true;

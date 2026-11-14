@@ -375,7 +375,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   the loop takes a box from `DisplayBeginBox()`, `ScreenDraw(box)` says
   whether the screen drew into it, and the loop then sends it to core 1
   with `DisplayEndBox()`. A screen draws only when its dirty flag, the
-  `bool` its `Screen.dirty` points at, is set. The router sets it when the
+  `bool` its `Screen.is_dirty` points at, is set. The router sets it when the
   screen opens and when it shows again, and clears it once `on_draw` has
   drawn, so `on_draw` only draws, and an `on_resume` with nothing to do is
   left out. The sending is each mode's, as the status rows
@@ -411,7 +411,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   itself, in `src/launcher_menu_screen.c`.
 - **An `on_resume` returns a result, as a key does**, so a parent can act on
   what its child left: the USB page, finding exporting ended, goes back too,
-  and the list, told through `g_exported`, reads the card again.
+  and the list, told through `g_did_export`, reads the card again.
 - **The browser is a screen any parent opens**: `BrowserScreenOpen()` takes
   the images to list, the folder, the image already chosen, and where to
   write the one chosen. A parent that cannot use the image, such as one
@@ -826,7 +826,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   date. It hands the list box each key with `ListBoxHandleKeyEvent()`,
   which ignores releases, clears the problem, moves the selection and
   returns a `ListBoxAction`: whether the key selected the item or went
-  back. The screen's `Screen.dirty` points at the list box's flag, which a
+  back. The screen's `Screen.is_dirty` points at the list box's flag, which a
   key that moves the selection sets. A screen with keys of its own checks
   `ListBoxIsKeyPress()`, handles its own keys, and hands the rest to
   `ListBoxHandleKeyCode()`: the name being typed, Backspace up a folder in
@@ -981,7 +981,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - Each write has reached the card before its callback returns, so
   SYNCHRONIZE CACHE has nothing to do.
 - **The card's size** is read from its CSD register (CMD9) when it is
-  brought up - `SdcardGetBlockCount()`, `sd_blocks` in the report - as the
+  brought up - `SdcardGetNumBlocks()`, `sd_blocks` in the report - as the
   reader has to say how many blocks it holds. FatFs never needed it.
 
 ## Commands over USB

@@ -46,7 +46,7 @@ static __noinline void ChooseFont(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, kFont4x10Count)) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kFont4x10NumFonts)) {
     case kListBoxActionSelect:
       ChooseFont();
       return ScreenBack();
@@ -58,12 +58,13 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(DisplayBox* box) {
-  BoxItem items[kFont4x10Count];
-  for (uint8_t i = 0; i < kFont4x10Count; ++i) {
+  BoxItem items[kFont4x10NumFonts];
+  for (uint8_t i = 0; i < kFont4x10NumFonts; ++i) {
     items[i] = (BoxItem){Font4x10Label((Font4x10)i), false};
   }
   ListBoxDrawItems(
-      box, "Font", NULL, 0, items, kFont4x10Count, g_list_box.selected, true);
+      box, "Font", NULL, 0, items, kFont4x10NumFonts, g_list_box.selected,
+      true);
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -75,5 +76,5 @@ const Screen kFontScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

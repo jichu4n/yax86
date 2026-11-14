@@ -18,11 +18,11 @@ static uint32_t* g_size;
 
 ScreenResult BrowserScreenOpen(
     FileBrowserImages images, const char* folder, const char* current,
-    const char* const in_drives[kFloppyDrives], char path[kFSMaxPath + 1],
+    const char* const in_drives[kNumFloppyDrives], char path[kFSMaxPath + 1],
     uint32_t* size) {
   g_browser.images = images;
   g_browser.current = current;
-  for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+  for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     g_browser.in_drives[drive] = in_drives != NULL ? in_drives[drive] : NULL;
   }
   g_path = path;
@@ -48,7 +48,7 @@ static ScreenResult OpenEntry(void) {
       return ScreenStays();
     case kFileBrowserOpenedFolder:
       g_list_box.selected = selected;
-      g_list_box.dirty = true;
+      g_list_box.is_dirty = true;
       return ScreenStays();
     case kFileBrowserSelectedImage:
       break;
@@ -59,8 +59,8 @@ static ScreenResult OpenEntry(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (
-      ListBoxHandleKeyEvent(&g_list_box, event, FileBrowserCount(&g_browser))) {
+  switch (ListBoxHandleKeyEvent(
+      &g_list_box, event, FileBrowserNumEntries(&g_browser))) {
     case kListBoxActionMoved:
       FileBrowserScrollTo(&g_browser, g_list_box.selected);
       return ScreenStays();
@@ -68,9 +68,9 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
       return OpenEntry();
     case kListBoxActionBack:
       // Backspace goes up a folder, until the card's root.
-      if (event.key == kKeyCodeBackspace && !FileBrowserAtRoot(&g_browser)) {
+      if (event.key == kKeyCodeBackspace && !FileBrowserIsAtRoot(&g_browser)) {
         g_list_box.selected = FileBrowserUp(&g_browser);
-        g_list_box.dirty = true;
+        g_list_box.is_dirty = true;
         return ScreenStays();
       }
       return ScreenBack();
@@ -94,5 +94,5 @@ const Screen kBrowserScreen = {
     .on_draw = OnDraw,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

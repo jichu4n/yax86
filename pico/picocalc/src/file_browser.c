@@ -36,11 +36,11 @@ uint8_t FileBrowserOpen(FileBrowser* browser, const char* folder) {
     return selected;
   }
   char path_of_entry[kFSMaxPath + 1];
-  for (uint8_t i = 0; i < browser->list.count; ++i) {
+  for (uint8_t i = 0; i < browser->list.num_entries; ++i) {
     if (browser->list.entries[i].kind == kFileListImage &&
         FileListEntryPath(
             &browser->list, &browser->list.entries[i], path_of_entry) &&
-        FSSamePath(path_of_entry, current)) {
+        FSIsSamePath(path_of_entry, current)) {
       selected = i;
       FileBrowserScrollTo(browser, selected);
     }
@@ -48,7 +48,7 @@ uint8_t FileBrowserOpen(FileBrowser* browser, const char* folder) {
   return selected;
 }
 
-bool FileBrowserAtRoot(const FileBrowser* browser) {
+bool FileBrowserIsAtRoot(const FileBrowser* browser) {
   return browser->list.path[0] == '\0';
 }
 
@@ -59,11 +59,11 @@ uint8_t FileBrowserUp(FileBrowser* browser) {
   FSFolderOf(left, parent);
   uint8_t selected = FileBrowserOpen(browser, parent);
   char path_of_entry[kFSMaxPath + 1];
-  for (uint8_t i = 0; i < browser->list.count; ++i) {
+  for (uint8_t i = 0; i < browser->list.num_entries; ++i) {
     if (browser->list.entries[i].kind == kFileListFolder &&
         FileListEntryPath(
             &browser->list, &browser->list.entries[i], path_of_entry) &&
-        FSSamePath(path_of_entry, left)) {
+        FSIsSamePath(path_of_entry, left)) {
       selected = i;
       FileBrowserScrollTo(browser, selected);
     }
@@ -71,14 +71,14 @@ uint8_t FileBrowserUp(FileBrowser* browser) {
   return selected;
 }
 
-uint8_t FileBrowserCount(const FileBrowser* browser) {
-  return browser->list.count;
+uint8_t FileBrowserNumEntries(const FileBrowser* browser) {
+  return browser->list.num_entries;
 }
 
 FileBrowserSelection FileBrowserSelect(
     FileBrowser* browser, uint8_t* selected, char path[kFSMaxPath + 1],
     uint32_t* size) {
-  if (*selected >= browser->list.count) {
+  if (*selected >= browser->list.num_entries) {
     return kFileBrowserNothing;
   }
   const FileListEntry* entry = &browser->list.entries[*selected];
@@ -134,12 +134,12 @@ void FileBrowserDraw(
   for (uint8_t i = 0; i < kListBoxRows; ++i) {
     DisplayTextRow* row = &box->text[1 + i];
     const uint8_t index = (uint8_t)(browser->top + i);
-    if (index >= list->count) {
+    if (index >= list->num_entries) {
       BoxBlankRow(row, box->columns);
-      if (i == 0 && !list->readable) {
+      if (i == 0 && !list->is_readable) {
         BoxPutText(
             row, box->columns, 3, "The card cannot be read", kBoxAttrText);
-      } else if (i == 1 && list->count <= 1) {
+      } else if (i == 1 && list->num_entries <= 1) {
         BoxPutText(row, box->columns, 3, BrowseEmpty(browser), kBoxAttrText);
       }
       continue;
@@ -162,9 +162,9 @@ void FileBrowserDraw(
     if (!FileListEntryPath(list, entry, path)) {
       continue;
     }
-    for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
+    for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
       const char* in_drive = browser->in_drives[drive];
-      if (in_drive != NULL && FSSamePath(path, in_drive)) {
+      if (in_drive != NULL && FSIsSamePath(path, in_drive)) {
         char note[16];
         snprintf(note, sizeof(note), "in %s", kVMDriveLabels[drive]);
         BoxPutText(row, box->columns, kBrowseNoteColumn, note, attr);
@@ -174,6 +174,6 @@ void FileBrowserDraw(
   // A folder with more entries than a list holds says so on the bottom edge.
   BoxEdgeRow(
       &box->text[kListBoxRows + 1], box->columns, false,
-      list->truncated ? "the first 64 entries" : NULL);
-  ListBoxDrawScrollArrows(box, browser->top, list->count);
+      list->is_truncated ? "the first 64 entries" : NULL);
+  ListBoxDrawScrollArrows(box, browser->top, list->num_entries);
 }

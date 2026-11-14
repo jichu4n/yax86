@@ -100,9 +100,9 @@ typedef struct SouthbridgeBattery {
   // Whether there is a reading. There is none until the first read, nor
   // while the controller reports no battery - it reports 0% then - nor from
   // firmware that answers the register with something out of range.
-  bool known;
+  bool is_known;
   uint8_t percent;
-  bool charging;
+  bool is_charging;
 } SouthbridgeBattery;
 
 SouthbridgeBattery SouthbridgeGetBattery(void);

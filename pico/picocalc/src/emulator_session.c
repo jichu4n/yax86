@@ -10,15 +10,15 @@
 #include "runtime_log.h"
 
 // Each floppy drive's name in the logs.
-static const char* const kDriveNames[kFloppyDrives] = {
+static const char* const kDriveNames[kNumFloppyDrives] = {
     [kFloppyDriveA] = "fd1",
     [kFloppyDriveB] = "fd2",
 };
 
 uint8_t EmulatorSessionNumFloppyDrives(const EmulatorSession* session) {
-  return session->config != NULL && !session->config->present[kVMDriveFD2]
+  return session->config != NULL && !session->config->is_present[kVMDriveFD2]
              ? 1
-             : kFloppyDrives;
+             : kNumFloppyDrives;
 }
 
 bool EmulatorSessionCanPowerOff(const EmulatorSession* session) {
@@ -68,7 +68,7 @@ void EmulatorSessionInsertFloppy(
   DiskImageName(path, name);
   char message[kTextColumns + 1];
   const FloppyDrive holding = FloppyDriveHolding(path);
-  if (holding != kFloppyDrives) {
+  if (holding != kNumFloppyDrives) {
     snprintf(
         message, sizeof(message), "%s is already in %s", name,
         kVMDriveLabels[holding]);

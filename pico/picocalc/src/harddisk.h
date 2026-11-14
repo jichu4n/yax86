@@ -13,13 +13,13 @@
 typedef enum HardDiskDrive {
   kHardDisk1 = 0,
   kHardDisk2,
-  kHardDisks,
+  kNumHardDisks,
 } HardDiskDrive;
 
 // Open each drive's image on the SD card: a path from the card's root, or
 // NULL or empty for none, which leaves the drive kDiskImageEjected. Call
 // once, before HardDiskAttach(). The paths are copied.
-void HardDiskOpen(const char* const paths[kHardDisks]);
+void HardDiskOpen(const char* const paths[kNumHardDisks]);
 
 // Attach the drives whose images opened to the hard disk controller.
 void HardDiskAttach(YHDCState* hdc);

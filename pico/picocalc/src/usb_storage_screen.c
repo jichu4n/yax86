@@ -19,10 +19,10 @@
 typedef enum USBItem {
   kUSBCard = 0,
   kUSBImage,
-  kUSBItemCount,
+  kNumUSBItems,
 } USBItem;
 
-static const BoxItem kUSBItems[kUSBItemCount] = {
+static const BoxItem kUSBItems[kNumUSBItems] = {
     [kUSBCard] = {"Entire SD card", false},
     [kUSBImage] = {"Disk image", true},
 };
@@ -32,9 +32,9 @@ extern const Screen kUSBStorageScreen;
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
 // The parent's, set once exporting has ended.
-static bool* g_exported;
+static bool* g_did_export;
 // Whether exporting has ended, which the active screen sets.
-static bool g_stopped;
+static bool g_did_stop;
 // The image found in the browser, empty for none, and its size.
 static char g_found_path[kFSMaxPath + 1];
 static uint32_t g_found_size;
@@ -42,8 +42,8 @@ static uint32_t g_found_size;
 static DiskImage g_image;
 static char g_image_path[kFSMaxPath + 1];
 
-ScreenResult USBStorageScreenOpen(bool* exported) {
-  g_exported = exported;
+ScreenResult USBStorageScreenOpen(bool* did_export) {
+  g_did_export = did_export;
   g_list_box.selected = kUSBCard;
   return ScreenOpen(&kUSBStorageScreen);
 }
@@ -53,9 +53,9 @@ ScreenResult USBStorageScreenOpen(bool* exported) {
 static ScreenResult ShareCard(void) {
   DiskImageUnmountCard();
   UsbStorageExportCard();
-  g_stopped = false;
+  g_did_stop = false;
   SYSTEM_INFO("usb_card_exported");
-  return USBStorageActiveScreenOpen(NULL, &g_stopped);
+  return USBStorageActiveScreenOpen(NULL, &g_did_stop);
 }
 
 // Export the disk image found in the browser, the card staying mounted to
@@ -80,13 +80,13 @@ static __noinline ScreenResult ShareImage(void) {
     return BrowserScreenReopen();
   }
   UsbStorageExportImage(&g_image);
-  g_stopped = false;
+  g_did_stop = false;
   SYSTEM_INFO("usb_image_exported", Y_LOG_STRING("path", g_image_path));
-  return USBStorageActiveScreenOpen(&g_image, &g_stopped);
+  return USBStorageActiveScreenOpen(&g_image, &g_did_stop);
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, kUSBItemCount)) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumUSBItems)) {
     case kListBoxActionSelect:
       if (g_list_box.selected == kUSBImage) {
         return BrowserScreenOpen(
@@ -104,9 +104,9 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // Back from exporting, which has ended, or from the browser, with an image
 // found or none.
 static ScreenResult OnResume(void) {
-  if (g_stopped) {
-    g_stopped = false;
-    *g_exported = true;
+  if (g_did_stop) {
+    g_did_stop = false;
+    *g_did_export = true;
     return ScreenBack();
   }
   if (g_found_path[0] != '\0') {
@@ -118,7 +118,7 @@ static ScreenResult OnResume(void) {
 static void OnDraw(DisplayBox* box) {
   ListBoxDrawItems(
       box, "USB mass storage", (const char* const[]){"Export to the host:"}, 1,
-      kUSBItems, kUSBItemCount, g_list_box.selected, true);
+      kUSBItems, kNumUSBItems, g_list_box.selected, true);
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -131,5 +131,5 @@ const Screen kUSBStorageScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

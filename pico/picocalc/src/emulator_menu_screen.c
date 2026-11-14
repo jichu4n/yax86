@@ -17,10 +17,10 @@ typedef enum MainItem {
   kMainReset,
   // Shown only while there is a list of VMs to go back to.
   kMainPowerOff,
-  kMainItemCount,
+  kNumMainItems,
 } MainItem;
 
-static const BoxItem kMainItems[kMainItemCount] = {
+static const BoxItem kMainItems[kNumMainItems] = {
     [kMainDriveA] = {"Floppy disk 1", true},
     [kMainDriveB] = {"Floppy disk 2", true},
     [kMainStatus] = {"Status", true},
@@ -52,49 +52,49 @@ static EmulatorMenuExit* g_exit;
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
 // The answers of the Reset and Power off questions, which they write.
-static bool g_reset_confirmed;
-static bool g_power_off_confirmed;
+static bool g_is_reset_confirmed;
+static bool g_is_power_off_confirmed;
 
 ScreenResult EmulatorMenuScreenOpen(
     EmulatorSession* session,
-    const StatusScreenLine status_lines[kStatusScreenLines],
+    const StatusScreenLine status_lines[kStatusScreenNumLines],
     EmulatorMenuExit* exit) {
   g_session = session;
   g_status_lines = status_lines;
   g_exit = exit;
   *g_exit = kEmulatorMenuExitResume;
-  g_reset_confirmed = false;
-  g_power_off_confirmed = false;
+  g_is_reset_confirmed = false;
+  g_is_power_off_confirmed = false;
   g_list_box.selected = 0;
   return ScreenOpen(&kEmulatorMenuScreen);
 }
 
 // The items as they show: Floppy disk 2 only with a second floppy drive, and
 // Power off only with a list to go back to. Returns how many.
-static uint8_t ShownItems(MainItem items[kMainItemCount]) {
-  uint8_t count = 0;
-  for (uint8_t item = 0; item < kMainItemCount; ++item) {
+static uint8_t ShownItems(MainItem items[kNumMainItems]) {
+  uint8_t num_shown = 0;
+  for (uint8_t item = 0; item < kNumMainItems; ++item) {
     if ((item == kMainDriveB &&
          EmulatorSessionNumFloppyDrives(g_session) < 2) ||
         (item == kMainPowerOff && !EmulatorSessionCanPowerOff(g_session))) {
       continue;
     }
-    items[count++] = (MainItem)item;
+    items[num_shown++] = (MainItem)item;
   }
-  return count;
+  return num_shown;
 }
 
-static uint8_t ItemCount(void) {
-  MainItem items[kMainItemCount];
+static uint8_t NumItems(void) {
+  MainItem items[kNumMainItems];
   return ShownItems(items);
 }
 
 // The item on the row selected.
 static MainItem SelectedItem(void) {
-  MainItem items[kMainItemCount];
-  const uint8_t count = ShownItems(items);
-  return g_list_box.selected < count ? items[g_list_box.selected]
-                                     : kMainItemCount;
+  MainItem items[kNumMainItems];
+  const uint8_t num_shown = ShownItems(items);
+  return g_list_box.selected < num_shown ? items[g_list_box.selected]
+                                         : kNumMainItems;
 }
 
 // Open the screen of the item selected.
@@ -108,17 +108,17 @@ static ScreenResult OnSelect(void) {
     case kMainStatus:
       return StatusScreenOpen(g_status_lines);
     case kMainReset:
-      return QuestionScreenOpen(&kResetQuestion, &g_reset_confirmed);
+      return QuestionScreenOpen(&kResetQuestion, &g_is_reset_confirmed);
     case kMainPowerOff:
-      return QuestionScreenOpen(&kPowerOffQuestion, &g_power_off_confirmed);
-    case kMainItemCount:
+      return QuestionScreenOpen(&kPowerOffQuestion, &g_is_power_off_confirmed);
+    case kNumMainItems:
       break;
   }
   return ScreenStays();
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, ItemCount())) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, NumItems())) {
     case kListBoxActionSelect:
       return OnSelect();
     case kListBoxActionBack:
@@ -132,11 +132,11 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // Reset or Power off answered yes closes the menu, for the emulator to carry
 // it out.
 static ScreenResult OnResume(void) {
-  if (g_reset_confirmed) {
+  if (g_is_reset_confirmed) {
     *g_exit = kEmulatorMenuExitReset;
     return ScreenClose();
   }
-  if (g_power_off_confirmed) {
+  if (g_is_power_off_confirmed) {
     *g_exit = kEmulatorMenuExitPowerOff;
     return ScreenClose();
   }
@@ -144,14 +144,14 @@ static ScreenResult OnResume(void) {
 }
 
 static void OnDraw(DisplayBox* box) {
-  MainItem shown[kMainItemCount];
-  const uint8_t count = ShownItems(shown);
-  BoxItem items[kMainItemCount];
-  for (uint8_t i = 0; i < count; ++i) {
+  MainItem shown[kNumMainItems];
+  const uint8_t num_shown = ShownItems(shown);
+  BoxItem items[kNumMainItems];
+  for (uint8_t i = 0; i < num_shown; ++i) {
     items[i] = kMainItems[shown[i]];
   }
   ListBoxDrawItems(
-      box, "yax86", NULL, 0, items, count, g_list_box.selected, false);
+      box, "yax86", NULL, 0, items, num_shown, g_list_box.selected, false);
 }
 
 static const char* Hint(void) { return kListBoxHint; }
@@ -164,5 +164,5 @@ const Screen kEmulatorMenuScreen = {
     .on_resume = OnResume,
     .hint = Hint,
     .page_name = PageName,
-    .dirty = &g_list_box.dirty,
+    .is_dirty = &g_list_box.is_dirty,
 };

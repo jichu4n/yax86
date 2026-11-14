@@ -25,7 +25,7 @@
 // Both must outlive the screen.
 ScreenResult BrowserScreenOpen(
     FileBrowserImages images, const char* folder, const char* current,
-    const char* const in_drives[kFloppyDrives], char path[kFSMaxPath + 1],
+    const char* const in_drives[kNumFloppyDrives], char path[kFSMaxPath + 1],
     uint32_t* size);
 
 // Show the browser again as it was left, with its folder and entry

@@ -64,7 +64,7 @@ enum {
 };
 
 // The read in flight, if any, and which register it is of.
-static bool g_poll_in_flight;
+static bool g_is_poll_in_flight;
 static uint8_t g_poll_register;
 // When the poll next reads the battery rather than the key FIFO: straight
 // away, the first time.
@@ -72,7 +72,7 @@ static uint64_t g_next_battery_read_us;
 static SouthbridgeBattery g_battery;
 static uint64_t g_poll_started_us;
 // Whether a read has found the key FIFO empty yet.
-static bool g_poll_caught_up;
+static bool g_has_poll_caught_up;
 static SouthbridgePollStats g_poll_stats;
 
 void SouthbridgeInit(void) {
@@ -151,7 +151,7 @@ static void StartKeyFIFORead(void) {
   hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS;
   hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS | I2C_IC_DATA_CMD_STOP_BITS;
   g_poll_started_us = time_us_64();
-  g_poll_in_flight = true;
+  g_is_poll_in_flight = true;
 }
 
 static void DrainReceiveFIFO(void) {
@@ -162,7 +162,7 @@ static void DrainReceiveFIFO(void) {
 
 bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
   i2c_hw_t* const hw = i2c_get_hw(kSouthbridgeI2C);
-  if (!g_poll_in_flight) {
+  if (!g_is_poll_in_flight) {
     SetTargetAddress();
     StartKeyFIFORead();
     return false;
@@ -181,12 +181,12 @@ bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
     ++g_poll_stats.reads;
     if (g_poll_register == kRegisterBattery) {
       const uint8_t percent = key & kBatteryPercentMask;
-      g_battery.known = percent > 0 && percent <= kBatteryMaxPercent;
+      g_battery.is_known = percent > 0 && percent <= kBatteryMaxPercent;
       g_battery.percent = percent;
-      g_battery.charging = (key & kBatteryChargingBit) != 0;
+      g_battery.is_charging = (key & kBatteryChargingBit) != 0;
     } else if (state == kSouthbridgeKeyIdle) {
-      g_poll_caught_up = true;
-    } else if (!g_poll_caught_up) {
+      g_has_poll_caught_up = true;
+    } else if (!g_has_poll_caught_up) {
       ++g_poll_stats.stale_keys;
     } else if (state <= kSouthbridgeKeyReleased) {
       event->state = (SouthbridgeKeyState)state;

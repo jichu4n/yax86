@@ -23,7 +23,7 @@
 
 enum {
   // The status rows: the two text rows at the bottom of the panel.
-  kDisplayStatusRows = 2,
+  kDisplayNumStatusRows = 2,
   // The most rows a box can have. The tallest, the in-VM menu's status page,
   // needs 10. A row is 160 bytes of SRAM.
   kDisplayBoxMaxRows = 12,
@@ -40,7 +40,7 @@ typedef struct DisplayTextRow {
 // The status rows, top to bottom: messages, and the machine's - see
 // status_bar.h.
 typedef struct DisplayStatus {
-  DisplayTextRow rows[kDisplayStatusRows];
+  DisplayTextRow rows[kDisplayNumStatusRows];
 } DisplayStatus;
 
 // A box of text drawn over the guest's screen.

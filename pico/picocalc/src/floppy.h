@@ -16,19 +16,19 @@
 typedef enum FloppyDrive {
   kFloppyDriveA = 0,
   kFloppyDriveB,
-  kFloppyDrives,
+  kNumFloppyDrives,
 } FloppyDrive;
 
 // Open each drive's image on the SD card: a path from the card's root, or
 // NULL or empty for none. A drive whose image does not open is left empty.
-// If built_in, drive A's path is to be empty, and it holds the built-in
+// If is_built_in, drive A's path is to be empty, and it holds the built-in
 // floppy instead, its image's status
 // saying why there is none on the card: no card, or kDiskImageNotFound.
 // Fills opened with how each drive's open went. Call once, before
 // FloppyAttach().
 void FloppyOpen(
-    const char* const paths[kFloppyDrives], bool built_in,
-    DiskImageStatus opened[kFloppyDrives]);
+    const char* const paths[kNumFloppyDrives], bool is_built_in,
+    DiskImageStatus opened[kNumFloppyDrives]);
 
 // Hand the drives to the floppy controller, with their disks in.
 void FloppyAttach(YFDCState* fdc);
@@ -39,7 +39,7 @@ void FloppyAttach(YFDCState* fdc);
 // kDiskImageEjected.
 const DiskImage* FloppyGetImage(FloppyDrive drive);
 
-// The drive whose image is the one at path, or kFloppyDrives if none is.
+// The drive whose image is the one at path, or kNumFloppyDrives if none is.
 FloppyDrive FloppyDriveHolding(const char* path);
 
 // Take the disk out of a drive, writing back what the guest was part way

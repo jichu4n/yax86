@@ -24,9 +24,9 @@ typedef struct Question {
   const char* page_name;
 } Question;
 
-// Ask question. *confirmed is set to false, and to true if the action is
-// selected, before the screen goes back. question, its strings and confirmed
+// Ask question. *is_confirmed is set to false, and to true if the action is
+// selected, before the screen goes back. question, its strings and is_confirmed
 // must outlive the screen.
-ScreenResult QuestionScreenOpen(const Question* question, bool* confirmed);
+ScreenResult QuestionScreenOpen(const Question* question, bool* is_confirmed);
 
 #endif  // YAX86_PICOCALC_QUESTION_SCREEN_H

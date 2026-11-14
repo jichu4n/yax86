@@ -45,7 +45,7 @@ typedef enum EmulatorMenuExit {
 // once the menu closes. All of these must outlive the menu.
 ScreenResult EmulatorMenuScreenOpen(
     EmulatorSession* session,
-    const StatusScreenLine status_lines[kStatusScreenLines],
+    const StatusScreenLine status_lines[kStatusScreenNumLines],
     EmulatorMenuExit* exit);
 
 #endif  // YAX86_PICOCALC_EMULATOR_MENU_SCREEN_H

@@ -20,7 +20,7 @@ enum {
   // The longest problem described.
   kConfigFileProblemLength = 60,
   // The most settings one update sets.
-  kConfigFileMaxSettings = 32,
+  kConfigFileMaxNumSettings = 32,
 };
 
 // What a file's pairs are handed to, one at a time. Returns false, with the
@@ -53,7 +53,7 @@ typedef struct ConfigFileSetting {
 } ConfigFileSetting;
 
 // Set each key to its value in the file at path, creating the file if there is
-// none, for up to kConfigFileMaxSettings settings. Every pair with the key
+// none, for up to kConfigFileMaxNumSettings settings. Every pair with the key
 // takes the new value where it stands - the last read is the one that counts -
 // and a key with no pair gains a line of its own at the end. Everything else in
 // the file stays as it was.
@@ -63,7 +63,7 @@ typedef struct ConfigFileSetting {
 // false, with the problem described, if the file could not be read, would be
 // longer than kConfigFileMaxBytes, or could not be written.
 bool ConfigFileUpdate(
-    const char* path, const ConfigFileSetting* settings, uint8_t count,
+    const char* path, const ConfigFileSetting* settings, uint8_t num_settings,
     char problem[kConfigFileProblemLength + 1]);
 
 #endif  // YAX86_PICOCALC_CONFIG_FILE_H

@@ -31,12 +31,12 @@ void BoxBlankRow(DisplayTextRow* row, uint8_t columns) {
 }
 
 void BoxEdgeRow(
-    DisplayTextRow* row, uint8_t columns, bool top, const char* title) {
-  row->chars[0] = (char)(top ? kBoxTopLeft : kBoxBottomLeft);
+    DisplayTextRow* row, uint8_t columns, bool is_top, const char* title) {
+  row->chars[0] = (char)(is_top ? kBoxTopLeft : kBoxBottomLeft);
   for (uint8_t i = 1; i + 1 < columns; ++i) {
     row->chars[i] = (char)kBoxHorizontal;
   }
-  row->chars[columns - 1] = (char)(top ? kBoxTopRight : kBoxBottomRight);
+  row->chars[columns - 1] = (char)(is_top ? kBoxTopRight : kBoxBottomRight);
   for (uint8_t i = 0; i < columns; ++i) {
     row->attrs[i] = kBoxAttrBorder;
   }
@@ -77,19 +77,21 @@ void BoxPutText(
 }
 
 void BoxItemTextRow(
-    DisplayTextRow* row, uint8_t columns, const char* text, bool selected) {
+    DisplayTextRow* row, uint8_t columns, const char* text, bool is_selected) {
   BoxBlankRow(row, columns);
-  if (selected) {
+  if (is_selected) {
     for (uint8_t i = 1; i + 1 < columns; ++i) {
       row->attrs[i] = kBoxAttrSelected;
     }
   }
-  BoxPutText(row, columns, 3, text, selected ? kBoxAttrSelected : kBoxAttrText);
+  BoxPutText(
+      row, columns, 3, text, is_selected ? kBoxAttrSelected : kBoxAttrText);
 }
 
 void BoxItemRow(
-    DisplayTextRow* row, uint8_t columns, const BoxItem* item, bool selected) {
-  BoxItemTextRow(row, columns, item->text, selected);
+    DisplayTextRow* row, uint8_t columns, const BoxItem* item,
+    bool is_selected) {
+  BoxItemTextRow(row, columns, item->text, is_selected);
   if (item->opens_box) {
     row->chars[columns - 3] = '>';
   }
