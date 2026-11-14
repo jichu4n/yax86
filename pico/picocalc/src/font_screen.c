@@ -47,11 +47,11 @@ static __noinline void ChooseFont(void) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, kFont4x10Count)) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kFont4x10Count)) {
+    case kListBoxActionSelect:
       ChooseFont();
       return ScreenBack();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();

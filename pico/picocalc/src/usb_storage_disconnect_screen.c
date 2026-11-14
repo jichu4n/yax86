@@ -32,13 +32,13 @@ ScreenResult USBStorageDisconnectScreenOpen(bool* confirmed) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, kStopItemCount)) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kStopItemCount)) {
+    case kListBoxActionSelect:
       if (g_list_box.selected == kStopConfirm) {
         *g_confirmed = true;
       }
       return ScreenBack();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();
