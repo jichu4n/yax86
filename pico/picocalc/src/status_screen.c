@@ -48,7 +48,7 @@ static bool OnDraw(DisplayBox* box) {
   if (now_us - g_drawn_us >= kRefreshUs) {
     g_list_box.dirty = true;
   }
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   BoxPlace(box, kListBoxWideColumns, kStatusScreenLines + 4);

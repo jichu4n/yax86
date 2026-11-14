@@ -110,7 +110,7 @@ static ScreenResult OnResume(void) {
 
 // What the drive holds, over its items.
 static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   const DiskImage* image = FloppyGetImage(g_drive);
