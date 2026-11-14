@@ -46,17 +46,17 @@ void ListBoxScrollTo(uint8_t row, uint8_t* top) {
 
 void ListBoxDrawScrollArrows(DisplayMenu* menu, uint8_t top, uint8_t total) {
   if (top > 0) {
-    menu->text[1].chars[menu->columns - 1] = (char)kMenuBoxArrowUp;
+    menu->text[1].chars[menu->columns - 1] = (char)kBoxArrowUp;
   }
   if (top + kListBoxRows < total) {
-    menu->text[kListBoxRows].chars[menu->columns - 1] = (char)kMenuBoxArrowDown;
+    menu->text[kListBoxRows].chars[menu->columns - 1] = (char)kBoxArrowDown;
   }
 }
 
 void ListBoxDrawItems(
     DisplayMenu* menu, const char* title, const char* const* lines,
-    uint8_t line_count, const MenuBoxItem* items, uint8_t count,
-    uint8_t selected, bool list_sized) {
+    uint8_t line_count, const BoxItem* items, uint8_t count, uint8_t selected,
+    bool list_sized) {
   // The box holds kDisplayMenuMaxRows: lines past what fits are left out,
   // rather than drawn past its rows.
   if (count + 4 + line_count + 1 > kDisplayMenuMaxRows) {
@@ -72,38 +72,26 @@ void ListBoxDrawItems(
   if (list_sized && rows < kListBoxRows + 2) {
     rows = kListBoxRows + 2;
   }
-  MenuBoxPlace(menu, kListBoxNarrowColumns, rows);
+  BoxPlace(menu, kListBoxNarrowColumns, rows);
   uint8_t row = 0;
-  MenuBoxEdgeRow(&menu->text[row++], menu->columns, true, title);
+  BoxEdgeRow(&menu->text[row++], menu->columns, true, title);
   if (!list_sized || line_count > 0) {
-    MenuBoxBlankRow(&menu->text[row++], menu->columns);
+    BoxBlankRow(&menu->text[row++], menu->columns);
   }
   for (uint8_t i = 0; i < line_count; ++i) {
-    MenuBoxBlankRow(&menu->text[row], menu->columns);
-    MenuBoxPutText(
-        &menu->text[row++], menu->columns, 3, lines[i], kMenuBoxAttrText);
+    BoxBlankRow(&menu->text[row], menu->columns);
+    BoxPutText(&menu->text[row++], menu->columns, 3, lines[i], kBoxAttrText);
   }
   if (line_count > 0) {
-    MenuBoxBlankRow(&menu->text[row++], menu->columns);
+    BoxBlankRow(&menu->text[row++], menu->columns);
   }
   for (uint8_t i = 0; i < count; ++i) {
-    MenuBoxItemRow(&menu->text[row++], menu->columns, &items[i], i == selected);
+    BoxItemRow(&menu->text[row++], menu->columns, &items[i], i == selected);
   }
   while (row + 1 < rows) {
-    MenuBoxBlankRow(&menu->text[row++], menu->columns);
+    BoxBlankRow(&menu->text[row++], menu->columns);
   }
-  MenuBoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
-}
-
-bool ListBoxFrameResized(const ListBoxFrame* frame, const DisplayMenu* menu) {
-  return frame->drawn &&
-         (menu->columns != frame->columns || menu->rows != frame->rows);
-}
-
-void ListBoxFrameDrawn(ListBoxFrame* frame, const DisplayMenu* menu) {
-  frame->columns = menu->columns;
-  frame->rows = menu->rows;
-  frame->drawn = true;
+  BoxEdgeRow(&menu->text[row], menu->columns, false, NULL);
 }
 
 const char kListBoxHint[] = "\x18\x19=Move  Enter=Select  Esc=Back";

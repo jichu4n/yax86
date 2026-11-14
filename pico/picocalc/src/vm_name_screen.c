@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "box.h"
 #include "display.h"
 #include "list_box.h"
-#include "menu_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
 #include "status_bar.h"
@@ -166,7 +166,7 @@ static bool OnDraw(DisplayMenu* menu, Y_UNUSED uint64_t now_us) {
     field[g_name_length] = '_';
   }
   field[kFSMaxFolderName] = '\0';
-  MenuBoxPutText(row, menu->columns, 3, field, kMenuBoxAttrSelected);
+  BoxPutText(row, menu->columns, 3, field, kBoxAttrSelected);
   return true;
 }
 
