@@ -10,6 +10,7 @@
 #include "core/video.h"
 #include "debug_command.h"
 #include "display.h"
+#include "emulator_menu_screen.h"
 #include "emulator_session.h"
 #include "emulator_status_bar.h"
 #include "file_list.h"
@@ -19,7 +20,6 @@
 #include "hardware/watchdog.h"
 #include "keymap.h"
 #include "launcher.h"
-#include "menu.h"
 #include "pager.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
@@ -31,6 +31,7 @@
 #include "speaker.h"
 #include "stack_usage.h"
 #include "status_bar.h"
+#include "status_screen.h"
 #include "typing.h"
 #include "usb_storage.h"
 #include "vm_config.h"
@@ -221,13 +222,10 @@ static bool BootIsOver(void) {
 // rather than waiting for real time to catch up with it.
 static uint64_t ElapsedUs(void) { return time_us_64() - g_clock.start_us; }
 
-// Whether a menu shows: the menu over the VM, or the list at power on before
-// one starts, which the report gives as the menu and pacing counts as paused.
-static bool MenuShowing(void) { return MenuIsOpen() || ScreenIsOpen(); }
-
+// Host time the VM has been paused for, while the menu showed.
 static uint64_t PausedUs(void) {
   return g_clock.paused_us +
-         (MenuShowing() ? time_us_64() - g_clock.pause_start_us : 0);
+         (ScreenIsOpen() ? time_us_64() - g_clock.pause_start_us : 0);
 }
 
 // How much guest RAM the VM has.
@@ -415,13 +413,13 @@ static void FormatDiskLine(char* buffer, size_t size) {
       (unsigned long long)(card_ms % kMillisecondsPerSecond));
 }
 
-// The menu's status page: what the runtime found, and what running the VM
-// has cost so far.
-static void DescribeStatus(MenuStatusLine lines[kMenuStatusLines]) {
-  static const char* const kLabels[kMenuStatusLines] = {
+// Fill in the menu's status page: what the runtime found, and what running
+// the VM has cost so far.
+static void DescribeStatus(StatusScreenLine lines[kStatusScreenLines]) {
+  static const char* const kLabels[kStatusScreenLines] = {
       "System", "Boot", "Speed", "Clock", "Display", "Disk",
   };
-  for (uint8_t i = 0; i < kMenuStatusLines; ++i) {
+  for (uint8_t i = 0; i < kStatusScreenLines; ++i) {
     lines[i].label = kLabels[i];
   }
   const size_t size = sizeof(lines[0].value);
@@ -459,7 +457,7 @@ static void UpdateStatusRows(void) {
   inputs.vm = g_has_vm ? g_vm->entry.name : NULL;
   inputs.keyboard_flags = GuestRAMByte(kBIOSKeyboardFlagsAddress);
   inputs.battery = SouthbridgeGetBattery();
-  inputs.hint = MenuIsOpen() ? MenuHint() : NULL;
+  inputs.hint = ScreenIsOpen() ? ScreenHint() : NULL;
   WarnOfLowBattery(inputs.battery);
   EmulatorStatusBarUpdate(&inputs);
 }
@@ -536,8 +534,8 @@ static __noinline void ReportDrives(const DebugCommand* command) {
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm->entry.name : ""),
       Y_LOG_UINT("vms", g_vms->count));
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "menu", Y_LOG_BOOL("open", MenuShowing()),
-      Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : MenuPageName()));
+      command, "menu", Y_LOG_BOOL("open", ScreenIsOpen()),
+      Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : ""));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
@@ -851,6 +849,27 @@ static __noinline void PollCommand(uint64_t* run_us) {
 // The menu
 // ============================================================================
 
+// The size of a box over the guest's screen.
+typedef struct BoxShown {
+  // The box's size, in columns and rows.
+  uint8_t columns;
+  uint8_t rows;
+  // Whether a box is showing: false while the guest's screen is drawn in
+  // full, as it is when the menu opens.
+  bool drawn;
+} BoxShown;
+
+// Which Shift keys are held, from the keyboard controller's events.
+static bool g_left_shift_held;
+static bool g_right_shift_held;
+// The status page's lines, which the menu's status screen draws, and what
+// the menu decided, which it writes as it closes.
+static StatusScreenLine g_status_lines[kStatusScreenLines];
+static EmulatorMenuExit g_exit;
+// The box last sent to core 1, and whether one drawn has still to be sent.
+static BoxShown g_box_shown;
+static bool g_box_pending;
+
 // Mark the guest's screen to be drawn in full, and send it to core 1 now
 // rather than at the next frame, which never comes while the VM is paused.
 // Returns whether core 1 took it. If it did not, the mark stays in the live
@@ -880,22 +899,6 @@ static void PowerOffVM(void) {
   LauncherLeaveStartNote(kStartIntentMenu, g_vm->entry.name);
 }
 
-// The menu's callbacks on the emulator session. A callback takes no
-// context, so each passes the session on.
-static bool CanPowerOff(void) { return EmulatorSessionCanPowerOff(&g_session); }
-
-static uint8_t FloppyDrives(void) {
-  return EmulatorSessionNumFloppyDrives(&g_session);
-}
-
-static void EjectDrive(FloppyDrive drive) {
-  EmulatorSessionEjectFloppy(&g_session, drive);
-}
-
-static void InsertDrive(FloppyDrive drive, const char* path) {
-  EmulatorSessionInsertFloppy(&g_session, drive, path);
-}
-
 // Real time goes on while the VM is paused and emulated time does not,
 // so on resuming the two are made to agree again from now, rather than the
 // VM being run flat out to catch up a pause it was meant to take.
@@ -907,29 +910,113 @@ static void ResumeFromMenu(void) {
   RedrawGuest();
 }
 
-// A key goes to the menu, which looks for the hotkey whether it is open or
-// not, and on to the guest unless the menu has the keyboard.
-static void HandleKey(SouthbridgeKeyEvent key, bool running) {
-  const bool menu_was_open = MenuIsOpen();
-  const MenuAction action = MenuHandleKey(key);
+// Track the Shift keys, and return whether this event completes the hotkey
+// that opens and closes the menu: both held, the second just pressed. Nothing
+// in DOS holds both, and typing never does.
+static bool TrackHotkey(SouthbridgeKeyEvent event) {
+  bool* held = NULL;
+  if (event.key == kKeyCodeLeftShift) {
+    held = &g_left_shift_held;
+  } else if (event.key == kKeyCodeRightShift) {
+    held = &g_right_shift_held;
+  } else {
+    return false;
+  }
+  const bool was_held = *held;
+  *held = event.state != kSouthbridgeKeyReleased;
+  return *held && !was_held && g_left_shift_held && g_right_shift_held;
+}
+
+// Open the menu over the VM, which pauses it. The guest has seen both Shift
+// keys go down, and while the menu has the keyboard it would not see them
+// come up, so it is told now.
+static void OpenMenu(bool running) {
+  if (running) {
+    TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeLeftShift});
+    TypeKey((SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeRightShift});
+  }
+  g_clock.pause_start_us = time_us_64();
+  // The guest's screen is under the first box in full, so nothing of a box
+  // is showing yet.
+  g_box_shown.drawn = false;
+  g_box_pending = false;
+  ScreenShow(EmulatorMenuScreenOpen(&g_session, g_status_lines, &g_exit));
+  SYSTEM_INFO("menu_opened");
+}
+
+// The menu has closed: carry out what it decided, and otherwise resume the
+// VM.
+static void CloseMenu(void) {
+  switch (g_exit) {
+    case kEmulatorMenuExitReset:
+      ResetVM();
+      break;
+    case kEmulatorMenuExitPowerOff:
+      PowerOffVM();
+      break;
+    case kEmulatorMenuExitResume:
+      break;
+  }
+  ResumeFromMenu();
+  SYSTEM_INFO("menu_closed");
+}
+
+// A key is first looked at for the hotkey, whether the menu shows or not.
+// Otherwise it goes to the menu while the menu shows, and to the guest while
+// it does not. Kept out of line, so that the menu's locals are on core 0's
+// stack only while a key is handled, not under the whole run loop.
+static __noinline void HandleKey(SouthbridgeKeyEvent key, bool running) {
+  const bool menu_was_open = ScreenIsOpen();
+  const bool hotkey = TrackHotkey(key);
   if (!menu_was_open && running) {
     TypeKey(key);
   }
-  if (action == kMenuActionOpened) {
-    // The guest has seen both Shift keys go down, and while the menu has the
-    // keyboard it would not see them come up, so it is told now.
-    if (running) {
-      TypeKey(
-          (SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeLeftShift});
-      TypeKey(
-          (SouthbridgeKeyEvent){kSouthbridgeKeyReleased, kKeyCodeRightShift});
-    }
-    g_clock.pause_start_us = time_us_64();
-    SYSTEM_INFO("menu_opened");
-  } else if (action == kMenuActionClosed) {
-    ResumeFromMenu();
-    SYSTEM_INFO("menu_closed");
+  if (hotkey && !menu_was_open) {
+    OpenMenu(running);
+    return;
   }
+  if (hotkey) {
+    ScreenHide();
+  } else if (menu_was_open) {
+    ScreenHandleKey(key);
+  }
+  if (menu_was_open && !ScreenIsOpen()) {
+    CloseMenu();
+  }
+}
+
+// Whether a box over the guest's screen is one of another size than the one
+// shown, so that the guest's screen has to be drawn under it first.
+static bool BoxResized(const DisplayBox* box) {
+  return g_box_shown.drawn &&
+         (box->columns != g_box_shown.columns || box->rows != g_box_shown.rows);
+}
+
+// Draw the screen showing, and send it to core 1. A box of another size than
+// the last leaves part of the last showing, so the guest's screen is drawn
+// in full under it first. If core 1 cannot take that yet, the box waits, and
+// is sent on a later pass, drawn again if the screen has changed meanwhile.
+// Kept out of line, as HandleKey() is.
+static __noinline void DrawMenu(void) {
+  DisplayBox* box = DisplayBeginBox();
+  if (box == NULL) {
+    return;
+  }
+  // The status page reads its lines as it draws, every second while it
+  // shows. Filling them in costs nothing that matters while the VM is
+  // paused.
+  DescribeStatus(g_status_lines);
+  if (ScreenDraw(box)) {
+    g_box_pending = true;
+  }
+  if (!g_box_pending || (BoxResized(box) && !RedrawGuest())) {
+    return;
+  }
+  DisplayEndBox();
+  g_box_shown.columns = box->columns;
+  g_box_shown.rows = box->rows;
+  g_box_shown.drawn = true;
+  g_box_pending = false;
 }
 
 // ============================================================================
@@ -956,7 +1043,7 @@ static void RunVM(bool vm_ready) {
   for (;;) {
     AnnounceToNewHost();
 
-    if (running && !MenuIsOpen() && RunBatch() == Y_PLATFORM_HUNG) {
+    if (running && !ScreenIsOpen() && RunBatch() == Y_PLATFORM_HUNG) {
       // The CPU halted with nothing to wake it.
       SYSTEM_ERROR("vm_stopped");
       running = false;
@@ -980,7 +1067,7 @@ static void RunVM(bool vm_ready) {
       }
     }
 
-    if (screen_on && !MenuIsOpen() && g_clock.cycles >= next_render_cycles) {
+    if (screen_on && !ScreenIsOpen() && g_clock.cycles >= next_render_cycles) {
       do {
         next_render_cycles += kCyclesPerRender;
       } while (next_render_cycles <= g_clock.cycles);
@@ -989,7 +1076,7 @@ static void RunVM(bool vm_ready) {
       }
     }
 
-    if (!BootIsOver() && !MenuIsOpen()) {
+    if (!BootIsOver() && !ScreenIsOpen()) {
       BootStage stage = g_status.boot_stage;
       if (!running || g_clock.cycles >= max_boot_cycles) {
         stage = kBootStageFailed;
@@ -1017,15 +1104,15 @@ static void RunVM(bool vm_ready) {
       next_status_at = make_timeout_time_ms(kStatusUpdateMs);
       UpdateStatusRows();
     }
-    if (screen_on) {
-      MenuDraw(time_us_64());
+    if (screen_on && ScreenIsOpen()) {
+      DrawMenu();
     }
     if (screen_on && time_reached(blank_at)) {
       DisplayTurnOff();
       screen_on = false;
     }
 
-    if (MenuIsOpen()) {
+    if (ScreenIsOpen()) {
       sleep_ms(kPausedPollMs);
     } else if (running) {
       PaceToRealTime();
@@ -1102,18 +1189,6 @@ void EmulatorInit(
   g_vms = vms;
   g_settings = settings;
   g_guest_ram = guest_ram;
-  const MenuConfig menu_config = {
-      .describe_status = DescribeStatus,
-      .reset = ResetVM,
-      .floppy_drives = FloppyDrives,
-      .power_off = PowerOffVM,
-      .can_power_off = CanPowerOff,
-      .redraw_guest = RedrawGuest,
-      .drive = FloppyGetImage,
-      .eject_drive = EjectDrive,
-      .insert_drive = InsertDrive,
-  };
-  MenuInit(&menu_config);
 }
 
 void EmulatorRun(VMConfig* vm) {

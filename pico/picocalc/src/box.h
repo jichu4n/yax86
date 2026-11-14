@@ -1,9 +1,8 @@
-// A box: what every screen in both modes, and the in-VM menu, draws over the
-// guest's screen, display.h's DisplayBox. It has code page 437's
-// double-lined border, a title in its top edge, and rows of text and items
-// inside. This has the colors a box is drawn in, draws its rows, centers it
-// on the guest's screen, and notices a box of another size than the one
-// shown. list_box.h builds a list to select from on it.
+// A box: what every screen in both modes draws over the guest's screen,
+// display.h's DisplayBox. It has code page 437's double-lined border, a title
+// in its top edge, and rows of text and items inside. This has the colors a
+// box is drawn in, draws its rows, and centers it on the guest's screen.
+// list_box.h builds a list to select from on it.
 #ifndef YAX86_PICOCALC_BOX_H
 #define YAX86_PICOCALC_BOX_H
 
@@ -62,24 +61,5 @@ void BoxItemRow(
 
 // Lay out a box of rows, centered on the guest's screen.
 void BoxPlace(DisplayBox* box, uint8_t columns, uint8_t rows);
-
-// The size of the box shown over the guest's screen. A new box of another
-// size would leave part of the old one showing, so the guest's screen is
-// drawn under it first.
-typedef struct BoxShown {
-  // The box's size, in columns and rows.
-  uint8_t columns;
-  uint8_t rows;
-  // Whether a box is showing: false once the guest's screen has been drawn
-  // over it.
-  bool drawn;
-} BoxShown;
-
-// Whether box is another size than the box shown, so that the guest's screen
-// has to be drawn under it first.
-bool BoxShownResized(const BoxShown* shown, const DisplayBox* box);
-
-// Record box as the box shown.
-void BoxShownRecord(BoxShown* shown, const DisplayBox* box);
 
 #endif  // YAX86_PICOCALC_BOX_H

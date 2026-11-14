@@ -18,11 +18,12 @@ static uint32_t* g_size;
 
 ScreenResult BrowserScreenOpen(
     FileBrowserImages images, const char* folder, const char* current,
-    char path[kFSMaxPath + 1], uint32_t* size) {
+    const char* const in_drives[kFloppyDrives], char path[kFSMaxPath + 1],
+    uint32_t* size) {
   g_browser.images = images;
   g_browser.current = current;
   for (uint8_t drive = 0; drive < kFloppyDrives; ++drive) {
-    g_browser.in_drives[drive] = NULL;
+    g_browser.in_drives[drive] = in_drives != NULL ? in_drives[drive] : NULL;
   }
   g_path = path;
   g_size = size;

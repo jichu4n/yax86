@@ -6,7 +6,8 @@
 
 enum {
   // The deepest the launcher's pages go is six: the list, Manage VMs, a VM,
-  // Configure, a drive's configuration and the browser.
+  // Configure, a drive's configuration and the browser. The in-VM menu's go
+  // three deep: the main page, a drive's page and the browser.
   kScreenStackMax = 8,
 };
 
@@ -33,6 +34,8 @@ void ScreenShow(ScreenResult opened) {
   g_stack[0] = opened.screen;
   g_depth = 1;
 }
+
+void ScreenHide(void) { g_depth = 0; }
 
 bool ScreenIsOpen(void) { return g_depth > 0; }
 

@@ -119,7 +119,10 @@ add_executable(yax86_picocalc
     src/main.c
     src/emulator.c
     src/stack_usage.c
-    src/menu.c
+    src/emulator_menu_screen.c
+    src/floppy_drive_screen.c
+    src/question_screen.c
+    src/status_screen.c
     src/browser_screen.c
     src/init.c
     src/debug_command.c

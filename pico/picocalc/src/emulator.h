@@ -1,17 +1,23 @@
-// Emulator mode, once the launcher has chosen a VM, or without a card none:
-// the VM brought up with its drives' images, or with none the floppy built
-// into flash, and run paced to real time for as long as the board has power,
-// with the PicoCalc's keyboard as its own. The guest's text screen is on the
-// LCD, and the menu opens over it: the VM is paused while it is open. DOS's
+// Emulator mode: running a VM once the launcher has loaded one. The VM starts
+// with its drives' images. Without a card there is no VM, and the machine
+// boots the floppy built into flash. It runs paced to real time for as long
+// as the board has power, with the PicoCalc's keyboard as its own. DOS's
 // date and time questions are answered by watching the screen, the way
-// pico/bench does it, which keeps the boot the dos-boot workload.
+// pico/bench does it, which keeps the boot pico/bench's dos-boot workload.
 //
-// It runs on core 0 and never touches the LCD: core 1 draws everything on
-// it, from copies core 0 hands over - see display.h. The guest's screen
-// takes the top 250 rows of the panel - 80 by 25 cells of the 4x10 font -
-// and the status rows the rest. Everything on them is also reported over
-// USB serial for pico/bench/run.js to capture. A report is printed whenever
-// a host attaches, since USB CDC drops whatever is written before then.
+// It runs on core 0 and never touches the LCD. Core 1 draws everything on
+// it, from copies core 0 sends: see display.h. The guest's screen takes the
+// top 250 rows of the panel, 80 by 25 cells of the 4x10 font, and the status
+// rows the rest. Everything on them is also reported over USB serial, for
+// pico/bench/run.js to capture. A report is printed whenever a host
+// attaches, since USB CDC drops whatever is written before then.
+//
+// Both Shift keys held together open the in-VM menu over the guest's screen,
+// and pause the VM. The menu is screens, through screen.h, starting with
+// emulator_menu_screen.h's main page. While it shows, the loop hands it the
+// keys and sends what it draws to core 1, drawing the guest's screen under
+// a box of a new size first. When it closes, the loop carries out what it
+// decided, a reset or a power off, or resumes the VM.
 //
 // Its loop answers two debug commands itself: report, with the system's
 // groups and then the VM's, and screen, with the guest's text screen. The

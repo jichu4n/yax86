@@ -110,7 +110,7 @@ static ScreenResult OnSelect(void) {
     }
     return BrowserScreenOpen(
         g_drive >= kVMDriveHD1 ? kFileBrowserHardDisks : kFileBrowserFloppies,
-        folder, g_choice->path, g_found_path, &g_found_size);
+        folder, g_choice->path, NULL, g_found_path, &g_found_size);
   }
   g_choice->path[0] = '\0';
   g_choice->blank = choice == kDriveBlank;

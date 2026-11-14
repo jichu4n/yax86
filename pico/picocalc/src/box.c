@@ -101,14 +101,3 @@ void BoxPlace(DisplayBox* box, uint8_t columns, uint8_t rows) {
   box->column = (uint8_t)((kTextColumns - columns) / 2);
   box->row = (uint8_t)((kGuestScreenRows - rows) / 2);
 }
-
-bool BoxShownResized(const BoxShown* shown, const DisplayBox* box) {
-  return shown->drawn &&
-         (box->columns != shown->columns || box->rows != shown->rows);
-}
-
-void BoxShownRecord(BoxShown* shown, const DisplayBox* box) {
-  shown->columns = box->columns;
-  shown->rows = box->rows;
-  shown->drawn = true;
-}

@@ -12,8 +12,8 @@
 //   border where there is more;
 // - drawing the items, under lines of text if there are any.
 //
-// A list box's state is its screen's. These functions take it and the top
-// row of a list as parameters, and keep nothing of their own.
+// A list box's state is its screen's. These functions take it and the top row
+// of a list as parameters, and keep nothing of their own.
 #ifndef YAX86_PICOCALC_LIST_BOX_H
 #define YAX86_PICOCALC_LIST_BOX_H
 
