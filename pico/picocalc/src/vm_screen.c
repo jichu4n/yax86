@@ -105,7 +105,7 @@ static const char* DriveShown(uint8_t drive, const char* name) {
 
 // The images in the VM's drives, over what can be done to it.
 static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds

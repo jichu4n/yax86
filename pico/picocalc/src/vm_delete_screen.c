@@ -97,7 +97,7 @@ static void JoinNames(
 }
 
 static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   const uint8_t named = g_contents.file_count < kVMListNamed

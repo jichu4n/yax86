@@ -801,10 +801,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   date. It hands the list box each key with `ListBoxHandleKeyEvent()`,
   which ignores releases, clears the problem, moves the selection and
   returns a `ListBoxAction`: whether the key selected the item or went
-  back. It draws when `ListBoxTakeDirty()` says the box is out of date. A
-  screen with keys of its own checks `ListBoxIsKeyPress()`, handles its
-  own keys, and hands the rest to `ListBoxHandleKeyCode()`: the name being
-  typed, Backspace up a folder in the browser, Esc ignored on the list.
+  back. It draws when `ListBoxTestAndClearDirty()` says the box is out of
+  date, which also clears its flag. A screen with keys of its own checks
+  `ListBoxIsKeyPress()`, handles its own keys, and hands the rest to
+  `ListBoxHandleKeyCode()`: the name being typed, Backspace up a folder in
+  the browser, Esc ignored on the list.
 - **The file browser both modes use is `src/file_browser.c`**, which says
   which image was chosen and leaves what to do with it to its user.
 - **The VM is paused while it is open**: no batches run and no frames

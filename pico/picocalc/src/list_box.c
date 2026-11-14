@@ -133,7 +133,7 @@ ListBoxAction ListBoxHandleKeyEvent(
   return ListBoxHandleKeyCode(list_box, event.key, count);
 }
 
-bool ListBoxTakeDirty(ListBox* list_box) {
+bool ListBoxTestAndClearDirty(ListBox* list_box) {
   const bool dirty = list_box->dirty;
   list_box->dirty = false;
   return dirty;

@@ -201,7 +201,7 @@ static ScreenResult OnResume(void) {
 // where there are more rows above or below, and the countdown on its bottom
 // edge.
 static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   BoxPlace(box, kListBoxNarrowColumns, kListBoxRows + 2);

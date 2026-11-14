@@ -117,7 +117,7 @@ static ScreenResult OnResume(void) {
 }
 
 static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   ListBoxDrawItems(
