@@ -63,7 +63,7 @@ async function flash(uf2FilePath) {
 function benchFigures(record) {
   const us = toNumber(record.elapsed_us);
   const cycles = toNumber(record.cycles);
-  const instructions = toNumber(record.instructions);
+  const instructions = toNumber(record.num_instructions);
   if (!(us > 0)) {
     return [];
   }

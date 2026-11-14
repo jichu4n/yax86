@@ -29,16 +29,16 @@ enum {
 };
 
 typedef struct PagerStats {
-  uint32_t frames;
+  uint32_t num_frames;
   // Pages brought into a frame from PSRAM, and as zeros.
-  uint32_t page_ins;
-  uint32_t zero_fills;
+  uint32_t num_page_ins;
+  uint32_t num_zero_fills;
   // Pages written back to PSRAM on leaving their frame.
-  uint32_t write_backs;
+  uint32_t num_write_backs;
   // Calls for a page already in its frame, which only set a flag.
-  uint32_t soft_faults;
+  uint32_t num_soft_faults;
   // PSRAM transfers that failed, leaving the page's bytes wrong.
-  uint32_t errors;
+  uint32_t num_errors;
   // Time spent in the page fault handler.
   uint64_t fault_us;
 } PagerStats;

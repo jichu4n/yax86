@@ -59,12 +59,12 @@ typedef struct DisplayBox {
 typedef struct DisplayStats {
   // Core 1: frames that drew something, the pixels they drew, and the time
   // spent in YVideoRender().
-  uint32_t frames_drawn;
-  uint64_t pixels_drawn;
+  uint32_t num_frames_drawn;
+  uint64_t num_pixels_drawn;
   uint64_t render_us;
   // Core 0: frames left for the next because core 1 was still drawing, and
   // the time spent copying the guest's screen for core 1.
-  uint32_t frames_late;
+  uint32_t num_frames_late;
   uint64_t copy_us;
 } DisplayStats;
 

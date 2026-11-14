@@ -44,12 +44,12 @@ typedef struct PsramStats {
   // Bytes moved since start, and transfers that timed out.
   uint64_t bytes_read;
   uint64_t bytes_written;
-  uint32_t timeouts;
+  uint32_t num_timeouts;
 } PsramStats;
 
-// Bring the chip up and test it, returning whether it is usable. skip says
-// the last start hung doing so, and leaves it off.
-bool PsramInit(bool skip);
+// Bring the chip up and test it, returning whether it is usable.
+// should_skip, set when the last start hung doing so, leaves it off.
+bool PsramInit(bool should_skip);
 
 // Read or write size bytes at address, both multiples of kPsramAlignment,
 // to or from a buffer aligned to it. Returns false on a timeout, or if the

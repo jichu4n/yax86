@@ -43,14 +43,14 @@ typedef struct UsbStorageStats {
   // Whether the host has ejected it, after which the reader is empty to
   // it again.
   bool was_ejected;
-  uint32_t blocks_read;
-  uint32_t blocks_written;
+  uint32_t num_blocks_read;
+  uint32_t num_blocks_written;
   // The time the reads and writes took on the card, of all the time the
   // host took to move them: the rest is USB's.
   uint64_t read_us;
   uint64_t write_us;
   // Reads and writes the card failed, or that were past its end.
-  uint32_t errors;
+  uint32_t num_errors;
 } UsbStorageStats;
 
 // Export the SD card, which the caller has unmounted, to the host. The host

@@ -174,11 +174,11 @@ bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
     // Reading the register clears the abort.
     (void)hw->clr_tx_abrt;
     DrainReceiveFIFO();
-    ++g_poll_stats.aborts;
+    ++g_poll_stats.num_aborts;
   } else if (i2c_get_read_available(kSouthbridgeI2C) >= kRegisterAnswerBytes) {
     const uint8_t state = i2c_read_byte_raw(kSouthbridgeI2C);
     const uint8_t key = i2c_read_byte_raw(kSouthbridgeI2C);
-    ++g_poll_stats.reads;
+    ++g_poll_stats.num_reads;
     if (g_poll_register == kRegisterBattery) {
       const uint8_t percent = key & kBatteryPercentMask;
       g_battery.is_known = percent > 0 && percent <= kBatteryMaxPercent;
@@ -187,11 +187,11 @@ bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
     } else if (state == kSouthbridgeKeyIdle) {
       g_has_poll_caught_up = true;
     } else if (!g_has_poll_caught_up) {
-      ++g_poll_stats.stale_keys;
+      ++g_poll_stats.num_stale_keys;
     } else if (state <= kSouthbridgeKeyReleased) {
       event->state = (SouthbridgeKeyState)state;
       event->key = key;
-      ++g_poll_stats.keys;
+      ++g_poll_stats.num_keys;
       has_key = true;
     }
   } else if (time_us_64() - g_poll_started_us > kSouthbridgePollTimeoutUs) {
@@ -200,7 +200,7 @@ bool SouthbridgePollKey(SouthbridgeKeyEvent* event) {
     i2c_deinit(kSouthbridgeI2C);
     SouthbridgeInit();
     SetTargetAddress();
-    ++g_poll_stats.timeouts;
+    ++g_poll_stats.num_timeouts;
   } else {
     return false;
   }

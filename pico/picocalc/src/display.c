@@ -163,12 +163,12 @@ static void WriteGraphicsPixels(
   if (g_graphics_row_length < g_graphics_row_width) {
     return;
   }
-  const uint16_t copies =
+  const uint16_t num_copies =
       (uint16_t)(GraphicsPanelRow(origin.y + 1) - GraphicsPanelRow(origin.y));
-  for (uint16_t i = 0; i < copies; ++i) {
+  for (uint16_t i = 0; i < num_copies; ++i) {
     LcdWritePixels(g_graphics_row, g_graphics_row_width);
   }
-  g_frame_pixels += (uint64_t)g_graphics_row_width * copies;
+  g_frame_pixels += (uint64_t)g_graphics_row_width * num_copies;
   g_graphics_row_length = 0;
 }
 
@@ -202,9 +202,9 @@ static void DrawFrame(void) {
   const uint64_t render_us = time_us_64() - start_us;
   critical_section_enter_blocking(&g_stats_lock);
   g_stats.render_us += render_us;
-  g_stats.pixels_drawn += g_frame_pixels;
+  g_stats.num_pixels_drawn += g_frame_pixels;
   if (g_frame_pixels > 0) {
-    ++g_stats.frames_drawn;
+    ++g_stats.num_frames_drawn;
   }
   critical_section_exit(&g_stats_lock);
 }
@@ -382,7 +382,7 @@ bool DisplaySendFrame(YVideoState* video) {
   }
   if (g_is_frame_busy) {
     critical_section_enter_blocking(&g_stats_lock);
-    ++g_stats.frames_late;
+    ++g_stats.num_frames_late;
     critical_section_exit(&g_stats_lock);
     return false;
   }

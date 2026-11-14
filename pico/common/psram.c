@@ -41,7 +41,7 @@ enum {
 
   // The self-test's block, and where it writes it: the ends and the middle.
   kPsramTestBytes = 512,
-  kPsramTestBlocks = 3,
+  kPsramNumTestBlocks = 3,
   kMicrosecondsPerMillisecond = 1000,
   // How long the chip needs after power before its first command.
   kPsramPowerUpUs = 150,
@@ -51,7 +51,7 @@ static uint g_sm;
 static uint g_offset;
 static PsramStats g_stats;
 
-static const uint32_t kPsramTestAddresses[kPsramTestBlocks] = {
+static const uint32_t kPsramTestAddresses[kPsramNumTestBlocks] = {
     0, kPsramSize / 2 - kPsramTestBytes / 2, kPsramSize - kPsramTestBytes};
 
 const char* PsramStateName(PsramState state) {
@@ -74,17 +74,18 @@ const char* PsramStateName(PsramState state) {
   return "unknown";
 }
 
-// One transaction with chip select held low: the command word, then
-// out_count words written, then in_count words read. Returns false if the
-// state machine stopped keeping up, leaving chip select raised either way.
+// One transaction with chip select held low: the command word, then the
+// words from out, num_out_words of them, written, then the words into in,
+// num_in_words of them, read. Returns false if the state machine stopped
+// keeping up, leaving chip select raised either way.
 //
 // Each word goes out most significant bit first, so memory's little-endian
 // words are swapped on the way out and on the way in.
 static bool __not_in_flash_func(PsramTransfer)(
-    uint32_t command, const uint32_t* out, uint32_t out_count, uint32_t* in,
-    uint32_t in_count) {
-  const uint32_t write_bits = (1 + out_count) * 32;
-  const uint32_t read_bits = in_count * 32;
+    uint32_t command, const uint32_t* out, uint32_t num_out_words, uint32_t* in,
+    uint32_t num_in_words) {
+  const uint32_t write_bits = (1 + num_out_words) * 32;
+  const uint32_t read_bits = num_in_words * 32;
   io_rw_32* const txf = &kPsramPIO->txf[g_sm];
   io_ro_32* const rxf = &kPsramPIO->rxf[g_sm];
   const uint32_t tx_full = 1u << (PIO_FSTAT_TXFULL_LSB + g_sm);
@@ -100,36 +101,36 @@ static bool __not_in_flash_func(PsramTransfer)(
   *txf = ((write_bits - 1) << 16) | (read_bits ? read_bits - 1 : 0);
   *txf = command;
   const uint32_t start_us = time_us_32();
-  bool ok = true;
-  while (out_count > 0 || in_count > 0) {
+  bool is_ok = true;
+  while (num_out_words > 0 || num_in_words > 0) {
     const uint32_t fstat = kPsramPIO->fstat;
-    if (out_count > 0 && !(fstat & tx_full)) {
+    if (num_out_words > 0 && !(fstat & tx_full)) {
       *txf = __builtin_bswap32(*out++);
-      --out_count;
-    } else if (in_count > 0 && !(fstat & rx_empty)) {
+      --num_out_words;
+    } else if (num_in_words > 0 && !(fstat & rx_empty)) {
       *in++ = __builtin_bswap32(*rxf);
-      --in_count;
+      --num_in_words;
     } else if (time_us_32() - start_us > kPsramTimeoutUs) {
-      ok = false;
+      is_ok = false;
       break;
     }
   }
   // A write is over once the state machine has shifted out its last word and
   // gone back for the next header, which it waits for at the top of the
   // program.
-  if (ok && read_bits == 0) {
+  if (is_ok && read_bits == 0) {
     while (!(kPsramPIO->fstat & tx_empty) ||
            pio_sm_get_pc(kPsramPIO, g_sm) != g_offset) {
       if (time_us_32() - start_us > kPsramTimeoutUs) {
-        ok = false;
+        is_ok = false;
         break;
       }
     }
   }
   gpio_put(kPsramPinCS, 1);
   restore_interrupts(interrupts);
-  if (!ok) {
-    ++g_stats.timeouts;
+  if (!is_ok) {
+    ++g_stats.num_timeouts;
     g_stats.state = kPsramTimedOut;
     // Whatever it was part way through is abandoned: the FIFOs emptied, and
     // the program started again from the top.
@@ -139,7 +140,7 @@ static bool __not_in_flash_func(PsramTransfer)(
     pio_sm_exec(kPsramPIO, g_sm, pio_encode_jmp(g_offset));
     pio_sm_set_enabled(kPsramPIO, g_sm, true);
   }
-  return ok;
+  return is_ok;
 }
 
 // The bytes from address to the end of its burst, or size if fewer: a burst
@@ -238,7 +239,7 @@ static PsramState PsramSelfTest(void) {
   uint32_t written[kPsramTestBytes / 4];
   uint32_t read[kPsramTestBytes / 4];
   uint32_t seed = 0x2545F491;
-  for (uint32_t block = 0; block < kPsramTestBlocks; ++block) {
+  for (uint32_t block = 0; block < kPsramNumTestBlocks; ++block) {
     for (uint32_t i = 0; i < kPsramTestBytes / 4; ++i) {
       seed ^= seed << 13;
       seed ^= seed >> 17;
@@ -266,8 +267,8 @@ static PsramState PsramSelfTest(void) {
   return kPsramOk;
 }
 
-bool PsramInit(bool skip) {
-  if (skip) {
+bool PsramInit(bool should_skip) {
+  if (should_skip) {
     g_stats.state = kPsramSkippedAfterHang;
     return false;
   }

@@ -48,11 +48,11 @@ static void Share(DiskImage* image) {
   g_image = image;
   g_stats.was_seen = false;
   g_stats.was_ejected = false;
-  g_stats.blocks_read = 0;
-  g_stats.blocks_written = 0;
+  g_stats.num_blocks_read = 0;
+  g_stats.num_blocks_written = 0;
   g_stats.read_us = 0;
   g_stats.write_us = 0;
-  g_stats.errors = 0;
+  g_stats.num_errors = 0;
   g_did_change = true;
   g_is_exporting = true;
 }
@@ -70,11 +70,11 @@ UsbStorageStats UsbStorageGetStats(void) {
       .is_connected = tud_mounted(),
       .was_seen = g_stats.was_seen,
       .was_ejected = g_stats.was_ejected,
-      .blocks_read = g_stats.blocks_read,
-      .blocks_written = g_stats.blocks_written,
+      .num_blocks_read = g_stats.num_blocks_read,
+      .num_blocks_written = g_stats.num_blocks_written,
       .read_us = g_stats.read_us,
       .write_us = g_stats.write_us,
-      .errors = g_stats.errors,
+      .num_errors = g_stats.num_errors,
   };
   return stats;
 }
@@ -159,7 +159,7 @@ static bool CheckTransfer(
   if (offset != 0 || bufsize % kSdcardBlockSize != 0 || lba >= NumBlocks() ||
       num_blocks > NumBlocks() - lba) {
     tud_msc_set_sense(lun, kSenseIllegalRequest, kSenseOutOfRange, 0);
-    ++g_stats.errors;
+    ++g_stats.num_errors;
     return false;
   }
   return true;
@@ -177,10 +177,10 @@ int32_t tud_msc_read10_cb(
   g_stats.read_us += time_us_64() - start_us;
   if (!was_read) {
     tud_msc_set_sense(lun, kSenseMediumError, kSenseReadError, 0);
-    ++g_stats.errors;
+    ++g_stats.num_errors;
     return -1;
   }
-  g_stats.blocks_read += num_blocks;
+  g_stats.num_blocks_read += num_blocks;
   return (int32_t)bufsize;
 }
 
@@ -196,10 +196,10 @@ int32_t tud_msc_write10_cb(
   g_stats.write_us += time_us_64() - start_us;
   if (!was_written) {
     tud_msc_set_sense(lun, kSenseMediumError, kSenseWriteError, 0);
-    ++g_stats.errors;
+    ++g_stats.num_errors;
     return -1;
   }
-  g_stats.blocks_written += num_blocks;
+  g_stats.num_blocks_written += num_blocks;
   return (int32_t)bufsize;
 }
 

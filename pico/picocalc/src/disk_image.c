@@ -126,9 +126,9 @@ static void WriteBackSector(DiskImage* image) {
   if (!SeekSector(image, image->sector_index) ||
       f_write(&image->file, image->sector, kSectorSize, &written) != FR_OK ||
       written != kSectorSize) {
-    ++image->stats.errors;
+    ++image->stats.num_errors;
   }
-  ++image->stats.sector_writes;
+  ++image->stats.num_sector_writes;
   image->stats.write_us += time_us_64() - start_us;
   image->is_sector_dirty = false;
 }
@@ -149,9 +149,9 @@ static void LoadSector(DiskImage* image, int32_t index) {
     for (uint32_t i = 0; i < kSectorSize; ++i) {
       image->sector[i] = kOpenBusByte;
     }
-    ++image->stats.errors;
+    ++image->stats.num_errors;
   }
-  ++image->stats.sector_reads;
+  ++image->stats.num_sector_reads;
   image->stats.read_us += time_us_64() - start_us;
 }
 
@@ -189,9 +189,9 @@ bool DiskImageReadSectors(
                      f_read(&image->file, data, length, &read) == FR_OK &&
                      read == length;
   if (!is_ok) {
-    ++image->stats.errors;
+    ++image->stats.num_errors;
   }
-  image->stats.sector_reads += num_sectors;
+  image->stats.num_sector_reads += num_sectors;
   image->stats.read_us += time_us_64() - start_us;
   return is_ok;
 }
@@ -212,9 +212,9 @@ bool DiskImageWriteSectors(
                      f_write(&image->file, data, length, &written) == FR_OK &&
                      written == length;
   if (!is_ok) {
-    ++image->stats.errors;
+    ++image->stats.num_errors;
   }
-  image->stats.sector_writes += num_sectors;
+  image->stats.num_sector_writes += num_sectors;
   image->stats.write_us += time_us_64() - start_us;
   return is_ok;
 }

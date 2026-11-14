@@ -122,10 +122,10 @@ static __noinline ScreenResult Create(void) {
   if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
-        Y_LOG_BOOL("blank_fd1", drives.is_blank[kVMDriveFD1]),
-        Y_LOG_BOOL("blank_fd2", drives.is_blank[kVMDriveFD2]),
-        Y_LOG_BOOL("blank_hd1", drives.is_blank[kVMDriveHD1]),
-        Y_LOG_BOOL("blank_hd2", drives.is_blank[kVMDriveHD2]),
+        Y_LOG_BOOL("is_fd1_blank", drives.is_blank[kVMDriveFD1]),
+        Y_LOG_BOOL("is_fd2_blank", drives.is_blank[kVMDriveFD2]),
+        Y_LOG_BOOL("is_hd1_blank", drives.is_blank[kVMDriveHD1]),
+        Y_LOG_BOOL("is_hd2_blank", drives.is_blank[kVMDriveHD2]),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {

@@ -35,7 +35,7 @@ enum {
 // A drive's light: how much it had done at the last look, and until when the
 // light stays on.
 typedef struct DriveLight {
-  uint32_t sectors;
+  uint32_t num_sectors;
   uint64_t lit_until_us;
 } DriveLight;
 
@@ -110,10 +110,10 @@ static bool IsDriveLit(
   if (image->status != kDiskImageOpen) {
     return false;
   }
-  const uint32_t sectors =
-      image->stats.sector_reads + image->stats.sector_writes;
-  if (sectors != light->sectors) {
-    light->sectors = sectors;
+  const uint32_t num_sectors =
+      image->stats.num_sector_reads + image->stats.num_sector_writes;
+  if (num_sectors != light->num_sectors) {
+    light->num_sectors = num_sectors;
     light->lit_until_us = now_us + kDriveLightUs;
   }
   return now_us < light->lit_until_us;

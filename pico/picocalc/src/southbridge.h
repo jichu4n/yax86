@@ -71,13 +71,13 @@ enum {
 // How the key FIFO poll has gone, for the report.
 typedef struct SouthbridgePollStats {
   // Reads that completed, the battery's included, and how many held a key.
-  uint32_t reads;
-  uint32_t keys;
+  uint32_t num_reads;
+  uint32_t num_keys;
   // Keys dropped because they were already queued when the poll started.
-  uint32_t stale_keys;
+  uint32_t num_stale_keys;
   // Reads the controller did not acknowledge, and reads that never completed.
-  uint32_t aborts;
-  uint32_t timeouts;
+  uint32_t num_aborts;
+  uint32_t num_timeouts;
 } SouthbridgePollStats;
 
 // Move the key FIFO poll on, without ever waiting for the bus. Each call

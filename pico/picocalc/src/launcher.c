@@ -259,9 +259,9 @@ static void Report(const DebugCommand* command) {
       command, "display", Y_LOG_STRING("font", Font4x10Name(g_settings->font)));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", ""),
-      Y_LOG_UINT("vms", g_vms->num_vms));
+      Y_LOG_UINT("num_vms", g_vms->num_vms));
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "menu", Y_LOG_BOOL("open", true),
+      command, "menu", Y_LOG_BOOL("is_open", true),
       Y_LOG_STRING("page", ScreenPageName()));
   DebugCommandReplyOk(command);
 }

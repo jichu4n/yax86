@@ -30,9 +30,9 @@ typedef enum DiskImageStatus {
 typedef struct DiskImageStats {
   // Sectors read from and written to the card, reads and writes that failed,
   // and the time they took, which the VM waits for.
-  uint32_t sector_reads;
-  uint32_t sector_writes;
-  uint32_t errors;
+  uint32_t num_sector_reads;
+  uint32_t num_sector_writes;
+  uint32_t num_errors;
   uint64_t read_us;
   uint64_t write_us;
 } DiskImageStats;
