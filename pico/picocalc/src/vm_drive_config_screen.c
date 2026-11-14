@@ -119,10 +119,11 @@ static ScreenResult Choose(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, ChoiceRow(kDriveItemCount))) {
-    case kListBoxKeySelect:
+  switch (
+      ListBoxHandleKeyEvent(&g_list_box, event, ChoiceRow(kDriveItemCount))) {
+    case kListBoxActionSelect:
       return Choose();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();

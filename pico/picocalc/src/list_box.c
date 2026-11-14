@@ -109,7 +109,7 @@ void ListBoxFrameDrawn(ListBoxFrame* frame, const DisplayMenu* menu) {
 
 const char kListBoxHint[] = "\x18\x19=Move  Enter=Select  Esc=Back";
 
-bool ListBoxKeyPressed(SouthbridgeKeyEvent event) {
+bool ListBoxIsKeyPress(SouthbridgeKeyEvent event) {
   // A key held down repeats, which moves through the items as a press does.
   if (event.state == kSouthbridgeKeyReleased) {
     return false;
@@ -118,31 +118,32 @@ bool ListBoxKeyPressed(SouthbridgeKeyEvent event) {
   return true;
 }
 
-ListBoxKey ListBoxTakeKey(ListBox* list_box, uint8_t key, uint8_t count) {
+ListBoxAction ListBoxHandleKeyCode(
+    ListBox* list_box, uint8_t key, uint8_t count) {
   if (ListBoxIsMoveKey(key)) {
     if (ListBoxMove(key, count, &list_box->selected)) {
       list_box->dirty = true;
     }
-    return kListBoxKeyMoved;
+    return kListBoxActionMoved;
   }
   switch (key) {
     case kKeyCodeEnter:
     case kKeyCodeSpace:
-      return kListBoxKeySelect;
+      return kListBoxActionSelect;
     case kKeyCodeBackspace:
     case kKeyCodeEsc:
-      return kListBoxKeyBack;
+      return kListBoxActionBack;
     default:
-      return kListBoxKeyNone;
+      return kListBoxActionNone;
   }
 }
 
-ListBoxKey ListBoxTakeEvent(
+ListBoxAction ListBoxHandleKeyEvent(
     ListBox* list_box, SouthbridgeKeyEvent event, uint8_t count) {
-  if (!ListBoxKeyPressed(event)) {
-    return kListBoxKeyNone;
+  if (!ListBoxIsKeyPress(event)) {
+    return kListBoxActionNone;
   }
-  return ListBoxTakeKey(list_box, event.key, count);
+  return ListBoxHandleKeyCode(list_box, event.key, count);
 }
 
 DisplayMenu* ListBoxBeginDraw(ListBox* list_box) {

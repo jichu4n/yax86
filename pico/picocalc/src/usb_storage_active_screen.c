@@ -80,9 +80,9 @@ static ScreenResult Disconnect(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, 1)) {
-    case kListBoxKeySelect:
-    case kListBoxKeyBack:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, 1)) {
+    case kListBoxActionSelect:
+    case kListBoxActionBack:
       return Disconnect();
     default:
       return ScreenStays();

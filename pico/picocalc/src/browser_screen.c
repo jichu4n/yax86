@@ -60,13 +60,14 @@ static ScreenResult OpenEntry(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, UIBrowserCount(&g_browser))) {
-    case kListBoxKeyMoved:
+  switch (
+      ListBoxHandleKeyEvent(&g_list_box, event, UIBrowserCount(&g_browser))) {
+    case kListBoxActionMoved:
       UIBrowserScrollTo(&g_browser, g_list_box.selected);
       return ScreenStays();
-    case kListBoxKeySelect:
+    case kListBoxActionSelect:
       return OpenEntry();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       // Backspace goes up a folder, until the card's root.
       if (event.key == kKeyCodeBackspace && !UIBrowserAtRoot(&g_browser)) {
         g_list_box.selected = UIBrowserUp(&g_browser);

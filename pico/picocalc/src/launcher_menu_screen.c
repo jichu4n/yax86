@@ -154,11 +154,11 @@ static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   if (event.state == kSouthbridgeKeyReleased) {
     return ScreenStays();
   }
-  switch (ListBoxTakeKey(&g_list_box, event.key, ItemCount())) {
-    case kListBoxKeyMoved:
+  switch (ListBoxHandleKeyCode(&g_list_box, event.key, ItemCount())) {
+    case kListBoxActionMoved:
       ScrollToSelected();
       return ScreenStays();
-    case kListBoxKeySelect:
+    case kListBoxActionSelect:
       return OnSelect();
     default:
       return ScreenStays();

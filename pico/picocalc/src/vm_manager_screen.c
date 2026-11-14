@@ -60,16 +60,16 @@ ScreenResult VMManagerScreenOpen(
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
   const uint8_t count = (uint8_t)(g_vm_manager.vms->count + 1);
-  switch (ListBoxTakeEvent(&g_list_box, event, count)) {
-    case kListBoxKeyMoved:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, count)) {
+    case kListBoxActionMoved:
       ScrollToSelected();
       return ScreenStays();
-    case kListBoxKeySelect:
+    case kListBoxActionSelect:
       if (g_list_box.selected == g_vm_manager.vms->count) {
         return VMConfigScreenOpenNew(&g_vm_manager);
       }
       return VMScreenOpen(&g_vm_manager, g_list_box.selected);
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();

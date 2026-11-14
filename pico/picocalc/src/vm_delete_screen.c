@@ -53,13 +53,13 @@ static __noinline ScreenResult Delete(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxTakeEvent(&g_list_box, event, kDeleteItemCount)) {
-    case kListBoxKeySelect:
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, kDeleteItemCount)) {
+    case kListBoxActionSelect:
       if (g_list_box.selected == kDeleteConfirm) {
         return Delete();
       }
       return ScreenBack();
-    case kListBoxKeyBack:
+    case kListBoxActionBack:
       return ScreenBack();
     default:
       return ScreenStays();

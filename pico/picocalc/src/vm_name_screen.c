@@ -104,7 +104,7 @@ static __noinline ScreenResult Clone(void) {
 }
 
 static ScreenResult HandleKey(SouthbridgeKeyEvent event) {
-  if (!ListBoxKeyPressed(event)) {
+  if (!ListBoxIsKeyPress(event)) {
     return ScreenStays();
   }
   const uint8_t key = event.key;
