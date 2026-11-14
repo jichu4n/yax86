@@ -10,6 +10,7 @@
 #include "core/video.h"
 #include "debug_command.h"
 #include "display.h"
+#include "emulator_session.h"
 #include "emulator_status_bar.h"
 #include "file_list.h"
 #include "floppy.h"
@@ -23,7 +24,6 @@
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "psram.h"
-#include "running_vm.h"
 #include "runtime_log.h"
 #include "screen.h"
 #include "sdcard.h"
@@ -168,9 +168,9 @@ static YPlatformState g_platform;
 // built-in floppy and no other drive has a disk.
 static VMConfig* g_vm;
 static bool g_has_vm;
-// The running VM, for the menu to change its floppy disks: g_vm and the
-// machine's floppy disk controller.
-static RunningVM g_running_vm;
+// The emulator session the in-VM menu works on: g_vm and the machine's
+// floppy disk controller.
+static EmulatorSession g_session;
 static RuntimeStatus g_status;
 static bool g_host_attached;
 // Host time spent carrying out commands a host sent, which a boot that took
@@ -447,13 +447,14 @@ static void WarnOfLowBattery(SouthbridgeBattery battery) {
   }
 }
 
+static uint8_t FloppyDrives(void);
+
 // Gather what the status rows show from the VM, and update them.
 static void UpdateStatusRows(void) {
   EmulatorStatusBarInputs inputs = {0};
   inputs.drives[kFloppyDriveA] = FloppyGetImage(kFloppyDriveA);
-  inputs.drives[kFloppyDriveB] = RunningVMFloppyDrives(&g_running_vm) > 1
-                                     ? FloppyGetImage(kFloppyDriveB)
-                                     : NULL;
+  inputs.drives[kFloppyDriveB] =
+      FloppyDrives() > 1 ? FloppyGetImage(kFloppyDriveB) : NULL;
   inputs.drives[kVMDriveHD1] = HardDiskGetImage(kHardDisk1);
   inputs.drives[kVMDriveHD2] = HardDiskGetImage(kHardDisk2);
   inputs.vm = g_has_vm ? g_vm->entry.name : NULL;
@@ -578,6 +579,12 @@ static void SetPCSpeakerFrequency(
   SpeakerSetFrequency(frequency_hz);
 }
 
+// The floppy drives the machine has, which the status rows, the BIOS and
+// the menu each need.
+static uint8_t FloppyDrives(void) {
+  return EmulatorSessionFloppyDrives(&g_session);
+}
+
 // Page all of guest RAM through the PSRAM if it came up, and the last start
 // did not end in a hard fault: paging is the newest thing a fault could come
 // from, and without it the VM has the SRAM alone - see yax86_pico.h.
@@ -601,7 +608,7 @@ static bool InitVM(void) {
   ConfigureGuestRAM(config);
   config->vram = g_vram;
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
-  config->floppy_drives = RunningVMFloppyDrives(&g_running_vm);
+  config->floppy_drives = FloppyDrives();
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -880,20 +887,92 @@ static void PowerOffVM(void) {
   LauncherLeaveStartNote(kStartIntentMenu, g_vm->entry.name);
 }
 
-// The menu's callbacks on the running VM. A callback takes no context, so
-// each passes the running VM on.
-static bool CanPowerOff(void) { return RunningVMCanPowerOff(&g_running_vm); }
+// Whether there is a list to power off to. The menu's callbacks take no
+// context, so this passes the session on.
+static bool CanPowerOff(void) { return EmulatorSessionCanPowerOff(&g_session); }
 
-static uint8_t FloppyDrives(void) {
-  return RunningVMFloppyDrives(&g_running_vm);
+static const char* const kDriveNames[kFloppyDrives] = {
+    [kFloppyDriveA] = "fd1",
+    [kFloppyDriveB] = "fd2",
+};
+
+// Take the disk out of a floppy drive, and say so.
+// Save what a floppy drive now holds to the VM's `vm.cfg`, so the next start
+// has it. Without a VM - the built-in floppy - there is nothing to save to.
+static void SaveDrive(FloppyDrive drive) {
+  if (!g_has_vm) {
+    return;
+  }
+  const DiskImage* image = FloppyGetImage(drive);
+  const char* path = image->status == kDiskImageOpen ? image->path : "";
+  char problem[kVMProblemLength + 1];
+  if (!VMConfigSaveDrive(g_vm, kVMDriveFD1 + drive, path, problem)) {
+    char message[kTextColumns + 1];
+    snprintf(
+        message, sizeof(message), "Could not save %s: %.50s",
+        kVMDriveLabels[drive], problem);
+    EmulatorStatusBarPostMessage(message);
+    SYSTEM_WARN(
+        "drive_not_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("problem", problem));
+    return;
+  }
+  FSCopyPath(path, g_vm->drives[kVMDriveFD1 + drive]);
+  SYSTEM_INFO(
+      "drive_saved", Y_LOG_STRING("drive", kDriveNames[drive]),
+      Y_LOG_STRING("path", path));
 }
 
 static void EjectDrive(FloppyDrive drive) {
-  RunningVMEjectFloppy(&g_running_vm, drive);
+  FloppyEject(&g_platform.fdc, drive);
+  char message[kTextColumns + 1];
+  snprintf(
+      message, sizeof(message), "Ejected the disk from %s",
+      kVMDriveLabels[drive]);
+  EmulatorStatusBarPostMessage(message);
+  DISK_INFO("ejected", Y_LOG_STRING("drive", kDriveNames[drive]));
+  SaveDrive(drive);
 }
 
+// Put an image in a floppy drive, and say whether it went in. An image
+// already in the other drive stays there: two drives writing one image would
+// each overwrite the other's sectors.
 static void InsertDrive(FloppyDrive drive, const char* path) {
-  RunningVMInsertFloppy(&g_running_vm, drive, path);
+  char name[kDiskImageNameLength + 1];
+  DiskImageName(path, name);
+  char message[kTextColumns + 1];
+  const FloppyDrive holding = FloppyDriveHolding(path);
+  if (holding != kFloppyDrives) {
+    snprintf(
+        message, sizeof(message), "%s is already in %s", name,
+        kVMDriveLabels[holding]);
+    EmulatorStatusBarPostMessage(message);
+    DISK_WARN(
+        "insert_failed", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("path", path), Y_LOG_STRING("error", "in_other_drive"));
+    return;
+  }
+  const DiskImageStatus status =
+      FloppyInsertImage(&g_platform.fdc, drive, path);
+  if (status == kDiskImageOpen) {
+    snprintf(
+        message, sizeof(message), "Inserted %s in %s", name,
+        kVMDriveLabels[drive]);
+    DISK_INFO(
+        "inserted", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("path", path));
+  } else {
+    snprintf(
+        message, sizeof(message), "Could not insert %s: %s", name,
+        DiskImageDescribeStatus(status));
+    DISK_WARN(
+        "insert_failed", Y_LOG_STRING("drive", kDriveNames[drive]),
+        Y_LOG_STRING("path", path),
+        Y_LOG_STRING("error", DiskImageDescribeStatus(status)));
+  }
+  EmulatorStatusBarPostMessage(message);
+  // The drive is empty after an insert that failed.
+  SaveDrive(drive);
 }
 
 // Real time goes on while the VM is paused and emulated time does not,
@@ -1119,8 +1198,8 @@ void EmulatorInit(
 void EmulatorRun(VMConfig* vm) {
   g_vm = vm;
   g_has_vm = vm != NULL;
-  g_running_vm.config = vm;
-  g_running_vm.fdc = &g_platform.fdc;
+  g_session.config = vm;
+  g_session.fdc = &g_platform.fdc;
   OpenDrives();
   RunVM(InitVM());
 }
