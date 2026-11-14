@@ -140,7 +140,7 @@ static ScreenResult OnResume(void) {
 // The name being typed, in a field marked as the item selected is, with a
 // cursor after it while there is room.
 static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   char title[kListBoxNarrowColumns];

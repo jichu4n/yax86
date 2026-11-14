@@ -122,7 +122,7 @@ static bool OnDraw(DisplayBox* box) {
   if (now_us - g_drawn_us >= kStatusRefreshUs) {
     g_list_box.dirty = true;
   }
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   const UsbStorageStats stats = UsbStorageGetStats();

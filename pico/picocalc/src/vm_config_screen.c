@@ -225,7 +225,7 @@ static ScreenResult OnResume(void) {
 // drives, with what each holds - or for an existing VM, the drives alone,
 // under its name.
 static bool OnDraw(DisplayBox* box) {
-  if (!ListBoxTakeDirty(&g_list_box)) {
+  if (!ListBoxTestAndClearDirty(&g_list_box)) {
     return false;
   }
   char rows[kFormItemCount][kListBoxNarrowColumns];
