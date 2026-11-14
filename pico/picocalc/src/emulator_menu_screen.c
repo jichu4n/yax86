@@ -75,7 +75,8 @@ ScreenResult EmulatorMenuScreenOpen(
 static uint8_t ShownItems(MainItem items[kMainItemCount]) {
   uint8_t count = 0;
   for (uint8_t item = 0; item < kMainItemCount; ++item) {
-    if ((item == kMainDriveB && EmulatorSessionFloppyDrives(g_session) < 2) ||
+    if ((item == kMainDriveB &&
+         EmulatorSessionNumFloppyDrives(g_session) < 2) ||
         (item == kMainPowerOff && !EmulatorSessionCanPowerOff(g_session))) {
       continue;
     }

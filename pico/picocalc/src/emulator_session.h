@@ -32,7 +32,7 @@ typedef struct EmulatorSession {
 // not name floppy disk 2. With one, the BIOS's switches report one, and
 // DOS's B: is drive A by another name. Without a VM, the machine has two,
 // the machine pico/bench's dos-boot workload measures.
-uint8_t EmulatorSessionFloppyDrives(const EmulatorSession* session);
+uint8_t EmulatorSessionNumFloppyDrives(const EmulatorSession* session);
 
 // Whether there is a list of VMs to power off to. There is one only with a
 // card, and a VM is started only from it.
