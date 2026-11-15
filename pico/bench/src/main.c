@@ -651,7 +651,7 @@ static void Overclock(void) {
   watchdog_enable(kWatchdogTimeoutMs, true);
   if (YAX86_PICO_SYS_CLK_KHZ > 250000) {
     vreg_set_voltage(VREG_VOLTAGE_1_30);
-  } else if (YAX86_PICO_SYS_CLK_KHZ > SYS_CLK_KHZ) {
+  } else if (YAX86_PICO_SYS_CLK_KHZ > SYS_CLK_HZ / 1000) {
     vreg_set_voltage(VREG_VOLTAGE_1_20);
   }
   busy_wait_us(10000);

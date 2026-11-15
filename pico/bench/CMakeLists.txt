@@ -42,15 +42,23 @@ set(YAX86_CORE_ROOT "${YAX86_ROOT}" CACHE PATH
 # Both must be set before the SDK is pulled in, since pico_sdk_import.cmake
 # selects the compiler and platform headers from them.
 if(YAX86_PICO_BOARD STREQUAL "pico")
-    set(PICO_PLATFORM rp2040 CACHE STRING "Pico platform" FORCE)
-    set(PICO_BOARD pico CACHE STRING "Board type" FORCE)
+    set(pico_platform rp2040)
+    set(pico_board pico)
 elseif(YAX86_PICO_BOARD STREQUAL "pico2")
-    set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Pico platform" FORCE)
-    set(PICO_BOARD pico2 CACHE STRING "Board type" FORCE)
+    set(pico_platform rp2350-arm-s)
+    set(pico_board pico2)
 else()
     message(FATAL_ERROR
         "YAX86_PICO_BOARD must be pico or pico2, not '${YAX86_PICO_BOARD}'")
 endif()
+if(DEFINED PICO_PLATFORM AND NOT PICO_PLATFORM STREQUAL pico_platform)
+    message(FATAL_ERROR
+        "Build directory was configured for PICO_PLATFORM='${PICO_PLATFORM}' "
+        "and cannot be reconfigured for YAX86_PICO_BOARD='${YAX86_PICO_BOARD}'; "
+        "use a separate build directory")
+endif()
+set(PICO_PLATFORM "${pico_platform}" CACHE STRING "Pico platform")
+set(PICO_BOARD "${pico_board}" CACHE STRING "Board type")
 
 include(pico_sdk_import.cmake)
 

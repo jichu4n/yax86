@@ -17,11 +17,11 @@
 
 enum {
   kVendorID = 0x2E8A,
-// The Pico SDK's ID for a stdio_usb device: 0x000A on RP2040, 0x0009 on
-// RP2350.
 #if PICO_RP2040
+  // The Pico SDK's ID for a stdio_usb device on an RP2040.
   kProductID = 0x000A,
 #else
+  // And on an RP2350.
   kProductID = 0x0009,
 #endif
   // A device release number, in binary coded decimal: 1.00.

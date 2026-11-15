@@ -722,8 +722,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk YAX86_PICO_BOARD=pico2 ./pico/picocalc/build.s
   given to the guest is in `pico/common/boards/<board>/yax86_pico.h`, a header
   per board so each board has its own. Both are shared with `pico/bench`, so
   that it measures what runs here. The pager brings a page into a frame when
-  the
-  guest first touches it, from PSRAM, or as zeros if it has never been
+  the guest first touches it, from PSRAM, or as zeros if it has never been
   written back, and takes frames back by the clock algorithm, writing a page
   back only if it was written. The report's `paging` group has the counts
   and `fault_us`, the time in the fault handler.

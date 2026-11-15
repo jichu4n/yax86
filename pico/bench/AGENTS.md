@@ -7,12 +7,13 @@ work" in the root `AGENTS.md` for what a performance PR reports and why.
 
 - It is a consumer of the core: `src/main.c` uses only the public interface,
   and nothing in `core` knows it exists.
-- **CI builds both boards for it and `pico/picocalc`**, in the `pico` job of
-  `.github/workflows/build.yaml`: their `build.sh` for `pico` and `pico2`
-  against the Pico SDK release pinned there, with apt's ARM GCC. It catches a
-  change to the core's interface or to `core/tools/generate-rom-data-files.js`
-  that breaks either target. It only builds them - nothing runs without a
-  board - so a change that touches either still needs a run on hardware.
+- **CI builds `pico/bench` and `pico/picocalc` for both boards**, in the `pico`
+  job of `.github/workflows/build.yaml`: their `build.sh` for `pico` and
+  `pico2` against the Pico SDK release pinned there, with apt's ARM GCC. It
+  catches a change to the core's interface or to
+  `core/tools/generate-rom-data-files.js` that breaks either target. It only
+  builds them - nothing runs without a board - so a change that touches either
+  still needs a run on hardware.
 - A standalone CMake project, because the top level builds native code that
   does not cross-compile, and the Pico SDK must own the toolchain from before
   `project()`.
@@ -64,10 +65,9 @@ YAX86_PICO_BOARD=pico2 YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh O3
 ```
 
 - **`YAX86_PICO_BOARD` chooses `pico` (`rp2040` / `pico`, default) or `pico2`
-  (`rp2350-arm-s` / `pico2`)**, and rejects anything else. The result header's
+  (`rp2350-arm-s` / `pico2`)**, and rejects anything else. The `header` line's
   `target` field records the SDK's `PICO_PLATFORM_STRING` (`rp2040` or
   `rp2350-arm-s`).
-
 - **`run.js` reboots the board into BOOTSEL with `picotool`, loads the image
   and captures what it prints**, exiting non-zero if the run did not finish;
   `--no-flash` captures from a board already running. The output is logfmt
