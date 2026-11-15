@@ -32,14 +32,15 @@ check a pin against that repository.
 ## Building and flashing
 
 ```sh
-PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
-PICO_SDK_PATH=/usr/share/pico-sdk YAX86_PICO_BOARD=pico2 ./pico/picocalc/build.sh
+PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico
+PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 ./pico/bench/run.js build-pico/picocalc/yax86_picocalc.uf2
 ```
 
-- **`YAX86_PICO_BOARD` chooses `pico` (`rp2040` / `pico`, default) into
-  `build-pico/picocalc` or `pico2` (`rp2350-arm-s` / `pico2`) into
-  `build-pico/pico2/picocalc`**, and rejects anything else. On `pico2`,
+- **`build.sh` requires `pico` or `pico2` (passed to CMake as
+  `-DYAX86_PICO_BOARD`, which also has no default)**: `pico` (`rp2040` / `pico`)
+  builds into `build-pico/picocalc`, `pico2` (`rp2350-arm-s` / `pico2`) builds
+  into `build-pico2/picocalc`, and anything else is rejected. On `pico2`,
   `PICO_EMBED_XIP_SETUP=1` is set alongside `PICO_FLASH_SPI_CLKDIV` so `crt0`
   embeds and runs `boot2` rather than leaving the RP2350 bootrom's fallback XIP
   timing in place.
@@ -76,7 +77,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk YAX86_PICO_BOARD=pico2 ./pico/picocalc/build.s
   at 1200 baud reboots it into BOOTSEL: `stty -F /dev/ttyACM0 1200`.
 - `YAX86_PICOCALC_DRAW_SCREEN=0` builds an otherwise identical image that does
   not draw the guest's screen, into `build-pico/picocalc-no-draw` (or
-  `build-pico/pico2/picocalc-no-draw` for `pico2`), which is how drawing's cost
+  `build-pico2/picocalc-no-draw` for `pico2`), which is how drawing's cost
   is measured.
 - `YAX86_PICOCALC_SYS_CLK_KHZ` sets the clock, 250000 by default; empty is the
   board's stock clock (125MHz on `pico`, 150MHz on `pico2`), and past 400000 is

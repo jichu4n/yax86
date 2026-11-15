@@ -52,22 +52,23 @@ work" in the root `AGENTS.md` for what a performance PR reports and why.
 
 ## Building and running
 
-Needs `PICO_SDK_PATH` and an `arm-none-eabi` toolchain. `build.sh` builds for
-`pico` (RP2040, the default) into `build-pico/<level>` and for `pico2`
-(RP2350, Arm) into `build-pico/pico2/<level>`, and prints the image's flash and
+Needs `PICO_SDK_PATH` and an `arm-none-eabi` toolchain. `build.sh` takes the
+board (`pico` for the RP2040 into `build-pico/<level>`, `pico2` for the RP2350
+into `build-pico2/<level>`, with no default) and prints the image's flash and
 SRAM:
 
 ```sh
-./pico/bench/build.sh                                         # -O3, pico
-YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh O3        # what a PR reports
-YAX86_PICO_BOARD=pico2 YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh O3
+./pico/bench/build.sh pico                                    # -O3, pico
+YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh pico O3   # what a PR reports
+YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh pico2 O3  # Pico 2 at 250MHz
 ./pico/bench/run.js build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
 ```
 
-- **`YAX86_PICO_BOARD` chooses `pico` (`rp2040` / `pico`, default) or `pico2`
-  (`rp2350-arm-s` / `pico2`)**, and rejects anything else. The `header` line's
-  `target` field records the SDK's `PICO_PLATFORM_STRING` (`rp2040` or
-  `rp2350-arm-s`).
+- **`build.sh` requires `pico` or `pico2` as its first argument, and CMake
+  requires `-DYAX86_PICO_BOARD=pico|pico2`**: `pico` maps to `rp2040` / `pico`,
+  `pico2` maps to `rp2350-arm-s` / `pico2`, and anything else is rejected. The
+  `header` line's `target` field records the SDK's `PICO_PLATFORM_STRING`
+  (`rp2040` or `rp2350-arm-s`).
 - **`run.js` reboots the board into BOOTSEL with `picotool`, loads the image
   and captures what it prints**, exiting non-zero if the run did not finish;
   `--no-flash` captures from a board already running. The output is logfmt
@@ -83,7 +84,7 @@ YAX86_PICO_BOARD=pico2 YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh O3
   is how a branch and its baseline are measured with one harness:
   ```sh
   git worktree add ~/Scratch/yax86-baseline <commit>
-  YAX86_CORE_ROOT=~/Scratch/yax86-baseline ./pico/bench/build.sh O2 O3
+  YAX86_CORE_ROOT=~/Scratch/yax86-baseline ./pico/bench/build.sh pico O2 O3
   ```
   The harness uses the core's public names and `Y_HOT`, so a baseline from
   before the `Y` namespace is built from its own checkout, harness and all.
@@ -247,7 +248,7 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
   the interrupted PC into a histogram, dumped as addresses, and
   `symbolize.js` names them.
   ```sh
-  YAX86_PICO_PROFILE=1 ./pico/bench/build.sh O3
+  YAX86_PICO_PROFILE=1 ./pico/bench/build.sh pico O3
   ./pico/bench/run.js build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
   ./pico/bench/symbolize.js build-pico/O3/yax86_pico_bench.elf capture.txt
   ```

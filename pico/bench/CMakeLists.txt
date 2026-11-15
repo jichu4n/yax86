@@ -7,8 +7,9 @@ cmake_minimum_required(VERSION 3.17)
 # =============================================================================
 # Build options
 # =============================================================================
-# Which board to build for: pico (RP2040) or pico2 (RP2350, Arm).
-set(YAX86_PICO_BOARD "pico" CACHE STRING "Target board: pico or pico2")
+# Which board to build for: pico (RP2040) or pico2 (RP2350, Arm). Required so
+# a build never targets the wrong board by default.
+set(YAX86_PICO_BOARD "" CACHE STRING "Target board: pico or pico2")
 set_property(CACHE YAX86_PICO_BOARD PROPERTY STRINGS pico pico2)
 
 # The optimization level the whole firmware - emulator, harness and SDK - is
@@ -47,6 +48,9 @@ if(YAX86_PICO_BOARD STREQUAL "pico")
 elseif(YAX86_PICO_BOARD STREQUAL "pico2")
     set(pico_platform rp2350-arm-s)
     set(pico_board pico2)
+elseif(YAX86_PICO_BOARD STREQUAL "")
+    message(FATAL_ERROR
+        "YAX86_PICO_BOARD must be set to pico or pico2")
 else()
     message(FATAL_ERROR
         "YAX86_PICO_BOARD must be pico or pico2, not '${YAX86_PICO_BOARD}'")

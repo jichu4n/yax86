@@ -1,14 +1,13 @@
 #!/bin/bash
-# Builds the PicoCalc firmware into build-pico/picocalc (or
-# build-pico/pico2/picocalc for a Pico 2) and prints where the image is and
-# what it costs in flash and SRAM.
+# Builds the PicoCalc firmware into build-pico/picocalc (for pico) or
+# build-pico2/picocalc (for pico2) and prints where the image is and what it
+# costs in flash and SRAM.
 #
-#   ./build.sh                            # for pico (RP2040)
-#   YAX86_PICO_BOARD=pico2 ./build.sh     # for pico2 (RP2350)
+#   ./build.sh pico     # for pico (RP2040)
+#   ./build.sh pico2    # for pico2 (RP2350)
 #
 # Environment:
 #   PICO_SDK_PATH                Where the Pico SDK lives.
-#   YAX86_PICO_BOARD             Target board: pico (default) or pico2.
 #   YAX86_PICOCALC_DRAW_SCREEN   0 to build an image that does not draw the
 #                                guest's screen, into *-no-draw, for measuring
 #                                what drawing costs. Defaults to 1.
@@ -24,14 +23,18 @@
 set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-BOARD="${YAX86_PICO_BOARD:-pico}"
+if [ $# -ne 1 ]; then
+    echo "Usage: build.sh <pico|pico2>" >&2
+    exit 1
+fi
+BOARD="$1"
 DRAW_SCREEN="${YAX86_PICOCALC_DRAW_SCREEN:-1}"
 SYS_CLK_KHZ="${YAX86_PICOCALC_SYS_CLK_KHZ-250000}"
 case "$BOARD" in
     pico) BUILD_DIR="$(cd ../.. && pwd)/build-pico/picocalc" ;;
-    pico2) BUILD_DIR="$(cd ../.. && pwd)/build-pico/pico2/picocalc" ;;
+    pico2) BUILD_DIR="$(cd ../.. && pwd)/build-pico2/picocalc" ;;
     *)
-        echo "!! YAX86_PICO_BOARD must be pico or pico2, not '$BOARD'" >&2
+        echo "Usage: build.sh <pico|pico2>" >&2
         exit 1
         ;;
 esac

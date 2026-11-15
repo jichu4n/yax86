@@ -50,7 +50,7 @@ touches too.
 ## Building and testing
 
 CMake. Native and Emscripten output go to `build-native` and
-`build-emscripten`; the Pico targets build into `build-pico`.
+`build-emscripten`; the Pico targets build into `build-pico` and `build-pico2`.
 
 ```sh
 ./tools/build.sh
@@ -65,8 +65,8 @@ CMake. Native and Emscripten output go to `build-native` and
 - CI builds both compilers at `Debug` - for the warnings - and `Release` -
   what ships - since undefined behavior tends to show under one and not the
   others. `MinSizeRel` is not built: nothing ships at it.
-- A separate CI job builds `pico/bench` and `pico/picocalc` for the RP2040 -
-  see `pico/bench/AGENTS.md`.
+- A separate CI job builds `pico/bench` and `pico/picocalc` for the RP2040 and
+  RP2350 - see `pico/bench/AGENTS.md`.
 
 ### The 8088 hardware test suite
 

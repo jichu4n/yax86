@@ -1,6 +1,7 @@
 /build-native/
 /build-emscripten/
 /build-pico/
+/build-pico2/
 /.ccls-cache/
 /.vscode/
 /.cache/

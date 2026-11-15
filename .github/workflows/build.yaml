@@ -82,8 +82,8 @@ jobs:
           ref: 2.3.1
           path: pico-sdk
       - run: git -C pico-sdk submodule update --init --depth 1 lib/tinyusb
-      - run: pico/bench/build.sh O3
-      - run: YAX86_PICO_BOARD=pico2 pico/bench/build.sh O3
-      - run: pico/picocalc/build.sh
-      - run: YAX86_PICO_BOARD=pico2 pico/picocalc/build.sh
+      - run: pico/bench/build.sh pico O3
+      - run: pico/bench/build.sh pico2 O3
+      - run: pico/picocalc/build.sh pico
+      - run: pico/picocalc/build.sh pico2
       - run: git diff --exit-code
