@@ -3,11 +3,15 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 #include "config_file.h"
+#include "pico/platform.h"
+#include "runtime_log.h"
 
 const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
+static const char kVideoAdapterKey[] = "video_adapter";
 
 const char* const kVMDriveLabels[kNumVMDrives] = {
     [kVMDriveFD1] = "FD1",
@@ -29,6 +33,36 @@ static const char* const kDriveKeys[kNumVMDrives] = {
     [kVMDriveHD1] = "hd1",
     [kVMDriveHD2] = "hd2",
 };
+
+static const char* const kVideoAdapterNames[Y_VIDEO_NUM_ADAPTERS] = {
+    [Y_VIDEO_ADAPTER_MDA] = "mda",
+    [Y_VIDEO_ADAPTER_CGA] = "cga",
+};
+
+static const char* const kVideoAdapterLabels[Y_VIDEO_NUM_ADAPTERS] = {
+    [Y_VIDEO_ADAPTER_MDA] = "MDA",
+    [Y_VIDEO_ADAPTER_CGA] = "CGA",
+};
+
+const char* VMConfigVideoAdapterName(YVideoAdapter adapter) {
+  return kVideoAdapterNames
+      [adapter < Y_VIDEO_NUM_ADAPTERS ? adapter : Y_VIDEO_ADAPTER_CGA];
+}
+
+const char* VMConfigVideoAdapterLabel(YVideoAdapter adapter) {
+  return kVideoAdapterLabels
+      [adapter < Y_VIDEO_NUM_ADAPTERS ? adapter : Y_VIDEO_ADAPTER_CGA];
+}
+
+static bool VideoAdapterFromName(const char* name, YVideoAdapter* adapter) {
+  for (uint8_t i = 0; i < Y_VIDEO_NUM_ADAPTERS; ++i) {
+    if (strcasecmp(name, kVideoAdapterNames[i]) == 0) {
+      *adapter = (YVideoAdapter)i;
+      return true;
+    }
+  }
+  return false;
+}
 
 bool VMEntryMake(const char* name, VMEntry* entry) {
   if (strlen(name) > kVMNameLength) {
@@ -52,18 +86,34 @@ typedef struct VMReading {
   char folder[kFSMaxPath + 1];
 } VMReading;
 
+static __noinline void LogIgnoredKey(const char* path, const char* key) {
+  SYSTEM_WARN(
+      "vm_config_key_ignored", Y_LOG_STRING("path", path),
+      Y_LOG_STRING("key", key));
+}
+
 static bool TakeVMPair(
     const char* key, const char* value, void* context,
     char problem[kVMProblemLength + 1]) {
   VMReading* reading = context;
   VMConfig* config = reading->config;
+  if (strcmp(key, kVideoAdapterKey) == 0) {
+    if (!VideoAdapterFromName(value, &config->video_adapter)) {
+      snprintf(
+          problem, kVMProblemLength + 1, "video_adapter is not cga or mda");
+      return false;
+    }
+    return true;
+  }
   uint8_t drive = 0;
   while (drive < kNumVMDrives && strcmp(key, kDriveKeys[drive]) != 0) {
     ++drive;
   }
   if (drive == kNumVMDrives) {
-    snprintf(problem, kVMProblemLength + 1, "no setting %s", key);
-    return false;
+    // A key this firmware does not know, perhaps one a later firmware wrote,
+    // is left for whatever reads it, rather than stopping the reading.
+    LogIgnoredKey(config->entry.path, key);
+    return true;
   }
   config->is_present[drive] = true;
   if (value[0] == '\0') {
@@ -83,6 +133,7 @@ bool VMConfigRead(
     config->drives[drive][0] = '\0';
     config->is_present[drive] = false;
   }
+  config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   VMReading reading = {.config = config};
   FSFolderOf(vm->path, reading.folder);
   return ConfigFileRead(vm->path, TakeVMPair, &reading, problem) ==

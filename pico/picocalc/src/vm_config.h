@@ -1,12 +1,13 @@
 // A VM: a folder in `yax86/vm`, holding a configuration file, `vm.cfg`,
-// that names the images in the VM's drives, and whichever of those images
-// are its own. A VM is named for its folder - `yax86/vm/DOS330` is the VM
-// DOS330. The list of them is in vm_list.h, and the card's own settings in
-// settings.h.
+// that names the images in the VM's drives and its video adapter, and
+// whichever of those images are its own. A VM is named for its folder -
+// `yax86/vm/DOS330` is the VM DOS330. The list of them is in vm_list.h, and
+// the card's own settings in settings.h.
 //
 //   fd1=../../images/msdos330/disk01.img
 //   hd1=hd1.img
 //   hd2=/shared/tools.img
+//   video_adapter=mda
 //
 // Each line is logfmt - any number of key=value pairs - and a line starting
 // with # is a comment. A path is relative to the folder the file is in, or
@@ -15,7 +16,8 @@
 // drive, and DOS's B: is drive A by another name - and named as fd2="" it is
 // a drive with no disk. A hard disk not named, or named as "", is not there:
 // a hard disk with no image is no disk at all. Floppy images are 360KB and
-// hard disk images the core's 10MB drive.
+// hard disk images the core's 10MB drive. video_adapter is cga or mda, and
+// cga when not named. Keys this firmware does not know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -23,6 +25,7 @@
 #include <stdint.h>
 
 #include "config_file.h"
+#include "core/video.h"
 #include "fs.h"
 
 enum {
@@ -66,15 +69,23 @@ typedef struct VMConfig {
   // Whether the file names each drive, even as empty. Floppy disk 2 is there
   // only if it does; a hard disk not named is empty either way.
   bool is_present[kNumVMDrives];
+  // The VM's video adapter: Y_VIDEO_ADAPTER_CGA when not named.
+  YVideoAdapter video_adapter;
 } VMConfig;
+
+// The video adapter's name in vm.cfg and the report (cga, mda), and its label
+// in the menu and on the status page (CGA, MDA).
+const char* VMConfigVideoAdapterName(YVideoAdapter adapter);
+const char* VMConfigVideoAdapterLabel(YVideoAdapter adapter);
 
 // The entry of the VM named name, whether or not it is on the card. Returns
 // false if the name is too long for one.
 bool VMEntryMake(const char* name, VMEntry* entry);
 
-// Read a VM's file. Returns false, with the problem described in problem,
-// if the file could not be read or has a line that is not understood; config
-// then holds what was understood before it.
+// Read a VM's file. Keys this firmware does not know are logged and skipped.
+// Returns false, with the problem described in problem, if the file could not
+// be read or has a line or value that is not understood; config then holds
+// what was understood before it.
 bool VMConfigRead(
     const VMEntry* vm, VMConfig* config, char problem[kVMProblemLength + 1]);
 

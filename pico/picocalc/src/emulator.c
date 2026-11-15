@@ -54,7 +54,7 @@ enum {
   // time - the same batch pico/bench runs.
   kCyclesPerBatch = 48000,
 
-  // The CGA text screen, which the boot is watched through. Character and
+  // The 80x25 text screen, which the boot is watched through. Character and
   // attribute alternate, so the characters are the even bytes.
   kScreenColumns = 80,
   kScreenRows = 25,
@@ -160,6 +160,7 @@ static const InitStatus* g_init_status;
 static uint8_t* g_guest_ram;
 static const VMList* g_vms;
 static Settings* g_settings;
+// Large enough for either adapter: the CGA's 16KB covers the MDA's 4KB.
 static uint8_t g_vram[Y_VIDEO_CGA_VRAM_SIZE];
 static YPlatformState g_platform;
 // The VM started, main.c's, if one was: without one drive A holds the
@@ -228,6 +229,11 @@ static uint64_t PausedUs(void) {
 // How much guest RAM the VM has.
 static uint32_t GuestRAMSize(void) {
   return g_is_paging ? Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE : kGuestRAMSize;
+}
+
+// The video adapter the VM runs with: a VM's, or the CGA without one.
+static YVideoAdapter VideoAdapter(void) {
+  return g_has_vm ? g_vm->video_adapter : Y_VIDEO_ADAPTER_CGA;
 }
 
 // A byte of guest RAM, read through the memory map since it may be paged. 0
@@ -331,15 +337,16 @@ static void FormatSystemLine(char* buffer, size_t size) {
 }
 
 static void FormatDisplayLine(char* buffer, size_t size) {
+  const char* adapter = VMConfigVideoAdapterLabel(VideoAdapter());
   if (!YAX86_PICOCALC_DRAW_SCREEN) {
-    snprintf(buffer, size, "not drawn in this build");
+    snprintf(buffer, size, "%s, not drawn in this build", adapter);
     return;
   }
   const DisplayStats stats = DisplayGetStats();
   const uint64_t render_ms = stats.render_us / kMicrosecondsPerMillisecond;
   snprintf(
-      buffer, size, "%lu frames, %llu.%03llus drawing on core 1, %lu late",
-      (unsigned long)stats.num_frames_drawn,
+      buffer, size, "%s, %lu frames, %llu.%03llus drawing on core 1, %lu late",
+      adapter, (unsigned long)stats.num_frames_drawn,
       (unsigned long long)(render_ms / kMillisecondsPerSecond),
       (unsigned long long)(render_ms % kMillisecondsPerSecond),
       (unsigned long)stats.num_frames_late);
@@ -513,7 +520,9 @@ static __noinline void ReportRunning(const DebugCommand* command) {
   DEBUG_COMMAND_REPLY_GROUP(command, "boot", BOOT_FIELDS());
   const DisplayStats display = DisplayGetStats();
   DEBUG_COMMAND_REPLY_GROUP(
-      command, "display", Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
+      command, "display",
+      Y_LOG_STRING("video_adapter", VMConfigVideoAdapterName(VideoAdapter())),
+      Y_LOG_BOOL("draw_screen", YAX86_PICOCALC_DRAW_SCREEN),
       Y_LOG_BOOL("on", DisplayPowerIsOn()),
       Y_LOG_UINT("timeout_s", g_settings->display_timeout),
       Y_LOG_STRING("font", Font4x10Name(g_settings->font)),
@@ -599,7 +608,7 @@ static bool InitVM(void) {
   config->logger_config = &g_vm_log_config;
   ConfigureGuestRAM(config);
   config->vram = g_vram;
-  config->video_adapter = Y_VIDEO_ADAPTER_CGA;
+  config->video_adapter = VideoAdapter();
   config->num_floppy_drives = EmulatorSessionNumFloppyDrives(&g_session);
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;

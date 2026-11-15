@@ -159,7 +159,10 @@ static __noinline bool LoadSelectedVM(uint8_t index, VMConfig* config) {
   const VMEntry* vm = &g_vms->vms[index];
   char problem[kVMProblemLength + 1];
   if (VMConfigRead(vm, config, problem)) {
-    SYSTEM_INFO("vm_loaded", Y_LOG_STRING("path", vm->path));
+    SYSTEM_INFO(
+        "vm_loaded", Y_LOG_STRING("path", vm->path),
+        Y_LOG_STRING(
+            "video_adapter", VMConfigVideoAdapterName(config->video_adapter)));
     SaveBootDefault(vm->name);
     return true;
   }
