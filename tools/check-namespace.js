@@ -70,10 +70,13 @@ const MODULE_OWNERS = {
 };
 
 // util is a directory of unrelated pieces rather than a module, so each of its
-// headers is its own owner. common.h defines only macros, which need none.
+// components is its own owner. common.h defines only macros, which need none.
 const UTIL_OWNERS = {
+  'log.c': 'Log',
   'log.h': 'Log',
+  'logfmt.c': 'Logfmt',
   'logfmt.h': 'Logfmt',
+  'snprintf.c': 'SNPrintF',
   'snprintf.h': 'SNPrintF',
   'static_vector.h': 'StaticVector',
 };

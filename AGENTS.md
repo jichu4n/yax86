@@ -181,7 +181,7 @@ name it defines is taken from the host. All of them are in a `Y` namespace:
   `BIOS` - and a sub-component takes its module's: `YVideoCGARenderRegion`,
   `Y_VIDEO_CRTC_REGISTER_CURSOR_START`, `YPlatformMemoryMapEntry`. It is what
   keeps eleven modules' `Init`s apart in one translation unit.
-- **util is not a module**; each header is its own owner: `Log` (`YLogger`,
+- **util is not a module**; each component is its own owner: `Log` (`YLogger`,
   `YLoggerConfig`), `Logfmt` (`YLogfmtLine`), `StaticVector`, and `YSNPrintF`,
   whose `va_list` form is `YVSNPrintF`. There is no `YUtil`. The macros in
   `util/common.h` are infrastructure with no owner: `Y_PUBLIC`, `Y_HOT`,
@@ -244,9 +244,7 @@ name it defines is taken from the host. All of them are in a `Y` namespace:
   which needs internal linkage, and a source one, which must not have it.
 - **Public means reachable through the interface**, not used by a host
   today: the log module descriptors are public because
-  `YLoggerEnableModule()` takes one. `YSNPrintF()` is the reverse - in every
-  module's public half because `logfmt.h` needs it, and called by nothing
-  outside the core.
+  `YLoggerEnableModule()` takes one.
 - Bare `static` cannot say which tier was meant, so nothing is written that
   way. The one exception is the body of `Y_STATIC_VECTOR_TYPE`, whose helpers
   take their tier from wherever it is instantiated.

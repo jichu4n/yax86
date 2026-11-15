@@ -1,11 +1,11 @@
-#include "src/util/logfmt.h"
-
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "util.h"
 
 using namespace std;
 
@@ -170,8 +170,7 @@ TEST(LogfmtParseTest, BarePairs) {
   const Parsed parsed = Parse("id=7 cmd=screen attrs=true");
   EXPECT_TRUE(parsed.ok);
   EXPECT_EQ(
-      parsed.pairs,
-      (Pairs{{"id", "7"}, {"cmd", "screen"}, {"attrs", "true"}}));
+      parsed.pairs, (Pairs{{"id", "7"}, {"cmd", "screen"}, {"attrs", "true"}}));
 }
 
 TEST(LogfmtParseTest, ExtraSpacesAreIgnored) {
