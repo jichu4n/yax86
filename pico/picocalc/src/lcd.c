@@ -6,13 +6,12 @@
 // interface accepts both (3Ah = 55h in the datasheet's serial interface
 // section), so it is two bytes a pixel rather than three.
 //
-// The serial interface is driven by a PIO state machine rather than the
-// RP2040's SPI block. The SPI block runs from the peripheral clock, which the
-// SDK moves to the 48MHz USB PLL on an overclock, capping the LCD at 24MHz.
-// Keeping it fast would mean overclocking the peripheral clock as well, and
-// every peripheral on it with it. PIO runs from the system clock, which is
-// overclocked already, and it is what ClockworkPi's own NES build drives this
-// panel with at 250MHz.
+// The serial interface is driven by a PIO state machine rather than the SPI
+// block. The SPI block runs from the peripheral clock, which the SDK moves to
+// the 48MHz USB PLL on an overclock, capping the LCD at 24MHz. Keeping it fast
+// would mean overclocking the peripheral clock as well, and every peripheral on
+// it with it. PIO runs from the system clock, which is overclocked already, and
+// it is what ClockworkPi's own NES build drives this panel with at 250MHz.
 
 #include "lcd.h"
 

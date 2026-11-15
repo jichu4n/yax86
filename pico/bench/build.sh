@@ -1,25 +1,41 @@
 #!/bin/bash
-# Builds the Pico benchmark firmware and reports what it costs in flash and
-# SRAM. Name optimization levels on the command line to build more than one:
-# the RP2040 runs code from flash through a 16KB XIP cache, so the level that
-# wins on a desktop is not necessarily the one that wins here.
+# Builds the Pico benchmark firmware into build-pico/<opt> (for pico) or
+# build-pico2/<opt> (for pico2) and reports what it costs in flash and SRAM.
+# Name the board first, then optimization levels on the command line to build
+# more than one: the Pico runs code from flash through a small XIP cache, so the
+# level that wins on a desktop is not necessarily the one that wins here.
 #
-#   ./build.sh                 # the default level, -O3
-#   ./build.sh O3              # just -O3
-#   ./build.sh Os O2 O3        # all three, to compare
+#   ./build.sh pico            # -O3 for pico (RP2040)
+#   ./build.sh pico O3         # just -O3
+#   ./build.sh pico Os O2 O3   # all three, to compare
+#   ./build.sh pico2 O3        # -O3 for pico2 (RP2350)
 #
 # Environment:
 #   YAX86_CORE_ROOT           Checkout whose core/ is compiled in, for A/B'ing
 #                             two core revisions against the same harness.
 #                             Defaults to this one.
-#   YAX86_PICO_SYS_CLK_KHZ    System clock. Defaults to the stock 125000.
+#   YAX86_PICO_SYS_CLK_KHZ    System clock. Defaults to the board's stock clock
+#                             (125000 on pico, 150000 on pico2).
 #   YAX86_PICO_PROFILE        1 to build in the sampling profiler.
 #   PICO_SDK_PATH             Where the Pico SDK lives.
 
 set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-BUILD_ROOT="$(cd ../.. && pwd)/build-pico"
+if [ $# -lt 1 ]; then
+    echo "Usage: build.sh <pico|pico2> [Os] [O2] [O3]" >&2
+    exit 1
+fi
+BOARD="$1"
+shift
+case "$BOARD" in
+    pico) BUILD_ROOT="$(cd ../.. && pwd)/build-pico" ;;
+    pico2) BUILD_ROOT="$(cd ../.. && pwd)/build-pico2" ;;
+    *)
+        echo "Usage: build.sh <pico|pico2> [Os] [O2] [O3]" >&2
+        exit 1
+        ;;
+esac
 CORE_ROOT="$(cd "${YAX86_CORE_ROOT:-../..}" && pwd)"
 SYS_CLK_KHZ="${YAX86_PICO_SYS_CLK_KHZ:-}"
 PROFILE="${YAX86_PICO_PROFILE:-0}"
@@ -29,7 +45,7 @@ for arg in "$@"; do
     case "$arg" in
         Os|O2|O3) OPT_LEVELS+=("$arg") ;;
         *)
-            echo "Usage: build.sh [Os] [O2] [O3]" >&2
+            echo "Usage: build.sh <pico|pico2> [Os] [O2] [O3]" >&2
             exit 1
             ;;
     esac
@@ -44,8 +60,9 @@ if [ -z "${PICO_SDK_PATH:-}" ]; then
 fi
 
 for opt in "${OPT_LEVELS[@]}"; do
-    echo "==> Building -$opt from $CORE_ROOT"
+    echo "==> Building -$opt ($BOARD) from $CORE_ROOT"
     cmake -S . -B "$BUILD_ROOT/$opt" \
+        -DYAX86_PICO_BOARD="$BOARD" \
         -DYAX86_PICO_OPT="$opt" \
         -DYAX86_PICO_SYS_CLK_KHZ="$SYS_CLK_KHZ" \
         -DYAX86_PICO_PROFILE="$PROFILE" \

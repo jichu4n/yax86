@@ -1,4 +1,5 @@
-// On-target benchmark harness for the yax86 core on the Raspberry Pi Pico.
+// On-target benchmark harness for the yax86 core on the Raspberry Pi Pico and
+// Pico 2.
 //
 // The RP2040 is the platform the emulator is meant to fit on, and it is not a
 // small desktop: a Cortex-M0+ has no branch predictor, no speculation and no
@@ -287,27 +288,32 @@ static bool AdvanceBootToPrompt(void) {
 //
 // A timer interrupt records where the interrupted code was, and the counts are
 // dumped after the run for a host to turn into symbol names. This exists
-// because guessing at what a Cortex-M0+ spends its time on has a poor record.
+// because guessing at what a Cortex-M spends its time on has a poor record.
 //
 // It costs a little over a percent, all of which lands in the reported time,
 // so a build with it on is for finding out where the time goes and never for
 // saying how much there was.
 
 #ifndef YAX86_PICO_PROFILE
-// Whether to sample. Off by default: the histogram costs 32KB of SRAM and the
-// interrupt costs more than most of the differences being looked for.
+// Whether to sample. Off by default: the histogram costs 32-48KB of SRAM and
+// the interrupt costs more than most of the differences being looked for.
 #define YAX86_PICO_PROFILE 0
 #endif
 
 #if YAX86_PICO_PROFILE
 enum {
-  // 16-byte buckets over the low 64KB of SRAM, which is where the hot path
-  // ends up once it is placed there. Coarser buckets could not be trusted: at
-  // 128 bytes several small functions share a bucket and only the first is
-  // named, which put samples on functions this workload cannot reach.
+  // 16-byte buckets over the low 64KB of SRAM on RP2040 (128KB on RP2350),
+  // which is where executable SRAM sections land ahead of .bss. Coarser
+  // buckets could not be trusted: at 128 bytes several small functions share a
+  // bucket and only the first is named, which put samples on functions this
+  // workload cannot reach.
   kProfileSRAMBucketShift = 4,
   kProfileSRAMBase = 0x20000000u,
+#if PICO_RP2040
   kProfileNumSRAMBuckets = 4096,
+#else
+  kProfileNumSRAMBuckets = 8192,
+#endif
   // Flash stays coarse, covering 512KB of the XIP window. Buckets there only
   // have to be fine enough to say which region the time went to.
   kProfileFlashBucketShift = 7,
@@ -353,20 +359,20 @@ void __not_in_flash_func(ProfileSampleFromFrame)(const uint32_t* frame) {
 
 // The hardware pushes {r0-r3, r12, lr, pc, xpsr} on exception entry, and a C
 // function's own prologue would move the stack pointer before it could be
-// read. So the stack pointer is captured first, in assembly, and the exception
-// return value in lr is preserved across the call.
+// read. So the stack pointer is captured first, in assembly, and an even
+// number of registers is pushed to keep sp 8-byte aligned across the call.
 __attribute__((naked)) static void ProfileIrqHandler(void) {
   __asm volatile(
       "mov r0, sp\n\t"
-      "push {lr}\n\t"
+      "push {r1, lr}\n\t"
       "bl ProfileSampleFromFrame\n\t"
-      "pop {r0}\n\t"
-      "bx r0\n\t");
+      "pop {r1, pc}\n\t");
 }
 
 static void ProfileInit(void) {
-  irq_set_exclusive_handler(TIMER_IRQ_0 + kProfileAlarm, ProfileIrqHandler);
-  irq_set_enabled(TIMER_IRQ_0 + kProfileAlarm, true);
+  const uint32_t irq = TIMER_ALARM_IRQ_NUM(timer_hw, kProfileAlarm);
+  irq_set_exclusive_handler(irq, ProfileIrqHandler);
+  irq_set_enabled(irq, true);
   hw_set_bits(&timer_hw->inte, 1u << kProfileAlarm);
   timer_hw->alarm[kProfileAlarm] = timer_hw->timerawl + kProfileIntervalUs;
 }
@@ -609,7 +615,8 @@ static Y_NOINLINE void LogStackUsage(void) {
 static Y_NOINLINE void LogHeader(void) {
   BENCH_INFO(
       "header", Y_LOG_STRING("emulator", "yax86"),
-      Y_LOG_STRING("target", "rp2040"), Y_LOG_STRING("opt", YAX86_PICO_OPT),
+      Y_LOG_STRING("target", PICO_PLATFORM_STRING),
+      Y_LOG_STRING("opt", YAX86_PICO_OPT),
       Y_LOG_UINT("guest_ram_kb", g_guest_ram_size / 1024),
       Y_LOG_BOOL("paging", g_is_paging),
       Y_LOG_UINT("sys_clk_khz", clock_get_hz(clk_sys) / 1000),
@@ -644,7 +651,7 @@ static void Overclock(void) {
   watchdog_enable(kWatchdogTimeoutMs, true);
   if (YAX86_PICO_SYS_CLK_KHZ > 250000) {
     vreg_set_voltage(VREG_VOLTAGE_1_30);
-  } else if (YAX86_PICO_SYS_CLK_KHZ > 125000) {
+  } else if (YAX86_PICO_SYS_CLK_KHZ > SYS_CLK_HZ / 1000) {
     vreg_set_voltage(VREG_VOLTAGE_1_20);
   }
   busy_wait_us(10000);

@@ -1,18 +1,19 @@
-# pico/bench - the RP2040 benchmark harness
+# pico/bench - the Pico benchmark harness
 
-Builds an image that runs the core on an RP2040 and reports how fast it went.
-This is the board the emulator is meant for, and it is not a small desktop -
-see "Performance work" in the root `AGENTS.md` for what a performance PR
-reports and why.
+Builds an image that runs the core on a Raspberry Pi Pico (RP2040) or Pico 2
+(RP2350) and reports how fast it went. The RP2040 is the reference board the
+emulator is tuned against, and it is not a small desktop - see "Performance
+work" in the root `AGENTS.md` for what a performance PR reports and why.
 
 - It is a consumer of the core: `src/main.c` uses only the public interface,
   and nothing in `core` knows it exists.
-- **CI builds it and `pico/picocalc`**, in the `pico` job of
-  `.github/workflows/build.yaml`: their `build.sh` against the Pico SDK
-  release pinned there, with apt's ARM GCC. It catches a change to the core's
-  interface or to `core/tools/generate-rom-data-files.js` that breaks them.
-  It only builds them - nothing runs without a board - so a change that
-  touches either still needs a run on hardware.
+- **CI builds `pico/bench` and `pico/picocalc` for both boards**, in the `pico`
+  job of `.github/workflows/build.yaml`: their `build.sh` for `pico` and
+  `pico2` against the Pico SDK release pinned there, with apt's ARM GCC. It
+  catches a change to the core's interface or to
+  `core/tools/generate-rom-data-files.js` that breaks either target. It only
+  builds them - nothing runs without a board - so a change that touches either
+  still needs a run on hardware.
 - A standalone CMake project, because the top level builds native code that
   does not cross-compile, and the Pico SDK must own the toolchain from before
   `project()`.
@@ -25,8 +26,8 @@ reports and why.
   machine - CPU, PIT, PIC, video, FDC - running what the BIOS and DOS do, so
   it compares only against another yax86 build.
 - **Guest memory is laid out as `pico/picocalc` lays it out**, by whether
-  the PicoCalc's PSRAM answers at startup (`pico/common/yax86_pico.h`). One
-  image runs both ways:
+  the PicoCalc's PSRAM answers at startup
+  (`pico/common/boards/<board>/yax86_pico.h`). One image runs both ways:
 
   | board | guest memory | header |
   | --- | --- | --- |
@@ -51,15 +52,23 @@ reports and why.
 
 ## Building and running
 
-Needs `PICO_SDK_PATH` and an `arm-none-eabi` toolchain. `build.sh` builds into
-`build-pico/<level>` and prints the image's flash and SRAM:
+Needs `PICO_SDK_PATH` and an `arm-none-eabi` toolchain. `build.sh` takes the
+board (`pico` for the RP2040 into `build-pico/<level>`, `pico2` for the RP2350
+into `build-pico2/<level>`, with no default) and prints the image's flash and
+SRAM:
 
 ```sh
-./pico/bench/build.sh                                         # -O3
-YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh O3        # what a PR reports
+./pico/bench/build.sh pico                                    # -O3, pico
+YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh pico O3   # what a PR reports
+YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh pico2 O3  # Pico 2 at 250MHz
 ./pico/bench/run.js build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
 ```
 
+- **`build.sh` requires `pico` or `pico2` as its first argument, and CMake
+  requires `-DYAX86_PICO_BOARD=pico|pico2`**: `pico` maps to `rp2040` / `pico`,
+  `pico2` maps to `rp2350-arm-s` / `pico2`, and anything else is rejected. The
+  `header` line's `target` field records the SDK's `PICO_PLATFORM_STRING`
+  (`rp2040` or `rp2350-arm-s`).
 - **`run.js` reboots the board into BOOTSEL with `picotool`, loads the image
   and captures what it prints**, exiting non-zero if the run did not finish;
   `--no-flash` captures from a board already running. The output is logfmt
@@ -75,7 +84,7 @@ YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh O3        # what a PR report
   is how a branch and its baseline are measured with one harness:
   ```sh
   git worktree add ~/Scratch/yax86-baseline <commit>
-  YAX86_CORE_ROOT=~/Scratch/yax86-baseline ./pico/bench/build.sh O2 O3
+  YAX86_CORE_ROOT=~/Scratch/yax86-baseline ./pico/bench/build.sh pico O2 O3
   ```
   The harness uses the core's public names and `Y_HOT`, so a baseline from
   before the `Y` namespace is built from its own checkout, harness and all.
@@ -224,11 +233,14 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
   `__uninitialized_ram`, surviving a reset but not power, and is set only
   across the window where a hang can happen.
 - **`PICO_FLASH_SPI_CLKDIV` rises with the clock**, or the flash is
-  overclocked by the same factor. It must be an `add_compile_definitions()`
-  **before** `pico_sdk_init()`: it goes into the second stage bootloader, an
-  SDK target `target_compile_definitions` never reaches. Set on the firmware
-  target it does nothing, and the hang looks exactly like an unstable
-  overclock.
+  overclocked by the same factor, keeping flash at or below its stock rate
+  (62.5MHz on `pico`, 75MHz on `pico2`). It must be an
+  `add_compile_definitions()` **before** `pico_sdk_init()`: it goes into the
+  second stage XIP setup, an SDK target `target_compile_definitions` never
+  reaches. Set on the firmware target it does nothing, and the hang looks
+  exactly like an unstable overclock. On `pico2`, `PICO_EMBED_XIP_SETUP=1` is
+  set alongside it so `crt0` embeds and runs `boot2` rather than leaving the
+  RP2350 bootrom's fallback XIP timing in place.
 
 ## Profiling
 
@@ -236,15 +248,16 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
   the interrupted PC into a histogram, dumped as addresses, and
   `symbolize.js` names them.
   ```sh
-  YAX86_PICO_PROFILE=1 ./pico/bench/build.sh O3
+  YAX86_PICO_PROFILE=1 ./pico/bench/build.sh pico O3
   ./pico/bench/run.js build-pico/O3/yax86_pico_bench.uf2 --out capture.txt
   ./pico/bench/symbolize.js build-pico/O3/yax86_pico_bench.elf capture.txt
   ```
 - **Symbolize against the ELF that produced the capture.** Another build's
   addresses do not fail - they give a plausible ranking of functions the run
   never executed.
-- It costs a little over a percent and 32KB of SRAM: off by default, and
-  **never on in a timing run**. It says where time went, not how much.
+- It costs a little over a percent and 32KB of SRAM on `pico` (48KB on
+  `pico2`): off by default, and **never on in a timing run**. It says where
+  time went, not how much.
 - SRAM is bucketed at 16 bytes and flash at 128, so below the top few flash
   entries a bucket can be credited to the wrong function. Verify the tail
   before acting on it.

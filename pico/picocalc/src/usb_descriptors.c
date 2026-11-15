@@ -17,8 +17,13 @@
 
 enum {
   kVendorID = 0x2E8A,
-  // The Pico SDK's ID for a device of its on an RP2040.
+#if PICO_RP2040
+  // The Pico SDK's ID for a stdio_usb device on an RP2040.
   kProductID = 0x000A,
+#else
+  // And on an RP2350.
+  kProductID = 0x0009,
+#endif
   // A device release number, in binary coded decimal: 1.00.
   kDeviceRelease = 0x0100,
   // USB 2.1, which says there is a binary object store to ask for, where the

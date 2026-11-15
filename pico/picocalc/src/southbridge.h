@@ -111,7 +111,7 @@ typedef struct SouthbridgePollStats {
 // starts the next, so call it often - once a batch. Returns true, with the
 // key in event, if the read it collected held one.
 //
-// The controller keeps running while the RP2040 restarts, and queues keys
+// The controller keeps running while the Pico restarts, and queues keys
 // whether or not anything reads them, so its FIFO can be full of keys pressed
 // long before this firmware started. Those are dropped: every key up to the
 // first read that finds the FIFO empty.

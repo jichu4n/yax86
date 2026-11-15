@@ -12,7 +12,8 @@
 #include "southbridge.h"
 #include "speaker.h"
 
-// The system clock in kHz, or 0 for the stock 125MHz. Set by CMakeLists.txt.
+// The system clock in kHz, or 0 for the board's stock clock. Set by
+// CMakeLists.txt.
 #ifndef YAX86_PICOCALC_SYS_CLK_KHZ
 #define YAX86_PICOCALC_SYS_CLK_KHZ 0
 #endif
@@ -94,7 +95,7 @@ static OverclockResult Overclock(void) {
   watchdog_enable(kWatchdogTimeoutMs, true);
   if (YAX86_PICOCALC_SYS_CLK_KHZ > 250000) {
     vreg_set_voltage(VREG_VOLTAGE_1_30);
-  } else if (YAX86_PICOCALC_SYS_CLK_KHZ > 125000) {
+  } else if (YAX86_PICOCALC_SYS_CLK_KHZ > SYS_CLK_HZ / 1000) {
     vreg_set_voltage(VREG_VOLTAGE_1_20);
   }
   busy_wait_us(kVoltageSettleUs);
