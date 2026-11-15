@@ -364,3 +364,15 @@ Alongside the table state:
 For how to emulate a component, read these, all under `.cache`:
 8086tiny (`.cache/8086tiny`), 86Box (`.cache/86Box`) and MartyPC
 (`.cache/martypc`).
+
+## Pull request reviews
+
+When asked to respond to review comments on a PR:
+
+- **Evaluate each comment critically**, and push back where a suggestion does
+  not make sense or conflicts with the codebase's constraints.
+- **Do not act on the comments directly**: explain how you plan to respond and
+  confirm with the user before changing code, committing or posting on GitHub.
+- **Once confirmed and applied**, update the PR description to match and post a
+  follow-up comment on GitHub clearly naming the agent that posted it (for
+  example, `🤖 Generated with [Antigravity](https://antigravity.google)`).
