@@ -367,6 +367,22 @@ For how to emulate a component, read these, all under `.cache`:
 
 ## Pull request reviews
 
+Several coding agents review and answer PRs under the maintainer's GitHub
+account, so everything an agent posts there names the agent that wrote it.
+
+### Reviewing a PR
+
+When asked to review a PR:
+
+- **Post the review as a comment on the PR** without asking first, unless told
+  otherwise. Say what you checked yourself, what must be fixed before it
+  merges, and what is only a nit.
+- **Open the comment with a line naming the agent**, since it is posted from
+  the maintainer's account and would otherwise read as theirs: for example,
+  `> 🤖 **Review by Claude Code**, posted on the maintainer's behalf.`
+
+### Responding to review comments
+
 When asked to respond to review comments on a PR:
 
 - **Evaluate each comment critically**, and push back where a suggestion does
