@@ -97,7 +97,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - **These counts are the 128KB machine's**, which the runtime runs without
   the PSRAM or after a crash. With the PSRAM it pages 640KB (see "Paging
   guest RAM"), and DOS330 boots in 2,439,664 instructions and 29,116,649
-  cycles (2,412,600 and 29,114,560 with `video_adapter=mda`), the BIOS
+  cycles, or 2,412,600 and 29,114,560 with `video_adapter=mda`, the BIOS
   testing and DOS sizing more memory; the bench's 640KB `dos-boot` takes
   2,353,188 and 27,922,137. The runtime with no VMs has not been counted at
   640KB.
@@ -320,12 +320,12 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   `vm.cfg`; and `src/vm_list.c`, the list of VMs and what changes them as
   folders, which are create, edit drives, rename, clone and delete. Rename
   and delete keep `boot_default` naming a VM that is there.
-- **A VM is a folder in `yax86/vm`**, `src/vm_config.c`,
-  holding `vm.cfg`, which names its drives' images and its video adapter, and
-  the images that are its own. Every folder there with a `vm.cfg` is one, named
-  for the folder, and there are no VMs anywhere else. Each line is logfmt, `#`
-  starts a comment, and a path is relative to the file's folder - `..` followed
-  - or to the card's root with a leading `/`, so VMs can share images and keep
+- **A VM is a folder in `yax86/vm`**, `src/vm_config.c`, holding `vm.cfg`,
+  which names its drives' images and its video adapter, and the images that
+  are its own. Every folder there with a `vm.cfg` is one, named for the
+  folder, and there are no VMs anywhere else. Each line is logfmt, `#` starts
+  a comment, and a path is relative to the file's folder - `..` followed - or
+  to the card's root with a leading `/`, so VMs can share images and keep
   their own:
 
   ```
@@ -338,13 +338,13 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 
   `fd1` and `fd2` are 360KB floppies, `hd1` and `hd2` the hard disk
   controller's master and slave, each the core's 10MB drive, and
-  `video_adapter` is `cga` or `mda`, `cga` without it (and without a VM, the
-  built-in floppy runs with the CGA). A key `vm.cfg` has that this firmware
-  does not know is logged as `vm_config_key_ignored`, with the file's path and
-  the key, and skipped, so a file written by a later firmware still reads and a
-  Configure save keeps the line; a bad value or path is logged as
-  `vm_config_problem`. Loading a VM logs `vm_loaded` with its `path` and
-  `video_adapter`.
+  `video_adapter` is `cga` or `mda`, `cga` without it. Without a VM, the
+  built-in floppy runs with the CGA. A key `vm.cfg` has that this firmware
+  does not know is logged as `vm_config_key_ignored` on each read, with the
+  file's path and the key, and skipped, so a file written by a later firmware
+  still reads and a Configure save keeps the line; a bad value or path is
+  logged as `vm_config_problem`. Loading a VM logs `vm_loaded` with its `path`
+  and `video_adapter`.
 - **A drive can be left out of the machine**, by leaving it out of
   `vm.cfg`. Floppy disk 1 is always there, `fd1=""` or not named holding no
   disk. Floppy disk 2 not named is not there: the BIOS's switches report one
@@ -856,7 +856,7 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   menu with an `EmulatorMenuExit`, and `src/emulator.c` carries it out.
 - **The status page's lines are the emulator's**: it fills them in on
   every pass while the menu shows, and the status screen draws them every
-  second (`Display` starts with the adapter, `CGA` or `MDA`). Filling them in
+  second. `Display` starts with the adapter, `CGA` or `MDA`. Filling them in
   costs nothing that matters while the VM is paused.
 - **A list box is a box that lists items, one of them selected**: most
   screens, and the menu's pages. `src/list_box.c` has what they share:
@@ -1049,10 +1049,10 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   system's groups first, with `DebugCommandReportSystem()`: `system`,
   `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
   mode. Then it gives its own. The emulator's, which `src/emulator.c`
-  answers, are the VM's `paging`, `boot`, `display` (starting with
-  `video_adapter`), `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`. The launcher's are `display` with whether
-  it is on, its timeout and the font, `vm` with the number of VMs, and `menu`
-  with the page showing; and
+  answers, are the VM's `paging`, `boot`, `display`, starting with
+  `video_adapter`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`. The
+  launcher's are `display` with whether it is on, its timeout and the font,
+  `vm` with the number of VMs, and `menu` with the page showing; and
   as no guest runs yet, its `screen` answers `no_guest`, which `debug.js`'s
   `wait` takes as no match yet.
 - **`src/init.c` initializes the system at startup**, after `main()` has
