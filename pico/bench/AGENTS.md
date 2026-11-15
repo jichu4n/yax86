@@ -68,7 +68,16 @@ YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh pico2 O3  # Pico 2 at 250MHz
   requires `-DYAX86_PICO_BOARD=pico|pico2`**: `pico` maps to `rp2040` / `pico`,
   `pico2` maps to `rp2350-arm-s` / `pico2`, and anything else is rejected. The
   `header` line's `target` field records the SDK's `PICO_PLATFORM_STRING`
-  (`rp2040` or `rp2350-arm-s`).
+  (`rp2040` or `rp2350-arm-s`); on `pico2`, a `chip` line after `header` logs
+  the RP2350's stepping, core voltage, and `qmi_hw->m[0].timing` before and
+  after the clock change with the resulting flash clock.
+- **Guard chip-specific code with the chip it needs**: `#if PICO_RP2350` for
+  code that exists only on the RP2350, such as the QMI, POWMAN and
+  `rp2350_rom_version()`, and `#if PICO_RP2040 ... #else` only where each board
+  takes a branch. The SDK defines just the built chip's macro, so the other
+  reads as 0; `!PICO_RP2040` is also true on the SDK's `host` platform, which
+  has none of the RP2350's hardware. This holds in `pico/common` and
+  `pico/picocalc` too.
 - **`run.js` reboots the board into BOOTSEL with `picotool`, loads the image
   and captures what it prints**, exiting non-zero if the run did not finish;
   `--no-flash` captures from a board already running. The output is logfmt
@@ -117,6 +126,19 @@ Notes on the machinery:
 
 ## Current figures
 
+GCC 16.2.0, SDK 2.3.1, picotool 2.3.1, 250MHz, `-O3`, hot path in SRAM, on a
+PicoCalc's Pico 2 (RP2350 A2, 128KB of SRAM frames), at #196:
+
+| guest memory | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
+| ------------ | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
+| 640KB paged | **3.688292** | **7.570** | **0.638** | **158.7%** | 468,484 | 194,800 | 88,853 |
+| 128KB direct | 2.910303 | 9.520 | 0.800 | 199.6% | 468,484 | 194,800 | 88,853 |
+
+- At the Pico 2's stock 150MHz (PSRAM off, flash at 75MHz), 128KB direct runs
+  in 4.815486 seconds (5.754 MHz, 0.484 MIPS, 120.6% of a real 8088).
+- Paging with 128KB of SRAM frames costs the Pico 2's boot 27%, with 0.13
+  seconds in the fault handler.
+
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.1, 250MHz, `-O3`, hot path in SRAM, on a
 PicoCalc's Pico, at #153:
 
@@ -125,7 +147,7 @@ PicoCalc's Pico, at #153:
 | 640KB paged | **5.711675** | **4.889** | **0.412** | **102.5%** | 477,060 | 196,968 | 90,124 |
 | 128KB direct | 4.466556 | 6.203 | 0.521 | 130.0% | 477,060 | 196,968 | 90,124 |
 
-- The direct row was measured by building the same image with paging
+- The direct rows were measured by building the same image with paging
   turned off at startup, the layout a bare Pico gets.
 - **Paging costs the boot 28%**: every data access goes through the paged
   lookup (`core/AGENTS.md`, paged memory), and the 640KB boot runs 1.1%
@@ -150,12 +172,14 @@ At #89, 128K of guest RAM, GCC 16.2.0, SDK 2.3.0, picotool 2.3.0:
   includes about 32KB of constant data - ROMs, fonts, the opcode table.
 - **`stack_peak`** is how deep the stack got, interrupt frames included:
   unused stack is painted `0x5A5A5A5A` from `main`'s frame and searched
-  afterwards, costing nothing during the run. Roughly 700-970 bytes of a 4KB
-  bank, varying between runs with where interrupts land - a bound with room
-  to spare, not a figure to compare.
-- **Guest memory and the stack cannot collide**: guest RAM is at the bottom of
-  the 256KB bank, the stack in SCRATCH_Y's own 4KB, with SCRATCH_X and about
-  100KB of unused heap between. The heap grows away from guest RAM.
+  afterwards, costing nothing during the run. Roughly 700-970 bytes on `pico`
+  and 1,070-1,330 on `pico2` of a 4KB bank, varying between runs with where
+  interrupts land - a bound with room to spare, not a figure to compare.
+- **Guest memory and the stack cannot collide**: guest RAM is in the main SRAM
+  bank (256KB on `pico`, 512KB on `pico2`), the stack in SCRATCH_Y's own 4KB,
+  with SCRATCH_X and unused heap (`__HeapLimit` less `__end__`: about 66KB on
+  `pico` and 324KB on `pico2` at 128KB of guest SRAM) between. The heap grows
+  away from guest RAM.
 
 ## PicoCalc workloads
 
@@ -232,6 +256,9 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
   nothing - `picotool` reboots through the watchdog too. The marker is in
   `__uninitialized_ram`, surviving a reset but not power, and is set only
   across the window where a hang can happen.
+- On `pico2`, POWMAN keeps a raised core voltage across watchdog and BOOTSEL
+  resets, returning to 1.10V only when power is lost, so `vreg_before_mv` in a
+  capture reflects what the previous boot set unless the board was power-cycled.
 - **`PICO_FLASH_SPI_CLKDIV` rises with the clock**, or the flash is
   overclocked by the same factor, keeping flash at or below its stock rate
   (62.5MHz on `pico`, 75MHz on `pico2`). It must be an

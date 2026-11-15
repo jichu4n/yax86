@@ -36,6 +36,9 @@
 #include "core/video.h"
 #include "hardware/clocks.h"
 #include "hardware/irq.h"
+#if PICO_RP2350
+#include "hardware/structs/qmi.h"
+#endif
 #include "hardware/timer.h"
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
@@ -624,6 +627,56 @@ static Y_NOINLINE void LogHeader(void) {
       Y_LOG_UINT("state_bytes", sizeof(YPlatformState)));
 }
 
+#if PICO_RP2350
+// rp2350_chip_version() returns 3 for both A3 and A4; rp2350_rom_version()
+// reads the bootrom revision (2 for A2, 3 for A3, 4 for A4), which tells them
+// apart.
+static const char* ChipSteppingName(uint8_t rom_version) {
+  switch (rom_version) {
+    case 2:
+      return "A2";
+    case 3:
+      return "A3";
+    case 4:
+      return "A4";
+    default:
+      return "unknown";
+  }
+}
+
+// Convert the RP2350's POWMAN voltage selector to millivolts: 50mV steps up to
+// VREG_VOLTAGE_1_30. Selectors above 1.30V have non-uniform steps and need
+// vreg_disable_voltage_limit(), which this firmware never calls; one left in
+// POWMAN by an earlier firmware logs as 0.
+static uint32_t VregMillivolts(enum vreg_voltage voltage) {
+  return voltage <= VREG_VOLTAGE_1_30 ? 550 + 50 * (uint32_t)voltage : 0;
+}
+
+// The RP2350's stepping, core voltage and QMI flash timing either side of the
+// clock change, so a capture records the flash clock the XIP setup actually put
+// in place.
+static Y_NOINLINE void LogChip(
+    uint32_t qmi_timing_before, enum vreg_voltage vreg_before) {
+  const uint8_t chip_version = rp2350_chip_version();
+  const uint8_t rom_version = rp2350_rom_version();
+  const uint32_t qmi_timing_after = qmi_hw->m[0].timing;
+  const uint32_t raw_clkdiv = (qmi_timing_after & QMI_M0_TIMING_CLKDIV_BITS) >>
+                              QMI_M0_TIMING_CLKDIV_LSB;
+  // A CLKDIV field of 0 encodes a divisor of 256.
+  const uint32_t clkdiv = raw_clkdiv == 0 ? 256 : raw_clkdiv;
+  const uint32_t flash_khz = (clock_get_hz(clk_sys) / 1000) / clkdiv;
+  BENCH_INFO(
+      "chip", Y_LOG_STRING("stepping", ChipSteppingName(rom_version)),
+      Y_LOG_UINT("chip_version", chip_version),
+      Y_LOG_UINT("rom_version", rom_version),
+      Y_LOG_UINT("vreg_before_mv", VregMillivolts(vreg_before)),
+      Y_LOG_UINT("vreg_mv", VregMillivolts(vreg_get_voltage())),
+      Y_LOG_HEX32("qmi_m0_timing_before", qmi_timing_before),
+      Y_LOG_HEX32("qmi_m0_timing_after", qmi_timing_after),
+      Y_LOG_UINT("flash_clkdiv", clkdiv), Y_LOG_UINT("flash_khz", flash_khz));
+}
+#endif
+
 #ifdef YAX86_PICO_SYS_CLK_KHZ
 // Raise the system clock, after USB is up rather than before.
 //
@@ -692,6 +745,10 @@ static void StartPsram(void) {
 }
 
 int main(void) {
+#if PICO_RP2350
+  const uint32_t qmi_timing_before = qmi_hw->m[0].timing;
+  const enum vreg_voltage vreg_before = vreg_get_voltage();
+#endif
   stdio_init_all();
   // Wait for the host to attach before printing anything. USB CDC drops
   // whatever is written before the port is opened, and the header says which
@@ -719,6 +776,9 @@ int main(void) {
   StartPsram();
 
   LogHeader();
+#if PICO_RP2350
+  LogChip(qmi_timing_before, vreg_before);
+#endif
   // Painted from main's frame, before anything deep runs, so that the whole of
   // what the run uses is measured.
   PaintStack();
