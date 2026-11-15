@@ -318,8 +318,8 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   that act on one through a pointer, with the caller owning the instance:
   `src/settings.c`, the card's settings; `src/vm_config.c`, one VM's
   `vm.cfg`; and `src/vm_list.c`, the list of VMs and what changes them as
-  folders, which are create, edit drives, rename, clone and delete. Rename
-  and delete keep `boot_default` naming a VM that is there.
+  folders, which are create, edit configuration, rename, clone and delete.
+  Rename and delete keep `boot_default` naming a VM that is there.
 - **A VM is a folder in `yax86/vm`**, `src/vm_config.c`, holding `vm.cfg`,
   which names its drives' images and its video adapter, and the images that
   are its own. Every folder there with a `vm.cfg` is one, named for the
@@ -507,7 +507,8 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
   (after a separator line if there are any VMs), a
   page for each VM with the images in its drives - two drives a line, A and
-  B then HD1 and HD2 - over Configure, Rename, Clone and Delete, a name typed
+  B then HD1 and HD2 - and its video adapter underneath over Configure, Rename,
+  Clone and Delete, a name typed
   for Rename and Clone, and a question before Delete. Afterwards it shows
   the list of VMs to manage again with the VM renamed or made chosen - after
   Configure, the VM's page - and the list at power on waits for a key, as
@@ -549,27 +550,28 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
-  floppy disks 1 and 2, hard disks 1 and 2, and Create. Floppy disk 1 is
-  Empty, New floppy image (360KB), or Existing floppy image, a 360KB image
+  floppy disks 1 and 2, hard disks 1 and 2, Video adapter (`CGA` or `MDA`, on a
+  page of its own, `src/vm_video_adapter_screen.c`), and Create. Floppy disk 1
+  is Empty, New floppy image (360KB), or Existing floppy image, a 360KB image
   from the browser; floppy disk 2 is Disabled or any of those; and a hard
   disk is Disabled, New disk image (10MB), or Existing disk image, a 10MB
   one. A new VM starts with floppy disk 1 empty, floppy disk 2 and hard disk
-  2 disabled, and a new disk image as hard disk 1. An existing image is
+  2 disabled, a new disk image as hard disk 1, and `CGA`. An existing image is
   shared, like any image outside the VM's folder. A floppy drive with no
   disk is "empty" wherever the menu says what a drive holds, as the status
   rows have it. Backspace on the form only ever erases the name -
   Esc leaves it - so that a press meant for the name does not throw the form
   away. One image in two drives is refused before anything is written.
-  Create writes `vm.cfg` with the drives there, as paths relative to it, in
-  one `ConfigFileUpdate()` - `VMConfigSaveDrives()` - which removes the line
-  of a drive left out, and a line left with nothing else on it.
+  Create writes `vm.cfg` with the drives there, as paths relative to it, and
+  `video_adapter` (`cga` or `mda`, always written) in one `ConfigFileUpdate()` -
+  `VMConfigSave()` - which removes the line of a drive left out, and a line
+  left with nothing else on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
-  for both, starting from its drives as its `vm.cfg` has them, with no name
-  and Save for Create. It is named for the VM's configuration as a whole,
-  which is drives today and guest RAM and the like later; Save writes the four drives the
-  same way, which keeps the file's comments and other lines. An image of the
-  VM's own a drive stops holding stays in its folder - nothing is deleted
-  behind the user's back - and goes with the VM.
+  for both, starting from its drives and video adapter as its `vm.cfg` has
+  them, with no name and Save for Create. Save writes the four drives and
+  `video_adapter` the same way, which keeps the file's comments and other
+  lines. An image of the VM's own a drive stops holding stays in its folder -
+  nothing is deleted behind the user's back - and goes with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
   was**: `fd1.img` or `fd2.img`, 360KB, for DOS's `FORMAT A:` -
   which the floppy controller's Format Track makes possible - and `hd1.img`

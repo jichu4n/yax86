@@ -168,6 +168,7 @@ add_executable(yax86_picocalc
     src/usb_storage_disconnect_screen.c
     src/vm_delete_screen.c
     src/vm_drive_config_screen.c
+    src/vm_video_adapter_screen.c
     src/vm_config_screen.c
     src/vm_name_screen.c
     src/vm_screen.c

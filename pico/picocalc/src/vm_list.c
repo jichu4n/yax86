@@ -313,11 +313,11 @@ static bool PlanDrives(
   return true;
 }
 
-// Write the blank disks planned, then vm's file naming every drive. Deletes
-// the blank disks written if it fails.
-static bool WriteDrives(
-    const VMEntry* vm, const VMListDrives* drives, FSTransfer* transfer,
-    char problem[kVMProblemLength + 1]) {
+// Write the blank disks planned, then vm's file naming every drive and its
+// video adapter. Deletes the blank disks written if it fails.
+static bool WriteConfig(
+    const VMEntry* vm, const VMListDrives* drives, YVideoAdapter video_adapter,
+    FSTransfer* transfer, char problem[kVMProblemLength + 1]) {
   if (transfer->total > 0) {
     transfer->progress(0, transfer->total);
   }
@@ -331,7 +331,7 @@ static bool WriteDrives(
   }
   if (result != FR_OK) {
     Describe("make the disks of", vm, result, problem);
-  } else if (VMConfigSaveDrives(vm, g_paths, problem)) {
+  } else if (VMConfigSave(vm, g_paths, video_adapter, problem)) {
     return true;
   }
   for (uint8_t drive = 0; drive < written; ++drive) {
@@ -343,8 +343,9 @@ static bool WriteDrives(
 }
 
 VMListResult VMListCreate(
-    const char* name, const VMListDrives* drives, FSTransfer* transfer,
-    VMEntry* created, char problem[kVMProblemLength + 1]) {
+    const char* name, const VMListDrives* drives, YVideoAdapter video_adapter,
+    FSTransfer* transfer, VMEntry* created,
+    char problem[kVMProblemLength + 1]) {
   static char folder[kFSMaxPath + 1];
   if (!TakeName(name, created, problem) || IsTaken(created, problem)) {
     return kVMListRefused;
@@ -358,7 +359,7 @@ VMListResult VMListCreate(
     Describe("make", created, result, problem);
     return kVMListFailed;
   }
-  if (WriteDrives(created, drives, transfer, problem)) {
+  if (WriteConfig(created, drives, video_adapter, transfer, problem)) {
     return kVMListDone;
   }
   FSDeleteFolder(folder, NULL);
@@ -366,15 +367,16 @@ VMListResult VMListCreate(
 }
 
 VMListResult VMListEdit(
-    const VMEntry* vm, const VMListDrives* drives, FSTransfer* transfer,
-    char problem[kVMProblemLength + 1]) {
+    const VMEntry* vm, const VMListDrives* drives, YVideoAdapter video_adapter,
+    FSTransfer* transfer, char problem[kVMProblemLength + 1]) {
   static char folder[kFSMaxPath + 1];
   FolderOf(vm, folder);
   if (!PlanDrives(vm, folder, drives, transfer, problem)) {
     return kVMListRefused;
   }
-  return WriteDrives(vm, drives, transfer, problem) ? kVMListDone
-                                                    : kVMListFailed;
+  return WriteConfig(vm, drives, video_adapter, transfer, problem)
+             ? kVMListDone
+             : kVMListFailed;
 }
 
 VMListResult VMListClone(
