@@ -4,7 +4,7 @@ const fs = require('fs/promises');
 const {parseArgs} = require('util');
 const {spawnSync} = require('child_process');
 const {parseLine, toNumber, formatLine} = require('./logfmt');
-const {delay, waitForPort, openPort} = require('./serial');
+const {kPortPattern, delay, waitForPort, openPort} = require('./serial');
 
 // Flashes an image onto an attached Pico and captures what it prints.
 //
@@ -202,7 +202,7 @@ async function main() {
   }
   const port = await waitForPort();
   if (port === null) {
-    throw new Error('no /dev/ttyACM* appeared');
+    throw new Error(`no ${kPortPattern} appeared`);
   }
   const {lines, done} = await capture(
     port,

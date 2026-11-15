@@ -104,8 +104,10 @@ Notes on the machinery:
   printing, and every open asserts it, so a separate `stty` first would start
   the run before a reader attached. `serial.js` wraps the descriptor it holds
   in a `tty.ReadStream` and calls `setRawMode()` on that. It finds
-  `/dev/ttyACM*` rather than hard-coding it, since the port can come back on
-  another node after a flash or reset.
+  `/dev/ttyACM*`, or `/dev/cu.usbmodem*` on macOS, rather than hard-coding
+  it, since the port can come back on another node after a flash or reset.
+  On macOS it is the `cu.` node: the `tty.` one waits in `open()` for
+  carrier detect.
 - A build directory reused across core roots keeps an object per root, CMake
   naming objects by absolute source path; `build.sh` spells the path out so
   `core_text` is always the core just built.

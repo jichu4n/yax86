@@ -30,13 +30,20 @@ readonly PARALLEL_DOWNLOADS=8
 cd "$(dirname "$0")"/..
 mkdir -p "${DEST}"
 
+# Written for bash 3.2, the /bin/bash macOS ships, which has neither mapfile
+# nor ${var^^}.
+opcodes=()
 if [ $# -gt 0 ]; then
-    opcodes=("${@^^}")
+    for opcode in "$@"; do
+        opcodes+=("$(printf '%s' "${opcode}" | tr '[:lower:]' '[:upper:]')")
+    done
 else
     # Read the opcode list from the repository rather than listing the
     # directory over the GitHub API, which is rate limited to 60 requests an
     # hour per IP for anonymous callers - a limit CI runners share.
-    mapfile -t opcodes < <(grep -v '^#' "${OPCODE_LIST}" | grep -v '^[[:space:]]*$')
+    while IFS= read -r opcode; do
+        opcodes+=("${opcode}")
+    done < <(grep -v '^#' "${OPCODE_LIST}" | grep -v '^[[:space:]]*$')
 fi
 
 # Only fetch what is not already here. The data is pinned to one revision, so
