@@ -171,8 +171,8 @@ At #89, 128K of guest RAM, GCC 16.2.0, SDK 2.3.0, picotool 2.3.0:
 - **Guest memory and the stack cannot collide**: guest RAM is in the main SRAM
   bank (256KB on `pico`, 512KB on `pico2`), the stack in SCRATCH_Y's own 4KB,
   with SCRATCH_X and unused heap (`__HeapLimit` less `__end__`: about 66KB on
-  `pico` and 324KB on `pico2`, in 1,024-byte KB at 128KB of guest SRAM)
-  between. The heap grows away from guest RAM.
+  `pico` and 324KB on `pico2` at 128KB of guest SRAM) between. The heap grows
+  away from guest RAM.
 
 ## PicoCalc workloads
 

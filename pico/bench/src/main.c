@@ -644,9 +644,10 @@ static const char* ChipSteppingName(uint8_t rom_version) {
   }
 }
 
-// Convert the RP2350's POWMAN voltage selector to millivolts (50mV steps up to
-// VREG_VOLTAGE_1_30; selectors above 1.30V are locked out unless unlocked in
-// hardware, which nothing here does).
+// Convert the RP2350's POWMAN voltage selector to millivolts: 50mV steps up to
+// VREG_VOLTAGE_1_30. Selectors above 1.30V have non-uniform steps and need
+// vreg_disable_voltage_limit(), which this firmware never calls; one left in
+// POWMAN by an earlier firmware logs as 0.
 static uint32_t VregMillivolts(enum vreg_voltage voltage) {
   return voltage <= VREG_VOLTAGE_1_30 ? 550 + 50 * (uint32_t)voltage : 0;
 }
