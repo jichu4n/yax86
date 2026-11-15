@@ -100,11 +100,11 @@ VMListResult VMListCreate(
     const char* name, const VMListDrives* drives, YVideoAdapter video_adapter,
     FSTransfer* transfer, VMEntry* created, char problem[kVMProblemLength + 1]);
 
-// Change a VM's configuration - what its drives hold and its video adapter -
-// as VMListCreate() makes it. An image of the VM's own that a drive no longer
-// holds stays in its folder, deleted with the VM. Anything but kVMListDone
-// comes with the problem described; blank disks made for a change that could
-// not be saved are deleted.
+// Change what vm's drives hold and its video adapter, as VMListCreate() makes
+// them. An image of the VM's own that a drive no longer holds stays in its
+// folder, deleted with the VM. Anything but kVMListDone comes with the problem
+// described; blank disks made for a change that could not be saved are
+// deleted.
 VMListResult VMListEdit(
     const VMEntry* vm, const VMListDrives* drives, YVideoAdapter video_adapter,
     FSTransfer* transfer, char problem[kVMProblemLength + 1]);

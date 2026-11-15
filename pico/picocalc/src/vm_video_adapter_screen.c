@@ -8,7 +8,7 @@
 #include "list_box.h"
 #include "vm_config.h"
 
-// Listed in menu order: CGA first (the default), then MDA.
+// Listed in menu order: CGA first, the default, then MDA.
 static const YVideoAdapter kAdapters[Y_VIDEO_NUM_ADAPTERS] = {
     Y_VIDEO_ADAPTER_CGA,
     Y_VIDEO_ADAPTER_MDA,
@@ -18,6 +18,7 @@ extern const Screen kVMVideoAdapterScreen;
 
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
+// The form's choice for the video adapter.
 static YVideoAdapter* g_chosen;
 
 ScreenResult VMVideoAdapterScreenOpen(YVideoAdapter* chosen) {

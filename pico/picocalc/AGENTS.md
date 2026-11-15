@@ -505,10 +505,9 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
   VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
-  (after a separator line if there are any VMs), a
-  page for each VM with the images in its drives - two drives a line, A and
-  B then HD1 and HD2 - and its video adapter underneath over Configure, Rename,
-  Clone and Delete, a name typed
+  (after a separator line if there are any VMs), a page for each VM with the
+  images in its drives - two drives a line, A and B then HD1 and HD2 - then
+  its video adapter, over Configure, Rename, Clone and Delete, a name typed
   for Rename and Clone, and a question before Delete. Afterwards it shows
   the list of VMs to manage again with the VM renamed or made chosen - after
   Configure, the VM's page - and the list at power on waits for a key, as
@@ -550,22 +549,22 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
-  floppy disks 1 and 2, hard disks 1 and 2, Video adapter (`CGA` or `MDA`, on a
-  page of its own, `src/vm_video_adapter_screen.c`), and Create. Floppy disk 1
-  is Empty, New floppy image (360KB), or Existing floppy image, a 360KB image
-  from the browser; floppy disk 2 is Disabled or any of those; and a hard
-  disk is Disabled, New disk image (10MB), or Existing disk image, a 10MB
-  one. A new VM starts with floppy disk 1 empty, floppy disk 2 and hard disk
-  2 disabled, a new disk image as hard disk 1, and `CGA`. An existing image is
-  shared, like any image outside the VM's folder. A floppy drive with no
-  disk is "empty" wherever the menu says what a drive holds, as the status
-  rows have it. Backspace on the form only ever erases the name -
-  Esc leaves it - so that a press meant for the name does not throw the form
-  away. One image in two drives is refused before anything is written.
-  Create writes `vm.cfg` with the drives there, as paths relative to it, and
-  `video_adapter` (`cga` or `mda`, always written) in one `ConfigFileUpdate()` -
-  `VMConfigSave()` - which removes the line of a drive left out, and a line
-  left with nothing else on it.
+  floppy disks 1 and 2, hard disks 1 and 2, Video adapter - `CGA` or `MDA`,
+  on a page of its own, `src/vm_video_adapter_screen.c` - and Create. Floppy
+  disk 1 is Empty, New floppy image (360KB), or Existing floppy image, a
+  360KB image from the browser; floppy disk 2 is Disabled or any of those;
+  and a hard disk is Disabled, New disk image (10MB), or Existing disk
+  image, a 10MB one. A new VM starts with floppy disk 1 empty, floppy disk 2
+  and hard disk 2 disabled, a new disk image as hard disk 1, and `CGA`. An
+  existing image is shared, like any image outside the VM's folder. A floppy
+  drive with no disk is "empty" wherever the menu says what a drive holds,
+  as the status rows have it. Backspace on the form only ever erases the
+  name - Esc leaves it - so that a press meant for the name does not throw
+  the form away. One image in two drives is refused before anything is
+  written. Create writes `vm.cfg` with the drives there, as paths relative
+  to it, and `video_adapter`, always written as `cga` or `mda`, in one
+  `ConfigFileUpdate()` through `VMConfigSave()`, which removes the line of a
+  drive left out and a line left with nothing else on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
   for both, starting from its drives and video adapter as its `vm.cfg` has
   them, with no name and Save for Create. Save writes the four drives and

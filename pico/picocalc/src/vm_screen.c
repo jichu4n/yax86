@@ -28,8 +28,8 @@ static const BoxItem kVMItems[kNumVMItems] = {
 };
 
 enum {
-  // Up to two drive lines (FD1/FD2, HD1/HD2, or "No disks.") and one line for
-  // the video adapter.
+  // Up to two drive lines, or "No disks.", plus one line for the video
+  // adapter.
   kMaxVMLines = kNumVMDrives / 2 + 1,
 };
 
