@@ -7,6 +7,10 @@ cmake_minimum_required(VERSION 3.17)
 
 get_filename_component(YAX86_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 
+# Which board to build for: pico (RP2040) or pico2 (RP2350, Arm).
+set(YAX86_PICO_BOARD "pico" CACHE STRING "Target board: pico or pico2")
+set_property(CACHE YAX86_PICO_BOARD PROPERTY STRINGS pico pico2)
+
 # Whether the guest's screen is drawn on the LCD. Off gives an image identical
 # but for that, which is how what drawing costs is measured.
 set(YAX86_PICOCALC_DRAW_SCREEN "1" CACHE STRING "Draw the guest's screen: 1 or 0")
@@ -16,9 +20,9 @@ if(NOT YAX86_PICOCALC_DRAW_SCREEN MATCHES "^[01]$")
         "'${YAX86_PICOCALC_DRAW_SCREEN}'")
 endif()
 
-# The system clock, in kHz, or empty for the stock 125MHz. 250MHz is what the
-# emulator needs to run faster than a real PC/XT, and is what pico/bench
-# reports at.
+# The system clock, in kHz, or empty for the stock clock (125MHz on pico,
+# 150MHz on pico2). 250MHz is what the emulator needs to run faster than a real
+# PC/XT, and is what pico/bench reports at.
 set(YAX86_PICOCALC_SYS_CLK_KHZ "250000" CACHE STRING
     "System clock in kHz, empty for stock")
 if(YAX86_PICOCALC_SYS_CLK_KHZ STREQUAL "")
@@ -35,10 +39,18 @@ endif()
 # =============================================================================
 # Pico SDK
 # =============================================================================
-# The PicoCalc ships with a Raspberry Pi Pico H, an RP2040, which is also what
-# the core's hot path is tuned against.
-set(PICO_PLATFORM rp2040 CACHE STRING "Pico platform")
-set(PICO_BOARD pico CACHE STRING "Board type")
+# The PicoCalc takes a Raspberry Pi Pico (RP2040) or a Pico 2 (RP2350) in the
+# same socket. Both variables must be set before pico_sdk_import.cmake.
+if(YAX86_PICO_BOARD STREQUAL "pico")
+    set(PICO_PLATFORM rp2040 CACHE STRING "Pico platform" FORCE)
+    set(PICO_BOARD pico CACHE STRING "Board type" FORCE)
+elseif(YAX86_PICO_BOARD STREQUAL "pico2")
+    set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Pico platform" FORCE)
+    set(PICO_BOARD pico2 CACHE STRING "Board type" FORCE)
+else()
+    message(FATAL_ERROR
+        "YAX86_PICO_BOARD must be pico or pico2, not '${YAX86_PICO_BOARD}'")
+endif()
 
 include(pico_sdk_import.cmake)
 
@@ -61,12 +73,23 @@ set(CMAKE_ASM_FLAGS_RELEASE "")
 add_compile_definitions(PICO_STACK_SIZE=4096)
 
 # The flash's SPI divider is against clk_sys, so an overclock raises it with
-# the clock, as in pico/bench. It goes in the second stage bootloader, a
-# target of the SDK's own, which only add_compile_definitions() reaches.
-if(sys_clk_khz GREATER 250000)
-    add_compile_definitions(PICO_FLASH_SPI_CLKDIV=6)
-elseif(sys_clk_khz GREATER 125000)
-    add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
+# the clock, keeping flash at or below its stock rate (62.5MHz on pico, 75MHz
+# on pico2), as in pico/bench. It goes in the second stage XIP setup, a target
+# of the SDK's own, which only add_compile_definitions() reaches; on the RP2350
+# PICO_EMBED_XIP_SETUP=1 is also required so the SDK embeds and runs boot2.
+if(YAX86_PICO_BOARD STREQUAL "pico2")
+    add_compile_definitions(PICO_EMBED_XIP_SETUP=1)
+    if(sys_clk_khz GREATER 300000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=6)
+    elseif(sys_clk_khz GREATER 150000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
+    endif()
+else()
+    if(sys_clk_khz GREATER 250000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=6)
+    elseif(sys_clk_khz GREATER 125000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
+    endif()
 endif()
 
 
@@ -184,6 +207,7 @@ target_include_directories(yax86_picocalc PRIVATE
     "${YAX86_ROOT}"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/../common"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../common/boards/${YAX86_PICO_BOARD}"
     "${fatfs_dir}"
     # Where the generated boot floppy header lands.
     "${CMAKE_CURRENT_BINARY_DIR}"

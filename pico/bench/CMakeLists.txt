@@ -7,9 +7,13 @@ cmake_minimum_required(VERSION 3.17)
 # =============================================================================
 # Build options
 # =============================================================================
+# Which board to build for: pico (RP2040) or pico2 (RP2350, Arm).
+set(YAX86_PICO_BOARD "pico" CACHE STRING "Target board: pico or pico2")
+set_property(CACHE YAX86_PICO_BOARD PROPERTY STRINGS pico pico2)
+
 # The optimization level the whole firmware - emulator, harness and SDK - is
-# built at. Worth having as an option rather than fixed: the Cortex-M0+ runs
-# code from flash through a 16KB XIP cache, so a larger image can lose to a
+# built at. Worth having as an option rather than fixed: the Pico executes
+# code from flash through a small XIP cache, so a larger image can lose to a
 # smaller one however the two rank on a desktop.
 set(YAX86_PICO_OPT "O2" CACHE STRING "Optimization level: Os, O2 or O3")
 set_property(CACHE YAX86_PICO_OPT PROPERTY STRINGS Os O2 O3)
@@ -18,7 +22,8 @@ if(NOT YAX86_PICO_OPT MATCHES "^O(s|2|3)$")
         "YAX86_PICO_OPT must be one of Os, O2 or O3, not '${YAX86_PICO_OPT}'")
 endif()
 
-# Optional overclock, in kHz. Left unset the board runs at its stock 125MHz.
+# Optional overclock, in kHz. Left unset the board runs at its stock clock
+# (125MHz on pico, 150MHz on pico2).
 set(YAX86_PICO_SYS_CLK_KHZ "" CACHE STRING "System clock in kHz, empty for stock")
 
 # Whether to build in the sampling profiler. It costs a little over a percent,
@@ -34,10 +39,18 @@ set(YAX86_CORE_ROOT "${YAX86_ROOT}" CACHE PATH
 # =============================================================================
 # Pico SDK
 # =============================================================================
-# Both must be set before the SDK is pulled in. The RP2040's small XIP cache is
-# a large part of why this harness exists, so the board is not a variable.
-set(PICO_PLATFORM rp2040 CACHE STRING "Pico platform")
-set(PICO_BOARD pico CACHE STRING "Board type")
+# Both must be set before the SDK is pulled in, since pico_sdk_import.cmake
+# selects the compiler and platform headers from them.
+if(YAX86_PICO_BOARD STREQUAL "pico")
+    set(PICO_PLATFORM rp2040 CACHE STRING "Pico platform" FORCE)
+    set(PICO_BOARD pico CACHE STRING "Board type" FORCE)
+elseif(YAX86_PICO_BOARD STREQUAL "pico2")
+    set(PICO_PLATFORM rp2350-arm-s CACHE STRING "Pico platform" FORCE)
+    set(PICO_BOARD pico2 CACHE STRING "Board type" FORCE)
+else()
+    message(FATAL_ERROR
+        "YAX86_PICO_BOARD must be pico or pico2, not '${YAX86_PICO_BOARD}'")
+endif()
 
 include(pico_sdk_import.cmake)
 
@@ -64,19 +77,32 @@ set(CMAKE_ASM_FLAGS_RELEASE "")
 add_compile_definitions(PICO_STACK_SIZE=4096)
 
 # The flash divider has to be set before the SDK creates its targets: it is
-# compiled into the second stage bootloader, which is a target of the SDK's own
+# compiled into the second stage XIP setup, which is a target of the SDK's own
 # and not ours. Setting it on the firmware target does nothing at all, and the
 # resulting image hangs at whatever clock the flash could not keep up with.
 #
 # The divider is against clk_sys, so overclocking without raising it overclocks
-# the flash by the same factor. At 400MHz and the default divider of 2 that is
-# a 200MHz SPI clock, which no RP2040 flash part will do.
-if(YAX86_PICO_SYS_CLK_KHZ GREATER 400000)
-    add_compile_definitions(PICO_FLASH_SPI_CLKDIV=8)
-elseif(YAX86_PICO_SYS_CLK_KHZ GREATER 250000)
-    add_compile_definitions(PICO_FLASH_SPI_CLKDIV=6)
-elseif(YAX86_PICO_SYS_CLK_KHZ GREATER 125000)
-    add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
+# the flash by the same factor, keeping flash at or below its stock rate
+# (62.5MHz on pico, 75MHz on pico2). On the RP2350 the SDK omits boot2 unless
+# PICO_EMBED_XIP_SETUP=1 is set, leaving the bootrom's fallback XIP timing in
+# place and ignoring PICO_FLASH_SPI_CLKDIV altogether.
+if(YAX86_PICO_BOARD STREQUAL "pico2")
+    add_compile_definitions(PICO_EMBED_XIP_SETUP=1)
+    if(YAX86_PICO_SYS_CLK_KHZ GREATER 450000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=8)
+    elseif(YAX86_PICO_SYS_CLK_KHZ GREATER 300000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=6)
+    elseif(YAX86_PICO_SYS_CLK_KHZ GREATER 150000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
+    endif()
+else()
+    if(YAX86_PICO_SYS_CLK_KHZ GREATER 400000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=8)
+    elseif(YAX86_PICO_SYS_CLK_KHZ GREATER 250000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=6)
+    elseif(YAX86_PICO_SYS_CLK_KHZ GREATER 125000)
+        add_compile_definitions(PICO_FLASH_SPI_CLKDIV=4)
+    endif()
 endif()
 
 pico_sdk_init()
@@ -119,6 +145,7 @@ target_include_directories(yax86_pico_bench PRIVATE
     "${YAX86_CORE_ROOT}"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/../common"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../common/boards/${YAX86_PICO_BOARD}"
     # Where the generated boot floppy header lands.
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
@@ -146,7 +173,7 @@ target_link_libraries(yax86_pico_bench PRIVATE
     pico_stdlib hardware_pio hardware_vreg)
 
 # The PicoCalc's PSRAM, which guest RAM is paged through where it is present.
-# See pico/common/yax86_pico.h.
+# See pico/common/boards/<board>/yax86_pico.h.
 pico_generate_pio_header(yax86_pico_bench
     "${CMAKE_CURRENT_SOURCE_DIR}/../common/psram.pio")
 

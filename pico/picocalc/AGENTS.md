@@ -1,4 +1,4 @@
-#pico / picocalc - the PicoCalc runtime
+# pico/picocalc - the PicoCalc runtime
 
 The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld with
 a 320x320 LCD, a keyboard, an SD card slot, speakers and a battery. It raises
@@ -33,8 +33,16 @@ check a pin against that repository.
 
 ```sh
 PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
+PICO_SDK_PATH=/usr/share/pico-sdk YAX86_PICO_BOARD=pico2 ./pico/picocalc/build.sh
 ./pico/bench/run.js build-pico/picocalc/yax86_picocalc.uf2
 ```
+
+- **`YAX86_PICO_BOARD` chooses `pico` (`rp2040` / `pico`, default) into
+  `build-pico/picocalc` or `pico2` (`rp2350-arm-s` / `pico2`) into
+  `build-pico/pico2/picocalc`**, and rejects anything else. On `pico2`,
+  `PICO_EMBED_XIP_SETUP=1` is set alongside `PICO_FLASH_SPI_CLKDIV` so `crt0`
+  embeds and runs `boot2` rather than leaving the RP2350 bootrom's fallback XIP
+  timing in place.
 
 - **Output is logfmt over USB serial** (`core/AGENTS.md`): a `boot_stage`
   line per stage, then `event=done`, said again to a host that attaches
@@ -64,15 +72,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh
   picotool save -a picocalc-factory-flash.bin
   picotool load -f -x -o 0x10000000 picocalc-factory-flash.bin
   ```
-  The factory firmware has no picotool reset interface;
-opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
-    F / dev / ttyACM0 1200`.- `YAX86_PICOCALC_DRAW_SCREEN =
-    0` builds an otherwise identical image that does not draw the
-        guest's screen, into `build-pico/picocalc-no-draw`, which is how
-            drawing's cost is measured. - `YAX86_PICOCALC_SYS_CLK_KHZ` sets the
-                clock,
-                              250000 by default; empty is the
-  stock 125MHz, and past 400000 is refused.
+  The factory firmware has no picotool reset interface; opening its serial port
+  at 1200 baud reboots it into BOOTSEL: `stty -F /dev/ttyACM0 1200`.
+- `YAX86_PICOCALC_DRAW_SCREEN=0` builds an otherwise identical image that does
+  not draw the guest's screen, into `build-pico/picocalc-no-draw` (or
+  `build-pico/pico2/picocalc-no-draw` for `pico2`), which is how drawing's cost
+  is measured.
+- `YAX86_PICOCALC_SYS_CLK_KHZ` sets the clock, 250000 by default; empty is the
+  board's stock clock (125MHz on `pico`, 150MHz on `pico2`), and past 400000 is
+  refused.
 - **The Pico is powered by its USB cable**: a crashed board needs the cable
   replugged, not the PicoCalc's power button. The PicoCalc's own power must be
   on for the keyboard controller and SD card.
@@ -711,9 +719,10 @@ opening its serial port at 1200 baud reboots it into BOOTSEL : `stty -
 - **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames,
   and PSRAM behind them**, through the core's `YPlatformConfig.paged_memory`
   (`core/AGENTS.md`). `pico/common/pager.c` does the paging, and the SRAM
-  given to the guest is in `pico/common/yax86_pico.h`, a header per board so
-  that a Pico 2 can have its own. Both are shared with `pico/bench`, so that
-  it measures what runs here. The pager brings a page into a frame when the
+  given to the guest is in `pico/common/boards/<board>/yax86_pico.h`, a header
+  per board so each board has its own. Both are shared with `pico/bench`, so
+  that it measures what runs here. The pager brings a page into a frame when
+  the
   guest first touches it, from PSRAM, or as zeros if it has never been
   written back, and takes frames back by the clock algorithm, writing a page
   back only if it was written. The report's `paging` group has the counts

@@ -23,6 +23,7 @@ const kPhnum = 44;
 const kShoff = 32;
 const kShentsize = 46;
 const kShnum = 48;
+const kShstrndx = 50;
 
 // Program header field offsets, and the one type that occupies memory.
 const kPhdrType = 0;
@@ -33,17 +34,21 @@ const kPhdrMemsz = 20;
 const kPtLoad = 1;
 
 // Section header field offsets and flags.
+const kShdrName = 0;
 const kShdrType = 4;
 const kShdrFlags = 8;
+const kShdrAddr = 12;
+const kShdrOffset = 16;
 const kShdrSize = 20;
 const kShtNobits = 8;
 const kShfWrite = 0x1;
 const kShfAlloc = 0x2;
 const kShfExecinstr = 0x4;
 
-// The RP2040's SRAM. Everything below it in a physical address is in flash.
+// SRAM on the RP2040 (264KB, to 0x20042000) and RP2350 (520KB, to 0x20082000).
+// Everything below it in a physical address is in flash.
 const kSRAMBase = 0x20000000;
-const kSRAMEnd = 0x20040000;
+const kSRAMEnd = 0x20082000;
 
 function readElf(filePath) {
   const elf = fs.readFileSync(filePath);
@@ -58,6 +63,44 @@ function readElf(filePath) {
     throw new Error(`${filePath} is not a little-endian 32-bit ELF file`);
   }
   return elf;
+}
+
+// The SDK's linker scripts emit NOLOAD .stack_dummy / .stack1_dummy sections
+// in the scratch banks to reserve each core's stack, and ld gives each its own
+// PT_LOAD segment inside [kSRAMBase, kSRAMEnd). Subtract them so SRAM matches
+// the linker's RAM figure and excludes the stacks on both chips.
+function stackDummySize(elf) {
+  const shoff = elf.readUInt32LE(kShoff);
+  const shentsize = elf.readUInt16LE(kShentsize);
+  const shnum = elf.readUInt16LE(kShnum);
+  const shstrndx = elf.readUInt16LE(kShstrndx);
+  if (shnum === 0 || shstrndx >= shnum) {
+    return 0;
+  }
+  const shstrHdr = shoff + shstrndx * shentsize;
+  const shstrOff = elf.readUInt32LE(shstrHdr + kShdrOffset);
+  const shstrEnd = shstrOff + elf.readUInt32LE(shstrHdr + kShdrSize);
+  let total = 0;
+  for (let i = 0; i < shnum; ++i) {
+    const shdr = shoff + i * shentsize;
+    if (elf.readUInt32LE(shdr + kShdrType) !== kShtNobits) {
+      continue;
+    }
+    const addr = elf.readUInt32LE(shdr + kShdrAddr);
+    if (addr < kSRAMBase || addr >= kSRAMEnd) {
+      continue;
+    }
+    const start = shstrOff + elf.readUInt32LE(shdr + kShdrName);
+    let end = start;
+    while (end < shstrEnd && elf[end] !== 0) {
+      ++end;
+    }
+    const name = elf.subarray(start, end).toString('ascii');
+    if (/^\.stack\d*_dummy$/.test(name)) {
+      total += elf.readUInt32LE(shdr + kShdrSize);
+    }
+  }
+  return total;
 }
 
 // Flash is what is loaded from it, which includes the initializers for
@@ -83,6 +126,7 @@ function loadedSize(elf) {
       sram += elf.readUInt32LE(phdr + kPhdrMemsz);
     }
   }
+  sram -= stackDummySize(elf);
   return {flash, sram};
 }
 
