@@ -228,8 +228,9 @@ static __noinline StartResult Start(uint8_t* copy_buffer, VMConfig* vm) {
       LoadSelectedVM(selected, vm)) {
     return kStartLoadedVM;
   }
-  const bool is_counting =
-      !was_noted && g_settings->boot_delay > 0 && g_vms->num_vms > 0;
+  const bool is_counting = !was_noted &&
+                           g_settings->boot_delay != kSettingsBootDelayNever &&
+                           g_settings->boot_delay > 0 && g_vms->num_vms > 0;
   OpenMenu(
       copy_buffer, selected,
       is_counting ? (uint32_t)g_settings->boot_delay * kMillisecondsPerSecond
@@ -270,7 +271,10 @@ static void Report(const DebugCommand* command) {
       Y_LOG_UINT("vms", g_vms->num_vms));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", true),
-      Y_LOG_STRING("page", ScreenPageName()));
+      Y_LOG_STRING("page", ScreenPageName()),
+      g_settings->boot_delay == kSettingsBootDelayNever
+          ? Y_LOG_STRING("boot_delay", "never")
+          : Y_LOG_UINT("boot_delay", g_settings->boot_delay));
   DebugCommandReplyOk(command);
 }
 

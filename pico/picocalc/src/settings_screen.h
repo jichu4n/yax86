@@ -1,5 +1,5 @@
-// Settings, from the list: a page of card-wide settings, Font and Display
-// timeout.
+// Settings, from the list: a page of card-wide settings, Font, Display timeout
+// and Boot delay.
 #ifndef YAX86_PICOCALC_SETTINGS_SCREEN_H
 #define YAX86_PICOCALC_SETTINGS_SCREEN_H
 

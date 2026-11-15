@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "boot_delay_screen.h"
 #include "box.h"
 #include "display.h"
 #include "display_timeout_screen.h"
@@ -12,12 +13,14 @@
 typedef enum SettingsItem {
   kSettingsItemFont = 0,
   kSettingsItemDisplayTimeout,
+  kSettingsItemBootDelay,
   kNumSettingsItems,
 } SettingsItem;
 
 static const BoxItem kSettingsItems[kNumSettingsItems] = {
     [kSettingsItemFont] = {"Font", true},
     [kSettingsItemDisplayTimeout] = {"Display timeout", true},
+    [kSettingsItemBootDelay] = {"Boot delay", true},
 };
 
 extern const Screen kSettingsScreen;
@@ -35,10 +38,15 @@ ScreenResult SettingsScreenOpen(Settings* settings) {
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumSettingsItems)) {
     case kListBoxActionSelect:
-      if (g_list_box.selected == kSettingsItemDisplayTimeout) {
-        return DisplayTimeoutScreenOpen(g_settings);
+      switch ((SettingsItem)g_list_box.selected) {
+        case kSettingsItemDisplayTimeout:
+          return DisplayTimeoutScreenOpen(g_settings);
+        case kSettingsItemBootDelay:
+          return BootDelayScreenOpen(g_settings);
+        case kSettingsItemFont:
+        default:
+          return FontScreenOpen(g_settings);
       }
-      return FontScreenOpen(g_settings);
     case kListBoxActionBack:
       return ScreenBack();
     default:

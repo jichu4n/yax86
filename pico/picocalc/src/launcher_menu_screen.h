@@ -51,9 +51,10 @@ typedef struct LauncherMenuExit {
 // itself, or 0 for no countdown.
 //
 // The screens opened from the menu change vms and settings: the VM manager
-// as it makes, renames and deletes VMs, and Settings as it saves the font and
-// display timeout. The VM manager also copies files through copy_buffer,
-// copy_buffer_size bytes of guest RAM. All of these must outlive the menu.
+// as it makes, renames and deletes VMs, and Settings as it saves the font,
+// display timeout and boot delay. The VM manager also copies files through
+// copy_buffer, copy_buffer_size bytes of guest RAM. All of these must outlive
+// the menu.
 //
 // When the menu closes, why is written to *exit.
 ScreenResult LauncherMenuScreenOpen(

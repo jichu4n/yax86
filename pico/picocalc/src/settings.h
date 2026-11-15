@@ -2,7 +2,7 @@
 // vm.cfg:
 //
 //   boot_default=DOS330
-//   boot_delay=5
+//   boot_delay=5          # 0 to 60, or never
 //   font=ymini
 //   display_timeout=120
 //   display_brightness=255
@@ -10,13 +10,13 @@
 //
 // boot_default is a VM's name. It is the VM the list highlights, and starts
 // by itself after boot_delay seconds with no key pressed; 0 starts it at
-// once. Without settings, or with a boot_default naming no VM, the first VM
-// listed is the default, after 5 seconds. Whichever VM starts becomes
-// boot_default for the next power on. font names the 4x10 font.
-// display_timeout is how many seconds without a key before the display and
-// backlights turn off, or 0 to keep them on. display_brightness and
-// keyboard_brightness are the active backlight levels on keyboard controller
-// firmware v1.6 and later.
+// once, and never shows the list with no countdown and waits for a key.
+// Without settings, or with a boot_default naming no VM, the first VM listed
+// is the default, after 5 seconds. Whichever VM starts becomes boot_default
+// for the next power on. font names the 4x10 font. display_timeout is how
+// many seconds without a key before the display and backlights turn off, or
+// 0 to keep them on. display_brightness and keyboard_brightness are the
+// active backlight levels on keyboard controller firmware v1.6 and later.
 #ifndef YAX86_PICOCALC_SETTINGS_H
 #define YAX86_PICOCALC_SETTINGS_H
 
@@ -32,6 +32,10 @@ enum {
   // settings, and at most.
   kSettingsDefaultBootDelay = 5,
   kSettingsMaxBootDelay = 60,
+  // Value of Settings.boot_delay for boot_delay=never: show the list and wait
+  // for a key with no countdown. Outside 0 to kSettingsMaxBootDelay, and never
+  // a number of seconds.
+  kSettingsBootDelayNever = UINT8_MAX,
 
   // How long the display stays on with no key pressed, in seconds, without
   // settings, and at most; 0 keeps it on.
@@ -71,7 +75,8 @@ typedef struct Settings {
 // in two cases:
 //   - The file cannot be read, a line cannot be parsed, or a known key has a
 //     bad value. Reading stops there, so settings has the values read before
-//     it and the defaults for the rest.
+//     it and the defaults for the rest: a problem before boot_delay leaves
+//     the 5-second countdown, while one after boot_delay=never keeps never.
 //   - boot_default names a VM that does not exist. boot_default is then left
 //     empty, so the first VM listed is the default.
 bool SettingsRead(
@@ -84,6 +89,14 @@ bool SettingsRead(
 // or written.
 bool SettingsSaveBootDefault(
     Settings* settings, const char* name,
+    char problem[kConfigFileProblemLength + 1]);
+
+// Set boot_delay on settings (0 to kSettingsMaxBootDelay, or
+// kSettingsBootDelayNever, written as never), and save it to the card's file
+// through ConfigFileUpdate(). Like SettingsSaveFont(), settings takes the new
+// value whether or not saving succeeded.
+bool SettingsSaveBootDelay(
+    Settings* settings, uint8_t boot_delay,
     char problem[kConfigFileProblemLength + 1]);
 
 // Make font the font of settings, and save it to the card's file through

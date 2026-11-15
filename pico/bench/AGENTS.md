@@ -84,8 +84,9 @@ YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh pico2 O3  # Pico 2 at 250MHz
   (`core/AGENTS.md`): the bench's header and result are shown as tables, with
   seconds, emulated MHz, MIPS and "vs a real 8088" worked out from the
   result's integers. `--out` saves the lines as they came, `--json` prints
-  each as JSON. The run is over at `event=done` - for the PicoCalc, once it
-  answers the `report` command `run.js` sends then. To pull a figure from a
+  each as JSON. The run is over at `event=done` - for the PicoCalc, once a VM
+  boots and answers the `report` command `run.js` sends then, so its card must
+  not have `boot_delay=never`. To pull a figure from a
   capture: `grep -o 'elapsed_us=[0-9]*' capture.txt`.
 - `serial.js` opens the port and `logfmt.js` reads and writes lines, for
   `run.js` and the PicoCalc's `debug.js`.
