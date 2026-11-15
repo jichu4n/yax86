@@ -99,10 +99,6 @@ Notes on the machinery:
   it, since the port can come back on another node after a flash or reset.
   On macOS it is the `cu.` node: the `tty.` one waits in `open()` for
   carrier detect.
-- **The scripts run on Linux and macOS**, so the shell scripts keep to bash
-  3.2, which is macOS's `/bin/bash` - no `mapfile`, no `${var^^}` - and
-  count processors with `getconf _NPROCESSORS_ONLN`, since macOS has no
-  `nproc`.
 - A build directory reused across core roots keeps an object per root, CMake
   naming objects by absolute source path; `build.sh` spells the path out so
   `core_text` is always the core just built.

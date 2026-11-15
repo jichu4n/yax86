@@ -67,6 +67,10 @@ CMake. Native and Emscripten output go to `build-native` and
   others. `MinSizeRel` is not built: nothing ships at it.
 - A separate CI job builds `pico/bench` and `pico/picocalc` for the RP2040 and
   RP2350 - see `pico/bench/AGENTS.md`.
+- **The scripts run on Linux and macOS.** Shell scripts keep to bash 3.2,
+  which is macOS's `/bin/bash`: no `mapfile`, no `${var^^}`. Processors are
+  counted with `getconf _NPROCESSORS_ONLN`, since macOS has no `nproc`. The
+  CI workflow runs on Linux, so `nproc` is fine there.
 
 ### The 8088 hardware test suite
 
