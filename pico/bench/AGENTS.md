@@ -224,9 +224,11 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
 - **A run's disk changes the next run**: the compilers leave their output,
   and Word's Setup records the name typed on its own files and skips asking
   next time. `workloads/word.txt` deletes `C:\WORD` after; a second run of
-  Setup needs its two name screens' steps taken out, and `display_timeout=0`
-  (`Never`) so the display does not time out while Setup decompresses files
-  and swallow the next key.
+  Setup needs its two name screens' steps taken out.
+- **Set `display_timeout=0` (`Never`) before `workloads/word.txt`**: Setup
+  decompresses files for more than two minutes with no keys pressed, so the
+  default 120-second display timeout turns the panel off mid-install and
+  swallows the next key on wake.
 
 ## Timing discipline
 

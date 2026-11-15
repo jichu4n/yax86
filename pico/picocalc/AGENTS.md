@@ -2,15 +2,14 @@
 
 The runtime for the ClockworkPi PicoCalc: a Raspberry Pi Pico H (RP2040) or
 Pico 2 (RP2350) in a handheld with a 320x320 LCD, a keyboard, an SD card slot,
-speakers and a battery. It raises
-the clock to 250MHz and starts a VM whose configuration is on the SD
-card, chosen at power on, or with none boots MS-DOS 3.30 from the floppy
-image in flash.
-The guest's screen and the status rows below it are drawn by the second core
-while the first runs the VM, paced to real time. It takes the
-PicoCalc's keyboard as its own and plays the PC speaker. DOS's date and time
-questions are answered by watching the screen, as `pico/bench` does - there
-is no clock to set them from, and it keeps the boot the `dos-boot` workload.
+speakers and a battery. It raises the clock to 250MHz and starts a VM whose
+configuration is on the SD card, chosen at power on, or with none boots MS-DOS
+3.30 from the floppy image in flash. The guest's screen and the status rows
+below it are drawn by the second core while the first runs the VM, paced to
+real time. It takes the PicoCalc's keyboard as its own and plays the PC
+speaker. DOS's date and time questions are answered by watching the screen, as
+`pico/bench` does - there is no clock to set them from, and it keeps the boot
+the `dos-boot` workload.
 
 Like `pico/bench` it uses only the core's public interface. CI builds it -
 see `pico/bench/AGENTS.md`. Measuring follows `pico/bench/AGENTS.md` and the root `AGENTS.md`.
@@ -70,12 +69,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   `-fstack-usage` gives each function's frame.
 - **Flashing replaces ClockworkPi's factory firmware** - a boot loader at
   offset 0, PicoMite at 200KB, and PicoMite's storage at 968KB on a Pico H
-  (2MB of flash), or PicoMite across 4MB of flash on a Pico 2. Back it up
-  before the first flash:
+  (2MB of flash), or a 4MB image on a Pico 2. Back it up before the first
+  flash:
   ```sh
-  picotool save -a picocalc-factory-flash.bin   # Pico H (RP2040, 2MB)
-  picotool save -a pico2-factory-flash.bin      # Pico 2 (RP2350, 4MB)
-  picotool load -f -x -o 0x10000000 picocalc-factory-flash.bin
+  picotool save -a picocalc-factory-flash.bin              # Pico H (RP2040, 2MB)
+  picotool save -a pico2-factory-flash.bin                 # Pico 2 (RP2350, 4MB)
+  picotool load -f -x -o 0x10000000 <factory-flash>.bin    # restore either image
   ```
   The factory firmware has no picotool reset interface; opening its serial port
   at 1200 baud reboots it into BOOTSEL: `stty -F /dev/ttyACM0 1200`.
@@ -296,7 +295,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   (`1a86:7523`). Read the old firmware back first - `stm32flash -r old.bin -S
   0x08000000:131072 /dev/ttyUSB0` - and the new one after, since `-v` does not
   check the whole image. The development unit came with v1.4 (byte for byte
-  `Bin/PicoCalc_BIOS_v1.4.bin`) and runs v1.7.
+  `Bin/PicoCalc_BIOS_v1.4.bin`) and runs v1.7; a second PicoCalc came with
+  v1.2 (`Bin/PicoCalc_BIOS_v1.2.bin`), which acknowledged nothing at all for
+  long stretches. Flash a new unit's controller to v1.7 before using it as a
+  test board.
 - **After flashing it may not power on until it loses power completely** -
   both cables and the batteries out. A long press shuts the device down, so
   it is no way to try.
