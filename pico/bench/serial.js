@@ -22,6 +22,15 @@ const kPortPollMs = 200;
 const kWriteTimeoutMs = 2000;
 const kWriteRetryMs = 5;
 
+// What a CDC port's node in /dev is named: ttyACM0 on Linux, and
+// cu.usbmodem<location> on macOS. macOS gives each port two nodes, and the
+// tty.usbmodem one waits in open() for carrier detect, where the cu one does
+// not.
+const kPortPrefix =
+  process.platform === 'darwin' ? 'cu.usbmodem' : 'ttyACM';
+// The ports looked for, as a person would write them, for messages.
+const kPortPattern = `/dev/${kPortPrefix}*`;
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Find the board's CDC port. Not hard-coded: the port re-enumerates after
@@ -32,7 +41,7 @@ async function waitForPort(timeoutMs = kPortWaitMs) {
   let first = true;
   while (Date.now() < end) {
     const ports = (await fs.readdir('/dev'))
-      .filter((name) => name.startsWith('ttyACM'))
+      .filter((name) => name.startsWith(kPortPrefix))
       .sort();
     if (ports.length > 0) {
       // A port that was already there has settled long since; one that has
@@ -107,4 +116,4 @@ function openPort(port, onLine, onClose = () => {}) {
   return {write, close: () => stream.destroy()};
 }
 
-module.exports = {delay, waitForPort, openPort};
+module.exports = {kPortPattern, delay, waitForPort, openPort};

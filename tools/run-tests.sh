@@ -12,5 +12,5 @@ tools/check-namespace.js
 # time.
 tools/download-cpu-hardware-tests.sh
 
-ctest --test-dir build-native/core -j$(nproc) --output-on-failure
+ctest --test-dir build-native/core -j"$(getconf _NPROCESSORS_ONLN)" --output-on-failure
 core/tests/cpu/cpu_demo_test.sh

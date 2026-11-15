@@ -74,7 +74,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   picotool load -f -x -o 0x10000000 picocalc-factory-flash.bin
   ```
   The factory firmware has no picotool reset interface; opening its serial port
-  at 1200 baud reboots it into BOOTSEL: `stty -F /dev/ttyACM0 1200`.
+  at 1200 baud reboots it into BOOTSEL: `stty -F /dev/ttyACM0 1200` on
+  Linux, `stty -f /dev/cu.usbmodem<location> 1200` on macOS.
 - `YAX86_PICOCALC_DRAW_SCREEN=0` builds an otherwise identical image that does
   not draw the guest's screen, into `build-pico/picocalc-no-draw` (or
   `build-pico2/picocalc-no-draw` for `pico2`), which is how drawing's cost
@@ -958,8 +959,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   `pico_usb_reset`; and a card reader (3), mass storage, in
   `src/usb_storage.c`. The serial port and the reset interface are described
   as `pico_stdio_usb` describes them, with the SDK's vendor and product
-  IDs, so a host finds `/dev/ttyACM*` and `picotool reboot -f` works as
-  before.
+  IDs, so a host finds `/dev/ttyACM*` (`/dev/cu.usbmodem*` on macOS) and
+  `picotool reboot -f` works as before.
 - **A third function means describing the device here**, which
   `pico_stdio_usb` allows only once the application links `tinyusb_device`
   itself - and then it turns off three things it otherwise does: starting

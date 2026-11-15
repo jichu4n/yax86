@@ -44,7 +44,7 @@ const fs = require('fs/promises');
 const {parseArgs} = require('util');
 const zlib = require('zlib');
 const {parseLine, formatLine, formatValue, toNumber} = require('../bench/logfmt');
-const {delay, waitForPort, openPort} = require('../bench/serial');
+const {kPortPattern, delay, waitForPort, openPort} = require('../bench/serial');
 
 // Code page 437, which the guest's text is in, as Unicode.
 const kCP437 =
@@ -396,7 +396,7 @@ async function main() {
   }
   const port = await waitForPort();
   if (port === null) {
-    throw new Error('no /dev/ttyACM* appeared');
+    throw new Error(`no ${kPortPattern} appeared`);
   }
   const board = new Board(port, values.quiet);
   try {

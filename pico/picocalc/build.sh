@@ -51,7 +51,7 @@ cmake -S . -B "$BUILD_DIR" \
     -DYAX86_PICO_BOARD="$BOARD" \
     -DYAX86_PICOCALC_DRAW_SCREEN="$DRAW_SCREEN" \
     -DYAX86_PICOCALC_SYS_CLK_KHZ="$SYS_CLK_KHZ" >/dev/null
-cmake --build "$BUILD_DIR" -j"$(nproc)"
+cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN)"
 
 echo
 read -r flash sram _ < <(../bench/image-size.js "$BUILD_DIR/yax86_picocalc.elf")

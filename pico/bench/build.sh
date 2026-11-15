@@ -67,7 +67,7 @@ for opt in "${OPT_LEVELS[@]}"; do
         -DYAX86_PICO_SYS_CLK_KHZ="$SYS_CLK_KHZ" \
         -DYAX86_PICO_PROFILE="$PROFILE" \
         -DYAX86_CORE_ROOT="$CORE_ROOT" >/dev/null
-    cmake --build "$BUILD_ROOT/$opt" -j"$(nproc)"
+    cmake --build "$BUILD_ROOT/$opt" -j"$(getconf _NPROCESSORS_ONLN)"
 done
 
 # -----------------------------------------------------------------------------
