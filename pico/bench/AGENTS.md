@@ -71,6 +71,13 @@ YAX86_PICO_SYS_CLK_KHZ=250000 ./pico/bench/build.sh pico2 O3  # Pico 2 at 250MHz
   (`rp2040` or `rp2350-arm-s`); on `pico2`, a `chip` line after `header` logs
   the RP2350's stepping, core voltage, and `qmi_hw->m[0].timing` before and
   after the clock change with the resulting flash clock.
+- **Guard chip-specific code with the chip it needs**: `#if PICO_RP2350` for
+  code that exists only on the RP2350, such as the QMI, POWMAN and
+  `rp2350_rom_version()`, and `#if PICO_RP2040 ... #else` only where each board
+  takes a branch. The SDK defines just the built chip's macro, so the other
+  reads as 0; `!PICO_RP2040` is also true on the SDK's `host` platform, which
+  has none of the RP2350's hardware. This holds in `pico/common` and
+  `pico/picocalc` too.
 - **`run.js` reboots the board into BOOTSEL with `picotool`, loads the image
   and captures what it prints**, exiting non-zero if the run did not finish;
   `--no-flash` captures from a board already running. The output is logfmt

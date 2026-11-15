@@ -36,7 +36,7 @@
 #include "core/video.h"
 #include "hardware/clocks.h"
 #include "hardware/irq.h"
-#if !PICO_RP2040
+#if PICO_RP2350
 #include "hardware/structs/qmi.h"
 #endif
 #include "hardware/timer.h"
@@ -627,7 +627,7 @@ static Y_NOINLINE void LogHeader(void) {
       Y_LOG_UINT("state_bytes", sizeof(YPlatformState)));
 }
 
-#if !PICO_RP2040
+#if PICO_RP2350
 // rp2350_chip_version() returns 3 for both A3 and A4; rp2350_rom_version()
 // reads the bootrom revision (2 for A2, 3 for A3, 4 for A4), which tells them
 // apart.
@@ -745,7 +745,7 @@ static void StartPsram(void) {
 }
 
 int main(void) {
-#if !PICO_RP2040
+#if PICO_RP2350
   const uint32_t qmi_timing_before = qmi_hw->m[0].timing;
   const enum vreg_voltage vreg_before = vreg_get_voltage();
 #endif
@@ -776,7 +776,7 @@ int main(void) {
   StartPsram();
 
   LogHeader();
-#if !PICO_RP2040
+#if PICO_RP2350
   LogChip(qmi_timing_before, vreg_before);
 #endif
   // Painted from main's frame, before anything deep runs, so that the whole of
