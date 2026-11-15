@@ -201,27 +201,32 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
   command's processor time is the change in the `pacing` group's `real_us`
   less `waited_us` and `paused_us`, and its time in faults the change in
   the `paging` group's `fault_us`.
-- On the PicoCalc at 250MHz, at #145:
+- On the PicoCalc at 250MHz with 128KB of SRAM frames, on a Pico (#145) and a
+  Pico 2 (#197):
 
-  | command | processor time | faults |
-  | --- | --- | --- |
-  | `TCC` compiling and linking a 40-line program | 18.8s | 1.9% |
-  | running it | 7.0s | 0.1% |
-  | `TPC /B BREAKOUT`, six units | 11.3s | 0.5% |
-  | `TPC QSORT` | 2.2s | 2.5% |
-  | `BC QCARDS.BAS` | 32.1s | 0.3% |
-  | `LINK QCARDS` | 26.7s | 0.5% |
-  | `QBASIC /RUN`, arrays and strings | 81.7s | 0.4% |
-  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 561.4s | 0.1% |
-  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 83.5s | 1.3% |
+  | command | Pico processor time | Pico faults | Pico 2 processor time | Pico 2 faults |
+  | --- | --- | --- | --- | --- |
+  | `TCC` compiling and linking a 40-line program | 18.8s | 1.9% | 10.9s | 3.2% |
+  | running it | 7.0s | 0.1% | 3.8s | 0.3% |
+  | `TPC /B BREAKOUT`, six units | 11.3s | 0.5% | 6.7s | 0.9% |
+  | `TPC QSORT` | 2.2s | 2.5% | 1.3s | 4.1% |
+  | `BC QCARDS.BAS` | 32.1s | 0.3% | 18.3s | 0.4% |
+  | `LINK QCARDS` | 26.7s | 0.5% | 14.7s | 0.9% |
+  | `QBASIC /RUN`, arrays and strings | 81.7s | 0.4% | 41.9s | 0.8% |
+  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 561.4s | 0.1% | 338.3s | 0.2% |
+  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 83.5s | 1.3% | 55.7s | 2.0% |
 
-  The first seven are "the seven commands" elsewhere. They run at 67% to
-  121% of a real PC/XT, 78% together, so faults are not what holds them
+  The first seven are "the seven commands" elsewhere. On a Pico they run at
+  67% to 121% of a real PC/XT, 78% together; on a Pico 2, 130% to 224%, 144%
+  together. Faults take the same wall time on both (the 62.5MHz PSRAM is the
+  same), so their share rises with the faster CPU, and they hold neither board
   back.
 - **A run's disk changes the next run**: the compilers leave their output,
   and Word's Setup records the name typed on its own files and skips asking
   next time. `workloads/word.txt` deletes `C:\WORD` after; a second run of
-  Setup needs its two name screens' steps taken out.
+  Setup needs its two name screens' steps taken out, and `display_timeout=0`
+  (`Never`) so the display does not time out while Setup decompresses files
+  and swallow the next key.
 
 ## Timing discipline
 
