@@ -1148,6 +1148,9 @@ Y_PUBLIC void YLogfmtLineAddString(
 }
 
 Y_PUBLIC size_t YLogfmtLineFinish(YLogfmtLine* line) {
+  // Fails to compile if the marker and Y_LOGFMT_RESERVED_LENGTH, the room
+  // every line keeps for it, ever differ: C99 has no static assertion, and an
+  // array of size -1 is an error.
   (void)sizeof(
       char[sizeof(YLogfmtTruncatedPair) == Y_LOGFMT_RESERVED_LENGTH ? 1 : -1]);
   if (line->is_truncated && line->size >= Y_LOGFMT_RESERVED_LENGTH) {

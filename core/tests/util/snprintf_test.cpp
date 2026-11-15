@@ -1,3 +1,5 @@
+// YSNPrintF() is private to util, static in libyax86_core.a, so the test
+// compiles its own copy from the source rather than linking to it.
 #define YAX86_IMPLEMENTATION
 extern "C" {
 #include "src/util/snprintf.c"
