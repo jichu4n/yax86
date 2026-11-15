@@ -1,7 +1,8 @@
 # pico/picocalc - the PicoCalc runtime
 
-The runtime for the ClockworkPi PicoCalc: an RP2040 Pico H in a handheld with
-a 320x320 LCD, a keyboard, an SD card slot, speakers and a battery. It raises
+The runtime for the ClockworkPi PicoCalc: a Raspberry Pi Pico H (RP2040) or
+Pico 2 (RP2350) in a handheld with a 320x320 LCD, a keyboard, an SD card slot,
+speakers and a battery. It raises
 the clock to 250MHz and starts a VM whose configuration is on the SD
 card, chosen at power on, or with none boots MS-DOS 3.30 from the floppy
 image in flash.
@@ -23,6 +24,7 @@ check a pin against that repository.
 
 | part | connection |
 | --- | --- |
+| Module | Raspberry Pi Pico H (RP2040: two Cortex-M0+ at 125MHz stock, 264KB SRAM, 2MB flash) or Pico 2 (RP2350: two Cortex-M33 at 150MHz stock, 520KB SRAM, 4MB flash) |
 | LCD: ST7365P, 320x320 | SPI1's pins, driven by PIO. SCK 10, MOSI 11, MISO 12, CS 13, DC 14, RST 15 |
 | Keyboard and power: an STM32 | I2C1. SDA 6, SCL 7, address `0x1F` |
 | SD card | SPI0. MISO 16, CS 17, SCK 18, MOSI 19; card detect 22 |
@@ -67,10 +69,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   stack until the function they are in returns: 1.5KB for all of them.
   `-fstack-usage` gives each function's frame.
 - **Flashing replaces ClockworkPi's factory firmware** - a boot loader at
-  offset 0, PicoMite at 200KB, and PicoMite's storage at 968KB. Back it up
+  offset 0, PicoMite at 200KB, and PicoMite's storage at 968KB on a Pico H
+  (2MB of flash), or PicoMite across 4MB of flash on a Pico 2. Back it up
   before the first flash:
   ```sh
-  picotool save -a picocalc-factory-flash.bin
+  picotool save -a picocalc-factory-flash.bin   # Pico H (RP2040, 2MB)
+  picotool save -a pico2-factory-flash.bin      # Pico 2 (RP2350, 4MB)
   picotool load -f -x -o 0x10000000 picocalc-factory-flash.bin
   ```
   The factory firmware has no picotool reset interface; opening its serial port
@@ -90,11 +94,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
 - **With no VMs on the card, the machine is the bench's with a second
   floppy drive**: the built-in floppy in drive A, B empty and no hard disk.
-  It reaches `A>` in 2,328,818 instructions, the bench's 2,328,128 and 690
+  It reaches `A>` in 2,328,997 instructions, the bench's 2,328,491 and 506
   for the BIOS and DOS looking at drive B, which is what says the two run
   the same machine. A VM's count depends on its images: DOS330, the two
-  MS-DOS 3.30 floppies and a hard disk, takes 2,416,289. At 250MHz, off
-  the floppy in flash, it takes 4.72 seconds of processor time without
+  MS-DOS 3.30 floppies and a hard disk, takes 2,416,289. On a Pico at 250MHz,
+  off the floppy in flash, it takes 4.72 seconds of processor time without
   drawing and 4.82 with it - 123% and 121% of a real PC/XT - and 4.89 off the
   card; at 125MHz, 9.44 with drawing, 61.5%.
 - If the count moves and the bench's does not, the runtime has stopped
@@ -108,8 +112,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   guest RAM"), and DOS330 boots in 2,439,664 instructions and 29,116,649
   cycles, or 2,412,600 and 29,114,560 with `video_adapter=mda`, the BIOS
   testing and DOS sizing more memory; the bench's 640KB `dos-boot` takes
-  2,353,188 and 27,922,137. The runtime with no VMs has not been counted at
-  640KB.
+  2,353,188 and 27,922,137. On a Pico 2 at 250MHz with 128KB of SRAM frames,
+  DOS330 at 640KB takes 3.93 seconds of processor time with drawing and 3.91
+  without - 155% and 156% of a real PC/XT - and 3.83 with `video_adapter=mda`.
+  The runtime with no VMs has not been counted at 640KB.
 
 ## Running in real time
 
@@ -260,7 +266,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   completes resets the block after 50ms. A read a batch is about a hundred a
   second against a 31-key FIFO, so typing never comes near it.
 - **The controller queues keys whatever reads them, and runs on while the
-  RP2040 restarts**, so its FIFO can be full of old keys - the first boot with
+  Pico restarts**, so its FIFO can be full of old keys - the first boot with
   the poll typed 31 of them and moved the invariant. Everything until the
   first read that finds it empty is dropped.
 - **The poll's cost to `dos-boot` is layout**: 0.42% slower than master, of
