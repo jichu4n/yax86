@@ -1,6 +1,7 @@
 // The list of VMs on the card, a folder each in `yax86/vm`, and what
-// changes the VMs as folders: making a new one, editing its drives, renaming
-// it, copying it as a new VM, and deleting it, for the menu's Manage VMs.
+// changes the VMs as folders: making a new one, editing its configuration,
+// renaming it, copying it as a new VM, and deleting it, for the menu's Manage
+// VMs.
 //
 // Everything in a VM's folder is its own, and goes with it: renamed, copied
 // or deleted. An image a VM names outside its folder is shared, and stays
@@ -85,27 +86,28 @@ VMListResult VMListRename(
     const VMList* list, Settings* settings, const VMEntry* vm, const char* name,
     VMEntry* renamed, char problem[kVMProblemLength + 1]);
 
-// Make a new VM, name: its folder, with a vm.cfg naming its drives, and its
-// blank disks, written through transfer's buffer, calling its progress as it
-// goes. A blank disk is zeros, unformatted as a new disk was, for DOS's
-// FORMAT - and for a hard disk, FDISK first: a 360KB floppy for drive A or B,
-// `fd1.img` or `fd2.img`, and the core's 10MB hard disk for hard disk 1 or
-// 2, `hd1.img` or `hd2.img` - or `fd1_2.img`, `hd1_2.img` and on, if the name
-// is taken.
+// Make a new VM, name: its folder, with a vm.cfg naming its drives and video
+// adapter, and its blank disks, written through transfer's buffer, calling its
+// progress as it goes. A blank disk is zeros, unformatted as a new disk was,
+// for DOS's FORMAT - and for a hard disk, FDISK first: a 360KB floppy for
+// drive A or B, `fd1.img` or `fd2.img`, and the core's 10MB hard disk for hard
+// disk 1 or 2, `hd1.img` or `hd2.img` - or `fd1_2.img`, `hd1_2.img` and on, if
+// the name is taken.
 // One image in two drives is refused. created is the new VM. Anything but
 // kVMListDone comes with the problem described, as for VMListRename(); a
 // VM that could not be made has what was made of it deleted.
 VMListResult VMListCreate(
-    const char* name, const VMListDrives* drives, FSTransfer* transfer,
-    VMEntry* created, char problem[kVMProblemLength + 1]);
+    const char* name, const VMListDrives* drives, YVideoAdapter video_adapter,
+    FSTransfer* transfer, VMEntry* created, char problem[kVMProblemLength + 1]);
 
-// Change what vm's drives hold, as VMListCreate() makes them. An image of
-// the VM's own that a drive no longer holds stays in its folder, deleted with
-// the VM. Anything but kVMListDone comes with the problem described; blank
-// disks made for a change that could not be saved are deleted.
+// Change what vm's drives hold and its video adapter, as VMListCreate() makes
+// them. An image of the VM's own that a drive no longer holds stays in its
+// folder, deleted with the VM. Anything but kVMListDone comes with the problem
+// described; blank disks made for a change that could not be saved are
+// deleted.
 VMListResult VMListEdit(
-    const VMEntry* vm, const VMListDrives* drives, FSTransfer* transfer,
-    char problem[kVMProblemLength + 1]);
+    const VMEntry* vm, const VMListDrives* drives, YVideoAdapter video_adapter,
+    FSTransfer* transfer, char problem[kVMProblemLength + 1]);
 
 // Copy vm's folder as a new VM, name, moving the files through transfer's
 // buffer and calling its progress as it goes. The copy's drives that name a

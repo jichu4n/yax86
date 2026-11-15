@@ -156,14 +156,14 @@ bool VMConfigSaveDrive(
   return ConfigFileUpdate(config->entry.path, &setting, 1, problem);
 }
 
-bool VMConfigSaveDrives(
+bool VMConfigSave(
     const VMEntry* vm, const char* const drives[kNumVMDrives],
-    char problem[kVMProblemLength + 1]) {
+    YVideoAdapter video_adapter, char problem[kVMProblemLength + 1]) {
   // Kept off the stack, with ConfigFileUpdate() under them.
   static char values[kNumVMDrives][kFSMaxPath + 2];
   char folder[kFSMaxPath + 1];
   FSFolderOf(vm->path, folder);
-  ConfigFileSetting settings[kNumVMDrives];
+  ConfigFileSetting settings[kNumVMDrives + 1];
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     values[drive][0] = '\0';
     if (drives[drive] != NULL && drives[drive][0] != '\0' &&
@@ -175,5 +175,10 @@ bool VMConfigSaveDrives(
     settings[drive].key = kDriveKeys[drive];
     settings[drive].value = drives[drive] != NULL ? values[drive] : NULL;
   }
-  return ConfigFileUpdate(vm->path, settings, kNumVMDrives, problem);
+  settings[kNumVMDrives] = (ConfigFileSetting){
+      .key = kVideoAdapterKey,
+      .value = VMConfigVideoAdapterName(video_adapter),
+  };
+  return ConfigFileUpdate(
+      vm->path, settings, sizeof(settings) / sizeof(settings[0]), problem);
 }

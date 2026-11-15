@@ -13,6 +13,7 @@
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "vm_drive_config_screen.h"
+#include "vm_video_adapter_screen.h"
 
 enum {
   kMicrosecondsPerMillisecond = 1000,
@@ -25,6 +26,7 @@ typedef enum FormItem {
   kFormDriveB,
   kFormDriveC,
   kFormDriveD,
+  kFormVideoAdapter,
   kFormCreate,
   kNumFormItems,
 } FormItem;
@@ -39,10 +41,11 @@ static ListBox g_list_box;
 // creates.
 static bool g_is_existing;
 static uint8_t g_vm;
-// A new VM's name, and what each drive is to hold.
+// A new VM's name, what each drive is to hold, and its video adapter.
 static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
 static VMDriveChoice g_drives[kNumVMDrives];
+static YVideoAdapter g_video_adapter;
 
 // The form's first item: its name for a new VM; for an existing one, at
 // the drives. g_list_box.selected counts from it.
@@ -69,6 +72,7 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
     g_drives[drive].is_blank = drive == kVMDriveHD1;
     g_drives[drive].is_present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
+  g_video_adapter = Y_VIDEO_ADAPTER_CGA;
   SelectItem(kFormName);
   return ScreenOpen(&kVMConfigScreen);
 }
@@ -88,6 +92,7 @@ ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
         (drive == kVMDriveFD2 ? config.is_present[drive]
                               : config.drives[drive][0] != '\0');
   }
+  g_video_adapter = config.video_adapter;
   SelectItem(kFormDriveA);
   return ScreenOpen(&kVMConfigScreen);
 }
@@ -111,8 +116,8 @@ static __noinline ScreenResult Create(void) {
   const uint64_t start_us = time_us_64();
   // Blank disks are written through the guest's RAM, which is zeroed after.
   FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "New VM", what);
-  const VMListResult result =
-      VMListCreate(g_name, &drives, &transfer, &created, problem);
+  const VMListResult result = VMListCreate(
+      g_name, &drives, g_video_adapter, &transfer, &created, problem);
   VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
@@ -122,6 +127,8 @@ static __noinline ScreenResult Create(void) {
   if (result == kVMListDone) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
+        Y_LOG_STRING(
+            "video_adapter", VMConfigVideoAdapterName(g_video_adapter)),
         Y_LOG_BOOL("blank_fd1", drives.is_blank[kVMDriveFD1]),
         Y_LOG_BOOL("blank_fd2", drives.is_blank[kVMDriveFD2]),
         Y_LOG_BOOL("blank_hd1", drives.is_blank[kVMDriveHD1]),
@@ -145,7 +152,8 @@ static __noinline ScreenResult Save(void) {
   char what[kListBoxNarrowColumns];
   snprintf(what, sizeof(what), "Writing %s's blank disks...", vm.name);
   FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Configure", what);
-  const VMListResult result = VMListEdit(&vm, &drives, &transfer, problem);
+  const VMListResult result =
+      VMListEdit(&vm, &drives, g_video_adapter, &transfer, problem);
   VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
@@ -153,7 +161,10 @@ static __noinline ScreenResult Save(void) {
   }
   VMManagerNoteChange(g_vm_manager, vm.name, true);
   if (result == kVMListDone) {
-    SYSTEM_INFO("vm_edited", Y_LOG_STRING("name", vm.name));
+    SYSTEM_INFO(
+        "vm_edited", Y_LOG_STRING("name", vm.name),
+        Y_LOG_STRING(
+            "video_adapter", VMConfigVideoAdapterName(g_video_adapter)));
   } else {
     VMManagerShowProblem("vm_not_edited", &vm, problem);
   }
@@ -182,7 +193,7 @@ static bool TypeName(uint8_t key) {
 }
 
 // Carry out the item selected: create or save the VM, move on from the
-// name to the first drive, or open a drive's choices.
+// name to the first drive, or open a drive's or the video adapter's choices.
 static ScreenResult OnSelect(void) {
   const uint8_t item = SelectedItem();
   if (item == kFormCreate) {
@@ -191,6 +202,9 @@ static ScreenResult OnSelect(void) {
   if (item == kFormName) {
     SelectItem(kFormDriveA);
     return ScreenStays();
+  }
+  if (item == kFormVideoAdapter) {
+    return VMVideoAdapterScreenOpen(&g_video_adapter);
   }
   const uint8_t drive = (uint8_t)(item - kFormDriveA);
   return VMDriveConfigScreenOpen(drive, &g_drives[drive]);
@@ -246,6 +260,10 @@ static void OnDraw(DisplayBox* box) {
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (BoxItem){rows[item], true};
   }
+  snprintf(
+      rows[kFormVideoAdapter], sizeof(rows[kFormVideoAdapter]), "%-15s %s",
+      "Video adapter", VMConfigVideoAdapterLabel(g_video_adapter));
+  items[kFormVideoAdapter] = (BoxItem){rows[kFormVideoAdapter], true};
   items[kFormCreate] = (BoxItem){g_is_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
       box, g_is_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL,

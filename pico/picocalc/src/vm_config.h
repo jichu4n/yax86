@@ -89,14 +89,15 @@ bool VMEntryMake(const char* name, VMEntry* entry);
 bool VMConfigRead(
     const VMEntry* vm, VMConfig* config, char problem[kVMProblemLength + 1]);
 
-// Write the images in all of a VM's drives - paths from the card's root,
-// empty for none, or NULL for a drive not there, whose line is removed - to
-// its file, as VMConfigSaveDrive() writes one, making the file if there is
-// none. Returns false, with the problem described, if a path
-// would be too long or the file could not be written.
-bool VMConfigSaveDrives(
+// Write a VM's configuration to its file, as VMConfigSaveDrive() writes one
+// drive, making the file if there is none. Each drive is a path from the
+// card's root, empty for none, or NULL for a drive not there, whose line is
+// removed; video_adapter is always written, as cga or mda. Returns false, with
+// the problem described, if a path would be too long or the file could not be
+// written.
+bool VMConfigSave(
     const VMEntry* vm, const char* const drives[kNumVMDrives],
-    char problem[kVMProblemLength + 1]);
+    YVideoAdapter video_adapter, char problem[kVMProblemLength + 1]);
 
 // Save the image in a VM's drive, a path from the card's root or NULL or
 // empty for none, to its `vm.cfg`, through ConfigFileUpdate(), written as
