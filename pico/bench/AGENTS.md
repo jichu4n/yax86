@@ -124,11 +124,11 @@ PicoCalc's Pico 2 (RP2350 A2, 128KB of SRAM frames), at #196:
 
 | guest memory | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ------------ | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| 640KB paged | **3.681458** | **7.585** | **0.639** | **159.0%** | 468,512 | 194,800 | 88,853 |
-| 128KB direct | 2.904643 | 9.539 | 0.802 | 200.0% | 468,512 | 194,800 | 88,853 |
+| 640KB paged | **3.688292** | **7.570** | **0.638** | **158.7%** | 468,484 | 194,800 | 88,853 |
+| 128KB direct | 2.910303 | 9.520 | 0.800 | 199.6% | 468,484 | 194,800 | 88,853 |
 
 - At the Pico 2's stock 150MHz (PSRAM off, flash at 75MHz), 128KB direct runs
-  in 4.813488 seconds (5.756 MHz, 0.484 MIPS, 120.7% of a real 8088).
+  in 4.815486 seconds (5.754 MHz, 0.484 MIPS, 120.6% of a real 8088).
 - Paging with 128KB of SRAM frames costs the Pico 2's boot 27%, with 0.13
   seconds in the fault handler.
 
@@ -170,8 +170,9 @@ At #89, 128K of guest RAM, GCC 16.2.0, SDK 2.3.0, picotool 2.3.0:
   interrupts land - a bound with room to spare, not a figure to compare.
 - **Guest memory and the stack cannot collide**: guest RAM is in the main SRAM
   bank (256KB on `pico`, 512KB on `pico2`), the stack in SCRATCH_Y's own 4KB,
-  with SCRATCH_X and unused heap (about 65KB on `pico` at 128KB of guest SRAM,
-  324KB on `pico2`) between. The heap grows away from guest RAM.
+  with SCRATCH_X and unused heap (`__HeapLimit` less `__end__`: about 66KB on
+  `pico` and 324KB on `pico2`, in 1,024-byte KB at 128KB of guest SRAM)
+  between. The heap grows away from guest RAM.
 
 ## PicoCalc workloads
 
@@ -248,6 +249,9 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
   nothing - `picotool` reboots through the watchdog too. The marker is in
   `__uninitialized_ram`, surviving a reset but not power, and is set only
   across the window where a hang can happen.
+- On `pico2`, POWMAN keeps a raised core voltage across watchdog and BOOTSEL
+  resets, returning to 1.10V only when power is lost, so `vreg_before_mv` in a
+  capture reflects what the previous boot set unless the board was power-cycled.
 - **`PICO_FLASH_SPI_CLKDIV` rises with the clock**, or the flash is
   overclocked by the same factor, keeping flash at or below its stock rate
   (62.5MHz on `pico`, 75MHz on `pico2`). It must be an
