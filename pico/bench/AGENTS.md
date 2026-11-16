@@ -131,7 +131,7 @@ Notes on the machinery:
 ## Current figures
 
 GCC 16.2.0, SDK 2.3.1, picotool 2.3.1, 250MHz, `-O3`, hot path in SRAM, on a
-PicoCalc's Pico 2 (RP2350 A2, 384KB of SRAM frames):
+PicoCalc's Pico 2 (RP2350 A2, 384KB of SRAM frames), at #200:
 
 | guest memory | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ------------ | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |

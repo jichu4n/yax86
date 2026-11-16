@@ -756,6 +756,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   GLaBIOS probes conventional memory in 16KB blocks (`ES:0000` and `ES:2000h`),
   so on a bare Pico 2 those extra 8KB go unseen (while 394KB maps `0x62000`
   without the rest of the 400KB block, making GLaBIOS size unmapped memory).
+  These frames are where SRAM for placing more code in RAM or growing the decode
+  cache would come from, and the 256KB row is what giving back 128KB costs.
 - **Pages are 256 bytes**, measured on the device with `pico/bench`'s
   PicoCalc workloads, the share of processor time in faults:
 

@@ -21,4 +21,11 @@ enum {
   kPicoGuestSRAMSize = 128 * 1024,
 };
 
+// GLaBIOS steps through conventional memory in 16KB blocks and probes only up
+// to offset 0x2000 in each, so a partial block past 8KB makes it report
+// unmapped memory as present in the direct layout.
+_Static_assert(
+    kPicoGuestSRAMSize % (16 * 1024) == 0,
+    "GLaBIOS sizes memory in 16KB blocks");
+
 #endif  // YAX86_PICO_H
