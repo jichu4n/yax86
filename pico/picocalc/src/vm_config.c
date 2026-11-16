@@ -12,6 +12,7 @@
 const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
 static const char kVideoAdapterKey[] = "video_adapter";
+static const char kMemoryKBKey[] = "memory_kb";
 
 const char* const kVMDriveLabels[kNumVMDrives] = {
     [kVMDriveFD1] = "FD1",
@@ -105,6 +106,19 @@ static bool TakeVMPair(
     }
     return true;
   }
+  if (strcmp(key, kMemoryKBKey) == 0) {
+    uint64_t memory_kb = 0;
+    if (!YLogfmtParseUInt(value, &memory_kb) || memory_kb < kVMMinMemoryKB ||
+        memory_kb > kVMMaxMemoryKB || memory_kb % kVMMemoryStepKB != 0) {
+      snprintf(
+          problem, kVMProblemLength + 1,
+          "memory_kb is not %u to %u in steps of %u", (unsigned)kVMMinMemoryKB,
+          (unsigned)kVMMaxMemoryKB, (unsigned)kVMMemoryStepKB);
+      return false;
+    }
+    config->memory_kb = (uint16_t)memory_kb;
+    return true;
+  }
   uint8_t drive = 0;
   while (drive < kNumVMDrives && strcmp(key, kDriveKeys[drive]) != 0) {
     ++drive;
@@ -134,6 +148,7 @@ bool VMConfigRead(
     config->is_present[drive] = false;
   }
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
+  config->memory_kb = kVMDefaultMemoryKB;
   VMReading reading = {.config = config};
   FSFolderOf(vm->path, reading.folder);
   return ConfigFileRead(vm->path, TakeVMPair, &reading, problem) ==
@@ -158,12 +173,14 @@ bool VMConfigSaveDrive(
 
 bool VMConfigSave(
     const VMEntry* vm, const char* const drives[kNumVMDrives],
-    YVideoAdapter video_adapter, char problem[kVMProblemLength + 1]) {
+    const VMMachine* machine, char problem[kVMProblemLength + 1]) {
   // Kept off the stack, with ConfigFileUpdate() under them.
   static char values[kNumVMDrives][kFSMaxPath + 2];
   char folder[kFSMaxPath + 1];
   FSFolderOf(vm->path, folder);
-  ConfigFileSetting settings[kNumVMDrives + 1];
+  char memory_kb[8];
+  snprintf(memory_kb, sizeof(memory_kb), "%u", (unsigned)machine->memory_kb);
+  ConfigFileSetting settings[kNumVMDrives + 2];
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     values[drive][0] = '\0';
     if (drives[drive] != NULL && drives[drive][0] != '\0' &&
@@ -177,7 +194,11 @@ bool VMConfigSave(
   }
   settings[kNumVMDrives] = (ConfigFileSetting){
       .key = kVideoAdapterKey,
-      .value = VMConfigVideoAdapterName(video_adapter),
+      .value = VMConfigVideoAdapterName(machine->video_adapter),
+  };
+  settings[kNumVMDrives + 1] = (ConfigFileSetting){
+      .key = kMemoryKBKey,
+      .value = memory_kb,
   };
   return ConfigFileUpdate(
       vm->path, settings, sizeof(settings) / sizeof(settings[0]), problem);

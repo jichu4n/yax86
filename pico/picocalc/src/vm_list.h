@@ -86,8 +86,8 @@ VMListResult VMListRename(
     const VMList* list, Settings* settings, const VMEntry* vm, const char* name,
     VMEntry* renamed, char problem[kVMProblemLength + 1]);
 
-// Make a new VM, name: its folder, with a vm.cfg naming its drives and video
-// adapter, and its blank disks, written through transfer's buffer, calling its
+// Make a new VM, name: its folder, with a vm.cfg naming its drives and machine
+// settings, and its blank disks, written through transfer's buffer, calling its
 // progress as it goes. A blank disk is zeros, unformatted as a new disk was,
 // for DOS's FORMAT - and for a hard disk, FDISK first: a 360KB or 720KB floppy
 // for drive A or B, `fd1.img` or `fd2.img`, and the core's 10MB hard disk for
@@ -97,16 +97,16 @@ VMListResult VMListRename(
 // kVMListDone comes with the problem described, as for VMListRename(); a
 // VM that could not be made has what was made of it deleted.
 VMListResult VMListCreate(
-    const char* name, const VMListDrives* drives, YVideoAdapter video_adapter,
+    const char* name, const VMListDrives* drives, const VMMachine* machine,
     FSTransfer* transfer, VMEntry* created, char problem[kVMProblemLength + 1]);
 
-// Change what vm's drives hold and its video adapter, as VMListCreate() makes
-// them. An image of the VM's own that a drive no longer holds stays in its
-// folder, deleted with the VM. Anything but kVMListDone comes with the problem
-// described; blank disks made for a change that could not be saved are
+// Change what vm's drives hold and its machine settings, as VMListCreate()
+// makes them. An image of the VM's own that a drive no longer holds stays in
+// its folder, deleted with the VM. Anything but kVMListDone comes with the
+// problem described; blank disks made for a change that could not be saved are
 // deleted.
 VMListResult VMListEdit(
-    const VMEntry* vm, const VMListDrives* drives, YVideoAdapter video_adapter,
+    const VMEntry* vm, const VMListDrives* drives, const VMMachine* machine,
     FSTransfer* transfer, char problem[kVMProblemLength + 1]);
 
 // Copy vm's folder as a new VM, name, moving the files through transfer's

@@ -29,7 +29,7 @@ static const BoxItem kVMItems[kNumVMItems] = {
 
 enum {
   // Up to two drive lines, or "No disks.", plus one line for the video
-  // adapter.
+  // adapter and memory size.
   kMaxVMLines = kNumVMDrives / 2 + 1,
 };
 
@@ -39,12 +39,12 @@ static VMManager* g_vm_manager;
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
 // The VM, an index in the list; the names of the images in its drives,
-// empty for none; whether each drive is there; its video adapter; and whether
-// its vm.cfg read.
+// empty for none; whether each drive is there; its machine settings; and
+// whether its vm.cfg read.
 static uint8_t g_vm;
 static char g_drives[kNumVMDrives][kDiskImageNameLength + 1];
 static bool g_is_present[kNumVMDrives];
-static YVideoAdapter g_video_adapter;
+static VMMachine g_machine;
 static bool g_is_readable;
 
 ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
@@ -63,7 +63,10 @@ ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
         (drive == kVMDriveFD2 ? config.is_present[drive]
                               : config.drives[drive][0] != '\0');
   }
-  g_video_adapter = config.video_adapter;
+  g_machine = (VMMachine){
+      .video_adapter = config.video_adapter,
+      .memory_kb = config.memory_kb,
+  };
   g_list_box.selected = kVMConfigure;
   return ScreenOpen(&kVMScreen);
 }
@@ -111,12 +114,12 @@ static const char* DriveShown(uint8_t drive, const char* name) {
   return g_is_present[drive] ? "empty" : "disabled";
 }
 
-// The images in the VM's drives and its video adapter, over what can be done to
-// it.
+// The images in the VM's drives, its video adapter and its memory size, over
+// what can be done to it.
 static void OnDraw(DisplayBox* box) {
   // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds
-  // anything, then the video adapter, with room for any name, which the box
-  // cuts to its width.
+  // anything, then the video adapter and memory size, with room for any name,
+  // which the box cuts to its width.
   char lines[kMaxVMLines][64];
   const char* line_pointers[kMaxVMLines];
   uint8_t num_lines = 0;
@@ -146,8 +149,10 @@ static void OnDraw(DisplayBox* box) {
       num_lines = 1;
     }
     snprintf(
-        lines[num_lines], sizeof(lines[num_lines]), "Video adapter: %s",
-        VMConfigVideoAdapterLabel(g_video_adapter));
+        lines[num_lines], sizeof(lines[num_lines]),
+        "Video adapter: %s   Memory: %uK",
+        VMConfigVideoAdapterLabel(g_machine.video_adapter),
+        (unsigned)g_machine.memory_kb);
     line_pointers[num_lines] = lines[num_lines];
     ++num_lines;
   }
