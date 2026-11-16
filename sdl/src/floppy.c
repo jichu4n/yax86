@@ -12,20 +12,21 @@ const char* const kDefaultFloppyImagePath =
     "floppy_a.img";
 #endif  // __EMSCRIPTEN__
 
-// The mounted image, held in memory for the lifetime of the program. 360KB
-// is the only format the FDC emulates, so the only image size that can be
+// The mounted image, held in memory for the lifetime of the program, sized for
+// the largest format the FDC supports, and the size of the image currently
 // mounted.
-static uint8_t g_floppy_image[Y_FDC_FORMAT_360KB_IMAGE_SIZE];
+static uint8_t g_floppy_image[Y_FDC_MAX_IMAGE_SIZE];
+static uint32_t g_floppy_image_size;
 
 static uint8_t FloppyReadByte(
     Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset) {
-  return offset < Y_FDC_FORMAT_360KB_IMAGE_SIZE ? g_floppy_image[offset] : 0xFF;
+  return offset < g_floppy_image_size ? g_floppy_image[offset] : 0xFF;
 }
 
 static void FloppyWriteByte(
     Y_UNUSED void* context, Y_UNUSED uint8_t drive, uint32_t offset,
     uint8_t value) {
-  if (offset < Y_FDC_FORMAT_360KB_IMAGE_SIZE) {
+  if (offset < g_floppy_image_size) {
     g_floppy_image[offset] = value;
   }
 }
@@ -37,24 +38,35 @@ bool FloppyMount(YPlatformState* platform, const char* path) {
     return false;
   }
   const size_t bytes_read =
-      fread(g_floppy_image, 1, Y_FDC_FORMAT_360KB_IMAGE_SIZE, file);
-  // A well-formed image is exactly Y_FDC_FORMAT_360KB_IMAGE_SIZE bytes: a short
-  // read means it is too small, and a successful extra byte means it is too
-  // large.
-  const bool is_expected_size =
-      bytes_read == Y_FDC_FORMAT_360KB_IMAGE_SIZE && fgetc(file) == EOF;
+      fread(g_floppy_image, 1, Y_FDC_MAX_IMAGE_SIZE, file);
+  // A well-formed image is an exact supported format size: a short read means
+  // it is smaller or between formats, and an extra byte past the buffer means
+  // it is larger than the largest format.
+  const bool is_complete = !ferror(file) && fgetc(file) == EOF;
   fclose(file);
 
-  if (!is_expected_size) {
-    // 360KB is the only format there is.
+  const YFDCDiskFormat* format =
+      is_complete ? YFDCFindFormat((uint32_t)bytes_read) : NULL;
+  if (!format) {
+    char expected[32];
+    size_t pos = 0;
+    for (uint8_t i = 0; i < Y_FDC_NUM_FORMATS && pos < sizeof(expected); ++i) {
+      const int n = snprintf(
+          expected + pos, sizeof(expected) - pos, "%s%lu", i > 0 ? "," : "",
+          (unsigned long)YFDCFormatImageSizes[i]);
+      if (n > 0) {
+        pos += (size_t)n;
+      }
+    }
     APP_ERROR(
         "floppy_wrong_size", Y_LOG_STRING("path", path),
-        Y_LOG_UINT("expected_bytes", Y_FDC_FORMAT_360KB_IMAGE_SIZE));
+        Y_LOG_STRING("expected_bytes", expected));
     return false;
   }
 
+  g_floppy_image_size = (uint32_t)bytes_read;
   platform->fdc.config.read_image_byte = FloppyReadByte;
   platform->fdc.config.write_image_byte = FloppyWriteByte;
-  YFDCInsertDisk(&platform->fdc, 0, &YFDCFormat360KB);
+  YFDCInsertDisk(&platform->fdc, 0, format);
   return true;
 }

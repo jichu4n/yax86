@@ -71,6 +71,13 @@ typedef struct DiskImage {
   bool is_sector_dirty;
 } DiskImage;
 
+// Open the image at path on the card, which must be one of sizes[0..num_sizes)
+// bytes long, and return whether it opened. The result is also kept in
+// image->status, and its byte length in image->size.
+DiskImageStatus DiskImageOpenSizes(
+    DiskImage* image, const char* path, const uint32_t* sizes,
+    uint8_t num_sizes);
+
 // Open the image at path on the card, which must be exactly size bytes, and
 // return whether it opened. The result is also kept in image->status.
 DiskImageStatus DiskImageOpen(

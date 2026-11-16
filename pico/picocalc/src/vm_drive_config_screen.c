@@ -4,6 +4,8 @@
 
 #include "box.h"
 #include "browser_screen.h"
+#include "core/fdc.h"
+#include "core/hdc.h"
 #include "display.h"
 #include "file_browser.h"
 #include "list_box.h"
@@ -15,33 +17,34 @@ typedef enum DriveItem {
   kDriveDisabled = 0,
   // A floppy drive with no disk in it.
   kDriveNone,
-  kDriveBlank,
-  kDriveImage,
+  kDriveBlank360KB,
+  kDriveBlank720KB,
+  kDriveBlank10MB,
+  kDriveFloppyImage,
+  kDriveHardDiskImage,
   kNumDriveItems,
 } DriveItem;
 
-static const BoxItem kFloppyItems[kNumDriveItems] = {
+static const BoxItem kDriveItems[kNumDriveItems] = {
     [kDriveDisabled] = {"Disabled", false},
     [kDriveNone] = {"Empty", false},
-    [kDriveBlank] = {"New floppy image (360KB)", false},
-    [kDriveImage] = {"Existing floppy image", true},
-};
-
-static const BoxItem kHardDiskItems[kNumDriveItems] = {
-    [kDriveDisabled] = {"Disabled", false},
-    [kDriveBlank] = {"New disk image (10MB)", false},
-    [kDriveImage] = {"Existing disk image", true},
+    [kDriveBlank360KB] = {"New floppy image (360KB)", false},
+    [kDriveBlank720KB] = {"New floppy image (720KB)", false},
+    [kDriveBlank10MB] = {"New disk image (10MB)", false},
+    [kDriveFloppyImage] = {"Existing floppy image", true},
+    [kDriveHardDiskImage] = {"Existing disk image", true},
 };
 
 // The choices each drive offers, in order: floppy disk 1 is always there;
 // floppy disk 2 can be left out too; and a hard disk is there only with an
 // image - with none there is no disk, rather than a drive with nothing in it.
 static const DriveItem kFloppy1Choices[] = {
-    kDriveNone, kDriveBlank, kDriveImage};
+    kDriveNone, kDriveBlank360KB, kDriveBlank720KB, kDriveFloppyImage};
 static const DriveItem kFloppy2Choices[] = {
-    kDriveDisabled, kDriveNone, kDriveBlank, kDriveImage};
+    kDriveDisabled, kDriveNone, kDriveBlank360KB, kDriveBlank720KB,
+    kDriveFloppyImage};
 static const DriveItem kHardDiskChoices[] = {
-    kDriveDisabled, kDriveBlank, kDriveImage};
+    kDriveDisabled, kDriveBlank10MB, kDriveHardDiskImage};
 
 extern const Screen kVMDriveConfigScreen;
 
@@ -80,16 +83,33 @@ static uint8_t ChoiceRow(DriveItem choice) {
   return choice == kNumDriveItems ? num_choices : 0;
 }
 
+static uint32_t ChoiceBlankSize(DriveItem choice) {
+  switch (choice) {
+    case kDriveBlank360KB:
+      return Y_FDC_FORMAT_360KB_IMAGE_SIZE;
+    case kDriveBlank720KB:
+      return Y_FDC_FORMAT_720KB_IMAGE_SIZE;
+    case kDriveBlank10MB:
+      return Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
+    default:
+      return 0;
+  }
+}
+
 ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* selected) {
   g_drive = drive;
   g_choice = selected;
   DriveItem item = kDriveNone;
   if (!selected->is_present) {
     item = kDriveDisabled;
-  } else if (selected->is_blank) {
-    item = kDriveBlank;
+  } else if (selected->blank_size == Y_FDC_FORMAT_360KB_IMAGE_SIZE) {
+    item = kDriveBlank360KB;
+  } else if (selected->blank_size == Y_FDC_FORMAT_720KB_IMAGE_SIZE) {
+    item = kDriveBlank720KB;
+  } else if (selected->blank_size == Y_HDC_GEOMETRY_10MB_IMAGE_SIZE) {
+    item = kDriveBlank10MB;
   } else if (selected->path[0] != '\0') {
-    item = kDriveImage;
+    item = drive >= kVMDriveHD1 ? kDriveHardDiskImage : kDriveFloppyImage;
   }
   g_list_box.selected = ChoiceRow(item);
   return ScreenOpen(&kVMDriveConfigScreen);
@@ -100,7 +120,7 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* selected) {
 static ScreenResult OnSelect(void) {
   uint8_t num_choices = 0;
   const DriveItem choice = Choices(&num_choices)[g_list_box.selected];
-  if (choice == kDriveImage) {
+  if (choice == kDriveFloppyImage || choice == kDriveHardDiskImage) {
     char folder[kFSMaxPath + 1];
     if (g_choice->path[0] != '\0') {
       FSFolderOf(g_choice->path, folder);
@@ -112,7 +132,7 @@ static ScreenResult OnSelect(void) {
         folder, g_choice->path, NULL, g_found_path, &g_found_size);
   }
   g_choice->path[0] = '\0';
-  g_choice->is_blank = choice == kDriveBlank;
+  g_choice->blank_size = ChoiceBlankSize(choice);
   g_choice->is_present = choice != kDriveDisabled;
   return ScreenBack();
 }
@@ -134,7 +154,7 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 static ScreenResult OnResume(void) {
   if (g_found_path[0] != '\0') {
     FSCopyPath(g_found_path, g_choice->path);
-    g_choice->is_blank = false;
+    g_choice->blank_size = 0;
     g_choice->is_present = true;
     return ScreenBack();
   }
@@ -144,11 +164,9 @@ static ScreenResult OnResume(void) {
 static void OnDraw(DisplayBox* box) {
   uint8_t num_choices = 0;
   const DriveItem* choices = Choices(&num_choices);
-  const BoxItem* labels =
-      g_drive >= kVMDriveHD1 ? kHardDiskItems : kFloppyItems;
   BoxItem items[kNumDriveItems];
   for (uint8_t row = 0; row < num_choices; ++row) {
-    items[row] = labels[choices[row]];
+    items[row] = kDriveItems[choices[row]];
   }
   ListBoxDrawItems(
       box, kVMDriveNames[g_drive], NULL, 0, items, num_choices,

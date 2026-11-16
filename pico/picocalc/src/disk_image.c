@@ -66,7 +66,9 @@ static bool MapClusters(DiskImage* image) {
   return false;
 }
 
-static DiskImageStatus Open(DiskImage* image, const char* path, uint32_t size) {
+static DiskImageStatus Open(
+    DiskImage* image, const char* path, const uint32_t* sizes,
+    uint8_t num_sizes) {
   const DiskImageStatus mounted = DiskImageMountCard();
   if (mounted != kDiskImageOpen) {
     return mounted;
@@ -74,21 +76,32 @@ static DiskImageStatus Open(DiskImage* image, const char* path, uint32_t size) {
   if (f_open(&image->file, path, FA_READ | FA_WRITE) != FR_OK) {
     return kDiskImageNotFound;
   }
-  if (f_size(&image->file) != size) {
+  const FSIZE_t file_size = f_size(&image->file);
+  uint8_t i = 0;
+  while (i < num_sizes && file_size != sizes[i]) {
+    ++i;
+  }
+  if (i == num_sizes) {
     f_close(&image->file);
     return kDiskImageWrongSize;
   }
-  image->size = size;
+  image->size = sizes[i];
   image->sector_index = kNoSector;
   image->uses_fast_seek = MapClusters(image);
   return kDiskImageOpen;
 }
 
+DiskImageStatus DiskImageOpenSizes(
+    DiskImage* image, const char* path, const uint32_t* sizes,
+    uint8_t num_sizes) {
+  image->path = path;
+  image->status = Open(image, path, sizes, num_sizes);
+  return image->status;
+}
+
 DiskImageStatus DiskImageOpen(
     DiskImage* image, const char* path, uint32_t size) {
-  image->path = path;
-  image->status = Open(image, path, size);
-  return image->status;
+  return DiskImageOpenSizes(image, path, &size, 1);
 }
 
 const char* DiskImageDescribeStatus(DiskImageStatus status) {

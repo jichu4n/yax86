@@ -27,6 +27,7 @@ extern "C" {
 // image access is delegated to the platform via callbacks.
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifndef YAX86_FDC_BUNDLE_H
@@ -75,6 +76,54 @@ Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat360KB = {
     .num_sectors_per_track = Y_FDC_FORMAT_360KB_NUM_SECTORS_PER_TRACK,
     .sector_size = Y_FDC_FORMAT_360KB_SECTOR_SIZE,
 };
+
+// The 3.5" 720KB double-sided double-density floppy disk format.
+enum {
+  Y_FDC_FORMAT_720KB_NUM_HEADS = 2,
+  Y_FDC_FORMAT_720KB_NUM_TRACKS = 80,
+  Y_FDC_FORMAT_720KB_NUM_SECTORS_PER_TRACK = 9,
+  Y_FDC_FORMAT_720KB_SECTOR_SIZE = 512,
+  // Size in bytes of an image of such a disk, so that a host can size a buffer
+  // for one at compile time.
+  Y_FDC_FORMAT_720KB_IMAGE_SIZE = Y_FDC_FORMAT_720KB_NUM_HEADS *
+      Y_FDC_FORMAT_720KB_NUM_TRACKS * Y_FDC_FORMAT_720KB_NUM_SECTORS_PER_TRACK *
+      Y_FDC_FORMAT_720KB_SECTOR_SIZE,
+};
+Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat720KB = {
+    .num_heads = Y_FDC_FORMAT_720KB_NUM_HEADS,
+    .num_tracks = Y_FDC_FORMAT_720KB_NUM_TRACKS,
+    .num_sectors_per_track = Y_FDC_FORMAT_720KB_NUM_SECTORS_PER_TRACK,
+    .sector_size = Y_FDC_FORMAT_720KB_SECTOR_SIZE,
+};
+
+enum {
+  // Number of floppy disk formats supported.
+  Y_FDC_NUM_FORMATS = 2,
+  // Largest image size in bytes among the supported floppy disk formats, so
+  // that a host can size a buffer for any floppy image at compile time.
+  Y_FDC_MAX_IMAGE_SIZE = Y_FDC_FORMAT_720KB_IMAGE_SIZE,
+};
+
+// Image sizes in bytes of the supported floppy disk formats, in ascending
+// order.
+Y_PUBLIC_HEADER const uint32_t YFDCFormatImageSizes[Y_FDC_NUM_FORMATS] = {
+    Y_FDC_FORMAT_360KB_IMAGE_SIZE,
+    Y_FDC_FORMAT_720KB_IMAGE_SIZE,
+};
+
+// Returns the floppy disk format for an image of image_size bytes, or NULL if
+// image_size is not a supported floppy image size.
+Y_PUBLIC_HEADER inline const YFDCDiskFormat* YFDCFindFormat(
+    uint32_t image_size) {
+  switch (image_size) {
+    case Y_FDC_FORMAT_360KB_IMAGE_SIZE:
+      return &YFDCFormat360KB;
+    case Y_FDC_FORMAT_720KB_IMAGE_SIZE:
+      return &YFDCFormat720KB;
+    default:
+      return NULL;
+  }
+}
 
 struct YFDCState;
 

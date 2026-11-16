@@ -6,6 +6,8 @@
 #include <stdio.h>
 
 #include "box.h"
+#include "core/fdc.h"
+#include "core/hdc.h"
 #include "disk_image.h"
 #include "display.h"
 #include "list_box.h"
@@ -69,7 +71,8 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
   g_name_length = 0;
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     g_drives[drive].path[0] = '\0';
-    g_drives[drive].is_blank = drive == kVMDriveHD1;
+    g_drives[drive].blank_size =
+        drive == kVMDriveHD1 ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : 0;
     g_drives[drive].is_present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
   g_video_adapter = Y_VIDEO_ADAPTER_CGA;
@@ -86,7 +89,7 @@ ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
   VMConfigRead(&vm_manager->vms->vms[index], &config, problem);
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     FSCopyPath(config.drives[drive], g_drives[drive].path);
-    g_drives[drive].is_blank = false;
+    g_drives[drive].blank_size = 0;
     g_drives[drive].is_present =
         drive == kVMDriveFD1 ||
         (drive == kVMDriveFD2 ? config.is_present[drive]
@@ -102,7 +105,7 @@ static void FormDrives(VMListDrives* drives) {
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     drives->paths[drive] =
         g_drives[drive].is_present ? g_drives[drive].path : NULL;
-    drives->is_blank[drive] = g_drives[drive].is_blank;
+    drives->blank_sizes[drive] = g_drives[drive].blank_size;
   }
 }
 
@@ -129,10 +132,10 @@ static __noinline ScreenResult Create(void) {
         "vm_created", Y_LOG_STRING("name", created.name),
         Y_LOG_STRING(
             "video_adapter", VMConfigVideoAdapterName(g_video_adapter)),
-        Y_LOG_BOOL("blank_fd1", drives.is_blank[kVMDriveFD1]),
-        Y_LOG_BOOL("blank_fd2", drives.is_blank[kVMDriveFD2]),
-        Y_LOG_BOOL("blank_hd1", drives.is_blank[kVMDriveHD1]),
-        Y_LOG_BOOL("blank_hd2", drives.is_blank[kVMDriveHD2]),
+        Y_LOG_UINT("blank_fd1_kb", drives.blank_sizes[kVMDriveFD1] / 1024),
+        Y_LOG_UINT("blank_fd2_kb", drives.blank_sizes[kVMDriveFD2] / 1024),
+        Y_LOG_BOOL("blank_hd1", drives.blank_sizes[kVMDriveHD1] != 0),
+        Y_LOG_BOOL("blank_hd2", drives.blank_sizes[kVMDriveHD2] != 0),
         Y_LOG_UINT(
             "ms", (time_us_64() - start_us) / kMicrosecondsPerMillisecond));
   } else {
@@ -250,8 +253,14 @@ static void OnDraw(DisplayBox* box) {
     char name[kDiskImageNameLength + 1];
     if (!g_drives[drive].is_present) {
       what = "disabled";
-    } else if (g_drives[drive].is_blank) {
-      what = drive >= kVMDriveHD1 ? "new disk image" : "new floppy image";
+    } else if (g_drives[drive].blank_size != 0) {
+      if (drive >= kVMDriveHD1) {
+        what = "new disk image";
+      } else if (g_drives[drive].blank_size == Y_FDC_FORMAT_720KB_IMAGE_SIZE) {
+        what = "new 720KB image";
+      } else {
+        what = "new 360KB image";
+      }
     } else if (g_drives[drive].path[0] != '\0') {
       DiskImageName(g_drives[drive].path, name);
       what = name;

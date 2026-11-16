@@ -16,15 +16,17 @@ enum {
 };
 
 uint8_t FileBrowserOpen(FileBrowser* browser, const char* folder) {
-  // A floppy drive takes a floppy, drive C a hard disk, and USB either.
-  static const uint32_t kImageSizes[] = {
-      Y_FDC_FORMAT_360KB_IMAGE_SIZE, Y_HDC_GEOMETRY_10MB_IMAGE_SIZE};
-  const uint32_t* sizes = kImageSizes;
-  uint8_t num_sizes = 1;
-  if (browser->images == kFileBrowserEither) {
-    num_sizes = 2;
-  } else if (browser->images == kFileBrowserHardDisks) {
-    sizes = &kImageSizes[1];
+  // A floppy drive takes a floppy, a hard disk drive a hard disk, and USB
+  // either.
+  uint32_t sizes[Y_FDC_NUM_FORMATS + 1];
+  uint8_t num_sizes = 0;
+  if (browser->images != kFileBrowserHardDisks) {
+    for (uint8_t i = 0; i < Y_FDC_NUM_FORMATS; ++i) {
+      sizes[num_sizes++] = YFDCFormatImageSizes[i];
+    }
+  }
+  if (browser->images != kFileBrowserFloppies) {
+    sizes[num_sizes++] = Y_HDC_GEOMETRY_10MB_IMAGE_SIZE;
   }
   FileListRead(&browser->list, folder, sizes, num_sizes);
   browser->top = 0;
@@ -155,8 +157,7 @@ void FileBrowserDraw(
     if (browser->images == kFileBrowserEither) {
       BoxPutText(
           row, box->columns, kBrowseNoteColumn,
-          entry->size == Y_FDC_FORMAT_360KB_IMAGE_SIZE ? "floppy" : "hard disk",
-          attr);
+          YFDCFindFormat(entry->size) != NULL ? "floppy" : "hard disk", attr);
       continue;
     }
     if (!FileListEntryPath(list, entry, path)) {
