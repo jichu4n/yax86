@@ -596,15 +596,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   nothing is deleted behind the user's back - and goes with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
   was**: `fd1.img` or `fd2.img`, 360KB or 720KB, for DOS's `FORMAT` - which
-  the floppy controller's Format Track makes possible (for 720KB under MS-DOS
-  3.30, with `DEVICE=DRIVER.SYS /D:1 /F:2` or `/D:0` in `CONFIG.SYS`) - and
-  `hd1.img` or `hd2.img`, the core's 10MB drive, for FDISK and then
-  `FORMAT C:/S`. A name already in the folder - an edit's new disk beside the
-  old - gives `hd1_2.img` to `hd1_9.img` and the like instead, so nothing is
-  written over. The hard disk takes 5.1 seconds to write, a 360KB floppy a
-  fifth of a second, and a 720KB floppy half a second. Zeros rather than space
-  merely allocated, which would hold whatever the card held there - an old
-  file's sectors, which FDISK could take for a partition table.
+  the floppy controller's Format Track makes possible (see `core/AGENTS.md`
+  for formatting 720KB under MS-DOS 3.30) - and `hd1.img` or `hd2.img`, the
+  core's 10MB drive, for FDISK and then `FORMAT C:/S`. A name already in the
+  folder - an edit's new disk beside the old - gives `hd1_2.img` to `hd1_9.img`
+  and the like instead, so nothing is written over. The hard disk takes 5.1
+  seconds to write, a 360KB floppy a fifth of a second, and a 720KB floppy half
+  a second. Zeros rather than space merely allocated, which would hold whatever
+  the card held there - an old file's sectors, which FDISK could take for a
+  partition table.
 - **A clone copies through 32KB of the guest's RAM**, which is not the
   guest's until a VM starts, and is zeroed after. Whole runs of the card's
   blocks go straight between it and the card - see "A transfer is 8KB" -
@@ -646,11 +646,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   image is `dd if=/dev/zero of=fd1.img bs=512 count=720` (formatted with
   `mformat -i fd1.img -f 360 ::`) and a blank 720KB image is
   `dd if=/dev/zero of=fd1.img bs=512 count=1440` (formatted with
-  `mformat -i fd1.img -f 720 ::`). MS-DOS 3.30 reads, writes and boots a
-  formatted 720KB image in either drive with no `CONFIG.SYS`; formatting a
-  blank one from DOS needs `DEVICE=DRIVER.SYS /D:1 /F:2` (or `/D:0` for drive
-  A) in `CONFIG.SYS` and `FORMAT <letter>:` without `/T` or `/N`
-  (`core/AGENTS.md`).
+  `mformat -i fd1.img -f 720 ::`). See `core/AGENTS.md` for how MS-DOS 3.30
+  reads, boots and formats 720KB images.
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hd1.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from

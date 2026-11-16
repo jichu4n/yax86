@@ -132,8 +132,8 @@ static __noinline ScreenResult Create(void) {
         "vm_created", Y_LOG_STRING("name", created.name),
         Y_LOG_STRING(
             "video_adapter", VMConfigVideoAdapterName(g_video_adapter)),
-        Y_LOG_UINT("blank_fd1_kb", drives.blank_sizes[kVMDriveFD1] / 1024),
-        Y_LOG_UINT("blank_fd2_kb", drives.blank_sizes[kVMDriveFD2] / 1024),
+        Y_LOG_BOOL("blank_fd1", drives.blank_sizes[kVMDriveFD1] != 0),
+        Y_LOG_BOOL("blank_fd2", drives.blank_sizes[kVMDriveFD2] != 0),
         Y_LOG_BOOL("blank_hd1", drives.blank_sizes[kVMDriveHD1] != 0),
         Y_LOG_BOOL("blank_hd2", drives.blank_sizes[kVMDriveHD2] != 0),
         Y_LOG_UINT(

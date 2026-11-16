@@ -235,11 +235,6 @@ VMListResult VMListRename(
   return kVMListDone;
 }
 
-// The size of a blank disk for a drive, or 0 if none was asked for.
-static uint32_t BlankSize(const VMListDrives* drives, uint8_t drive) {
-  return drives->blank_sizes[drive];
-}
-
 // The stem of a blank disk's file when its own name is taken, before _2 to
 // _9: fd1_2.img, hd1_2.img.
 static const char* const kBlankStems[kNumVMDrives] = {
@@ -280,7 +275,7 @@ static bool PlanDrives(
   transfer->total = 0;
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     g_paths[drive] = drives->paths[drive];
-    const uint32_t blank_size = BlankSize(drives, drive);
+    const uint32_t blank_size = drives->blank_sizes[drive];
     if (g_paths[drive] == NULL || blank_size == 0) {
       continue;
     }
@@ -324,7 +319,7 @@ static bool WriteConfig(
   FRESULT result = FR_OK;
   uint8_t written = 0;
   for (; written < kNumVMDrives && result == FR_OK; ++written) {
-    const uint32_t blank_size = BlankSize(drives, written);
+    const uint32_t blank_size = drives->blank_sizes[written];
     if (blank_size != 0) {
       result = FSWriteZeros(g_blank_paths[written], blank_size, transfer);
     }
@@ -335,7 +330,7 @@ static bool WriteConfig(
     return true;
   }
   for (uint8_t drive = 0; drive < written; ++drive) {
-    if (BlankSize(drives, drive) != 0) {
+    if (drives->blank_sizes[drive] != 0) {
       f_unlink(g_blank_paths[drive]);
     }
   }
