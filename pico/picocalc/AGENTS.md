@@ -107,15 +107,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   floppy that is not `resources`' byte for byte, or a hard disk image - see
   the SD card section. Compare against a baseline with the same VM, or
   none.
-- **These counts are the 128KB machine's**, which the runtime runs without
-  the PSRAM or after a crash. With the PSRAM it pages 640KB (see "Paging
-  guest RAM"), and DOS330 boots in 2,439,664 instructions and 29,116,649
-  cycles, or 2,412,600 and 29,114,560 with `video_adapter=mda`, the BIOS
-  testing and DOS sizing more memory; the bench's 640KB `dos-boot` takes
-  2,353,188 and 27,922,137. On a Pico 2 at 250MHz with 128KB of SRAM frames,
-  DOS330 at 640KB takes 3.93 seconds of processor time with drawing and 3.91
-  without - 155% and 156% of a real PC/XT - and 3.83 with `video_adapter=mda`.
-  The runtime with no VMs has not been counted at 640KB.
+- **These counts are the 128KB machine's**, which a Pico runs without the
+  PSRAM or after a crash (on a Pico 2 that fallback is 384KB: 2,352,177
+  instructions and 27,921,416 cycles with no VMs, 2,441,987 and 29,158,902 on
+  DOS330). With the PSRAM both boards page 640KB (see "Paging guest RAM"), and
+  DOS330 boots in 2,439,664 instructions and 29,116,649 cycles, or 2,412,600
+  and 29,114,560 with `video_adapter=mda`, the BIOS testing and DOS sizing
+  more memory; the bench's 640KB `dos-boot` takes 2,353,188 and 27,922,137. On
+  a Pico 2 at 250MHz with 384KB of SRAM frames, DOS330 at 640KB takes 3.83
+  seconds of processor time with drawing and 3.81 without - 159% and 160% of a
+  real PC/XT - and 3.74 with `video_adapter=mda`. The runtime with no VMs has
+  not been counted at 640KB.
 
 ## Running in real time
 
@@ -726,16 +728,34 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
 ## Paging guest RAM
 
-- **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames,
-  and PSRAM behind them**, through the core's `YPlatformConfig.paged_memory`
-  (`core/AGENTS.md`). `pico/common/pager.c` does the paging, and the SRAM
-  given to the guest is in `pico/common/boards/<board>/yax86_pico.h`, a header
-  per board so each board has its own. Both are shared with `pico/bench`, so
-  that it measures what runs here. The pager brings a page into a frame when
-  the guest first touches it, from PSRAM, or as zeros if it has never been
-  written back, and takes frames back by the clock algorithm, writing a page
-  back only if it was written. The report's `paging` group has the counts
-  and `fault_us`, the time in the fault handler.
+- **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames on a
+  Pico and 384KB on a Pico 2, with PSRAM behind them**, through the core's
+  `YPlatformConfig.paged_memory` (`core/AGENTS.md`). `pico/common/pager.c`
+  does the paging, and the SRAM given to the guest is in
+  `pico/common/boards/<board>/yax86_pico.h`, a header per board so each board
+  has its own. Both are shared with `pico/bench`, so that it measures what runs
+  here. The pager brings a page into a frame when the guest first touches it,
+  from PSRAM, or as zeros if it has never been written back, and takes frames
+  back by the clock algorithm, writing a page back only if it was written. The
+  report's `paging` group has the counts and `fault_us`, the time in the fault
+  handler.
+- **384KB on a Pico 2 is chosen by the PicoCalc workloads** at 250MHz, and is
+  also the largest 16KB BIOS memory block that fits in the 512KB main SRAM bank
+  alongside video memory, the SDK, USB and the runtime (513,748 of 524,288
+  bytes, leaving 10.3KB above `.heap`, matching a Pico's 11.0KB at 128KB):
+
+  | guest SRAM | frames | seven commands | seven faults | Word session | Word faults | Word's pages in |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 128KB | 512 | 97.6s | 1.1% | 55.7s | 2.0% | 18,875 |
+  | 256KB | 1,024 | 95.8s | 0.4% | 54.3s | 1.0% | 7,916 |
+  | **384KB** | **1,536** | **95.5s** | **0.1%** | **54.1s** | **0.7%** | **4,854** |
+  | 392KB | 1,568 | 95.5s | 0.1% | 54.3s | 0.7% | 4,803 |
+
+  392KB is the largest 4KB-aligned size that links (522,004 bytes, 2.2KB
+  headroom; 396KB overflows): it saves nothing measurable over 384KB, and
+  GLaBIOS probes conventional memory in 16KB blocks (`ES:0000` and `ES:2000h`),
+  so on a bare Pico 2 those extra 8KB go unseen (while 394KB maps `0x62000`
+  without the rest of the 400KB block, making GLaBIOS size unmapped memory).
 - **Pages are 256 bytes**, measured on the device with `pico/bench`'s
   PicoCalc workloads, the share of processor time in faults:
 
@@ -758,13 +778,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   processor time against 179.7, and more than doubled the Word session's
   share in faults, 2.8% to 6.0%. The programs' code and data are above
   64KB, so it sped up little of what they do, and it left half the frames.
-- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM** held
-  directly. A hard fault on either core reboots the board through
-  `isr_hardfault()`, which replaces the SDK's breakpoint, and leaves a marker
-  in RAM startup does not clear; the start after it pages nothing, says so
-  on the message row, and reports `off_after_fault`. Paging is the newest
-  code a fault could come from, and a board that halts on one needs its
-  cable replugged.
+- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM on a Pico
+  and 384KB on a Pico 2**, held directly. A hard fault on either core reboots
+  the board through `isr_hardfault()`, which replaces the SDK's breakpoint, and
+  leaves a marker in RAM startup does not clear; the start after it pages
+  nothing, says so on the message row, and reports `off_after_fault`. Paging is
+  the newest code a fault could come from, and a board that halts on one needs
+  its cable replugged.
 - **The runtime reads the BIOS data area through the memory map**,
   `GuestRAMByte()`, since with the PSRAM it is paged.
 
