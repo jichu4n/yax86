@@ -2,21 +2,22 @@
 // vm.cfg:
 //
 //   boot_default=DOS330
-//   boot_delay=5          # 0 to 60, or never
+//   boot_delay=5
 //   font=ymini
 //   display_timeout=120
 //   display_brightness=255
 //   keyboard_brightness=0
 //
 // boot_default is a VM's name. It is the VM the list highlights, and starts
-// by itself after boot_delay seconds with no key pressed; 0 starts it at
-// once, and never shows the list with no countdown and waits for a key.
-// Without settings, or with a boot_default naming no VM, the first VM listed
-// is the default, after 5 seconds. Whichever VM starts becomes boot_default
-// for the next power on. font names the 4x10 font. display_timeout is how
-// many seconds without a key before the display and backlights turn off, or
-// 0 to keep them on. display_brightness and keyboard_brightness are the
-// active backlight levels on keyboard controller firmware v1.6 and later.
+// by itself after boot_delay seconds (0 to 60) with no key pressed; 0 starts
+// it at once, while "never" shows the list with no countdown and waits for a
+// key. Without settings, or with a boot_default naming no VM, the first VM
+// listed is the default, after 5 seconds. Whichever VM starts becomes
+// boot_default for the next power on. font names the 4x10 font.
+// display_timeout is how many seconds without a key before the display and
+// backlights turn off, or 0 to keep them on. display_brightness and
+// keyboard_brightness are the active backlight levels on keyboard controller
+// firmware v1.6 and later.
 #ifndef YAX86_PICOCALC_SETTINGS_H
 #define YAX86_PICOCALC_SETTINGS_H
 

@@ -32,6 +32,8 @@ enum {
   kNumPresets = sizeof(kPresets) / sizeof(kPresets[0]),
 };
 
+// sizeof rather than kNumPresets: kListBoxRows is in another anonymous enum
+// (-Wenum-compare).
 _Static_assert(
     sizeof(kPresets) / sizeof(kPresets[0]) <= kListBoxRows,
     "boot delay presets must fit in one list");

@@ -229,7 +229,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **The display turns off after `display_timeout` seconds with no key** (120
   without a setting): in launcher mode while neither counting down nor
   exporting over USB (including a list waiting under `boot_delay=never`), and
-  in emulator mode once the boot is over or the menu is open. `src/display_power.c` puts the panel's display off and into sleep,
+  in emulator mode once the boot is over or the menu is open.
+  `src/display_power.c` puts the panel's display off and into sleep,
   `LcdSetDisplayOn(false)` - a static image can mark the panel, though `0`
   (`Never`) lets the user opt out and keep it on - and on keyboard controller
   firmware v1.6 and later writes 0 to both backlight registers, turning the
